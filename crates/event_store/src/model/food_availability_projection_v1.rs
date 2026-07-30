@@ -11,7 +11,7 @@ use radroots_event::{
     },
     id::EventId,
 };
-use radroots_event_codec::food_availability::inbound::{
+use radroots_event_codec::decode::food_availability::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsInboundFoodAvailabilityImage,
     RadrootsInboundFoodAvailabilityProjection,
 };

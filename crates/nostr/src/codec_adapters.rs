@@ -7,11 +7,10 @@ use radroots_event::{
     social::job_feedback::JobFeedback, social::job_request::JobRequest,
     social::job_result::JobResult,
 };
-use radroots_event_codec::job::{
-    error::JobParseError, feedback::decode as fb_decode, request::decode as req_decode,
-    result::decode as res_decode,
+use radroots_event_codec::decode::job::{
+    JobParseError, feedback as fb_decode, request as req_decode, result as res_decode,
 };
-use radroots_event_codec::parsed::{RadrootsParsedData, RadrootsParsedEvent};
+use radroots_event_codec::decode::{RadrootsParsedData, RadrootsParsedEvent};
 
 fn event_id(e: &RadrootsNostrEvent) -> String {
     e.id.to_hex()

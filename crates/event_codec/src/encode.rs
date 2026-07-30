@@ -9,6 +9,109 @@ use std::string::String;
 #[cfg(feature = "json")]
 use radroots_event::envelope::EventEnvelope;
 
+// Domain-specific algorithms live behind the canonical encoding namespace.
+// The implementation modules remain crate-private compatibility structure
+// until their final removal checkpoint.
+pub use crate::error::{EventEncodeError, RadrootsEncodeError};
+
+macro_rules! encode_domain {
+    ($name:ident, $source:path) => {
+        pub mod $name {
+            pub use $source::*;
+        }
+    };
+}
+
+encode_domain!(app_data, crate::app_data::encode);
+encode_domain!(article, crate::article::encode);
+encode_domain!(calendar, crate::calendar::encode);
+encode_domain!(coop, crate::coop::encode);
+encode_domain!(document, crate::document::encode);
+encode_domain!(farm_crdt, crate::farm_crdt::encode);
+encode_domain!(farm_file, crate::farm_file::encode);
+encode_domain!(farm_workspace, crate::farm_workspace::encode);
+encode_domain!(file_metadata, crate::file_metadata::encode);
+encode_domain!(follow, crate::follow::encode);
+encode_domain!(geochat, crate::geochat::encode);
+encode_domain!(gift_wrap, crate::gift_wrap::encode);
+encode_domain!(group, crate::group::encode);
+encode_domain!(http_auth, crate::http_auth::encode);
+encode_domain!(list, crate::list::encode);
+encode_domain!(list_set, crate::list_set::encode);
+encode_domain!(message, crate::message::encode);
+encode_domain!(message_file, crate::message_file::encode);
+encode_domain!(plot, crate::plot::encode);
+encode_domain!(reaction, crate::reaction::encode);
+encode_domain!(relay_auth, crate::relay_auth::encode);
+encode_domain!(report, crate::report::encode);
+encode_domain!(repost, crate::repost::encode);
+encode_domain!(resource_area, crate::resource_area::encode);
+encode_domain!(resource_cap, crate::resource_cap::encode);
+encode_domain!(seal, crate::seal::encode);
+
+pub mod comment {
+    pub use crate::comment::authored::*;
+}
+
+pub mod deletion {
+    pub use crate::deletion::authored::*;
+}
+
+pub mod farm {
+    pub use crate::farm::encode::*;
+    pub use crate::farm::list_sets::*;
+}
+
+pub mod food_availability {
+    pub use crate::food_availability::authored::*;
+}
+
+pub mod job {
+    pub mod feedback {
+        pub use crate::job::feedback::encode::*;
+    }
+    pub mod request {
+        pub use crate::job::request::encode::*;
+    }
+    pub mod result {
+        pub use crate::job::result::encode::*;
+    }
+}
+
+#[cfg(feature = "knowledge")]
+pub mod knowledge {
+    pub use crate::knowledge::encode::*;
+}
+
+pub mod operational_listing {
+    pub use crate::operational_listing::encode::*;
+    pub use crate::operational_listing::tags::*;
+}
+
+pub mod order {
+    #[cfg(feature = "json")]
+    pub use crate::order::encode::*;
+    pub use crate::order::tags::*;
+}
+
+pub mod post {
+    pub use crate::post::authored::*;
+}
+
+#[cfg(feature = "json")]
+pub mod profile {
+    pub use crate::profile::authored::*;
+}
+
+pub mod reply {
+    pub use crate::reply::authored::*;
+}
+
+#[cfg(feature = "json")]
+pub mod trade {
+    pub use crate::trade::{trade_mutation_event_build, trade_mutation_tags};
+}
+
 /// A failure while encoding an event.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -11,7 +11,7 @@ use radroots_event::post::{AuthoredAsk, AuthoredPhotoUpdate, AuthoredUpdate};
 #[cfg(feature = "events")]
 use radroots_event::wire::Nip01EventWireParts;
 #[cfg(feature = "events")]
-use radroots_event_codec::post::authored::{
+use radroots_event_codec::encode::post::{
     authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
 };
 
@@ -108,8 +108,8 @@ pub async fn radroots_nostr_fetch_post_events(
     since_unix: Option<u64>,
 ) -> Result<
     Vec<
-        radroots_event_codec::parsed::RadrootsParsedData<
-            radroots_event_codec::post::decode::LegacyPost,
+        radroots_event_codec::decode::RadrootsParsedData<
+            radroots_event_codec::decode::post::LegacyPost,
         >,
     >,
     RadrootsNostrError,

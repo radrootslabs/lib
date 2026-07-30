@@ -1,10 +1,10 @@
 use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 use radroots_event_codec::{
-    post::admission::{RadrootsPostAdmissionOutcome, verify_and_admit_post_event},
-    reply::{
-        admission::{admit_thread_excluded_post_candidate, verify_and_admit_nip10_reply_event},
-        inbound::RadrootsNip10ReplyStyle,
+    admission::{
+        post::{RadrootsPostAdmissionOutcome, verify_and_admit_post_event},
+        reply::{admit_thread_excluded_post_candidate, verify_and_admit_nip10_reply_event},
     },
+    decode::reply::RadrootsNip10ReplyStyle,
 };
 use radroots_nostr::prelude::{
     RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,

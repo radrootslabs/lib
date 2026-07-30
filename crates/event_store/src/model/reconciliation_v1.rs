@@ -4,7 +4,7 @@ use radroots_event::contract::registry_v7::{TagSemantic, TagValueType};
 use radroots_event::draft::SignedEvent;
 use radroots_event::envelope::event_head::v1::EventHeadDecision;
 use radroots_event::envelope::{EventEnvelope, EventKindClass};
-use radroots_event_codec::verification::v1::RadrootsSignatureVerifiedEvent;
+use radroots_event_codec::verify::v1::RadrootsSignatureVerifiedEvent;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventAdmissionStatus {

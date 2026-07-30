@@ -18,7 +18,7 @@ use crate::nip09::reconciliation_v1::{
 };
 use radroots_event::food::availability::FoodIdentifier;
 use radroots_event::id::EventId;
-use radroots_event_codec::food_availability::inbound::{
+use radroots_event_codec::decode::food_availability::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsFoodAvailabilityProjectionOutcome,
     project_verified_food_availability_event_registry_v7,
 };
@@ -416,7 +416,7 @@ async fn apply_transition(
     let stored = RadrootsStoredFoodAvailabilityV1::from_projection(
         transition.source_generation(),
         *canonical.pubkey(),
-        canonical.event_id().clone(),
+        *canonical.event_id(),
         transition.raw_head().event_seq(),
         canonical.created_at(),
         transition.transition_seq(),

@@ -509,8 +509,8 @@
     {
       "role": "event_codec_admission_facade",
       "path": "crates/event_codec/src/admission.rs",
-      "byte_length": 20592,
-      "sha256": "49cc28d06e99880d5df75e899ca72c97f4fa27e8cb4f96457527b6cff783e0ae",
+      "byte_length": 20946,
+      "sha256": "1217ef75ee71c5dba88e16545933c8fcf53cb82b133ab4830b3c3ba08946ca16",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -684,8 +684,8 @@
     {
       "role": "event_store_error_and_limits",
       "path": "crates/event_store/src/error.rs",
-      "byte_length": 19464,
-      "sha256": "47be522eb0541619683f8b30eb6f66da821b65eb310a60815c81c7b7f3349947",
+      "byte_length": 19458,
+      "sha256": "3d87df984af6ae5decf7ca8c3a8d5422be6c647e6a05490225b6b2037bf3701b",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -719,15 +719,15 @@
     {
       "role": "event_store_reconciliation_v1_model",
       "path": "crates/event_store/src/model/reconciliation_v1.rs",
-      "byte_length": 10452,
-      "sha256": "bd3a8f0efe6d4b2959ab8a5b8048cd940fd078dce842083be2386544722017ef",
+      "byte_length": 10446,
+      "sha256": "475b7b840bffdae7e3f7a31f5b940b9dfa579eaa1cac640729aaaeadabf83ba6",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "event_store_reconciliation_v1_ingest_model",
       "path": "crates/event_store/src/model/ingest_reconciliation_v1.rs",
-      "byte_length": 1594,
-      "sha256": "27b02ef508b4df45a801ef72e9f92b43819ea6372a3936bc2507c67a42acd07a",
+      "byte_length": 1588,
+      "sha256": "6117e797674c35bb1ccebffbc6a8c0108bfc38c7c9f82607066dfd802b8f0734",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -741,21 +741,21 @@
       "role": "current_visibility_model",
       "path": "crates/event_store/src/model/current_visibility_v1.rs",
       "byte_length": 5634,
-      "sha256": "7d5b2b35ceb52d7472d68444515fa4a6aab43f6838b557aefff74fcebf487657",
+      "sha256": "d64429bc7985231e923c1c3e5295d94270a817dd5dc96693f35dfdf2dc398e4f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "food_projection_model",
       "path": "crates/event_store/src/model/food_availability_projection_v1.rs",
-      "byte_length": 17109,
-      "sha256": "2fd51989da7f07b3e80557fb1a4b89814126eb3ffd80023e42012f0242b0584d",
+      "byte_length": 17108,
+      "sha256": "67861a966d674efbc40f0b0433db2ec006048ff923f6261df4161e2ddba717b5",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "source_generation_rebuild_authority",
       "path": "crates/event_store/src/nip09/reconciliation_v1.rs",
-      "byte_length": 184853,
-      "sha256": "b6887f9f319809d401ac519137cfa78467ca26594cae53720a58a37ccc72757e",
+      "byte_length": 184833,
+      "sha256": "3ca802cb7a8444c8512b2be1390a019281704316a430fb9b75a8ad2cad358a07",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -775,15 +775,15 @@
     {
       "role": "public_store_and_transaction_authority",
       "path": "crates/event_store/src/store.rs",
-      "byte_length": 393835,
-      "sha256": "d47f5d8d95599783162533dcd26b0114160a098ddef3447fb2ee6648c3949e5f",
+      "byte_length": 393535,
+      "sha256": "c3286b50a2e9e17a330938492cfded0829dc19516f55aa4f62289d513457bad7",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "addressable_transition_feed_store",
       "path": "crates/event_store/src/store/addressable_transition_feed_v1.rs",
-      "byte_length": 40216,
-      "sha256": "31ed3390d279aee5261848386889cf256667759b9898be5607856a3f80fd7eb7",
+      "byte_length": 40209,
+      "sha256": "2cebcca9602633652a79e7041d18d3a7d3feb1388a98f4f68137b9814efcedfa",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -796,8 +796,8 @@
     {
       "role": "food_projection_store",
       "path": "crates/event_store/src/store/food_availability_projection_v1.rs",
-      "byte_length": 48927,
-      "sha256": "78a96d441e2fbfdfc6f9e2787ae773e8fd6aa5c53ca10d658350b843c0d1537e",
+      "byte_length": 48919,
+      "sha256": "3a30da308ef863b806ed63d1cb65ac80f6a946a71821af84a0c595330491757e",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -867,7 +867,7 @@
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
       "byte_length": 199270,
-      "sha256": "148698b4f9f46bcad6af5ce84240153d5742b8ee2ce8b938539ede0da9ef9cdb",
+      "sha256": "a6685c27255918769f894ab098ba13a927c0d70c423fbd72b5404c0af0ae2f89",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

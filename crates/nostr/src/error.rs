@@ -59,13 +59,13 @@ pub enum RadrootsNostrError {
     #[error("FoodAvailability encoding error: {0}")]
     FoodAvailabilityEncode(
         #[from]
-        radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError,
+        radroots_event_codec::encode::food_availability::RadrootsFoodAvailabilityEncodeError,
     ),
 
     #[cfg(feature = "events")]
     #[error("Profile encoding error: {0}")]
     ProfileEncode(
-        #[from] radroots_event_codec::profile::authored::RadrootsAuthoredProfileEncodeError,
+        #[from] radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError,
     ),
 
     #[cfg(feature = "events")]

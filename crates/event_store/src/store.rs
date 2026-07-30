@@ -404,8 +404,8 @@ impl RadrootsEventStore {
         let mut unique_event_ids = Vec::new();
         let mut seen_event_ids = BTreeMap::new();
         for event_id in &event_ids {
-            if seen_event_ids.insert(event_id.clone(), ()).is_none() {
-                unique_event_ids.push(event_id.clone());
+            if seen_event_ids.insert(*event_id, ()).is_none() {
+                unique_event_ids.push(*event_id);
             }
         }
         if unique_event_ids.is_empty() {
@@ -1100,8 +1100,8 @@ async fn event_visibility_in_transaction(
             })?;
             RadrootsEventVisibility::Suppressed {
                 reason: evidence.reason,
-                event_reference_request_id: evidence.event_reference_request_id.clone(),
-                address_reference_request_id: evidence.address_reference_request_id.clone(),
+                event_reference_request_id: evidence.event_reference_request_id,
+                address_reference_request_id: evidence.address_reference_request_id,
                 address_reference_cutoff: evidence.address_reference_cutoff,
             }
         }
@@ -1800,7 +1800,7 @@ mod tests {
         DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, Nip01EventWire,
         compute_canonical_nip01_event_id,
     };
-    use radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic;
+    use radroots_event_codec::decode::food_availability::RadrootsFoodAvailabilityImageDiagnostic;
     use radroots_identity::PublicKey;
     use std::sync::Arc;
 
@@ -1984,24 +1984,24 @@ mod tests {
         let TradeMutationBodyV1::Proposal { candidate } = &proposal.envelope.body else {
             panic!("proposal");
         };
-        let candidate_id = candidate.candidate_id.clone().expect("candidate id");
+        let candidate_id = candidate.candidate_id.expect("candidate id");
         let line = candidate.lines.first().expect("candidate line");
         TradeMutationEnvelopeV1 {
             mutation_id: None,
             contract_id: RADROOTS_TRADE_DECISION_CONTRACT_ID.to_owned(),
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
-            trade_id: proposal.envelope.trade_id.clone(),
-            root_mutation_id: Some(proposal.mutation_id.clone()),
+            trade_id: proposal.envelope.trade_id,
+            root_mutation_id: Some(proposal.mutation_id),
             buyer_pubkey: public_key('a'),
             seller_pubkey: public_key('a'),
             farm_id: DTag::parse("farm-1").expect("farm id"),
-            parent_mutation_ids: vec![proposal.mutation_id.clone()],
+            parent_mutation_ids: vec![proposal.mutation_id],
             author_pubkey: public_key('a'),
             counterparty_pubkey: public_key('a'),
             authored_at_unix_s: 1_799_000_060,
             body: TradeMutationBodyV1::Decision {
-                proposal_mutation_id: proposal.mutation_id.clone(),
-                candidate_id: candidate_id.clone(),
+                proposal_mutation_id: proposal.mutation_id,
+                candidate_id,
                 decision: TradeDecisionV1::Accepted {
                     reservation_assertion: Some(SellerReservationAssertionV1 {
                         reservation_id: DTag::parse("reservation-1").expect("reservation id"),
@@ -5949,43 +5949,43 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         };
         let mut revision_decision = decision.envelope.clone();
         revision_decision.body = TradeMutationBodyV1::RevisionDecision {
-            proposal_mutation_id: proposal_mutation_id.clone(),
-            candidate_id: candidate_id.clone(),
+            proposal_mutation_id: *proposal_mutation_id,
+            candidate_id: *candidate_id,
             decision: decision_value.clone(),
         };
         let mut cancellation = proposal.envelope.clone();
         cancellation.body = TradeMutationBodyV1::Cancellation {
-            target_candidate_id: Some(candidate_id.clone()),
-            target_claim_mutation_id: Some(decision.mutation_id.clone()),
+            target_candidate_id: Some(*candidate_id),
+            target_claim_mutation_id: Some(decision.mutation_id),
             reason: "fixture".to_owned(),
         };
         let mut claim_only_cancellation = cancellation.clone();
         claim_only_cancellation.body = TradeMutationBodyV1::Cancellation {
             target_candidate_id: None,
-            target_claim_mutation_id: Some(decision.mutation_id.clone()),
+            target_claim_mutation_id: Some(decision.mutation_id),
             reason: "fixture".to_owned(),
         };
 
         assert_eq!(
             candidate_id_for_mutation(&revision_proposal),
-            Some(candidate_id.clone())
+            Some(*candidate_id)
         );
         assert_eq!(
             candidate_id_for_mutation(&revision_decision),
-            Some(candidate_id.clone())
+            Some(*candidate_id)
         );
         assert_eq!(
             candidate_id_for_mutation(&cancellation),
-            Some(candidate_id.clone())
+            Some(*candidate_id)
         );
         assert_eq!(candidate_id_for_mutation(&claim_only_cancellation), None);
         assert_eq!(
             proposal_mutation_id_for_mutation(&revision_decision),
-            Some(proposal_mutation_id.clone())
+            Some(*proposal_mutation_id)
         );
         assert_eq!(
             target_claim_mutation_id_for_mutation(&cancellation),
-            Some(decision.mutation_id.clone())
+            Some(decision.mutation_id)
         );
         assert!(seller_reservation_for_mutation(&revision_decision).is_some());
         assert!(seller_reservation_for_mutation(&cancellation).is_none());
@@ -6243,7 +6243,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(matches!(
             error,
             RadrootsEventStoreError::Nip01Verification(
-                radroots_event_codec::verification::RadrootsNip01VerificationError::SignatureInvalid
+                radroots_event_codec::verify::RadrootsNip01VerificationError::SignatureInvalid
             )
         ));
         assert!(
@@ -6273,9 +6273,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(matches!(
             error,
             RadrootsEventStoreError::Nip01Verification(
-                radroots_event_codec::verification::RadrootsNip01VerificationError::KindOutOfRange {
-                    ..
-                }
+                radroots_event_codec::verify::RadrootsNip01VerificationError::KindOutOfRange { .. }
             )
         ));
         assert!(
@@ -8749,7 +8747,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(matches!(
             error,
             RadrootsEventStoreError::Nip01Verification(
-                radroots_event_codec::verification::RadrootsNip01VerificationError::SignatureInvalid
+                radroots_event_codec::verify::RadrootsNip01VerificationError::SignatureInvalid
             )
         ));
         assert!(
@@ -9586,7 +9584,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             signed_event(KIND_PROFILE, 20, Vec::new(), "{\"name\":\"a\"}"),
             signed_event(KIND_PROFILE, 20, Vec::new(), "{\"name\":\"b\"}"),
         ];
-        events.sort_by(|left, right| left.id_hex().cmp(&right.id_hex()));
+        events.sort_by_key(|event| event.id_hex());
         let lower = events[0].clone();
         let higher = events[1].clone();
 
@@ -9766,7 +9764,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 reducer_contract_id: "radroots.trade.reducer.v1".to_owned(),
                 reducer_version: 1,
                 projection_digest: event_id('f'),
-                root_mutation_id: Some(proposal.mutation_id.clone()),
+                root_mutation_id: Some(proposal.mutation_id),
                 negotiation_state: "open".to_owned(),
                 agreement_state: "none".to_owned(),
                 evidence_state: "complete".to_owned(),
@@ -9776,7 +9774,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 fulfillment_state: "not_started".to_owned(),
                 payment_state: "not_tracked".to_owned(),
                 projection_json: "{\"trade_id\":\"fixture\"}".to_owned(),
-                last_mutation_id: Some(proposal.mutation_id.clone()),
+                last_mutation_id: Some(proposal.mutation_id),
                 last_transport_event_seq: proposal_receipt.persistence.sequence(),
                 updated_at_ms: 7_100,
             })
@@ -9787,10 +9785,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("checkpoint query")
             .expect("checkpoint");
-        assert_eq!(
-            checkpoint.root_mutation_id,
-            Some(proposal.mutation_id.clone())
-        );
+        assert_eq!(checkpoint.root_mutation_id, Some(proposal.mutation_id));
         assert_eq!(checkpoint.agreement_state, "none");
 
         let mutation_plan = explain_query_plan(

@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use radroots_event::{post::deletion::AuthoredNip09DeletionRequest, wire::Nip01EventWireParts};
-use radroots_event_codec::deletion::authored::authored_nip09_deletion_request_to_wire_parts;
+use radroots_event_codec::encode::deletion::authored_nip09_deletion_request_to_wire_parts;
 
 /// A sealed builder for a validated NIP-09 deletion request.
 ///

@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use radroots_event::food::availability::FoodAvailabilityDetails;
-use radroots_event_codec::food_availability::authored::authored_food_availability_to_wire_parts;
+use radroots_event_codec::encode::food_availability::authored_food_availability_to_wire_parts;
 
 /// A sealed builder for a validated focused FoodAvailability event.
 ///

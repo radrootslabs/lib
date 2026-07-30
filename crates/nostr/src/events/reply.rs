@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use radroots_event::{post::reply::AuthoredNip10Reply, wire::Nip01EventWireParts};
-use radroots_event_codec::reply::authored::authored_nip10_reply_to_wire_parts;
+use radroots_event_codec::encode::reply::authored_nip10_reply_to_wire_parts;
 
 /// A sealed builder for a validated strict marked NIP-10 Reply.
 ///

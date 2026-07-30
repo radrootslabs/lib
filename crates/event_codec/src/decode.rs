@@ -7,6 +7,120 @@
 use core::fmt;
 use radroots_event::{envelope::EventEnvelopeError, wire::EventWireError};
 
+// Domain-specific parsers live behind the canonical decoding namespace.
+pub use crate::error::EventParseError;
+pub use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
+
+macro_rules! decode_domain {
+    ($name:ident, $source:path) => {
+        pub mod $name {
+            pub use $source::*;
+        }
+    };
+}
+
+decode_domain!(app_data, crate::app_data::decode);
+decode_domain!(article, crate::article::decode);
+decode_domain!(calendar, crate::calendar::decode);
+#[cfg(feature = "json")]
+decode_domain!(coop, crate::coop::decode);
+#[cfg(feature = "json")]
+decode_domain!(document, crate::document::decode);
+#[cfg(feature = "json")]
+decode_domain!(farm_crdt, crate::farm_crdt::decode);
+decode_domain!(farm_file, crate::farm_file::decode);
+#[cfg(feature = "json")]
+decode_domain!(farm_workspace, crate::farm_workspace::decode);
+decode_domain!(file_metadata, crate::file_metadata::decode);
+decode_domain!(follow, crate::follow::decode);
+decode_domain!(geochat, crate::geochat::decode);
+decode_domain!(gift_wrap, crate::gift_wrap::decode);
+decode_domain!(group, crate::group::decode);
+decode_domain!(http_auth, crate::http_auth::decode);
+decode_domain!(list, crate::list::decode);
+decode_domain!(list_set, crate::list_set::decode);
+decode_domain!(message, crate::message::decode);
+decode_domain!(message_file, crate::message_file::decode);
+#[cfg(feature = "json")]
+decode_domain!(plot, crate::plot::decode);
+decode_domain!(reaction, crate::reaction::decode);
+decode_domain!(relay_auth, crate::relay_auth::decode);
+decode_domain!(report, crate::report::decode);
+decode_domain!(repost, crate::repost::decode);
+#[cfg(feature = "json")]
+decode_domain!(resource_area, crate::resource_area::decode);
+#[cfg(feature = "json")]
+decode_domain!(resource_cap, crate::resource_cap::decode);
+decode_domain!(seal, crate::seal::decode);
+
+pub mod comment {
+    pub use crate::comment::inbound::*;
+}
+
+pub mod deletion {
+    pub use crate::deletion::inbound::*;
+    pub use crate::deletion::reconciliation_v1::inbound as reconciliation_v1;
+}
+
+#[cfg(feature = "json")]
+pub mod farm {
+    pub use crate::farm::decode::*;
+}
+
+pub mod food_availability {
+    pub use crate::food_availability::inbound::*;
+}
+
+pub mod job {
+    pub use crate::job::error::*;
+    pub use crate::job::traits::*;
+
+    pub mod feedback {
+        pub use crate::job::feedback::decode::*;
+    }
+    pub mod request {
+        pub use crate::job::request::decode::*;
+    }
+    pub mod result {
+        pub use crate::job::result::decode::*;
+    }
+}
+
+#[cfg(feature = "knowledge")]
+pub mod knowledge {
+    pub use crate::knowledge::decode::*;
+}
+
+pub mod operational_listing {
+    pub use crate::operational_listing::decode::*;
+}
+
+#[cfg(feature = "json")]
+pub mod order {
+    pub use crate::order::decode::*;
+}
+
+pub mod post {
+    pub use crate::post::decode::*;
+    pub use crate::post::inbound::*;
+}
+
+#[cfg(feature = "json")]
+pub mod profile {
+    pub use crate::profile::decode::*;
+    pub use crate::profile::inbound::*;
+    pub use crate::profile::{LegacyProfile, RadrootsProfileData};
+}
+
+pub mod reply {
+    pub use crate::reply::inbound::*;
+}
+
+#[cfg(feature = "json")]
+pub mod trade {
+    pub use crate::trade::{RadrootsTradeMutationParseError, trade_mutation_from_event};
+}
+
 #[cfg(feature = "json")]
 use radroots_event::{
     admission::RawEvent,

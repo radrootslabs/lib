@@ -24,16 +24,16 @@ use radroots_event::envelope::event_head::v1::{
 };
 use radroots_event::envelope::{EventEnvelope, EventKindClass};
 use radroots_event::id::Nip01Coordinate;
+use radroots_event_codec::admission::deletion::reconciliation_v1::{
+    RadrootsAdmittedNip09DeletionRequestEventV1, admit_verified_nip09_deletion_request_event_v1,
+};
+use radroots_event_codec::admission::deletion::reconciliation_v1::{
+    RadrootsNip09SuppressionOutcome, evaluate_nip09_suppression_from_borrowed_requests_v1,
+};
 use radroots_event_codec::admission::registry_v7::{
     RadrootsRegistryV7AdmissionDecision, admit_verified_event_registry_v7,
 };
-use radroots_event_codec::deletion::reconciliation_v1::admission::{
-    RadrootsAdmittedNip09DeletionRequestEventV1, admit_verified_nip09_deletion_request_event_v1,
-};
-use radroots_event_codec::deletion::reconciliation_v1::evaluator::{
-    RadrootsNip09SuppressionOutcome, evaluate_nip09_suppression_from_borrowed_requests_v1,
-};
-use radroots_event_codec::verification::v1::RadrootsSignatureVerifiedEvent;
+use radroots_event_codec::verify::v1::RadrootsSignatureVerifiedEvent;
 #[cfg(test)]
 use sqlx::SqlitePool;
 use sqlx::{Row, SqliteConnection};
@@ -1964,7 +1964,7 @@ fn apply_raw_head_to_winners(
         .get(&candidate.coordinate)
         .map(|winner| CurrentEventHead {
             coordinate: winner.candidate.coordinate.clone(),
-            event_id: winner.candidate.event_id.clone(),
+            event_id: winner.candidate.event_id,
             created_at: winner.candidate.created_at,
         });
     let decision = select_event_head_v1(candidate.clone(), current.as_ref());
@@ -3604,7 +3604,7 @@ mod tests {
         post::deletion::RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         wire::compute_canonical_nip01_event_id,
     };
-    use radroots_event_codec::verification::v1::verify_nip01_event_v1;
+    use radroots_event_codec::verify::v1::verify_nip01_event_v1;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use std::str::FromStr;
 

@@ -2,7 +2,7 @@ use super::reconciliation_v1::RadrootsEventIngest;
 use crate::RadrootsEventStoreError;
 use radroots_event::draft::SignedEvent;
 use radroots_event::wire::v1::Nip01EventWire;
-use radroots_event_codec::verification::v1::verify_nip01_event_v1;
+use radroots_event_codec::verify::v1::verify_nip01_event_v1;
 
 impl RadrootsEventIngest {
     pub(crate) fn from_signed_event_reconciliation_v1(

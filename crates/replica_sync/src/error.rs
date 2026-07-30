@@ -3,8 +3,8 @@ use alloc::string::{String, ToString};
 
 use core::fmt;
 
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::verification::RadrootsNip01VerificationError;
+use radroots_event_codec::verify::RadrootsNip01VerificationError;
+use radroots_event_codec::{decode::EventParseError, encode::EventEncodeError};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_sql_core::error::SqlError;
 
@@ -61,8 +61,8 @@ impl From<RadrootsNip01VerificationError> for RadrootsReplicaEventsError {
 #[cfg(test)]
 mod tests {
     use super::RadrootsReplicaEventsError;
-    use radroots_event_codec::error::{EventEncodeError, EventParseError};
-    use radroots_event_codec::verification::RadrootsNip01VerificationError;
+    use radroots_event_codec::verify::RadrootsNip01VerificationError;
+    use radroots_event_codec::{decode::EventParseError, encode::EventEncodeError};
     use radroots_replica_schema::ReplicaSchemaError;
     use radroots_sql_core::error::SqlError;
 

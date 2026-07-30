@@ -1,7 +1,7 @@
 use radroots_event::draft::SignedEventError;
 use radroots_event::id::ParseError;
 use radroots_event::wire::EventWireError;
-use radroots_event_codec::verification::RadrootsNip01VerificationError;
+use radroots_event_codec::verify::RadrootsNip01VerificationError;
 use radroots_transport::RadrootsTransportError;
 
 /// Maximum retained raw event rows in one event store.

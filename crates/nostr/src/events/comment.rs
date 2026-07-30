@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use radroots_event::{post::comment::AuthoredNip22Comment, wire::Nip01EventWireParts};
-use radroots_event_codec::comment::authored::authored_nip22_comment_to_wire_parts;
+use radroots_event_codec::encode::comment::authored_nip22_comment_to_wire_parts;
 
 /// A sealed builder for a validated strict NIP-22 Comment.
 ///

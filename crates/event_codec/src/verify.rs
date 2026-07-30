@@ -8,6 +8,10 @@ pub use radroots_event::admission::{
     ContractValidatedEvent, IdVerifiedEvent, RawEvent, SignatureVerifiedEvent, SignatureVerifier,
 };
 
+// Preserve the mature verification profiles under the final verification
+// namespace while consumers move away from the superseded crate-root exports.
+pub use crate::verification::*;
+
 /// Verifies that an event's declared identifier matches its canonical bytes.
 pub fn id(event: RawEvent) -> Result<IdVerifiedEvent, VerificationError> {
     event.verify_id()

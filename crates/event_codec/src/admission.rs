@@ -40,6 +40,19 @@ use crate::{
     },
 };
 
+/// Typed comment admission.
+pub mod comment;
+/// Typed deletion admission and deterministic suppression evaluation.
+pub mod deletion;
+/// Typed food-availability admission and revision validation.
+pub mod food_availability;
+/// Typed post admission.
+pub mod post;
+/// Typed profile admission.
+pub mod profile;
+/// Typed reply admission.
+pub mod reply;
+
 #[doc(hidden)]
 pub mod registry_v7;
 pub use registry_v7::{RadrootsRegistryV7AdmissionDecision, admit_verified_event_registry_v7};

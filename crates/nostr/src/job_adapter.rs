@@ -2,7 +2,7 @@
 
 use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};
 use radroots_event::envelope::kind::KIND_PROFILE;
-use radroots_event_codec::job::traits::{JobEventBorrow, JobEventLike};
+use radroots_event_codec::decode::job::{JobEventBorrow, JobEventLike};
 
 #[derive(Clone, Debug)]
 pub struct RadrootsNostrEventAdapter<'a> {

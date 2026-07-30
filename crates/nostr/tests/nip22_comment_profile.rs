@@ -7,8 +7,9 @@ use radroots_event::{
         Nip22EventRootReference,
     },
 };
-use radroots_event_codec::comment::{
-    admission::verify_and_admit_nip22_comment_event, inbound::RadrootsInboundNip22CommentPosition,
+use radroots_event_codec::{
+    admission::comment::verify_and_admit_nip22_comment_event,
+    decode::comment::RadrootsInboundNip22CommentPosition,
 };
 use radroots_nostr::prelude::{
     RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,

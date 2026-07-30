@@ -423,7 +423,7 @@ async fn transition_from_row(
             )));
         }
         Some(RadrootsStoreProducedCanonicalEventV1 {
-            event_id: raw_head.event_id().clone(),
+            event_id: *raw_head.event_id(),
             pubkey: *coordinate.pubkey(),
             created_at: raw_event.created_at,
             kind: coordinate.kind(),

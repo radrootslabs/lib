@@ -13,7 +13,7 @@ use core::time::Duration;
 #[cfg(feature = "events")]
 use radroots_event::profile::AuthoredProfile;
 #[cfg(feature = "events")]
-use radroots_event_codec::profile::authored::authored_profile_to_wire_parts;
+use radroots_event_codec::encode::profile::authored_profile_to_wire_parts;
 
 /// A sealed builder for a validated kind-0 Profile replacement snapshot.
 ///

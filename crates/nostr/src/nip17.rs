@@ -14,12 +14,11 @@ use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_event::social::message::Message;
 use radroots_event::social::message_file::MessageFile;
 use radroots_event::wire::Nip01EventWireParts;
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::message::decode as message_decode;
-use radroots_event_codec::message::encode as message_encode;
-use radroots_event_codec::message_file::decode as message_file_decode;
-use radroots_event_codec::message_file::encode as message_file_encode;
-use radroots_event_codec::parsed::RadrootsParsedData;
+use radroots_event_codec::decode::RadrootsParsedData;
+use radroots_event_codec::decode::message_file as message_file_decode;
+use radroots_event_codec::decode::{EventParseError, message as message_decode};
+use radroots_event_codec::encode::message_file as message_file_encode;
+use radroots_event_codec::encode::{EventEncodeError, message as message_encode};
 
 #[derive(Debug, Error)]
 pub enum RadrootsNip17Error {

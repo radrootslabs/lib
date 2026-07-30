@@ -5,7 +5,7 @@ use radroots_event::food::availability::{
     FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
 };
 use radroots_event::media::AuthoredImage;
-use radroots_event_codec::food_availability::admission::{
+use radroots_event_codec::admission::food_availability::{
     RadrootsFoodAvailabilityAdmissionOutcome, verify_and_admit_food_availability_event,
 };
 use radroots_nostr::prelude::{

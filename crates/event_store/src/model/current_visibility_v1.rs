@@ -2,7 +2,7 @@ use super::{
     RadrootsEventAdmissionStatus, RadrootsEventStoreSourceGeneration, RadrootsStoredRawEvent,
 };
 use radroots_event::id::EventId;
-pub use radroots_event_codec::deletion::reconciliation_v1::evaluator::{
+pub use radroots_event_codec::admission::deletion::reconciliation_v1::{
     RadrootsNip09SuppressionOutcome, RadrootsNip09SuppressionReason,
 };
 

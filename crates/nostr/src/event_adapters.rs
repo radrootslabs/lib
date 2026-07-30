@@ -3,10 +3,10 @@ use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_from_tag_value,
 };
 #[cfg(feature = "events")]
-use radroots_event_codec::parsed::RadrootsParsedData;
+use radroots_event_codec::decode::RadrootsParsedData;
 #[cfg(feature = "events")]
-use radroots_event_codec::{
-    post::decode::LegacyPost,
+use radroots_event_codec::decode::{
+    post::LegacyPost,
     profile::{LegacyProfile, RadrootsProfileData},
 };
 

@@ -4,7 +4,7 @@ use radroots_event::{
         AuthoredNip09DeletionRequest, Nip09DeletionAddressTarget, Nip09DeletionEventTarget,
     },
 };
-use radroots_event_codec::deletion::admission::verify_and_admit_nip09_deletion_request_event;
+use radroots_event_codec::admission::deletion::verify_and_admit_nip09_deletion_request_event;
 use radroots_nostr::prelude::{
     RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
     RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,

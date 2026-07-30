@@ -1,3 +1,4 @@
+use nostr::Keys;
 use radroots_event::envelope::kind::{
     KIND_FARM, KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE,
 };
@@ -10,11 +11,11 @@ use radroots_event::profile::{
 use radroots_event::social::list::ListEntry;
 use radroots_event::social::list_set::ListSet;
 use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::farm::encode as farm_encode;
-use radroots_event_codec::farm::list_sets as farm_list_sets;
-use radroots_event_codec::list_set::encode as list_set_encode;
-use radroots_event_codec::plot::encode as plot_encode;
+use radroots_event_codec::encode::farm as farm_encode;
+use radroots_event_codec::encode::farm as farm_list_sets;
+use radroots_event_codec::encode::list_set as list_set_encode;
+use radroots_event_codec::encode::plot as plot_encode;
+use radroots_event_codec::{decode::EventParseError, encode::EventEncodeError};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
 use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
@@ -44,6 +45,13 @@ use radroots_sql_core::SqlxSqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{ExecOutcome, SqlExecutor};
 use std::panic;
+
+fn fixture_public_key(seed: u8) -> String {
+    Keys::parse(&format!("{seed:064x}"))
+        .expect("fixture secret key")
+        .public_key()
+        .to_hex()
+}
 
 fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -> T {
     match result {
@@ -199,7 +207,7 @@ fn seed_source(
 ) {
     migrations::run_all_up(exec).expect("migrations");
 
-    let farm_pubkey = "f".repeat(64);
+    let farm_pubkey = fixture_public_key(15);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
     let farm_fields = IFarmFields {
         d_tag: farm_d_tag.clone(),
@@ -383,7 +391,7 @@ fn seed_source(
         "plot_tag",
     );
 
-    let owner_pubkey = "8".repeat(64);
+    let owner_pubkey = fixture_public_key(8);
     let _ = unwrap_sql(
         farm_member::create(
             exec,
@@ -546,7 +554,7 @@ fn ingest_rejects_unsupported_kind() {
     migrations::run_all_up(&exec).expect("migrations");
     let event = event_with_parts(
         1,
-        &"a".repeat(64),
+        &fixture_public_key(10),
         1_720_000_001,
         42,
         String::new(),
@@ -560,7 +568,7 @@ fn ingest_rejects_unsupported_kind() {
 fn ingest_reports_transaction_boundary_errors() {
     let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
-    let author = "a".repeat(64);
+    let author = fixture_public_key(10);
     let profile = profile_event(
         9_001,
         &author,
@@ -580,7 +588,7 @@ fn ingest_reports_transaction_boundary_errors() {
 fn ingest_reports_delete_internal_errors() {
     let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
-    let farm_pubkey = "f".repeat(64);
+    let farm_pubkey = fixture_public_key(15);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
 
     let create_event = farm_event(
@@ -619,7 +627,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
     let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let profile_pubkey = "a".repeat(64);
+    let profile_pubkey = fixture_public_key(10);
     let profile_ok = profile_event(
         9_201,
         &profile_pubkey,
@@ -637,7 +645,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
     );
     assert!(radroots_replica_ingest_event(&exec, &profile_parse_error).is_err());
 
-    let farm_pubkey = "b".repeat(64);
+    let farm_pubkey = fixture_public_key(11);
     let farm_seed_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
     let farm_seed = farm_event(
         9_203,
@@ -723,7 +731,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
     };
     let profile_insert_state_error = profile_event(
         9_209,
-        &"c".repeat(64),
+        &fixture_public_key(12),
         18,
         Some(ProfileType::Individual),
         "profile-state-insert",
@@ -777,7 +785,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         );
     };
 
-    let profile_pubkey = "d".repeat(64);
+    let profile_pubkey = fixture_public_key(13);
     let profile_create = profile_event(
         9_301,
         &profile_pubkey,
@@ -800,7 +808,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
     );
     assert_query_fail("update nostr_profile", &profile_update);
 
-    let farm_pubkey = "e".repeat(64);
+    let farm_pubkey = fixture_public_key(14);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
     let farm_create = farm_event(
         9_303,
@@ -890,7 +898,8 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
     assert_query_fail("insert into farm_member_claim", &member_of_event);
 
     let members_set =
-        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)]).expect("members");
+        farm_list_sets::farm_members_list_set(farm_d_tag, vec![fixture_public_key(6)])
+            .expect("members");
     let members_event =
         list_set_event(9_308, &farm_pubkey, 17, KIND_LIST_SET_GENERIC, &members_set);
     assert_query_fail("insert into farm_member", &members_event);
@@ -1081,7 +1090,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let profile_pubkey = "9".repeat(64);
+    let profile_pubkey = fixture_public_key(9);
     let profile_create = profile_event(
         101,
         &profile_pubkey,
@@ -1138,10 +1147,14 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     assert!(err.to_string().contains("profile_type required"));
 
     let profile_types = [
-        (ProfileType::Farm, "f".repeat(64), "farm-profile"),
-        (ProfileType::Coop, "c".repeat(64), "coop-profile"),
-        (ProfileType::Any, "a".repeat(64), "any-profile"),
-        (ProfileType::Radrootsd, "d".repeat(64), "radrootsd-profile"),
+        (ProfileType::Farm, fixture_public_key(15), "farm-profile"),
+        (ProfileType::Coop, fixture_public_key(12), "coop-profile"),
+        (ProfileType::Any, fixture_public_key(10), "any-profile"),
+        (
+            ProfileType::Radrootsd,
+            fixture_public_key(13),
+            "radrootsd-profile",
+        ),
     ];
     for (index, (profile_type, pubkey, name)) in profile_types.iter().enumerate() {
         let event = profile_event(
@@ -1157,7 +1170,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         );
     }
 
-    let farm_pubkey = "e".repeat(64);
+    let farm_pubkey = fixture_public_key(14);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
     let farm_location = FarmPublicLocation {
         primary: "farm-primary".to_string(),
@@ -1370,7 +1383,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         201,
         "AAAAAAAAAAAAAAAAAAAAAg",
         FarmRef {
-            pubkey: "3".repeat(64),
+            pubkey: fixture_public_key(3),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
         "plot-missing-farm",
@@ -1644,9 +1657,11 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
             .contains("must only include p tags")
     );
 
-    let members_valid =
-        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64), "6".repeat(64)])
-            .expect("members list");
+    let members_valid = farm_list_sets::farm_members_list_set(
+        farm_d_tag,
+        vec![fixture_public_key(6), fixture_public_key(6)],
+    )
+    .expect("members list");
     let members_event = list_set_event(
         406,
         &farm_pubkey,
@@ -1678,14 +1693,16 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         RadrootsReplicaIngestOutcome::Applied
     );
     let owners_valid =
-        farm_list_sets::farm_owners_list_set(farm_d_tag, vec!["8".repeat(64)]).expect("owners");
+        farm_list_sets::farm_owners_list_set(farm_d_tag, vec![fixture_public_key(8)])
+            .expect("owners");
     let owners_event = list_set_event(407, &farm_pubkey, 307, KIND_LIST_SET_GENERIC, &owners_valid);
     assert_eq!(
         radroots_replica_ingest_event(&exec, &owners_event).expect("owners apply"),
         RadrootsReplicaIngestOutcome::Applied
     );
     let workers_valid =
-        farm_list_sets::farm_workers_list_set(farm_d_tag, vec!["0".repeat(64)]).expect("workers");
+        farm_list_sets::farm_workers_list_set(farm_d_tag, vec![fixture_public_key(16)])
+            .expect("workers");
     let workers_event = list_set_event(
         408,
         &farm_pubkey,
@@ -1887,7 +1904,7 @@ fn sync_all_rejects_invalid_selectors_and_resolves_unique_pair() {
     assert!(missing_id_err.to_string().contains("farm not found"));
 
     let duplicate_d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
-    let duplicate_pubkey = "e".repeat(64);
+    let duplicate_pubkey = fixture_public_key(14);
     let fields = IFarmFields {
         d_tag: duplicate_d_tag.clone(),
         pubkey: duplicate_pubkey.clone(),
@@ -1924,7 +1941,7 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
     let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let farm_pubkey = "0".repeat(64);
+    let farm_pubkey = fixture_public_key(16);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
     let farm_row = unwrap_sql(
         farm::create(
@@ -2017,7 +2034,7 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
         "plot gcs",
     );
 
-    let member_pubkey = "6".repeat(64);
+    let member_pubkey = fixture_public_key(6);
     let _ = unwrap_sql(
         farm_member::create(
             &exec,
@@ -2117,7 +2134,7 @@ fn sync_emit_reports_encode_error_for_invalid_farm_record() {
             &exec,
             &IFarmFields {
                 d_tag: String::new(),
-                pubkey: "f".repeat(64),
+                pubkey: fixture_public_key(15),
                 name: "invalid farm".to_string(),
                 about: None,
                 website: None,
