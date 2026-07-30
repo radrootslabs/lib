@@ -1,0 +1,156 @@
+{
+  "suite": "knowledge_manifest_and_decode",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "knowledge_manifest_fields_valid_001",
+      "kind": "knowledge.contract_manifest_json.valid",
+      "input": {
+        "registry": "radroots_event_contract_registry_v7"
+      },
+      "expected": {
+        "schema_version": 2,
+        "registry_version": 7,
+        "required_fields": [
+          "schema_version",
+          "registry_version",
+          "radroots_event_version",
+          "radroots_event_codec_version",
+          "contract_id",
+          "kind",
+          "class",
+          "standard",
+          "stability",
+          "privacy",
+          "content_schema",
+          "discriminators",
+          "tag_contracts",
+          "codec_support",
+          "sdk_builder_support",
+          "sdk_draft_support",
+          "wasm_tag_builder_support",
+          "wasm_verified_decode_support",
+          "deprecated",
+          "replaced_by",
+          "introduced_at"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_verify_decode_claim_valid_002",
+      "kind": "knowledge.verify_and_decode_event.valid",
+      "input": {
+        "fixture": "knowledge_claim_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.claim.v1",
+        "decoded_variant": "KnowledgeClaim"
+      }
+    },
+    {
+      "id": "knowledge_missing_contract_invalid_003",
+      "kind": "knowledge.verify_and_decode_event.invalid",
+      "input": {
+        "fixture": "missing_contract_id"
+      },
+      "expected": {
+        "error_class": "decode_error",
+        "stage": "contract_validation"
+      }
+    },
+    {
+      "id": "knowledge_nip54_wiki_article_fork_defer_valid_004",
+      "kind": "knowledge.nip54.wiki_article_tags.valid",
+      "input": {
+        "fixture": "wiki_article_valid"
+      },
+      "expected": {
+        "fork_address_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health",
+          "wss://relay.example.com",
+          "fork"
+        ],
+        "fork_event_tag": [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "wss://relay.example.com",
+          "fork"
+        ],
+        "defer_address_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health-v2",
+          "wss://relay.example.com",
+          "defer"
+        ],
+        "defer_event_tag": [
+          "e",
+          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "wss://relay.example.com",
+          "defer"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_nip54_redirect_valid_005",
+      "kind": "knowledge.nip54.wiki_redirect_tags.valid",
+      "input": {
+        "fixture": "wiki_redirect_valid"
+      },
+      "expected": {
+        "target_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health",
+          "wss://relay.example.com"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_nip54_merge_request_valid_006",
+      "kind": "knowledge.nip54.wiki_merge_request.valid",
+      "input": {
+        "fixture": "wiki_merge_request_valid"
+      },
+      "expected": {
+        "content": "Merge synthetic soil article updates",
+        "target_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health",
+          "wss://relay.example.com"
+        ],
+        "destination_tag": [
+          "p",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "base_event_tag": [
+          "e",
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          ""
+        ],
+        "source_event_tag": [
+          "e",
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "",
+          "source"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_nip54_merge_request_without_base_valid_007",
+      "kind": "knowledge.nip54.wiki_merge_request.valid",
+      "input": {
+        "fixture": "wiki_merge_request_without_base_valid"
+      },
+      "expected": {
+        "content": "Merge synthetic soil article updates",
+        "base_version_event_id": null,
+        "source_event_tag": [
+          "e",
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "",
+          "source"
+        ]
+      }
+    }
+  ]
+}

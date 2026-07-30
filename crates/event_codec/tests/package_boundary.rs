@@ -45,13 +45,53 @@ fn crate_root_declares_every_approved_module() {
 }
 
 #[test]
+fn canonical_root_exports_are_explicit_and_host_types_do_not_leak() {
+    for export in [
+        "pub use codec::Codec;",
+        "pub use decode::DecodeError;",
+        "pub use encode::EncodeError;",
+        "pub use verify::VerificationError;",
+    ] {
+        assert!(
+            ROOT.contains(export),
+            "missing canonical root export {export}"
+        );
+    }
+
+    assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
+    assert!(!ROOT.contains("pub trait "));
+    for forbidden in [
+        "nostr::",
+        "nostr_sdk::",
+        "reqwest::",
+        "sqlx::",
+        "tokio::",
+        "std::os::",
+    ] {
+        assert!(
+            !ROOT.contains(forbidden),
+            "crate root must not expose host path {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn codec_runtime_is_protocol_neutral_and_host_free() {
     let features = table_keys(MANIFEST, "[features]");
     let dependencies = table_keys(MANIFEST, "[dependencies]");
 
     assert!(!features.contains("nostr"));
     assert!(dependencies.contains("secp256k1"));
-    for forbidden in ["nostr", "nostr-sdk", "reqwest", "sqlx", "tokio"] {
+    for forbidden in [
+        "keyring",
+        "nostr",
+        "nostr-sdk",
+        "reqwest",
+        "sqlx",
+        "tokio",
+        "wasm-bindgen",
+        "web-sys",
+    ] {
         assert!(
             !dependencies.contains(forbidden),
             "codec runtime must not depend on {forbidden}"

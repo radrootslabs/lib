@@ -27,6 +27,8 @@ use radroots_event_codec::verification::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };
+#[cfg(feature = "manifests")]
+use radroots_event_codec::{contract_manifest_json, knowledge_contract_manifest};
 use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 use radroots_test_fixtures::knowledge::{
     RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES, RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS,
@@ -557,6 +559,123 @@ fn verified_decode_exposes_representative_public_surface_events() {
             | RadrootsDecodedEvent::KnowledgeReview(_)
             | RadrootsDecodedEvent::KnowledgeFieldReport(_) => {}
             decoded => panic!("{decoded:?}"),
+        }
+    }
+}
+
+#[cfg(feature = "manifests")]
+#[test]
+fn checked_in_manifest_and_decode_vectors_execute_every_declared_case() {
+    const PACKAGED_VECTORS: &str = include_str!("fixtures/knowledge_manifest_and_decode.v1.json");
+    let workspace_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json");
+    if let Ok(workspace_vectors) = std::fs::read_to_string(workspace_path) {
+        assert_eq!(PACKAGED_VECTORS, workspace_vectors);
+    }
+
+    let suite: serde_json::Value = serde_json::from_str(PACKAGED_VECTORS).expect("vector suite");
+    assert_eq!(suite["suite"], "knowledge_manifest_and_decode");
+    assert_eq!(suite["contract_version"], "1.0.0");
+    let vectors = suite["vectors"].as_array().expect("vectors");
+    assert_eq!(vectors.len(), 7);
+
+    let fixtures = knowledge_valid_fixtures();
+    for vector in vectors {
+        let id = vector["id"].as_str().expect("vector id");
+        let kind = vector["kind"].as_str().expect("vector kind");
+        let expected = vector["expected"].as_object().expect("expected object");
+        match kind {
+            "knowledge.contract_manifest_json.valid" => {
+                let manifest_json = contract_manifest_json().expect("manifest JSON");
+                let manifest: serde_json::Value =
+                    serde_json::from_str(manifest_json.as_str()).expect("manifest value");
+                assert_eq!(
+                    manifest["schema_version"], expected["schema_version"],
+                    "{id}"
+                );
+                assert_eq!(
+                    manifest["registry_version"], expected["registry_version"],
+                    "{id}"
+                );
+                let contracts = manifest["contracts"].as_array().expect("contracts");
+                assert_eq!(
+                    contracts.len(),
+                    knowledge_contract_manifest().contracts.len(),
+                    "{id}"
+                );
+                for field in expected["required_fields"]
+                    .as_array()
+                    .expect("required fields")
+                {
+                    let field = field.as_str().expect("field name");
+                    assert!(
+                        manifest.get(field).is_some()
+                            || contracts
+                                .iter()
+                                .all(|contract| contract.get(field).is_some()),
+                        "{id}: missing required manifest field {field}"
+                    );
+                }
+            }
+            "knowledge.verify_and_decode_event.valid" => {
+                let fixture_id = vector["input"]["fixture"].as_str().expect("fixture id");
+                let signed = sign_parts(parts_for_fixture(
+                    &fixture_by_id(&fixtures, fixture_id).data,
+                ));
+                let decoded = verify_and_decode_radroots_event(signed).expect("decoded event");
+                assert!(
+                    matches!(decoded, RadrootsDecodedEvent::KnowledgeClaim(_)),
+                    "{id}"
+                );
+                assert_eq!(expected["decoded_variant"], "KnowledgeClaim", "{id}");
+                assert_eq!(
+                    expected["contract_id"], RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
+                    "{id}"
+                );
+            }
+            "knowledge.verify_and_decode_event.invalid" => {
+                let mut parts = knowledge_claim_to_wire_parts(&knowledge_claim()).expect("parts");
+                parts
+                    .tags
+                    .retain(|tag| tag.first().map(String::as_str) != Some("contract"));
+                let error = verify_and_decode_radroots_event(sign_parts(parts))
+                    .expect_err("missing contract must fail");
+                assert!(
+                    matches!(error, RadrootsDecodeError::ContractValidation(_)),
+                    "{id}"
+                );
+                assert_eq!(expected["error_class"], "decode_error", "{id}");
+                assert_eq!(expected["stage"], error.code(), "{id}");
+            }
+            "knowledge.nip54.wiki_article_tags.valid"
+            | "knowledge.nip54.wiki_redirect_tags.valid"
+            | "knowledge.nip54.wiki_merge_request.valid" => {
+                let fixture_id = vector["input"]["fixture"].as_str().expect("fixture id");
+                let parts = parts_for_fixture(&fixture_by_id(&fixtures, fixture_id).data);
+                if let Some(content) = expected.get("content") {
+                    assert_eq!(content, parts.content.as_str(), "{id}");
+                }
+                for (field, value) in expected {
+                    if field.ends_with("_tag") {
+                        let expected_tag = value
+                            .as_array()
+                            .expect("expected tag")
+                            .iter()
+                            .map(|value| value.as_str().expect("tag value").to_owned())
+                            .collect::<Vec<_>>();
+                        assert!(parts.tags.contains(&expected_tag), "{id}: missing {field}");
+                    }
+                }
+                if expected.get("base_version_event_id") == Some(&serde_json::Value::Null) {
+                    assert!(
+                        !parts.tags.iter().any(|tag| {
+                            tag == &vec!["e".to_owned(), hex_64('e'), String::new()]
+                        }),
+                        "{id}: unexpected base event tag"
+                    );
+                }
+            }
+            kind => panic!("{id}: unsupported vector kind {kind}"),
         }
     }
 }
