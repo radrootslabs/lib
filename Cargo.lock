@@ -4955,6 +4955,11 @@ version = "0.1.0-alpha"
 [[package]]
 name = "radroots_signing"
 version = "0.1.0-alpha"
+dependencies = [
+ "radroots_event",
+ "radroots_identity",
+ "radroots_protocol",
+]
 
 [[package]]
 name = "radroots_simplex_agent_proto"

@@ -14,5 +14,23 @@ publish = false
 [lib]
 name = "radroots_signing"
 
+[features]
+default = ["std", "serde"]
+std = [
+  "radroots_event/std",
+  "radroots_identity/std",
+  "radroots_protocol/std",
+]
+serde = [
+  "radroots_event/serde",
+  "radroots_identity/serde",
+  "radroots_protocol/serde",
+]
+
+[dependencies]
+radroots_event = { workspace = true, default-features = false }
+radroots_identity = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
+
 [lints]
 workspace = true
