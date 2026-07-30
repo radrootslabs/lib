@@ -802,6 +802,8 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::DuplicateFetchTargetOutcome
         | RadrootsTransportError::FetchPageLimitExceeded
         | RadrootsTransportError::FetchPageRequestMismatch
+        | RadrootsTransportError::InvalidDeliveryDeadline
+        | RadrootsTransportError::InvalidDeliveryOutcome
         | RadrootsTransportError::UnexpectedDeliveryTargetReceipt
         | RadrootsTransportError::DuplicateDeliveryTargetReceipt
         | RadrootsTransportError::MissingDeliveryTargetReceipt

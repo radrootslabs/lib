@@ -2101,6 +2101,8 @@ fn every_transport_error_has_a_stable_display_message() {
         RadrootsTransportError::EmptyDeliveryRequestId,
         RadrootsTransportError::InvalidDeliveryRequestId,
         RadrootsTransportError::InvalidDeliveryTimestamp,
+        RadrootsTransportError::InvalidDeliveryDeadline,
+        RadrootsTransportError::InvalidDeliveryOutcome,
         RadrootsTransportError::UnexpectedDeliveryTargetReceipt,
         RadrootsTransportError::DuplicateDeliveryTargetReceipt,
         RadrootsTransportError::MissingDeliveryTargetReceipt,

@@ -37,6 +37,8 @@ pub enum RadrootsTransportError {
     EmptyDeliveryRequestId,
     InvalidDeliveryRequestId,
     InvalidDeliveryTimestamp,
+    InvalidDeliveryDeadline,
+    InvalidDeliveryOutcome,
     UnexpectedDeliveryTargetReceipt,
     DuplicateDeliveryTargetReceipt,
     MissingDeliveryTargetReceipt,
@@ -114,6 +116,8 @@ impl fmt::Display for RadrootsTransportError {
             Self::InvalidDeliveryTimestamp => {
                 f.write_str("transport delivery timestamp is invalid")
             }
+            Self::InvalidDeliveryDeadline => f.write_str("transport delivery deadline is invalid"),
+            Self::InvalidDeliveryOutcome => f.write_str("transport delivery outcome is invalid"),
             Self::UnexpectedDeliveryTargetReceipt => {
                 f.write_str("transport delivery receipt contains an unexpected target")
             }

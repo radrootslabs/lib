@@ -1,10 +1,12 @@
 use futures::executor::block_on;
+use radroots_event::{SignedEvent, wire::v1::Nip01EventWire};
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, EventSource, FetchPage, FetchRequest,
-    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
-    RadrootsTransportTargetSet, SinkStatus, SourceStatus, TransportId,
+    RadrootsTransportTarget, RadrootsTransportTargetSet, SinkStatus, SourceStatus, TransportId,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
+    outcome::DeliveryOutcome,
+    policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    sink::{DeliveryPayload, DeliveryTargetReceipt},
     source::{FetchBounds, NextPage},
 };
 
@@ -43,10 +45,7 @@ impl EventSink for SinkOnly {
                 .iter()
                 .cloned()
                 .map(|target| {
-                    RadrootsTransportTargetReceipt::new(
-                        target,
-                        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
-                    )
+                    DeliveryTargetReceipt::attempted(target, DeliveryOutcome::delivered())
                 })
                 .collect();
             DeliveryReceipt::for_request(&request, receipts)
@@ -114,6 +113,14 @@ fn target_set() -> RadrootsTransportTargetSet {
     .expect("target set")
 }
 
+fn delivery_payload() -> DeliveryPayload {
+    let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
+    let wire = Nip01EventWire::parse_json(raw).expect("wire event");
+    DeliveryPayload::new(
+        SignedEvent::from_wire_verified_id(wire, raw).expect("signed delivery event"),
+    )
+}
+
 fn assert_source_dyn_compatible(_: &dyn EventSource) {}
 fn assert_sink_dyn_compatible(_: &dyn EventSink) {}
 
@@ -141,15 +148,16 @@ fn source_only_and_sink_only_implementations_are_independently_dispatchable() {
         sink.deliver(
             DeliveryRequest::new(
                 "deliver-1",
-                RadrootsTransportPayload::opaque_bytes("spi", [1]).expect("payload"),
+                delivery_payload(),
                 target_set(),
-                RadrootsTransportSatisfactionPolicy::all_delivered(),
+                SatisfactionPolicy::new(SatisfactionClass::Delivered, TargetPolicy::all()),
+                1_700_000_100_000,
             )
             .expect("delivery request"),
         ),
     )
     .expect("delivery receipt");
-    assert_eq!(receipt.request_id(), "deliver-1");
+    assert_eq!(receipt.request_id().as_str(), "deliver-1");
 }
 
 #[test]
