@@ -30,6 +30,9 @@ pub mod job_adapter;
 #[cfg(feature = "nip17")]
 pub mod nip17;
 
+#[cfg(feature = "signing")]
+pub mod signing;
+
 #[cfg(feature = "http")]
 pub mod nip11;
 

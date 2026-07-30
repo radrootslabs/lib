@@ -34,6 +34,7 @@ events = [
 ]
 http = ["dep:reqwest"]
 nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
+signing = ["events", "dep:radroots_signing", "radroots_signing/std"]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
@@ -43,6 +44,7 @@ radroots_event_codec = { workspace = true, optional = true, default-features = f
 radroots_identity = { workspace = true, optional = true, default-features = false, features = [
   "std",
 ] }
+radroots_signing = { workspace = true, optional = true, default-features = false }
 nostr = { workspace = true, features = ["nip04"] }
 nostr-sdk = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, default-features = false, features = [
@@ -55,6 +57,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 radroots_blossom = { workspace = true, default-features = false, features = [
+  "std",
+] }
+radroots_protocol = { workspace = true, default-features = false, features = [
   "std",
 ] }
 radroots_test_fixtures = { workspace = true }

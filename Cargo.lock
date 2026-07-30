@@ -4500,7 +4500,6 @@ version = "0.1.0-alpha"
 dependencies = [
  "radroots_event",
  "radroots_identity",
- "radroots_nostr",
  "serde_json",
 ]
 
@@ -4699,6 +4698,8 @@ dependencies = [
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",
+ "radroots_protocol",
+ "radroots_signing",
  "radroots_test_fixtures",
  "reqwest",
  "serde",
