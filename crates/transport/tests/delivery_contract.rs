@@ -255,6 +255,7 @@ fn retryability_and_terminality_are_explicit_normalized_data() {
 }
 
 #[test]
+#[cfg(feature = "serde")]
 fn serde_revalidates_policy_outcome_and_receipt_invariants() {
     let request = request(SatisfactionPolicy::new(
         SatisfactionClass::Accepted,

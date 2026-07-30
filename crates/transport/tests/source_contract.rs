@@ -120,16 +120,19 @@ fn page_preserves_cursor_provenance_and_partial_target_outcomes() {
     );
     assert!(matches!(page.next_page(), NextPage::Cursor(cursor) if cursor.as_str() == "page-2"));
 
-    let encoded = serde_json::to_string(&page).expect("serialize page");
-    assert!(!encoded.contains("admission"));
-    assert!(!encoded.contains("storage"));
-    assert_eq!(
-        serde_json::from_str::<FetchPage>(&encoded).expect("deserialize page"),
-        page
-    );
-    let mut invalid_time = serde_json::to_value(&page).expect("page value");
-    invalid_time["events"][0]["provenance"]["observed_at_unix_ms"] = 0.into();
-    assert!(serde_json::from_value::<FetchPage>(invalid_time).is_err());
+    #[cfg(feature = "serde")]
+    {
+        let encoded = serde_json::to_string(&page).expect("serialize page");
+        assert!(!encoded.contains("admission"));
+        assert!(!encoded.contains("storage"));
+        assert_eq!(
+            serde_json::from_str::<FetchPage>(&encoded).expect("deserialize page"),
+            page
+        );
+        let mut invalid_time = serde_json::to_value(&page).expect("page value");
+        invalid_time["events"][0]["provenance"]["observed_at_unix_ms"] = 0.into();
+        assert!(serde_json::from_value::<FetchPage>(invalid_time).is_err());
+    }
 }
 
 #[test]

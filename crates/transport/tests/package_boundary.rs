@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 
 #[allow(unused_imports)]
 use radroots_transport::{
+    DeliveryReceipt as _, DeliveryRequest as _, Error as _, EventSink as _, EventSource as _,
+    FetchPage as _, FetchRequest as _, Target as _, TargetSet as _, TransportId as _,
     capability as _, endpoint as _, error as _, outcome as _, policy as _, sink as _, source as _,
     target as _,
 };
@@ -10,6 +12,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const SOURCE: &str = include_str!("../src/source.rs");
 const SINK: &str = include_str!("../src/sink.rs");
+const ID: &str = include_str!("../src/id.rs");
 const LEGACY_TRANSPORT: &str = include_str!("../src/transport.rs");
 
 #[test]
@@ -89,6 +92,54 @@ fn source_and_sink_are_independent_dyn_compatible_host_spis() {
     assert!(!SINK.contains("fn fetch("));
 
     assert!(LEGACY_TRANSPORT.contains("#[doc(hidden)]\npub trait RadrootsTransport: Send + Sync"));
+}
+
+#[test]
+fn public_api_excludes_adapter_runtime_storage_and_retry_authority() {
+    let dependency_keys = table_keys(MANIFEST, "[dependencies]");
+    for forbidden in [
+        "radroots_outbox",
+        "radroots_storage",
+        "radroots_transport_nostr",
+        "radroots_transport_reticulum",
+        "nostr-sdk",
+        "nostr_sdk",
+        "reqwest",
+        "sqlx",
+        "tokio",
+    ] {
+        assert!(
+            !dependency_keys.contains(forbidden),
+            "generic transport must not depend on `{forbidden}`"
+        );
+    }
+
+    assert!(ID.contains("pub struct TransportId("));
+    assert!(!ID.contains("pub enum TransportId"));
+    for forbidden in [
+        "RADROOTS_RETICULUM_",
+        "ReticulumDestination",
+        "RelayUrl",
+        "NostrRelay",
+    ] {
+        assert!(
+            !ROOT.contains(forbidden),
+            "generic transport root must not export adapter symbol `{forbidden}`"
+        );
+    }
+    for source in [SOURCE, SINK] {
+        for forbidden in [
+            "tokio::spawn",
+            "std::thread::spawn",
+            "retry_loop",
+            "fallback_transport",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "transport SPI must not own runtime behavior `{forbidden}`"
+            );
+        }
+    }
 }
 
 fn table_keys<'a>(source: &'a str, heading: &str) -> BTreeSet<&'a str> {
