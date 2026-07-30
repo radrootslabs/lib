@@ -24,7 +24,6 @@ dto-bindgen = [
   "dep:dto_bindgen_core",
 ]
 std = [
-  "radroots_authority/std",
   "radroots_core/std",
   "radroots_event/std",
   "radroots_event_codec/std",
@@ -56,7 +55,6 @@ serde_json = [
 ]
 
 [dependencies]
-radroots_authority = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }

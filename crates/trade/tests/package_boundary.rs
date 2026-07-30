@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, workflow as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const DRAFT: &str = include_str!("../src/operational_listing/draft.rs");
 const IDENTITY: &str = include_str!("../src/identity.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -70,6 +71,19 @@ fn protocol_trade_id_is_singular_and_business_order_id_is_distinct() {
     assert!(IDENTITY.contains("trade::TradeId"));
     assert!(MODEL.contains("pub struct OrderId(String);"));
     assert!(MODEL.contains("No conversion exists between them."));
+}
+
+#[test]
+fn trade_canonicalization_accepts_validated_identity_without_authority_or_signing() {
+    let dependencies = table_keys(MANIFEST, "[dependencies]");
+
+    assert!(!dependencies.contains("radroots_authority"));
+    assert!(!MANIFEST.contains("radroots_authority/std"));
+    assert!(!DRAFT.contains("radroots_authority"));
+    assert!(!DRAFT.contains("RadrootsActorContext"));
+    assert!(!DRAFT.contains("ActorRoleUnsatisfied"));
+    assert!(DRAFT.contains("seller_pubkey: PublicKey"));
+    assert!(DRAFT.contains("performs no signing or authorization"));
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

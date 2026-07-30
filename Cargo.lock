@@ -5111,7 +5111,6 @@ dependencies = [
  "dto_bindgen_core",
  "hex",
  "nostr",
- "radroots_authority",
  "radroots_core",
  "radroots_event",
  "radroots_event_codec",
