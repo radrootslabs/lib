@@ -5164,6 +5164,9 @@ name = "radroots_transport"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "radroots_event",
+ "radroots_identity",
+ "radroots_protocol",
  "serde",
  "serde_json",
  "sha2",

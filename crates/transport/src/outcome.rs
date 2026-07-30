@@ -1,0 +1,1 @@
+//! Normalized transport operation outcomes.

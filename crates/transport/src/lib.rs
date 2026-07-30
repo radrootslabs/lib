@@ -1,17 +1,23 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 extern crate alloc;
 
+pub mod capability;
 mod delivery;
-mod error;
+pub mod endpoint;
+pub mod error;
 mod kind;
 mod message;
+pub mod outcome;
 mod payload;
+pub mod policy;
 mod reticulum;
+pub mod sink;
+pub mod source;
 mod status;
-mod target;
+pub mod target;
 mod transport;
 
 pub use delivery::{
