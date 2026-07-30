@@ -6,9 +6,8 @@ use radroots_mesh::{
 use radroots_mesh_agent_proto::{
     RADROOTS_MESH_AGENT_SCHEMA_ID, RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE, schema_sha256_hex,
 };
-use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-};
+use radroots_transport::{RadrootsTransportKind, RadrootsTransportMeshScopeId};
+use radroots_transport_reticulum::RADROOTS_RETICULUM_ENDPOINT_URI;
 
 pub const RADROOTS_MESH_AGENT_CLIENT_SCHEMA_ID: &str = RADROOTS_MESH_AGENT_SCHEMA_ID;
 pub const RADROOTS_MESH_AGENT_CLIENT_SCHEMA_NAMESPACE: &str = RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE;

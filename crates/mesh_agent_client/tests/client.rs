@@ -12,9 +12,8 @@ use radroots_mesh_agent_client::{
 use radroots_mesh_agent_proto::{
     RADROOTS_MESH_AGENT_SCHEMA_ID, RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE, schema_sha256_hex,
 };
-use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransportKind,
-};
+use radroots_transport::RadrootsTransportKind;
+use radroots_transport_reticulum::{RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID};
 use serde_json::json;
 
 fn publish_request() -> MeshAgentPublishRequest {

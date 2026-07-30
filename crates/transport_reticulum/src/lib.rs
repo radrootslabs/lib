@@ -4,21 +4,33 @@
 
 extern crate alloc;
 
+mod contract;
+mod message;
+
+pub use contract::{
+    RETICULUM_V1_MAX_PAYLOAD_BYTES, ReticulumCapabilityReportV1, ReticulumDestinationV1,
+    ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1, ReticulumFragmentPolicyV1,
+    ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPayloadPolicyV1,
+    ReticulumPrivacySemanticsV1, ReticulumRoutingMetadataV1,
+};
+pub use message::{
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+};
+
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport,
-    RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
+    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
     RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
     RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt, ReticulumCapabilityReportV1, ReticulumDestinationV1,
-    ReticulumPayloadPolicyV1,
+    RadrootsTransportTargetReceipt,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.default";

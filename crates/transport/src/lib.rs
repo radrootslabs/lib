@@ -10,11 +10,9 @@ pub mod endpoint;
 pub mod error;
 mod id;
 mod kind;
-mod message;
 pub mod outcome;
 mod payload;
 pub mod policy;
-mod reticulum;
 pub mod sink;
 pub mod source;
 mod status;
@@ -32,17 +30,7 @@ pub use kind::{
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
     RadrootsTransportImplementationState,
 };
-pub use message::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-};
 pub use payload::RadrootsTransportPayload;
-pub use reticulum::{
-    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
-    ReticulumFragmentIntegrityV1, ReticulumFragmentPolicyV1, ReticulumFragmentationModeV1,
-    ReticulumGatewaySemanticsV1, ReticulumPayloadPolicyV1, ReticulumPrivacySemanticsV1,
-    ReticulumRoutingMetadataV1,
-};
 pub use sink::{DeliveryReceipt, DeliveryRequest, EventSink, SinkStatus};
 pub use source::{BoxFuture, EventSource, FetchPage, FetchRequest, SourceStatus};
 pub use status::{

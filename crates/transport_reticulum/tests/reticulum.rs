@@ -1,19 +1,21 @@
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport,
-    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportFetchRequest, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RadrootsTransport, RadrootsTransportCapabilityAvailability,
+    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchRequest,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
-    ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
-    ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
 };
 use radroots_transport_reticulum::{
-    RadrootsReticulumAgentEndpoint, RadrootsReticulumBehavior, RadrootsReticulumEndpoint,
-    RadrootsReticulumError, RadrootsReticulumFetchRequest, RadrootsReticulumProfile,
-    RadrootsReticulumTransport,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsReticulumAgentEndpoint,
+    RadrootsReticulumBehavior, RadrootsReticulumEndpoint, RadrootsReticulumError,
+    RadrootsReticulumFetchRequest, RadrootsReticulumProfile, RadrootsReticulumTransport,
+    ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
+    ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
 };
+#[cfg(feature = "serde")]
+use serde_json::Value;
 
 fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
     assert_eq!(uri, RADROOTS_RETICULUM_ENDPOINT_URI);
@@ -602,6 +604,54 @@ fn public_models_round_trip_through_serde() {
     let decoded: RadrootsReticulumProfile = serde_json::from_str(&json).expect("profile decode");
 
     assert_eq!(decoded, profile);
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn destination_deserialization_revalidates_canonical_identity() {
+    let destination = ReticulumDestinationV1::local();
+    let canonical = serde_json::to_value(&destination).expect("serialize destination");
+    assert_eq!(
+        serde_json::from_value::<ReticulumDestinationV1>(canonical.clone())
+            .expect("deserialize canonical destination"),
+        destination
+    );
+
+    let mut forged_fingerprint = canonical.clone();
+    forged_fingerprint
+        .as_object_mut()
+        .expect("destination object")
+        .insert("fingerprint".to_owned(), Value::String("0".repeat(64)));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_fingerprint).is_err());
+
+    let mut forged_scope = canonical.clone();
+    forged_scope
+        .get_mut("routing")
+        .and_then(Value::as_object_mut)
+        .expect("routing object")
+        .insert("scope".to_owned(), Value::String("remote".to_owned()));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_scope).is_err());
+
+    let mut nested_unknown = canonical.clone();
+    nested_unknown
+        .get_mut("routing")
+        .and_then(Value::as_object_mut)
+        .expect("routing object")
+        .insert("unexpected".to_owned(), Value::Bool(true));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(nested_unknown).is_err());
+
+    let mut top_level_unknown = canonical;
+    top_level_unknown
+        .as_object_mut()
+        .expect("destination object")
+        .insert("unexpected".to_owned(), Value::Bool(true));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(top_level_unknown).is_err());
+}
+
+#[test]
+fn destination_rejects_non_reticulum_targets() {
+    let local = RadrootsTransportTarget::local("local:memory").expect("local target");
+    assert!(ReticulumDestinationV1::from_target(&local).is_err());
 }
 
 #[test]

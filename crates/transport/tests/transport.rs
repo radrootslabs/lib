@@ -1,5 +1,4 @@
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
     RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RadrootsTransport,
     RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
     RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
@@ -11,9 +10,7 @@ use radroots_transport::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
-    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
-    ReticulumFragmentIntegrityV1, ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1,
-    ReticulumPrivacySemanticsV1, TRANSPORT_ID_MAX_BYTES, TransportId,
+    TRANSPORT_ID_MAX_BYTES, TransportId,
 };
 use serde_json::Value;
 use std::borrow::ToOwned;
@@ -37,133 +34,12 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
 
     assert_eq!(nostr_upper.uri().as_str(), "wss://relay.example/Events");
     assert_eq!(nostr_upper.scope(), None);
-    assert_eq!(
-        reticulum.scope().map(|scope| scope.as_str()),
-        Some(RADROOTS_RETICULUM_SCOPE_ID)
-    );
+    assert_eq!(reticulum.scope().map(|scope| scope.as_str()), Some("local"));
     assert_eq!(nostr_upper.fingerprint(), nostr_lower.fingerprint());
     assert_ne!(nostr_upper.fingerprint(), reticulum.fingerprint());
     assert_eq!(
         nostr_upper.fingerprint().as_str(),
         "d0903c3067150d7b4f7efd92a9be002b97d74e83f8bb6827327fa7ecd869332b"
-    );
-}
-
-#[test]
-fn reticulum_destination_v1_is_canonical_and_stable() {
-    let target = RadrootsTransportTarget::reticulum().expect("reticulum target");
-    let destination = radroots_transport::ReticulumDestinationV1::from_target(&target)
-        .expect("destination from target");
-    let local = radroots_transport::ReticulumDestinationV1::local();
-
-    assert_eq!(destination, local);
-    assert_eq!(destination.uri().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
-    assert_eq!(
-        destination.routing().scope.as_str(),
-        RADROOTS_RETICULUM_SCOPE_ID
-    );
-    assert_eq!(
-        destination.routing().gateway,
-        ReticulumGatewaySemanticsV1::NoGatewayForwarding
-    );
-    assert_eq!(
-        destination.routing().privacy,
-        ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
-    );
-    assert_eq!(destination.fingerprint(), target.fingerprint());
-    assert_eq!(
-        destination
-            .transport_target()
-            .expect("transport target")
-            .fingerprint(),
-        target.fingerprint()
-    );
-    assert_eq!(
-        destination.fingerprint().as_str(),
-        "39142c9a79d6912655e0ad00fb5dbfbe9d2d91b4999e5d68d04a81d89a77f831"
-    );
-    assert!(
-        radroots_transport::ReticulumDestinationV1::new(
-            "reticulum:other",
-            RadrootsTransportMeshScopeId::local_reticulum(),
-            None,
-        )
-        .is_err()
-    );
-}
-
-#[test]
-#[cfg(feature = "serde")]
-fn reticulum_destination_deserialization_revalidates_canonical_identity() {
-    let destination = ReticulumDestinationV1::local();
-    let canonical = serde_json::to_value(&destination).expect("serialize destination");
-    assert_eq!(
-        serde_json::from_value::<ReticulumDestinationV1>(canonical.clone())
-            .expect("deserialize canonical destination"),
-        destination
-    );
-
-    let mut forged_fingerprint = canonical.clone();
-    forged_fingerprint
-        .as_object_mut()
-        .expect("destination object")
-        .insert("fingerprint".to_owned(), Value::String("0".repeat(64)));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_fingerprint).is_err());
-
-    let mut forged_scope = canonical.clone();
-    forged_scope
-        .get_mut("routing")
-        .and_then(Value::as_object_mut)
-        .expect("routing object")
-        .insert("scope".to_owned(), Value::String("remote".to_owned()));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_scope).is_err());
-
-    let mut nested_unknown = canonical.clone();
-    nested_unknown
-        .get_mut("routing")
-        .and_then(Value::as_object_mut)
-        .expect("routing object")
-        .insert("unexpected".to_owned(), Value::Bool(true));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(nested_unknown).is_err());
-
-    let mut top_level_unknown = canonical;
-    top_level_unknown
-        .as_object_mut()
-        .expect("destination object")
-        .insert("unexpected".to_owned(), Value::Bool(true));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(top_level_unknown).is_err());
-}
-
-#[test]
-fn reticulum_capability_report_v1_is_explicitly_unavailable_without_fragmentation() {
-    let report = ReticulumCapabilityReportV1::unavailable_local();
-
-    assert!(report.delivery_required);
-    assert!(!report.fetch_required);
-    assert!(!report.can_deliver);
-    assert!(!report.can_fetch);
-    assert!(!report.can_discover);
-    assert!(!report.can_forward_gateway);
-    assert!(!report.can_observe_receipts);
-    assert_eq!(
-        report.payload_policy.fragment_policy.mode,
-        ReticulumFragmentationModeV1::Unsupported
-    );
-    assert_eq!(report.payload_policy.fragment_policy.max_fragment_count, 1);
-    assert_eq!(
-        report.payload_policy.fragment_policy.max_reassembled_bytes,
-        report.payload_policy.max_payload_bytes
-    );
-    assert_eq!(
-        report
-            .payload_policy
-            .fragment_policy
-            .duplicate_fragment_behavior,
-        ReticulumDuplicateFragmentBehaviorV1::Reject
-    );
-    assert_eq!(
-        report.payload_policy.fragment_policy.integrity_verification,
-        ReticulumFragmentIntegrityV1::PayloadDigest
     );
 }
 
@@ -773,11 +649,8 @@ fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
 #[test]
 fn reticulum_transport_targets_use_default_destination_and_scope() {
     let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    assert_eq!(target.uri().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
-    assert_eq!(
-        target.scope().map(|scope| scope.as_str()),
-        Some(RADROOTS_RETICULUM_SCOPE_ID)
-    );
+    assert_eq!(target.uri().as_str(), "reticulum:local");
+    assert_eq!(target.scope().map(|scope| scope.as_str()), Some("local"));
 
     let invalid_reticulum_destination = ["reticulum:", "remote"].concat();
     for invalid in [
@@ -824,21 +697,21 @@ fn target_scope_participates_in_identity_and_label_does_not() {
     let remote_scope = RadrootsTransportMeshScopeId::parse("remote").expect("remote scope");
     let local = RadrootsTransportTarget::new_with_metadata(
         RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_ENDPOINT_URI,
+        "reticulum:local",
         Some(local_scope.clone()),
         Some(RadrootsTransportTargetLabel::parse("Local Reticulum node").expect("label")),
     )
     .expect("local Reticulum target");
     let relabeled = RadrootsTransportTarget::new_with_metadata(
         RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_ENDPOINT_URI,
+        "reticulum:local",
         Some(local_scope),
         Some(RadrootsTransportTargetLabel::parse("Renamed node").expect("label")),
     )
     .expect("relabeled mesh target");
     let remote = RadrootsTransportTarget::new_with_metadata(
         RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_ENDPOINT_URI,
+        "reticulum:local",
         Some(remote_scope),
         None,
     )
@@ -1863,7 +1736,7 @@ fn status_contract_covers_builders_and_availability_defaults() {
     .with_maturity(RadrootsTransportCapabilityMaturity::Preview)
     .with_availability(RadrootsTransportCapabilityAvailability::Degraded)
     .with_profile_id("reticulum.local")
-    .with_endpoint_uri(RADROOTS_RETICULUM_ENDPOINT_URI);
+    .with_endpoint_uri("reticulum:local");
     assert_eq!(
         unavailable.availability,
         RadrootsTransportCapabilityAvailability::Degraded
@@ -1900,15 +1773,6 @@ fn transport_id_serde_uses_the_protocol_wire_contract() {
     let protocol: radroots_protocol::capability::v1::TransportKind = id.into();
     assert_eq!(protocol.as_str(), id.as_str());
     assert_eq!(TransportId::from(protocol), id);
-}
-
-#[test]
-fn reticulum_destination_rejects_wrong_kind() {
-    let local = RadrootsTransportTarget::local("local:memory").expect("local target");
-    assert_eq!(
-        ReticulumDestinationV1::from_target(&local).expect_err("wrong kind"),
-        RadrootsTransportError::InvalidTargetUri
-    );
 }
 
 #[test]

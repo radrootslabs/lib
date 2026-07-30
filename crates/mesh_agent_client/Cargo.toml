@@ -19,6 +19,7 @@ serde = ["dep:serde", "radroots_mesh/serde"]
 radroots_mesh = { workspace = true, default-features = false }
 radroots_mesh_agent_proto = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
+radroots_transport_reticulum = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true, features = ["derive", "std"] }
 
 [dev-dependencies]

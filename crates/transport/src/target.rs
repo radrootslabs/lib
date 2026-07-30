@@ -1,8 +1,10 @@
 use crate::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransportError,
-    RadrootsTransportKind,
+    RadrootsTransportError, RadrootsTransportKind,
     endpoint::{ENDPOINT_URI_MAX_BYTES, TARGET_LABEL_MAX_BYTES, TARGET_SCOPE_MAX_BYTES},
 };
+
+const LEGACY_RETICULUM_ENDPOINT_URI: &str = "reticulum:local";
+const LEGACY_RETICULUM_SCOPE_ID: &str = "local";
 use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -103,7 +105,7 @@ impl TargetScope {
     }
 
     pub fn local_reticulum() -> Self {
-        Self::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("default Reticulum scope id")
+        Self::parse(LEGACY_RETICULUM_SCOPE_ID).expect("default Reticulum scope id")
     }
 
     pub fn as_str(&self) -> &str {
@@ -341,7 +343,7 @@ impl Target {
     }
 
     pub fn reticulum() -> Result<Self, RadrootsTransportError> {
-        Self::reticulum_with_metadata(RADROOTS_RETICULUM_ENDPOINT_URI, None, None)
+        Self::reticulum_with_metadata(LEGACY_RETICULUM_ENDPOINT_URI, None, None)
     }
 
     pub fn reticulum_with_metadata(
@@ -375,7 +377,7 @@ impl Target {
             RadrootsTransportKind::Nostr => EndpointUri::parse_nostr_relay(raw_uri)?,
             _ => EndpointUri::parse(raw_uri)?,
         };
-        if kind == RadrootsTransportKind::Reticulum && raw_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
+        if kind == RadrootsTransportKind::Reticulum && raw_uri != LEGACY_RETICULUM_ENDPOINT_URI {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
         let scope = scope.or_else(|| default_scope_for_kind(&kind));

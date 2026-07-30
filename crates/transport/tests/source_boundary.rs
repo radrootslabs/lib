@@ -628,7 +628,11 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
         );
     }
 
-    let reticulum_source = read_source(crates_root.join("transport/src/reticulum.rs").as_path());
+    let reticulum_source = read_source(
+        crates_root
+            .join("transport_reticulum/src/contract.rs")
+            .as_path(),
+    );
     let destination_struct = source_between(
         reticulum_source.as_str(),
         "pub struct ReticulumDestinationV1 {",
@@ -760,7 +764,7 @@ fn required_target_semantics_stay_fingerprint_exact() {
 }
 
 #[test]
-fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
+fn transport_identity_is_extensible_and_reticulum_contracts_are_preview_owned() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("transport crate parent");
@@ -786,8 +790,36 @@ fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
     assert!(!protocol_identity.contains("pub enum TransportKind"));
     assert!(protocol_identity.contains("MAX_TRANSPORT_KIND_BYTES"));
 
-    let transport_message_source =
-        read_source(crates_root.join("transport/src/message.rs").as_path());
+    let transport_root_source = read_source(crates_root.join("transport/src/lib.rs").as_path());
+    for forbidden in [
+        "RADROOTS_RETICULUM_ENDPOINT_URI",
+        "RADROOTS_RETICULUM_SCOPE_ID",
+        "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
+        "ReticulumCapabilityReportV1",
+        "ReticulumDestinationV1",
+        "ReticulumFragmentPolicyV1",
+        "ReticulumPayloadPolicyV1",
+        "ReticulumRoutingMetadataV1",
+    ] {
+        assert!(
+            !transport_root_source.contains(forbidden),
+            "generic transport root must not expose Reticulum-specific symbol `{forbidden}`"
+        );
+    }
+    assert!(
+        !crates_root.join("transport/src/message.rs").exists(),
+        "generic transport must not retain the Reticulum message module"
+    );
+    assert!(
+        !crates_root.join("transport/src/reticulum.rs").exists(),
+        "generic transport must not retain the Reticulum contract module"
+    );
+
+    let reticulum_message_source = read_source(
+        crates_root
+            .join("transport_reticulum/src/message.rs")
+            .as_path(),
+    );
     for required in [
         "RADROOTS_RETICULUM_ENDPOINT_URI",
         "reticulum:local",
@@ -796,8 +828,8 @@ fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
         "but this build does not implement Reticulum delivery.",
     ] {
         assert!(
-            transport_message_source.contains(required),
-            "transport message source must retain Reticulum unavailable message witness `{required}`"
+            reticulum_message_source.contains(required),
+            "private Reticulum message source must retain contract witness `{required}`"
         );
     }
     for forbidden in [
@@ -808,8 +840,8 @@ fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
         "hidden transport substitution",
     ] {
         assert!(
-            !transport_message_source.contains(forbidden),
-            "transport message source must not retain superseded Reticulum unavailable copy `{forbidden}`"
+            !reticulum_message_source.contains(forbidden),
+            "private Reticulum message source must not retain superseded copy `{forbidden}`"
         );
     }
 
@@ -817,15 +849,15 @@ fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
         read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
     assert!(
         reticulum_source.contains("RADROOTS_RETICULUM_ENDPOINT_URI"),
-        "Reticulum source must consume the shared endpoint URI constant"
+        "Reticulum source must consume its preview-owned endpoint URI constant"
     );
     assert!(
         !reticulum_source.contains(["reticulum:", "pre", "view-unavailable"].concat().as_str()),
-        "Reticulum source must not duplicate the shared endpoint URI"
+        "Reticulum source must not duplicate its endpoint URI"
     );
     assert!(
         reticulum_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
-        "Reticulum source must consume the shared unavailable message constant"
+        "Reticulum source must consume its preview-owned unavailable message constant"
     );
     assert!(
         !reticulum_source.contains("Reticulum transport is configured in preview mode"),
@@ -843,16 +875,17 @@ fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
     );
     let protocol_source = production_source(protocol_source_raw.as_str());
     assert!(
-        protocol_source.contains("RADROOTS_RETICULUM_ENDPOINT_URI"),
-        "transport publish protocol must consume the shared Reticulum endpoint URI constant"
+        protocol_source.contains("RETICULUM_ENDPOINT_URI as RADROOTS_RETICULUM_ENDPOINT_URI"),
+        "transport publish protocol must consume the versioned protocol endpoint constant"
     );
     assert!(
         !protocol_source.contains(["reticulum:", "pre", "view-unavailable"].concat().as_str()),
         "transport publish protocol must not duplicate the shared endpoint URI"
     );
     assert!(
-        protocol_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
-        "transport publish capabilities must consume the shared Reticulum unavailable message"
+        protocol_source
+            .contains("RETICULUM_UNAVAILABLE_MESSAGE as RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
+        "transport publish capabilities must consume the versioned protocol unavailable message"
     );
     assert!(
         !protocol_source.contains("Reticulum transport is configured in preview mode"),

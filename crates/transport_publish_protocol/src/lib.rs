@@ -10,8 +10,11 @@ use alloc::{collections::BTreeSet, string::String, vec::Vec};
 use std::{collections::BTreeSet, string::String, vec::Vec};
 
 use core::fmt;
+use radroots_protocol::radrootsd::transport_publish::v5::{
+    RETICULUM_ENDPOINT_URI as RADROOTS_RETICULUM_ENDPOINT_URI,
+    RETICULUM_UNAVAILABLE_MESSAGE as RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+};
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
 };

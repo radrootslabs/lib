@@ -24,9 +24,10 @@ use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
 };
+use radroots_protocol::radrootsd::transport_publish::v5::RETICULUM_ENDPOINT_URI as RADROOTS_RETICULUM_ENDPOINT_URI;
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
 };

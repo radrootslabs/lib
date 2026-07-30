@@ -1,7 +1,8 @@
-use crate::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetLabel, RadrootsTransportTargetUri,
+use crate::RADROOTS_RETICULUM_ENDPOINT_URI;
+use radroots_transport::{
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportTargetUri,
 };
 
 pub const RETICULUM_V1_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
