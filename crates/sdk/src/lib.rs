@@ -148,6 +148,7 @@ pub use crate::runtime::{
     StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+#[doc(hidden)]
 pub use crate::signer_provider::{
     RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS,
     RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS, RadrootsSdkLocalKeySigner,

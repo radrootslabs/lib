@@ -204,3 +204,21 @@ fn sdk_consumes_only_the_final_signing_boundary() {
         }
     }
 }
+
+#[test]
+fn signer_transition_surface_is_private_hidden_and_scheduled_for_removal() {
+    let manifest = manifest_dir();
+    let package_manifest = read_source(&manifest.join("Cargo.toml"));
+    let lib = read_source(&manifest.join("src/lib.rs"));
+    let adapters = read_source(&manifest.join("src/adapters/mod.rs"));
+    let transition_record =
+        read_source(&manifest.join("../../docs/implementation/COMPATIBILITY_SHIMS.md"));
+
+    assert!(package_manifest.contains("publish = false"));
+    assert!(lib.contains("#[doc(hidden)]\npub use crate::signer_provider::{"));
+    assert!(adapters.contains("#[doc(hidden)]\npub mod signer;"));
+    assert!(transition_record.contains("SDK signer provider façade"));
+    assert!(transition_record.contains("Step 313"));
+    assert!(transition_record.contains("oss/cli"));
+    assert!(transition_record.contains("oss/studio_app"));
+}
