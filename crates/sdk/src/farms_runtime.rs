@@ -12,8 +12,6 @@ use crate::{
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
-#[cfg(feature = "runtime")]
 use radroots_event::{
     contract::AuthorRole,
     draft::EventDraft,
@@ -23,6 +21,7 @@ use radroots_event::{
     listing::operational::OperationalListingPublicLocation,
 };
 #[cfg(feature = "runtime")]
+use radroots_signing::{Actor, Signer};
 #[cfg(feature = "runtime")]
 pub const FARM_PUBLISH_OPERATION_KIND: &str = "farm.publish.v1";
 
@@ -40,14 +39,14 @@ const GEOHASH_BASE32: &[u8; 32] = b"0123456789bcdefghjkmnpqrstuvwxyz";
 #[non_exhaustive]
 pub struct FarmPreparePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub farm: Farm,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl FarmPreparePublishRequest {
-    pub fn new(actor: RadrootsActorContext, farm: Farm) -> Self {
+    pub fn new(actor: Actor, farm: Farm) -> Self {
         Self {
             actor,
             farm,
@@ -66,7 +65,7 @@ impl FarmPreparePublishRequest {
 #[non_exhaustive]
 pub struct FarmEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub farm: Farm,
     pub target_policy: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -75,7 +74,7 @@ pub struct FarmEnqueuePublishRequest {
 
 #[cfg(feature = "runtime")]
 impl FarmEnqueuePublishRequest {
-    pub fn new(actor: RadrootsActorContext, farm: Farm, target_policy: TargetPolicy) -> Self {
+    pub fn new(actor: Actor, farm: Farm, target_policy: TargetPolicy) -> Self {
         Self {
             actor,
             farm,
@@ -213,7 +212,7 @@ impl SdkPublicLocality {
 #[non_exhaustive]
 pub struct FarmPrivateLocationUpsertRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub farm_d_tag: String,
     pub exact_location: SdkExactLocation,
     pub label: Option<String>,
@@ -223,7 +222,7 @@ pub struct FarmPrivateLocationUpsertRequest {
 #[cfg(feature = "runtime")]
 impl FarmPrivateLocationUpsertRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         farm_d_tag: impl Into<String>,
         exact_location: SdkExactLocation,
     ) -> Self {
@@ -279,7 +278,7 @@ impl FarmPrivateLocationInput {
 #[non_exhaustive]
 pub struct FarmPrivateLocationSetRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub farm_d_tag: String,
     pub input: FarmPrivateLocationInput,
     pub label: Option<String>,
@@ -289,7 +288,7 @@ pub struct FarmPrivateLocationSetRequest {
 #[cfg(feature = "runtime")]
 impl FarmPrivateLocationSetRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         farm_d_tag: impl Into<String>,
         input: FarmPrivateLocationInput,
     ) -> Self {
@@ -303,7 +302,7 @@ impl FarmPrivateLocationSetRequest {
     }
 
     pub fn exact(
-        actor: RadrootsActorContext,
+        actor: Actor,
         farm_d_tag: impl Into<String>,
         exact_location: SdkExactLocation,
     ) -> Self {
@@ -314,27 +313,15 @@ impl FarmPrivateLocationSetRequest {
         )
     }
 
-    pub fn city(
-        actor: RadrootsActorContext,
-        farm_d_tag: impl Into<String>,
-        city: impl Into<String>,
-    ) -> Self {
+    pub fn city(actor: Actor, farm_d_tag: impl Into<String>, city: impl Into<String>) -> Self {
         Self::new(actor, farm_d_tag, FarmPrivateLocationInput::city(city))
     }
 
-    pub fn query(
-        actor: RadrootsActorContext,
-        farm_d_tag: impl Into<String>,
-        query: impl Into<String>,
-    ) -> Self {
+    pub fn query(actor: Actor, farm_d_tag: impl Into<String>, query: impl Into<String>) -> Self {
         Self::new(actor, farm_d_tag, FarmPrivateLocationInput::query(query))
     }
 
-    pub fn geonames_id(
-        actor: RadrootsActorContext,
-        farm_d_tag: impl Into<String>,
-        id: i64,
-    ) -> Self {
+    pub fn geonames_id(actor: Actor, farm_d_tag: impl Into<String>, id: i64) -> Self {
         Self::new(actor, farm_d_tag, FarmPrivateLocationInput::geonames_id(id))
     }
 
@@ -354,13 +341,13 @@ impl FarmPrivateLocationSetRequest {
 #[non_exhaustive]
 pub struct FarmPrivateLocationClearRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub farm_d_tag: String,
 }
 
 #[cfg(feature = "runtime")]
 impl FarmPrivateLocationClearRequest {
-    pub fn new(actor: RadrootsActorContext, farm_d_tag: impl Into<String>) -> Self {
+    pub fn new(actor: Actor, farm_d_tag: impl Into<String>) -> Self {
         Self {
             actor,
             farm_d_tag: farm_d_tag.into(),
@@ -455,7 +442,7 @@ impl<'sdk> FarmsClient<'sdk> {
     pub async fn enqueue_publish_with_explicit_signer(
         &self,
         request: FarmEnqueuePublishRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
         let FarmEnqueuePublishRequest {
             actor,
@@ -483,7 +470,7 @@ impl<'sdk> FarmsClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_publish(
         &self,
-        actor: &RadrootsActorContext,
+        actor: &Actor,
         plan: FarmPublishPlan,
         target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
@@ -506,11 +493,11 @@ impl<'sdk> FarmsClient<'sdk> {
 
     pub async fn enqueue_prepared_publish_with_explicit_signer(
         &self,
-        actor: &RadrootsActorContext,
+        actor: &Actor,
         plan: FarmPublishPlan,
         target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
         let metadata = validate_farm_publish_plan(&plan)?;
         let enqueue = enqueue_signed_workflow(
@@ -596,7 +583,7 @@ impl<'sdk> FarmsClient<'sdk> {
         let public_locality = public_locality_from_reverse(request.exact_location, &reverse)?;
         let record = SdkPrivateFarmLocationRecord {
             farm_addr: farm_addr.clone(),
-            farm_pubkey: request.actor.pubkey().to_hex(),
+            farm_pubkey: request.actor.public_key().to_hex(),
             farm_d_tag: request.farm_d_tag,
             label,
             latitude: request.exact_location.latitude,
@@ -619,7 +606,7 @@ impl<'sdk> FarmsClient<'sdk> {
 
     async fn set_private_location_from_locality(
         &self,
-        actor: RadrootsActorContext,
+        actor: Actor,
         farm_d_tag: String,
         locality_query: GeocoderLocalityQuery,
         label: Option<String>,
@@ -641,7 +628,7 @@ impl<'sdk> FarmsClient<'sdk> {
                 };
                 let record = SdkPrivateFarmLocationRecord {
                     farm_addr: farm_addr.clone(),
-                    farm_pubkey: actor.pubkey().to_hex(),
+                    farm_pubkey: actor.public_key().to_hex(),
                     farm_d_tag,
                     label,
                     latitude: exact_location.latitude,
@@ -666,7 +653,7 @@ impl<'sdk> FarmsClient<'sdk> {
             GeocoderLocalityLookup::NoMatch => Ok(FarmPrivateLocationSetResult::NoMatch(
                 farm_private_location_lookup_receipt(
                     farm_addr,
-                    actor.pubkey().to_hex().as_str(),
+                    actor.public_key().to_hex().as_str(),
                     farm_d_tag,
                     FarmPrivateLocationInput::Locality(locality_query),
                     Vec::new(),
@@ -675,7 +662,7 @@ impl<'sdk> FarmsClient<'sdk> {
             GeocoderLocalityLookup::Ambiguous { candidates } => Ok(
                 FarmPrivateLocationSetResult::Ambiguous(farm_private_location_lookup_receipt(
                     farm_addr,
-                    actor.pubkey().to_hex().as_str(),
+                    actor.public_key().to_hex().as_str(),
                     farm_d_tag,
                     FarmPrivateLocationInput::Locality(locality_query),
                     candidates
@@ -800,7 +787,7 @@ fn validate_farm_publish_plan(
 
 #[cfg(feature = "runtime")]
 fn farm_publish_plan(
-    actor: &RadrootsActorContext,
+    actor: &Actor,
     farm_value: Farm,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<FarmPublishPlan, RadrootsSdkError> {
@@ -818,7 +805,7 @@ fn farm_publish_plan(
         created_at_nostr.into(),
         parts.tags,
         parts.content,
-        actor.pubkey().to_hex(),
+        actor.public_key().to_hex(),
     )
     .expect("validated farm publish draft freezes");
     let expected_event_id = EventId::parse(frozen_draft.expected_event_id_hex())
@@ -832,10 +819,7 @@ fn farm_publish_plan(
 }
 
 #[cfg(feature = "runtime")]
-fn require_farmer_actor(
-    actor: &RadrootsActorContext,
-    operation: &'static str,
-) -> Result<(), RadrootsSdkError> {
+fn require_farmer_actor(actor: &Actor, operation: &'static str) -> Result<(), RadrootsSdkError> {
     if actor.satisfies(AuthorRole::Farmer) {
         Ok(())
     } else {
@@ -847,11 +831,8 @@ fn require_farmer_actor(
 }
 
 #[cfg(feature = "runtime")]
-fn farm_addr(
-    actor: &RadrootsActorContext,
-    d_tag: &str,
-) -> Result<AddressableCoordinate, RadrootsSdkError> {
-    AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey())).map_err(
+fn farm_addr(actor: &Actor, d_tag: &str) -> Result<AddressableCoordinate, RadrootsSdkError> {
+    AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.public_key())).map_err(
         |error| RadrootsSdkError::InvalidRequest {
             message: format!("farm address is invalid: {error}"),
         },

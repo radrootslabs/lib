@@ -16,8 +16,6 @@ use crate::{
 #[cfg(feature = "runtime")]
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 #[cfg(feature = "runtime")]
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
-#[cfg(feature = "runtime")]
 use radroots_event::{
     draft::EventDraft,
     envelope::kind::TRADE_MUTATION_EVENT_KINDS,
@@ -32,6 +30,8 @@ use radroots_event::{
 use radroots_event_codec::encode::trade::trade_mutation_event_build;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RadrootsStoredTradeMutation, RadrootsTradeProjectionCheckpoint};
+#[cfg(feature = "runtime")]
+use radroots_signing::{Actor, Signer};
 #[cfg(feature = "runtime")]
 use radroots_trade::evidence::{
     RadrootsTradeEvidenceStateV1, RadrootsTradeMutationRecordV1,
@@ -112,7 +112,7 @@ impl<'client> TradeCommandService<'client> {
     pub async fn submit_proposal_with_explicit_signer(
         &self,
         request: SubmitProposalRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<TradeCommandReceipt, RadrootsSdkError> {
         let command = TradeCommandRequest::SubmitProposal(request);
         enqueue_trade_command_with_explicit_signer(self.sdk, command, signer).await
@@ -130,7 +130,7 @@ impl<'client> TradeCommandService<'client> {
     pub async fn propose_revision_with_explicit_signer(
         &self,
         request: ProposeRevisionRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<TradeCommandReceipt, RadrootsSdkError> {
         let command = TradeCommandRequest::ProposeRevision(request);
         enqueue_trade_command_with_explicit_signer(self.sdk, command, signer).await
@@ -148,7 +148,7 @@ impl<'client> TradeCommandService<'client> {
     pub async fn decide_candidate_with_explicit_signer(
         &self,
         request: DecideCandidateRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<TradeCommandReceipt, RadrootsSdkError> {
         let command = TradeCommandRequest::DecideCandidate(request);
         enqueue_trade_command_with_explicit_signer(self.sdk, command, signer).await
@@ -166,7 +166,7 @@ impl<'client> TradeCommandService<'client> {
     pub async fn cancel_trade_with_explicit_signer(
         &self,
         request: CancelTradeRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<TradeCommandReceipt, RadrootsSdkError> {
         let command = TradeCommandRequest::CancelTrade(request);
         enqueue_trade_command_with_explicit_signer(self.sdk, command, signer).await
@@ -184,7 +184,7 @@ impl<'client> TradeCommandService<'client> {
     pub async fn resume_operation_with_explicit_signer(
         &self,
         request: ResumeOperationRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<TradeCommandReceipt, RadrootsSdkError> {
         let command = TradeCommandRequest::ResumeOperation(request);
         enqueue_trade_command_with_explicit_signer(self.sdk, command, signer).await
@@ -305,7 +305,7 @@ impl<'client> TradesClient<'client> {
 #[non_exhaustive]
 pub struct SubmitProposalRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
@@ -315,7 +315,7 @@ pub struct SubmitProposalRequest {
 #[cfg(feature = "runtime")]
 impl SubmitProposalRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
@@ -352,7 +352,7 @@ impl SubmitProposalRequest {
 #[non_exhaustive]
 pub struct ProposeRevisionRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
@@ -362,7 +362,7 @@ pub struct ProposeRevisionRequest {
 #[cfg(feature = "runtime")]
 impl ProposeRevisionRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
@@ -391,7 +391,7 @@ impl ProposeRevisionRequest {
 #[non_exhaustive]
 pub struct DecideCandidateRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
@@ -402,7 +402,7 @@ pub struct DecideCandidateRequest {
 #[cfg(feature = "runtime")]
 impl DecideCandidateRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
@@ -437,7 +437,7 @@ impl DecideCandidateRequest {
 #[non_exhaustive]
 pub struct CancelTradeRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
@@ -447,7 +447,7 @@ pub struct CancelTradeRequest {
 #[cfg(feature = "runtime")]
 impl CancelTradeRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
@@ -471,7 +471,7 @@ impl CancelTradeRequest {
 #[non_exhaustive]
 pub struct ResumeOperationRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub envelope: TradeMutationEnvelopeV1,
     pub operation_kind: &'static str,
     pub target_policy: TargetPolicy,
@@ -483,7 +483,7 @@ pub struct ResumeOperationRequest {
 #[cfg(feature = "runtime")]
 impl ResumeOperationRequest {
     pub fn new(
-        actor: RadrootsActorContext,
+        actor: Actor,
         envelope: TradeMutationEnvelopeV1,
         operation_kind: &'static str,
         target_policy: TargetPolicy,
@@ -1040,7 +1040,7 @@ pub struct EvidenceView {
 #[derive(Clone, Debug)]
 struct TradeCommandPlan {
     operation_kind: &'static str,
-    actor: RadrootsActorContext,
+    actor: Actor,
     frozen_draft: EventDraft,
     trade_id: TradeId,
     mutation_id: MutationId,
@@ -1073,7 +1073,7 @@ impl TradeCommandRequest {
     fn into_parts(
         self,
     ) -> (
-        RadrootsActorContext,
+        Actor,
         TradeMutationEnvelopeV1,
         TargetPolicy,
         SatisfactionPolicy,
@@ -1163,7 +1163,7 @@ async fn enqueue_configured_trade_command(
 async fn enqueue_trade_command_with_explicit_signer(
     sdk: &RadrootsClient,
     request: TradeCommandRequest,
-    signer: &dyn RadrootsEventSigner,
+    signer: &dyn Signer,
 ) -> Result<TradeCommandReceipt, RadrootsSdkError> {
     let plan = trade_command_plan(sdk, request).await?;
     let enqueue = enqueue_signed_workflow(sdk, workflow_request(&plan), signer).await?;
@@ -1209,7 +1209,7 @@ async fn trade_command_plan(
         canonical.authored_at_unix_s,
         wire.tags,
         wire.content,
-        actor.pubkey().to_hex(),
+        actor.public_key().to_hex(),
     )
     .map_err(|error| {
         trade_command_error(
@@ -1304,10 +1304,10 @@ fn validate_operation_body(
 #[cfg(feature = "runtime")]
 fn validate_actor_matches_envelope(
     operation_kind: &'static str,
-    actor: &RadrootsActorContext,
+    actor: &Actor,
     envelope: &TradeMutationEnvelopeV1,
 ) -> Result<(), RadrootsSdkError> {
-    if actor.pubkey() == &envelope.author_pubkey {
+    if actor.public_key() == envelope.author_pubkey {
         Ok(())
     } else {
         Err(RadrootsSdkError::UnauthorizedActor {

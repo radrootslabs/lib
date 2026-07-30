@@ -1,4 +1,3 @@
-use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::contract::AuthorRole;
 use radroots_event::farm::FarmRef;
@@ -9,11 +8,13 @@ use radroots_event::listing::operational::{
     OperationalListingStatus,
 };
 use radroots_nostr::prelude::RadrootsNostrKeys;
+use radroots_nostr::signing::LocalSigner;
 use radroots_sdk::{
     ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,
     RadrootsSdkError, RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp,
     SdkIdempotencyKey, TargetPolicy,
 };
+use radroots_signing::{Actor, actor::ActorSource};
 
 const RELAY: &str = "wss://relay.example.com";
 
@@ -21,14 +22,17 @@ const RELAY: &str = "wss://relay.example.com";
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let keys = RadrootsNostrKeys::generate();
     let seller = keys.public_key().to_hex();
-    let signer =
-        RadrootsSdkLocalKeySigner::from_event_signer(RadrootsLocalEventSigner::new(keys)?)?;
+    let signer = RadrootsSdkLocalKeySigner::from_signer(LocalSigner::new(keys), seller.as_str())?;
     let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
         .await?;
-    let actor = RadrootsActorContext::test(seller.as_str(), [AuthorRole::Seller])?;
+    let actor = Actor::from_public_key_hex(
+        seller.as_str(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )?;
     let listing = sample_listing(seller.as_str());
     let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
     let target_policy = TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)?;

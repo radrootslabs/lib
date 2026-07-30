@@ -1,6 +1,5 @@
 #![cfg(feature = "runtime")]
 
-use radroots_authority::RadrootsActorContext;
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     contract::AuthorRole,
@@ -25,6 +24,7 @@ use radroots_sdk::{
     RadrootsSdkTimestamp, ReticulumProfile, SdkIdempotencyKey, SdkMutationState, TargetPolicy,
     TargetSet, TransportProfile,
 };
+use radroots_signing::{Actor, actor::ActorSource};
 use radroots_trade::operational_listing::RadrootsOperationalListingEditDocumentV1;
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 use sqlx::Row;
@@ -60,12 +60,22 @@ fn other_pubkey() -> &'static str {
     fixture_bob_pubkey()
 }
 
-fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
+fn actor() -> Actor {
+    Actor::from_public_key_hex(
+        seller_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )
+    .expect("actor")
 }
 
-fn non_seller_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Buyer]).expect("actor")
+fn non_seller_actor() -> Actor {
+    Actor::from_public_key_hex(
+        seller_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Buyer],
+    )
+    .expect("actor")
 }
 
 fn listing(d_tag: &str, title: &str) -> OperationalListing {
@@ -403,7 +413,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
         prepare_json["actor"]["roles"],
         serde_json::json!(["seller"])
     );
-    assert_eq!(prepare_json["actor"]["source"], "test");
+    assert_eq!(prepare_json["actor"]["source"], "explicit_public_key");
     assert_eq!(prepare_json["created_at"], 1_700_000_123);
     assert_eq!(
         prepare_json["document"]["listing"]["product"]["title"],
@@ -586,10 +596,7 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
         .expect_err("signer error");
     let message = error.to_string();
 
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerPubkeyMismatch { .. }
-    ));
+    assert!(matches!(error, RadrootsSdkError::UnauthorizedActor { .. }));
     assert!(!message.contains("raw"));
     assert!(!message.contains("ffff"));
 }
@@ -662,10 +669,7 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
         .expect_err("signer error");
     let message = error.to_string();
 
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerPubkeyMismatch { .. }
-    ));
+    assert!(matches!(error, RadrootsSdkError::UnauthorizedActor { .. }));
     assert!(!message.contains("raw"));
     assert!(!message.contains("ffff"));
 }

@@ -1,7 +1,7 @@
-use radroots_authority::{RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity};
-use radroots_event::draft::{EventDraft, SignedEvent};
-use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use radroots_signing::{
+    Error, SignReceipt, SignRequest, Signer, SignerStatus, error::Kind, signer::BoxFuture,
+};
 use std::sync::LazyLock;
 
 struct FixtureKeyMaterial {
@@ -28,9 +28,7 @@ pub(crate) fn fixture_bob_pubkey() -> &'static str {
     FIXTURE_BOB.pubkey.as_str()
 }
 
-#[derive(Clone)]
 pub struct FixtureSigner {
-    identity: RadrootsSignerIdentity,
     keys: RadrootsNostrKeys,
 }
 
@@ -42,27 +40,29 @@ impl FixtureSigner {
             _ => panic!("unsupported fixture signer public key"),
         };
         Self {
-            identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
             keys: material.keys.clone(),
         }
     }
+
+    #[allow(dead_code)]
+    pub fn sign_frozen_draft(
+        &self,
+        draft: &radroots_event::EventDraft,
+    ) -> Result<radroots_event::SignedEvent, radroots_nostr::error::RadrootsNostrError> {
+        radroots_nostr_sign_frozen_draft(&self.keys, draft)
+    }
 }
 
-impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &PublicKey {
-        self.identity.pubkey()
+impl Signer for FixtureSigner {
+    fn status(&self) -> BoxFuture<'_, Result<SignerStatus, Error>> {
+        Box::pin(async { Ok(SignerStatus::unavailable()) })
     }
 
-    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
-        if self.pubkey() != draft.expected_pubkey() {
-            return Err(RadrootsSignerError::SigningFailed {
-                message: "wrong fixture signer".to_owned(),
-            });
-        }
-        radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
-            RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
-            }
+    fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
+        Box::pin(async move {
+            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
+                .map_err(|source| Error::with_source(Kind::AuthorizationDenied, source))?;
+            SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)
         })
     }
 }

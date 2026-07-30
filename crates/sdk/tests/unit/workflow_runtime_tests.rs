@@ -1,12 +1,14 @@
 use super::*;
 #[cfg(feature = "signer-adapters")]
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
-use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_event::contract::AuthorRole;
 use radroots_event::draft::{EventDraft, SignedEvent, SignedEventParts};
 use radroots_event::envelope::kind::{KIND_FARM, KIND_GEOCHAT};
-use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use radroots_signing::{
+    Error as SigningError, SignReceipt, SignRequest, SignerStatus, actor::ActorSource,
+    error::Kind as SigningErrorKind, signer::BoxFuture,
+};
 use std::sync::LazyLock;
 
 struct WorkflowKeyMaterial {
@@ -30,37 +32,31 @@ fn workflow_idempotency_key(index: u16) -> SdkIdempotencyKey {
 }
 
 struct WorkflowSigner {
-    identity: RadrootsSignerIdentity,
     keys: RadrootsNostrKeys,
 }
 
 impl WorkflowSigner {
     fn new() -> Self {
         Self {
-            identity: RadrootsSignerIdentity::new(farmer_pubkey()).expect("identity"),
             keys: WORKFLOW_KEY_MATERIAL.keys.clone(),
         }
     }
 }
 
-struct FailIfCalledSigner {
-    identity: RadrootsSignerIdentity,
-}
+struct FailIfCalledSigner;
 
 impl FailIfCalledSigner {
     fn new() -> Self {
-        Self {
-            identity: RadrootsSignerIdentity::new(farmer_pubkey()).expect("identity"),
-        }
+        Self
     }
 }
 
-impl RadrootsEventSigner for FailIfCalledSigner {
-    fn pubkey(&self) -> &PublicKey {
-        self.identity.pubkey()
+impl Signer for FailIfCalledSigner {
+    fn status(&self) -> BoxFuture<'_, Result<SignerStatus, SigningError>> {
+        Box::pin(async { Ok(SignerStatus::unavailable()) })
     }
 
-    fn sign_frozen_draft(&self, _draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
+    fn sign(&self, _request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, SigningError>> {
         panic!("ephemeral workflow preflight must not invoke the signer")
     }
 }
@@ -73,35 +69,39 @@ impl InvalidSignatureSigner {
     }
 }
 
-impl RadrootsEventSigner for InvalidSignatureSigner {
-    fn pubkey(&self) -> &PublicKey {
-        self.0.pubkey()
+impl Signer for InvalidSignatureSigner {
+    fn status(&self) -> BoxFuture<'_, Result<SignerStatus, SigningError>> {
+        Box::pin(async { Ok(SignerStatus::unavailable()) })
     }
 
-    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
-        let signed = self.0.sign_frozen_draft(draft)?;
-        let mut wire = signed.wire().clone();
-        wire.sig = "0".repeat(128);
-        let raw_json =
-            serde_json::to_string(&wire).expect("invalid-signature fixture must serialize");
-        SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
-            RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
-            }
+    fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, SigningError>> {
+        Box::pin(async move {
+            let receipt = self.0.sign(request.clone()).await?;
+            let mut wire = receipt.signed_event().wire().clone();
+            wire.sig = "0".repeat(128);
+            let raw_json =
+                serde_json::to_string(&wire).expect("invalid-signature fixture must serialize");
+            let signed_event =
+                SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|source| {
+                    SigningError::with_source(SigningErrorKind::InternalError, source)
+                })?;
+            SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)
         })
     }
 }
 
-impl RadrootsEventSigner for WorkflowSigner {
-    fn pubkey(&self) -> &PublicKey {
-        self.identity.pubkey()
+impl Signer for WorkflowSigner {
+    fn status(&self) -> BoxFuture<'_, Result<SignerStatus, SigningError>> {
+        Box::pin(async { Ok(SignerStatus::unavailable()) })
     }
 
-    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
-        radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
-            RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
-            }
+    fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, SigningError>> {
+        Box::pin(async move {
+            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
+                .map_err(|source| {
+                    SigningError::with_source(SigningErrorKind::InternalError, source)
+                })?;
+            SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)
         })
     }
 }
@@ -208,7 +208,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     let idempotency_key =
         SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000237").expect("idempotency");
     let input = signed_outbox_input(
-        "workflow.test.v1",
+        "farm.publish.v1",
         &draft,
         signed_event(),
         workflow_delivery_plan(),
@@ -216,7 +216,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         true,
         1_700_000_000_000,
     );
-    assert_eq!(input.operation_kind, "workflow.test.v1");
+    assert_eq!(input.operation_kind, "farm.publish.v1");
     assert_eq!(
         input.delivery_plan.targets[0].uri().as_str(),
         "wss://relay.example.com"
@@ -272,7 +272,12 @@ async fn enqueue_signed_workflow_rejects_ephemeral_event_before_durable_commit()
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = ephemeral_draft_for(farmer_pubkey());
     let error = enqueue_signed_workflow(
         &sdk,
@@ -330,9 +335,14 @@ async fn enqueue_signed_workflow_rejects_invalid_signer_signature_without_storag
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-invalid-signature");
-    let operation_kind = "workflow.invalid-signature.test.v1";
+    let operation_kind = "farm.publish.v1";
 
     let error = enqueue_signed_workflow(
         &sdk,
@@ -397,7 +407,12 @@ async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_comm
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let signer = WorkflowSigner::new();
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-target-policy");
     let first_target_policy = TargetPolicy::try_nostr_relays(
@@ -414,7 +429,7 @@ async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_comm
     let first = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: first_target_policy.clone(),
@@ -428,7 +443,7 @@ async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_comm
     let replay = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: first_target_policy.clone(),
@@ -442,7 +457,7 @@ async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_comm
     let conflict = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: second_target_policy,
@@ -511,14 +526,19 @@ async fn enqueue_signed_workflow_maps_no_wait_directly_and_allows_local_only_pro
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let signer = WorkflowSigner::new();
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-no-wait");
 
     let receipt = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: TargetPolicy::default_profile(),
@@ -584,13 +604,18 @@ async fn enqueue_signed_workflow_rejects_missing_explicit_idempotency_key_withou
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-missing-idempotency");
 
     let error = match enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: TargetPolicy::default_profile(),
@@ -634,7 +659,12 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let signer = WorkflowSigner::new();
     let first_draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-success");
     let idempotency_key =
@@ -642,7 +672,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
     let receipt = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &first_draft,
             target_policy: TargetPolicy::default_profile(),
@@ -683,7 +713,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
     let error = match enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &second_draft,
             target_policy: TargetPolicy::default_profile(),
@@ -703,7 +733,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         RadrootsSdkError::IdempotencyConflict {
             operation_kind,
             ..
-        } if operation_kind == "workflow.test.v1"
+        } if operation_kind == "farm.publish.v1"
     ));
     assert_eq!(
         sdk._event_store
@@ -732,19 +762,24 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
             1_700_000_011,
         ))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(WorkflowSigner::new())
+            RadrootsSdkLocalKeySigner::from_signer(WorkflowSigner::new(), farmer_pubkey())
                 .expect("local signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-configured");
 
     let receipt = enqueue_configured_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "workflow.test.v1",
+            operation_kind: "farm.publish.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: TargetPolicy::default_profile(),
@@ -778,10 +813,15 @@ async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() 
         0
     );
     sdk._outbox.pool().close().await;
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
-        operation_kind: "workflow.test.v1",
+        operation_kind: "farm.publish.v1",
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
@@ -799,7 +839,12 @@ async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() 
 
 #[tokio::test]
 async fn enqueue_signed_workflow_reports_store_failures() {
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let closed_store_sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
@@ -808,7 +853,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
         .expect("sdk");
     closed_store_sdk._event_store.pool().close().await;
     let store_failure_request = SdkWorkflowEnqueueRequest {
-        operation_kind: "workflow.test.v1",
+        operation_kind: "farm.publish.v1",
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
@@ -834,10 +879,15 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
-        operation_kind: "workflow.test.v1",
+        operation_kind: "farm.publish.v1",
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
@@ -853,10 +903,15 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
 #[tokio::test]
 async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_radrootsd_execution() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
-        operation_kind: "workflow.test.v1",
+        operation_kind: "farm.publish.v1",
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::DefaultProfile,

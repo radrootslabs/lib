@@ -7,8 +7,6 @@ use crate::{
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
-#[cfg(feature = "runtime")]
 use radroots_event::{
     contract::AuthorRole,
     draft::EventDraft,
@@ -18,6 +16,8 @@ use radroots_event::{
 };
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutboxEnqueueStatus;
+#[cfg(feature = "runtime")]
+use radroots_signing::{Actor, Signer};
 #[cfg(feature = "runtime")]
 use radroots_trade::operational_listing::{
     RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditDocumentV1,
@@ -35,14 +35,14 @@ const OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID: &str = "radroots.operational_li
 #[non_exhaustive]
 pub struct ListingPreparePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub document: RadrootsOperationalListingEditDocumentV1,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl ListingPreparePublishRequest {
-    pub fn new(actor: RadrootsActorContext, listing: OperationalListing) -> Self {
+    pub fn new(actor: Actor, listing: OperationalListing) -> Self {
         Self {
             actor,
             document: RadrootsOperationalListingEditDocumentV1::new(listing),
@@ -50,10 +50,7 @@ impl ListingPreparePublishRequest {
         }
     }
 
-    pub fn from_document(
-        actor: RadrootsActorContext,
-        document: RadrootsOperationalListingEditDocumentV1,
-    ) -> Self {
+    pub fn from_document(actor: Actor, document: RadrootsOperationalListingEditDocumentV1) -> Self {
         Self {
             actor,
             document,
@@ -72,7 +69,7 @@ impl ListingPreparePublishRequest {
 #[non_exhaustive]
 pub struct ListingEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
-    pub actor: RadrootsActorContext,
+    pub actor: Actor,
     pub document: RadrootsOperationalListingEditDocumentV1,
     pub target_policy: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -81,11 +78,7 @@ pub struct ListingEnqueuePublishRequest {
 
 #[cfg(feature = "runtime")]
 impl ListingEnqueuePublishRequest {
-    pub fn new(
-        actor: RadrootsActorContext,
-        listing: OperationalListing,
-        target_policy: TargetPolicy,
-    ) -> Self {
+    pub fn new(actor: Actor, listing: OperationalListing, target_policy: TargetPolicy) -> Self {
         Self::from_document(
             actor,
             RadrootsOperationalListingEditDocumentV1::new(listing),
@@ -94,7 +87,7 @@ impl ListingEnqueuePublishRequest {
     }
 
     pub fn from_document(
-        actor: RadrootsActorContext,
+        actor: Actor,
         document: RadrootsOperationalListingEditDocumentV1,
         target_policy: TargetPolicy,
     ) -> Self {
@@ -234,7 +227,7 @@ impl<'sdk> ListingsClient<'sdk> {
     pub async fn enqueue_publish_with_explicit_signer(
         &self,
         request: ListingEnqueuePublishRequest,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
         let ListingEnqueuePublishRequest {
             actor,
@@ -262,7 +255,7 @@ impl<'sdk> ListingsClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_publish(
         &self,
-        actor: &RadrootsActorContext,
+        actor: &Actor,
         plan: ListingPublishPlan,
         target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
@@ -285,11 +278,11 @@ impl<'sdk> ListingsClient<'sdk> {
 
     pub async fn enqueue_prepared_publish_with_explicit_signer(
         &self,
-        actor: &RadrootsActorContext,
+        actor: &Actor,
         plan: ListingPublishPlan,
         target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-        signer: &dyn RadrootsEventSigner,
+        signer: &dyn Signer,
     ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
         let metadata = validate_listing_publish_plan(&plan)?;
         let enqueue = enqueue_signed_workflow(
@@ -338,7 +331,7 @@ fn listing_enqueue_receipt(
 
 #[cfg(feature = "runtime")]
 fn canonical_listing_edit(
-    actor: &RadrootsActorContext,
+    actor: &Actor,
     document: RadrootsOperationalListingEditDocumentV1,
 ) -> Result<RadrootsOperationalListingCanonicalEdit, RadrootsSdkError> {
     if !actor.satisfies(AuthorRole::Seller) {
@@ -347,7 +340,7 @@ fn canonical_listing_edit(
             reason: "missing role Seller".to_owned(),
         });
     }
-    canonicalize_operational_listing_edit(*actor.pubkey(), document).map_err(Into::into)
+    canonicalize_operational_listing_edit(actor.public_key(), document).map_err(Into::into)
 }
 
 #[cfg(feature = "runtime")]
@@ -412,7 +405,7 @@ fn validate_listing_publish_plan(
 
 #[cfg(feature = "runtime")]
 fn listing_publish_plan(
-    actor: &RadrootsActorContext,
+    actor: &Actor,
     document: RadrootsOperationalListingEditDocumentV1,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<ListingPublishPlan, RadrootsSdkError> {

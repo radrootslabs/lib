@@ -1,9 +1,5 @@
-use crate::RadrootsSdkError;
+use crate::{RadrootsSdkError, workflow_runtime::signing_operation_id};
 use nostr::{JsonUtil, Kind, PublicKey as NostrPublicKey, Tag, Tags, Timestamp, UnsignedEvent};
-use radroots_authority::{
-    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, authorize_actor_for_draft,
-    authorize_signer_for_draft, sign_authorized_draft, validate_signed_event_matches_draft,
-};
 use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::envelope::kind::{
     KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION,
@@ -19,13 +15,17 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest, RadrootsNostrConnectResponse,
     execute_request_with_transport,
 };
+use radroots_signing::{
+    Actor, SignReceipt, SignRequest, Signer,
+    request::{CancellationPolicy, SignPolicy},
+};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
 
 pub type RadrootsSdkNip46TransportFuture<'a, T> = RadrootsNostrConnectClientTransportFuture<'a, T>;
-pub type RadrootsSdkLocalSignerCapability = dyn RadrootsEventSigner + Send + Sync;
+pub type RadrootsSdkLocalSignerCapability = dyn Signer;
 
 pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
     KIND_FARM,
@@ -119,17 +119,13 @@ where
 
 pub struct RadrootsSdkSignRequest<'a> {
     pub operation_kind: &'a str,
-    pub actor: &'a RadrootsActorContext,
+    pub actor: &'a Actor,
     pub frozen_draft: &'a EventDraft,
     progress_sink: Option<&'a mut dyn RadrootsSdkSignerProgressSink>,
 }
 
 impl<'a> RadrootsSdkSignRequest<'a> {
-    pub fn new(
-        operation_kind: &'a str,
-        actor: &'a RadrootsActorContext,
-        frozen_draft: &'a EventDraft,
-    ) -> Self {
+    pub fn new(operation_kind: &'a str, actor: &'a Actor, frozen_draft: &'a EventDraft) -> Self {
         Self {
             operation_kind,
             actor,
@@ -220,20 +216,28 @@ pub struct RadrootsSdkLocalKeySigner {
 
 #[cfg(feature = "local-signer")]
 impl RadrootsSdkLocalKeySigner {
-    pub fn from_event_signer<S>(signer: S) -> Result<Self, RadrootsSdkError>
+    pub fn from_signer<S>(
+        signer: S,
+        signer_pubkey: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError>
     where
-        S: RadrootsEventSigner + Send + Sync + 'static,
+        S: Signer + 'static,
     {
-        Self::from_shared_event_signer(Arc::new(signer))
+        let signer_pubkey = PublicKey::from_hex(signer_pubkey.as_ref()).map_err(|_| {
+            RadrootsSdkError::InvalidRequest {
+                message: "local signer public key is invalid".to_owned(),
+            }
+        })?;
+        Self::from_shared_signer(Arc::new(signer), signer_pubkey)
     }
 
-    pub fn from_shared_event_signer(
+    pub fn from_shared_signer(
         signer: Arc<RadrootsSdkLocalSignerCapability>,
+        signer_pubkey: PublicKey,
     ) -> Result<Self, RadrootsSdkError> {
-        let signer_pubkey = signer.pubkey().to_hex();
         Ok(Self {
             signer,
-            signer_pubkey,
+            signer_pubkey: signer_pubkey.to_hex(),
         })
     }
 
@@ -265,17 +269,22 @@ impl RadrootsSdkLocalKeySigner {
         request.emit_progress(RadrootsSdkSignerProgress::RequestStarted {
             mode: RadrootsSdkSignerMode::LocalKey,
         })?;
-        let signed_event =
-            sign_authorized_draft(request.actor, self.signer.as_ref(), request.frozen_draft)?;
+        let operation_kind = request.operation_kind.to_owned();
+        let sign_request = final_sign_request(
+            &request,
+            CancellationPolicy::LocalCooperative,
+            Duration::from_millis(RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS),
+        )?;
+        let receipt = self.signer.sign(sign_request).await?;
         request.emit_progress(RadrootsSdkSignerProgress::RequestCompleted {
             mode: RadrootsSdkSignerMode::LocalKey,
         })?;
-        Ok(sign_receipt(
-            request.operation_kind,
+        Ok(sdk_sign_receipt(
+            operation_kind.as_str(),
             RadrootsSdkSignerMode::LocalKey,
             self.signer_pubkey.clone(),
             None,
-            signed_event,
+            receipt,
         ))
     }
 }
@@ -416,12 +425,19 @@ impl RadrootsSdkMycNip46Signer {
         request.emit_progress(RadrootsSdkSignerProgress::RequestStarted {
             mode: RadrootsSdkSignerMode::MycNip46,
         })?;
-        authorize_actor_for_draft(request.actor, request.frozen_draft)?;
-        let signer_identity = RadrootsSdkSignerIdentityOnly {
-            pubkey: self.user_pubkey,
-        };
-        authorize_signer_for_draft(&signer_identity, request.frozen_draft)?;
-        let sign_event_request = sign_event_request_from_frozen_draft(request.frozen_draft)?;
+        let operation_kind = request.operation_kind.to_owned();
+        let sign_request = final_sign_request(
+            &request,
+            CancellationPolicy::PreservePublishedRequest,
+            self.request_policy.request_timeout(),
+        )?;
+        if self.user_pubkey != sign_request.actor().public_key() {
+            return Err(radroots_signing::Error::new(
+                radroots_signing::error::Kind::AuthorizationDenied,
+            )
+            .into());
+        }
+        let sign_event_request = sign_event_request_from_frozen_draft(sign_request.draft())?;
         let request_id = self.next_request_id();
         let mut adapter = RadrootsSdkNip46TransportAdapter {
             transport: self.transport.as_ref(),
@@ -458,22 +474,26 @@ impl RadrootsSdkMycNip46Signer {
             return Err(error);
         }
         let response = response.map_err(sdk_error_from_nip46_error)?;
-        let signed_event = signed_event_from_nip46_response(request.operation_kind, response)?;
-        validate_signed_event_matches_draft(&signed_event, request.frozen_draft).map_err(
-            |error| RadrootsSdkError::SignerReturnedEventDrift {
-                operation: request.operation_kind.to_owned(),
-                reason: error.to_string(),
-            },
-        )?;
+        let signed_event = signed_event_from_nip46_response(operation_kind.as_str(), response)?;
+        let receipt = SignReceipt::from_signed_event(&sign_request, signed_event, unix_time_now()?)
+            .map_err(|error| match error.kind() {
+                radroots_signing::error::Kind::SignerOutputInvalid => {
+                    RadrootsSdkError::SignerReturnedEventDrift {
+                        operation: operation_kind.clone(),
+                        reason: error.to_string(),
+                    }
+                }
+                _ => error.into(),
+            })?;
         request.emit_progress(RadrootsSdkSignerProgress::RequestCompleted {
             mode: RadrootsSdkSignerMode::MycNip46,
         })?;
-        Ok(sign_receipt(
-            request.operation_kind,
+        Ok(sdk_sign_receipt(
+            operation_kind.as_str(),
             RadrootsSdkSignerMode::MycNip46,
             self.user_pubkey.to_hex(),
             Some(self.target.remote_signer_public_key.to_hex()),
-            signed_event,
+            receipt,
         ))
     }
 
@@ -513,20 +533,6 @@ pub fn radroots_sdk_myc_nip46_product_permission_strings() -> Vec<String> {
         .iter()
         .map(ToString::to_string)
         .collect()
-}
-
-struct RadrootsSdkSignerIdentityOnly {
-    pubkey: PublicKey,
-}
-
-impl RadrootsEventSigner for RadrootsSdkSignerIdentityOnly {
-    fn pubkey(&self) -> &PublicKey {
-        &self.pubkey
-    }
-
-    fn sign_frozen_draft(&self, _draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
-        Err(RadrootsSignerError::Unavailable)
-    }
 }
 
 struct RadrootsSdkNip46TransportAdapter<'a> {
@@ -676,13 +682,46 @@ fn sdk_error_from_nip46_error(error: RadrootsNostrConnectError) -> RadrootsSdkEr
     }
 }
 
-fn sign_receipt(
+fn final_sign_request(
+    request: &RadrootsSdkSignRequest<'_>,
+    cancellation: CancellationPolicy,
+    timeout: Duration,
+) -> Result<SignRequest, RadrootsSdkError> {
+    let operation_id = signing_operation_id(request.operation_kind).ok_or_else(|| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("unknown signing operation `{}`", request.operation_kind),
+        }
+    })?;
+    let now = unix_time_now()?;
+    let timeout_seconds = timeout.as_secs().max(1);
+    let deadline_unix = now
+        .checked_add(timeout_seconds)
+        .ok_or(RadrootsSdkError::TimestampOutOfRange { value: now })?;
+    let policy = SignPolicy::new(deadline_unix, cancellation)?;
+    SignRequest::new(
+        operation_id,
+        request.actor.clone(),
+        request.frozen_draft.clone(),
+        policy,
+    )
+    .map_err(Into::into)
+}
+
+fn unix_time_now() -> Result<u64, RadrootsSdkError> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)
+}
+
+fn sdk_sign_receipt(
     operation_kind: &str,
     mode: RadrootsSdkSignerMode,
     signer_pubkey: String,
     remote_signer_pubkey: Option<String>,
-    signed_event: SignedEvent,
+    receipt: SignReceipt,
 ) -> RadrootsSdkSignReceipt {
+    let signed_event = receipt.signed_event().clone();
     RadrootsSdkSignReceipt {
         operation_kind: operation_kind.to_owned(),
         mode,

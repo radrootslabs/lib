@@ -148,3 +148,59 @@ fn sdk_does_not_expose_generic_wire_part_signing() {
     assert!(!lib.contains("feature = \"signing\",\n"));
     assert!(!adapters.contains("pub mod signing"));
 }
+
+#[test]
+fn sdk_consumes_only_the_final_signing_boundary() {
+    let manifest = manifest_dir();
+    let cargo_manifest = read_source(&manifest.join("Cargo.toml"));
+    let workspace = manifest
+        .parent()
+        .and_then(Path::parent)
+        .expect("SDK crate belongs to the workspace root");
+    let workspace_manifest = read_source(&workspace.join("Cargo.toml"));
+    let cargo_config = read_source(&workspace.join(".cargo/config.toml"));
+    assert!(cargo_manifest.contains("radroots_signing = { workspace = true"));
+    assert!(workspace_manifest.contains("radroots_signing = { package = \"radroots_signing\""));
+    assert!(cargo_config.contains("radroots_signing = { path = \"../lib/crates/signing\" }"));
+    for source in [&cargo_manifest, &workspace_manifest, &cargo_config] {
+        assert!(!source.contains("radroots_authority"));
+    }
+
+    let retired_signing_surface = [
+        "radroots_authority",
+        "RadrootsActorContext",
+        "RadrootsEventSigner",
+        "RadrootsLocalEventSigner",
+    ];
+
+    for root in ["src", "tests", "examples"] {
+        let directory = manifest.join(root);
+        let mut files = Vec::new();
+        if directory.exists() {
+            fn collect(directory: &Path, files: &mut Vec<PathBuf>) {
+                for entry in fs::read_dir(directory).expect("read SDK source tree") {
+                    let path = entry.expect("SDK source entry").path();
+                    if path.is_dir() {
+                        collect(&path, files);
+                    } else if path.extension().is_some_and(|extension| extension == "rs") {
+                        files.push(path);
+                    }
+                }
+            }
+            collect(&directory, &mut files);
+        }
+        for path in files {
+            if path.ends_with("source_boundary.rs") {
+                continue;
+            }
+            let source = read_source(&path);
+            for retired in retired_signing_surface {
+                assert!(
+                    !source.contains(retired),
+                    "{} must use radroots_signing instead of retired `{retired}`",
+                    path.display()
+                );
+            }
+        }
+    }
+}

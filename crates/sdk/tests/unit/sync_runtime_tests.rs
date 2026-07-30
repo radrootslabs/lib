@@ -18,19 +18,13 @@ use crate::adapters::radrootsd::{RadrootsdError, RadrootsdPublishAdapter, Radroo
 use crate::workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow};
 use futures::future::BoxFuture;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_authority::{
-    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
-};
-#[cfg(feature = "radrootsd-execution")]
 use radroots_event::contract::AuthorRole;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_event::draft::{EventDraft, SignedEvent};
+use radroots_event::draft::EventDraft;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_event::envelope::kind::KIND_FARM;
 use radroots_event::id::EventId;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
-#[cfg(feature = "radrootsd-execution")]
-use radroots_identity::PublicKey;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 #[cfg(feature = "radrootsd-execution")]
@@ -51,6 +45,11 @@ use radroots_protocol::radrootsd::transport_publish::v5::{
     TargetFingerprint as TransportPublishTargetFingerprint,
     TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
     TargetSource as TransportPublishTargetSource,
+};
+#[cfg(feature = "radrootsd-execution")]
+use radroots_signing::{
+    Actor, Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus,
+    actor::ActorSource, error::Kind as SigningErrorKind, signer::BoxFuture as SigningFuture,
 };
 use radroots_transport::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportMeshScopeId, RadrootsTransportTarget,
@@ -89,7 +88,6 @@ struct UnusedPublishAdapter;
 
 #[cfg(feature = "radrootsd-execution")]
 struct RadrootsdFixtureSigner {
-    identity: RadrootsSignerIdentity,
     keys: RadrootsNostrKeys,
 }
 
@@ -97,24 +95,31 @@ struct RadrootsdFixtureSigner {
 impl RadrootsdFixtureSigner {
     fn new() -> Self {
         Self {
-            identity: RadrootsSignerIdentity::new(radrootsd_fixture_signer_pubkey())
-                .expect("identity"),
             keys: RADROOTSD_FIXTURE_SIGNER_KEYS.clone(),
         }
+    }
+
+    fn sign_frozen_draft(
+        &self,
+        draft: &EventDraft,
+    ) -> Result<radroots_event::SignedEvent, radroots_nostr::error::RadrootsNostrError> {
+        radroots_nostr_sign_frozen_draft(&self.keys, draft)
     }
 }
 
 #[cfg(feature = "radrootsd-execution")]
-impl RadrootsEventSigner for RadrootsdFixtureSigner {
-    fn pubkey(&self) -> &PublicKey {
-        self.identity.pubkey()
+impl Signer for RadrootsdFixtureSigner {
+    fn status(&self) -> SigningFuture<'_, Result<SignerStatus, SigningError>> {
+        Box::pin(async { Ok(SignerStatus::unavailable()) })
     }
 
-    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
-        radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
-            RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
-            }
+    fn sign(&self, request: SignRequest) -> SigningFuture<'_, Result<SignReceipt, SigningError>> {
+        Box::pin(async move {
+            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
+                .map_err(|source| {
+                    SigningError::with_source(SigningErrorKind::InternalError, source)
+                })?;
+            SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)
         })
     }
 }
@@ -130,9 +135,13 @@ impl RadrootsRelayPublishAdapter for UnusedPublishAdapter {
 }
 
 #[cfg(feature = "radrootsd-execution")]
-fn radrootsd_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(radrootsd_fixture_signer_pubkey(), [AuthorRole::Farmer])
-        .expect("actor")
+fn radrootsd_actor() -> Actor {
+    Actor::from_public_key_hex(
+        radrootsd_fixture_signer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor")
 }
 
 #[cfg(feature = "radrootsd-execution")]
@@ -164,7 +173,7 @@ async fn claimed_radrootsd_event(
     enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "sync.radrootsd.unit.v1",
+            operation_kind: "sync.push.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: crate::TargetPolicy::try_nostr_relays(

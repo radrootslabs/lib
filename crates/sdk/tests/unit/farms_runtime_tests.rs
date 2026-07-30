@@ -4,6 +4,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 use crate::fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
 use crate::serializer_failure::assert_struct_serialize_error_paths;
+use radroots_signing::actor::ActorSource;
 
 const FARM_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const FARM_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
@@ -15,8 +16,13 @@ fn farmer_pubkey() -> &'static str {
     fixture_alice_pubkey()
 }
 
-fn farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor")
+fn farmer_actor() -> Actor {
+    Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor")
 }
 
 fn farm(d_tag: &str, name: &str) -> Farm {
@@ -117,8 +123,9 @@ async fn fixture_geocoder(tempdir: &tempfile::TempDir, feature_name: Option<&str
 
 #[test]
 fn farm_publish_plan_rejects_invalid_draft_tags() {
-    let actor = RadrootsActorContext::test(
+    let actor = Actor::from_public_key_hex(
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ActorSource::ExplicitPublicKey,
         [AuthorRole::Farmer],
     )
     .expect("actor");
@@ -748,13 +755,21 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(farmer_pubkey()))
-                .expect("signer"),
+            RadrootsSdkLocalKeySigner::from_signer(
+                FixtureSigner::new(farmer_pubkey()),
+                farmer_pubkey(),
+            )
+            .expect("signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
 
     let receipt = sdk
         .farms()
@@ -780,13 +795,21 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
     let configured_sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(farmer_pubkey()))
-                .expect("signer"),
+            RadrootsSdkLocalKeySigner::from_signer(
+                FixtureSigner::new(farmer_pubkey()),
+                farmer_pubkey(),
+            )
+            .expect("signer"),
         ))
         .build()
         .await
         .expect("configured sdk");
-    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor");
 
     assert!(matches!(
         configured_sdk
@@ -918,8 +941,12 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
         farm_addr(&actor, FARM_B_D_TAG).expect("farm b addr")
     );
 
-    let non_farmer_actor =
-        RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Buyer]).expect("buyer actor");
+    let non_farmer_actor = Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Buyer],
+    )
+    .expect("buyer actor");
     assert!(matches!(
         sdk.farms()
             .clear_private_location(FarmPrivateLocationClearRequest::new(

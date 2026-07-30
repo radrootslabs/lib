@@ -43,7 +43,15 @@ knowledge = [
 identity-models = [
   "radroots_identity/std",
 ]
-signing = ["dep:nostr", "dep:radroots_nostr", "nostr", "radroots_nostr/std"]
+signing = [
+  "dep:nostr",
+  "dep:radroots_nostr",
+  "dep:radroots_protocol",
+  "nostr",
+  "radroots_nostr/std",
+  "radroots_protocol/std",
+  "radroots_signing/std",
+]
 transport-nostr-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
 radrootsd-execution = [
   "std",
@@ -74,11 +82,11 @@ runtime = [
   "dep:tokio",
   "dep:base64",
   "dep:hex",
-  "dep:radroots_authority",
   "dep:radroots_event_store",
   "dep:radroots_geocoder",
   "dep:radroots_outbox",
   "dep:radroots_protected_store",
+  "dep:radroots_protocol",
   "dep:radroots_transport",
   "dep:radroots_transport_nostr",
   "dep:radroots_transport_reticulum",
@@ -87,19 +95,20 @@ runtime = [
   "dep:sha2",
   "dep:sqlx",
   "dep:uuid",
-  "radroots_authority/std",
+  "radroots_signing/std",
   "radroots_event_store/sqlite",
   "radroots_event_store/runtime-tokio",
   "radroots_outbox/sqlite",
   "radroots_outbox/runtime-tokio",
   "radroots_protected_store/std",
+  "radroots_protocol/std",
   "radroots_secret_vault/std",
   "radroots_transport/serde",
   "radroots_transport_nostr/std",
   "radroots_transport_nostr/storage",
   "radroots_transport_nostr/runtime-tokio",
 ]
-local-signer = ["runtime", "radroots_authority/local_signer"]
+local-signer = ["runtime", "signing", "radroots_nostr/signing"]
 transport-nostr-runtime = [
   "runtime",
   "dep:radroots_nostr",
@@ -131,7 +140,6 @@ test-fixture-geonames-asset = [
 [dependencies]
 base64 = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
-radroots_authority = { workspace = true, optional = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
@@ -144,6 +152,7 @@ radroots_transport_nostr = { workspace = true, optional = true, default-features
 radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
 radroots_secret_vault = { workspace = true, optional = true, default-features = false }
+radroots_signing = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
@@ -201,10 +210,7 @@ nostr = { workspace = true }
 radroots_core = { workspace = true, default-features = false, features = [
   "std",
 ] }
-radroots_authority = { workspace = true, default-features = false, features = [
-  "std",
-  "local_signer",
-] }
+radroots_signing = { workspace = true, default-features = false, features = ["std"] }
 radroots_replica_store = { workspace = true, default-features = false, features = [
   "native",
 ] }
@@ -214,6 +220,7 @@ radroots_sql_core = { workspace = true, features = ["native"] }
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",
+  "signing",
 ] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

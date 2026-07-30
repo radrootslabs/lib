@@ -1107,36 +1107,42 @@ impl fmt::Display for RadrootsSdkError {
 impl std::error::Error for RadrootsSdkError {}
 
 #[cfg(feature = "runtime")]
-impl From<radroots_authority::RadrootsAuthorityError> for RadrootsSdkError {
-    fn from(error: radroots_authority::RadrootsAuthorityError) -> Self {
-        match error {
-            radroots_authority::RadrootsAuthorityError::ActorRoleUnsatisfied {
-                contract_id,
-                required_role,
-            } => Self::UnauthorizedActor {
-                operation: contract_id,
-                reason: format!("missing role {required_role:?}"),
-            },
-            radroots_authority::RadrootsAuthorityError::ActorPubkeyMismatch {
-                expected_pubkey,
-                actor_pubkey,
-            } => Self::UnauthorizedActor {
-                operation: "event authorization".to_owned(),
-                reason: format!(
-                    "actor_pubkey_prefix={} expected_pubkey_prefix={}",
-                    redacted_prefix(actor_pubkey.as_str()),
-                    redacted_prefix(expected_pubkey.as_str())
-                ),
-            },
-            radroots_authority::RadrootsAuthorityError::SignerPubkeyMismatch {
-                expected_pubkey,
-                signer_pubkey,
-            } => Self::SignerPubkeyMismatch {
+impl From<radroots_signing::Error> for RadrootsSdkError {
+    fn from(error: radroots_signing::Error) -> Self {
+        use radroots_signing::error::Kind;
+
+        match error.kind() {
+            Kind::AuthorizationDenied => Self::UnauthorizedActor {
                 operation: "event signing".to_owned(),
-                expected_pubkey_prefix: redacted_prefix(expected_pubkey.as_str()),
-                signer_pubkey_prefix: redacted_prefix(signer_pubkey.as_str()),
+                reason: "actor or signer is not authorized for the frozen draft".to_owned(),
             },
-            error => Self::Authority {
+            Kind::SignerCapabilityMissing => Self::SignerUnavailable {
+                mode: "configured".to_owned(),
+                reason: error.to_string(),
+            },
+            Kind::SignerUnavailable => Self::SignerUnavailable {
+                mode: "configured".to_owned(),
+                reason: error.to_string(),
+            },
+            Kind::SignerRejected => Self::SignerRequestRejected {
+                mode: "configured".to_owned(),
+                reason: error.to_string(),
+            },
+            Kind::SignerTimeout | Kind::DeadlineExceeded => Self::SignerRequestTimedOut {
+                mode: "configured".to_owned(),
+            },
+            Kind::SignerCancelled => Self::SignerRequestRejected {
+                mode: "configured".to_owned(),
+                reason: error.to_string(),
+            },
+            Kind::SignerOutputInvalid => Self::SignerReturnedEventDrift {
+                operation: "event signing".to_owned(),
+                reason: error.to_string(),
+            },
+            Kind::InvalidArgument | Kind::InternalError => Self::Authority {
+                message: error.to_string(),
+            },
+            _ => Self::Authority {
                 message: error.to_string(),
             },
         }

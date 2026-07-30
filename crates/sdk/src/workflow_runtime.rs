@@ -5,7 +5,6 @@ use crate::{
     TargetPolicy, TargetSet, TransportProfile,
     runtime::{RuntimeRecoveryReceiptWrite, record_runtime_recovery_receipt, sdk_now_ms},
 };
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event::{
     draft::{EventDraft, SignedEvent},
     envelope::{EventKind, EventKindClass},
@@ -19,6 +18,11 @@ use radroots_outbox::{
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus, RadrootsOutboxReticulumBehavior,
     RadrootsOutboxSignedOperationInput, RadrootsOutboxSignedTradeMutationInput,
 };
+use radroots_protocol::runtime::v1::OperationId;
+use radroots_signing::{
+    Actor, SignRequest, Signer,
+    request::{CancellationPolicy, SignPolicy},
+};
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportTarget,
 };
@@ -30,7 +34,7 @@ const SDK_RUNTIME_CONTRACT_VERSION: &str = "1";
 
 pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
     pub(crate) operation_kind: &'static str,
-    pub(crate) actor: &'a RadrootsActorContext,
+    pub(crate) actor: &'a Actor,
     pub(crate) frozen_draft: &'a EventDraft,
     pub(crate) target_policy: TargetPolicy,
     pub(crate) satisfaction_policy: SatisfactionPolicy,
@@ -50,7 +54,7 @@ pub(crate) struct SdkWorkflowEnqueueReceipt {
 pub(crate) async fn enqueue_signed_workflow(
     sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
-    signer: &dyn RadrootsEventSigner,
+    signer: &dyn Signer,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     ensure_durable_workflow_kind(&request)?;
     let delivery_plan =
@@ -67,8 +71,9 @@ pub(crate) async fn enqueue_signed_workflow(
         None,
     )
     .await?;
-    let signed_event = match sign_authorized_draft(request.actor, signer, request.frozen_draft) {
-        Ok(signed_event) => signed_event,
+    let sign_request = signing_request(&request)?;
+    let signed_event = match signer.sign(sign_request).await {
+        Ok(receipt) => receipt.signed_event().clone(),
         Err(error) => {
             let sdk_error: RadrootsSdkError = error.into();
             record_runtime_operation_failure(sdk, &request, &prepared.idempotency_key, &sdk_error)
@@ -83,6 +88,55 @@ pub(crate) async fn enqueue_signed_workflow(
                 .await?;
             Err(error)
         }
+    }
+}
+
+fn signing_request(
+    request: &SdkWorkflowEnqueueRequest<'_>,
+) -> Result<SignRequest, RadrootsSdkError> {
+    let operation_id = signing_operation_id(request.operation_kind).ok_or_else(|| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("unknown signing operation `{}`", request.operation_kind),
+        }
+    })?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)?
+        .as_secs();
+    let deadline_unix = now
+        .checked_add(30)
+        .ok_or(RadrootsSdkError::TimestampOutOfRange { value: now })?;
+    let policy = SignPolicy::new(deadline_unix, CancellationPolicy::PreservePublishedRequest)?;
+    SignRequest::new(
+        operation_id,
+        request.actor.clone(),
+        request.frozen_draft.clone(),
+        policy,
+    )
+    .map_err(Into::into)
+}
+
+pub(crate) fn signing_operation_id(operation: &str) -> Option<OperationId> {
+    match operation {
+        "farm.publish" | "farm.publish.v1" => Some(OperationId::FarmPublish),
+        "listing.publish" | "listing.publish.v1" => Some(OperationId::ListingPublish),
+        "trade.proposal.submit" | "trade.submit_proposal.v1" => {
+            Some(OperationId::TradeProposalSubmit)
+        }
+        "trade.revision.propose" | "trade.propose_revision.v1" => {
+            Some(OperationId::TradeRevisionPropose)
+        }
+        "trade.candidate.decide" | "trade.decide_candidate.v1" => {
+            Some(OperationId::TradeCandidateDecide)
+        }
+        "trade.cancellation.submit" | "trade.cancel.v1" => {
+            Some(OperationId::TradeCancellationSubmit)
+        }
+        "trade.operation.resume" | "trade.resume_operation.v1" => {
+            Some(OperationId::TradeOperationResume)
+        }
+        "sync.push" | "sync.push.v1" => Some(OperationId::SyncPush),
+        _ => OperationId::parse(operation.strip_suffix(".v1").unwrap_or(operation)).ok(),
     }
 }
 
@@ -616,7 +670,7 @@ async fn prepare_runtime_operation_journal(
     )
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().to_hex())
+    .bind(request.actor.public_key().to_hex())
     .bind(idempotency_key.as_str())
     .fetch_optional(&mut *tx)
     .await
@@ -633,7 +687,7 @@ async fn prepare_runtime_operation_journal(
             let new_digest_prefix = digest_prefix(command_hash.as_str());
             let error = RadrootsSdkError::IdempotencyConflict {
                 operation_kind: request.operation_kind.to_owned(),
-                expected_pubkey_prefix: request.actor.pubkey().to_hex().chars().take(12).collect(),
+                expected_pubkey_prefix: request.actor.public_key().to_hex().chars().take(12).collect(),
                 existing_digest_prefix: existing_digest_prefix.clone(),
                 new_digest_prefix: new_digest_prefix.clone(),
             };
@@ -642,7 +696,7 @@ async fn prepare_runtime_operation_journal(
             )
             .bind("idempotency_conflict")
             .bind(request.operation_kind)
-            .bind(request.actor.pubkey().to_hex())
+            .bind(request.actor.public_key().to_hex())
             .bind(idempotency_key.as_str())
             .bind("retry_operation_with_same_idempotency_key")
             .bind(
@@ -687,7 +741,7 @@ async fn prepare_runtime_operation_journal(
             .bind(observed_at_ms)
             .bind(SDK_RUNTIME_CONTRACT_VERSION)
             .bind(request.operation_kind)
-            .bind(request.actor.pubkey().to_hex())
+            .bind(request.actor.public_key().to_hex())
             .bind(idempotency_key.as_str())
             .execute(&mut *tx)
             .await
@@ -702,7 +756,7 @@ async fn prepare_runtime_operation_journal(
         )
         .bind(SDK_RUNTIME_CONTRACT_VERSION)
         .bind(request.operation_kind)
-        .bind(request.actor.pubkey().to_hex())
+        .bind(request.actor.public_key().to_hex())
         .bind(idempotency_key.as_str())
         .bind(command_hash.as_str())
         .bind(frozen_draft_json.as_str())
@@ -754,7 +808,7 @@ async fn mark_runtime_operation_state(
     .bind(observed_at_ms)
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().to_hex())
+    .bind(request.actor.public_key().to_hex())
     .bind(idempotency_key.as_str())
     .execute(sdk._event_store.pool())
     .await
@@ -790,7 +844,7 @@ async fn record_runtime_operation_failure(
         _ => None,
     };
     if let Some((recovery_code, recovery_action)) = recovery {
-        let actor_pubkey = request.actor.pubkey().to_hex();
+        let actor_pubkey = request.actor.public_key().to_hex();
         record_runtime_recovery_receipt(
             sdk._event_store.pool(),
             RuntimeRecoveryReceiptWrite {
@@ -818,7 +872,7 @@ async fn ensure_runtime_operation_can_commit(
     )
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().to_hex())
+    .bind(request.actor.public_key().to_hex())
     .bind(idempotency_key.as_str())
     .fetch_one(tx.as_mut())
     .await
@@ -859,7 +913,7 @@ async fn commit_runtime_operation_journal(
     .bind(observed_at_ms)
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().to_hex())
+    .bind(request.actor.public_key().to_hex())
     .bind(idempotency_key.as_str())
     .execute(tx.as_mut())
     .await
@@ -1016,7 +1070,7 @@ fn runtime_request_digest(
     let digest_document = serde_json::json!({
         "contract_version": SDK_RUNTIME_CONTRACT_VERSION,
         "operation_kind": request.operation_kind,
-        "actor_pubkey": request.actor.pubkey().to_hex(),
+        "actor_pubkey": request.actor.public_key().to_hex(),
         "draft": {
             "contract_id": request.frozen_draft.contract_id(),
             "contract_registry_version": request.frozen_draft.contract_registry_version(),

@@ -14,6 +14,7 @@ use radroots_event::{
 
 use crate::fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
 use crate::serializer_failure::assert_struct_serialize_error_paths;
+use radroots_signing::actor::ActorSource;
 
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const LISTING_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
@@ -26,8 +27,13 @@ fn seller_pubkey() -> &'static str {
     fixture_alice_pubkey()
 }
 
-fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
+fn actor() -> Actor {
+    Actor::from_public_key_hex(
+        seller_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )
+    .expect("actor")
 }
 
 fn listing(d_tag: &str, title: &str) -> OperationalListing {
@@ -511,13 +517,21 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(seller_pubkey()))
-                .expect("signer"),
+            RadrootsSdkLocalKeySigner::from_signer(
+                FixtureSigner::new(seller_pubkey()),
+                seller_pubkey(),
+            )
+            .expect("signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor");
+    let actor = Actor::from_public_key_hex(
+        seller_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )
+    .expect("actor");
 
     let receipt = sdk
         .listings()

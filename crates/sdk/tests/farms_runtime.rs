@@ -1,6 +1,5 @@
 #![cfg(feature = "runtime")]
 
-use radroots_authority::RadrootsActorContext;
 use radroots_event::{
     contract::AuthorRole,
     envelope::kind::{KIND_FARM, KIND_PROFILE},
@@ -24,6 +23,7 @@ use radroots_sdk::{
     SdkIdempotencyKey, SdkMutationState, SdkPublicLocality, StorageStatusRequest, TargetPolicy,
     TargetSet, TransportProfile,
 };
+use radroots_signing::{Actor, actor::ActorSource};
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
@@ -52,12 +52,22 @@ fn other_pubkey() -> &'static str {
     fixture_bob_pubkey()
 }
 
-fn farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor")
+fn farmer_actor() -> Actor {
+    Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor")
 }
 
-fn non_farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Buyer]).expect("actor")
+fn non_farmer_actor() -> Actor {
+    Actor::from_public_key_hex(
+        farmer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Buyer],
+    )
+    .expect("actor")
 }
 
 fn farm(d_tag: &str, name: &str) -> Farm {
@@ -73,8 +83,8 @@ fn farm(d_tag: &str, name: &str) -> Farm {
     }
 }
 
-fn farm_addr(actor: &RadrootsActorContext, d_tag: &str) -> AddressableCoordinate {
-    AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey()))
+fn farm_addr(actor: &Actor, d_tag: &str) -> AddressableCoordinate {
+    AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.public_key()))
         .expect("farm addr")
 }
 
@@ -658,10 +668,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
         .expect_err("signer error");
     let message = error.to_string();
 
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerPubkeyMismatch { .. }
-    ));
+    assert!(matches!(error, RadrootsSdkError::UnauthorizedActor { .. }));
     assert!(!message.contains("raw"));
     assert!(!message.contains("ffff"));
 
@@ -986,7 +993,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
-                "source": "test"
+                "source": "explicit_public_key"
             },
             "farm": {
                 "d_tag": FARM_A_D_TAG,
@@ -1023,7 +1030,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
-                "source": "test"
+                "source": "explicit_public_key"
             },
             "farm": {
                 "d_tag": FARM_B_D_TAG,
@@ -1094,7 +1101,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
-                "source": "test"
+                "source": "explicit_public_key"
             },
             "farm_d_tag": FARM_C_D_TAG,
             "exact_location": {
@@ -1121,7 +1128,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
-                "source": "test"
+                "source": "explicit_public_key"
             },
             "farm_d_tag": FARM_D_D_TAG,
             "input": {
@@ -1180,7 +1187,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
-                "source": "test"
+                "source": "explicit_public_key"
             },
             "farm_d_tag": FARM_E_D_TAG
         })

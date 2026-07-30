@@ -1,4 +1,3 @@
-use radroots_authority::RadrootsActorContext;
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::contract::AuthorRole;
 use radroots_event::farm::FarmRef;
@@ -9,6 +8,7 @@ use radroots_event::listing::operational::{
     OperationalListingStatus,
 };
 use radroots_sdk::{ListingPreparePublishRequest, RadrootsClient, RadrootsSdkTimestamp};
+use radroots_signing::{Actor, actor::ActorSource};
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -18,7 +18,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .build()
         .await?;
-    let actor = RadrootsActorContext::test(SELLER, [AuthorRole::Seller])?;
+    let actor =
+        Actor::from_public_key_hex(SELLER, ActorSource::ExplicitPublicKey, [AuthorRole::Seller])?;
     let request = ListingPreparePublishRequest::new(actor, sample_listing(SELLER));
 
     let plan = sdk.listings().prepare_publish(request)?;

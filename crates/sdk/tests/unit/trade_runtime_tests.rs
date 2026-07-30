@@ -3,7 +3,6 @@ use crate::{
     RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp, RadrootsSdkTradeErrorKind,
     SatisfactionPolicy, SdkIdempotencyKey, TargetPolicy,
 };
-use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_event::{
     contract::AuthorRole,
     envelope::kind::TRADE_MUTATION_EVENT_KINDS,
@@ -20,6 +19,8 @@ use radroots_event::{
 };
 use radroots_identity::PublicKey;
 use radroots_nostr::prelude::RadrootsNostrKeys;
+use radroots_nostr::signing::LocalSigner;
+use radroots_signing::{Actor, actor::ActorSource};
 use radroots_trade::model::RadrootsTradePrivateTermsStateV1;
 use radroots_trade::reducer::{RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION};
 
@@ -35,13 +36,10 @@ fn trade_id() -> TradeId {
     TradeId::parse("11111111111111111111111111111111").expect("trade id")
 }
 
-fn local_signer() -> (String, RadrootsLocalEventSigner) {
+fn local_signer() -> (String, LocalSigner) {
     let keys = RadrootsNostrKeys::generate();
     let pubkey = keys.public_key().to_hex();
-    (
-        pubkey,
-        RadrootsLocalEventSigner::new(keys).expect("local event signer"),
-    )
+    (pubkey, LocalSigner::new(keys))
 }
 
 #[tokio::test]
@@ -105,12 +103,22 @@ async fn trade_capabilities_report_canonical_release_product_surface() {
     assert!(!capabilities.optional_integrations.reticulum_transport);
 }
 
-fn buyer_actor(buyer_pubkey: &str) -> RadrootsActorContext {
-    RadrootsActorContext::test(buyer_pubkey, [AuthorRole::Buyer]).expect("buyer")
+fn buyer_actor(buyer_pubkey: &str) -> Actor {
+    Actor::from_public_key_hex(
+        buyer_pubkey,
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Buyer],
+    )
+    .expect("buyer")
 }
 
-fn seller_actor(seller_pubkey: &str) -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey, [AuthorRole::Seller]).expect("seller")
+fn seller_actor(seller_pubkey: &str) -> Actor {
+    Actor::from_public_key_hex(
+        seller_pubkey,
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )
+    .expect("seller")
 }
 
 fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> TradeCandidateTermsV1 {

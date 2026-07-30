@@ -1,7 +1,6 @@
 #![cfg(feature = "runtime")]
 
 use futures::future::BoxFuture;
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     contract::AuthorRole,
@@ -31,6 +30,7 @@ use radroots_sdk::{
     ReticulumTryNowRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
     StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
+use radroots_signing::{Actor, actor::ActorSource};
 use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportMeshScopeId,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
@@ -383,8 +383,13 @@ impl RadrootsRelayPublishAdapter for RecordingPublishAdapter {
     }
 }
 
-fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
+fn actor() -> Actor {
+    Actor::from_public_key_hex(
+        seller_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )
+    .expect("actor")
 }
 
 fn listing(d_tag: &str, title: &str) -> OperationalListing {

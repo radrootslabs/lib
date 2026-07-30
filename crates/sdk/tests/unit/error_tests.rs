@@ -4,28 +4,24 @@ use super::{
 };
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumBehavior;
-use radroots_authority::RadrootsAuthorityError;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
+use radroots_signing::{Error as SigningError, error::Kind as SigningErrorKind};
 use std::collections::BTreeSet;
 
 #[test]
-fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
-    let actor_error = RadrootsSdkError::from(RadrootsAuthorityError::ActorPubkeyMismatch {
-        expected_pubkey: "a".repeat(64),
-        actor_pubkey: "b".repeat(64),
-    });
+fn signing_error_conversion_preserves_normalized_failures() {
+    let actor_error =
+        RadrootsSdkError::from(SigningError::new(SigningErrorKind::AuthorizationDenied));
     assert!(matches!(
         actor_error,
         RadrootsSdkError::UnauthorizedActor { ref reason, .. }
-            if reason == "actor_pubkey_prefix=bbbbbbbbbbbb expected_pubkey_prefix=aaaaaaaaaaaa"
+            if reason == "actor or signer is not authorized for the frozen draft"
     ));
 
-    let fallback = RadrootsSdkError::from(RadrootsAuthorityError::UnknownContract {
-        contract_id: "contract-x".to_owned(),
-    });
+    let fallback = RadrootsSdkError::from(SigningError::new(SigningErrorKind::InvalidArgument));
     assert!(matches!(
         fallback,
-        RadrootsSdkError::Authority { ref message } if message.contains("contract-x")
+        RadrootsSdkError::Authority { ref message } if message == "signing request is invalid"
     ));
 }
 

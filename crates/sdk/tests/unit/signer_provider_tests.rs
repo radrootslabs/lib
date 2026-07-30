@@ -1,17 +1,17 @@
 use super::*;
 use nostr::nips::nip44::{self, Version};
 use nostr::{EventBuilder, JsonUtil, Kind, Tag};
-use radroots_authority::RadrootsLocalEventSigner;
 use radroots_event::contract::AuthorRole;
 use radroots_event::draft::EventDraft;
 use radroots_event::envelope::kind::{
     KIND_CLASSIFIED_LISTING, KIND_COOP, KIND_FARM, TRADE_MUTATION_EVENT_KINDS,
 };
-use radroots_nostr::prelude::RadrootsNostrEvent;
+use radroots_nostr::{prelude::RadrootsNostrEvent, signing::LocalSigner};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
 };
+use radroots_signing::actor::ActorSource;
 use std::collections::VecDeque;
 use std::future;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -32,10 +32,9 @@ fn user_pubkey() -> &'static str {
 }
 
 fn local_sdk_signer(keys: RadrootsNostrKeys) -> RadrootsSdkLocalKeySigner {
-    RadrootsSdkLocalKeySigner::from_event_signer(
-        RadrootsLocalEventSigner::new(keys).expect("local event signer"),
-    )
-    .expect("sdk local signer")
+    let signer_pubkey = keys.public_key().to_hex();
+    RadrootsSdkLocalKeySigner::from_signer(LocalSigner::new(keys), signer_pubkey)
+        .expect("sdk local signer")
 }
 
 fn remote_keys() -> RadrootsNostrKeys {
@@ -46,8 +45,13 @@ fn client_keys() -> RadrootsNostrKeys {
     CLIENT_KEYS.clone()
 }
 
-fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(user_pubkey(), [AuthorRole::Farmer]).expect("actor")
+fn actor() -> Actor {
+    Actor::from_public_key_hex(
+        user_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("actor")
 }
 
 fn frozen_draft() -> EventDraft {
@@ -273,8 +277,12 @@ async fn local_key_provider_returns_progress_sink_errors_without_transport_state
     let signer = local_sdk_signer(user_keys());
     let draft = frozen_draft();
     let actor = actor();
-    let wrong_actor =
-        RadrootsActorContext::test("a".repeat(64), [AuthorRole::Farmer]).expect("wrong actor");
+    let wrong_actor = Actor::from_public_key_hex(
+        &"a".repeat(64),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("wrong actor");
 
     assert!(matches!(
         signer
@@ -409,14 +417,6 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
 
 #[test]
 fn nip46_private_helpers_map_identity_adapter_and_response_edges() {
-    let pubkey = user_pubkey().parse().expect("pubkey");
-    let identity = RadrootsSdkSignerIdentityOnly { pubkey };
-    assert_eq!(identity.pubkey().to_hex(), user_pubkey());
-    assert!(matches!(
-        identity.sign_frozen_draft(&frozen_draft()),
-        Err(RadrootsSignerError::Unavailable)
-    ));
-
     assert!(matches!(
         signed_event_from_nip46_response(
             "farm.publish",
@@ -645,8 +645,12 @@ async fn myc_nip46_provider_reports_preflight_and_progress_sink_edges() {
     ));
     assert!(transport.published().is_empty());
 
-    let wrong_actor =
-        RadrootsActorContext::test("a".repeat(64), [AuthorRole::Farmer]).expect("wrong actor");
+    let wrong_actor = Actor::from_public_key_hex(
+        &"a".repeat(64),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("wrong actor");
     let actor_error = signer
         .sign(RadrootsSdkSignRequest::new(
             "farm.publish",
@@ -678,7 +682,7 @@ async fn myc_nip46_provider_reports_preflight_and_progress_sink_edges() {
         .expect_err("signer mismatch");
     assert!(matches!(
         signer_error,
-        RadrootsSdkError::SignerPubkeyMismatch { .. }
+        RadrootsSdkError::UnauthorizedActor { .. }
     ));
     assert!(mismatch_transport.published().is_empty());
 }

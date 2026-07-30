@@ -18,7 +18,7 @@ mod error;
 mod farm;
 #[cfg(feature = "runtime")]
 mod farms_runtime;
-#[cfg(all(test, feature = "runtime"))]
+#[cfg(all(test, feature = "runtime", feature = "signer-adapters"))]
 #[path = "../tests/support/fixture_signer.rs"]
 pub(crate) mod fixture_signer;
 #[cfg(feature = "runtime")]
