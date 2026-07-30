@@ -7,6 +7,16 @@ use radroots_protocol::runtime::v1::OperationId;
 use crate::{Error, SignRequest, error::Kind};
 
 /// Successful signer output with portable operation provenance.
+///
+/// Native receipts cannot be deserialized without the originating request;
+/// adapters must use [`SignReceipt::from_signed_event`] so exact-draft
+/// verification cannot be bypassed.
+///
+/// ```compile_fail
+/// use radroots_signing::SignReceipt;
+///
+/// let _: SignReceipt = serde_json::from_str("{}").unwrap();
+/// ```
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -87,7 +97,13 @@ mod tests {
     use radroots_identity::PublicKey;
 
     #[cfg(not(feature = "std"))]
-    use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
+    use alloc::{
+        borrow::ToOwned,
+        format,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
     #[cfg(feature = "std")]
     use std::{borrow::ToOwned, string::String, vec, vec::Vec};
 

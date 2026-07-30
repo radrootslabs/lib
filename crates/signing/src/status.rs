@@ -252,7 +252,13 @@ impl SignerStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "serde")]
     use crate::capability::{CancellationSupport, SignerKind};
+
+    #[cfg(not(feature = "std"))]
+    use alloc::format;
+    #[cfg(all(not(feature = "std"), feature = "serde"))]
+    use alloc::vec;
 
     #[test]
     fn challenge_validation_and_debug_redaction_are_explicit() {

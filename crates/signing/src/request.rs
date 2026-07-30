@@ -69,6 +69,17 @@ pub trait ProgressObserver: Send + Sync {
 }
 
 /// One authorized actor, frozen draft, and bounded signer invocation.
+///
+/// Runtime-local observers intentionally prevent native requests from becoming
+/// passive wire DTOs. Versioned protocol types own serialized boundaries.
+///
+/// ```compile_fail
+/// use radroots_signing::SignRequest;
+///
+/// fn serialize(request: &SignRequest) {
+///     let _ = serde_json::to_string(request).unwrap();
+/// }
+/// ```
 #[derive(Clone)]
 pub struct SignRequest {
     operation_id: OperationId,
@@ -199,7 +210,7 @@ mod tests {
     use radroots_identity::PublicKey;
 
     #[cfg(not(feature = "std"))]
-    use alloc::{string::String, sync::Arc, vec, vec::Vec};
+    use alloc::{borrow::ToOwned, string::String, sync::Arc, vec, vec::Vec};
     #[cfg(feature = "std")]
     use std::{string::String, sync::Arc, vec, vec::Vec};
 
