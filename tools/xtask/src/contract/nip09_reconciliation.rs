@@ -233,7 +233,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         TRANSPORT_CARGO_MANIFEST_RELATIVE,
-        "7839356e3ba830b758327552bfa6295747d5073ac023f5d2ab47bdd0c6866972",
+        "2ee4667dc2974d91d137ce5fcf0506c0d35163164a533f0f94b8b02907a7e4cf",
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
@@ -9612,7 +9612,7 @@ fn validate_post_core_storage_source(
         "radroots_event::trade::SellerReservationAssertionV1",
         "radroots_event::trade::TradeMutationEnvelopeV1",
         "radroots_event::trade::TradeMutationKindV1",
-        "radroots_transport::RadrootsTransportKind",
+        "radroots_transport::TransportId",
         "sqlx::Sqlite",
         "sqlx::Transaction",
     ]
@@ -20673,6 +20673,9 @@ name = "radroots_transport"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "radroots_event",
+ "radroots_identity",
+ "radroots_protocol",
  "serde",
  "serde_json",
  "sha2",
@@ -20683,6 +20686,9 @@ name = "radroots_transport"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "radroots_event",
+ "radroots_identity",
+ "radroots_protocol",
  "serde",
  "serde_json",
  "sha2",

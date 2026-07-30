@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use radroots_transport::outcome::DeliveryOutcome;
 use radroots_transport::{RadrootsTransportOutcome, RadrootsTransportOutcomeKind};
 use serde::{Deserialize, Serialize};
 
@@ -213,5 +214,35 @@ impl RadrootsRelayOutcome {
             outcome = outcome.with_message(message.clone());
         }
         outcome
+    }
+
+    pub(crate) fn to_delivery_outcome(&self) -> DeliveryOutcome {
+        let outcome = match self.kind {
+            RadrootsRelayOutcomeKind::Accepted
+            | RadrootsRelayOutcomeKind::DuplicateAccepted
+            | RadrootsRelayOutcomeKind::SkippedAlreadyAccepted => DeliveryOutcome::accepted(),
+            RadrootsRelayOutcomeKind::Blocked
+            | RadrootsRelayOutcomeKind::Invalid
+            | RadrootsRelayOutcomeKind::Restricted
+            | RadrootsRelayOutcomeKind::Muted
+            | RadrootsRelayOutcomeKind::Unsupported
+            | RadrootsRelayOutcomeKind::PaymentRequired
+            | RadrootsRelayOutcomeKind::RelayUrlRejected => DeliveryOutcome::rejected(),
+            RadrootsRelayOutcomeKind::RateLimited
+            | RadrootsRelayOutcomeKind::PowRequired
+            | RadrootsRelayOutcomeKind::AuthRequired
+            | RadrootsRelayOutcomeKind::Error
+            | RadrootsRelayOutcomeKind::Timeout
+            | RadrootsRelayOutcomeKind::ConnectionFailed
+            | RadrootsRelayOutcomeKind::Unknown => DeliveryOutcome::unavailable(),
+        };
+        if let Some(message) = &self.message {
+            outcome
+                .clone()
+                .with_detail(self.kind.as_str(), message.clone())
+                .unwrap_or(outcome)
+        } else {
+            outcome
+        }
     }
 }

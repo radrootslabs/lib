@@ -12,7 +12,7 @@ use radroots_event_store::{
     RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter};
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
+use radroots_transport::{Target, TransportId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -482,7 +482,7 @@ where
                     }
                 };
                 let observation = RadrootsTransportObservation::new(
-                    RadrootsTransportKind::Nostr,
+                    TransportId::NOSTR,
                     relay_url.clone(),
                     observation_type,
                     observed_at_ms,
@@ -1127,7 +1127,7 @@ fn canonical_requested_fetch_relay(
     target_relays: &[String],
     relay_url: &str,
 ) -> Result<String, RadrootsRelayTransportError> {
-    let target = RadrootsTransportTarget::nostr_relay(relay_url).map_err(|error| {
+    let target = Target::new(TransportId::NOSTR, relay_url).map_err(|error| {
         RadrootsRelayTransportError::InvalidFetchItemRelayUrl {
             url: relay_url.to_owned(),
             reason: error.to_string(),

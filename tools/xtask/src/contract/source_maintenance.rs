@@ -3726,9 +3726,9 @@ struct DelegatedAuthoritySpec {
 }
 
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
-    "730fe3bf7d8a1eed342ea58ca1ab6cdad9065cb6fdb1695244ebaeb17168cef2";
+    "b1a7658f47b4561ad816ef65dab47cf68c75de3c459383371319e96e6051d435";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "aaf8433098153cad9105761402d65c78d7f8134c260bc2737c0bbcb032ae9d60";
+    "b0a59506a3a49b86875699a545cd9eec388c4b030b46264f2cb6540aab0b6a8d";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {

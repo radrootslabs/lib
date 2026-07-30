@@ -70,10 +70,8 @@ use radroots_event::envelope::event_head::v1::{
 };
 use radroots_event::id::{DTag, EventId, MutationId, TradeId};
 use radroots_event::trade::TradeMutationKindV1;
-use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetUri,
-};
+use radroots_transport::target::TargetFingerprint;
+use radroots_transport::{RadrootsTransportTargetUri, Target, TransportId};
 #[cfg(test)]
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
@@ -320,10 +318,10 @@ impl RadrootsEventStore {
     /// delivery evidence remains available from transport delivery receipts.
     pub async fn observations_for_endpoint(
         &self,
-        transport_kind: RadrootsTransportKind,
+        transport_kind: TransportId,
         endpoint_uri: impl AsRef<str>,
     ) -> Result<Vec<RadrootsTransportObservationRow>, RadrootsEventStoreError> {
-        let target = RadrootsTransportTarget::new(transport_kind, endpoint_uri)?;
+        let target = Target::new(transport_kind, endpoint_uri)?;
         let rows = sqlx::query(
             "SELECT event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message FROM event_transport_observation WHERE transport_kind = ? AND endpoint_fingerprint = ? ORDER BY last_observed_at_ms, event_id, observation_type",
         )
@@ -1150,9 +1148,9 @@ pub async fn inspect_event_store_status(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportObservationRow {
     pub event_id: String,
-    pub transport_kind: RadrootsTransportKind,
+    pub transport_kind: TransportId,
     pub endpoint_uri: RadrootsTransportTargetUri,
-    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    pub endpoint_fingerprint: TargetFingerprint,
     pub observation_type: RadrootsTransportObservationType,
     pub first_observed_at_ms: i64,
     pub last_observed_at_ms: i64,
@@ -1631,10 +1629,9 @@ fn transport_observation_from_row(
     let transport_kind_label: String = row.try_get("transport_kind")?;
     let endpoint_uri_raw: String = row.try_get("endpoint_uri")?;
     let endpoint_fingerprint_raw: String = row.try_get("endpoint_fingerprint")?;
-    let transport_kind = RadrootsTransportKind::parse_canonical(&transport_kind_label)?;
-    let endpoint_fingerprint =
-        RadrootsTransportTargetFingerprint::parse(&endpoint_fingerprint_raw)?;
-    let target = RadrootsTransportTarget::new(transport_kind, &endpoint_uri_raw)?;
+    let transport_kind = TransportId::parse_canonical(&transport_kind_label)?;
+    let endpoint_fingerprint = TargetFingerprint::parse(&endpoint_fingerprint_raw)?;
+    let target = Target::new(transport_kind, &endpoint_uri_raw)?;
     if target.uri().as_str() != endpoint_uri_raw
         || endpoint_fingerprint.as_str() != endpoint_fingerprint_raw
         || &endpoint_fingerprint != target.fingerprint()
@@ -1674,7 +1671,7 @@ fn transport_observation_from_row(
         .transpose()?;
     Ok(RadrootsTransportObservationRow {
         event_id,
-        transport_kind: target.kind().clone(),
+        transport_kind: *target.kind(),
         endpoint_uri: target.uri().clone(),
         endpoint_fingerprint: target.fingerprint().clone(),
         observation_type: RadrootsTransportObservationType::parse(
@@ -4613,7 +4610,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             "hello",
         );
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.example.com",
             crate::RadrootsTransportObservationType::PublishAck,
             1_100,
@@ -5186,7 +5183,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1
         );
         let duplicate_observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://capacity-boundary.example.test",
             RadrootsTransportObservationType::Subscription,
             1_100,
@@ -5235,7 +5232,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         ));
         let ephemeral = signed_event(KIND_GEOCHAT, 22, Vec::new(), "live-only boundary event");
         let ephemeral_observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://ephemeral-boundary.example.test",
             RadrootsTransportObservationType::Subscription,
             1_300,
@@ -6296,7 +6293,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let unsupported = signed_event(29_999, 16, Vec::new(), "unsupported");
         let invalid = signed_event(KIND_RELAY_AUTH, 17, Vec::new(), "not-json");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.example.test",
             RadrootsTransportObservationType::Subscription,
             2_260,
@@ -9159,7 +9156,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(KIND_POST, 15, Vec::new(), "hello");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_000,
@@ -9168,7 +9165,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let ingest = RadrootsEventIngest::new(event.clone(), 4_000).with_observation(observation);
         store.ingest_event(ingest).await.expect("first");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_100,
@@ -9179,7 +9176,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let ingest = RadrootsEventIngest::new(event.clone(), 4_100).with_observation(observation);
         store.ingest_event(ingest).await.expect("second");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_050,
@@ -9204,7 +9201,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
 
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_100,
@@ -9215,7 +9212,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let ingest = RadrootsEventIngest::new(event.clone(), 4_100).with_observation(observation);
         store.ingest_event(ingest).await.expect("tie duplicate");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_100,
@@ -9227,7 +9224,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("tie duplicate without message");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_200,
@@ -9244,7 +9241,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("observations");
         assert_eq!(observations.len(), 1);
-        assert_eq!(observations[0].transport_kind, RadrootsTransportKind::Nostr);
+        assert_eq!(observations[0].transport_kind, TransportId::NOSTR);
         assert_eq!(observations[0].endpoint_uri.as_str(), "wss://relay.local");
         assert_eq!(
             observations[0].observation_type,
@@ -9259,13 +9256,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
 
         let endpoint_observations = store
-            .observations_for_endpoint(RadrootsTransportKind::Nostr, "WSS://RELAY.LOCAL/")
+            .observations_for_endpoint(TransportId::NOSTR, "WSS://RELAY.LOCAL/")
             .await
             .expect("endpoint observations");
         assert_eq!(endpoint_observations, observations);
 
         let reticulum_observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Reticulum,
+            TransportId::RETICULUM,
             "reticulum:local",
             crate::RadrootsTransportObservationType::MeshHeard,
             4_300,
@@ -9278,12 +9275,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("Reticulum observation ingest");
         let reticulum_observations = store
-            .observations_for_endpoint(RadrootsTransportKind::Reticulum, "reticulum:local")
+            .observations_for_endpoint(TransportId::RETICULUM, "reticulum:local")
             .await
             .expect("Reticulum endpoint observations");
         assert_eq!(reticulum_observations.len(), 1);
-        let expected_reticulum =
-            RadrootsTransportTarget::reticulum().expect("canonical Reticulum target");
+        let expected_reticulum = Target::reticulum().expect("canonical Reticulum target");
         assert_eq!(
             &reticulum_observations[0].endpoint_fingerprint,
             expected_reticulum.fingerprint()
@@ -9297,9 +9293,9 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let endpoint_uri =
             RadrootsTransportTargetUri::parse("wss://relay-a.local").expect("endpoint A");
         let endpoint_b =
-            RadrootsTransportTarget::nostr_relay("wss://relay-b.local").expect("endpoint B");
+            Target::new(TransportId::NOSTR, "wss://relay-b.local").expect("endpoint B");
         let observation = RadrootsTransportObservation::from_unchecked_parts_for_test(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             endpoint_uri,
             endpoint_b.fingerprint().clone(),
             crate::RadrootsTransportObservationType::Subscription,
@@ -9338,7 +9334,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(KIND_POST, 16, Vec::new(), "observation corruption");
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.local",
             crate::RadrootsTransportObservationType::Subscription,
             4_000,
@@ -9375,7 +9371,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         .expect("corrupt observation time order");
         assert!(matches!(
             store
-                .observations_for_endpoint(RadrootsTransportKind::Nostr, "wss://relay.local")
+                .observations_for_endpoint(TransportId::NOSTR, "wss://relay.local")
                 .await,
             Err(RadrootsEventStoreError::InvalidStoredTransportObservation {
                 first_observed_at_ms: 4_100,

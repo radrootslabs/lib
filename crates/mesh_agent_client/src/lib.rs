@@ -6,8 +6,9 @@ use radroots_mesh::{
 use radroots_mesh_agent_proto::{
     RADROOTS_MESH_AGENT_SCHEMA_ID, RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE, schema_sha256_hex,
 };
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportMeshScopeId};
-use radroots_transport_reticulum::RADROOTS_RETICULUM_ENDPOINT_URI;
+use radroots_transport::TransportId;
+use radroots_transport::target::TargetScope;
+use radroots_transport_reticulum::{RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID};
 
 pub const RADROOTS_MESH_AGENT_CLIENT_SCHEMA_ID: &str = RADROOTS_MESH_AGENT_SCHEMA_ID;
 pub const RADROOTS_MESH_AGENT_CLIENT_SCHEMA_NAMESPACE: &str = RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE;
@@ -108,9 +109,9 @@ impl MeshAgentTransportKind {
         }
     }
 
-    pub fn transport_kind(self) -> RadrootsTransportKind {
+    pub fn transport_kind(self) -> TransportId {
         match self {
-            Self::Reticulum => RadrootsTransportKind::Reticulum,
+            Self::Reticulum => TransportId::RETICULUM,
         }
     }
 }
@@ -212,7 +213,7 @@ pub trait RadrootsMeshAgentClient {
 pub struct RadrootsMockMeshAgentClient {
     profile_id: String,
     endpoint_uri: String,
-    scope: RadrootsTransportMeshScopeId,
+    scope: TargetScope,
     policy: RadrootsMeshPayloadPolicy,
 }
 
@@ -221,12 +222,12 @@ impl RadrootsMockMeshAgentClient {
         Self {
             profile_id: RADROOTS_MESH_RETICULUM_POLICY_ID.to_owned(),
             endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
-            scope: RadrootsTransportMeshScopeId::local_reticulum(),
+            scope: TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
             policy: RadrootsMeshPayloadPolicy::reticulum_unavailable(),
         }
     }
 
-    pub fn scope(&self) -> &RadrootsTransportMeshScopeId {
+    pub fn scope(&self) -> &TargetScope {
         &self.scope
     }
 

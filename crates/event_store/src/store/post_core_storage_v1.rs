@@ -9,7 +9,7 @@ use radroots_event::id::{CandidateId, MutationId};
 use radroots_event::trade::{
     SellerReservationAssertionV1, TradeMutationEnvelopeV1, TradeMutationKindV1,
 };
-use radroots_transport::RadrootsTransportKind;
+use radroots_transport::TransportId;
 use sqlx::{Sqlite, Transaction};
 
 pub(super) struct PostCoreStorageV1<'borrow, 'db> {
@@ -205,7 +205,7 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         .bind(write.event.id_hex())
         .bind(write.mutation_id.to_hex())
         .bind(write.mutation.trade_id.to_hex())
-        .bind(RadrootsTransportKind::Nostr.canonical_label())
+        .bind(TransportId::NOSTR.canonical_label())
         .bind(write.event.author().to_hex())
         .bind(i64_from_u64("created_at", write.event.created_at_u64())?)
         .bind(write.stored_event_seq)

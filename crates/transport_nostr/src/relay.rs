@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsRelayTransportError;
-use radroots_transport::RadrootsTransportTarget;
+use radroots_transport::{Target, TransportId};
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
@@ -71,7 +71,7 @@ impl RelayUrl {
                 });
             }
         }
-        let target = RadrootsTransportTarget::nostr_relay(original).map_err(|error| {
+        let target = Target::new(TransportId::NOSTR, original).map_err(|error| {
             RadrootsRelayTransportError::RelayUrlParse {
                 url: original.to_owned(),
                 reason: error.to_string(),

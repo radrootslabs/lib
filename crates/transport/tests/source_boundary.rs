@@ -29,6 +29,26 @@ const CORE_STATUS_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src", "transport
 
 const CORE_TRANSPORT_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src"];
 
+const TRANSPORT_CONSUMER_SOURCE_ROOTS: &[&str] = &[
+    "event_store/src",
+    "mesh/src",
+    "mesh_agent_client/src",
+    "outbox/src",
+    "runtime/src",
+    "transport_nostr/src",
+    "transport_publish_protocol/src",
+    "transport_reticulum/src",
+];
+
+const RETIRED_TRANSPORT_TYPE_NAMES: &[&str] = &[
+    "RadrootsTransportKind",
+    "RadrootsTransportMeshScopeId",
+    "RadrootsTransportTarget",
+    "RadrootsTransportTargetFingerprint",
+    "RadrootsTransportTargetLabel",
+    "RadrootsTransportTargetSet",
+];
+
 const DELIVERY_PAYLOAD_CONTRACT_SOURCE_ROOTS: &[&str] =
     &["transport/src", "runtime/src", "transport_reticulum/src"];
 
@@ -489,7 +509,7 @@ fn foundation_hardening_repo_sources_reject_retired_names_and_ambiguous_docs() {
 }
 
 #[test]
-fn runtime_transport_registry_uses_core_transport_contract() {
+fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("transport crate parent");
@@ -499,17 +519,22 @@ fn runtime_transport_registry_uses_core_transport_contract() {
         read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
     let reticulum_source = production_source(reticulum_source_raw.as_str());
 
+    for required in [
+        "Arc<dyn EventSource>",
+        "Arc<dyn EventSink>",
+        "pub fn register_source<T>",
+        "pub fn register_sink<T>",
+        "T: EventSource + 'static",
+        "T: EventSink + 'static",
+    ] {
+        assert!(
+            runtime_source.contains(required),
+            "runtime registry must expose final split SPI witness `{required}`"
+        );
+    }
     assert!(
         runtime_source.contains("Arc<dyn RadrootsTransport>"),
-        "runtime registry must store the core RadrootsTransport trait object"
-    );
-    assert!(
-        runtime_source.contains("T: RadrootsTransport + 'static"),
-        "runtime registry registration must accept the core RadrootsTransport trait"
-    );
-    assert!(
-        runtime_source.contains("transport.transport_kind()"),
-        "runtime registry must key transports through the core trait transport_kind"
+        "mixed runtime delivery workers retain the sole temporary monolithic shim until RCLD 40"
     );
     let removed_reticulum_runtime_transport =
         ["RadrootsRuntimeReticulum", "Pre", "viewTransport"].concat();
@@ -523,9 +548,63 @@ fn runtime_transport_registry_uses_core_transport_contract() {
             "runtime transport source must not retain split adapter contract `{forbidden}`"
         );
     }
+    for required in [
+        "impl EventSource for RadrootsReticulumTransport",
+        "impl EventSink for RadrootsReticulumTransport",
+    ] {
+        assert!(
+            reticulum_source.contains(required),
+            "Reticulum preview must implement final split SPI witness `{required}`"
+        );
+    }
     assert!(
-        reticulum_source.contains("impl RadrootsTransport for RadrootsReticulumTransport"),
-        "Reticulum transport must implement the core transport contract"
+        !reticulum_source.contains("impl RadrootsTransport for RadrootsReticulumTransport"),
+        "Reticulum preview must not implement the predecessor monolithic SPI"
+    );
+
+    let nostr_source = read_source(crates_root.join("transport_nostr/src/publish.rs").as_path());
+    assert!(
+        nostr_source.contains("impl<A> EventSink for RadrootsNostrTransport<A>"),
+        "Nostr adapter must implement the final sink-only SPI"
+    );
+    assert!(
+        !nostr_source.contains("impl<A> RadrootsTransport for RadrootsNostrTransport<A>"),
+        "Nostr adapter must not implement the predecessor monolithic SPI"
+    );
+}
+
+#[test]
+fn canonical_workspace_consumers_reject_retired_transport_type_names() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let mut findings = Vec::new();
+
+    for relative_root in TRANSPORT_CONSUMER_SOURCE_ROOTS {
+        for path in rust_source_files(crates_root.join(relative_root).as_path()) {
+            if path
+                .components()
+                .any(|component| component.as_os_str() == "generated")
+            {
+                continue;
+            }
+            let source_raw = read_source(path.as_path());
+            let source = production_source(source_raw.as_str());
+            let relative_path = relative_path(crates_root, path.as_path());
+            for retired in RETIRED_TRANSPORT_TYPE_NAMES {
+                if contains_forbidden_concept(source, retired) {
+                    findings.push(format!(
+                        "{relative_path} still consumes retired transport type `{retired}`"
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "canonical transport consumer migration violations:\n{}",
+        findings.join("\n")
     );
 }
 
@@ -651,7 +730,7 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
 
     let relay_source = read_source(crates_root.join("transport_nostr/src/relay.rs").as_path());
     for required in [
-        "RadrootsTransportTarget::nostr_relay(original)",
+        "Target::new(TransportId::NOSTR, original)",
         "RadrootsRelayTransportError::DuplicateRelayUrl",
     ] {
         assert!(

@@ -1,7 +1,7 @@
 use serde::{Serialize, de::DeserializeOwned};
 
 use radroots_protocol::radrootsd::transport_publish::v5 as successor;
-use radroots_transport::RadrootsTransportTarget;
+use radroots_transport::{Target, TransportId};
 use radroots_transport_publish_protocol as predecessor;
 
 fn assert_json_equivalent<Old, New>(old: &Old) -> New
@@ -86,8 +86,8 @@ fn request_response_job_and_capability_json_are_byte_identical() {
 
 #[test]
 fn required_target_fingerprint_json_is_byte_identical() {
-    let target = RadrootsTransportTarget::nostr_relay("wss://relay.example.com")
-        .expect("native Nostr target");
+    let target =
+        Target::new(TransportId::NOSTR, "wss://relay.example.com").expect("native Nostr target");
     let predecessor = predecessor::TransportPublishDeliveryPolicy::required_targets(vec![
         target.fingerprint().clone(),
     ])

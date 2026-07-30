@@ -1,10 +1,13 @@
+use radroots_transport::capability::{Availability, Maturity};
+use radroots_transport::sink::EventSink;
+use radroots_transport::source::{EventSource, FetchBounds, FetchRequest};
+use radroots_transport::target::TargetScope;
 use radroots_transport::{
-    RadrootsTransport, RadrootsTransportCapabilityAvailability,
-    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchRequest,
-    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportImplementationState, RadrootsTransportPayload,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy, Target, TargetSet,
+    TransportId,
 };
 use radroots_transport_reticulum::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
@@ -17,29 +20,30 @@ use radroots_transport_reticulum::{
 #[cfg(feature = "serde")]
 use serde_json::Value;
 
-fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
+fn reticulum_target(uri: &str) -> Target {
     assert_eq!(uri, RADROOTS_RETICULUM_ENDPOINT_URI);
-    RadrootsTransportTarget::reticulum().expect("reticulum target")
+    Target::reticulum().expect("reticulum target")
 }
 
-fn scoped_reticulum_target(scope: &str) -> RadrootsTransportTarget {
-    RadrootsTransportTarget::reticulum_with_metadata(
+fn scoped_reticulum_target(scope: &str) -> Target {
+    Target::new_with_metadata(
+        TransportId::RETICULUM,
         RADROOTS_RETICULUM_ENDPOINT_URI,
-        Some(RadrootsTransportMeshScopeId::parse(scope).expect("scope")),
+        Some(TargetScope::parse(scope).expect("scope")),
         None,
     )
     .expect("scoped reticulum target")
 }
 
-fn nostr_target() -> RadrootsTransportTarget {
-    RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("nostr target")
+fn nostr_target() -> Target {
+    Target::new(TransportId::NOSTR, "wss://relay.example").expect("nostr target")
 }
 
-fn delivery_request(targets: Vec<RadrootsTransportTarget>) -> RadrootsTransportDeliveryRequest {
+fn delivery_request(targets: Vec<Target>) -> RadrootsTransportDeliveryRequest {
     RadrootsTransportDeliveryRequest::new(
         "reticulum-delivery",
         reticulum_payload(),
-        RadrootsTransportTargetSet::new(targets).expect("target set"),
+        TargetSet::new(targets).expect("target set"),
         RadrootsTransportSatisfactionPolicy::any_accepted(),
     )
     .expect("delivery request")
@@ -239,7 +243,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         RadrootsReticulumProfile::new(
             "transport reticulum",
             endpoint,
-            RadrootsTransportMeshScopeId::local_reticulum(),
+            TargetScope::local_reticulum(),
             None,
             RadrootsReticulumBehavior::RejectDeliveryAttempts,
         )
@@ -250,7 +254,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         RadrootsReticulumProfile::new(
             "",
             RadrootsReticulumEndpoint::default(),
-            RadrootsTransportMeshScopeId::local_reticulum(),
+            TargetScope::local_reticulum(),
             None,
             RadrootsReticulumBehavior::RejectDeliveryAttempts,
         )
@@ -260,7 +264,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     let profile = RadrootsReticulumProfile::new(
         "transport.reticulum.custom",
         RadrootsReticulumEndpoint::default(),
-        RadrootsTransportMeshScopeId::local_reticulum(),
+        TargetScope::local_reticulum(),
         Some(agent_endpoint),
         RadrootsReticulumBehavior::DeferDeliveryPlans,
     )
@@ -336,56 +340,36 @@ fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
 }
 
 #[test]
-fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
+fn final_transport_spis_report_unavailable_reticulum_source_and_sink() {
     let transport = RadrootsReticulumTransport::default();
-    let target_set =
-        RadrootsTransportTargetSet::new(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)])
-            .expect("target set");
-    let status = futures::executor::block_on(RadrootsTransport::status(&transport))
-        .expect("transport status");
-    assert_eq!(status.kind, RadrootsTransportKind::Reticulum);
-    assert_eq!(
-        status.implementation,
-        RadrootsTransportImplementationState::Real
-    );
-    assert_eq!(
-        status.maturity,
-        RadrootsTransportCapabilityMaturity::Preview
-    );
-    assert_eq!(
-        status.availability,
-        RadrootsTransportCapabilityAvailability::Unavailable
-    );
-    assert!(!status.usable_for_delivery);
-    assert!(!status.capabilities.deliver);
-    assert!(!status.capabilities.fetch);
+    let target_set = TargetSet::new(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)])
+        .expect("target set");
+    let sink_status =
+        futures::executor::block_on(EventSink::status(&transport)).expect("sink status");
+    assert_eq!(sink_status.transport_id(), TransportId::RETICULUM);
+    assert_eq!(sink_status.maturity(), Maturity::Preview);
+    assert_eq!(sink_status.availability(), Availability::Unavailable);
+    assert!(!sink_status.capabilities().can_deliver());
 
-    let delivery = futures::executor::block_on(RadrootsTransport::deliver(
+    let source_status =
+        futures::executor::block_on(EventSource::status(&transport)).expect("source status");
+    assert_eq!(source_status.transport_id(), TransportId::RETICULUM);
+    assert_eq!(source_status.maturity(), Maturity::Preview);
+    assert_eq!(source_status.availability(), Availability::Unavailable);
+    assert!(!source_status.capabilities().can_fetch());
+
+    let fetch = futures::executor::block_on(EventSource::fetch(
         &transport,
-        RadrootsTransportDeliveryRequest::new(
-            "core-delivery",
-            reticulum_payload(),
-            target_set.clone(),
-            RadrootsTransportSatisfactionPolicy::any_accepted(),
+        FetchRequest::new(
+            "core-fetch",
+            target_set,
+            FetchBounds::new(10, 10_000).expect("fetch bounds"),
         )
-        .expect("delivery request"),
+        .expect("fetch request"),
     ))
-    .expect("delivery receipt");
-    assert_eq!(
-        delivery.target_receipts()[0].status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-    );
-
-    let fetch = futures::executor::block_on(RadrootsTransport::fetch(
-        &transport,
-        RadrootsTransportFetchRequest::new("core-fetch", target_set),
-    ))
-    .expect("fetch receipt");
-    assert_eq!(fetch.fetched_count, 0);
-    assert_eq!(
-        fetch.target_receipts[0].status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-    );
+    .expect("fetch page");
+    assert!(fetch.events().is_empty());
+    assert_eq!(fetch.target_outcomes().len(), 1);
 }
 
 #[test]
@@ -400,10 +384,7 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
         0
     );
     for target_receipt in receipt.target_receipts() {
-        assert_eq!(
-            target_receipt.target.kind(),
-            &RadrootsTransportKind::Reticulum
-        );
+        assert_eq!(target_receipt.target.kind(), &TransportId::RETICULUM);
         assert_eq!(
             target_receipt.status,
             RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
@@ -431,7 +412,7 @@ fn noncanonical_reticulum_targets_are_rejected() {
         "reticulum:custom",
     ] {
         assert_eq!(
-            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid)
+            Target::new(TransportId::RETICULUM, invalid)
                 .expect_err("noncanonical Reticulum target"),
             radroots_transport::RadrootsTransportError::InvalidTargetUri
         );
@@ -650,7 +631,7 @@ fn destination_deserialization_revalidates_canonical_identity() {
 
 #[test]
 fn destination_rejects_non_reticulum_targets() {
-    let local = RadrootsTransportTarget::local("local:memory").expect("local target");
+    let local = Target::new(TransportId::LOCAL, "local:memory").expect("local target");
     assert!(ReticulumDestinationV1::from_target(&local).is_err());
 }
 

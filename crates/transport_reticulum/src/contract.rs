@@ -1,9 +1,6 @@
 use crate::RADROOTS_RETICULUM_ENDPOINT_URI;
-use radroots_transport::{
-    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
-    RadrootsTransportTargetUri,
-};
+use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
+use radroots_transport::{RadrootsTransportError, RadrootsTransportTargetUri, Target, TransportId};
 
 pub const RETICULUM_V1_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 
@@ -79,7 +76,7 @@ pub enum ReticulumPrivacySemanticsV1 {
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReticulumRoutingMetadataV1 {
-    pub scope: RadrootsTransportMeshScopeId,
+    pub scope: TargetScope,
     pub gateway: ReticulumGatewaySemanticsV1,
     pub privacy: ReticulumPrivacySemanticsV1,
 }
@@ -87,7 +84,7 @@ pub struct ReticulumRoutingMetadataV1 {
 impl ReticulumRoutingMetadataV1 {
     pub fn local() -> Self {
         Self {
-            scope: RadrootsTransportMeshScopeId::local_reticulum(),
+            scope: TargetScope::parse(crate::RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
             gateway: ReticulumGatewaySemanticsV1::NoGatewayForwarding,
             privacy: ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly,
         }
@@ -99,8 +96,8 @@ impl ReticulumRoutingMetadataV1 {
 pub struct ReticulumDestinationV1 {
     uri: RadrootsTransportTargetUri,
     routing: ReticulumRoutingMetadataV1,
-    label: Option<RadrootsTransportTargetLabel>,
-    fingerprint: RadrootsTransportTargetFingerprint,
+    label: Option<TargetLabel>,
+    fingerprint: TargetFingerprint,
 }
 
 impl ReticulumDestinationV1 {
@@ -115,10 +112,11 @@ impl ReticulumDestinationV1 {
 
     pub fn new(
         uri: impl AsRef<str>,
-        scope: RadrootsTransportMeshScopeId,
-        label: Option<RadrootsTransportTargetLabel>,
+        scope: TargetScope,
+        label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
-        let target = RadrootsTransportTarget::reticulum_with_metadata(
+        let target = Target::new_with_metadata(
+            TransportId::RETICULUM,
             uri.as_ref(),
             Some(scope),
             label.clone(),
@@ -138,8 +136,8 @@ impl ReticulumDestinationV1 {
         })
     }
 
-    pub fn from_target(target: &RadrootsTransportTarget) -> Result<Self, RadrootsTransportError> {
-        if target.kind() != &RadrootsTransportKind::Reticulum
+    pub fn from_target(target: &Target) -> Result<Self, RadrootsTransportError> {
+        if target.kind() != &TransportId::RETICULUM
             || target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
         {
             return Err(RadrootsTransportError::InvalidTargetUri);
@@ -154,8 +152,9 @@ impl ReticulumDestinationV1 {
         Ok(destination)
     }
 
-    pub fn transport_target(&self) -> Result<RadrootsTransportTarget, RadrootsTransportError> {
-        RadrootsTransportTarget::reticulum_with_metadata(
+    pub fn transport_target(&self) -> Result<Target, RadrootsTransportError> {
+        Target::new_with_metadata(
+            TransportId::RETICULUM,
             self.uri.as_str(),
             Some(self.routing.scope.clone()),
             self.label.clone(),
@@ -170,11 +169,11 @@ impl ReticulumDestinationV1 {
         &self.routing
     }
 
-    pub fn label(&self) -> Option<&RadrootsTransportTargetLabel> {
+    pub fn label(&self) -> Option<&TargetLabel> {
         self.label.as_ref()
     }
 
-    pub fn fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+    pub fn fingerprint(&self) -> &TargetFingerprint {
         &self.fingerprint
     }
 }
@@ -185,8 +184,8 @@ impl ReticulumDestinationV1 {
 struct ReticulumDestinationV1Wire {
     uri: RadrootsTransportTargetUri,
     routing: ReticulumRoutingMetadataV1,
-    label: Option<RadrootsTransportTargetLabel>,
-    fingerprint: RadrootsTransportTargetFingerprint,
+    label: Option<TargetLabel>,
+    fingerprint: TargetFingerprint,
 }
 
 #[cfg(feature = "serde")]

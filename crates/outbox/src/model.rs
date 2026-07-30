@@ -3,11 +3,10 @@
 use crate::RadrootsOutboxError;
 use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::id::{MutationId, TradeId};
+use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
-    RadrootsTransportTargetUri,
+    RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetUri, Target, TransportId,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -248,7 +247,7 @@ pub struct RadrootsOutboxDeliveryPlanInput {
     pub transport_profile_id: String,
     pub target_policy_version: u32,
     pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
-    pub targets: Vec<RadrootsTransportTarget>,
+    pub targets: Vec<Target>,
     pub reticulum_behavior: RadrootsOutboxReticulumBehavior,
 }
 
@@ -257,7 +256,7 @@ impl RadrootsOutboxDeliveryPlanInput {
         transport_profile_id: impl Into<String>,
         target_policy_version: u32,
         satisfaction_policy: RadrootsTransportSatisfactionPolicy,
-        targets: Vec<RadrootsTransportTarget>,
+        targets: Vec<Target>,
     ) -> Self {
         Self {
             transport_profile_id: transport_profile_id.into(),
@@ -518,11 +517,11 @@ pub struct RadrootsOutboxDeliveryPlanRecord {
 pub struct RadrootsOutboxDeliveryTargetRecord {
     pub delivery_target_id: i64,
     pub delivery_plan_id: i64,
-    pub transport_kind: RadrootsTransportKind,
+    pub transport_kind: TransportId,
     pub endpoint_uri: RadrootsTransportTargetUri,
-    pub target_scope: Option<RadrootsTransportMeshScopeId>,
-    pub target_label: Option<RadrootsTransportTargetLabel>,
-    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    pub target_scope: Option<TargetScope>,
+    pub target_label: Option<TargetLabel>,
+    pub endpoint_fingerprint: TargetFingerprint,
     pub status: RadrootsOutboxDeliveryTargetStatus,
     pub last_outcome_kind: Option<RadrootsTransportOutcomeKind>,
     pub attempt_count: i64,

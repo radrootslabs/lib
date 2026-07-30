@@ -5,7 +5,6 @@ use crate::{
     RadrootsRelayOutcome, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
     RadrootsRelayTransportError, RadrootsRelayUrlPolicy, publish_signed_event,
-    verified_signed_event_payload,
 };
 use radroots_event::draft::SignedEvent;
 use radroots_event_store::{
@@ -16,13 +15,21 @@ use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
     RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventStoreIngestReceipt,
 };
-use radroots_transport::{
-    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
+#[cfg(test)]
+use radroots_transport::RadrootsTransportDeliveryReceipt;
+use radroots_transport::outcome::{DeliveryOutcomeKind, Retryability};
+use radroots_transport::policy::{
+    SatisfactionClass, SatisfactionPolicy as SinkSatisfactionPolicy, TargetPolicy,
 };
+use radroots_transport::sink::{DeliveryPayload, DeliveryReceipt, DeliveryRequest, EventSink};
+use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
+use radroots_transport::{
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy, Target, TargetSet,
+    TransportId,
+};
+#[cfg(test)]
+use radroots_transport::{RadrootsTransportOutcome, RadrootsTransportOutcomeKind};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishPolicy {
@@ -69,7 +76,7 @@ pub struct RadrootsOutboxPublishReceipt {
 pub struct RadrootsOutboxPublishTargetReceipt {
     pub delivery_target_id: i64,
     pub endpoint_uri: String,
-    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    pub endpoint_fingerprint: TargetFingerprint,
     pub target_scope: Option<String>,
     pub target_label: Option<String>,
     pub attempted: bool,
@@ -224,15 +231,18 @@ pub async fn publish_claimed_outbox_event_with_transport<T>(
     now_ms: i64,
 ) -> Result<RadrootsOutboxPublishReceipt, RadrootsRelayTransportError>
 where
-    T: RadrootsTransport + ?Sized,
+    T: EventSink + ?Sized,
 {
     ensure_nonnegative_timestamp("now_ms", now_ms)?;
     ensure_nonnegative_timestamp("next_attempt_after_ms", policy.next_attempt_after_ms)?;
-    let transport_kind = transport.transport_kind();
-    if transport_kind != RadrootsTransportKind::Nostr {
+    let status = transport
+        .status()
+        .await
+        .map_err(transport_error_to_relay_error)?;
+    if status.transport_id() != TransportId::NOSTR {
         return Err(RadrootsRelayTransportError::UnexpectedTransportKind {
             expected: "nostr",
-            actual: transport_kind.canonical_label(),
+            actual: status.transport_id().canonical_label(),
         });
     }
     let signed_event = claimed.signed_event.clone().ok_or(
@@ -276,20 +286,27 @@ where
         policy.relay_url_policy,
     )?;
     let transport_targets = publishable_transport_targets(&publishable)?;
-    let target_set = RadrootsTransportTargetSet::new(transport_targets)?;
-    let satisfaction_policy = transport_satisfaction_policy_for_publishable(&publishable);
+    let target_set = TargetSet::new(transport_targets)?;
     let request_id = outbox_publish_idempotency_key(
         claimed.outbox_event_id,
         claimed.attempt_count,
         signed_event.id_str(),
         publishable.active_delivery_plan_id,
     );
-    let payload =
-        verified_signed_event_payload(&signed_event).map_err(transport_error_to_relay_error)?;
-    let delivery_request =
-        RadrootsTransportDeliveryRequest::new(request_id, payload, target_set, satisfaction_policy)
-            .and_then(|request| request.try_with_now_ms(now_ms))
-            .map_err(transport_error_to_relay_error)?;
+    let deadline_unix_ms =
+        u64::try_from(policy.next_attempt_after_ms.max(now_ms).max(1)).map_err(|_| {
+            RadrootsRelayTransportError::TransportContract(
+                "outbox delivery deadline is outside the transport range".to_owned(),
+            )
+        })?;
+    let delivery_request = DeliveryRequest::new(
+        request_id,
+        DeliveryPayload::new(signed_event.clone()),
+        target_set,
+        SinkSatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+        deadline_unix_ms,
+    )
+    .map_err(transport_error_to_relay_error)?;
     let delivery = transport
         .deliver(delivery_request.clone())
         .await
@@ -297,8 +314,8 @@ where
     delivery
         .validate_for_request(&delivery_request)
         .map_err(transport_error_to_relay_error)?;
-    let relay_receipts = relay_receipts_from_transport_receipts(&delivery)?;
-    let target_receipts = target_receipts_from_transport_receipts(&publishable, &delivery);
+    let relay_receipts = relay_receipts_from_delivery_receipts(&delivery)?;
+    let target_receipts = target_receipts_from_delivery_receipts(&publishable, &delivery);
 
     for target_receipt in &target_receipts {
         complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
@@ -398,8 +415,9 @@ struct PublishableRelays {
     satisfaction_required_count: usize,
     remaining_satisfaction_count: usize,
     satisfaction_class: RadrootsTransportSatisfactionClass,
-    required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
-    remaining_required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
+    required_targets: Option<Vec<TargetFingerprint>>,
+    #[cfg_attr(not(test), allow(dead_code))]
+    remaining_required_targets: Option<Vec<TargetFingerprint>>,
 }
 
 impl PublishableRelays {
@@ -407,7 +425,7 @@ impl PublishableRelays {
         &'a self,
         relay_url: &'a str,
     ) -> impl Iterator<Item = &'a PublishableRelay> + 'a {
-        let canonical_relay_url = RadrootsTransportTarget::nostr_relay(relay_url)
+        let canonical_relay_url = Target::new(TransportId::NOSTR, relay_url)
             .ok()
             .map(|target| target.uri().as_str().to_owned());
         self.relays.iter().filter(move |target| {
@@ -440,7 +458,7 @@ impl PublishableRelays {
 struct PublishableRelay {
     delivery_target_id: i64,
     relay_url: String,
-    endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    endpoint_fingerprint: TargetFingerprint,
     target_scope: Option<String>,
     target_label: Option<String>,
 }
@@ -478,9 +496,9 @@ fn target_receipts_from_relay_receipts(
     target_receipts
 }
 
-fn target_receipts_from_transport_receipts(
+fn target_receipts_from_delivery_receipts(
     publishable: &PublishableRelays,
-    delivery: &RadrootsTransportDeliveryReceipt,
+    delivery: &DeliveryReceipt,
 ) -> Vec<RadrootsOutboxPublishTargetReceipt> {
     delivery
         .target_receipts()
@@ -489,16 +507,16 @@ fn target_receipts_from_transport_receipts(
             publishable
                 .relays
                 .iter()
-                .find(|target| target.endpoint_fingerprint == *receipt.target.fingerprint())
+                .find(|target| target.endpoint_fingerprint == *receipt.target().fingerprint())
                 .map(|target| RadrootsOutboxPublishTargetReceipt {
                     delivery_target_id: target.delivery_target_id,
                     endpoint_uri: target.relay_url.clone(),
                     endpoint_fingerprint: target.endpoint_fingerprint.clone(),
                     target_scope: target.target_scope.clone(),
                     target_label: target.target_label.clone(),
-                    attempted: receipt.attempted,
-                    transport_status: receipt.status,
-                    outcome: relay_outcome_from_transport_outcome(&receipt.outcome),
+                    attempted: receipt.was_attempted(),
+                    transport_status: delivery_target_status(receipt.outcome()),
+                    outcome: relay_outcome_from_delivery_outcome(receipt.outcome()),
                 })
         })
         .collect()
@@ -631,6 +649,117 @@ async fn complete_outbox_delivery_target(
     Ok(())
 }
 
+fn relay_receipts_from_delivery_receipts(
+    delivery: &DeliveryReceipt,
+) -> Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError> {
+    let mut relay_receipts: Vec<RadrootsRelayPublishRelayReceipt> = Vec::new();
+    for receipt in delivery.target_receipts() {
+        let outcome = relay_outcome_from_delivery_outcome(receipt.outcome());
+        let relay_receipt = if receipt.was_attempted() {
+            RadrootsRelayPublishRelayReceipt::attempted(receipt.target().uri().as_str(), outcome)
+        } else {
+            RadrootsRelayPublishRelayReceipt::skipped(receipt.target().uri().as_str(), outcome)
+        };
+        if let Some(existing) = relay_receipts
+            .iter()
+            .find(|existing| existing.relay_url == relay_receipt.relay_url)
+        {
+            if existing != &relay_receipt {
+                return Err(
+                    RadrootsRelayTransportError::ConflictingTransportReceiptRelayUrl {
+                        url: relay_receipt.relay_url,
+                    },
+                );
+            }
+            continue;
+        }
+        relay_receipts.push(relay_receipt);
+    }
+    Ok(relay_receipts)
+}
+
+fn delivery_target_status(
+    outcome: &radroots_transport::outcome::DeliveryOutcome,
+) -> RadrootsTransportDeliveryTargetStatus {
+    match outcome.kind() {
+        DeliveryOutcomeKind::Accepted => RadrootsTransportDeliveryTargetStatus::Accepted,
+        DeliveryOutcomeKind::Delivered => RadrootsTransportDeliveryTargetStatus::Delivered,
+        DeliveryOutcomeKind::Rejected => RadrootsTransportDeliveryTargetStatus::FailedTerminal,
+        DeliveryOutcomeKind::Unavailable => RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+        DeliveryOutcomeKind::Failed => match outcome.retryability() {
+            Retryability::Retryable => RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+            Retryability::Terminal | Retryability::NotApplicable => {
+                RadrootsTransportDeliveryTargetStatus::FailedTerminal
+            }
+        },
+    }
+}
+
+fn relay_outcome_from_delivery_outcome(
+    outcome: &radroots_transport::outcome::DeliveryOutcome,
+) -> RadrootsRelayOutcome {
+    let kind = outcome
+        .code()
+        .and_then(relay_outcome_kind_from_code)
+        .unwrap_or(match outcome.kind() {
+            DeliveryOutcomeKind::Accepted => crate::RadrootsRelayOutcomeKind::Accepted,
+            DeliveryOutcomeKind::Delivered => crate::RadrootsRelayOutcomeKind::Accepted,
+            DeliveryOutcomeKind::Rejected => crate::RadrootsRelayOutcomeKind::Invalid,
+            DeliveryOutcomeKind::Unavailable => crate::RadrootsRelayOutcomeKind::Error,
+            DeliveryOutcomeKind::Failed if outcome.is_retryable() => {
+                crate::RadrootsRelayOutcomeKind::Error
+            }
+            DeliveryOutcomeKind::Failed => crate::RadrootsRelayOutcomeKind::Invalid,
+        });
+    RadrootsRelayOutcome {
+        kind,
+        message: outcome.message().map(str::to_owned),
+    }
+}
+
+#[cfg(test)]
+fn relay_outcome_from_transport_outcome(
+    outcome: &RadrootsTransportOutcome,
+) -> RadrootsRelayOutcome {
+    let kind = outcome
+        .code
+        .as_deref()
+        .and_then(relay_outcome_kind_from_code)
+        .unwrap_or_else(|| relay_outcome_kind_from_transport_outcome(outcome.kind));
+    RadrootsRelayOutcome {
+        kind,
+        message: outcome.message.clone(),
+    }
+}
+
+#[cfg(test)]
+fn target_receipts_from_transport_receipts(
+    publishable: &PublishableRelays,
+    delivery: &RadrootsTransportDeliveryReceipt,
+) -> Vec<RadrootsOutboxPublishTargetReceipt> {
+    delivery
+        .target_receipts()
+        .iter()
+        .filter_map(|receipt| {
+            publishable
+                .relays
+                .iter()
+                .find(|target| target.endpoint_fingerprint == *receipt.target.fingerprint())
+                .map(|target| RadrootsOutboxPublishTargetReceipt {
+                    delivery_target_id: target.delivery_target_id,
+                    endpoint_uri: target.relay_url.clone(),
+                    endpoint_fingerprint: target.endpoint_fingerprint.clone(),
+                    target_scope: target.target_scope.clone(),
+                    target_label: target.target_label.clone(),
+                    attempted: receipt.attempted,
+                    transport_status: receipt.status,
+                    outcome: relay_outcome_from_transport_outcome(&receipt.outcome),
+                })
+        })
+        .collect()
+}
+
+#[cfg(test)]
 fn relay_receipts_from_transport_receipts(
     delivery: &RadrootsTransportDeliveryReceipt,
 ) -> Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError> {
@@ -660,20 +789,6 @@ fn relay_receipts_from_transport_receipts(
     Ok(relay_receipts)
 }
 
-fn relay_outcome_from_transport_outcome(
-    outcome: &RadrootsTransportOutcome,
-) -> RadrootsRelayOutcome {
-    let kind = outcome
-        .code
-        .as_deref()
-        .and_then(relay_outcome_kind_from_code)
-        .unwrap_or_else(|| relay_outcome_kind_from_transport_outcome(outcome.kind));
-    RadrootsRelayOutcome {
-        kind,
-        message: outcome.message.clone(),
-    }
-}
-
 fn relay_outcome_kind_from_code(code: &str) -> Option<crate::RadrootsRelayOutcomeKind> {
     Some(match code {
         "accepted" => crate::RadrootsRelayOutcomeKind::Accepted,
@@ -697,6 +812,7 @@ fn relay_outcome_kind_from_code(code: &str) -> Option<crate::RadrootsRelayOutcom
     })
 }
 
+#[cfg(test)]
 fn relay_outcome_kind_from_transport_outcome(
     kind: RadrootsTransportOutcomeKind,
 ) -> crate::RadrootsRelayOutcomeKind {
@@ -730,23 +846,24 @@ fn relay_outcome_kind_from_transport_outcome(
 
 fn publishable_transport_targets(
     publishable: &PublishableRelays,
-) -> Result<Vec<RadrootsTransportTarget>, RadrootsRelayTransportError> {
+) -> Result<Vec<Target>, RadrootsRelayTransportError> {
     publishable
         .relays
         .iter()
         .map(|relay| {
-            RadrootsTransportTarget::nostr_relay_with_metadata(
+            Target::new_with_metadata(
+                TransportId::NOSTR,
                 relay.relay_url.as_str(),
                 relay
                     .target_scope
                     .as_deref()
-                    .map(radroots_transport::RadrootsTransportMeshScopeId::parse)
+                    .map(TargetScope::parse)
                     .transpose()
                     .map_err(transport_error_to_relay_error)?,
                 relay
                     .target_label
                     .as_deref()
-                    .map(radroots_transport::RadrootsTransportTargetLabel::parse)
+                    .map(TargetLabel::parse)
                     .transpose()
                     .map_err(transport_error_to_relay_error)?,
             )
@@ -755,6 +872,7 @@ fn publishable_transport_targets(
         .collect()
 }
 
+#[cfg(test)]
 fn transport_satisfaction_policy_for_publishable(
     publishable: &PublishableRelays,
 ) -> RadrootsTransportSatisfactionPolicy {
@@ -1005,14 +1123,15 @@ fn is_publishable_delivery_status(
 }
 
 fn is_nostr_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
-    target.transport_kind == RadrootsTransportKind::Nostr
+    target.transport_kind == TransportId::NOSTR
 }
 
+#[cfg(test)]
 fn satisfaction_policy_for_remaining_count(
     satisfaction_class: RadrootsTransportSatisfactionClass,
     remaining_satisfaction_count: usize,
     target_count: usize,
-    exact_required_targets: Option<&[RadrootsTransportTargetFingerprint]>,
+    exact_required_targets: Option<&[TargetFingerprint]>,
 ) -> RadrootsTransportSatisfactionPolicy {
     if let Some(targets) = exact_required_targets {
         return RadrootsTransportSatisfactionPolicy::RequiredTargets {
@@ -1051,7 +1170,7 @@ async fn ingest_publish_observation(
     observed_at_ms: i64,
 ) -> Result<(), RadrootsRelayTransportError> {
     let observation = RadrootsTransportObservation::new(
-        RadrootsTransportKind::Nostr,
+        TransportId::NOSTR,
         relay_url,
         RadrootsTransportObservationType::PublishAck,
         observed_at_ms,
@@ -1078,12 +1197,12 @@ mod tests {
         RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishRelayReceipt,
         RadrootsRelayTransportError,
     };
+    use radroots_transport::target::TargetScope;
     use radroots_transport::{
         RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportError, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-        RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-        RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-        RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+        RadrootsTransportError, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+        RadrootsTransportTargetReceipt, Target, TargetSet, TransportId,
     };
 
     #[test]
@@ -1116,7 +1235,7 @@ mod tests {
             RadrootsTransportSatisfactionPolicy::quorum_delivered(2)
         );
         let required_target =
-            RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("required target");
+            Target::new(TransportId::NOSTR, "wss://relay.example").expect("required target");
         assert_eq!(
             satisfaction_policy_for_remaining_count(
                 RadrootsTransportSatisfactionClass::Delivered,
@@ -1196,7 +1315,7 @@ mod tests {
 
     #[test]
     fn outbox_publish_satisfaction_counts_use_active_transport_class() {
-        let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
+        let target = Target::new(TransportId::NOSTR, "wss://relay.example").expect("target");
         let publishable = PublishableRelays {
             active_delivery_plan_id: 7,
             relays: vec![PublishableRelay {
@@ -1233,7 +1352,7 @@ mod tests {
 
         let delivery = RadrootsTransportDeliveryReceipt::new(
             "request-1",
-            RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
+            TargetSet::new(vec![target.clone()]).expect("target set"),
             vec![RadrootsTransportTargetReceipt::new(
                 target,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
@@ -1414,7 +1533,7 @@ mod tests {
 
     #[test]
     fn transport_target_and_error_adapters_preserve_contract_categories() {
-        let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
+        let target = Target::new(TransportId::NOSTR, "wss://relay.example").expect("target");
         let publishable = PublishableRelays {
             active_delivery_plan_id: 7,
             relays: vec![PublishableRelay {
@@ -1509,10 +1628,10 @@ mod tests {
         }
 
         let unknown =
-            RadrootsTransportTarget::nostr_relay("wss://unknown.example").expect("unknown target");
+            Target::new(TransportId::NOSTR, "wss://unknown.example").expect("unknown target");
         let delivery = RadrootsTransportDeliveryReceipt::new(
             "unknown",
-            RadrootsTransportTargetSet::new(vec![unknown.clone()]).expect("target set"),
+            TargetSet::new(vec![unknown.clone()]).expect("target set"),
             vec![RadrootsTransportTargetReceipt::new(
                 unknown,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
@@ -1527,23 +1646,24 @@ mod tests {
             1
         );
 
-        let west = RadrootsTransportTarget::nostr_relay_with_metadata(
+        let west = Target::new_with_metadata(
+            TransportId::NOSTR,
             "wss://scoped.example",
-            Some(RadrootsTransportMeshScopeId::parse("foodshed.west").expect("west scope")),
+            Some(TargetScope::parse("foodshed.west").expect("west scope")),
             None,
         )
         .expect("west target");
-        let east = RadrootsTransportTarget::nostr_relay_with_metadata(
+        let east = Target::new_with_metadata(
+            TransportId::NOSTR,
             "wss://scoped.example",
-            Some(RadrootsTransportMeshScopeId::parse("foodshed.east").expect("east scope")),
+            Some(TargetScope::parse("foodshed.east").expect("east scope")),
             None,
         )
         .expect("east target");
         let scoped_relay_uri = west.uri().as_str().to_owned();
         let conflicting = RadrootsTransportDeliveryReceipt::new(
             "conflicting",
-            RadrootsTransportTargetSet::new(vec![west.clone(), east.clone()])
-                .expect("scoped target set"),
+            TargetSet::new(vec![west.clone(), east.clone()]).expect("scoped target set"),
             vec![
                 RadrootsTransportTargetReceipt::new(
                     west,

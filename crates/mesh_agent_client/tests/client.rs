@@ -12,7 +12,7 @@ use radroots_mesh_agent_client::{
 use radroots_mesh_agent_proto::{
     RADROOTS_MESH_AGENT_SCHEMA_ID, RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE, schema_sha256_hex,
 };
-use radroots_transport::RadrootsTransportKind;
+use radroots_transport::TransportId;
 use radroots_transport_reticulum::{RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID};
 use serde_json::json;
 
@@ -40,10 +40,7 @@ fn mock_client_status_reports_reticulum_unavailable() {
     assert_eq!(response.transports.len(), 1);
     let status = &response.transports[0];
     assert_eq!(status.transport, MeshAgentTransportKind::Reticulum);
-    assert_eq!(
-        status.transport.transport_kind(),
-        RadrootsTransportKind::Reticulum
-    );
+    assert_eq!(status.transport.transport_kind(), TransportId::RETICULUM);
     assert_eq!(status.profile_id, RADROOTS_MESH_RETICULUM_POLICY_ID);
     assert_eq!(status.endpoint_uri, RADROOTS_RETICULUM_ENDPOINT_URI);
     assert!(status.configured);

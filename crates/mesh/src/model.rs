@@ -1,7 +1,8 @@
 use crate::RadrootsMeshError;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use radroots_transport::{RadrootsTransportError, RadrootsTransportMeshScopeId};
+use radroots_transport::RadrootsTransportError;
+use radroots_transport::target::TargetScope;
 
 pub const RADROOTS_MESH_FRAME_VERSION: u16 = 1;
 pub const RADROOTS_MESH_UNAVAILABLE_MESSAGE: &str =
@@ -65,11 +66,10 @@ pub enum RadrootsMeshScope {
 
 impl RadrootsMeshScope {
     pub fn custom(value: impl AsRef<str>) -> Result<Self, RadrootsMeshError> {
-        let scope =
-            RadrootsTransportMeshScopeId::parse(value.as_ref()).map_err(|err| match err {
-                RadrootsTransportError::EmptyTargetScope => RadrootsMeshError::EmptyCustomScope,
-                _ => RadrootsMeshError::InvalidCustomScope,
-            })?;
+        let scope = TargetScope::parse(value.as_ref()).map_err(|err| match err {
+            RadrootsTransportError::EmptyTargetScope => RadrootsMeshError::EmptyCustomScope,
+            _ => RadrootsMeshError::InvalidCustomScope,
+        })?;
         Ok(Self::Custom(scope.as_str().to_string()))
     }
 

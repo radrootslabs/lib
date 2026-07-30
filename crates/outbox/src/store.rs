@@ -25,11 +25,10 @@ use radroots_event_store::{
     RadrootsTransportObservationType,
 };
 use radroots_protocol::radrootsd::transport_publish::v5::RETICULUM_ENDPOINT_URI as RADROOTS_RETICULUM_ENDPOINT_URI;
+use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
 use radroots_transport::{
-    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportError, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, Target, TransportId,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -1228,7 +1227,7 @@ impl RadrootsOutbox {
             .signed_event
             .ok_or(RadrootsOutboxError::MissingSignedEvent(outbox_event_id))?;
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Local,
+            TransportId::LOCAL,
             "local:outbox",
             RadrootsTransportObservationType::LocalImport,
             observed_at_ms,
@@ -1752,7 +1751,7 @@ struct PreparedDeliveryPlan {
 }
 
 struct PreparedDeliveryTarget {
-    target: RadrootsTransportTarget,
+    target: Target,
     initial_status: RadrootsOutboxDeliveryTargetStatus,
 }
 
@@ -2004,8 +2003,8 @@ fn satisfaction_target_count(
     delivery_capable_target_count
 }
 
-fn validate_delivery_target(target: &RadrootsTransportTarget) -> Result<(), RadrootsOutboxError> {
-    if target.kind() == &RadrootsTransportKind::Reticulum
+fn validate_delivery_target(target: &Target) -> Result<(), RadrootsOutboxError> {
+    if target.kind() == &TransportId::RETICULUM
         && target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
     {
         return Err(RadrootsOutboxError::Transport(
@@ -2015,7 +2014,7 @@ fn validate_delivery_target(target: &RadrootsTransportTarget) -> Result<(), Radr
     Ok(())
 }
 
-fn validate_unique_targets(targets: &[RadrootsTransportTarget]) -> Result<(), RadrootsOutboxError> {
+fn validate_unique_targets(targets: &[Target]) -> Result<(), RadrootsOutboxError> {
     let mut fingerprints = BTreeSet::new();
     for target in targets {
         if !fingerprints.insert(target.fingerprint().as_str()) {
@@ -2028,10 +2027,10 @@ fn validate_unique_targets(targets: &[RadrootsTransportTarget]) -> Result<(), Ra
 }
 
 fn initial_delivery_target_status(
-    target: &RadrootsTransportTarget,
+    target: &Target,
     _reticulum_behavior: RadrootsOutboxReticulumBehavior,
 ) -> RadrootsOutboxDeliveryTargetStatus {
-    if target.kind() != &RadrootsTransportKind::Reticulum {
+    if target.kind() != &TransportId::RETICULUM {
         return RadrootsOutboxDeliveryTargetStatus::Pending;
     }
     RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
@@ -2186,13 +2185,13 @@ async fn insert_or_get_delivery_plan(
             prepared_target
                 .target
                 .scope()
-                .map(RadrootsTransportMeshScopeId::as_str),
+                .map(TargetScope::as_str),
         )
         .bind(
             prepared_target
                 .target
                 .label()
-                .map(RadrootsTransportTargetLabel::as_str),
+                .map(TargetLabel::as_str),
         )
         .bind(prepared_target.target.fingerprint().as_str())
         .bind(prepared_target.initial_status.as_str())
@@ -2846,59 +2845,53 @@ fn delivery_target_from_row(
         field,
     };
     let transport_kind_raw = row.try_get::<String, _>("transport_kind")?;
-    let transport_kind = RadrootsTransportKind::parse_canonical(transport_kind_raw.as_str())
+    let transport_kind = TransportId::parse_canonical(transport_kind_raw.as_str())
         .map_err(|_| invalid_identity("transport_kind"))?;
     let endpoint_uri_raw = row.try_get::<String, _>("endpoint_uri")?;
     let target_scope_raw = row.try_get::<Option<String>, _>("target_scope")?;
     let target_scope = target_scope_raw
         .as_deref()
-        .map(RadrootsTransportMeshScopeId::parse)
+        .map(TargetScope::parse)
         .transpose()
         .map_err(|_| invalid_identity("target_scope"))?;
-    if target_scope
-        .as_ref()
-        .map(RadrootsTransportMeshScopeId::as_str)
-        != target_scope_raw.as_deref()
-    {
+    if target_scope.as_ref().map(TargetScope::as_str) != target_scope_raw.as_deref() {
         return Err(invalid_identity("target_scope"));
     }
     let target_label_raw = row.try_get::<Option<String>, _>("target_label")?;
     let target_label = target_label_raw
         .as_deref()
-        .map(RadrootsTransportTargetLabel::parse)
+        .map(TargetLabel::parse)
         .transpose()
         .map_err(|_| invalid_identity("target_label"))?;
-    if target_label
-        .as_ref()
-        .map(RadrootsTransportTargetLabel::as_str)
-        != target_label_raw.as_deref()
-    {
+    if target_label.as_ref().map(TargetLabel::as_str) != target_label_raw.as_deref() {
         return Err(invalid_identity("target_label"));
     }
     let endpoint_fingerprint_raw = row.try_get::<String, _>("endpoint_fingerprint")?;
-    let endpoint_fingerprint =
-        RadrootsTransportTargetFingerprint::parse(endpoint_fingerprint_raw.as_str())
-            .map_err(|_| invalid_identity("endpoint_fingerprint"))?;
+    let endpoint_fingerprint = TargetFingerprint::parse(endpoint_fingerprint_raw.as_str())
+        .map_err(|_| invalid_identity("endpoint_fingerprint"))?;
     if endpoint_fingerprint.as_str() != endpoint_fingerprint_raw {
         return Err(invalid_identity("endpoint_fingerprint"));
     }
     let target = match transport_kind {
-        RadrootsTransportKind::Nostr => RadrootsTransportTarget::nostr_relay_with_metadata(
+        TransportId::NOSTR => Target::new_with_metadata(
+            TransportId::NOSTR,
             endpoint_uri_raw.as_str(),
             target_scope.clone(),
             target_label.clone(),
         ),
-        RadrootsTransportKind::Reticulum => RadrootsTransportTarget::reticulum_with_metadata(
+        TransportId::RETICULUM => Target::new_with_metadata(
+            TransportId::RETICULUM,
             endpoint_uri_raw.as_str(),
             target_scope.clone(),
             target_label.clone(),
         ),
-        RadrootsTransportKind::Local => RadrootsTransportTarget::local_with_metadata(
+        TransportId::LOCAL => Target::new_with_metadata(
+            TransportId::LOCAL,
             endpoint_uri_raw.as_str(),
             target_scope.clone(),
             target_label.clone(),
         ),
-        _ => RadrootsTransportTarget::new_with_metadata(
+        _ => Target::new_with_metadata(
             transport_kind,
             endpoint_uri_raw.as_str(),
             target_scope.clone(),
@@ -2924,7 +2917,7 @@ fn delivery_target_from_row(
     Ok(RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id,
         delivery_plan_id: row.try_get("delivery_plan_id")?,
-        transport_kind: target.kind().clone(),
+        transport_kind: *target.kind(),
         endpoint_uri: target.uri().clone(),
         target_scope: target.scope().cloned(),
         target_label: target.label().cloned(),
@@ -3265,7 +3258,7 @@ fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolic
         RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
             let mut fingerprints = targets
                 .iter()
-                .map(RadrootsTransportTargetFingerprint::as_str)
+                .map(TargetFingerprint::as_str)
                 .collect::<Vec<_>>();
             fingerprints.sort();
             let fingerprints = fingerprints.join(",");
@@ -3353,7 +3346,7 @@ fn parse_required_target_policy(
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
     let targets = fingerprints
         .split(',')
-        .map(RadrootsTransportTargetFingerprint::parse)
+        .map(TargetFingerprint::parse)
         .collect::<Result<Vec<_>, _>>()?;
     let required_success_count = usize::from(required_count_u16(required_success_count)?);
     if required_success_count != targets.len() {
@@ -3596,31 +3589,33 @@ mod tests {
         (draft, signed_event)
     }
 
-    fn nostr_target(uri: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::nostr_relay(uri).expect("nostr target")
+    fn nostr_target(uri: &str) -> Target {
+        Target::new(TransportId::NOSTR, uri).expect("nostr target")
     }
 
-    fn scoped_nostr_target(uri: &str, scope: &str, label: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::nostr_relay_with_metadata(
+    fn scoped_nostr_target(uri: &str, scope: &str, label: &str) -> Target {
+        Target::new_with_metadata(
+            TransportId::NOSTR,
             uri,
-            Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
-            Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
+            Some(TargetScope::parse(scope).expect("target scope")),
+            Some(TargetLabel::parse(label).expect("target label")),
         )
         .expect("scoped nostr target")
     }
 
-    fn scoped_reticulum_target(scope: &str, label: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::reticulum_with_metadata(
+    fn scoped_reticulum_target(scope: &str, label: &str) -> Target {
+        Target::new_with_metadata(
+            TransportId::RETICULUM,
             RADROOTS_RETICULUM_ENDPOINT_URI,
-            Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
-            Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
+            Some(TargetScope::parse(scope).expect("target scope")),
+            Some(TargetLabel::parse(label).expect("target label")),
         )
         .expect("scoped reticulum target")
     }
 
-    fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
+    fn reticulum_target(uri: &str) -> Target {
         assert_eq!(uri, RADROOTS_RETICULUM_ENDPOINT_URI);
-        RadrootsTransportTarget::reticulum().expect("reticulum target")
+        Target::reticulum().expect("reticulum target")
     }
 
     #[test]
@@ -3989,7 +3984,7 @@ mod tests {
         assert!(prepare_delivery_plan("event-no-wait", &empty_no_wait).is_ok());
     }
 
-    fn delivery_plan(targets: Vec<RadrootsTransportTarget>) -> RadrootsOutboxDeliveryPlanInput {
+    fn delivery_plan(targets: Vec<Target>) -> RadrootsOutboxDeliveryPlanInput {
         RadrootsOutboxDeliveryPlanInput::new(
             "transport.nostr.local",
             1,
@@ -4033,13 +4028,13 @@ mod tests {
         canonical: &TradeCanonicalMutationV1,
         draft: EventDraft,
         signed_event: SignedEvent,
-        targets: Vec<RadrootsTransportTarget>,
+        targets: Vec<Target>,
         created_at_ms: i64,
     ) -> RadrootsOutboxSignedTradeMutationInput {
         RadrootsOutboxSignedTradeMutationInput::new(
             "publish_trade_mutation",
-            canonical.envelope.trade_id.clone(),
-            canonical.mutation_id.clone(),
+            canonical.envelope.trade_id,
+            canonical.mutation_id,
             sha256_hex(canonical.content.as_bytes()),
             draft,
             signed_event,
@@ -4053,13 +4048,13 @@ mod tests {
     fn trade_mutation_input(
         canonical: &TradeCanonicalMutationV1,
         draft: EventDraft,
-        targets: Vec<RadrootsTransportTarget>,
+        targets: Vec<Target>,
         created_at_ms: i64,
     ) -> RadrootsOutboxTradeMutationInput {
         RadrootsOutboxTradeMutationInput::new(
             "publish_trade_mutation",
-            canonical.envelope.trade_id.clone(),
-            canonical.mutation_id.clone(),
+            canonical.envelope.trade_id,
+            canonical.mutation_id,
             sha256_hex(canonical.content.as_bytes()),
             draft,
             delivery_plan(targets),
@@ -4659,7 +4654,7 @@ mod tests {
                 .is_err()
         );
         sqlx::query("UPDATE outbox_operations SET trade_id = ?, mutation_id = 'invalid' WHERE operation_id = ?")
-            .bind(&canonical.envelope.trade_id.to_hex())
+            .bind(canonical.envelope.trade_id.to_hex())
             .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
@@ -4671,7 +4666,7 @@ mod tests {
                 .is_err()
         );
         sqlx::query("UPDATE outbox_operations SET mutation_id = ? WHERE operation_id = ?")
-            .bind(&canonical.mutation_id.to_hex())
+            .bind(canonical.mutation_id.to_hex())
             .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
@@ -5776,7 +5771,7 @@ mod tests {
         sqlx::query(
             "UPDATE outbox_operations SET mutation_id = ?, operation_idempotency_digest = 'corrupt' WHERE operation_id = ?",
         )
-        .bind(&canonical.mutation_id.to_hex())
+        .bind(canonical.mutation_id.to_hex())
         .bind(first.operation_id)
         .execute(outbox.pool())
         .await
@@ -6037,9 +6032,7 @@ mod tests {
             .enqueue_operation(RadrootsOutboxOperationInput::new(
                 "publish_post",
                 draft,
-                delivery_plan(vec![
-                    RadrootsTransportTarget::reticulum().expect("Reticulum target"),
-                ]),
+                delivery_plan(vec![Target::reticulum().expect("Reticulum target")]),
                 1_000,
             ))
             .await
@@ -6118,7 +6111,7 @@ mod tests {
     async fn enqueue_rejects_invalid_reticulum_targets_before_persistence() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         assert_eq!(
-            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, "reticulum:alternate",)
+            Target::new(TransportId::RETICULUM, "reticulum:alternate",)
                 .expect_err("invalid Reticulum target"),
             RadrootsTransportError::InvalidTargetUri
         );
@@ -8110,7 +8103,7 @@ mod tests {
             .await
             .expect("observations");
         assert_eq!(observations.len(), 1);
-        assert_eq!(observations[0].transport_kind, RadrootsTransportKind::Local);
+        assert_eq!(observations[0].transport_kind, TransportId::LOCAL);
         assert_eq!(observations[0].endpoint_uri.as_str(), "local:outbox");
         assert_eq!(
             observations[0].observation_type,

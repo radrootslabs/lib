@@ -38,10 +38,8 @@ use radroots_event::envelope::EventKind;
 use radroots_event::id::{CandidateId, DTag, EventId, InventoryBinId, MutationId, TradeId};
 use radroots_event::trade::TradeMutationKindV1;
 use radroots_identity::PublicKey;
-use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetUri,
-};
+use radroots_transport::target::TargetFingerprint;
+use radroots_transport::{RadrootsTransportTargetUri, Target, TransportId};
 pub use reconciliation_v1::{
     RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
     RadrootsEventPersistence, RadrootsEventStoreSourceGeneration, RadrootsRawHeadDecision,
@@ -168,9 +166,9 @@ impl RadrootsTransportObservationType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportObservation {
-    transport_kind: RadrootsTransportKind,
+    transport_kind: TransportId,
     endpoint_uri: RadrootsTransportTargetUri,
-    endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    endpoint_fingerprint: TargetFingerprint,
     observation_type: RadrootsTransportObservationType,
     observed_at_ms: i64,
     caller_redacted_message: Option<RadrootsTransportObservationMessage>,
@@ -183,7 +181,7 @@ impl RadrootsTransportObservation {
     /// observation identity. Use transport delivery receipts when scoped
     /// Reticulum or local-target evidence must be preserved.
     pub fn new(
-        transport_kind: RadrootsTransportKind,
+        transport_kind: TransportId,
         endpoint_uri: impl AsRef<str>,
         observation_type: RadrootsTransportObservationType,
         observed_at_ms: i64,
@@ -195,9 +193,9 @@ impl RadrootsTransportObservation {
                 },
             );
         }
-        let target = RadrootsTransportTarget::new(transport_kind, endpoint_uri)?;
+        let target = Target::new(transport_kind, endpoint_uri)?;
         Ok(Self {
-            transport_kind: target.kind().clone(),
+            transport_kind: *target.kind(),
             endpoint_uri: target.uri().clone(),
             endpoint_fingerprint: target.fingerprint().clone(),
             observation_type,
@@ -206,7 +204,7 @@ impl RadrootsTransportObservation {
         })
     }
 
-    pub fn transport_kind(&self) -> &RadrootsTransportKind {
+    pub fn transport_kind(&self) -> &TransportId {
         &self.transport_kind
     }
 
@@ -214,7 +212,7 @@ impl RadrootsTransportObservation {
         &self.endpoint_uri
     }
 
-    pub fn endpoint_fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+    pub fn endpoint_fingerprint(&self) -> &TargetFingerprint {
         &self.endpoint_fingerprint
     }
 
@@ -242,8 +240,7 @@ impl RadrootsTransportObservation {
         &self,
         event_id: &str,
     ) -> Result<(), RadrootsEventStoreError> {
-        let target =
-            RadrootsTransportTarget::new(self.transport_kind.clone(), self.endpoint_uri.as_str())?;
+        let target = Target::new(self.transport_kind, self.endpoint_uri.as_str())?;
         if target.uri() != &self.endpoint_uri || target.fingerprint() != &self.endpoint_fingerprint
         {
             return Err(
@@ -260,9 +257,9 @@ impl RadrootsTransportObservation {
 
     #[cfg(test)]
     pub(crate) fn from_unchecked_parts_for_test(
-        transport_kind: RadrootsTransportKind,
+        transport_kind: TransportId,
         endpoint_uri: RadrootsTransportTargetUri,
-        endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+        endpoint_fingerprint: TargetFingerprint,
         observation_type: RadrootsTransportObservationType,
         observed_at_ms: i64,
     ) -> Self {
@@ -694,7 +691,7 @@ mod tests {
         }
         assert!(RadrootsTransportObservationType::parse("bad").is_err());
         let observation = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "wss://relay.example.test",
             RadrootsTransportObservationType::Fetch,
             1,
@@ -708,7 +705,7 @@ mod tests {
             "wss://relay.example.test"
         );
         let canonical_relay = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Nostr,
+            TransportId::NOSTR,
             "WSS://RELAY.EXAMPLE.TEST/",
             RadrootsTransportObservationType::Fetch,
             1,
@@ -726,7 +723,7 @@ mod tests {
         ] {
             assert!(
                 RadrootsTransportObservation::new(
-                    RadrootsTransportKind::Nostr,
+                    TransportId::NOSTR,
                     invalid_relay,
                     RadrootsTransportObservationType::Fetch,
                     1,
@@ -736,14 +733,13 @@ mod tests {
             );
         }
         let reticulum = RadrootsTransportObservation::new(
-            RadrootsTransportKind::Reticulum,
+            TransportId::RETICULUM,
             "reticulum:local",
             RadrootsTransportObservationType::MeshHeard,
             1,
         )
         .expect("Reticulum observation");
-        let expected_reticulum =
-            RadrootsTransportTarget::reticulum().expect("canonical Reticulum target");
+        let expected_reticulum = Target::reticulum().expect("canonical Reticulum target");
         assert_eq!(reticulum.endpoint_uri(), expected_reticulum.uri());
         assert_eq!(
             reticulum.endpoint_fingerprint(),
@@ -751,7 +747,7 @@ mod tests {
         );
         assert!(
             RadrootsTransportObservation::new(
-                RadrootsTransportKind::Nostr,
+                TransportId::NOSTR,
                 "not a URI",
                 RadrootsTransportObservationType::Fetch,
                 1,
@@ -760,7 +756,7 @@ mod tests {
         );
         assert!(matches!(
             RadrootsTransportObservation::new(
-                RadrootsTransportKind::Nostr,
+                TransportId::NOSTR,
                 "wss://relay.example.test",
                 RadrootsTransportObservationType::Fetch,
                 -1,

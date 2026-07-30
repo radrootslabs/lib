@@ -14,10 +14,8 @@ use radroots_protocol::radrootsd::transport_publish::v5::{
     RETICULUM_ENDPOINT_URI as RADROOTS_RETICULUM_ENDPOINT_URI,
     RETICULUM_UNAVAILABLE_MESSAGE as RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
 };
-use radroots_transport::{
-    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
-};
+use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
+use radroots_transport::{RadrootsTransportError, Target, TransportId};
 
 pub const API_VERSION: &str = "radrootsd.transport_publish.v5";
 pub const DAEMON_NAME: &str = "radrootsd";
@@ -309,15 +307,15 @@ impl TransportPublishTarget {
         if self.transport_kind.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyTransportKind { index });
         }
-        let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
+        let transport_kind = TransportId::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
         if self.endpoint_uri.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
         }
-        if transport_kind != RadrootsTransportKind::Reticulum && self.reticulum_behavior.is_some() {
+        if transport_kind != TransportId::RETICULUM && self.reticulum_behavior.is_some() {
             return Err(TransportPublishProtocolError::InvalidReticulumBehavior { index });
         }
-        if transport_kind == RadrootsTransportKind::Reticulum
+        if transport_kind == TransportId::RETICULUM
             && self.endpoint_uri != RADROOTS_RETICULUM_ENDPOINT_URI
         {
             return Err(TransportPublishProtocolError::InvalidReticulumEndpoint { index });
@@ -334,26 +332,23 @@ impl TransportPublishTarget {
     fn fingerprint(
         &self,
         index: usize,
-    ) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
+    ) -> Result<TargetFingerprint, TransportPublishProtocolError> {
         Ok(self.canonical_target(index)?.fingerprint().clone())
     }
 
-    fn canonical_target(
-        &self,
-        index: usize,
-    ) -> Result<RadrootsTransportTarget, TransportPublishProtocolError> {
-        let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
+    fn canonical_target(&self, index: usize) -> Result<Target, TransportPublishProtocolError> {
+        let transport_kind = TransportId::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
         let scope = self
             .target_scope
             .as_deref()
-            .map(RadrootsTransportMeshScopeId::parse)
+            .map(TargetScope::parse)
             .transpose()
             .map_err(|error| target_metadata_error(error, index))?;
         let label = self
             .target_label
             .as_deref()
-            .map(RadrootsTransportTargetLabel::parse)
+            .map(TargetLabel::parse)
             .transpose()
             .map_err(|error| target_metadata_error(error, index))?;
         let target =
@@ -386,12 +381,10 @@ fn validate_target_metadata(
     index: usize,
 ) -> Result<(), TransportPublishProtocolError> {
     if let Some(scope) = target_scope {
-        RadrootsTransportMeshScopeId::parse(scope)
-            .map_err(|error| target_metadata_error(error, index))?;
+        TargetScope::parse(scope).map_err(|error| target_metadata_error(error, index))?;
     }
     if let Some(label) = target_label {
-        RadrootsTransportTargetLabel::parse(label)
-            .map_err(|error| target_metadata_error(error, index))?;
+        TargetLabel::parse(label).map_err(|error| target_metadata_error(error, index))?;
     }
     Ok(())
 }
@@ -503,7 +496,7 @@ impl TransportPublishTargetPolicy {
                     if endpoint_uri.trim().is_empty() {
                         return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
                     }
-                    let target = RadrootsTransportTarget::nostr_relay(endpoint_uri)
+                    let target = Target::new(TransportId::NOSTR, endpoint_uri)
                         .map_err(|error| target_fingerprint_error(error, index))?;
                     if target.uri().as_str() != endpoint_uri {
                         return Err(TransportPublishProtocolError::InvalidEndpointUri { index });
@@ -544,17 +537,13 @@ fn validate_explicit_target_uniqueness(
 pub enum TransportPublishDeliveryPolicy {
     Any,
     All,
-    Quorum {
-        quorum: usize,
-    },
-    RequiredTargets {
-        targets: Vec<RadrootsTransportTargetFingerprint>,
-    },
+    Quorum { quorum: usize },
+    RequiredTargets { targets: Vec<TargetFingerprint> },
 }
 
 impl TransportPublishDeliveryPolicy {
     pub fn required_targets(
-        targets: Vec<RadrootsTransportTargetFingerprint>,
+        targets: Vec<TargetFingerprint>,
     ) -> Result<Self, TransportPublishProtocolError> {
         validate_required_target_fingerprints(&targets)?;
         Ok(Self::RequiredTargets { targets })
@@ -579,7 +568,7 @@ impl TransportPublishDeliveryPolicy {
 
     pub fn validate_target_membership(
         &self,
-        target_fingerprints: &[RadrootsTransportTargetFingerprint],
+        target_fingerprints: &[TargetFingerprint],
     ) -> Result<(), TransportPublishProtocolError> {
         let Self::RequiredTargets { targets } = self else {
             return Ok(());
@@ -598,7 +587,7 @@ impl TransportPublishDeliveryPolicy {
 }
 
 fn validate_required_target_fingerprints(
-    targets: &[RadrootsTransportTargetFingerprint],
+    targets: &[TargetFingerprint],
 ) -> Result<(), TransportPublishProtocolError> {
     if targets.is_empty() {
         return Err(TransportPublishProtocolError::EmptyRequiredTargetSet);
@@ -1147,7 +1136,7 @@ fn validate_target_outcome(
     if target.transport_kind.trim().is_empty() {
         return Err(TransportPublishProtocolError::EmptyTransportKind { index });
     }
-    let transport_kind = RadrootsTransportKind::parse_canonical(target.transport_kind.as_str())
+    let transport_kind = TransportId::parse_canonical(target.transport_kind.as_str())
         .map_err(|error| transport_kind_error(error, index))?;
     if target.endpoint_uri.trim().is_empty() {
         return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
@@ -1157,7 +1146,7 @@ fn validate_target_outcome(
         target.target_label.as_deref(),
         index,
     )?;
-    if transport_kind == RadrootsTransportKind::Reticulum {
+    if transport_kind == TransportId::RETICULUM {
         if target.endpoint_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
             return Err(TransportPublishProtocolError::InvalidReticulumEndpoint { index });
         }
@@ -1182,19 +1171,19 @@ fn validate_target_outcome(
 fn target_outcome_fingerprint(
     target: &TransportPublishTargetOutcome,
     index: usize,
-) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
-    let transport_kind = RadrootsTransportKind::parse_canonical(target.transport_kind.as_str())
+) -> Result<TargetFingerprint, TransportPublishProtocolError> {
+    let transport_kind = TransportId::parse_canonical(target.transport_kind.as_str())
         .map_err(|error| transport_kind_error(error, index))?;
     let scope = target
         .target_scope
         .as_deref()
-        .map(RadrootsTransportMeshScopeId::parse)
+        .map(TargetScope::parse)
         .transpose()
         .map_err(|error| target_metadata_error(error, index))?;
     let label = target
         .target_label
         .as_deref()
-        .map(RadrootsTransportTargetLabel::parse)
+        .map(TargetLabel::parse)
         .transpose()
         .map_err(|error| target_metadata_error(error, index))?;
     let canonical_target =
@@ -1207,30 +1196,30 @@ fn target_outcome_fingerprint(
 }
 
 fn transport_target_from_parts(
-    transport_kind: RadrootsTransportKind,
+    transport_kind: TransportId,
     endpoint_uri: &str,
-    scope: Option<RadrootsTransportMeshScopeId>,
-    label: Option<RadrootsTransportTargetLabel>,
-) -> Result<RadrootsTransportTarget, RadrootsTransportError> {
+    scope: Option<TargetScope>,
+    label: Option<TargetLabel>,
+) -> Result<Target, RadrootsTransportError> {
     match transport_kind {
-        RadrootsTransportKind::Nostr => {
-            RadrootsTransportTarget::nostr_relay_with_metadata(endpoint_uri, scope, label)
+        TransportId::NOSTR => {
+            Target::new_with_metadata(TransportId::NOSTR, endpoint_uri, scope, label)
         }
-        RadrootsTransportKind::Reticulum => {
+        TransportId::RETICULUM => {
             if endpoint_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
                 return Err(RadrootsTransportError::InvalidTargetUri);
             }
-            RadrootsTransportTarget::reticulum_with_metadata(endpoint_uri, scope, label)
+            Target::new_with_metadata(TransportId::RETICULUM, endpoint_uri, scope, label)
         }
-        RadrootsTransportKind::Local => {
-            RadrootsTransportTarget::local_with_metadata(endpoint_uri, scope, label)
+        TransportId::LOCAL => {
+            Target::new_with_metadata(TransportId::LOCAL, endpoint_uri, scope, label)
         }
-        _ => RadrootsTransportTarget::new_with_metadata(transport_kind, endpoint_uri, scope, label),
+        _ => Target::new_with_metadata(transport_kind, endpoint_uri, scope, label),
     }
 }
 
 fn required_policy_outcomes<'a>(
-    required_targets: &[RadrootsTransportTargetFingerprint],
+    required_targets: &[TargetFingerprint],
     outcomes: &'a [TransportPublishTargetOutcome],
 ) -> Result<Vec<&'a TransportPublishTargetOutcome>, TransportPublishProtocolError> {
     required_targets
@@ -2674,19 +2663,13 @@ mod tests {
             assert_eq!(target_metadata_error(error, 5), expected);
         }
 
-        assert!(serde_json::from_str::<RadrootsTransportTargetFingerprint>("\"invalid\"").is_err());
+        assert!(serde_json::from_str::<TargetFingerprint>("\"invalid\"").is_err());
 
         assert!(
-            transport_target_from_parts(RadrootsTransportKind::Local, "local:publish", None, None,)
-                .is_ok()
+            transport_target_from_parts(TransportId::LOCAL, "local:publish", None, None,).is_ok()
         );
         assert_eq!(
-            transport_target_from_parts(
-                RadrootsTransportKind::Reticulum,
-                "reticulum:other",
-                None,
-                None,
-            ),
+            transport_target_from_parts(TransportId::RETICULUM, "reticulum:other", None, None,),
             Err(RadrootsTransportError::InvalidTargetUri)
         );
 

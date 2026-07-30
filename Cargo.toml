@@ -68,7 +68,7 @@ rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/radrootslabs/lib"
 homepage = "https://radroots.org"
-readme = "README"
+readme = "README.md"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 
 [workspace.metadata.radroots.public-package]
