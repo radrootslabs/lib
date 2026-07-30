@@ -10,6 +10,7 @@ use crate::{
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
+    contract::AuthorRole,
     draft::EventDraft,
     envelope::kind::KIND_CLASSIFIED_LISTING,
     id::{ClassifiedListingAddress, EventId},
@@ -340,7 +341,13 @@ fn canonical_listing_edit(
     actor: &RadrootsActorContext,
     document: RadrootsOperationalListingEditDocumentV1,
 ) -> Result<RadrootsOperationalListingCanonicalEdit, RadrootsSdkError> {
-    canonicalize_operational_listing_edit(actor, document).map_err(Into::into)
+    if !actor.satisfies(AuthorRole::Seller) {
+        return Err(RadrootsSdkError::UnauthorizedActor {
+            operation: "listing.prepare_publish".to_owned(),
+            reason: "missing role Seller".to_owned(),
+        });
+    }
+    canonicalize_operational_listing_edit(*actor.pubkey(), document).map_err(Into::into)
 }
 
 #[cfg(feature = "runtime")]

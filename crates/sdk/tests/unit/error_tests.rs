@@ -5,7 +5,6 @@ use super::{
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumBehavior;
 use radroots_authority::RadrootsAuthorityError;
-use radroots_event::contract::AuthorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
 use std::collections::BTreeSet;
 
@@ -32,17 +31,6 @@ fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
 
 #[test]
 fn listing_and_store_errors_convert_to_sdk_error_classes() {
-    let draft = RadrootsSdkError::from(
-        radroots_trade::operational_listing::RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
-            required_role: AuthorRole::Seller,
-        },
-    );
-    assert!(matches!(
-        draft,
-        RadrootsSdkError::UnauthorizedActor { ref operation, ref reason }
-            if operation == "listing.prepare_publish" && reason == "missing role Seller"
-    ));
-
     let draft_fallback = RadrootsSdkError::from(
         radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidFarmPubkey(
             radroots_identity::PublicKey::from_hex("bad").expect_err("invalid public key"),

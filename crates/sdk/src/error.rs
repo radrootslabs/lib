@@ -1197,10 +1197,6 @@ impl From<radroots_trade::operational_listing::RadrootsOperationalListingEditErr
         error: radroots_trade::operational_listing::RadrootsOperationalListingEditError,
     ) -> Self {
         match error {
-            radroots_trade::operational_listing::RadrootsOperationalListingEditError::ActorRoleUnsatisfied { required_role } => Self::UnauthorizedActor {
-                operation: "listing.prepare_publish".to_owned(),
-                reason: format!("missing role {required_role:?}"),
-            },
             radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidModel(error) => Self::ListingValidation {
                 kind: RadrootsSdkListingValidationErrorKind::from(&error),
                 message: error.to_string(),

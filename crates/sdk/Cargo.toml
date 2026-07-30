@@ -98,7 +98,6 @@ runtime = [
   "radroots_transport_nostr/std",
   "radroots_transport_nostr/storage",
   "radroots_transport_nostr/runtime-tokio",
-  "radroots_trade/event_store",
 ]
 local-signer = ["runtime", "radroots_authority/local_signer"]
 transport-nostr-runtime = [
