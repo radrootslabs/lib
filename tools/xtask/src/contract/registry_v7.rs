@@ -1,5 +1,6 @@
 use super::artifact_bundle::{
-    GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
+    GeneratedArtifact, read_regular_file, validate_canonical_json_artifact,
+    validate_sha256_artifact, with_artifact_bundle_transaction,
 };
 use radroots_event_codec::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_V7_EVENT_COUNT,
@@ -61,8 +62,8 @@ pub(super) fn validate_event_contract_registry_v7_inventory_under_lock(
         .map_err(|error| format!("parse {INVENTORY_RELATIVE}: {error}"))?;
 
     validate_inventory_shape(&parsed)?;
-    validate_canonical_json_bytes(&actual_json)?;
-    validate_digest_bytes(&actual_sha256)?;
+    validate_canonical_json_artifact(INVENTORY_RELATIVE, &actual_json)?;
+    validate_sha256_artifact(INVENTORY_SHA256_RELATIVE, &actual_sha256)?;
 
     if actual_json != expected_json.as_bytes() {
         return Err(stale_error(INVENTORY_RELATIVE));
@@ -132,33 +133,6 @@ fn validate_inventory_shape(
     {
         return Err(format!(
             "{INVENTORY_RELATIVE} event-contract ordinals must be contiguous from zero"
-        ));
-    }
-    Ok(())
-}
-
-fn validate_canonical_json_bytes(bytes: &[u8]) -> Result<(), String> {
-    if bytes.contains(&b'\r') {
-        return Err(format!("{INVENTORY_RELATIVE} must use LF line endings"));
-    }
-    if !bytes.ends_with(b"\n") || bytes.ends_with(b"\n\n") {
-        return Err(format!("{INVENTORY_RELATIVE} must end with exactly one LF"));
-    }
-    Ok(())
-}
-
-fn validate_digest_bytes(bytes: &[u8]) -> Result<(), String> {
-    if bytes.len() != 65 || bytes[64] != b'\n' {
-        return Err(format!(
-            "{INVENTORY_SHA256_RELATIVE} must contain 64 lowercase hexadecimal bytes and one LF"
-        ));
-    }
-    if !bytes[..64]
-        .iter()
-        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
-    {
-        return Err(format!(
-            "{INVENTORY_SHA256_RELATIVE} must contain a lowercase SHA-256 digest"
         ));
     }
     Ok(())

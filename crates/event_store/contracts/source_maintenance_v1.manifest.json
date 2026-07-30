@@ -845,8 +845,8 @@
     {
       "role": "artifact_transaction_authority",
       "path": "tools/xtask/src/contract/artifact_bundle.rs",
-      "byte_length": 38279,
-      "sha256": "f326ea57b56d40135f95b6b1e15961f66eed363337180a6d12a5ea903e1a9a29",
+      "byte_length": 39149,
+      "sha256": "3d1bba3980b80698d2a21e26caf7af6fe4d9dc4a7fbabc6e406b5d33928b457f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -873,8 +873,8 @@
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 503671,
-      "sha256": "82a33a2227fe63eed1d8ca5908f51f48c4ac4aa1d4527a7633980673fd9a6a30",
+      "byte_length": 508534,
+      "sha256": "43900769fc0d364ff6d693ec735312126b233774ca23d525997823409a4b783b",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

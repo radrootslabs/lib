@@ -8,19 +8,23 @@ use alloc::{
 use radroots_event::{
     contract::{
         AuthorRole, ContentSchema, EventAuthoringPolicy, EventClass, EventContract,
-        EventDiscriminator, EventPrivacy, EventStability, KindContract, NostrStandard, Reducer,
-        TagCardinality, TagContract, TagSemantic, TagValueType, all_event_contracts_registry_v7,
-        all_kind_contracts_registry_v7,
+        EventDiscriminator, EventPrivacy, EventStability, KindContract, NostrStandard,
+        RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, Reducer, TagCardinality, TagContract,
+        TagSemantic, TagValueType, all_event_contracts_registry_v7, all_kind_contracts_registry_v7,
     },
     listing::classified::ClassifiedListingPartition,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
+use super::{canonical_manifest_json, manifest_sha256, parse_manifest_json};
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_INVENTORY_SCHEMA_VERSION: u32 = 1;
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION: u32 = 7;
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_KIND_COUNT: usize = 93;
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_EVENT_COUNT: usize = 103;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION: u32 =
+    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_KIND_COUNT: usize =
+    all_kind_contracts_registry_v7().len();
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_V7_EVENT_COUNT: usize =
+    all_event_contracts_registry_v7().len();
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -330,20 +334,18 @@ pub fn event_contract_registry_v7_inventory() -> RadrootsEventContractRegistryV7
 }
 
 pub fn event_contract_registry_v7_inventory_json() -> Result<String, serde_json::Error> {
-    let mut json = serde_json::to_string_pretty(&event_contract_registry_v7_inventory())?;
-    json.push('\n');
-    Ok(json)
+    canonical_manifest_json(&event_contract_registry_v7_inventory())
 }
 
 pub fn event_contract_registry_v7_inventory_sha256() -> Result<String, serde_json::Error> {
     let json = event_contract_registry_v7_inventory_json()?;
-    Ok(hex::encode(Sha256::digest(json.as_bytes())))
+    Ok(manifest_sha256(&json))
 }
 
 pub fn parse_event_contract_registry_v7_inventory_json(
     json: &str,
 ) -> Result<RadrootsEventContractRegistryV7Inventory, serde_json::Error> {
-    serde_json::from_str(json)
+    parse_manifest_json(json)
 }
 
 fn kind_inventory_entry(

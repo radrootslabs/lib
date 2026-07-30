@@ -9,10 +9,10 @@ use radroots_event::contract::VERSION;
 use radroots_event::contract::{
     ContentSchema, ContractFamily, EventClass, EventContract, EventDiscriminator, EventPrivacy,
     EventStability, NostrStandard, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, Reducer,
-    TagCardinality, TagContract, TagSemantic, TagValueType, all_event_contracts,
-    event_contract_family, kind_contract,
+    TagCardinality, TagContract, TagSemantic, TagValueType, all_event_contracts_registry_v7,
+    event_contract_family, kind_contract_registry_v7,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 
 pub mod registry_v7;
@@ -37,6 +37,7 @@ const HISTORICAL_KNOWLEDGE_CONTRACT_INTRODUCTIONS: [(&str, &str); 11] = [
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsKnowledgeContractManifest {
     pub schema_version: u32,
     pub registry_version: u32,
@@ -47,6 +48,7 @@ pub struct RadrootsKnowledgeContractManifest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsKnowledgeContractManifestEntry {
     pub contract_id: String,
     pub kind: u32,
@@ -104,6 +106,7 @@ pub enum RadrootsKnowledgeManifestDiscriminator {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsKnowledgeManifestTagContract {
     pub name: String,
     pub cardinality: String,
@@ -113,6 +116,7 @@ pub struct RadrootsKnowledgeManifestTagContract {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsKnowledgeManifestCodecSupport {
     pub encode: bool,
     pub decode: bool,
@@ -122,7 +126,7 @@ pub struct RadrootsKnowledgeManifestCodecSupport {
 }
 
 pub fn knowledge_contract_manifest() -> RadrootsKnowledgeContractManifest {
-    let mut contracts = all_event_contracts()
+    let mut contracts = all_event_contracts_registry_v7()
         .iter()
         .filter(|contract| event_contract_family(contract) == Some(ContractFamily::Knowledge))
         .map(manifest_entry)
@@ -140,18 +144,42 @@ pub fn knowledge_contract_manifest() -> RadrootsKnowledgeContractManifest {
 }
 
 pub fn contract_manifest_json() -> Result<String, serde_json::Error> {
-    let mut json = serde_json::to_string_pretty(&knowledge_contract_manifest())?;
-    json.push('\n');
-    Ok(json)
+    canonical_manifest_json(&knowledge_contract_manifest())
 }
 
 pub fn contract_manifest_sha256() -> Result<String, serde_json::Error> {
     let json = contract_manifest_json()?;
-    Ok(hex::encode(Sha256::digest(json.as_bytes())))
+    Ok(manifest_sha256(&json))
+}
+
+pub fn parse_knowledge_contract_manifest_json(
+    json: &str,
+) -> Result<RadrootsKnowledgeContractManifest, serde_json::Error> {
+    serde_json::from_str(json)
+}
+
+pub(super) fn canonical_manifest_json<T>(manifest: &T) -> Result<String, serde_json::Error>
+where
+    T: Serialize,
+{
+    let mut json = serde_json::to_string_pretty(manifest)?;
+    json.push('\n');
+    Ok(json)
+}
+
+pub(super) fn parse_manifest_json<T>(json: &str) -> Result<T, serde_json::Error>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_str(json)
+}
+
+pub(super) fn manifest_sha256(json: &str) -> String {
+    hex::encode(Sha256::digest(json.as_bytes()))
 }
 
 fn manifest_entry(contract: &EventContract) -> RadrootsKnowledgeContractManifestEntry {
-    let standard = kind_contract(contract.kind)
+    let standard = kind_contract_registry_v7(contract.kind)
         .map(|contract| standard_label(contract.standard))
         .unwrap_or("unknown");
     let mvp_support = mvp_sdk_and_wasm_tag_support(contract.id);
@@ -453,11 +481,65 @@ fn reducer_label(value: Reducer) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{discriminator_manifest, reducer_label, standard_label};
+    use super::{
+        contract_manifest_json, contract_manifest_sha256, discriminator_manifest,
+        knowledge_contract_manifest, parse_knowledge_contract_manifest_json, reducer_label,
+        standard_label,
+    };
     use radroots_event::{
-        contract::{EventDiscriminator, NostrStandard, Reducer},
+        contract::{
+            ContractFamily, EventDiscriminator, NostrStandard, Reducer,
+            all_event_contracts_registry_v7, event_contract_family,
+        },
         listing::classified::ClassifiedListingPartition,
     };
+
+    #[test]
+    fn knowledge_manifest_is_derived_from_authority_with_stable_order_and_count() {
+        let manifest = knowledge_contract_manifest();
+        let authority_count = all_event_contracts_registry_v7()
+            .iter()
+            .filter(|contract| event_contract_family(contract) == Some(ContractFamily::Knowledge))
+            .count();
+
+        assert_eq!(manifest.contract_count, authority_count);
+        assert_eq!(manifest.contract_count, manifest.contracts.len());
+        assert!(
+            manifest
+                .contracts
+                .windows(2)
+                .all(|pair| pair[0].contract_id < pair[1].contract_id)
+        );
+    }
+
+    #[test]
+    fn knowledge_manifest_json_is_canonical_repeatable_and_strictly_parsed() {
+        let first = contract_manifest_json().expect("serialize manifest");
+        let second = contract_manifest_json().expect("serialize manifest again");
+
+        assert_eq!(first, second);
+        assert!(first.ends_with('\n'));
+        assert!(!first.ends_with("\n\n"));
+        assert!(!first.contains("\r\n"));
+        assert_eq!(
+            parse_knowledge_contract_manifest_json(&first).expect("parse manifest"),
+            knowledge_contract_manifest()
+        );
+        assert_eq!(
+            contract_manifest_sha256().expect("hash manifest"),
+            contract_manifest_sha256().expect("hash manifest again")
+        );
+
+        let mut unknown =
+            serde_json::to_value(knowledge_contract_manifest()).expect("manifest value");
+        unknown
+            .as_object_mut()
+            .expect("manifest object")
+            .insert("unknown".to_string(), serde_json::Value::Bool(true));
+        assert!(
+            serde_json::from_value::<super::RadrootsKnowledgeContractManifest>(unknown).is_err()
+        );
+    }
 
     #[test]
     fn classified_listing_standard_label_is_nip99() {

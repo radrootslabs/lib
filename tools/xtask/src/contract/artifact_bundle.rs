@@ -72,6 +72,33 @@ pub(super) fn read_regular_file(workspace_root: &Path, relative: &str) -> Result
     fs::read(path).map_err(|error| format!("read {relative}: {error}"))
 }
 
+pub(super) fn validate_canonical_json_artifact(relative: &str, bytes: &[u8]) -> Result<(), String> {
+    if bytes.contains(&b'\r') {
+        return Err(format!("{relative} must use LF line endings"));
+    }
+    if !bytes.ends_with(b"\n") || bytes.ends_with(b"\n\n") {
+        return Err(format!("{relative} must end with exactly one LF"));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_sha256_artifact(relative: &str, bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() != 65 || bytes[64] != b'\n' {
+        return Err(format!(
+            "{relative} must contain 64 lowercase hexadecimal bytes and one LF"
+        ));
+    }
+    if !bytes[..64]
+        .iter()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+    {
+        return Err(format!(
+            "{relative} must contain a lowercase SHA-256 digest"
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn with_artifact_bundle_transaction<T>(
     workspace_root: &Path,
     operation: impl FnOnce(&ArtifactBundleTransaction<'_>) -> Result<T, String>,

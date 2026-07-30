@@ -24,6 +24,10 @@ pub(crate) use source_maintenance::{
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
 use admission_authority::validate_admission_operation_authority;
+use artifact_bundle::{
+    GeneratedArtifact, read_regular_file, validate_canonical_json_artifact,
+    validate_sha256_artifact, with_artifact_bundle_transaction,
+};
 use comment_authority::{
     COMMENT_CASE_KINDS, COMMENT_CONFORMANCE_VECTOR_RELATIVE, COMMENT_OPERATION_EXPECTATIONS,
     COMMENT_VECTOR_EXPECTATIONS, REQUIRED_COMMENT_PUBLIC_TYPES,
@@ -67,6 +71,7 @@ const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
 const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.sha256";
+const KNOWLEDGE_MANIFEST_WRITE_COMMAND: &str = "cargo xtask contract knowledge-manifest --write";
 const KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json";
 const KNOWLEDGE_PUBLIC_SURFACE_RELATIVE: &str =
@@ -4508,49 +4513,127 @@ fn validate_comment_vector_namespace(
 }
 
 pub fn write_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), String> {
-    let manifest_json = radroots_event_codec::contract_manifest_json()
-        .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
-    let manifest_sha256 = radroots_event_codec::contract_manifest_sha256()
-        .map_err(|error| format!("hash knowledge contract manifest: {error}"))?;
-    let manifest_path = workspace_root.join(KNOWLEDGE_MANIFEST_RELATIVE);
-    let hash_path = workspace_root.join(KNOWLEDGE_MANIFEST_SHA256_RELATIVE);
-    if let Some(parent) = manifest_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("create {}: {error}", parent.display()))?;
-    }
-    fs::write(&manifest_path, manifest_json)
-        .map_err(|error| format!("write {}: {error}", manifest_path.display()))?;
-    fs::write(&hash_path, format!("{manifest_sha256}\n"))
-        .map_err(|error| format!("write {}: {error}", hash_path.display()))?;
-    validate_knowledge_contract_manifest(workspace_root)
+    let manifest_json = write_knowledge_contract_manifest_artifacts(workspace_root)?;
+    validate_knowledge_contract_manifest_context(workspace_root, &manifest_json)
 }
 
 pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), String> {
+    let manifest_json = validate_knowledge_contract_manifest_artifacts(workspace_root)?;
+    validate_knowledge_contract_manifest_context(workspace_root, &manifest_json)
+}
+
+fn write_knowledge_contract_manifest_artifacts(workspace_root: &Path) -> Result<String, String> {
+    with_artifact_bundle_transaction(workspace_root, |transaction| {
+        let manifest_json = expected_knowledge_contract_manifest_json()?;
+        let manifest_sha256 = expected_knowledge_contract_manifest_sha256()?;
+        transaction.write(vec![
+            GeneratedArtifact {
+                relative: KNOWLEDGE_MANIFEST_RELATIVE,
+                contents: manifest_json.into_bytes(),
+            },
+            GeneratedArtifact {
+                relative: KNOWLEDGE_MANIFEST_SHA256_RELATIVE,
+                contents: format!("{manifest_sha256}\n").into_bytes(),
+            },
+        ])?;
+        validate_knowledge_contract_manifest_artifacts_under_lock(workspace_root)
+    })
+}
+
+fn validate_knowledge_contract_manifest_artifacts(workspace_root: &Path) -> Result<String, String> {
+    with_artifact_bundle_transaction(workspace_root, |_| {
+        validate_knowledge_contract_manifest_artifacts_under_lock(workspace_root)
+    })
+}
+
+fn validate_knowledge_contract_manifest_artifacts_under_lock(
+    workspace_root: &Path,
+) -> Result<String, String> {
+    let expected_json = expected_knowledge_contract_manifest_json()?;
+    let expected_sha256 = expected_knowledge_contract_manifest_sha256()?;
+    let actual_json = read_regular_file(workspace_root, KNOWLEDGE_MANIFEST_RELATIVE)?;
+    let actual_sha256 = read_regular_file(workspace_root, KNOWLEDGE_MANIFEST_SHA256_RELATIVE)?;
+    let actual_json_text = std::str::from_utf8(&actual_json)
+        .map_err(|error| format!("{KNOWLEDGE_MANIFEST_RELATIVE} must be UTF-8 JSON: {error}"))?;
+    let parsed =
+        radroots_event_codec::manifest::parse_knowledge_contract_manifest_json(actual_json_text)
+            .map_err(|error| format!("parse {KNOWLEDGE_MANIFEST_RELATIVE}: {error}"))?;
+
+    validate_knowledge_contract_manifest_shape(&parsed)?;
+    validate_canonical_json_artifact(KNOWLEDGE_MANIFEST_RELATIVE, &actual_json)?;
+    validate_sha256_artifact(KNOWLEDGE_MANIFEST_SHA256_RELATIVE, &actual_sha256)?;
+
+    if actual_json != expected_json.as_bytes() {
+        return Err(stale_knowledge_manifest_error(KNOWLEDGE_MANIFEST_RELATIVE));
+    }
+    if actual_sha256 != format!("{expected_sha256}\n").as_bytes() {
+        return Err(stale_knowledge_manifest_error(
+            KNOWLEDGE_MANIFEST_SHA256_RELATIVE,
+        ));
+    }
+    if parsed != radroots_event_codec::knowledge_contract_manifest() {
+        return Err(stale_knowledge_manifest_error(KNOWLEDGE_MANIFEST_RELATIVE));
+    }
+
+    Ok(actual_json_text.to_owned())
+}
+
+fn expected_knowledge_contract_manifest_json() -> Result<String, String> {
     let expected_json = radroots_event_codec::contract_manifest_json()
         .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
-    let expected_sha256 = radroots_event_codec::contract_manifest_sha256()
-        .map_err(|error| format!("hash knowledge contract manifest: {error}"))?;
-    let manifest_path = workspace_root.join(KNOWLEDGE_MANIFEST_RELATIVE);
-    let hash_path = workspace_root.join(KNOWLEDGE_MANIFEST_SHA256_RELATIVE);
-    let actual_json = fs::read_to_string(&manifest_path)
-        .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
-    let actual_hash = fs::read_to_string(&hash_path)
-        .map_err(|error| format!("read {}: {error}", hash_path.display()))?;
+    Ok(expected_json)
+}
 
-    if actual_json != expected_json {
+fn expected_knowledge_contract_manifest_sha256() -> Result<String, String> {
+    radroots_event_codec::contract_manifest_sha256()
+        .map_err(|error| format!("hash knowledge contract manifest: {error}"))
+}
+
+fn validate_knowledge_contract_manifest_shape(
+    manifest: &radroots_event_codec::manifest::RadrootsKnowledgeContractManifest,
+) -> Result<(), String> {
+    if manifest.schema_version
+        != radroots_event_codec::RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION
+    {
         return Err(format!(
-            "knowledge manifest {} is stale; run cargo xtask contract knowledge-manifest --write",
-            KNOWLEDGE_MANIFEST_RELATIVE
+            "{KNOWLEDGE_MANIFEST_RELATIVE} schema_version must be {}",
+            radroots_event_codec::RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION
         ));
     }
-    if actual_hash != format!("{expected_sha256}\n") {
+    if manifest.registry_version
+        != radroots_event_codec::RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION
+    {
         return Err(format!(
-            "knowledge manifest hash {} is stale; run cargo xtask contract knowledge-manifest --write",
-            KNOWLEDGE_MANIFEST_SHA256_RELATIVE
+            "{KNOWLEDGE_MANIFEST_RELATIVE} registry_version must be {}",
+            radroots_event_codec::RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION
         ));
     }
+    if manifest.contract_count != manifest.contracts.len() {
+        return Err(format!(
+            "{KNOWLEDGE_MANIFEST_RELATIVE} contract_count must match its contract inventory"
+        ));
+    }
+    if manifest
+        .contracts
+        .windows(2)
+        .any(|pair| pair[0].contract_id >= pair[1].contract_id)
+    {
+        return Err(format!(
+            "{KNOWLEDGE_MANIFEST_RELATIVE} contract IDs must be unique and strictly sorted"
+        ));
+    }
+    Ok(())
+}
 
-    validate_knowledge_manifest_witnesses(workspace_root, &actual_json)?;
+fn stale_knowledge_manifest_error(relative: &str) -> String {
+    format!("{relative} is stale; run `{KNOWLEDGE_MANIFEST_WRITE_COMMAND}`")
+}
+
+fn validate_knowledge_contract_manifest_context(
+    workspace_root: &Path,
+    manifest_json: &str,
+) -> Result<(), String> {
+    validate_knowledge_manifest_witnesses(workspace_root, manifest_json)?;
     validate_knowledge_conformance_vector_inventory(workspace_root)?;
 
     let bundle = load_contract_bundle(workspace_root)?;
@@ -4558,7 +4641,7 @@ pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(),
         &workspace_root.join(KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE),
         &bundle.manifest.contract.version,
     )?;
-    validate_knowledge_manifest_vector_semantics(&actual_json, &knowledge_manifest_vector)?;
+    validate_knowledge_manifest_vector_semantics(manifest_json, &knowledge_manifest_vector)?;
     validate_conformance_vector_file(
         &workspace_root.join(KNOWLEDGE_PUBLIC_SURFACE_RELATIVE),
         &bundle.manifest.contract.version,
@@ -9955,6 +10038,44 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let error = validate_knowledge_manifest_vector_semantics(&manifest, &vector)
             .expect_err("stale expected registry version must fail");
         assert!(error.contains("expected registry_version drift"), "{error}");
+    }
+
+    #[test]
+    fn knowledge_manifest_artifacts_are_atomic_fresh_and_shape_checked() {
+        let root = temp_root("knowledge_manifest_artifacts");
+        let generated =
+            write_knowledge_contract_manifest_artifacts(&root).expect("write manifest artifacts");
+        assert_eq!(
+            generated,
+            expected_knowledge_contract_manifest_json().expect("expected manifest")
+        );
+        assert_eq!(
+            validate_knowledge_contract_manifest_artifacts(&root)
+                .expect("fresh manifest artifacts"),
+            generated
+        );
+
+        let manifest_path = root.join(KNOWLEDGE_MANIFEST_RELATIVE);
+        let mut extra_lf = fs::read_to_string(&manifest_path).expect("read manifest");
+        extra_lf.push('\n');
+        fs::write(&manifest_path, extra_lf).expect("write noncanonical manifest");
+        let error = validate_knowledge_contract_manifest_artifacts(&root)
+            .expect_err("noncanonical manifest must fail");
+        assert!(error.contains("exactly one LF"), "{error}");
+
+        write_knowledge_contract_manifest_artifacts(&root).expect("restore manifest artifacts");
+        let mut value: Value =
+            serde_json::from_slice(&fs::read(&manifest_path).expect("read restored manifest"))
+                .expect("parse restored manifest");
+        value["contract_count"] = Value::from(0_u64);
+        let mut mismatched = serde_json::to_string_pretty(&value).expect("serialize mismatch");
+        mismatched.push('\n');
+        fs::write(&manifest_path, mismatched).expect("write count mismatch");
+        let error = validate_knowledge_contract_manifest_artifacts(&root)
+            .expect_err("count mismatch must fail");
+        assert!(error.contains("contract_count"), "{error}");
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
