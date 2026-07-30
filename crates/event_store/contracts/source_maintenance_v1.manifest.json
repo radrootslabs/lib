@@ -341,8 +341,8 @@
     {
       "role": "event_draft_authority",
       "path": "crates/event/src/draft.rs",
-      "byte_length": 51154,
-      "sha256": "7fab3174e7fa6c317287ae53f049c9a5f7590c3432b99f1698c415df663265c0",
+      "byte_length": 51150,
+      "sha256": "ecc619aae28d688d13f35467398f17766b60f26c2bf3616d772ce65b7fa4fb53",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -474,8 +474,8 @@
     {
       "role": "event_wire_v1_authority",
       "path": "crates/event/src/wire/v1.rs",
-      "byte_length": 21218,
-      "sha256": "c3f82fefcf52b3f208f31dedceae64a29ec6ba2804896a0bb957235fd8d9ff6b",
+      "byte_length": 22198,
+      "sha256": "c818bc1f67e215948ba253c8c62b09ab788db9aeec9b6df8096014b55565cb8c",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

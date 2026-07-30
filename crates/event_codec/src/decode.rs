@@ -5,14 +5,17 @@
 //! remain explicit under [`crate::verify`].
 
 use core::fmt;
-use radroots_event::envelope::EventEnvelopeError;
+use radroots_event::{envelope::EventEnvelopeError, wire::EventWireError};
 
 #[cfg(feature = "json")]
 use radroots_event::{
     admission::RawEvent,
-    envelope::{EventEnvelope, EventEnvelopeParts},
-    wire::{EventWireLimits, Nip01EventWire},
+    wire::{DEFAULT_RAW_JSON_MAX_BYTES, Nip01EventWire},
 };
+
+/// Maximum compact NIP-01 event JSON size accepted by [`event`].
+#[cfg(feature = "json")]
+pub const MAX_EVENT_JSON_BYTES: usize = DEFAULT_RAW_JSON_MAX_BYTES;
 
 /// A failure while decoding an untrusted event representation.
 #[non_exhaustive]
@@ -24,6 +27,8 @@ pub enum DecodeError {
     InvalidJson,
     /// A decoded field violates the native event-envelope contract.
     InvalidEnvelope(EventEnvelopeError),
+    /// A decoded field violates the bounded NIP-01 wire contract.
+    InvalidWire(EventWireError),
 }
 
 impl DecodeError {
@@ -34,6 +39,7 @@ impl DecodeError {
             Self::InputTooLarge { .. } => "input_too_large",
             Self::InvalidJson => "invalid_json",
             Self::InvalidEnvelope(_) => "invalid_envelope",
+            Self::InvalidWire(_) => "invalid_wire",
         }
     }
 }
@@ -46,6 +52,7 @@ impl fmt::Display for DecodeError {
             }
             Self::InvalidJson => formatter.write_str("event JSON is invalid"),
             Self::InvalidEnvelope(error) => write!(formatter, "event envelope is invalid: {error}"),
+            Self::InvalidWire(error) => write!(formatter, "event wire is invalid: {error}"),
         }
     }
 }
@@ -55,6 +62,7 @@ impl std::error::Error for DecodeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidEnvelope(error) => Some(error),
+            Self::InvalidWire(error) => Some(error),
             Self::InputTooLarge { .. } | Self::InvalidJson => None,
         }
     }
@@ -78,23 +86,30 @@ impl std::error::Error for DecodeError {
 /// ```
 #[cfg(feature = "json")]
 pub fn event(raw_json: &str) -> Result<RawEvent, DecodeError> {
-    let max = EventWireLimits::default().max_raw_json_bytes;
+    let max = MAX_EVENT_JSON_BYTES;
     let actual = raw_json.len();
     if actual > max {
         return Err(DecodeError::InputTooLarge { max, actual });
     }
 
-    let wire =
-        serde_json::from_str::<Nip01EventWire>(raw_json).map_err(|_| DecodeError::InvalidJson)?;
-    let envelope = EventEnvelope::new(EventEnvelopeParts {
-        id: wire.id,
-        author: wire.pubkey,
-        created_at: wire.created_at,
-        kind: wire.kind,
-        tags: wire.tags,
-        content: wire.content,
-        sig: wire.sig,
-    })
-    .map_err(DecodeError::InvalidEnvelope)?;
+    let wire = Nip01EventWire::parse_json_unverified(raw_json).map_err(map_wire_error)?;
+    let envelope = wire
+        .into_unverified_envelope()
+        .map_err(DecodeError::InvalidEnvelope)?;
     Ok(RawEvent::new(envelope))
+}
+
+#[cfg(feature = "json")]
+fn map_wire_error(error: EventWireError) -> DecodeError {
+    match error {
+        EventWireError::RawJsonTooLarge { max, actual } => {
+            DecodeError::InputTooLarge { max, actual }
+        }
+        EventWireError::Json(_)
+        | EventWireError::RootNotObject
+        | EventWireError::MissingField(_)
+        | EventWireError::InvalidField(_) => DecodeError::InvalidJson,
+        EventWireError::Envelope(error) => DecodeError::InvalidEnvelope(error),
+        error => DecodeError::InvalidWire(error),
+    }
 }

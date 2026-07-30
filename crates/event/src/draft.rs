@@ -564,7 +564,7 @@ impl SignedEvent {
         }
         let envelope = wire
             .clone()
-            .into_envelope_unchecked_id()
+            .into_unverified_envelope()
             .map_err(SignedEventError::Envelope)?;
         Ok(Self {
             envelope,
@@ -580,7 +580,7 @@ impl SignedEvent {
     ) -> Result<Self, SignedEventError> {
         let envelope = wire
             .clone()
-            .into_envelope_unchecked_id()
+            .into_unverified_envelope()
             .map_err(SignedEventError::Envelope)?;
         Ok(Self {
             envelope,

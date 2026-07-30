@@ -1,0 +1,23 @@
+[package]
+name = "radroots_event_codec_fuzz"
+publish = false
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97.1"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+radroots_event_codec = { path = "../../crates/event_codec", default-features = false, features = ["json"] }
+
+[[bin]]
+name = "event_codec_decode_verify"
+path = "fuzz_targets/event_codec_decode_verify.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

@@ -249,7 +249,26 @@ impl Nip01EventWire {
         Self::parse_json_with_limits(raw_json, EventWireLimits::default())
     }
 
+    /// Parses and structurally validates an event without verifying its ID.
+    ///
+    /// This boundary enforces every [`EventWireLimits`] budget. Callers must
+    /// invoke [`Self::verify_id`] before treating the result as ID-verified.
+    pub fn parse_json_unverified(raw_json: &str) -> Result<Self, EventWireError> {
+        Self::parse_json_unverified_with_limits(raw_json, EventWireLimits::default())
+    }
+
     pub fn parse_json_with_limits(
+        raw_json: &str,
+        limits: EventWireLimits,
+    ) -> Result<Self, EventWireError> {
+        let wire = Self::parse_json_unverified_with_limits(raw_json, limits)?;
+        wire.verify_id()?;
+        Ok(wire)
+    }
+
+    /// Parses and structurally validates an event under explicit limits
+    /// without verifying its ID.
+    pub fn parse_json_unverified_with_limits(
         raw_json: &str,
         limits: EventWireLimits,
     ) -> Result<Self, EventWireError> {
@@ -298,11 +317,15 @@ impl Nip01EventWire {
 
     pub fn into_envelope(self) -> Result<EventEnvelope, EventWireError> {
         self.verify_id()?;
-        self.into_envelope_unchecked_id()
+        self.into_unverified_envelope()
             .map_err(EventWireError::Envelope)
     }
 
-    pub(crate) fn into_envelope_unchecked_id(self) -> Result<EventEnvelope, EventEnvelopeError> {
+    /// Converts structurally validated wire data without verifying its ID.
+    ///
+    /// The returned envelope remains untrusted until an admission typestate
+    /// transition verifies its canonical ID and signature.
+    pub fn into_unverified_envelope(self) -> Result<EventEnvelope, EventEnvelopeError> {
         EventEnvelope::new(EventEnvelopeParts {
             id: self.id,
             author: self.pubkey,
@@ -344,7 +367,6 @@ impl Nip01EventWire {
             sig,
             extra,
         };
-        wire.verify_id()?;
         Ok(wire)
     }
 }

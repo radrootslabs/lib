@@ -128,6 +128,29 @@ fn into_envelope_verifies_id_before_domain_conversion() {
 }
 
 #[test]
+fn unverified_parse_preserves_explicit_id_verification_stage() {
+    let mut value = valid_event_value("hello", default_tags());
+    value
+        .as_object_mut()
+        .expect("object")
+        .insert("id".to_owned(), json!(hex_64('f')));
+    let raw = raw_json(&value);
+
+    let wire = Nip01EventWire::parse_json_unverified(raw.as_str()).expect("unverified wire");
+    assert!(matches!(
+        wire.verify_id(),
+        Err(EventWireError::EventIdMismatch { .. })
+    ));
+    wire.into_unverified_envelope()
+        .expect("structurally valid unverified envelope");
+
+    assert!(matches!(
+        Nip01EventWire::parse_json(raw.as_str()),
+        Err(EventWireError::EventIdMismatch { .. })
+    ));
+}
+
+#[test]
 fn into_envelope_ignores_extra_for_id_and_propagates_domain_limits() {
     let mut value = valid_event_value("hello", default_tags());
     value
