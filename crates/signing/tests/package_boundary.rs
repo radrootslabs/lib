@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use radroots_signing::{
-    actor as _, capability as _, error as _, receipt as _, request as _, signer as _, status as _,
+    Actor, actor as _, capability as _, error as _, receipt as _, request as _, signer as _,
+    status as _,
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
@@ -42,4 +43,6 @@ fn crate_root_declares_the_approved_module_skeleton() {
             "crate root is missing {module}"
         );
     }
+    let _ = core::mem::size_of::<Actor>();
+    assert!(ROOT.contains("pub use actor::Actor;"));
 }

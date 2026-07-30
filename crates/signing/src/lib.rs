@@ -12,3 +12,5 @@ pub mod receipt;
 pub mod request;
 pub mod signer;
 pub mod status;
+
+pub use actor::Actor;
