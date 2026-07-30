@@ -14,3 +14,8 @@ pub mod signer;
 pub mod status;
 
 pub use actor::Actor;
+pub use error::Error;
+pub use receipt::SignReceipt;
+pub use request::SignRequest;
+pub use signer::Signer;
+pub use status::SignerStatus;

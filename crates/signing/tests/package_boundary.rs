@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
 use radroots_signing::{
-    Actor, actor as _, capability as _, error as _, receipt as _, request as _, signer as _,
-    status as _,
+    Actor, Error, SignReceipt, SignRequest, Signer, SignerStatus, actor as _, capability as _,
+    error as _, receipt as _, request as _, signer as _, status as _,
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
@@ -44,5 +44,20 @@ fn crate_root_declares_the_approved_module_skeleton() {
         );
     }
     let _ = core::mem::size_of::<Actor>();
-    assert!(ROOT.contains("pub use actor::Actor;"));
+    let _ = core::mem::size_of::<SignRequest>();
+    let _ = core::mem::size_of::<SignReceipt>();
+    let _ = core::mem::size_of::<SignerStatus>();
+    let _ = core::mem::size_of::<Error>();
+    fn assert_object_safe(_: &dyn Signer) {}
+    let _ = assert_object_safe;
+    for root_export in [
+        "pub use actor::Actor;",
+        "pub use error::Error;",
+        "pub use receipt::SignReceipt;",
+        "pub use request::SignRequest;",
+        "pub use signer::Signer;",
+        "pub use status::SignerStatus;",
+    ] {
+        assert!(ROOT.contains(root_export), "missing {root_export}");
+    }
 }
