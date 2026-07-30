@@ -282,6 +282,13 @@ mod tests {
     use radroots_identity::PublicKey;
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
+    #[cfg(feature = "serde_json")]
+    const CANONICAL_WORKFLOW_VECTORS: &str =
+        include_str!("../../../contracts/conformance/vectors/trade/prepare_workflow.v1.json");
+    #[cfg(feature = "serde_json")]
+    const PACKAGED_WORKFLOW_VECTORS: &str =
+        include_str!("../tests/fixtures/prepare_workflow.v1.json");
+
     fn pubkey(value: &str) -> PublicKey {
         PublicKey::from_hex(value).expect("fixture public key")
     }
@@ -508,5 +515,108 @@ mod tests {
             WorkflowPlan::prepare(invalid).unwrap_err().kind(),
             ErrorKind::InvalidMutation
         );
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn workflow_conformance_vectors_execute_every_mutation_and_error_case() {
+        assert_eq!(PACKAGED_WORKFLOW_VECTORS, CANONICAL_WORKFLOW_VECTORS);
+        let suite: serde_json::Value =
+            serde_json::from_str(PACKAGED_WORKFLOW_VECTORS).expect("workflow vector suite");
+        assert_eq!(suite["suite"], "trade_workflow");
+        assert_eq!(suite["contract_version"], "1.0.0");
+        let vectors = suite["vectors"].as_array().expect("workflow vectors");
+        assert_eq!(vectors.len(), 8);
+        let mut ids = std::collections::BTreeSet::new();
+
+        for vector in vectors {
+            let id = vector["id"].as_str().expect("workflow vector id");
+            assert!(ids.insert(id), "duplicate workflow vector {id}");
+            let mutation_fixture = vector["input"]["mutation"]
+                .as_str()
+                .expect("workflow mutation fixture");
+            let result = match mutation_fixture {
+                "proposal_with_private_terms" => {
+                    WorkflowPlan::prepare(all_operation_mutations().remove(0))
+                }
+                "decision" => WorkflowPlan::prepare(all_operation_mutations().remove(1)),
+                "revision_proposal_with_private_terms" => {
+                    WorkflowPlan::prepare(all_operation_mutations().remove(2))
+                }
+                "revision_decision" => WorkflowPlan::prepare(all_operation_mutations().remove(3)),
+                "cancellation" => WorkflowPlan::prepare(all_operation_mutations().remove(4)),
+                "proposal_with_unsupported_schema" => {
+                    let mut mutation = all_operation_mutations().remove(0);
+                    mutation.schema_version += 1;
+                    WorkflowPlan::prepare(mutation)
+                }
+                "proposal_without_mutation_id" => {
+                    let mut mutation = all_operation_mutations().remove(0);
+                    mutation.mutation_id = None;
+                    WorkflowPlan::prepare(mutation)
+                }
+                "decision_without_parent" => {
+                    let mut mutation = all_operation_mutations().remove(1);
+                    mutation.parent_mutation_ids.clear();
+                    WorkflowPlan::prepare(mutation)
+                }
+                _ => panic!("{id}: unsupported mutation fixture {mutation_fixture}"),
+            };
+
+            let actual = match vector["kind"].as_str().expect("workflow vector kind") {
+                "trade.prepare_workflow.valid" => {
+                    let plan = result.unwrap_or_else(|error| panic!("{id}: {error}"));
+                    serde_json::json!({
+                        "mutation_kind": mutation_kind_label(plan.kind()),
+                        "required_actions": plan
+                            .required_actions()
+                            .iter()
+                            .copied()
+                            .map(workflow_action_label)
+                            .collect::<Vec<_>>(),
+                        "private_terms_artifact_id": plan
+                            .private_terms()
+                            .map(PrivateTermsPlan::artifact_id),
+                    })
+                }
+                "trade.prepare_workflow.invalid" => {
+                    let error = result.expect_err("invalid workflow vector must fail");
+                    serde_json::json!({ "error_kind": error_kind_label(error.kind()) })
+                }
+                kind => panic!("{id}: unsupported workflow vector kind {kind}"),
+            };
+            assert_eq!(actual, vector["expected"], "{id}");
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
+    const fn mutation_kind_label(kind: TradeMutationKindV1) -> &'static str {
+        match kind {
+            TradeMutationKindV1::Proposal => "proposal",
+            TradeMutationKindV1::Decision => "decision",
+            TradeMutationKindV1::RevisionProposal => "revision_proposal",
+            TradeMutationKindV1::RevisionDecision => "revision_decision",
+            TradeMutationKindV1::Cancellation => "cancellation",
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
+    const fn workflow_action_label(action: WorkflowAction) -> &'static str {
+        match action {
+            WorkflowAction::Sign => "sign",
+            WorkflowAction::Persist => "persist",
+            WorkflowAction::Deliver => "deliver",
+            WorkflowAction::VerifyPrivateTerms => "verify_private_terms",
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
+    const fn error_kind_label(kind: ErrorKind) -> &'static str {
+        match kind {
+            ErrorKind::UnsupportedSchema => "unsupported_schema",
+            ErrorKind::MissingMutationId => "missing_mutation_id",
+            ErrorKind::InvalidMutation => "invalid_mutation",
+            ErrorKind::InvalidPrivateTerms => "invalid_private_terms",
+        }
     }
 }

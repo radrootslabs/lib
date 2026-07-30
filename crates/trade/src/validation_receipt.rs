@@ -2,10 +2,14 @@
 
 #[cfg(not(feature = "std"))]
 use alloc::{
+    borrow::ToOwned,
     format,
     string::{String, ToString},
+    vec,
     vec::Vec,
 };
+
+use core::fmt;
 
 use base64::Engine as _;
 use radroots_event::{
@@ -18,7 +22,6 @@ use radroots_event::{
 use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use thiserror::Error;
 
 pub const VALIDATION_RECEIPT_DOMAIN: &str = "radroots.receipt";
 pub const VALIDATION_RECEIPT_VERSION: u32 = 1;
@@ -369,29 +372,57 @@ pub struct RadrootsVerifiedValidationReceipt {
     pub tags: RadrootsValidationReceiptTags,
 }
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsValidationReceiptError {
-    #[error("{0} cannot be empty")]
     EmptyField(&'static str),
-    #[error("invalid event kind {got}; expected {expected}")]
     InvalidKind { expected: u32, got: u32 },
-    #[error("invalid validation receipt json")]
     InvalidJson,
-    #[error("validation receipt json is not canonical")]
     NonCanonicalJson,
-    #[error("invalid validation receipt field {0}")]
     InvalidField(&'static str),
-    #[error("invalid validation receipt proof metadata {0}")]
     InvalidProofMetadata(&'static str),
-    #[error("missing validation receipt tag {0}")]
     MissingTag(&'static str),
-    #[error("invalid validation receipt tag {0}")]
     InvalidTag(&'static str),
-    #[error("validation receipt tag {0} does not match content")]
     TagMismatch(&'static str),
-    #[error("validation receipt expected binding {0} does not match")]
     ExpectedBindingMismatch(&'static str),
 }
+
+impl fmt::Display for RadrootsValidationReceiptError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyField(field) => write!(formatter, "{field} cannot be empty"),
+            Self::InvalidKind { expected, got } => {
+                write!(formatter, "invalid event kind {got}; expected {expected}")
+            }
+            Self::InvalidJson => formatter.write_str("invalid validation receipt json"),
+            Self::NonCanonicalJson => {
+                formatter.write_str("validation receipt json is not canonical")
+            }
+            Self::InvalidField(field) => {
+                write!(formatter, "invalid validation receipt field {field}")
+            }
+            Self::InvalidProofMetadata(field) => {
+                write!(
+                    formatter,
+                    "invalid validation receipt proof metadata {field}"
+                )
+            }
+            Self::MissingTag(tag) => write!(formatter, "missing validation receipt tag {tag}"),
+            Self::InvalidTag(tag) => write!(formatter, "invalid validation receipt tag {tag}"),
+            Self::TagMismatch(tag) => {
+                write!(
+                    formatter,
+                    "validation receipt tag {tag} does not match content"
+                )
+            }
+            Self::ExpectedBindingMismatch(field) => write!(
+                formatter,
+                "validation receipt expected binding {field} does not match"
+            ),
+        }
+    }
+}
+
+impl core::error::Error for RadrootsValidationReceiptError {}
 
 impl RadrootsValidatorSetV1 {
     pub fn validate(&self) -> Result<(), RadrootsValidationReceiptError> {

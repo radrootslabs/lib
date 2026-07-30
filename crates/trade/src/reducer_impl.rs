@@ -1395,8 +1395,9 @@ mod tests {
     };
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
-    const REDUCER_VECTORS: &str =
+    const CANONICAL_REDUCER_VECTORS: &str =
         include_str!("../../../contracts/conformance/vectors/trade/reduce_records.v1.json");
+    const PACKAGED_REDUCER_VECTORS: &str = include_str!("../tests/fixtures/reduce_records.v1.json");
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -1885,26 +1886,52 @@ mod tests {
     }
 
     #[test]
-    fn reducer_conformance_inventory_covers_deterministic_edge_cases() {
+    fn reducer_conformance_vectors_execute_deterministic_edge_cases() {
+        assert_eq!(PACKAGED_REDUCER_VECTORS, CANONICAL_REDUCER_VECTORS);
         let document: serde_json::Value =
-            serde_json::from_str(REDUCER_VECTORS).expect("reducer vectors parse");
-        let ids = document["vectors"]
+            serde_json::from_str(PACKAGED_REDUCER_VECTORS).expect("reducer vectors parse");
+        assert_eq!(document["suite"], "trade");
+        assert_eq!(document["contract_version"], "1.0.0");
+        let vectors = document["vectors"]
             .as_array()
-            .expect("reducer vector array")
-            .iter()
-            .map(|vector| vector["id"].as_str().expect("reducer vector id"))
-            .collect::<BTreeSet<_>>();
+            .expect("reducer vector array");
+        assert_eq!(vectors.len(), 7);
+        let mut ids = BTreeSet::new();
 
-        for required in [
-            "trade_reduce_agreed_projection_digest_001",
-            "trade_reduce_contested_claims_002",
-            "trade_reduce_attestation_only_003",
-            "trade_reduce_missing_parent_004",
-            "trade_reduce_unsupported_version_isolated_005",
-            "trade_reduce_private_evidence_precedence_006",
-            "trade_reduce_attestation_deduplication_007",
-        ] {
-            assert!(ids.contains(required), "missing reducer vector {required}");
+        for vector in vectors {
+            let id = vector["id"].as_str().expect("reducer vector id");
+            assert!(ids.insert(id), "duplicate reducer vector {id}");
+            assert_eq!(vector["kind"], "trade.reduce_records", "{id}");
+            assert!(vector["input"].is_object(), "{id}: input must be object");
+            assert!(
+                vector["expected"].is_object(),
+                "{id}: expected must be object"
+            );
+
+            match id {
+                "trade_reduce_agreed_projection_digest_001" => {
+                    reducer_digest_is_independent_of_input_order_and_duplicates();
+                }
+                "trade_reduce_contested_claims_002" => {
+                    reducer_preserves_contested_incompatible_acceptances_without_timestamp_winner();
+                }
+                "trade_reduce_attestation_only_003" => {
+                    reducer_attestation_never_commits_or_invalidates_agreement();
+                }
+                "trade_reduce_missing_parent_004" => {
+                    reducer_keeps_missing_parents_as_incomplete_evidence();
+                }
+                "trade_reduce_unsupported_version_isolated_005" => {
+                    reducer_excludes_unsupported_versions_from_domain_semantics();
+                }
+                "trade_reduce_private_evidence_precedence_006" => {
+                    reducer_private_evidence_precedence_is_permutation_independent();
+                }
+                "trade_reduce_attestation_deduplication_007" => {
+                    reducer_attestation_order_and_duplicates_do_not_change_digest();
+                }
+                _ => panic!("unsupported reducer vector {id}"),
+            }
         }
     }
 

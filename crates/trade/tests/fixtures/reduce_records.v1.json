@@ -1,0 +1,105 @@
+{
+  "suite": "trade",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "trade_reduce_agreed_projection_digest_001",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "proposal_plus_seller_acceptance_with_live_all_line_reservation",
+        "mutation_order": "arbitrary_with_duplicate_transport_observations",
+        "attestation_records": []
+      },
+      "expected": {
+        "negotiation_state": "open",
+        "agreement_state": "agreed",
+        "evidence_state": "complete",
+        "conflict_state": "none",
+        "attestation_state": "none",
+        "projection_digest": "35a5f555344febe675f4e5e6b15865356400b2b8f7791fc631590e0f1e1fd441"
+      }
+    },
+    {
+      "id": "trade_reduce_contested_claims_002",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "proposal_plus_two_causally_unordered_incompatible_acceptances",
+        "winner_selection": "forbidden"
+      },
+      "expected": {
+        "agreement_state": "contested",
+        "conflict_state": "double_acceptance",
+        "contested_claim_ids": "all_incompatible_claim_mutation_ids_sorted",
+        "forbidden_winner_inputs": [
+          "timestamp",
+          "transport_event_id",
+          "relay_order",
+          "observation_order",
+          "first_seen"
+        ]
+      }
+    },
+    {
+      "id": "trade_reduce_attestation_only_003",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "agreed_claim_plus_invalid_attestation_record"
+      },
+      "expected": {
+        "agreement_state": "agreed",
+        "attestation_state": "present_invalid",
+        "attestation_agreement_authority": false
+      }
+    },
+    {
+      "id": "trade_reduce_missing_parent_004",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "known_acceptance_with_missing_direct_parent"
+      },
+      "expected": {
+        "evidence_state": "missing",
+        "agreement_claim_visibility": "retained_when_local_claim_is_known",
+        "global_invalidity": false
+      }
+    },
+    {
+      "id": "trade_reduce_unsupported_version_isolated_005",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "unsupported_version_proposal_without_supported_records"
+      },
+      "expected": {
+        "evidence_state": "unsupported_version",
+        "negotiation_state": "none",
+        "agreement_state": "none",
+        "unsupported_record_domain_authority": false
+      }
+    },
+    {
+      "id": "trade_reduce_private_evidence_precedence_006",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "agreed_private_terms_candidate_with_conflicting_duplicate_evidence",
+        "evidence_order": "arbitrary"
+      },
+      "expected": {
+        "private_terms_state": "commitment_mismatch",
+        "projection_digest": "input_order_independent"
+      }
+    },
+    {
+      "id": "trade_reduce_attestation_deduplication_007",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "agreed_claim_with_duplicate_valid_and_distinct_invalid_attestations",
+        "attestation_order": "arbitrary"
+      },
+      "expected": {
+        "attestation_state": "conflicting",
+        "duplicate_records": "removed",
+        "projection_digest": "input_order_independent"
+      }
+    }
+  ]
+}

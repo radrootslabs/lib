@@ -1,0 +1,74 @@
+{
+  "suite": "trade_workflow",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "trade_prepare_workflow_proposal_private_terms_001",
+      "kind": "trade.prepare_workflow.valid",
+      "input": { "mutation": "proposal_with_private_terms" },
+      "expected": {
+        "mutation_kind": "proposal",
+        "required_actions": ["verify_private_terms", "sign", "persist", "deliver"],
+        "private_terms_artifact_id": "artifact-1"
+      }
+    },
+    {
+      "id": "trade_prepare_workflow_decision_002",
+      "kind": "trade.prepare_workflow.valid",
+      "input": { "mutation": "decision" },
+      "expected": {
+        "mutation_kind": "decision",
+        "required_actions": ["sign", "persist", "deliver"],
+        "private_terms_artifact_id": null
+      }
+    },
+    {
+      "id": "trade_prepare_workflow_revision_proposal_003",
+      "kind": "trade.prepare_workflow.valid",
+      "input": { "mutation": "revision_proposal_with_private_terms" },
+      "expected": {
+        "mutation_kind": "revision_proposal",
+        "required_actions": ["verify_private_terms", "sign", "persist", "deliver"],
+        "private_terms_artifact_id": "artifact-1"
+      }
+    },
+    {
+      "id": "trade_prepare_workflow_revision_decision_004",
+      "kind": "trade.prepare_workflow.valid",
+      "input": { "mutation": "revision_decision" },
+      "expected": {
+        "mutation_kind": "revision_decision",
+        "required_actions": ["sign", "persist", "deliver"],
+        "private_terms_artifact_id": null
+      }
+    },
+    {
+      "id": "trade_prepare_workflow_cancellation_005",
+      "kind": "trade.prepare_workflow.valid",
+      "input": { "mutation": "cancellation" },
+      "expected": {
+        "mutation_kind": "cancellation",
+        "required_actions": ["sign", "persist", "deliver"],
+        "private_terms_artifact_id": null
+      }
+    },
+    {
+      "id": "trade_prepare_workflow_unsupported_schema_006",
+      "kind": "trade.prepare_workflow.invalid",
+      "input": { "mutation": "proposal_with_unsupported_schema" },
+      "expected": { "error_kind": "unsupported_schema" }
+    },
+    {
+      "id": "trade_prepare_workflow_missing_mutation_id_007",
+      "kind": "trade.prepare_workflow.invalid",
+      "input": { "mutation": "proposal_without_mutation_id" },
+      "expected": { "error_kind": "missing_mutation_id" }
+    },
+    {
+      "id": "trade_prepare_workflow_invalid_transition_008",
+      "kind": "trade.prepare_workflow.invalid",
+      "input": { "mutation": "decision_without_parent" },
+      "expected": { "error_kind": "invalid_mutation" }
+    }
+  ]
+}

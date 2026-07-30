@@ -1810,14 +1810,42 @@ signing = "native"
 transport = "native"
 
 [operations.trade_reduce_records.implementation]
-rust_modules = ["crates/trade/src/workflow.rs"]
+rust_modules = [
+  "crates/trade/src/reducer.rs",
+  "crates/trade/src/reducer_impl.rs",
+]
 rust_types = [
-  "radroots_trade::workflow::RadrootsTradeReductionInputV1",
-  "radroots_trade::workflow::RadrootsTradeProjectionV1",
+  "radroots_trade::reducer::RadrootsTradeReductionInputV1",
+  "radroots_trade::model::RadrootsTradeProjectionV1",
 ]
 
 [operations.trade_reduce_records.conformance]
 vector = "contracts/conformance/vectors/trade/reduce_records.v1.json"
+
+[operations.trade_prepare_workflow]
+domain = "trade"
+id = "trade.prepare_workflow"
+stability = "beta"
+inputs = ["TradeMutationEnvelopeV1"]
+outputs = ["WorkflowPlan"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.trade_prepare_workflow.implementation]
+rust_modules = ["crates/trade/src/workflow.rs"]
+rust_types = [
+  "radroots_trade::workflow::Error",
+  "radroots_trade::workflow::WorkflowPlan",
+]
+
+[operations.trade_prepare_workflow.conformance]
+vector = "contracts/conformance/vectors/trade/prepare_workflow.v1.json"
+case_kinds = [
+  "trade.prepare_workflow.valid",
+  "trade.prepare_workflow.invalid",
+]
 
 [operations.trade_validation_validate_operational_listing_event]
 domain = "trade_validation"

@@ -7,8 +7,15 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const DRAFT: &str = include_str!("../src/operational_listing/draft.rs");
 const IDENTITY: &str = include_str!("../src/identity.rs");
 const MODEL: &str = include_str!("../src/model.rs");
+const OPERATIONS: &str = include_str!("../../../contracts/operations.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const REDUCER_IMPLEMENTATION: &str = include_str!("../src/reducer_impl.rs");
+const CANONICAL_REDUCER_VECTORS: &str =
+    include_str!("../../../contracts/conformance/vectors/trade/reduce_records.v1.json");
+const PACKAGED_REDUCER_VECTORS: &str = include_str!("fixtures/reduce_records.v1.json");
+const CANONICAL_WORKFLOW_VECTORS: &str =
+    include_str!("../../../contracts/conformance/vectors/trade/prepare_workflow.v1.json");
+const PACKAGED_WORKFLOW_VECTORS: &str = include_str!("fixtures/prepare_workflow.v1.json");
 const WORKFLOW: &str = include_str!("../src/workflow.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
 
@@ -95,12 +102,76 @@ fn trade_feature_graph_has_no_persistence_or_sql_boundary() {
     let dev_dependencies = table_keys(MANIFEST, "[dev-dependencies]");
 
     assert!(!features.contains("event_store"));
-    assert!(!dependencies.contains("radroots_event_store"));
-    assert!(!dependencies.contains("sqlx"));
-    assert!(!dev_dependencies.contains("sqlx"));
-    assert!(!dev_dependencies.contains("tokio"));
+    for forbidden in [
+        "radroots_authority",
+        "radroots_event_store",
+        "radroots_outbox",
+        "radroots_transport",
+        "reqwest",
+        "sqlx",
+        "tokio",
+    ] {
+        assert!(
+            !dependencies.contains(forbidden),
+            "trade acquired forbidden production dependency {forbidden}"
+        );
+    }
+    for forbidden in ["sqlx", "tokio"] {
+        assert!(
+            !dev_dependencies.contains(forbidden),
+            "trade retained forbidden development dependency {forbidden}"
+        );
+    }
     assert!(!MANIFEST.contains("sqlite-bundled"));
     assert!(!MANIFEST.contains("runtime-tokio"));
+}
+
+#[test]
+fn portable_root_exports_and_native_traits_are_compile_checked() {
+    use radroots_trade::{Error, Projection, ReducerIssue, ReductionInput, WorkflowPlan};
+
+    fn assert_portable<T: Clone + core::fmt::Debug + Eq + Send + Sync>() {}
+    fn assert_native_error<T: core::error::Error + Send + Sync>() {}
+
+    assert_portable::<Projection>();
+    assert_portable::<ReducerIssue>();
+    assert_portable::<ReductionInput>();
+    assert_portable::<WorkflowPlan>();
+    assert_native_error::<Error>();
+
+    assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
+    assert!(!ROOT.contains("pub trait "));
+    for export in [
+        "pub use model::RadrootsTradeProjectionV1 as Projection;",
+        "RadrootsTradeReducerIssueV1 as ReducerIssue",
+        "RadrootsTradeReductionInputV1 as ReductionInput",
+        "pub use workflow::{Error, WorkflowPlan};",
+    ] {
+        assert!(
+            ROOT.contains(export),
+            "missing canonical root export {export}"
+        );
+    }
+}
+
+#[test]
+fn packaged_trade_vectors_match_canonical_operation_contracts() {
+    assert_eq!(PACKAGED_REDUCER_VECTORS, CANONICAL_REDUCER_VECTORS);
+    assert_eq!(PACKAGED_WORKFLOW_VECTORS, CANONICAL_WORKFLOW_VECTORS);
+    for required in [
+        "id = \"trade.reduce_records\"",
+        "crates/trade/src/reducer.rs",
+        "radroots_trade::model::RadrootsTradeProjectionV1",
+        "id = \"trade.prepare_workflow\"",
+        "crates/trade/src/workflow.rs",
+        "contracts/conformance/vectors/trade/prepare_workflow.v1.json",
+    ] {
+        assert!(
+            OPERATIONS.contains(required),
+            "operation contract is missing {required}"
+        );
+    }
+    assert!(!OPERATIONS.contains("radroots_trade::workflow::RadrootsTradeProjectionV1"));
 }
 
 #[test]
