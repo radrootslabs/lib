@@ -1,3 +1,10 @@
+//! Typed admission for verified Radroots events.
+//!
+//! Admission consumes signature-verified inputs, selects an exact typed or
+//! registry contract, and returns a value bound to that verified envelope. It
+//! is deterministic and does not authorize an actor, mutate storage, or
+//! publish an event.
+
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 

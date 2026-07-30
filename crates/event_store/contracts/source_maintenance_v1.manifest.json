@@ -481,8 +481,8 @@
     {
       "role": "event_codec_public_surface",
       "path": "crates/event_codec/src/lib.rs",
-      "byte_length": 2698,
-      "sha256": "021496688fbc8390639a4ec47be1d0b26fe3af0926fbae195692687f04ee4401",
+      "byte_length": 2737,
+      "sha256": "46ef52c98309a2636e4ea45d72251b7e07f90b00f1b4c4ddb0593ecbbdd03658",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -509,8 +509,8 @@
     {
       "role": "event_codec_admission_facade",
       "path": "crates/event_codec/src/admission.rs",
-      "byte_length": 20946,
-      "sha256": "1217ef75ee71c5dba88e16545933c8fcf53cb82b133ab4830b3c3ba08946ca16",
+      "byte_length": 21251,
+      "sha256": "25928e734e7b3688f92af806a12a13458c48fb47e94249f60f0226300d5da2b4",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -859,8 +859,8 @@
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 842232,
-      "sha256": "08c2cc956f0f055c8e25d99b5c05dd8f7f2b095c52efa125b7f05471302ef9f5",
+      "byte_length": 842286,
+      "sha256": "6d00e065b8fb9d8575f127abb4b40c672e419812aeb87ae338df95874d4ad16a",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

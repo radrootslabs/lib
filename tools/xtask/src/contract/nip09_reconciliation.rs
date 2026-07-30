@@ -5295,6 +5295,7 @@ fn validate_raw_crate_attributes(relative: &str, source: &str) -> Result<(), Str
             "#![cfg_attr(not(feature=\"std\"),no_std)]",
             "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
             "#![forbid(unsafe_code)]",
+            "#![doc=include_str!(\"../README.md\")]",
         ],
         "crates/blossom/src/lib.rs" => &[
             "#![doc=include_str!(\"../README.md\")]",

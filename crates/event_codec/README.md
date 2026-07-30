@@ -1,339 +1,155 @@
 # radroots_event_codec
 
-This is the README for `radroots_event_codec`, which provides canonical event
-codecs and tag builders for the `radroots` core libraries.
+`radroots_event_codec` is the portable, deterministic algorithm layer for
+Radroots events. It converts between bounded wire representations and native
+`radroots_event` values, computes canonical NIP-01 identifiers, verifies event
+identifiers and signatures, validates event contracts, admits typed event
+profiles, and generates governed contract manifests.
 
-## Overview
+The crate is pre-release and its Cargo version is frozen at `0.1.0-alpha`
+until explicitly changed. Serialized contract generations such as registry v7
+are versioned independently from the Cargo package.
 
- * canonical decoders for event content, tags, job envelopes, profiles, Field
-   event envelopes, NIP-29 group events, and wire representations;
- * tag builder helpers for the same event families exposed by
-   `radroots_event`;
- * parsed view and error types for codec-driven validation and routing;
- * optional `json` adapters for JSON and wire interop.
+## Canonical surface
 
-With the optional `json` feature, the Profile codec exposes separate
-strict authored and tolerant inbound operations. Strict authoring emits
-bounded, deterministic kind-`0` metadata with empty tags and image-typed,
-byte-verified Blossom media references. Tolerant inbound parsing retains raw
-and residual fields and never upgrades observed media or NIP-05 syntax into
-network verification. Its content parser accepts only bounded kind-`0` content
-from an event whose identifier and signature the caller has already verified.
-With `json`, `profile::admission::verify_and_admit_profile_event`
-provides that combined boundary and returns metadata bound to a non-forgeable
-signature-verified envelope. Standard tagless kind-`0` events are accepted; no
-Radroots marker is required.
+New code should enter through these modules:
 
-General NIP-01 identifier and Schnorr verification lives in `verification` and
-is independent of serde, JSON, and the optional `knowledge` decoder. The
-portable verifier exposes `RadrootsSignatureVerifiedEvent` and rejects event
-kinds above `u16::MAX` instead of truncating them.
+| Module | Responsibility |
+| --- | --- |
+| `canonical` | Compute canonical NIP-01 preimages and event identifiers without asserting trust. |
+| `decode` | Parse bounded wire data and domain projections without silently verifying later stages. |
+| `encode` | Produce deterministic JSON, tags, and unsigned wire parts from validated native inputs. |
+| `verify` | Advance explicit identifier, signature, and contract-validation typestates. |
+| `admission` | Apply typed or registry admission to an already verified event; available with `json`. |
+| `manifest` | Generate and validate registry and knowledge inventories; available with `manifests`. |
 
-With `json`, `admission::admit_verified_event` is the current central
-contract boundary over an already verified event. It preserves typed admitted
-Profile, root Post, Reply, Comment, DeletionRequest, and FoodAvailability
-values, while other registered events must pass complete registry shape
-validation and return `ContractValidated`. Kind `1` is tested as a root Post
-before the exact thread-excluded candidate may be promoted to Reply. Kind
-`30402` is partitioned as focused Food, Operational Listing, generic NIP-99,
-or ambiguous before any profile validation; a valid excluded Operational
-Listing falls back to the registry, while generic and mixed-marker candidates
-remain distinct failures.
+The Release V1 canonical root consists of `Codec`, `DecodeError`,
+`EncodeError`, and `VerificationError`. Domain algorithms stay beneath the
+canonical modules so each import states whether it encodes, decodes, verifies,
+or admits data. The pre-release tree still exposes temporary compatibility
+paths while first-party consumers finish migration; they are not the
+canonical interface and may be removed before Release V1. The complete current
+surface, including those temporary paths, is recorded in the
+[public API baseline](../../docs/api/radroots_event_codec.txt).
 
-`admission::admit_verified_event_registry_v7` is the immutable historical
-admission graph used by event-store reconciliation v1. It returns the closed
-registry-v7 admitted, unsupported, invalid, or internal-defect decision needed
-for persisted facts without depending on richer current admission enums.
-Later registry revisions must add a new versioned entrypoint rather than
-changing this behavior. Neither admission operation accepts an unverified
-envelope, signs or publishes events, selects event heads, evaluates deletion
-effects, or mutates storage.
+## Verification pipeline
 
-The post codec exposes deterministic authored wire builders and a separate
-verified-event projection. Update emits no profile tags, PhotoUpdate emits
-strict ordered NIP-92 `imeta`, and Ask emits one exact `t=radroots-ask` marker
-before optional strict media. The former mutable post encoder and generic tag
-builder are removed. Inbound projection preserves ordinary kind-1 reads,
-excludes any `e`-tagged reply before product classification, and applies Ask,
-PhotoUpdate, Update precedence. Unknown media fields and repeatable fallbacks
-remain ordered; malformed media becomes diagnostic Update unless a valid Ask
-marker takes precedence. Structural inbound URLs remain unverified and no
-network retrieval occurs.
+Wire parsing and cryptographic trust are separate operations. A successful
+decode returns a structurally valid `RawEvent`; it does not make the declared
+event ID, signature, contract, referenced events, relay hints, or remote media
+trustworthy.
 
-The Reply codec deterministically emits strict marked direct and nested NIP-10
-wire parts from `AuthoredNip10Reply`. Its inbound boundary projects
-only signature-and-id verified kind-1 envelopes, accepts marked and deprecated
-positional thread anchors, retains valid supplemental citations, and reports
-malformed advisory relay, author, participant, and citation metadata through
-ordered diagnostics. Root and parent ambiguity or malformed hard anchors
-remain projection failures.
+```rust
+use radroots_event_codec::{admission, decode, verify};
 
-Authored and inbound NIP-10 Reply and NIP-22 Comment relay metadata uses the
-shared `NostrRelayHint` profile: exact lowercase `ws://` or `wss://`,
-visible ASCII, canonical lowercase DNS or four-octet IPv4 or bracketed
-pure-hex RFC 5952 IPv6, canonical optional port `1..65535`, and RFC 3986
-path-abempty/query syntax with uppercase `%HH` escapes. IDNA or
-percent-encoded hosts, legacy IPv4, userinfo, fragments, controls,
-backslashes, and normalization-dependent forms are rejected. Inbound
-projection ignores an invalid advisory hint while preserving its exact raw tag
-in ordered diagnostics. Relay syntax remains independent from each event
-profile's 4,096-byte tag-element budget.
+const PROFILE_EVENT: &str = r#"{"id":"762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1800000100,"kind":0,"tags":[],"content":"{\"display_name\":\"Moss Street Farm\",\"bot\":false,\"website\":\"https://mossstreet.example\",\"picture\":42}","sig":"4290da0bb6422986647bc8cd5f63bd52d49f41e7b665d3b47105b8109183e8d596f322c531d4061df53e1d2b70fda12d5d1c14f3720d7a56d9d0a03746af5109"}"#;
 
-The Comment codec implements the strict Radroots
-[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
-kind-`1111` profile for event or address roots of kind `30402`, `31922`, or
-`31923`. It rejects external `I`/`i` authority and kind-`1` roots.
-`authored_nip22_comment_to_wire_parts` emits only canonical order:
-`E,K,P,e,k,p` for a top-level event, `A,K,P,a,e,k,p` for a top-level
-address, and `E,K,P,e,k,p` or `A,K,P,e,k,p` for a nested event or address.
-Event `E` and parent or direct `e` references always have four elements with a
-relay slot and author hint. Address and participant references have two
-elements plus an optional relay; a top-level address Comment's revision `e`
-has no author hint. Direct `k` repeats the root kind and nested `k` is exactly
-`1111`.
+let raw = decode::event(PROFILE_EVENT)?;
+let verified = verify::verify_nip01_event(raw.into_event())?;
+let admitted = admission::admit_verified_event(verified)?;
 
-`project_verified_nip22_comment_event` accepts only a
-`RadrootsSignatureVerifiedEvent`. It resolves the `E`/`A`, `K`, `P`, `e`/`a`,
-`k`, and selected `p` authority independently of tag order and treats invalid
-cardinality, shapes, noncanonical kinds, unsupported roots, coordinate
-conflicts, and valid-but-conflicting author hints as hard errors. It preserves
-exact raw tags, supplemental unknown and `q` tags, and distinct unselected
-lowercase `p` mentions. Inbound NIP-22 reference event IDs, public keys, and
-coordinate-author hex accept either ASCII hex case; typed values normalize to
-lowercase while raw tags retain the original spelling. Malformed advisory relay
-and participant metadata produce ordered diagnostics without weakening the
-required authority.
-`verify_and_admit_nip22_comment_event` first verifies the NIP-01 id and Schnorr
-signature, then binds that envelope to
-`RadrootsInboundNip22CommentProjection` in
-`RadrootsAdmittedNip22CommentEvent`; it does not verify any referenced event or
-relay.
+assert_eq!(admitted.event().kind_u32(), 0);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
 
-The exact Comment operation namespace is
-`social.comment.build_authored_draft`,
-`social.comment.project_verified_event`, and
-`social.comment.verify_and_admit_event`. Registry v7 makes
-`radroots.social.comment.v1` `TypedOnly` for authoring and `AdmissionOnly` for
-matching; registry versions `1` through `6` are stale. Content is limited to
-131072 UTF-8 bytes, a Comment to 1024 tags, all tags to 4096 elements including
-tag names, each element to 4096 bytes, aggregate tag bytes to 131072, and
-compact signed wire JSON to 262144 bytes.
+A runnable version is available at
+[`examples/verify_profile.rs`](examples/verify_profile.rs).
 
-The canonical 114-case self-contained Comment corpus is
-`contracts/conformance/vectors/comment/verified_profile.v1.json`; the packaged
-fixture is byte-identical. Projection and admission cases contain fixed signed
-event JSON, while authored cases contain explicit checked inputs and complete
-wire expectations. The runner consumes these records directly and covers
-valid shapes, diagnostics, exact and over-limit budgets, stable error
-precedence, and NIP-01 admission without secret keys, mutation recipes, or
-ambient state.
+For capability-injected verification, use `verify::id`, then
+`verify::signature`, then `verify::contract`. Each function consumes its input
+typestate and returns the next, so callers cannot obtain a later state by
+accidentally skipping an earlier check.
 
-The Deletion codec implements the request and pure suppression-evaluation
-boundaries of
-[NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md).
-`authored_nip09_deletion_request_to_wire_parts` emits canonical two-element
-`e` targets, then `a` targets, then the complete unique ascending set of `k`
-kind advisories. `project_verified_nip09_deletion_request_event` accepts only
-an id-and-signature-verified kind-`5` envelope. It retains exact raw tags,
-deduplicates normalized targets with first-seen provenance, sorts the typed
-target views, and treats malformed `e` or `a` targets as hard errors. Unknown
-tags and trailing target elements remain observable. Advisory `k` shape,
-numeric spelling, duplicates, and address-only conflicts produce stable
-ordered diagnostics; event-target kind correspondence remains unprovable at
-this boundary.
+## Features
 
-`verify_and_admit_nip09_deletion_request_event` binds the projection to the
-verified request envelope. It does not authorize or apply a deletion, look up
-a target, compare authors, compute an address cutoff, suppress an event, or
-mutate storage.
+| Feature | Default | Effect |
+| --- | --- | --- |
+| `std` | yes | Standard-library error integration for the portable surface. |
+| `serde` | no | Serde support for native values used by codec contracts. |
+| `json` | yes | Bounded JSON parsing/encoding and JSON-backed typed profiles; enables `serde`. |
+| `knowledge` | no | Knowledge event codecs and verified decoding; enables `json`. |
+| `manifests` | no | Typed registry and knowledge manifest generation; enables `knowledge`. |
 
-`evaluate_nip09_suppression` is a separate pure operation over one
-`RadrootsSignatureVerifiedEvent` candidate and admitted deletion requests. It
-returns an explicit `RadrootsNip09SuppressionDecision` with canonical evidence
-without changing any input or touching a store. Kind `5` is immune. Other
-candidates require the request author to equal the candidate author. An exact
-event-id target applies independently of timestamps; a canonical address
-target applies through the inclusive maximum qualifying request timestamp, so
-a later replacement is not suppressed. Advisory `k` values do not affect the
-result, and request order cannot affect the decision.
+`--no-default-features` keeps the portable allocation-backed canonical,
+encoding, decoding, and verification core. Feature-specific APIs disappear
+when their feature is disabled rather than installing a fallback with weaker
+guarantees.
 
-The reconciliation-v1 entrypoints
-`project_verified_nip09_deletion_request_event_v1`,
-`admit_verified_nip09_deletion_request_event_v1`, and
-`evaluate_nip09_suppression_v1` freeze the exact request and suppression
-behavior consumed by event-store schema version 2. Current compatibility
-entrypoints delegate to these functions; a future algorithm revision must add
-new versioned functions.
+## Serialization and canonicalization
 
-The exact operation namespace is
-`social.deletion_request.build_authored_draft`,
-`social.deletion_request.project_verified_event`,
-`social.deletion_request.verify_and_admit_event`, and
-`social.deletion_request.evaluate_suppression`. Registry v7 makes
-`radroots.social.deletion_request.v1` `TypedOnly` for authoring and
-`AdmissionOnly` for matching, with generic kind-`5` authoring and publication
-reserved.
+- `decode::event` accepts compact NIP-01 JSON only within the shared bounded
+  wire limits. Unknown extension structure is bounded before it can consume
+  unbounded memory or parser depth.
+- `encode::event` emits deterministic compact JSON from an existing event
+  envelope. Encoding does not verify or alter the envelope.
+- `canonical::id_preimage` and `canonical::id` compute canonical bytes and the
+  corresponding identifier. They do not compare the result with the event's
+  declared ID.
+- Domain encoders accept checked `radroots_event` inputs and emit unsigned
+  wire parts. Signing and publication belong to the owning runtime.
+- Manifest JSON and digests are generated from versioned contract authority;
+  a manifest feature does not grant storage or publication authority.
 
-The canonical self-contained 80-case corpus is
-`contracts/conformance/vectors/deletion/verified_profile.v1.json`; the
-packaged fixture is byte-identical. Signed inputs are complete compact event
-JSON, expected projections contain no effect-authority output, and executable
-cases cover canonical authoring, tolerant verified projection, diagnostics,
-exact and over-limit resource budgets, precedence, and admission without
-shipping keys, seeds, generators, or mutation recipes.
+Serialized output is stable only where its event profile or manifest
+generation says it is stable. Rust data layout and the pre-release public API
+are not serialized contracts.
 
-The separate
-`contracts/conformance/vectors/deletion/suppression.v1.json` corpus and its
-byte-identical packaged fixture execute the evaluator's same-author, direct
-event, inclusive address-cutoff, later-replacement, pre-target request,
-kind-`5` immunity, and deterministic evidence behavior. These vectors govern a
-decision value only and claim no persistent store effect.
+## Security and trust boundaries
 
-The FoodAvailability codec owns four boundaries for the focused
-`radroots.food.availability.v1` kind-`30402` profile. Strict details plus
-`created_at` produce bounded unsigned wire parts whose tag order is exactly
-`d`, `title`, `summary`, `published_at`, `location`, `price`,
-`radroots:price_unit`, optional `radroots:quantity`, `status`, and repeated
-`image`. Content and decoded tags remain bounded, and compact signed-event size
-is checked after exact JSON escaping. Authored images already prove local
-Blossom descriptor-to-byte agreement, but not upload completion or network
-availability.
+All public parsers treat their inputs as untrusted. They return structured
+errors for malformed or over-budget data and do not intentionally panic on
+untrusted input. Verification distinguishes these claims:
 
-Verified inbound projection partitions raw tag names before validation.
-Focused-only candidates are projected, Operational Listing and marker-free
-generic NIP-99 candidates are explicit exclusions, and mixed-marker candidates
-fail as ambiguous. Focused core fields are required; decimal and currency
-spellings are normalized within their wire bounds; optional unowned NIP-99
-tags are ignored; and tags purporting to add commerce, fulfillment,
-provenance, or operational capabilities fail closed. Image observations remain
-ordered structural HTTP(S) data. At most 64 are retained, with stable ordered
-diagnostics for overflow, shape, URL, dimensions, duplicate URL, and duplicate
-Blossom digest. An image diagnostic does not invalidate an otherwise complete
-focused core and never upgrades observed media to an authored typestate.
+1. structural decoding proves only bounded event shape;
+2. ID verification proves the declared identifier matches canonical bytes;
+3. signature verification proves the BIP-340 signature for that event and
+   author;
+4. contract validation proves the event matches a registered shape;
+5. typed admission proves the selected Radroots profile.
 
-`verify_and_admit_food_availability_event` first verifies the NIP-01 id and
-Schnorr signature, then binds either the focused projection or an explicit
-non-focused exclusion to that verified envelope. Revision validation accepts
-two independently verified events, requires both to satisfy the exact authored
-wire profile, preserves kind, author, `d`, and `published_at`, and applies the
-NIP-01 newer-event rule: later `created_at`, then lower event id at equal time.
-Successful combined verification and admission uses the portable verifier;
-the packaged conformance runner enables `json` for signed JSON event cases.
-These codecs do not sign, publish, replicate, upload, retrieve, or provide
-client behavior.
+No stage proves referenced-event existence, relay availability, media upload
+or retrievability, actor authorization, business-policy approval, persistence,
+or publication. Inbound URLs and relay hints remain structural observations
+unless a higher layer explicitly establishes a stronger state.
 
-The NIP-52 calendar codecs expose a deliberate three-stage boundary for kinds
-`31922`, `31923`, `31924`, and `31925`:
+The crate never owns secret keys and does not sign events. Signature
+verification is deterministic and public-key-only. Callers must not interpret
+a successfully encoded unsigned event as signed or published.
 
-1. bounded structural wire or envelope parsing preserves the complete event;
-2. the kind-specific date event, time event, calendar collection, or RSVP
-   parser produces a tolerant `RadrootsParsedNip52*` projection and rejects a
-   mismatched kind;
-3. the corresponding `admit_radroots_*` operation applies the stricter
-   Radroots profile and returns a non-interchangeable admitted type.
+## Side effects, cancellation, and commit points
 
-Structural envelope construction, the baseline parsers, and the admission
-functions do not verify a Schnorr signature. Before treating inbound data as
-accepted, callers must recompute and compare its NIP-01 id, verify its
-signature against the author, use the parser for its expected kind, and keep
-the typed result bound to that verified envelope. The calendar
-`*_parsed_from_event` convenience functions remain structural wrappers; their
-names do not imply cryptographic verification.
+This crate performs no network access, filesystem access, database access,
+background work, executor installation, timer management, signing, or event
+publication. Its algorithms are synchronous and deterministic for the same
+inputs.
 
-The baseline parser projects repeated NIP-52 `location`, participant `p`,
-category `t`, absolute-URI reference `r`, and kind-`31924` inclusion-request
-`a` tags, plus deprecated `name` compatibility data. It accepts arbitrary
-absolute image URIs. Kind `31922` requires semantic Gregorian dates and retains
-uppercase-`D` tags as uninterpreted extensions. Kind `31923` requires at least
-one in-range `D` day and exact IANA time-zone identifiers. NIP-52 makes
-multi-day coverage a `SHOULD`, so the baseline requires neither the start-day
-index nor complete coverage; duplicate, unordered, and leading-zero numeric
-observations are additionally preserved as parser tolerance and are never
-canonical authored output. An omitted
-`end_tzid` uses `start_tzid` when present.
+There is therefore no asynchronous cancellation or deadline boundary and no
+durable commit point. Dropping a computation only discards in-memory work.
+Storage, signing, transport, SDK, and daemon callers own cancellation and must
+report success only after their own explicit commit boundary succeeds.
 
-Strict date admission rejects every uppercase-`D` extension. Strict time
-admission requires canonical decimal timestamps and the exact ascending
-uppercase-`D` sequence for the exclusive interval, bounded to 366 covered
-days. Authored codecs derive that sequence and emit unsigned
-`Nip01EventWireParts`; signing and transport stay at the owning runtime
-boundary.
+## Intended consumers
 
-Kind `31924` is handled only by the calendar-specific codec. Generic NIP-51
-taxonomy may recognize it as a calendar list, but the generic list-set decoder
-and authoring path and the broader generic list codec reject it. Calendar collection content is the bounded
-plain-text NIP-52 detailed description; it is not substituted from or collapsed
-into the optional NIP-51 `description` tag. The parser requires exactly one
-`d` and `title`, accepts optional singleton `description` and `image` tags, and
-accepts zero or more exact `a` references to kind `31922` or `31923` events.
-An empty collection is valid, and each event reference preserves its own
-optional relay hint. Singleton collection tags have exactly two elements; an
-`a` tag has exactly two elements plus an optional relay element.
+Direct consumers are `radroots_nostr`, `radroots_storage_sqlite`,
+`radroots_transport_nostr`, `radroots_sync`, `radroots_sdk`, generated
+bindings, indexers, and conformance tooling. Applications should normally use
+the `radroots` or `radroots_sdk` front door and depend on this crate directly
+only when implementing a deterministic event boundary.
 
-Kind `31925` has bounded optional note content and exact singleton
-cardinality: required `d`, `a`, and `status`, with optional `e`, `fb`, and `p`.
-The `a`, `e`, and `p` values preserve independent optional relay hints. The
-`p` tag is parsed as an event-author hint without participant-role semantics;
-strict admission requires it to match the author in the `a` coordinate.
-`d`, `status`, and `fb` tags have exactly two elements, while `a`, `e`, and `p`
-have exactly two elements plus an optional relay element.
-Tolerant parsing preserves `fb` observed on a declined RSVP, but parsed and
-admitted values expose no effective free/busy state for it. Authored declined
-RSVPs never emit `fb`.
+This package must not acquire live relay clients, persistence, background
+workers, host configuration, SDK state, or upstream client error types. Those
+responsibilities belong to adapter and runtime crates.
 
-Strict collection and RSVP authoring and admission require a canonical
-22-character unpadded base64url 128-bit identifier and canonical reference
-spellings. Identifier syntax does not establish runtime uniqueness. Parsing
-valid identifiers, event ids, author keys, coordinates, and relay hints does
-not establish reference existence, revision correspondence, RSVP authority,
-or relay availability.
+## Package charter
 
-Strict inbound admission, including kind-`31924` collection images, upgrades
-an image only to a structural Blossom hash-path URL. It does not prove
-reference approval, bytes, upload completion, or retrievability. Strict
-authored image inputs are approved, byte-verified Blossom `image/*`
-descriptors, but are still not upload receipts. A publishing runtime must
-require successful BUD-02 completion and a bounded retrievability check before
-signing or publishing media-bearing wire parts.
-
-## Field Event Codecs
-
-The Field codec surface validates the public Nostr event substrate exposed by
-`radroots_event`:
-
- * workspace manifests use kind `30078`, JSON content, a schema marker, `d` and
-   `h` routing tags, owner tags, relay references, and Field-supported kind
-   declarations;
- * CRDT changes use kind `78`, JSON content, `h`, `d`, `a`, optional author `p`,
-   and semantic `t` tags, with base64url change payload validation;
- * farm files use kind `1063`, NIP-94-compatible metadata tags, a workspace
-   address, a farm group id, an owner document tag, lowercase SHA-256 hashes,
-   and optional caption text as content;
- * NIP-42 relay auth and NIP-98 HTTP auth events require empty content and the
-   auth tags required by their protocols; NIP-98 `u`, `method`, and `payload`
-   tags are parsed as singleton security tags and duplicate occurrences fail
-   closed;
- * NIP-29 group codecs preserve the protocol distinction between `h`-routed
-   group operations and `d`-routed addressable group state for the supported
-   `9000`, `9001`, `9002`, `9005`, `9007`, `9008`, `9009`, `9021`, `9022`,
-   `39000`, `39001`, `39002`, and `39003` subset.
-
-These codecs validate event shape, routing tags, hashes, and payload encoding.
-They do not validate private Field task, work-session, harvest, approval, or
-authorization semantics; those remain application and CRDT document concerns.
-The group codecs use bare metadata marker tags such as `private`, `restricted`,
-`hidden`, and `closed`, `supported_kinds` declarations, and `code` tags for
-invite and join flows. They preserve optional reason content on user management
-and moderation events. LiveKit room metadata and live participant state are
-deferred. SDK-owned wasm bindings expose deterministic JSON tag builders for the
-same Field and NIP-29 families.
+The authoritative Release V1 responsibility, dependency, feature, module, and
+forbidden-scope contract is the
+[Radroots crates Release V1 specification](../../docs/specs/radroots_crates_release_v1.md).
+The baseline generation procedure and toolchain are documented in
+[`docs/api/README.md`](../../docs/api/README.md).
 
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_event_codec`
-distribution are
-
- Copyright (c) 2025 Tyson Lupul
-
-For information on usage and redistribution, and for a DISCLAIMER OF ALL
-WARRANTIES, see LICENSE included in the `radroots_event_codec` distribution.
+distribution are copyright (c) 2025 Tyson Lupul. See `LICENSE` for usage,
+redistribution, and warranty terms.

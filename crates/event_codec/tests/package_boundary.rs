@@ -4,8 +4,11 @@ use std::collections::BTreeSet;
 use radroots_event_codec::{canonical as _, decode as _, encode as _, verify as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const VERIFICATION: &str = include_str!("../src/verification/v1.rs");
+const EXAMPLE: &str = include_str!("../examples/verify_profile.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event_codec.txt");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -123,6 +126,43 @@ fn serialization_features_are_explicit_additive_and_final() {
         assert!(
             !features.contains(forbidden),
             "retired public feature {forbidden} must remain absent"
+        );
+    }
+}
+
+#[test]
+fn package_documentation_and_reviewed_api_baseline_are_complete() {
+    for section in [
+        "## Canonical surface",
+        "## Verification pipeline",
+        "## Features",
+        "## Serialization and canonicalization",
+        "## Security and trust boundaries",
+        "## Side effects, cancellation, and commit points",
+        "## Intended consumers",
+        "## Package charter",
+    ] {
+        assert!(README.contains(section), "README is missing {section}");
+    }
+    assert!(ROOT.contains("#![doc = include_str!(\"../README.md\")]"));
+    assert!(EXAMPLE.contains("use radroots_event_codec::{admission, decode, verify};"));
+
+    assert!(PUBLIC_API.starts_with("pub mod radroots_event_codec\n"));
+    for item in [
+        "pub mod radroots_event_codec::admission",
+        "pub mod radroots_event_codec::canonical",
+        "pub mod radroots_event_codec::decode",
+        "pub mod radroots_event_codec::encode",
+        "pub mod radroots_event_codec::manifest",
+        "pub mod radroots_event_codec::verify",
+        "pub use radroots_event_codec::VerificationError",
+    ] {
+        assert!(PUBLIC_API.contains(item), "API baseline is missing {item}");
+    }
+    for forbidden in ["nostr_sdk::", "reqwest::", "sqlx::", "tokio::", "keyring::"] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "API baseline exposes forbidden host path {forbidden}"
         );
     }
 }

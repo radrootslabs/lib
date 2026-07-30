@@ -1,3 +1,9 @@
+//! Governed event-contract manifest generation and validation.
+//!
+//! Manifest operations derive deterministic JSON and SHA-256 evidence from
+//! versioned contract authority. They perform no filesystem writes or release
+//! publication themselves.
+
 #[cfg(not(feature = "std"))]
 use alloc::{
     string::{String, ToString},
