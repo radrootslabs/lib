@@ -7,14 +7,41 @@ use radroots_event::{draft::SignedEvent, wire::Nip01EventWire};
 #[cfg(feature = "transport-workers")]
 use radroots_transport::RadrootsTransportTargetReceipt;
 use radroots_transport::{
-    EventSink, EventSource, RadrootsTransport, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionPolicy, Target, TargetSet, TransportId,
+    EventSink, EventSource, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportPayload, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportStatus, Target, TargetSet, TransportId,
 };
 use thiserror::Error;
 
 pub type RadrootsRuntimeTransportFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, RadrootsRuntimeTransportError>> + Send + 'a>>;
+
+/// Unpublished predecessor future alias; removed at Step 170.
+#[doc(hidden)]
+pub type RadrootsRuntimeTransportShimFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, RadrootsTransportError>> + Send + 'a>>;
+
+/// Unpublished bridge for the predecessor mixed runtime delivery workers.
+///
+/// This runtime-owned shim is retired at Step 170 in RCLD 40 when those
+/// workers move to the independent source and sink registries.
+#[doc(hidden)]
+pub trait RadrootsRuntimeTransportShim: Send + Sync {
+    fn transport_id(&self) -> TransportId;
+
+    fn status(&self) -> RadrootsRuntimeTransportShimFuture<'_, RadrootsTransportStatus>;
+
+    fn deliver(
+        &self,
+        request: RadrootsTransportDeliveryRequest,
+    ) -> RadrootsRuntimeTransportShimFuture<'_, RadrootsTransportDeliveryReceipt>;
+
+    fn fetch(
+        &self,
+        request: RadrootsTransportFetchRequest,
+    ) -> RadrootsRuntimeTransportShimFuture<'_, RadrootsTransportFetchReceipt>;
+}
 
 #[derive(Debug, Error)]
 pub enum RadrootsRuntimeTransportError {
@@ -143,7 +170,7 @@ pub struct RadrootsRuntimeTransportRegistry {
     sources: BTreeMap<TransportId, Arc<dyn EventSource>>,
     sinks: BTreeMap<TransportId, Arc<dyn EventSink>>,
     #[doc(hidden)]
-    transports: BTreeMap<TransportId, Arc<dyn RadrootsTransport>>,
+    transports: BTreeMap<TransportId, Arc<dyn RadrootsRuntimeTransportShim>>,
 }
 
 impl RadrootsRuntimeTransportRegistry {
@@ -214,9 +241,9 @@ impl RadrootsRuntimeTransportRegistry {
     #[doc(hidden)]
     pub fn register<T>(&mut self, transport: T) -> Result<(), RadrootsRuntimeTransportError>
     where
-        T: RadrootsTransport + 'static,
+        T: RadrootsRuntimeTransportShim + 'static,
     {
-        let kind = transport.transport_kind();
+        let kind = transport.transport_id();
         if self.transports.contains_key(&kind) {
             return Err(RadrootsRuntimeTransportError::TransportAlreadyRegistered(
                 kind.canonical_label(),
@@ -230,7 +257,7 @@ impl RadrootsRuntimeTransportRegistry {
     pub fn transport(
         &self,
         kind: &TransportId,
-    ) -> Result<Arc<dyn RadrootsTransport>, RadrootsRuntimeTransportError> {
+    ) -> Result<Arc<dyn RadrootsRuntimeTransportShim>, RadrootsRuntimeTransportError> {
         self.transports.get(kind).cloned().ok_or_else(|| {
             RadrootsRuntimeTransportError::TransportNotRegistered(kind.canonical_label())
         })
@@ -729,6 +756,7 @@ mod tests {
         RadrootsRuntimeBoundedQueue, RadrootsRuntimeTransportDispatchRequest,
         RadrootsRuntimeTransportError, RadrootsRuntimeTransportFuture,
         RadrootsRuntimeTransportPayload, RadrootsRuntimeTransportRegistry,
+        RadrootsRuntimeTransportShim, RadrootsRuntimeTransportShimFuture,
     };
     #[cfg(feature = "transport-workers")]
     use super::{
@@ -741,10 +769,10 @@ mod tests {
     #[cfg(feature = "transport-workers")]
     use radroots_event::{draft::SignedEvent, wire::Nip01EventWire};
     use radroots_transport::{
-        RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
+        RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
         RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
         RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-        RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportOutcome,
+        RadrootsTransportImplementationState, RadrootsTransportOutcome,
         RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
         RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus,
         RadrootsTransportTargetReceipt, Target, TargetSet, TransportId,
@@ -786,12 +814,12 @@ mod tests {
         }
     }
 
-    impl RadrootsTransport for StaticTransport {
-        fn transport_kind(&self) -> TransportId {
+    impl RadrootsRuntimeTransportShim for StaticTransport {
+        fn transport_id(&self) -> TransportId {
             self.kind
         }
 
-        fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        fn status(&self) -> RadrootsRuntimeTransportShimFuture<'_, RadrootsTransportStatus> {
             Box::pin(async move {
                 Ok(RadrootsTransportStatus::new(
                     self.kind,
@@ -807,7 +835,7 @@ mod tests {
         fn deliver<'a>(
             &'a self,
             request: RadrootsTransportDeliveryRequest,
-        ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        ) -> RadrootsRuntimeTransportShimFuture<'a, RadrootsTransportDeliveryReceipt> {
             Box::pin(async move {
                 #[cfg(feature = "transport-workers")]
                 if let Some(captured_now_ms) = &self.captured_now_ms {
@@ -837,7 +865,7 @@ mod tests {
         fn fetch<'a>(
             &'a self,
             request: RadrootsTransportFetchRequest,
-        ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        ) -> RadrootsRuntimeTransportShimFuture<'a, RadrootsTransportFetchReceipt> {
             Box::pin(async move {
                 Ok(RadrootsTransportFetchReceipt::new(
                     request.request_id,
@@ -872,12 +900,12 @@ mod tests {
     }
 
     #[cfg(feature = "transport-workers")]
-    impl RadrootsTransport for ForgedReceiptTransport {
-        fn transport_kind(&self) -> TransportId {
+    impl RadrootsRuntimeTransportShim for ForgedReceiptTransport {
+        fn transport_id(&self) -> TransportId {
             TransportId::NOSTR
         }
 
-        fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        fn status(&self) -> RadrootsRuntimeTransportShimFuture<'_, RadrootsTransportStatus> {
             Box::pin(async {
                 Ok(RadrootsTransportStatus::new(
                     TransportId::NOSTR,
@@ -892,7 +920,7 @@ mod tests {
         fn deliver<'a>(
             &'a self,
             request: RadrootsTransportDeliveryRequest,
-        ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        ) -> RadrootsRuntimeTransportShimFuture<'a, RadrootsTransportDeliveryReceipt> {
             Box::pin(async move {
                 match self.forged {
                     ForgedDeliveryReceipt::RequestId => RadrootsTransportDeliveryReceipt::new(
@@ -933,7 +961,7 @@ mod tests {
         fn fetch<'a>(
             &'a self,
             _request: RadrootsTransportFetchRequest,
-        ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        ) -> RadrootsRuntimeTransportShimFuture<'a, RadrootsTransportFetchReceipt> {
             Box::pin(async { Err(RadrootsTransportError::UnsupportedOperation) })
         }
     }

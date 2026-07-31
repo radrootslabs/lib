@@ -3,10 +3,11 @@
 use crate::RadrootsOutboxError;
 use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::id::{MutationId, TradeId};
+use radroots_transport::target::EndpointUri;
 use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
 use radroots_transport::{
     RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetUri, Target, TransportId,
+    RadrootsTransportSatisfactionPolicy, Target, TransportId,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -518,7 +519,7 @@ pub struct RadrootsOutboxDeliveryTargetRecord {
     pub delivery_target_id: i64,
     pub delivery_plan_id: i64,
     pub transport_kind: TransportId,
-    pub endpoint_uri: RadrootsTransportTargetUri,
+    pub endpoint_uri: EndpointUri,
     pub target_scope: Option<TargetScope>,
     pub target_label: Option<TargetLabel>,
     pub endpoint_fingerprint: TargetFingerprint,

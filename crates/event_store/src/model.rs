@@ -38,8 +38,9 @@ use radroots_event::envelope::EventKind;
 use radroots_event::id::{CandidateId, DTag, EventId, InventoryBinId, MutationId, TradeId};
 use radroots_event::trade::TradeMutationKindV1;
 use radroots_identity::PublicKey;
+use radroots_transport::target::EndpointUri;
 use radroots_transport::target::TargetFingerprint;
-use radroots_transport::{RadrootsTransportTargetUri, Target, TransportId};
+use radroots_transport::{Target, TransportId};
 pub use reconciliation_v1::{
     RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
     RadrootsEventPersistence, RadrootsEventStoreSourceGeneration, RadrootsRawHeadDecision,
@@ -167,7 +168,7 @@ impl RadrootsTransportObservationType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportObservation {
     transport_kind: TransportId,
-    endpoint_uri: RadrootsTransportTargetUri,
+    endpoint_uri: EndpointUri,
     endpoint_fingerprint: TargetFingerprint,
     observation_type: RadrootsTransportObservationType,
     observed_at_ms: i64,
@@ -208,7 +209,7 @@ impl RadrootsTransportObservation {
         &self.transport_kind
     }
 
-    pub fn endpoint_uri(&self) -> &RadrootsTransportTargetUri {
+    pub fn endpoint_uri(&self) -> &EndpointUri {
         &self.endpoint_uri
     }
 
@@ -258,7 +259,7 @@ impl RadrootsTransportObservation {
     #[cfg(test)]
     pub(crate) fn from_unchecked_parts_for_test(
         transport_kind: TransportId,
-        endpoint_uri: RadrootsTransportTargetUri,
+        endpoint_uri: EndpointUri,
         endpoint_fingerprint: TargetFingerprint,
         observation_type: RadrootsTransportObservationType,
         observed_at_ms: i64,
@@ -739,7 +740,8 @@ mod tests {
             1,
         )
         .expect("Reticulum observation");
-        let expected_reticulum = Target::reticulum().expect("canonical Reticulum target");
+        let expected_reticulum = Target::new(TransportId::RETICULUM, "reticulum:local")
+            .expect("canonical Reticulum target");
         assert_eq!(reticulum.endpoint_uri(), expected_reticulum.uri());
         assert_eq!(
             reticulum.endpoint_fingerprint(),

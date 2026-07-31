@@ -1,6 +1,7 @@
 use crate::RADROOTS_RETICULUM_ENDPOINT_URI;
+use radroots_transport::target::EndpointUri;
 use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
-use radroots_transport::{RadrootsTransportError, RadrootsTransportTargetUri, Target, TransportId};
+use radroots_transport::{RadrootsTransportError, Target, TransportId};
 
 pub const RETICULUM_V1_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 
@@ -94,7 +95,7 @@ impl ReticulumRoutingMetadataV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReticulumDestinationV1 {
-    uri: RadrootsTransportTargetUri,
+    uri: EndpointUri,
     routing: ReticulumRoutingMetadataV1,
     label: Option<TargetLabel>,
     fingerprint: TargetFingerprint,
@@ -161,7 +162,7 @@ impl ReticulumDestinationV1 {
         )
     }
 
-    pub fn uri(&self) -> &RadrootsTransportTargetUri {
+    pub fn uri(&self) -> &EndpointUri {
         &self.uri
     }
 
@@ -182,7 +183,7 @@ impl ReticulumDestinationV1 {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReticulumDestinationV1Wire {
-    uri: RadrootsTransportTargetUri,
+    uri: EndpointUri,
     routing: ReticulumRoutingMetadataV1,
     label: Option<TargetLabel>,
     fingerprint: TargetFingerprint,

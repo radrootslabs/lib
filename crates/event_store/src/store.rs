@@ -70,8 +70,9 @@ use radroots_event::envelope::event_head::v1::{
 };
 use radroots_event::id::{DTag, EventId, MutationId, TradeId};
 use radroots_event::trade::TradeMutationKindV1;
+use radroots_transport::target::EndpointUri;
 use radroots_transport::target::TargetFingerprint;
-use radroots_transport::{RadrootsTransportTargetUri, Target, TransportId};
+use radroots_transport::{Target, TransportId};
 #[cfg(test)]
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
@@ -1149,7 +1150,7 @@ pub async fn inspect_event_store_status(
 pub struct RadrootsTransportObservationRow {
     pub event_id: String,
     pub transport_kind: TransportId,
-    pub endpoint_uri: RadrootsTransportTargetUri,
+    pub endpoint_uri: EndpointUri,
     pub endpoint_fingerprint: TargetFingerprint,
     pub observation_type: RadrootsTransportObservationType,
     pub first_observed_at_ms: i64,
@@ -9279,7 +9280,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("Reticulum endpoint observations");
         assert_eq!(reticulum_observations.len(), 1);
-        let expected_reticulum = Target::reticulum().expect("canonical Reticulum target");
+        let expected_reticulum = Target::new(TransportId::RETICULUM, "reticulum:local")
+            .expect("canonical Reticulum target");
         assert_eq!(
             &reticulum_observations[0].endpoint_fingerprint,
             expected_reticulum.fingerprint()
@@ -9290,8 +9292,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     async fn transport_observation_ingest_rejects_forged_endpoint_identity_atomically() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(KIND_POST, 16, Vec::new(), "forged observation");
-        let endpoint_uri =
-            RadrootsTransportTargetUri::parse("wss://relay-a.local").expect("endpoint A");
+        let endpoint_uri = EndpointUri::parse("wss://relay-a.local").expect("endpoint A");
         let endpoint_b =
             Target::new(TransportId::NOSTR, "wss://relay-b.local").expect("endpoint B");
         let observation = RadrootsTransportObservation::from_unchecked_parts_for_test(

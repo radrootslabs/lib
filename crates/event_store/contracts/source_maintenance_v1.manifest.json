@@ -712,8 +712,8 @@
     {
       "role": "predecessor_model_public_surface",
       "path": "crates/event_store/src/model.rs",
-      "byte_length": 32050,
-      "sha256": "910053012eb65cb1a6c24455ffacee056ce013c950e9b545822f9c2e679a8892",
+      "byte_length": 32070,
+      "sha256": "2cdbf6d1a4e0fa6680f45f02758513509339a7cf3a2387e824fb73b0edf749a4",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -775,8 +775,8 @@
     {
       "role": "public_store_and_transaction_authority",
       "path": "crates/event_store/src/store.rs",
-      "byte_length": 393195,
-      "sha256": "03fc56bf151f53c35792d09b247513d722ae26e3d112810f28f167a004c83273",
+      "byte_length": 393218,
+      "sha256": "64565c3bc043779e1c2f26d9761901b109b4acab0f48c2021102c0e4e1f1f726",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -867,7 +867,7 @@
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
       "byte_length": 199270,
-      "sha256": "d3681d09e60763baf3c59edfbcb48e3c370c315a75fcd5a01756c8c961e784c9",
+      "sha256": "65b83a3ee1a700527d15c7403ca042cf2aaa4cd8935a2f8d2ab190c491a815bd",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

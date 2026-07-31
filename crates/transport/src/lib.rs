@@ -43,10 +43,7 @@ pub use target::{
     RadrootsTransportTargetLabel, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
     TARGET_SET_MAX_ITEMS, Target, TargetSet,
 };
-pub use transport::{
-    RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-    RadrootsTransportFuture,
-};
+pub use transport::{RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest};
 
 #[cfg(test)]
 extern crate self as radroots_transport;

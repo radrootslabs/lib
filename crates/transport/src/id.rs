@@ -25,11 +25,16 @@ impl TransportId {
     /// Daemon-mediated transport.
     pub const RADROOTSD: Self = Self(ProtocolTransportKind::RADROOTSD);
 
-    // Compatibility spellings retained until the planned consumer cutover.
+    /// Publish-frozen spelling retained only for external first-party consumers.
+    #[doc(hidden)]
     #[allow(non_upper_case_globals)]
     pub const Local: Self = Self::LOCAL;
+    /// Publish-frozen spelling retained only for external first-party consumers.
+    #[doc(hidden)]
     #[allow(non_upper_case_globals)]
     pub const Nostr: Self = Self::NOSTR;
+    /// Publish-frozen spelling retained only for external first-party consumers.
+    #[doc(hidden)]
     #[allow(non_upper_case_globals)]
     pub const Reticulum: Self = Self::RETICULUM;
 
@@ -50,11 +55,15 @@ impl TransportId {
         self.0.as_str()
     }
 
-    /// Returns an owned canonical identity for compatibility with predecessor APIs.
+    /// Returns an owned canonical identity label.
     pub fn canonical_label(&self) -> String {
         self.as_str().to_string()
     }
 }
+
+/// Publish-frozen external-consumer alias; removed at Step 305.
+#[doc(hidden)]
+pub type RadrootsTransportKind = TransportId;
 
 fn map_protocol_error(error: ProtocolError) -> RadrootsTransportError {
     match error {
@@ -131,7 +140,3 @@ impl<'de> serde::Deserialize<'de> for TransportId {
         <ProtocolTransportKind as serde::Deserialize>::deserialize(deserializer).map(Self)
     }
 }
-
-/// Compatibility name retained until the planned workspace consumer cutover.
-#[doc(hidden)]
-pub type RadrootsTransportKind = TransportId;

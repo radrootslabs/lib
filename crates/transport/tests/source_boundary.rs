@@ -533,8 +533,12 @@ fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
         );
     }
     assert!(
-        runtime_source.contains("Arc<dyn RadrootsTransport>"),
-        "mixed runtime delivery workers retain the sole temporary monolithic shim until RCLD 40"
+        runtime_source.contains("Arc<dyn RadrootsRuntimeTransportShim>"),
+        "mixed runtime delivery workers retain the sole runtime-owned unpublished shim until RCLD 40"
+    );
+    assert!(
+        runtime_source.contains("pub trait RadrootsRuntimeTransportShim: Send + Sync"),
+        "the temporary runtime shim must have an explicit, searchable final-removal owner"
     );
     let removed_reticulum_runtime_transport =
         ["RadrootsRuntimeReticulum", "Pre", "viewTransport"].concat();
@@ -558,7 +562,8 @@ fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
         );
     }
     assert!(
-        !reticulum_source.contains("impl RadrootsTransport for RadrootsReticulumTransport"),
+        !reticulum_source
+            .contains("impl RadrootsRuntimeTransportShim for RadrootsReticulumTransport"),
         "Reticulum preview must not implement the predecessor monolithic SPI"
     );
 
@@ -568,7 +573,8 @@ fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
         "Nostr adapter must implement the final sink-only SPI"
     );
     assert!(
-        !nostr_source.contains("impl<A> RadrootsTransport for RadrootsNostrTransport<A>"),
+        !nostr_source
+            .contains("impl<A> RadrootsRuntimeTransportShim for RadrootsNostrTransport<A>"),
         "Nostr adapter must not implement the predecessor monolithic SPI"
     );
 }

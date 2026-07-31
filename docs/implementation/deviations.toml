@@ -37,6 +37,33 @@ normative_architecture_change = false
 adr_required = false
 
 [[deviation]]
+id = "RCRV1-DEV-007"
+date = "2026-07-30"
+status = "active"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["122", "170", "235", "305"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#9-radroots_transport",
+  "docs/specs/radroots_crates_release_v1.md#111-separate-source-and-sink-contracts",
+]
+source_evidence = [
+  "Step 120 migrated canonical adapters and registries to independent EventSource and EventSink contracts.",
+  "Mixed runtime delivery workers still consume predecessor request and receipt models until their ordered RCLD 40 migration.",
+  "The standalone publish-frozen SDK still maps user-facing target and satisfaction models into predecessor outbox orchestration until Step 235.",
+  "oss/cli/src/runtime/{config,sync,transport}.rs and oss/radrootsd/src/core/transport_publish.rs still import the predecessor identity aliases and Reticulum target helpers; those standalone repositories are outside the approved crate-surface mutation scope.",
+]
+replacement_action = "Remove the monolithic trait from radroots_transport in Step 122; retain one explicitly named runtime-owned unpublished shim until Step 170, the SDK-local unpublished target/satisfaction mapping until Step 235, and documentation-hidden external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate."
+verification = [
+  "Transport source-boundary tests reject every removed public predecessor name and require the singular runtime-owned shim.",
+  "Release policy keeps runtime and SDK publication disabled while either downstream shim exists.",
+  "Steps 170 and 235 are the exact fail-closed final-removal gates for the remaining downstream mappings.",
+  "Step 305 rejects publication until oss/cli and oss/radrootsd no longer require the documentation-hidden external-consumer aliases and Reticulum helpers.",
+]
+unresolved_risk = "Runtime, SDK, CLI, and daemon consumers retain bounded publish-frozen predecessor mappings; package-realistic publication remains blocked until every mapping is removed at its explicit gate."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
 id = "RCRV1-DEV-005"
 date = "2026-07-28"
 status = "active"

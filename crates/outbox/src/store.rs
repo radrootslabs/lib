@@ -2004,12 +2004,17 @@ fn satisfaction_target_count(
 }
 
 fn validate_delivery_target(target: &Target) -> Result<(), RadrootsOutboxError> {
-    if target.kind() == &TransportId::RETICULUM
-        && target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
-    {
-        return Err(RadrootsOutboxError::Transport(
-            radroots_transport::RadrootsTransportError::InvalidTargetUri,
-        ));
+    if target.kind() == &TransportId::RETICULUM {
+        if target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI {
+            return Err(RadrootsOutboxError::Transport(
+                RadrootsTransportError::InvalidTargetUri,
+            ));
+        }
+        if target.scope().is_none() {
+            return Err(RadrootsOutboxError::Transport(
+                RadrootsTransportError::EmptyTargetScope,
+            ));
+        }
     }
     Ok(())
 }
@@ -2899,6 +2904,7 @@ fn delivery_target_from_row(
         ),
     }
     .map_err(|_| invalid_identity("canonical_fields"))?;
+    validate_delivery_target(&target).map_err(|_| invalid_identity("canonical_fields"))?;
     if target.uri().as_str() != endpoint_uri_raw
         || target.scope() != target_scope.as_ref()
         || target.label() != target_label.as_ref()
@@ -3615,7 +3621,13 @@ mod tests {
 
     fn reticulum_target(uri: &str) -> Target {
         assert_eq!(uri, RADROOTS_RETICULUM_ENDPOINT_URI);
-        Target::reticulum().expect("reticulum target")
+        Target::new_with_metadata(
+            TransportId::RETICULUM,
+            "reticulum:local",
+            Some(TargetScope::parse("local").expect("Reticulum scope")),
+            None,
+        )
+        .expect("reticulum target")
     }
 
     #[test]
@@ -6032,7 +6044,7 @@ mod tests {
             .enqueue_operation(RadrootsOutboxOperationInput::new(
                 "publish_post",
                 draft,
-                delivery_plan(vec![Target::reticulum().expect("Reticulum target")]),
+                delivery_plan(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)]),
                 1_000,
             ))
             .await
@@ -6110,11 +6122,43 @@ mod tests {
     #[tokio::test]
     async fn enqueue_rejects_invalid_reticulum_targets_before_persistence() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        assert_eq!(
-            Target::new(TransportId::RETICULUM, "reticulum:alternate",)
-                .expect_err("invalid Reticulum target"),
-            RadrootsTransportError::InvalidTargetUri
-        );
+        let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "invalid Reticulum target");
+        let invalid_uri = Target::new_with_metadata(
+            TransportId::RETICULUM,
+            "reticulum:alternate",
+            Some(TargetScope::parse("local").expect("Reticulum scope")),
+            None,
+        )
+        .expect("transport-neutral target");
+        assert!(matches!(
+            outbox
+                .enqueue_operation(RadrootsOutboxOperationInput::new(
+                    "publish_post",
+                    draft.clone(),
+                    delivery_plan(vec![invalid_uri]),
+                    1_000,
+                ))
+                .await,
+            Err(RadrootsOutboxError::Transport(
+                RadrootsTransportError::InvalidTargetUri
+            ))
+        ));
+
+        let missing_scope = Target::new(TransportId::RETICULUM, "reticulum:local")
+            .expect("transport-neutral target");
+        assert!(matches!(
+            outbox
+                .enqueue_operation(RadrootsOutboxOperationInput::new(
+                    "publish_post",
+                    draft,
+                    delivery_plan(vec![missing_scope]),
+                    1_000,
+                ))
+                .await,
+            Err(RadrootsOutboxError::Transport(
+                RadrootsTransportError::EmptyTargetScope
+            ))
+        ));
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);

@@ -1,7 +1,7 @@
 use crate::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
+    RadrootsTransportOutcomeKind, RadrootsTransportPayload, Target, TargetSet,
+    target::TargetFingerprint,
 };
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
@@ -36,7 +36,7 @@ pub enum RadrootsTransportSatisfactionPolicy {
     },
     RequiredTargets {
         class: RadrootsTransportSatisfactionClass,
-        targets: Vec<RadrootsTransportTargetFingerprint>,
+        targets: Vec<TargetFingerprint>,
     },
 }
 
@@ -161,7 +161,7 @@ impl RadrootsTransportSatisfactionPolicy {
 
     pub fn required_targets(
         class: RadrootsTransportSatisfactionClass,
-        mut targets: Vec<RadrootsTransportTargetFingerprint>,
+        mut targets: Vec<TargetFingerprint>,
     ) -> Result<Self, RadrootsTransportError> {
         validate_required_targets(&targets)?;
         targets.sort();
@@ -178,7 +178,7 @@ impl RadrootsTransportSatisfactionPolicy {
         }
     }
 
-    pub fn required_target_fingerprints(&self) -> Option<&[RadrootsTransportTargetFingerprint]> {
+    pub fn required_target_fingerprints(&self) -> Option<&[TargetFingerprint]> {
         match self {
             Self::RequiredTargets { targets, .. } => Some(targets),
             Self::NoWait | Self::Any { .. } | Self::All { .. } | Self::Quorum { .. } => None,
@@ -226,7 +226,7 @@ impl RadrootsTransportSatisfactionPolicy {
 
     pub fn validate_for_target_set(
         &self,
-        target_set: &RadrootsTransportTargetSet,
+        target_set: &TargetSet,
     ) -> Result<(), RadrootsTransportError> {
         self.required_target_count(target_set.len())?;
         if let Self::RequiredTargets { targets, .. } = self {
@@ -260,7 +260,7 @@ enum RadrootsTransportSatisfactionPolicyWire {
     },
     RequiredTargets {
         class: RadrootsTransportSatisfactionClass,
-        targets: Vec<RadrootsTransportTargetFingerprint>,
+        targets: Vec<TargetFingerprint>,
     },
 }
 
@@ -289,9 +289,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportSatisfactionPolicy {
     }
 }
 
-fn validate_required_targets(
-    targets: &[RadrootsTransportTargetFingerprint],
-) -> Result<(), RadrootsTransportError> {
+fn validate_required_targets(targets: &[TargetFingerprint]) -> Result<(), RadrootsTransportError> {
     if targets.is_empty() {
         return Err(RadrootsTransportError::EmptyRequiredTargetSet);
     }
@@ -309,7 +307,7 @@ fn validate_required_targets(
 pub struct RadrootsTransportDeliveryRequest {
     request_id: String,
     payload: RadrootsTransportPayload,
-    target_set: RadrootsTransportTargetSet,
+    target_set: TargetSet,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     now_ms: i64,
 }
@@ -318,7 +316,7 @@ impl RadrootsTransportDeliveryRequest {
     pub fn new(
         request_id: impl Into<String>,
         payload: RadrootsTransportPayload,
-        target_set: RadrootsTransportTargetSet,
+        target_set: TargetSet,
         satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     ) -> Result<Self, RadrootsTransportError> {
         let request_id = request_id.into();
@@ -348,7 +346,7 @@ impl RadrootsTransportDeliveryRequest {
         &self.payload
     }
 
-    pub fn target_set(&self) -> &RadrootsTransportTargetSet {
+    pub fn target_set(&self) -> &TargetSet {
         &self.target_set
     }
 
@@ -387,7 +385,7 @@ fn validate_delivery_timestamp(now_ms: i64) -> Result<(), RadrootsTransportError
 struct RadrootsTransportDeliveryRequestWire {
     request_id: String,
     payload: RadrootsTransportPayload,
-    target_set: RadrootsTransportTargetSet,
+    target_set: TargetSet,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     now_ms: i64,
 }
@@ -413,18 +411,18 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportDeliveryRequest {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportTargetReceipt {
-    pub target: RadrootsTransportTarget,
+    pub target: Target,
     pub attempted: bool,
     pub status: RadrootsTransportDeliveryTargetStatus,
     pub outcome: RadrootsTransportOutcome,
 }
 
 impl RadrootsTransportTargetReceipt {
-    pub fn new(target: RadrootsTransportTarget, outcome: RadrootsTransportOutcome) -> Self {
+    pub fn new(target: Target, outcome: RadrootsTransportOutcome) -> Self {
         Self::attempted(target, outcome)
     }
 
-    pub fn attempted(target: RadrootsTransportTarget, outcome: RadrootsTransportOutcome) -> Self {
+    pub fn attempted(target: Target, outcome: RadrootsTransportOutcome) -> Self {
         Self {
             target,
             attempted: true,
@@ -433,7 +431,7 @@ impl RadrootsTransportTargetReceipt {
         }
     }
 
-    pub fn skipped(target: RadrootsTransportTarget, outcome: RadrootsTransportOutcome) -> Self {
+    pub fn skipped(target: Target, outcome: RadrootsTransportOutcome) -> Self {
         Self {
             target,
             attempted: false,
@@ -461,7 +459,7 @@ impl RadrootsTransportTargetReceipt {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RadrootsTransportTargetReceiptWire {
-    target: RadrootsTransportTarget,
+    target: Target,
     attempted: bool,
     status: RadrootsTransportDeliveryTargetStatus,
     outcome: RadrootsTransportOutcome,
@@ -489,7 +487,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetReceipt {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportDeliveryReceipt {
     request_id: String,
-    target_set: RadrootsTransportTargetSet,
+    target_set: TargetSet,
     target_receipts: Vec<RadrootsTransportTargetReceipt>,
 }
 
@@ -507,7 +505,7 @@ impl RadrootsTransportDeliveryReceipt {
 
     pub fn new(
         request_id: impl Into<String>,
-        target_set: RadrootsTransportTargetSet,
+        target_set: TargetSet,
         target_receipts: Vec<RadrootsTransportTargetReceipt>,
     ) -> Result<Self, RadrootsTransportError> {
         let request_id = request_id.into();
@@ -559,7 +557,7 @@ impl RadrootsTransportDeliveryReceipt {
         self.request_id.as_str()
     }
 
-    pub fn target_set(&self) -> &RadrootsTransportTargetSet {
+    pub fn target_set(&self) -> &TargetSet {
         &self.target_set
     }
 
@@ -620,7 +618,7 @@ impl RadrootsTransportDeliveryReceipt {
 #[serde(deny_unknown_fields)]
 struct RadrootsTransportDeliveryReceiptWire {
     request_id: String,
-    target_set: RadrootsTransportTargetSet,
+    target_set: TargetSet,
     target_receipts: Vec<RadrootsTransportTargetReceipt>,
 }
 

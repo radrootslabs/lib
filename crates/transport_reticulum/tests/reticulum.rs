@@ -22,7 +22,9 @@ use serde_json::Value;
 
 fn reticulum_target(uri: &str) -> Target {
     assert_eq!(uri, RADROOTS_RETICULUM_ENDPOINT_URI);
-    Target::reticulum().expect("reticulum target")
+    ReticulumDestinationV1::local()
+        .transport_target()
+        .expect("reticulum target")
 }
 
 fn scoped_reticulum_target(scope: &str) -> Target {
@@ -243,7 +245,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         RadrootsReticulumProfile::new(
             "transport reticulum",
             endpoint,
-            TargetScope::local_reticulum(),
+            TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
             None,
             RadrootsReticulumBehavior::RejectDeliveryAttempts,
         )
@@ -254,7 +256,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         RadrootsReticulumProfile::new(
             "",
             RadrootsReticulumEndpoint::default(),
-            TargetScope::local_reticulum(),
+            TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
             None,
             RadrootsReticulumBehavior::RejectDeliveryAttempts,
         )
@@ -264,7 +266,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     let profile = RadrootsReticulumProfile::new(
         "transport.reticulum.custom",
         RadrootsReticulumEndpoint::default(),
-        TargetScope::local_reticulum(),
+        TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
         Some(agent_endpoint),
         RadrootsReticulumBehavior::DeferDeliveryPlans,
     )
@@ -411,9 +413,10 @@ fn noncanonical_reticulum_targets_are_rejected() {
         "reticulum:unavailable-alt",
         "reticulum:custom",
     ] {
+        let result = Target::new(TransportId::RETICULUM, invalid)
+            .and_then(|target| ReticulumDestinationV1::from_target(&target).map(|_| target));
         assert_eq!(
-            Target::new(TransportId::RETICULUM, invalid)
-                .expect_err("noncanonical Reticulum target"),
+            result.expect_err("noncanonical Reticulum target"),
             radroots_transport::RadrootsTransportError::InvalidTargetUri
         );
     }

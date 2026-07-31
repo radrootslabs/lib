@@ -16,7 +16,9 @@ const ROOT: &str = include_str!("../src/lib.rs");
 const SOURCE: &str = include_str!("../src/source.rs");
 const SINK: &str = include_str!("../src/sink.rs");
 const ID: &str = include_str!("../src/id.rs");
-const LEGACY_TRANSPORT: &str = include_str!("../src/transport.rs");
+const PREDECESSOR_MODELS: &str = include_str!("../src/transport.rs");
+const TARGET: &str = include_str!("../src/target.rs");
+const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
 
 #[test]
 fn manifest_has_final_identity_features_and_required_radroots_dependencies() {
@@ -107,10 +109,25 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub mod radroots_transport::target",
         "pub trait radroots_transport::EventSource",
         "pub trait radroots_transport::EventSink",
+        "pub fn radroots_transport::target::Target::new(radroots_transport::TransportId",
+        "pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::TransportId",
     ] {
         assert!(
             PUBLIC_API.contains(required),
             "public API baseline is missing {required}"
+        );
+    }
+    for forbidden in [
+        "pub trait radroots_transport::RadrootsTransport",
+        "RadrootsTransportFuture",
+        "RadrootsTransportKind",
+        "RadrootsTransportTargetSet",
+        "Target::reticulum",
+        "TargetScope::local_reticulum",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "reviewed public API baseline still exposes `{forbidden}`"
         );
     }
 }
@@ -164,7 +181,30 @@ fn source_and_sink_are_independent_dyn_compatible_host_spis() {
     }
     assert!(!SINK.contains("fn fetch("));
 
-    assert!(LEGACY_TRANSPORT.contains("#[doc(hidden)]\npub trait RadrootsTransport: Send + Sync"));
+    assert!(!PREDECESSOR_MODELS.contains("pub trait RadrootsTransport"));
+    for required in [
+        "Publish-frozen external-consumer helper; removed at Step 305.",
+        "#[doc(hidden)]\n    pub fn reticulum(",
+        "#[doc(hidden)]\n    pub fn reticulum_with_metadata(",
+        "#[doc(hidden)]\n    pub fn local_reticulum(",
+    ] {
+        assert!(
+            TARGET.contains(required),
+            "external-consumer quarantine is missing `{required}`"
+        );
+    }
+    for required in [
+        "id = \"RCRV1-DEV-007\"",
+        "affected_steps = [\"122\", \"170\", \"235\", \"305\"]",
+        "runtime-owned unpublished shim until Step 170",
+        "SDK-local unpublished target/satisfaction mapping until Step 235",
+        "external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate",
+    ] {
+        assert!(
+            DEVIATIONS.contains(required),
+            "temporary downstream ownership record is missing `{required}`"
+        );
+    }
 }
 
 #[test]

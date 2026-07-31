@@ -2,7 +2,7 @@ use futures::executor::block_on;
 use radroots_event::{SignedEvent, wire::v1::Nip01EventWire};
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, EventSource, FetchPage, FetchRequest,
-    RadrootsTransportTarget, RadrootsTransportTargetSet, SinkStatus, SourceStatus, TransportId,
+    SinkStatus, SourceStatus, Target, TargetSet, TransportId,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
     outcome::DeliveryOutcome,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
@@ -106,11 +106,8 @@ fn sink_status() -> SinkStatus {
     )
 }
 
-fn target_set() -> RadrootsTransportTargetSet {
-    RadrootsTransportTargetSet::new(vec![
-        RadrootsTransportTarget::local("local:spi").expect("local target"),
-    ])
-    .expect("target set")
+fn target_set() -> TargetSet {
+    TargetSet::new(vec![Target::local("local:spi").expect("local target")]).expect("target set")
 }
 
 fn delivery_payload() -> DeliveryPayload {

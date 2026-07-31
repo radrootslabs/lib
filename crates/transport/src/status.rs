@@ -1,6 +1,6 @@
 use crate::{
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportImplementationState, RadrootsTransportKind, TransportId,
+    RadrootsTransportImplementationState, TransportId,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
     delivery::RadrootsTransportSatisfactionClass,
 };
@@ -484,7 +484,7 @@ impl RadrootsTransportCapabilities {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportStatus {
     #[cfg_attr(feature = "serde", serde(rename = "transport"))]
-    pub kind: RadrootsTransportKind,
+    pub kind: TransportId,
     pub profile_id: Option<String>,
     pub endpoint_uri: Option<String>,
     pub configured: bool,
@@ -498,7 +498,7 @@ pub struct RadrootsTransportStatus {
 
 impl RadrootsTransportStatus {
     pub fn new(
-        kind: RadrootsTransportKind,
+        kind: TransportId,
         configured: bool,
         implementation: RadrootsTransportImplementationState,
         usable_for_delivery: bool,

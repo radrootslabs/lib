@@ -528,7 +528,9 @@ mod tests {
     };
 
     fn reticulum_target() -> Target {
-        Target::reticulum().expect("Reticulum target")
+        ReticulumDestinationV1::local()
+            .transport_target()
+            .expect("Reticulum target")
     }
 
     fn delivery_request(targets: Vec<Target>) -> RadrootsTransportDeliveryRequest {
@@ -710,10 +712,17 @@ mod tests {
             ensure_reticulum_targets(&[wrong_kind]),
             Err(RadrootsReticulumError::NonReticulumTarget)
         );
+        let wrong_uri = Target::new(TransportId::RETICULUM, "reticulum:other")
+            .expect("transport-neutral target");
         assert_eq!(
-            Target::new(TransportId::RETICULUM, "reticulum:other")
-                .expect_err("wrong Reticulum URI"),
-            RadrootsTransportError::InvalidTargetUri
+            ensure_reticulum_targets(&[wrong_uri]),
+            Err(RadrootsReticulumError::InvalidEndpoint)
+        );
+        let missing_scope = Target::new(TransportId::RETICULUM, RADROOTS_RETICULUM_ENDPOINT_URI)
+            .expect("transport-neutral target");
+        assert_eq!(
+            ensure_reticulum_targets(&[missing_scope]),
+            Err(RadrootsReticulumError::InvalidEndpoint)
         );
         assert!(reticulum_target().scope().is_some());
 

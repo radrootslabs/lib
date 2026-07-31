@@ -13,6 +13,7 @@ silently change `radroots.crates.release.v1`.
 | `RCRV1-DEV-002` | 249 | Pull only the facade scaffold forward to immediately after Step 014 in `sdk`; do not repeat it later. |
 | `RCRV1-DEV-004` | 098, 155, 225, 260, 268, 294, 298-299, 301-304, 314 | Enforce a temporary 90% four-dimension coverage baseline during heavy development; restore 100% only through a future explicit contract update. |
 | `RCRV1-DEV-005` | 013, 019-026, 027-315 | Pin every Rust crate and internal Radroots dependency in `radrootslabs/lib` to exactly `0.1.0-alpha` until further explicit authority. |
+| `RCRV1-DEV-007` | 122, 170, 235, 305 | Remove the predecessor monolithic transport SPI now; quarantine publish-frozen runtime, SDK, CLI, and daemon consumer shims until their explicit removal gates. |
 
 ## Record template
 

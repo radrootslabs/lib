@@ -72,7 +72,6 @@ pub fn radroots_transport::target::TargetLabel::deserialize<D>(D) -> core::resul
 pub struct radroots_transport::endpoint::TargetScope(_)
 impl radroots_transport::target::TargetScope
 pub fn radroots_transport::target::TargetScope::as_str(&self) -> &str
-pub fn radroots_transport::target::TargetScope::local_reticulum() -> Self
 pub fn radroots_transport::target::TargetScope::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 impl core::convert::AsRef<str> for radroots_transport::target::TargetScope
 pub fn radroots_transport::target::TargetScope::as_ref(&self) -> &str
@@ -370,16 +369,14 @@ pub fn radroots_transport::target::EndpointUri::deserialize<D>(D) -> core::resul
 pub struct radroots_transport::target::Target
 impl radroots_transport::target::Target
 pub fn radroots_transport::target::Target::fingerprint(&self) -> &radroots_transport::target::TargetFingerprint
-pub fn radroots_transport::target::Target::kind(&self) -> &RadrootsTransportKind
+pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::TransportId
 pub fn radroots_transport::target::Target::label(&self) -> core::option::Option<&radroots_transport::target::TargetLabel>
 pub fn radroots_transport::target::Target::local(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::local_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::new(RadrootsTransportKind, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::new_with_metadata(RadrootsTransportKind, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::target::Target::new(radroots_transport::TransportId, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::target::Target::new_with_metadata(radroots_transport::TransportId, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::nostr_relay(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::nostr_relay_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::reticulum() -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::reticulum_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::scope(&self) -> core::option::Option<&radroots_transport::target::TargetScope>
 pub fn radroots_transport::target::Target::uri(&self) -> &radroots_transport::target::EndpointUri
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::target::Target
@@ -387,7 +384,7 @@ pub fn radroots_transport::target::Target::deserialize<D>(D) -> core::result::Re
 pub struct radroots_transport::target::TargetFingerprint(_)
 impl radroots_transport::target::TargetFingerprint
 pub fn radroots_transport::target::TargetFingerprint::as_str(&self) -> &str
-pub fn radroots_transport::target::TargetFingerprint::from_target(&RadrootsTransportKind, &radroots_transport::target::EndpointUri, core::option::Option<&radroots_transport::target::TargetScope>) -> Self
+pub fn radroots_transport::target::TargetFingerprint::from_target(&radroots_transport::TransportId, &radroots_transport::target::EndpointUri, core::option::Option<&radroots_transport::target::TargetScope>) -> Self
 pub fn radroots_transport::target::TargetFingerprint::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 impl core::convert::AsRef<str> for radroots_transport::target::TargetFingerprint
 pub fn radroots_transport::target::TargetFingerprint::as_ref(&self) -> &str
@@ -420,7 +417,6 @@ pub fn radroots_transport::target::TargetLabel::deserialize<D>(D) -> core::resul
 pub struct radroots_transport::target::TargetScope(_)
 impl radroots_transport::target::TargetScope
 pub fn radroots_transport::target::TargetScope::as_str(&self) -> &str
-pub fn radroots_transport::target::TargetScope::local_reticulum() -> Self
 pub fn radroots_transport::target::TargetScope::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 impl core::convert::AsRef<str> for radroots_transport::target::TargetScope
 pub fn radroots_transport::target::TargetScope::as_ref(&self) -> &str
@@ -580,7 +576,7 @@ pub radroots_transport::RadrootsTransportSatisfactionPolicy::Quorum::class: radr
 pub radroots_transport::RadrootsTransportSatisfactionPolicy::Quorum::threshold: u16
 pub radroots_transport::RadrootsTransportSatisfactionPolicy::RequiredTargets
 pub radroots_transport::RadrootsTransportSatisfactionPolicy::RequiredTargets::class: radroots_transport::RadrootsTransportSatisfactionClass
-pub radroots_transport::RadrootsTransportSatisfactionPolicy::RequiredTargets::targets: alloc::vec::Vec<crate::RadrootsTransportTargetFingerprint>
+pub radroots_transport::RadrootsTransportSatisfactionPolicy::RequiredTargets::targets: alloc::vec::Vec<radroots_transport::target::TargetFingerprint>
 impl radroots_transport::RadrootsTransportSatisfactionPolicy
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted() -> Self
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::all_delivered() -> Self
@@ -603,10 +599,10 @@ pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::quorum_forwarded
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::quorum_seen(u16) -> Self
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::quorum_stored(u16) -> Self
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::required_target_count(&self, usize) -> core::result::Result<usize, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::required_target_fingerprints(&self) -> core::option::Option<&[RadrootsTransportTargetFingerprint]>
-pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::required_targets(radroots_transport::RadrootsTransportSatisfactionClass, alloc::vec::Vec<RadrootsTransportTargetFingerprint>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::required_target_fingerprints(&self) -> core::option::Option<&[radroots_transport::target::TargetFingerprint]>
+pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::required_targets(radroots_transport::RadrootsTransportSatisfactionClass, alloc::vec::Vec<radroots_transport::target::TargetFingerprint>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::target_satisfaction_class(&self) -> core::option::Option<radroots_transport::RadrootsTransportSatisfactionClass>
-pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::validate_for_target_set(&self, &RadrootsTransportTargetSet) -> core::result::Result<(), radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::validate_for_target_set(&self, &radroots_transport::target::TargetSet) -> core::result::Result<(), radroots_transport::error::RadrootsTransportError>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::RadrootsTransportSatisfactionPolicy
 pub fn radroots_transport::RadrootsTransportSatisfactionPolicy::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::DeliveryReceipt
@@ -668,22 +664,22 @@ pub struct radroots_transport::RadrootsTransportDeliveryReceipt
 impl radroots_transport::RadrootsTransportDeliveryReceipt
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::for_request(&radroots_transport::RadrootsTransportDeliveryRequest, alloc::vec::Vec<radroots_transport::RadrootsTransportTargetReceipt>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::is_satisfied_by(&self, &radroots_transport::RadrootsTransportSatisfactionPolicy) -> core::result::Result<bool, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::RadrootsTransportDeliveryReceipt::new(impl core::convert::Into<alloc::string::String>, RadrootsTransportTargetSet, alloc::vec::Vec<radroots_transport::RadrootsTransportTargetReceipt>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::RadrootsTransportDeliveryReceipt::new(impl core::convert::Into<alloc::string::String>, radroots_transport::target::TargetSet, alloc::vec::Vec<radroots_transport::RadrootsTransportTargetReceipt>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::request_id(&self) -> &str
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::satisfied_target_count(&self, radroots_transport::RadrootsTransportSatisfactionClass) -> usize
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::target_receipts(&self) -> &[radroots_transport::RadrootsTransportTargetReceipt]
-pub fn radroots_transport::RadrootsTransportDeliveryReceipt::target_set(&self) -> &RadrootsTransportTargetSet
+pub fn radroots_transport::RadrootsTransportDeliveryReceipt::target_set(&self) -> &radroots_transport::target::TargetSet
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::validate_for_request(&self, &radroots_transport::RadrootsTransportDeliveryRequest) -> core::result::Result<(), radroots_transport::error::RadrootsTransportError>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::RadrootsTransportDeliveryReceipt
 pub fn radroots_transport::RadrootsTransportDeliveryReceipt::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::RadrootsTransportDeliveryRequest
 impl radroots_transport::RadrootsTransportDeliveryRequest
-pub fn radroots_transport::RadrootsTransportDeliveryRequest::new(impl core::convert::Into<alloc::string::String>, radroots_transport::RadrootsTransportPayload, RadrootsTransportTargetSet, radroots_transport::RadrootsTransportSatisfactionPolicy) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::RadrootsTransportDeliveryRequest::new(impl core::convert::Into<alloc::string::String>, radroots_transport::RadrootsTransportPayload, radroots_transport::target::TargetSet, radroots_transport::RadrootsTransportSatisfactionPolicy) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::RadrootsTransportDeliveryRequest::now_ms(&self) -> i64
 pub fn radroots_transport::RadrootsTransportDeliveryRequest::payload(&self) -> &radroots_transport::RadrootsTransportPayload
 pub fn radroots_transport::RadrootsTransportDeliveryRequest::request_id(&self) -> &str
 pub fn radroots_transport::RadrootsTransportDeliveryRequest::satisfaction_policy(&self) -> &radroots_transport::RadrootsTransportSatisfactionPolicy
-pub fn radroots_transport::RadrootsTransportDeliveryRequest::target_set(&self) -> &RadrootsTransportTargetSet
+pub fn radroots_transport::RadrootsTransportDeliveryRequest::target_set(&self) -> &radroots_transport::target::TargetSet
 pub fn radroots_transport::RadrootsTransportDeliveryRequest::try_with_now_ms(self, i64) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::RadrootsTransportDeliveryRequest
 pub fn radroots_transport::RadrootsTransportDeliveryRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
@@ -695,9 +691,9 @@ impl radroots_transport::RadrootsTransportFetchReceipt
 pub fn radroots_transport::RadrootsTransportFetchReceipt::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<radroots_transport::RadrootsTransportTargetReceipt>, usize) -> Self
 pub struct radroots_transport::RadrootsTransportFetchRequest
 pub radroots_transport::RadrootsTransportFetchRequest::request_id: alloc::string::String
-pub radroots_transport::RadrootsTransportFetchRequest::target_set: crate::RadrootsTransportTargetSet
+pub radroots_transport::RadrootsTransportFetchRequest::target_set: radroots_transport::target::TargetSet
 impl radroots_transport::RadrootsTransportFetchRequest
-pub fn radroots_transport::RadrootsTransportFetchRequest::new(impl core::convert::Into<alloc::string::String>, RadrootsTransportTargetSet) -> Self
+pub fn radroots_transport::RadrootsTransportFetchRequest::new(impl core::convert::Into<alloc::string::String>, radroots_transport::target::TargetSet) -> Self
 pub struct radroots_transport::RadrootsTransportOutcome
 pub radroots_transport::RadrootsTransportOutcome::code: core::option::Option<alloc::string::String>
 pub radroots_transport::RadrootsTransportOutcome::kind: radroots_transport::RadrootsTransportOutcomeKind
@@ -716,13 +712,13 @@ pub radroots_transport::RadrootsTransportStatus::capabilities: radroots_transpor
 pub radroots_transport::RadrootsTransportStatus::configured: bool
 pub radroots_transport::RadrootsTransportStatus::endpoint_uri: core::option::Option<alloc::string::String>
 pub radroots_transport::RadrootsTransportStatus::implementation: radroots_transport::RadrootsTransportImplementationState
-pub radroots_transport::RadrootsTransportStatus::kind: crate::RadrootsTransportKind
+pub radroots_transport::RadrootsTransportStatus::kind: radroots_transport::TransportId
 pub radroots_transport::RadrootsTransportStatus::maturity: crate::RadrootsTransportCapabilityMaturity
 pub radroots_transport::RadrootsTransportStatus::message: alloc::string::String
 pub radroots_transport::RadrootsTransportStatus::profile_id: core::option::Option<alloc::string::String>
 pub radroots_transport::RadrootsTransportStatus::usable_for_delivery: bool
 impl radroots_transport::RadrootsTransportStatus
-pub fn radroots_transport::RadrootsTransportStatus::new(RadrootsTransportKind, bool, radroots_transport::RadrootsTransportImplementationState, bool, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_transport::RadrootsTransportStatus::new(radroots_transport::TransportId, bool, radroots_transport::RadrootsTransportImplementationState, bool, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn radroots_transport::RadrootsTransportStatus::with_availability(self, RadrootsTransportCapabilityAvailability) -> Self
 pub fn radroots_transport::RadrootsTransportStatus::with_capabilities(self, radroots_transport::RadrootsTransportCapabilities) -> Self
 pub fn radroots_transport::RadrootsTransportStatus::with_endpoint_uri(self, impl core::convert::Into<alloc::string::String>) -> Self
@@ -732,11 +728,11 @@ pub struct radroots_transport::RadrootsTransportTargetReceipt
 pub radroots_transport::RadrootsTransportTargetReceipt::attempted: bool
 pub radroots_transport::RadrootsTransportTargetReceipt::outcome: radroots_transport::RadrootsTransportOutcome
 pub radroots_transport::RadrootsTransportTargetReceipt::status: radroots_transport::RadrootsTransportDeliveryTargetStatus
-pub radroots_transport::RadrootsTransportTargetReceipt::target: crate::RadrootsTransportTarget
+pub radroots_transport::RadrootsTransportTargetReceipt::target: radroots_transport::target::Target
 impl radroots_transport::RadrootsTransportTargetReceipt
-pub fn radroots_transport::RadrootsTransportTargetReceipt::attempted(RadrootsTransportTarget, radroots_transport::RadrootsTransportOutcome) -> Self
-pub fn radroots_transport::RadrootsTransportTargetReceipt::new(RadrootsTransportTarget, radroots_transport::RadrootsTransportOutcome) -> Self
-pub fn radroots_transport::RadrootsTransportTargetReceipt::skipped(RadrootsTransportTarget, radroots_transport::RadrootsTransportOutcome) -> Self
+pub fn radroots_transport::RadrootsTransportTargetReceipt::attempted(radroots_transport::target::Target, radroots_transport::RadrootsTransportOutcome) -> Self
+pub fn radroots_transport::RadrootsTransportTargetReceipt::new(radroots_transport::target::Target, radroots_transport::RadrootsTransportOutcome) -> Self
+pub fn radroots_transport::RadrootsTransportTargetReceipt::skipped(radroots_transport::target::Target, radroots_transport::RadrootsTransportOutcome) -> Self
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::RadrootsTransportTargetReceipt
 pub fn radroots_transport::RadrootsTransportTargetReceipt::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::SinkStatus
@@ -762,16 +758,14 @@ pub const fn radroots_transport::SourceStatus::transport_id(&self) -> radroots_t
 pub struct radroots_transport::Target
 impl radroots_transport::target::Target
 pub fn radroots_transport::target::Target::fingerprint(&self) -> &radroots_transport::target::TargetFingerprint
-pub fn radroots_transport::target::Target::kind(&self) -> &RadrootsTransportKind
+pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::TransportId
 pub fn radroots_transport::target::Target::label(&self) -> core::option::Option<&radroots_transport::target::TargetLabel>
 pub fn radroots_transport::target::Target::local(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::local_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::new(RadrootsTransportKind, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::new_with_metadata(RadrootsTransportKind, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::target::Target::new(radroots_transport::TransportId, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
+pub fn radroots_transport::target::Target::new_with_metadata(radroots_transport::TransportId, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::nostr_relay(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::nostr_relay_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::reticulum() -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
-pub fn radroots_transport::target::Target::reticulum_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
 pub fn radroots_transport::target::Target::scope(&self) -> core::option::Option<&radroots_transport::target::TargetScope>
 pub fn radroots_transport::target::Target::uri(&self) -> &radroots_transport::target::EndpointUri
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::target::Target
@@ -787,12 +781,9 @@ pub fn radroots_transport::target::TargetSet::deserialize<D>(D) -> core::result:
 pub struct radroots_transport::TransportId(_)
 impl radroots_transport::TransportId
 pub const radroots_transport::TransportId::LOCAL: Self
-pub const radroots_transport::TransportId::Local: Self
 pub const radroots_transport::TransportId::NOSTR: Self
-pub const radroots_transport::TransportId::Nostr: Self
 pub const radroots_transport::TransportId::RADROOTSD: Self
 pub const radroots_transport::TransportId::RETICULUM: Self
-pub const radroots_transport::TransportId::Reticulum: Self
 pub fn radroots_transport::TransportId::as_str(&self) -> &str
 pub fn radroots_transport::TransportId::canonical_label(&self) -> alloc::string::String
 pub fn radroots_transport::TransportId::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::RadrootsTransportError>
@@ -829,4 +820,3 @@ pub fn radroots_transport::EventSource::fetch(&self, radroots_transport::source:
 pub fn radroots_transport::EventSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SourceStatus, radroots_transport::error::Error>>
 pub type radroots_transport::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
 pub type radroots_transport::Error = radroots_transport::error::RadrootsTransportError
-pub type radroots_transport::RadrootsTransportFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<T, radroots_transport::error::RadrootsTransportError>> + core::marker::Send + 'a)>>

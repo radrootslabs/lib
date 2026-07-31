@@ -499,6 +499,16 @@ fn scoped_nostr_target(relay_url: &str, scope: &str, label: &str) -> Target {
     .expect("scoped nostr target")
 }
 
+fn reticulum_target() -> Target {
+    Target::new_with_metadata(
+        TransportId::RETICULUM,
+        "reticulum:local",
+        Some(TargetScope::parse("local").expect("Reticulum scope")),
+        None,
+    )
+    .expect("Reticulum target")
+}
+
 fn sink_delivery_request(
     request_id: &str,
     signed_event: &SignedEvent,
@@ -1180,7 +1190,7 @@ async fn nostr_transport_sink_rejects_non_nostr_targets() {
     let request = sink_delivery_request(
         "facade-request-target",
         &signed,
-        vec![Target::new(TransportId::RETICULUM, "reticulum:local").expect("target")],
+        vec![reticulum_target()],
         SinkTargetPolicy::all(),
     );
     let error = transport
@@ -4160,7 +4170,7 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
                     required.clone(),
                     optional.clone(),
                     terminal.clone(),
-                    Target::reticulum().expect("reticulum target"),
+                    reticulum_target(),
                 ],
             ),
             1_000,
@@ -4494,10 +4504,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
                 "transport.mixed.local",
                 1,
                 RadrootsTransportSatisfactionPolicy::all_accepted(),
-                vec![
-                    nostr_target(RELAY_PRIMARY_WSS),
-                    Target::reticulum().expect("reticulum target"),
-                ],
+                vec![nostr_target(RELAY_PRIMARY_WSS), reticulum_target()],
             ),
             1_000,
         ))

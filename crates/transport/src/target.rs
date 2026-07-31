@@ -1,12 +1,9 @@
 //! Extensible transport identities and canonical operation targets.
 
 use crate::{
-    RadrootsTransportError, RadrootsTransportKind,
+    RadrootsTransportError, TransportId,
     endpoint::{ENDPOINT_URI_MAX_BYTES, TARGET_LABEL_MAX_BYTES, TARGET_SCOPE_MAX_BYTES},
 };
-
-const LEGACY_RETICULUM_ENDPOINT_URI: &str = "reticulum:local";
-const LEGACY_RETICULUM_SCOPE_ID: &str = "local";
 use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -14,6 +11,9 @@ use alloc::vec::Vec;
 use core::net::Ipv6Addr;
 use core::str::FromStr;
 use sha2::{Digest, Sha256};
+
+const EXTERNAL_RETICULUM_ENDPOINT_URI: &str = "reticulum:local";
+const EXTERNAL_RETICULUM_SCOPE_ID: &str = "local";
 
 /// Maximum number of targets in one operation.
 pub const TARGET_SET_MAX_ITEMS: usize = 64;
@@ -106,8 +106,10 @@ impl TargetScope {
         Ok(Self(value.to_string()))
     }
 
+    /// Publish-frozen external-consumer helper; removed at Step 305.
+    #[doc(hidden)]
     pub fn local_reticulum() -> Self {
-        Self::parse(LEGACY_RETICULUM_SCOPE_ID).expect("default Reticulum scope id")
+        Self::parse(EXTERNAL_RETICULUM_SCOPE_ID).expect("external Reticulum scope id")
     }
 
     pub fn as_str(&self) -> &str {
@@ -228,11 +230,7 @@ impl<'de> serde::Deserialize<'de> for TargetLabel {
 pub struct TargetFingerprint(String);
 
 impl TargetFingerprint {
-    pub fn from_target(
-        kind: &RadrootsTransportKind,
-        uri: &EndpointUri,
-        scope: Option<&TargetScope>,
-    ) -> Self {
+    pub fn from_target(kind: &TransportId, uri: &EndpointUri, scope: Option<&TargetScope>) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(kind.canonical_label().as_bytes());
         hasher.update([0]);
@@ -317,7 +315,7 @@ impl<'de> serde::Deserialize<'de> for TargetFingerprint {
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Validated transport-neutral target.
 pub struct Target {
-    kind: RadrootsTransportKind,
+    kind: TransportId,
     uri: EndpointUri,
     scope: Option<TargetScope>,
     label: Option<TargetLabel>,
@@ -325,10 +323,7 @@ pub struct Target {
 }
 
 impl Target {
-    pub fn new(
-        kind: RadrootsTransportKind,
-        uri: impl AsRef<str>,
-    ) -> Result<Self, RadrootsTransportError> {
+    pub fn new(kind: TransportId, uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
         Self::new_with_metadata(kind, uri, None, None)
     }
 
@@ -341,19 +336,31 @@ impl Target {
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
-        Self::new_with_metadata(RadrootsTransportKind::Nostr, uri, scope, label)
+        Self::new_with_metadata(TransportId::NOSTR, uri, scope, label)
     }
 
+    /// Publish-frozen external-consumer helper; removed at Step 305.
+    #[doc(hidden)]
     pub fn reticulum() -> Result<Self, RadrootsTransportError> {
-        Self::reticulum_with_metadata(LEGACY_RETICULUM_ENDPOINT_URI, None, None)
+        Self::reticulum_with_metadata(EXTERNAL_RETICULUM_ENDPOINT_URI, None, None)
     }
 
+    /// Publish-frozen external-consumer helper; removed at Step 305.
+    #[doc(hidden)]
     pub fn reticulum_with_metadata(
         uri: impl AsRef<str>,
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
-        Self::new_with_metadata(RadrootsTransportKind::Reticulum, uri, scope, label)
+        if uri.as_ref() != EXTERNAL_RETICULUM_ENDPOINT_URI {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
+        Self::new_with_metadata(
+            TransportId::RETICULUM,
+            uri,
+            Some(scope.unwrap_or_else(TargetScope::local_reticulum)),
+            label,
+        )
     }
 
     pub fn local(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
@@ -365,24 +372,20 @@ impl Target {
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
-        Self::new_with_metadata(RadrootsTransportKind::Local, uri, scope, label)
+        Self::new_with_metadata(TransportId::LOCAL, uri, scope, label)
     }
 
     pub fn new_with_metadata(
-        kind: RadrootsTransportKind,
+        kind: TransportId,
         uri: impl AsRef<str>,
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         let raw_uri = uri.as_ref();
         let uri = match kind {
-            RadrootsTransportKind::Nostr => EndpointUri::parse_nostr_relay(raw_uri)?,
+            TransportId::NOSTR => EndpointUri::parse_nostr_relay(raw_uri)?,
             _ => EndpointUri::parse(raw_uri)?,
         };
-        if kind == RadrootsTransportKind::Reticulum && raw_uri != LEGACY_RETICULUM_ENDPOINT_URI {
-            return Err(RadrootsTransportError::InvalidTargetUri);
-        }
-        let scope = scope.or_else(|| default_scope_for_kind(&kind));
         let fingerprint = TargetFingerprint::from_target(&kind, &uri, scope.as_ref());
         Ok(Self {
             kind,
@@ -393,7 +396,7 @@ impl Target {
         })
     }
 
-    pub fn kind(&self) -> &RadrootsTransportKind {
+    pub fn kind(&self) -> &TransportId {
         &self.kind
     }
 
@@ -418,7 +421,7 @@ impl Target {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TargetWire {
-    kind: RadrootsTransportKind,
+    kind: TransportId,
     uri: String,
     scope: Option<String>,
     label: Option<String>,
@@ -469,10 +472,6 @@ impl<'de> serde::Deserialize<'de> for Target {
         }
         Ok(target)
     }
-}
-
-fn default_scope_for_kind(kind: &RadrootsTransportKind) -> Option<TargetScope> {
-    (*kind == RadrootsTransportKind::Reticulum).then(TargetScope::local_reticulum)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -850,26 +849,26 @@ fn is_local_ws_relay_host(host: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "[::1]")
 }
 
-/// Compatibility endpoint URI name retained until the workspace cutover.
+/// Publish-frozen external-consumer alias; removed at Step 305.
 #[doc(hidden)]
 pub type RadrootsTransportTargetUri = EndpointUri;
 
-/// Compatibility target scope name retained until the workspace cutover.
+/// Publish-frozen external-consumer alias; removed at Step 305.
 #[doc(hidden)]
 pub type RadrootsTransportMeshScopeId = TargetScope;
 
-/// Compatibility target label name retained until the workspace cutover.
+/// Publish-frozen external-consumer alias; removed at Step 305.
 #[doc(hidden)]
 pub type RadrootsTransportTargetLabel = TargetLabel;
 
-/// Compatibility target fingerprint name retained until the workspace cutover.
+/// Publish-frozen external-consumer alias; removed at Step 305.
 #[doc(hidden)]
 pub type RadrootsTransportTargetFingerprint = TargetFingerprint;
 
-/// Compatibility target name retained until the workspace cutover.
+/// Publish-frozen external-consumer alias; removed at Step 305.
 #[doc(hidden)]
 pub type RadrootsTransportTarget = Target;
 
-/// Compatibility target-set name retained until the workspace cutover.
+/// Publish-frozen external-consumer alias; removed at Step 305.
 #[doc(hidden)]
 pub type RadrootsTransportTargetSet = TargetSet;
