@@ -16,6 +16,7 @@ const ROOT: &str = include_str!("../src/lib.rs");
 const EVENT_MODULE: &str = include_str!("../src/event.rs");
 const FILTER_MODULE: &str = include_str!("../src/filter.rs");
 const KEY_MODULE: &str = include_str!("../src/key.rs");
+const SIGNING_MODULE: &str = include_str!("../src/signing.rs");
 const TAG_MODULE: &str = include_str!("../src/tag.rs");
 const TYPES_MODULE: &str = include_str!("../src/types.rs");
 const IDENTITY_MANIFEST: &str = include_str!("../../identity/Cargo.toml");
@@ -280,6 +281,32 @@ fn nostr_key_conversion_is_explicit_and_identity_remains_public_only() {
         assert!(
             nearby.contains("#[cfg(feature = \"signing\")]"),
             "secret adapter `{secret_function}` is not signing-gated"
+        );
+    }
+}
+
+#[test]
+fn local_signer_consumes_only_the_opaque_secret_boundary() {
+    for required in [
+        "pub fn new(secret_key: SecretKey)",
+        "pub fn generate()",
+        "pub const fn public_key(&self) -> PublicKey",
+        "key::SecretKey",
+    ] {
+        assert!(
+            SIGNING_MODULE.contains(required),
+            "local signer boundary is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub const fn new(keys: RadrootsNostrKeys)",
+        "pub fn new(keys: RadrootsNostrKeys)",
+        "pub fn keys(",
+        "pub fn secret_key(",
+    ] {
+        assert!(
+            !SIGNING_MODULE.contains(forbidden),
+            "local signer leaks an upstream representation: `{forbidden}`"
         );
     }
 }

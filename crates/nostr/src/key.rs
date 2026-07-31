@@ -1,7 +1,7 @@
 //! Nostr key encoding and NIP-19 conversion for Radroots identities.
 //!
-//! Step 125 moves the existing conversion behavior to this durable public
-//! module without returning Nostr representation policy to identity.
+//! This durable adapter keeps Nostr representation policy out of the identity
+//! crate and keeps local secret material opaque.
 
 use alloc::string::String;
 
@@ -67,6 +67,14 @@ pub struct SecretKey {
 
 #[cfg(feature = "signing")]
 impl SecretKey {
+    /// Generates a fresh local secret without exposing its representation.
+    #[must_use]
+    pub fn generate() -> Self {
+        Self {
+            inner: nostr::SecretKey::generate(),
+        }
+    }
+
     /// Parses exact hexadecimal or NIP-19 `nsec` text.
     ///
     /// Errors never retain or render the supplied secret material.
@@ -80,6 +88,10 @@ impl SecretKey {
     pub fn public_key(&self) -> Result<PublicKey, Error> {
         let public_key = nostr::Keys::new(self.inner.clone()).public_key();
         public_key_from_nostr(public_key)
+    }
+
+    pub(crate) fn into_keys(self) -> nostr::Keys {
+        nostr::Keys::new(self.inner)
     }
 }
 
