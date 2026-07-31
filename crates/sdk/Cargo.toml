@@ -52,7 +52,13 @@ signing = [
   "radroots_protocol/std",
   "radroots_signing/std",
 ]
-transport-nostr-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
+transport-nostr-client = [
+  "signing",
+  "std",
+  "serde_json",
+  "dep:radroots_transport_nostr",
+  "radroots_transport_nostr/client",
+]
 radrootsd-execution = [
   "std",
   "serde_json",
@@ -112,7 +118,6 @@ local-signer = ["runtime", "signing", "radroots_nostr/signing"]
 transport-nostr-runtime = [
   "runtime",
   "dep:radroots_nostr",
-  "radroots_nostr/client",
   "radroots_transport_nostr/client",
 ]
 local-runtime = [

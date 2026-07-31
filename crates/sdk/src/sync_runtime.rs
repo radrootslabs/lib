@@ -15,8 +15,6 @@ use crate::{RadrootsdExecutionAuth, RadrootsdExecutionProfile};
 use radroots_event::id::EventId;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
-#[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_outbox::RadrootsOutboxClaimedEvent;
 #[cfg(feature = "runtime")]
@@ -44,7 +42,9 @@ use radroots_transport::{
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-use radroots_transport_nostr::{RadrootsNostrClientPublishAdapter, RadrootsNostrTransport};
+use radroots_transport_nostr::{
+    RadrootsNostrClient, RadrootsNostrClientPublishAdapter, RadrootsNostrTransport,
+};
 #[cfg(feature = "runtime")]
 use radroots_transport_nostr::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,

@@ -564,7 +564,6 @@ fn check_sdk_feature_matrix(root: &Path) -> Result<(), String> {
     for entry in [
         "runtime",
         "dep:radroots_nostr",
-        "radroots_nostr/client",
         "radroots_transport_nostr/client",
     ] {
         require_feature_entry(&nostr_runtime, "transport-nostr-runtime", entry)?;

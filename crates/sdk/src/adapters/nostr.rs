@@ -1,17 +1,16 @@
 use core::time::Duration;
 
-use radroots_nostr::prelude::{
-    RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrError, RadrootsNostrEvent,
-    RadrootsNostrEventId, RadrootsNostrKeys, RadrootsNostrOutput,
+use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrKeys};
+use radroots_transport_nostr::{
+    RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrOutput,
+    RadrootsRelayTransportError,
 };
 
 pub fn signerless_client() -> RadrootsNostrClient {
     RadrootsNostrClient::new_signerless()
 }
 
-pub fn signerless_client_with_options(
-    options: RadrootsNostrClientOptions,
-) -> Result<RadrootsNostrClient, RadrootsNostrError> {
+pub fn signerless_client_with_options(options: RadrootsNostrClientOptions) -> RadrootsNostrClient {
     RadrootsNostrClient::new_signerless_with_options(options)
 }
 
@@ -23,7 +22,7 @@ pub async fn configure_write_relays(
     client: &RadrootsNostrClient,
     relay_urls: &[String],
     connect_timeout: Duration,
-) -> Result<(), RadrootsNostrError> {
+) -> Result<(), RadrootsRelayTransportError> {
     for relay_url in relay_urls {
         client.add_write_relay(relay_url).await?;
     }
@@ -36,7 +35,7 @@ pub async fn connected_client_from_keys(
     keys: RadrootsNostrKeys,
     relay_urls: &[String],
     connect_timeout: Duration,
-) -> Result<RadrootsNostrClient, RadrootsNostrError> {
+) -> Result<RadrootsNostrClient, RadrootsRelayTransportError> {
     let client = client_from_keys(keys);
     configure_write_relays(&client, relay_urls, connect_timeout).await?;
     Ok(client)
@@ -57,7 +56,7 @@ pub async fn connected_relay_urls(client: &RadrootsNostrClient) -> Vec<String> {
 pub async fn publish_signed_event(
     client: &RadrootsNostrClient,
     event: &RadrootsNostrEvent,
-) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsRelayTransportError> {
     client.send_event(event).await
 }
 

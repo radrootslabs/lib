@@ -4,7 +4,7 @@ use super::{
 };
 use core::time::Duration;
 use nostr::{EventBuilder, Keys, Kind};
-use radroots_nostr::prelude::RadrootsNostrClientOptions;
+use radroots_transport_nostr::{RadrootsNostrClientOptions, RadrootsRelayTransportError};
 use tokio::runtime::Runtime;
 
 #[test]
@@ -13,8 +13,7 @@ fn client_constructors_build_without_runtime_net() {
     let _client = client_from_keys(keys);
     let _signerless = signerless_client();
     let _signerless_with_options =
-        signerless_client_with_options(RadrootsNostrClientOptions::new())
-            .expect("signerless client with options");
+        signerless_client_with_options(RadrootsNostrClientOptions::new());
 }
 
 #[test]
@@ -42,7 +41,7 @@ fn relay_helpers_accept_empty_relay_sets_without_network_endpoints() {
         let error = configure_write_relays(&client, &invalid_relays, Duration::from_millis(1))
             .await
             .expect_err("invalid relay");
-        assert!(format!("{error:?}").contains("Url"));
+        assert!(matches!(error, RadrootsRelayTransportError::Client(_)));
         let connected_error = match connected_client_from_keys(
             keys.clone(),
             &invalid_relays,
@@ -53,7 +52,10 @@ fn relay_helpers_accept_empty_relay_sets_without_network_endpoints() {
             Ok(_) => panic!("expected invalid connected relay"),
             Err(error) => error,
         };
-        assert!(format!("{connected_error:?}").contains("Url"));
+        assert!(matches!(
+            connected_error,
+            RadrootsRelayTransportError::Client(_)
+        ));
 
         let disconnected = client_from_keys(keys.clone());
         disconnected
@@ -78,6 +80,6 @@ fn relay_helpers_accept_empty_relay_sets_without_network_endpoints() {
         let error = publish_signed_event(&connected, &signed)
             .await
             .expect_err("publish without relays");
-        assert!(format!("{error:?}").contains("NoRelaysSpecified"));
+        assert!(matches!(error, RadrootsRelayTransportError::Client(_)));
     });
 }
