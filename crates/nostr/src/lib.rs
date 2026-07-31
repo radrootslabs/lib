@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
+#[cfg(not(feature = "std"))]
+extern crate core as std;
 
 #[cfg(feature = "client")]
 pub mod client;
@@ -9,14 +11,19 @@ pub mod client;
 pub mod blossom;
 
 pub mod error;
+pub mod event;
 pub mod events;
 pub mod filter;
+pub mod key;
 pub mod parse;
 #[cfg(feature = "client")]
 pub mod relays;
+pub mod tag;
 pub mod tags;
 pub mod types;
 pub mod util;
+
+pub use error::RadrootsNostrError as Error;
 
 #[cfg(test)]
 mod test_fixtures;
@@ -71,9 +78,10 @@ pub mod prelude {
     };
 
     pub use crate::error::{RadrootsNostrError, RadrootsNostrTagsResolveError};
+    #[cfg(feature = "std")]
+    pub use crate::filter::radroots_nostr_filter_new_events;
     pub use crate::filter::{
-        radroots_nostr_filter_kind, radroots_nostr_filter_new_events, radroots_nostr_filter_tag,
-        radroots_nostr_kind,
+        radroots_nostr_filter_kind, radroots_nostr_filter_tag, radroots_nostr_kind,
     };
 
     pub use crate::events::{

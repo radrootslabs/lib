@@ -30,7 +30,7 @@ os-keyring = ["std", "radroots_secret_vault/os-keyring"]
 nostrdb-bridge = ["std", "dep:radroots_nostrdb"]
 
 [dependencies]
-nostr = { workspace = true, optional = true }
+nostr = { workspace = true, optional = true, features = ["std"] }
 radroots_identity = { workspace = true, optional = true, default-features = false, features = [
   "std",
   "serde",

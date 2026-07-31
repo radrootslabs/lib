@@ -1,4 +1,5 @@
 use crate::types::{RadrootsNostrFromBech32, RadrootsNostrPublicKey};
+use alloc::{string::String, string::ToString, vec::Vec};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {

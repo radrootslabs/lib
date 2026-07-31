@@ -42,7 +42,7 @@ sqlx = { workspace = true, optional = true, features = ["derive"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 

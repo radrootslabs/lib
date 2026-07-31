@@ -1,5 +1,9 @@
 extern crate alloc;
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use nostr::nips::nip04;
 

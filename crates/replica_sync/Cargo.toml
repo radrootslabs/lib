@@ -53,7 +53,7 @@ base64 = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["std"] }
 radroots_nostr = { workspace = true, default-features = false, features = [
   "events",
   "std",

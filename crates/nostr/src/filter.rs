@@ -1,5 +1,8 @@
 use crate::error::RadrootsNostrError;
-use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrTimestamp};
+#[cfg(feature = "std")]
+use crate::types::RadrootsNostrTimestamp;
+use crate::types::{RadrootsNostrFilter, RadrootsNostrKind};
+use alloc::{string::String, string::ToString, vec::Vec};
 
 pub fn radroots_nostr_filter_tag(
     filter: RadrootsNostrFilter,
@@ -28,6 +31,7 @@ pub fn radroots_nostr_filter_kind(kind: u16) -> RadrootsNostrFilter {
     RadrootsNostrFilter::new().kind(RadrootsNostrKind::Custom(kind))
 }
 
+#[cfg(feature = "std")]
 pub fn radroots_nostr_filter_new_events(filter: RadrootsNostrFilter) -> RadrootsNostrFilter {
     filter.since(RadrootsNostrTimestamp::now())
 }

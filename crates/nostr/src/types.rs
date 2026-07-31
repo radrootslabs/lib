@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "std")]
 use crate::error::RadrootsNostrError;
+#[cfg(feature = "std")]
 use radroots_event::listing::classified::{
     ClassifiedListingPartition, classify_classified_listing_marker_names,
 };
@@ -54,6 +56,7 @@ impl RadrootsNostrExternalSigningRequest {
 
     /// Accepts an external signing result only when it is the exact requested
     /// event and its NIP-01 identifier and signature are valid.
+    #[cfg(feature = "std")]
     pub fn complete(
         self,
         event: RadrootsNostrEvent,
@@ -76,6 +79,7 @@ impl RadrootsNostrExternalSigningRequest {
         Ok(event)
     }
 
+    #[cfg(feature = "std")]
     fn sign_with_keys(
         self,
         keys: &RadrootsNostrKeys,
@@ -190,6 +194,7 @@ impl RadrootsNostrGenericEventBuilder {
     }
 
     /// Signs a generic event after enforcing typed-authoring reservations.
+    #[cfg(feature = "std")]
     pub fn sign_with_keys(
         self,
         keys: &RadrootsNostrKeys,
@@ -200,6 +205,7 @@ impl RadrootsNostrGenericEventBuilder {
 
     /// Finalizes a generic event for an external signer after enforcing typed
     /// authoring reservations.
+    #[cfg(feature = "std")]
     pub fn into_external_signing_request(
         self,
         public_key: RadrootsNostrPublicKey,
@@ -226,6 +232,7 @@ impl RadrootsNostrGenericEventBuilder {
         Ok(self.inner)
     }
 
+    #[cfg(feature = "std")]
     fn validate_generic_authoring_policy(&self) -> Result<(), RadrootsNostrError> {
         // Inspect an unsigned clone so rejection never consults a signer. PoW
         // is irrelevant to kind/tag policy and must not delay the check.

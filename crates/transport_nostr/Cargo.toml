@@ -51,7 +51,7 @@ radroots_outbox = { workspace = true, optional = true, default-features = false,
 ] }
 radroots_transport = { workspace = true, default-features = false }
 futures = { workspace = true }
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }

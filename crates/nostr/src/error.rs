@@ -1,3 +1,4 @@
+use alloc::{boxed::Box, string::String};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -36,16 +37,16 @@ pub enum RadrootsNostrError {
     },
 
     #[error("External signing event is invalid: {0}")]
-    ExternalSigningEventInvalid(#[source] nostr::event::Error),
+    ExternalSigningEventInvalid(#[cfg_attr(feature = "std", source)] nostr::event::Error),
 
     #[error("Event error: {0}")]
-    EventError(#[from] nostr::event::Error),
+    EventError(#[cfg_attr(feature = "std", source)] nostr::event::Error),
 
     #[error("Event not found: {0}")]
     EventNotFound(String),
 
     #[error("Event builder failure: {0}")]
-    EventBuildError(#[from] nostr::event::builder::Error),
+    EventBuildError(#[cfg_attr(feature = "std", source)] nostr::event::builder::Error),
 
     #[cfg(feature = "events")]
     #[error("Draft error: {0}")]
@@ -89,10 +90,28 @@ pub enum RadrootsNostrError {
     },
 
     #[error("Key error: {0}")]
-    KeyError(#[from] nostr::key::Error),
+    KeyError(#[cfg_attr(feature = "std", source)] nostr::key::Error),
 
     #[error("Filter tag error: {0}")]
     FilterTagError(String),
+}
+
+impl From<nostr::event::Error> for RadrootsNostrError {
+    fn from(error: nostr::event::Error) -> Self {
+        Self::EventError(error)
+    }
+}
+
+impl From<nostr::event::builder::Error> for RadrootsNostrError {
+    fn from(error: nostr::event::builder::Error) -> Self {
+        Self::EventBuildError(error)
+    }
+}
+
+impl From<nostr::key::Error> for RadrootsNostrError {
+    fn from(error: nostr::key::Error) -> Self {
+        Self::KeyError(error)
+    }
 }
 
 #[derive(Debug, Error)]

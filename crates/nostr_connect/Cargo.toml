@@ -16,7 +16,7 @@ readme = "README.md"
 name = "radroots_nostr_connect"
 
 [dependencies]
-nostr = { workspace = true, features = ["nip44"] }
+nostr = { workspace = true, features = ["std", "nip44"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

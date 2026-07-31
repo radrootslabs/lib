@@ -17,7 +17,7 @@ native = ["dep:radroots_sql_core", "radroots_sql_core/native"]
 
 [dependencies]
 hex = { workspace = true }
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["std"] }
 radroots_identity = { workspace = true, default-features = false, features = [
   "serde",
   "std",

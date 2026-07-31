@@ -54,7 +54,7 @@ hex = { version = "0.4", default-features = false, features = [
 sha2 = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["std"] }
 radroots_blossom = { workspace = true, default-features = false, features = [
   "serde",
   "std",
