@@ -4,7 +4,7 @@ use crate::message::{
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope,
 };
-use crate::method::RadrootsNostrConnectMethod;
+use crate::method::Method;
 use nostr::nips::nip44::{self, Version};
 use nostr::{Event, EventBuilder, Keys, Kind, PublicKey, RelayUrl, Tag};
 use std::future::Future;
@@ -42,7 +42,7 @@ impl RadrootsNostrConnectClientRequest {
         }
     }
 
-    pub fn method(&self) -> RadrootsNostrConnectMethod {
+    pub fn method(&self) -> Method {
         self.request.method()
     }
 
@@ -98,7 +98,7 @@ pub fn parse_response_event(
     client_keys: &Keys,
     target: &RadrootsNostrConnectClientTarget,
     request_id: &str,
-    method: &RadrootsNostrConnectMethod,
+    method: &Method,
     event: &Event,
 ) -> Result<RadrootsNostrConnectClientEventOutcome, RadrootsNostrConnectError> {
     if event.kind != Kind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND) {

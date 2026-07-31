@@ -1570,7 +1570,8 @@ mod tests {
                 request_message(
                     "req-custom",
                     RadrootsNostrConnectRequest::Custom {
-                        method: RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
+                        method: RadrootsNostrConnectMethod::custom("publish_note")
+                            .expect("valid custom NIP-46 method"),
                         params: vec![],
                     },
                 ),
@@ -1876,7 +1877,8 @@ mod tests {
         let custom = request_message(
             "req-eval-custom",
             RadrootsNostrConnectRequest::Custom {
-                method: RadrootsNostrConnectMethod::Custom("do_work".to_owned()),
+                method: RadrootsNostrConnectMethod::custom("do_work")
+                    .expect("valid custom NIP-46 method"),
                 params: vec![],
             },
         );

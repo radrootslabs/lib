@@ -1,7 +1,7 @@
 use crate::error::RadrootsNostrConnectError;
-use crate::method::RadrootsNostrConnectMethod;
-use crate::permission::RadrootsNostrConnectPermissions;
-use crate::uri::RadrootsNostrConnectClientMetadata;
+use crate::method::Method;
+use crate::permission::Permissions;
+use crate::uri::ClientMetadata;
 use nostr::{Event, JsonUtil, PublicKey, RelayUrl, UnsignedEvent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value, json};
@@ -14,7 +14,7 @@ pub const RADROOTS_NOSTR_CONNECT_RPC_KIND: u16 = 24_133;
 pub struct RadrootsNostrConnectRemoteSessionCapability {
     pub user_public_key: PublicKey,
     pub relays: Vec<RelayUrl>,
-    pub permissions: RadrootsNostrConnectPermissions,
+    pub permissions: Permissions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,8 +22,8 @@ pub enum RadrootsNostrConnectRequest {
     Connect {
         remote_signer_public_key: PublicKey,
         secret: Option<String>,
-        requested_permissions: RadrootsNostrConnectPermissions,
-        client_metadata: Option<RadrootsNostrConnectClientMetadata>,
+        requested_permissions: Permissions,
+        client_metadata: Option<ClientMetadata>,
     },
     GetPublicKey,
     GetSessionCapability,
@@ -48,25 +48,25 @@ pub enum RadrootsNostrConnectRequest {
     SwitchRelays,
     Logout,
     Custom {
-        method: RadrootsNostrConnectMethod,
+        method: Method,
         params: Vec<String>,
     },
 }
 
 impl RadrootsNostrConnectRequest {
-    pub fn method(&self) -> RadrootsNostrConnectMethod {
+    pub fn method(&self) -> Method {
         match self {
-            Self::Connect { .. } => RadrootsNostrConnectMethod::Connect,
-            Self::GetPublicKey => RadrootsNostrConnectMethod::GetPublicKey,
-            Self::GetSessionCapability => RadrootsNostrConnectMethod::GetSessionCapability,
-            Self::SignEvent(_) => RadrootsNostrConnectMethod::SignEvent,
-            Self::Nip04Encrypt { .. } => RadrootsNostrConnectMethod::Nip04Encrypt,
-            Self::Nip04Decrypt { .. } => RadrootsNostrConnectMethod::Nip04Decrypt,
-            Self::Nip44Encrypt { .. } => RadrootsNostrConnectMethod::Nip44Encrypt,
-            Self::Nip44Decrypt { .. } => RadrootsNostrConnectMethod::Nip44Decrypt,
-            Self::Ping => RadrootsNostrConnectMethod::Ping,
-            Self::SwitchRelays => RadrootsNostrConnectMethod::SwitchRelays,
-            Self::Logout => RadrootsNostrConnectMethod::Logout,
+            Self::Connect { .. } => Method::Connect,
+            Self::GetPublicKey => Method::GetPublicKey,
+            Self::GetSessionCapability => Method::GetSessionCapability,
+            Self::SignEvent(_) => Method::SignEvent,
+            Self::Nip04Encrypt { .. } => Method::Nip04Encrypt,
+            Self::Nip04Decrypt { .. } => Method::Nip04Decrypt,
+            Self::Nip44Encrypt { .. } => Method::Nip44Encrypt,
+            Self::Nip44Decrypt { .. } => Method::Nip44Decrypt,
+            Self::Ping => Method::Ping,
+            Self::SwitchRelays => Method::SwitchRelays,
+            Self::Logout => Method::Logout,
             Self::Custom { method, .. } => method.clone(),
         }
     }
@@ -123,11 +123,11 @@ impl RadrootsNostrConnectRequest {
     }
 
     pub fn from_parts(
-        method: RadrootsNostrConnectMethod,
+        method: Method,
         params: Vec<String>,
     ) -> Result<Self, RadrootsNostrConnectError> {
         match method {
-            RadrootsNostrConnectMethod::Connect => {
+            Method::Connect => {
                 if params.is_empty() || params.len() > 4 {
                     return Err(RadrootsNostrConnectError::InvalidParams {
                         method: method.to_string(),
@@ -138,12 +138,12 @@ impl RadrootsNostrConnectRequest {
                 let remote_signer_public_key = parse_public_key(&params[0])?;
                 let secret = params.get(1).cloned().filter(|value| !value.is_empty());
                 let requested_permissions = match params.get(2) {
-                    Some(value) => RadrootsNostrConnectPermissions::from_str(value)?,
-                    None => RadrootsNostrConnectPermissions::default(),
+                    Some(value) => Permissions::from_str(value)?,
+                    None => Permissions::default(),
                 };
                 let client_metadata = params
                     .get(3)
-                    .map(|value| RadrootsNostrConnectClientMetadata::from_connect_param(value))
+                    .map(|value| ClientMetadata::from_connect_param(value))
                     .transpose()?;
                 Ok(Self::Connect {
                     remote_signer_public_key,
@@ -152,15 +152,15 @@ impl RadrootsNostrConnectRequest {
                     client_metadata,
                 })
             }
-            RadrootsNostrConnectMethod::GetPublicKey => {
+            Method::GetPublicKey => {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::GetPublicKey)
             }
-            RadrootsNostrConnectMethod::GetSessionCapability => {
+            Method::GetSessionCapability => {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::GetSessionCapability)
             }
-            RadrootsNostrConnectMethod::SignEvent => {
+            Method::SignEvent => {
                 expect_param_count(&method, &params, 1)?;
                 let unsigned_event = serde_json::from_str(&params[0]).map_err(|error| {
                     RadrootsNostrConnectError::InvalidRequestPayload {
@@ -170,43 +170,43 @@ impl RadrootsNostrConnectRequest {
                 })?;
                 Ok(Self::SignEvent(unsigned_event))
             }
-            RadrootsNostrConnectMethod::Nip04Encrypt => {
+            Method::Nip04Encrypt => {
                 expect_param_count(&method, &params, 2)?;
                 Ok(Self::Nip04Encrypt {
                     public_key: parse_public_key(&params[0])?,
                     plaintext: params[1].clone(),
                 })
             }
-            RadrootsNostrConnectMethod::Nip04Decrypt => {
+            Method::Nip04Decrypt => {
                 expect_param_count(&method, &params, 2)?;
                 Ok(Self::Nip04Decrypt {
                     public_key: parse_public_key(&params[0])?,
                     ciphertext: params[1].clone(),
                 })
             }
-            RadrootsNostrConnectMethod::Nip44Encrypt => {
+            Method::Nip44Encrypt => {
                 expect_param_count(&method, &params, 2)?;
                 Ok(Self::Nip44Encrypt {
                     public_key: parse_public_key(&params[0])?,
                     plaintext: params[1].clone(),
                 })
             }
-            RadrootsNostrConnectMethod::Nip44Decrypt => {
+            Method::Nip44Decrypt => {
                 expect_param_count(&method, &params, 2)?;
                 Ok(Self::Nip44Decrypt {
                     public_key: parse_public_key(&params[0])?,
                     ciphertext: params[1].clone(),
                 })
             }
-            RadrootsNostrConnectMethod::Ping => {
+            Method::Ping => {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::Ping)
             }
-            RadrootsNostrConnectMethod::SwitchRelays => {
+            Method::SwitchRelays => {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::SwitchRelays)
             }
-            RadrootsNostrConnectMethod::Logout => {
+            Method::Logout => {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::Logout)
             }
@@ -439,7 +439,7 @@ impl RadrootsNostrConnectResponse {
     }
 
     pub fn from_envelope(
-        method: &RadrootsNostrConnectMethod,
+        method: &Method,
         envelope: RadrootsNostrConnectResponseEnvelope,
     ) -> Result<Self, RadrootsNostrConnectError> {
         if let (Some(Value::String(result)), Some(url)) = (&envelope.result, &envelope.error)
@@ -449,16 +449,13 @@ impl RadrootsNostrConnectResponse {
         }
 
         if let Some(error) = envelope.error {
-            if matches!(
-                method,
-                RadrootsNostrConnectMethod::GetPublicKey
-                    | RadrootsNostrConnectMethod::GetSessionCapability
-            ) && envelope.result.is_none()
+            if matches!(method, Method::GetPublicKey | Method::GetSessionCapability)
+                && envelope.result.is_none()
                 && error == RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR
             {
                 return Ok(Self::PendingConnection);
             }
-            if let RadrootsNostrConnectMethod::Custom(_) = method {
+            if let Method::Custom(_) = method {
                 return Ok(Self::Custom {
                     result: envelope.result,
                     error: Some(error),
@@ -471,7 +468,7 @@ impl RadrootsNostrConnectResponse {
         }
 
         match method {
-            RadrootsNostrConnectMethod::Connect => {
+            Method::Connect => {
                 let result = expect_string_result(method, envelope.result)?;
                 if result == "ack" {
                     Ok(Self::ConnectAcknowledged)
@@ -479,19 +476,19 @@ impl RadrootsNostrConnectResponse {
                     Ok(Self::ConnectSecretEcho(result))
                 }
             }
-            RadrootsNostrConnectMethod::GetPublicKey => {
+            Method::GetPublicKey => {
                 let result = expect_string_result(method, envelope.result)?;
                 Ok(Self::UserPublicKey(parse_public_key(&result)?))
             }
-            RadrootsNostrConnectMethod::GetSessionCapability => {
+            Method::GetSessionCapability => {
                 let capability = parse_json_string_result(method, envelope.result)?;
                 Ok(Self::RemoteSessionCapability(capability))
             }
-            RadrootsNostrConnectMethod::SignEvent => {
+            Method::SignEvent => {
                 let event = parse_json_string_result::<Event>(method, envelope.result)?;
                 Ok(Self::SignedEvent(event))
             }
-            RadrootsNostrConnectMethod::Ping => {
+            Method::Ping => {
                 let result = expect_string_result(method, envelope.result)?;
                 if result != "pong" {
                     return Err(RadrootsNostrConnectError::InvalidResponsePayload {
@@ -501,22 +498,24 @@ impl RadrootsNostrConnectResponse {
                 }
                 Ok(Self::Pong)
             }
-            RadrootsNostrConnectMethod::Nip04Encrypt => Ok(Self::Nip04Encrypt(
-                expect_string_result(method, envelope.result)?,
-            )),
-            RadrootsNostrConnectMethod::Nip04Decrypt => Ok(Self::Nip04Decrypt(
-                expect_string_result(method, envelope.result)?,
-            )),
-            RadrootsNostrConnectMethod::Nip44Encrypt => Ok(Self::Nip44Encrypt(
-                expect_string_result(method, envelope.result)?,
-            )),
-            RadrootsNostrConnectMethod::Nip44Decrypt => Ok(Self::Nip44Decrypt(
-                expect_string_result(method, envelope.result)?,
-            )),
-            RadrootsNostrConnectMethod::SwitchRelays => {
-                parse_switch_relays_response(envelope.result)
-            }
-            RadrootsNostrConnectMethod::Logout => {
+            Method::Nip04Encrypt => Ok(Self::Nip04Encrypt(expect_string_result(
+                method,
+                envelope.result,
+            )?)),
+            Method::Nip04Decrypt => Ok(Self::Nip04Decrypt(expect_string_result(
+                method,
+                envelope.result,
+            )?)),
+            Method::Nip44Encrypt => Ok(Self::Nip44Encrypt(expect_string_result(
+                method,
+                envelope.result,
+            )?)),
+            Method::Nip44Decrypt => Ok(Self::Nip44Decrypt(expect_string_result(
+                method,
+                envelope.result,
+            )?)),
+            Method::SwitchRelays => parse_switch_relays_response(envelope.result),
+            Method::Logout => {
                 let result = expect_string_result(method, envelope.result)?;
                 if result != "ack" {
                     return Err(RadrootsNostrConnectError::InvalidResponsePayload {
@@ -526,7 +525,7 @@ impl RadrootsNostrConnectResponse {
                 }
                 Ok(Self::LogoutAcknowledged)
             }
-            RadrootsNostrConnectMethod::Custom(_) => Ok(Self::Custom {
+            Method::Custom(_) => Ok(Self::Custom {
                 result: envelope.result,
                 error: None,
             }),
@@ -547,12 +546,12 @@ fn remote_session_capability_value(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct RawRequestMessage {
     id: String,
-    method: RadrootsNostrConnectMethod,
+    method: Method,
     params: Vec<String>,
 }
 
 fn expect_param_count(
-    method: &RadrootsNostrConnectMethod,
+    method: &Method,
     params: &[String],
     expected: usize,
 ) -> Result<(), RadrootsNostrConnectError> {
@@ -583,7 +582,7 @@ fn parse_public_key(value: &str) -> Result<PublicKey, RadrootsNostrConnectError>
 }
 
 fn expect_string_result(
-    method: &RadrootsNostrConnectMethod,
+    method: &Method,
     result: Option<Value>,
 ) -> Result<String, RadrootsNostrConnectError> {
     match result {
@@ -597,7 +596,7 @@ fn expect_string_result(
 }
 
 fn parse_json_string_result<T>(
-    method: &RadrootsNostrConnectMethod,
+    method: &Method,
     result: Option<Value>,
 ) -> Result<T, RadrootsNostrConnectError>
 where
@@ -623,7 +622,7 @@ where
 fn parse_switch_relays_response(
     result: Option<Value>,
 ) -> Result<RadrootsNostrConnectResponse, RadrootsNostrConnectError> {
-    let method = RadrootsNostrConnectMethod::SwitchRelays;
+    let method = Method::SwitchRelays;
     match result {
         None | Some(Value::Null) => Ok(RadrootsNostrConnectResponse::RelayListUnchanged),
         Some(Value::Array(values)) => {
@@ -660,7 +659,7 @@ fn parse_relay_values(values: Vec<Value>) -> Result<Vec<RelayUrl>, RadrootsNostr
                 }
             }),
             other => Err(RadrootsNostrConnectError::InvalidResponsePayload {
-                method: RadrootsNostrConnectMethod::SwitchRelays.to_string(),
+                method: Method::SwitchRelays.to_string(),
                 reason: format!("expected relay string, got {other}"),
             }),
         })

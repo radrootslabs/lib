@@ -1,8 +1,11 @@
 use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const METHOD: &str = include_str!("../src/method.rs");
+const PERMISSION: &str = include_str!("../src/permission.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
 const SERVER: &str = include_str!("../src/server.rs");
+const URI: &str = include_str!("../src/uri.rs");
 
 #[test]
 fn manifest_has_final_identity_feature_vocabulary_and_radroots_dependencies() {
@@ -64,6 +67,35 @@ fn crate_root_contains_the_approved_module_skeleton() {
         ROOT.contains("Step 143 removes this module"),
         "the temporary prelude must carry an exact removal checkpoint"
     );
+}
+
+#[test]
+fn uri_method_and_permission_types_use_canonical_owners_and_names() {
+    for root_export in [
+        "pub use method::Method;",
+        "pub use permission::Permission;",
+        "pub use uri::{BunkerUri, ClientUri};",
+    ] {
+        assert!(ROOT.contains(root_export), "missing `{root_export}`");
+    }
+    for forbidden in [
+        "pub enum RadrootsNostrConnectMethod",
+        "pub struct RadrootsNostrConnectPermission",
+        "pub struct RadrootsNostrConnectPermissions",
+    ] {
+        assert!(!METHOD.contains(forbidden));
+        assert!(!PERMISSION.contains(forbidden));
+    }
+    for forbidden in [
+        "pub struct RadrootsNostrConnectBunkerUri",
+        "pub struct RadrootsNostrConnectClientUri",
+        "pub enum RadrootsNostrConnectUri",
+        "use nostr::{PublicKey",
+    ] {
+        assert!(!URI.contains(forbidden), "URI source retains `{forbidden}`");
+    }
+    assert!(URI.contains("use radroots_identity::PublicKey;"));
+    assert!(URI.contains("radroots_nostr::key::parse_public_key"));
 }
 
 fn table_keys<'a>(source: &'a str, header: &str) -> BTreeSet<&'a str> {

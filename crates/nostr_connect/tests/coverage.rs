@@ -3,12 +3,11 @@ mod test_fixtures;
 
 use nostr::{Event, EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
-    RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR,
-    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectError, RadrootsNostrConnectMethod,
-    RadrootsNostrConnectPendingConnectionPollOutcome, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
+    CLIENT_URL_MAX_BYTES, ClientMetadata, Method, Permission, Permissions,
+    RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
+    RadrootsNostrConnectPendingConnectionPollOutcome, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
+    RadrootsNostrConnectResponseEnvelope, Uri,
 };
 use serde_json::{Value, json};
 use std::str::FromStr;
@@ -65,90 +64,80 @@ fn error_method_and_permission_surfaces_cover_public_paths() {
     ));
 
     let methods = [
-        (RadrootsNostrConnectMethod::Connect, "connect"),
-        (RadrootsNostrConnectMethod::GetPublicKey, "get_public_key"),
-        (
-            RadrootsNostrConnectMethod::GetSessionCapability,
-            "get_session_capability",
-        ),
-        (RadrootsNostrConnectMethod::SignEvent, "sign_event"),
-        (RadrootsNostrConnectMethod::Nip04Encrypt, "nip04_encrypt"),
-        (RadrootsNostrConnectMethod::Nip04Decrypt, "nip04_decrypt"),
-        (RadrootsNostrConnectMethod::Nip44Encrypt, "nip44_encrypt"),
-        (RadrootsNostrConnectMethod::Nip44Decrypt, "nip44_decrypt"),
-        (RadrootsNostrConnectMethod::Ping, "ping"),
-        (RadrootsNostrConnectMethod::SwitchRelays, "switch_relays"),
+        (Method::Connect, "connect"),
+        (Method::GetPublicKey, "get_public_key"),
+        (Method::GetSessionCapability, "get_session_capability"),
+        (Method::SignEvent, "sign_event"),
+        (Method::Nip04Encrypt, "nip04_encrypt"),
+        (Method::Nip04Decrypt, "nip04_decrypt"),
+        (Method::Nip44Encrypt, "nip44_encrypt"),
+        (Method::Nip44Decrypt, "nip44_decrypt"),
+        (Method::Ping, "ping"),
+        (Method::SwitchRelays, "switch_relays"),
     ];
     for (method, raw) in methods {
         assert_eq!(method.as_str(), raw);
         assert_eq!(method.to_string(), raw);
-        assert_eq!(
-            RadrootsNostrConnectMethod::from_str(raw).expect("parse method"),
-            method
-        );
+        assert_eq!(Method::from_str(raw).expect("parse method"), method);
     }
     assert_eq!(
-        RadrootsNostrConnectMethod::from_str("publish_note").expect("custom method"),
-        RadrootsNostrConnectMethod::Custom("publish_note".to_owned())
+        Method::from_str("publish_note").expect("custom method"),
+        Method::custom("publish_note").expect("valid custom NIP-46 method")
     );
     assert!(matches!(
-        RadrootsNostrConnectMethod::from_str(" "),
+        Method::from_str(" "),
         Err(RadrootsNostrConnectError::InvalidMethod(value)) if value == " "
     ));
     assert_eq!(
-        serde_json::from_str::<RadrootsNostrConnectMethod>("\"do_work\"")
-            .expect("deserialize custom method"),
-        RadrootsNostrConnectMethod::Custom("do_work".to_owned())
+        serde_json::from_str::<Method>("\"do_work\"").expect("deserialize custom method"),
+        Method::custom("do_work").expect("valid custom NIP-46 method")
     );
     assert!(
-        serde_json::from_str::<RadrootsNostrConnectMethod>("123")
+        serde_json::from_str::<Method>("123")
             .expect_err("non-string method")
             .to_string()
             .contains("invalid type")
     );
     assert!(
-        serde_json::from_str::<RadrootsNostrConnectMethod>("\"\"")
+        serde_json::from_str::<Method>("\"\"")
             .expect_err("blank method")
             .to_string()
             .contains("invalid NIP-46 method")
     );
 
-    let simple = RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping);
+    let simple = Permission::new(Method::Ping);
     assert_eq!(simple.to_string(), "ping");
-    let parameterized = RadrootsNostrConnectPermission::with_parameter(
-        RadrootsNostrConnectMethod::SignEvent,
-        "1059",
-    );
+    let parameterized = Permission::with_parameter(Method::SignEvent, "1059");
     assert_eq!(parameterized.to_string(), "sign_event:1059");
     assert_eq!(
-        RadrootsNostrConnectPermission::from_str("sign_event:1059").expect("parse permission"),
+        Permission::from_str("sign_event:1059").expect("parse permission"),
         parameterized
     );
     assert!(matches!(
-        RadrootsNostrConnectPermission::from_str(" "),
+        Permission::from_str(" "),
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == " "
     ));
     assert!(matches!(
-        RadrootsNostrConnectPermission::from_str("sign_event:"),
+        Permission::from_str("sign_event:"),
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == "sign_event:"
     ));
     assert!(matches!(
-        RadrootsNostrConnectPermission::from_str(" :kind"),
+        Permission::from_str(" :kind"),
         Err(RadrootsNostrConnectError::InvalidMethod(_))
     ));
 
-    let empty = RadrootsNostrConnectPermissions::new();
+    let empty = Permissions::new();
     assert!(empty.is_empty());
     assert!(empty.as_slice().is_empty());
     assert!(empty.clone().into_vec().is_empty());
     assert_eq!(
-        RadrootsNostrConnectPermissions::from_str("  ").expect("empty permissions"),
+        Permissions::from_str("  ").expect("empty permissions"),
         empty
     );
 
-    let permissions = RadrootsNostrConnectPermissions::from(vec![
-        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Encrypt),
-        RadrootsNostrConnectPermission::with_parameter(RadrootsNostrConnectMethod::SignEvent, "13"),
+    let permissions = Permissions::from(vec![
+        Permission::new(Method::Nip44Encrypt),
+        Permission::with_parameter(Method::SignEvent, "13"),
     ]);
     assert_eq!(permissions.to_string(), "nip44_encrypt,sign_event:13");
     assert_eq!(
@@ -156,88 +145,60 @@ fn error_method_and_permission_surfaces_cover_public_paths() {
         "\"nip44_encrypt,sign_event:13\""
     );
     assert_eq!(
-        serde_json::from_str::<RadrootsNostrConnectPermissions>("\"nip44_encrypt,sign_event:13\"")
+        serde_json::from_str::<Permissions>("\"nip44_encrypt,sign_event:13\"")
             .expect("deserialize permissions"),
         permissions
     );
     assert!(
-        serde_json::from_str::<RadrootsNostrConnectPermissions>("123")
+        serde_json::from_str::<Permissions>("123")
             .expect_err("non-string permissions")
             .to_string()
             .contains("invalid type")
     );
     assert!(matches!(
-        RadrootsNostrConnectPermissions::from_str("sign_event:,ping"),
+        Permissions::from_str("sign_event:,ping"),
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == "sign_event:"
     ));
 
-    let all_sign_events =
-        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::SignEvent);
+    let all_sign_events = Permission::new(Method::SignEvent);
     assert!(all_sign_events.matches_sign_event_kind(30402));
-    assert!(all_sign_events.matches_request(&RadrootsNostrConnectMethod::SignEvent, None));
-    assert!(!all_sign_events.matches_request(&RadrootsNostrConnectMethod::Ping, None));
+    assert!(all_sign_events.matches_request(&Method::SignEvent, None));
+    assert!(!all_sign_events.matches_request(&Method::Ping, None));
 
-    let numeric_sign_event = RadrootsNostrConnectPermission::with_parameter(
-        RadrootsNostrConnectMethod::SignEvent,
-        "30402",
-    );
-    let kind_prefixed_sign_event = RadrootsNostrConnectPermission::with_parameter(
-        RadrootsNostrConnectMethod::SignEvent,
-        "kind:30402",
-    );
+    let numeric_sign_event = Permission::with_parameter(Method::SignEvent, "30402");
+    let kind_prefixed_sign_event = Permission::with_parameter(Method::SignEvent, "kind:30402");
     assert!(numeric_sign_event.matches_sign_event_kind(30402));
     assert!(kind_prefixed_sign_event.matches_sign_event_kind(30402));
-    assert!(
-        numeric_sign_event
-            .matches_request(&RadrootsNostrConnectMethod::SignEvent, Some("kind:30402"))
-    );
+    assert!(numeric_sign_event.matches_request(&Method::SignEvent, Some("kind:30402")));
     assert!(!numeric_sign_event.matches_sign_event_kind(3040));
     assert!(
-        !RadrootsNostrConnectPermission::with_parameter(
-            RadrootsNostrConnectMethod::SignEvent,
-            "130402"
-        )
-        .matches_sign_event_kind(30402)
+        !Permission::with_parameter(Method::SignEvent, "130402").matches_sign_event_kind(30402)
     );
     assert!(
-        !RadrootsNostrConnectPermission::with_parameter(
-            RadrootsNostrConnectMethod::SignEvent,
-            "not-a-kind"
-        )
-        .matches_request(
-            &RadrootsNostrConnectMethod::SignEvent,
-            Some("also-not-a-kind")
-        )
+        !Permission::with_parameter(Method::SignEvent, "not-a-kind")
+            .matches_request(&Method::SignEvent, Some("also-not-a-kind"))
     );
+    assert!(!Permission::with_parameter(Method::SignEvent, "kind:").matches_sign_event_kind(30402));
+    let encrypt_permission =
+        Permission::with_parameter(Method::Nip44Encrypt, test_public_key().to_hex());
     assert!(
-        !RadrootsNostrConnectPermission::with_parameter(
-            RadrootsNostrConnectMethod::SignEvent,
-            "kind:"
-        )
-        .matches_sign_event_kind(30402)
+        encrypt_permission
+            .matches_request(&Method::Nip44Encrypt, Some(&test_public_key().to_hex()))
     );
-    let encrypt_permission = RadrootsNostrConnectPermission::with_parameter(
-        RadrootsNostrConnectMethod::Nip44Encrypt,
-        test_public_key().to_hex(),
-    );
-    assert!(encrypt_permission.matches_request(
-        &RadrootsNostrConnectMethod::Nip44Encrypt,
-        Some(&test_public_key().to_hex())
-    ));
-    assert!(!encrypt_permission.matches_request(&RadrootsNostrConnectMethod::Nip44Encrypt, None));
+    assert!(!encrypt_permission.matches_request(&Method::Nip44Encrypt, None));
 
-    let typed_permissions = RadrootsNostrConnectPermissions::from(vec![
-        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+    let typed_permissions = Permissions::from(vec![
+        Permission::new(Method::Ping),
         kind_prefixed_sign_event,
     ]);
-    assert!(typed_permissions.allows_request(&RadrootsNostrConnectMethod::Ping, None));
+    assert!(typed_permissions.allows_request(&Method::Ping, None));
     assert!(typed_permissions.allows_sign_event_kind(30402));
     assert!(!typed_permissions.allows_sign_event_kind(0));
 }
 
 #[test]
 fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
-    let bunker = RadrootsNostrConnectUri::parse(&format!(
+    let bunker = Uri::parse(&format!(
         "bunker://{}?relay={}&foo=bar",
         FIXTURE_ALICE.public_key_hex,
         encode_uri_component(RELAY_PRIMARY_WSS),
@@ -250,7 +211,7 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
     )));
     assert!(!bunker_rendered.contains("secret="));
 
-    let minimal_client: RadrootsNostrConnectUri = format!(
+    let minimal_client: Uri = format!(
         "nostrconnect://{}?relay={}&secret=shared",
         FIXTURE_ALICE.public_key_hex,
         encode_uri_component(RELAY_PRIMARY_WSS),
@@ -264,7 +225,7 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
     assert!(!minimal_client_rendered.contains("url="));
     assert!(!minimal_client_rendered.contains("image="));
 
-    let metadata_client = RadrootsNostrConnectUri::parse(&format!(
+    let metadata_client = Uri::parse(&format!(
         "nostrconnect://{}?relay={}&secret=shared&perms=ping&name=myc&url={}&image={}&ignored=value",
         FIXTURE_ALICE.public_key_hex,
         encode_uri_component(RELAY_PRIMARY_WSS),
@@ -282,28 +243,26 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
     assert!(metadata_rendered.contains(&format!("image={}", encode_uri_component(&logo_url()))));
 
     assert!(matches!(
-        RadrootsNostrConnectUri::parse("not a uri"),
+        Uri::parse("not a uri"),
         Err(RadrootsNostrConnectError::InvalidUrl { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect:///path?relay=wss%3A%2F%2Frelay.example.com&secret=abc"
-        ),
+        Uri::parse("nostrconnect:///path?relay=wss%3A%2F%2Frelay.example.com&secret=abc"),
         Err(RadrootsNostrConnectError::MissingPublicKey)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!("bunker://{}", FIXTURE_ALICE.public_key_hex)),
+        Uri::parse(&format!("bunker://{}", FIXTURE_ALICE.public_key_hex)),
         Err(RadrootsNostrConnectError::MissingRelay)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?secret=abc",
             FIXTURE_ALICE.public_key_hex
         )),
         Err(RadrootsNostrConnectError::MissingRelay)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?relay={}",
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
@@ -311,24 +270,22 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::MissingSecret)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse("https://example.com"),
+        Uri::parse("https://example.com"),
         Err(RadrootsNostrConnectError::InvalidUriScheme(value)) if value == "https"
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://bad-key?relay=wss%3A%2F%2Frelay.example.com&secret=abc"
-        ),
+        Uri::parse("nostrconnect://bad-key?relay=wss%3A%2F%2Frelay.example.com&secret=abc"),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?relay=http%3A%2F%2Frelay.example.com&secret=abc",
             FIXTURE_ALICE.public_key_hex
         )),
         Err(RadrootsNostrConnectError::InvalidRelayUrl { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?relay={}&secret=abc&url=not-a-url",
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
@@ -336,18 +293,18 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "url", .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse("bunker://bad-key?relay=wss%3A%2F%2Frelay.example.com"),
+        Uri::parse("bunker://bad-key?relay=wss%3A%2F%2Frelay.example.com"),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "bunker://{}?relay=http%3A%2F%2Frelay.example.com",
             FIXTURE_ALICE.public_key_hex
         )),
         Err(RadrootsNostrConnectError::InvalidRelayUrl { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?relay={}&secret=abc&perms=sign_event%3A",
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
@@ -355,7 +312,7 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == "sign_event:"
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?relay={}&secret=abc&image=not-a-url",
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
@@ -363,7 +320,7 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "image", .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(&format!(
+        Uri::parse(&format!(
             "nostrconnect://{}?relay={}&secret=",
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
@@ -374,9 +331,9 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
 
 #[test]
 fn client_metadata_rejects_malformed_and_unsafe_display_fields() {
-    let empty = RadrootsNostrConnectClientMetadata::default();
+    let empty = ClientMetadata::default();
     assert!(empty.is_display_empty());
-    let decoded: RadrootsNostrConnectClientMetadata = serde_json::from_value(json!({
+    let decoded: ClientMetadata = serde_json::from_value(json!({
         "requested_permissions": "ping",
         "name": " client ",
         "url": APP_PRIMARY_HTTPS,
@@ -389,21 +346,21 @@ fn client_metadata_rejects_malformed_and_unsafe_display_fields() {
         Some(format!("{APP_PRIMARY_HTTPS}/").as_str())
     );
     assert!(
-        serde_json::from_value::<RadrootsNostrConnectClientMetadata>(json!({
+        serde_json::from_value::<ClientMetadata>(json!({
             "name": "line\nbreak"
         }))
         .is_err()
     );
     for metadata in [
-        RadrootsNostrConnectClientMetadata {
+        ClientMetadata {
             name: Some("client".to_owned()),
             ..empty.clone()
         },
-        RadrootsNostrConnectClientMetadata {
+        ClientMetadata {
             url: Some(APP_PRIMARY_HTTPS.to_owned()),
             ..empty.clone()
         },
-        RadrootsNostrConnectClientMetadata {
+        ClientMetadata {
             image: Some(logo_url()),
             ..empty.clone()
         },
@@ -412,7 +369,7 @@ fn client_metadata_rejects_malformed_and_unsafe_display_fields() {
     }
 
     assert!(matches!(
-        RadrootsNostrConnectClientMetadata::from_connect_param("{"),
+        ClientMetadata::from_connect_param("{"),
         Err(RadrootsNostrConnectError::InvalidClientMetadata {
             field: "payload",
             ..
@@ -420,15 +377,12 @@ fn client_metadata_rejects_malformed_and_unsafe_display_fields() {
     ));
 
     for (value, field) in [
-        (
-            "x".repeat(RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES + 1),
-            "url",
-        ),
+        ("x".repeat(CLIENT_URL_MAX_BYTES + 1), "url"),
         ("https://example.com/\n".to_owned(), "url"),
         ("https://user@example.com".to_owned(), "url"),
         ("https://:secret@example.com".to_owned(), "image"),
     ] {
-        let metadata = RadrootsNostrConnectClientMetadata {
+        let metadata = ClientMetadata {
             url: (field == "url").then_some(value.clone()),
             image: (field == "image").then_some(value),
             ..empty.clone()
@@ -445,20 +399,17 @@ fn client_metadata_rejects_malformed_and_unsafe_display_fields() {
 
 #[test]
 fn request_surface_covers_variant_methods_serialization_and_validation() {
-    let ping_permission =
-        RadrootsNostrConnectPermissions::from(vec![RadrootsNostrConnectPermission::new(
-            RadrootsNostrConnectMethod::Ping,
-        )]);
+    let ping_permission = Permissions::from(vec![Permission::new(Method::Ping)]);
 
     let requests = vec![
         (
             RadrootsNostrConnectRequest::Connect {
                 remote_signer_public_key: test_public_key(),
                 secret: None,
-                requested_permissions: RadrootsNostrConnectPermissions::default(),
+                requested_permissions: Permissions::default(),
                 client_metadata: None,
             },
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             vec![test_public_key().to_hex()],
         ),
         (
@@ -468,22 +419,22 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 requested_permissions: ping_permission.clone(),
                 client_metadata: None,
             },
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             vec![test_public_key().to_hex(), String::new(), "ping".to_owned()],
         ),
         (
             RadrootsNostrConnectRequest::GetPublicKey,
-            RadrootsNostrConnectMethod::GetPublicKey,
+            Method::GetPublicKey,
             Vec::new(),
         ),
         (
             RadrootsNostrConnectRequest::GetSessionCapability,
-            RadrootsNostrConnectMethod::GetSessionCapability,
+            Method::GetSessionCapability,
             Vec::new(),
         ),
         (
             RadrootsNostrConnectRequest::SignEvent(unsigned_event()),
-            RadrootsNostrConnectMethod::SignEvent,
+            Method::SignEvent,
             vec![serde_json::to_string(&unsigned_event()).expect("serialize unsigned event")],
         ),
         (
@@ -491,7 +442,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 public_key: test_public_key(),
                 plaintext: "hello".to_owned(),
             },
-            RadrootsNostrConnectMethod::Nip04Encrypt,
+            Method::Nip04Encrypt,
             vec![test_public_key().to_hex(), "hello".to_owned()],
         ),
         (
@@ -499,7 +450,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 public_key: test_public_key(),
                 ciphertext: "cipher".to_owned(),
             },
-            RadrootsNostrConnectMethod::Nip04Decrypt,
+            Method::Nip04Decrypt,
             vec![test_public_key().to_hex(), "cipher".to_owned()],
         ),
         (
@@ -507,7 +458,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 public_key: test_public_key(),
                 plaintext: "hello".to_owned(),
             },
-            RadrootsNostrConnectMethod::Nip44Encrypt,
+            Method::Nip44Encrypt,
             vec![test_public_key().to_hex(), "hello".to_owned()],
         ),
         (
@@ -515,30 +466,26 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 public_key: test_public_key(),
                 ciphertext: "cipher".to_owned(),
             },
-            RadrootsNostrConnectMethod::Nip44Decrypt,
+            Method::Nip44Decrypt,
             vec![test_public_key().to_hex(), "cipher".to_owned()],
         ),
-        (
-            RadrootsNostrConnectRequest::Ping,
-            RadrootsNostrConnectMethod::Ping,
-            Vec::new(),
-        ),
+        (RadrootsNostrConnectRequest::Ping, Method::Ping, Vec::new()),
         (
             RadrootsNostrConnectRequest::SwitchRelays,
-            RadrootsNostrConnectMethod::SwitchRelays,
+            Method::SwitchRelays,
             Vec::new(),
         ),
         (
             RadrootsNostrConnectRequest::Logout,
-            RadrootsNostrConnectMethod::Logout,
+            Method::Logout,
             Vec::new(),
         ),
         (
             RadrootsNostrConnectRequest::Custom {
-                method: RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
+                method: Method::custom("publish_note").expect("valid custom NIP-46 method"),
                 params: vec!["one".to_owned(), "two".to_owned()],
             },
-            RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
+            Method::custom("publish_note").expect("valid custom NIP-46 method"),
             vec!["one".to_owned(), "two".to_owned()],
         ),
     ];
@@ -548,52 +495,41 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     }
 
     assert_eq!(
-        RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Connect,
-            vec![test_public_key().to_hex()],
-        )
-        .expect("connect without secret or perms"),
+        RadrootsNostrConnectRequest::from_parts(Method::Connect, vec![test_public_key().to_hex()],)
+            .expect("connect without secret or perms"),
         RadrootsNostrConnectRequest::Connect {
             remote_signer_public_key: test_public_key(),
             secret: None,
-            requested_permissions: RadrootsNostrConnectPermissions::default(),
+            requested_permissions: Permissions::default(),
             client_metadata: None,
         }
     );
     assert_eq!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             vec![test_public_key().to_hex(), String::new(), "ping".to_owned()],
         )
         .expect("connect with empty secret"),
         RadrootsNostrConnectRequest::Connect {
             remote_signer_public_key: test_public_key(),
             secret: None,
-            requested_permissions: RadrootsNostrConnectPermissions::from(vec![
-                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
-            ]),
+            requested_permissions: Permissions::from(vec![Permission::new(Method::Ping),]),
             client_metadata: None,
         }
     );
     assert_eq!(
-        RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::GetPublicKey,
-            Vec::new(),
-        )
-        .expect("get_public_key from parts"),
+        RadrootsNostrConnectRequest::from_parts(Method::GetPublicKey, Vec::new(),)
+            .expect("get_public_key from parts"),
         RadrootsNostrConnectRequest::GetPublicKey
     );
     assert_eq!(
-        RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::GetSessionCapability,
-            Vec::new(),
-        )
-        .expect("get_session_capability from parts"),
+        RadrootsNostrConnectRequest::from_parts(Method::GetSessionCapability, Vec::new(),)
+            .expect("get_session_capability from parts"),
         RadrootsNostrConnectRequest::GetSessionCapability
     );
     assert_eq!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip04Encrypt,
+            Method::Nip04Encrypt,
             vec![test_public_key().to_hex(), "hello".to_owned()],
         )
         .expect("nip04 encrypt from parts"),
@@ -604,7 +540,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     );
     assert_eq!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip04Decrypt,
+            Method::Nip04Decrypt,
             vec![test_public_key().to_hex(), "cipher".to_owned()],
         )
         .expect("nip04 decrypt from parts"),
@@ -615,7 +551,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     );
     assert_eq!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip44Encrypt,
+            Method::Nip44Encrypt,
             vec![test_public_key().to_hex(), "hello".to_owned()],
         )
         .expect("nip44 encrypt from parts"),
@@ -626,7 +562,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     );
     assert_eq!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip44Decrypt,
+            Method::Nip44Decrypt,
             vec![test_public_key().to_hex(), "cipher".to_owned()],
         )
         .expect("nip44 decrypt from parts"),
@@ -636,70 +572,46 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
         }
     );
     assert_eq!(
-        RadrootsNostrConnectRequest::from_parts(RadrootsNostrConnectMethod::Ping, Vec::new())
-            .expect("ping from parts"),
+        RadrootsNostrConnectRequest::from_parts(Method::Ping, Vec::new()).expect("ping from parts"),
         RadrootsNostrConnectRequest::Ping
     );
     assert_eq!(
-        RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::SwitchRelays,
-            Vec::new(),
-        )
-        .expect("switch relays from parts"),
+        RadrootsNostrConnectRequest::from_parts(Method::SwitchRelays, Vec::new(),)
+            .expect("switch relays from parts"),
         RadrootsNostrConnectRequest::SwitchRelays
     );
 
     for (method, params, expected_error) in [
+        (Method::GetPublicKey, vec!["oops".to_owned()], "no params"),
         (
-            RadrootsNostrConnectMethod::GetPublicKey,
+            Method::GetSessionCapability,
             vec!["oops".to_owned()],
             "no params",
         ),
+        (Method::SignEvent, Vec::new(), "exactly 1 param"),
         (
-            RadrootsNostrConnectMethod::GetSessionCapability,
-            vec!["oops".to_owned()],
-            "no params",
-        ),
-        (
-            RadrootsNostrConnectMethod::SignEvent,
-            Vec::new(),
-            "exactly 1 param",
-        ),
-        (
-            RadrootsNostrConnectMethod::Nip04Encrypt,
+            Method::Nip04Encrypt,
             vec!["only-one".to_owned()],
             "exactly 2 params",
         ),
         (
-            RadrootsNostrConnectMethod::Nip04Decrypt,
+            Method::Nip04Decrypt,
             vec!["only-one".to_owned()],
             "exactly 2 params",
         ),
         (
-            RadrootsNostrConnectMethod::Nip44Encrypt,
+            Method::Nip44Encrypt,
             vec!["only-one".to_owned()],
             "exactly 2 params",
         ),
         (
-            RadrootsNostrConnectMethod::Nip44Decrypt,
+            Method::Nip44Decrypt,
             vec!["only-one".to_owned()],
             "exactly 2 params",
         ),
-        (
-            RadrootsNostrConnectMethod::Ping,
-            vec!["oops".to_owned()],
-            "no params",
-        ),
-        (
-            RadrootsNostrConnectMethod::SwitchRelays,
-            vec!["oops".to_owned()],
-            "no params",
-        ),
-        (
-            RadrootsNostrConnectMethod::Logout,
-            vec!["oops".to_owned()],
-            "no params",
-        ),
+        (Method::Ping, vec!["oops".to_owned()], "no params"),
+        (Method::SwitchRelays, vec!["oops".to_owned()], "no params"),
+        (Method::Logout, vec!["oops".to_owned()], "no params"),
     ] {
         assert!(matches!(
             RadrootsNostrConnectRequest::from_parts(method, params),
@@ -707,27 +619,24 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
         ));
     }
     assert!(matches!(
-        RadrootsNostrConnectRequest::from_parts(RadrootsNostrConnectMethod::Connect, Vec::new()),
+        RadrootsNostrConnectRequest::from_parts(Method::Connect, Vec::new()),
         Err(RadrootsNostrConnectError::InvalidParams { expected, received, .. })
             if expected == "1 to 4 params" && received == 0
     ));
     assert!(matches!(
-        RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Connect,
-            vec!["bad-key".to_owned()],
-        ),
+        RadrootsNostrConnectRequest::from_parts(Method::Connect, vec!["bad-key".to_owned()],),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             vec![test_public_key().to_hex(), "secret".to_owned(), "sign_event:".to_owned()],
         ),
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == "sign_event:"
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             vec![
                 test_public_key().to_hex(),
                 "secret".to_owned(),
@@ -740,36 +649,33 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             if expected == "1 to 4 params" && received == 5
     ));
     assert!(matches!(
-        RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::SignEvent,
-            vec!["not-json".to_owned()],
-        ),
+        RadrootsNostrConnectRequest::from_parts(Method::SignEvent, vec!["not-json".to_owned()],),
         Err(RadrootsNostrConnectError::InvalidRequestPayload { .. })
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip04Encrypt,
+            Method::Nip04Encrypt,
             vec!["bad-key".to_owned(), "hello".to_owned()],
         ),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip04Decrypt,
+            Method::Nip04Decrypt,
             vec!["bad-key".to_owned(), "cipher".to_owned()],
         ),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip44Encrypt,
+            Method::Nip44Encrypt,
             vec!["bad-key".to_owned(), "hello".to_owned()],
         ),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Nip44Decrypt,
+            Method::Nip44Decrypt,
             vec!["bad-key".to_owned(), "cipher".to_owned()],
         ),
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
@@ -778,7 +684,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     let custom_message = RadrootsNostrConnectRequestMessage::new(
         "req-custom",
         RadrootsNostrConnectRequest::Custom {
-            method: RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
+            method: Method::custom("publish_note").expect("valid custom NIP-46 method"),
             params: vec!["a".to_owned()],
         },
     );
@@ -809,72 +715,69 @@ fn response_surface_covers_success_and_error_paths() {
         radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
             user_public_key: test_public_key(),
             relays: vec![relay(RELAY_PRIMARY_WSS), relay(RELAY_SECONDARY_WSS)],
-            permissions: RadrootsNostrConnectPermissions::from(vec![
-                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
-                RadrootsNostrConnectPermission::with_parameter(
-                    RadrootsNostrConnectMethod::SignEvent,
-                    "kind:1",
-                ),
+            permissions: Permissions::from(vec![
+                Permission::new(Method::Ping),
+                Permission::with_parameter(Method::SignEvent, "kind:1"),
             ]),
         };
     let cases = vec![
         (
             RadrootsNostrConnectResponse::ConnectAcknowledged,
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             RadrootsNostrConnectResponse::ConnectAcknowledged,
         ),
         (
             RadrootsNostrConnectResponse::ConnectSecretEcho("secret".to_owned()),
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             RadrootsNostrConnectResponse::ConnectSecretEcho("secret".to_owned()),
         ),
         (
             RadrootsNostrConnectResponse::UserPublicKey(test_public_key()),
-            RadrootsNostrConnectMethod::GetPublicKey,
+            Method::GetPublicKey,
             RadrootsNostrConnectResponse::UserPublicKey(test_public_key()),
         ),
         (
             RadrootsNostrConnectResponse::PendingConnection,
-            RadrootsNostrConnectMethod::GetSessionCapability,
+            Method::GetSessionCapability,
             RadrootsNostrConnectResponse::PendingConnection,
         ),
         (
             RadrootsNostrConnectResponse::RemoteSessionCapability(
                 remote_session_capability.clone(),
             ),
-            RadrootsNostrConnectMethod::GetSessionCapability,
+            Method::GetSessionCapability,
             RadrootsNostrConnectResponse::RemoteSessionCapability(
                 remote_session_capability.clone(),
             ),
         ),
         (
             RadrootsNostrConnectResponse::SignedEvent(event.clone()),
-            RadrootsNostrConnectMethod::SignEvent,
+            Method::SignEvent,
             RadrootsNostrConnectResponse::SignedEvent(event.clone()),
         ),
         (
             RadrootsNostrConnectResponse::Pong,
-            RadrootsNostrConnectMethod::Ping,
+            Method::Ping,
             RadrootsNostrConnectResponse::Pong,
         ),
         (
             RadrootsNostrConnectResponse::Nip04Encrypt("cipher".to_owned()),
-            RadrootsNostrConnectMethod::Nip04Encrypt,
+            Method::Nip04Encrypt,
             RadrootsNostrConnectResponse::Nip04Encrypt("cipher".to_owned()),
         ),
         (
             RadrootsNostrConnectResponse::Nip04Decrypt("plain".to_owned()),
-            RadrootsNostrConnectMethod::Nip04Decrypt,
+            Method::Nip04Decrypt,
             RadrootsNostrConnectResponse::Nip04Decrypt("plain".to_owned()),
         ),
         (
             RadrootsNostrConnectResponse::Nip44Encrypt("cipher".to_owned()),
-            RadrootsNostrConnectMethod::Nip44Encrypt,
+            Method::Nip44Encrypt,
             RadrootsNostrConnectResponse::Nip44Encrypt("cipher".to_owned()),
         ),
         (
             RadrootsNostrConnectResponse::Nip44Decrypt("plain".to_owned()),
-            RadrootsNostrConnectMethod::Nip44Decrypt,
+            Method::Nip44Decrypt,
             RadrootsNostrConnectResponse::Nip44Decrypt("plain".to_owned()),
         ),
         (
@@ -882,7 +785,7 @@ fn response_surface_covers_success_and_error_paths() {
                 relay(RELAY_SECONDARY_WSS),
                 relay(RELAY_TERTIARY_WSS),
             ]),
-            RadrootsNostrConnectMethod::SwitchRelays,
+            Method::SwitchRelays,
             RadrootsNostrConnectResponse::RelayList(vec![
                 relay(RELAY_SECONDARY_WSS),
                 relay(RELAY_TERTIARY_WSS),
@@ -890,7 +793,7 @@ fn response_surface_covers_success_and_error_paths() {
         ),
         (
             RadrootsNostrConnectResponse::RelayListUnchanged,
-            RadrootsNostrConnectMethod::SwitchRelays,
+            Method::SwitchRelays,
             RadrootsNostrConnectResponse::RelayListUnchanged,
         ),
     ];
@@ -922,17 +825,14 @@ fn response_surface_covers_success_and_error_paths() {
             .into_envelope("req-auth")
             .expect("serialize auth_url");
     assert_eq!(
-        RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SignEvent,
-            auth_envelope,
-        )
-        .expect("parse auth_url"),
+        RadrootsNostrConnectResponse::from_envelope(&Method::SignEvent, auth_envelope,)
+            .expect("parse auth_url"),
         RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/challenge".to_owned())
     );
 
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
+            &Method::custom("publish_note").expect("valid custom NIP-46 method"),
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-custom".to_owned(),
                 result: Some(json!("ok")),
@@ -947,7 +847,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
+            &Method::custom("publish_note").expect("valid custom NIP-46 method"),
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-custom".to_owned(),
                 result: Some(json!({"ok": true})),
@@ -962,7 +862,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetPublicKey,
+            &Method::GetPublicKey,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-pending".to_owned(),
                 result: None,
@@ -974,7 +874,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetSessionCapability,
+            &Method::GetSessionCapability,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-pending-capability".to_owned(),
                 result: None,
@@ -986,7 +886,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetPublicKey,
+            &Method::GetPublicKey,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-nonpending-public-key".to_owned(),
                 result: None,
@@ -1001,7 +901,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetSessionCapability,
+            &Method::GetSessionCapability,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-capability-error-with-result".to_owned(),
                 result: Some(json!({"code": "retry"})),
@@ -1016,7 +916,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetSessionCapability,
+            &Method::GetSessionCapability,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-capability-invalid-result".to_owned(),
                 result: Some(json!({"permissions": "ping"})),
@@ -1028,7 +928,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetSessionCapability,
+            &Method::GetSessionCapability,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-capability-string-result".to_owned(),
                 result: Some(json!(
@@ -1043,7 +943,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetSessionCapability,
+            &Method::GetSessionCapability,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-capability-invalid-string".to_owned(),
                 result: Some(json!("{")),
@@ -1055,7 +955,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Ping,
+            &Method::Ping,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-error".to_owned(),
                 result: Some(json!("partial")),
@@ -1070,7 +970,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SignEvent,
+            &Method::SignEvent,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-event".to_owned(),
                 result: Some(serde_json::to_value(&event).expect("event value")),
@@ -1082,7 +982,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SwitchRelays,
+            &Method::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
                 result: Some(json!("null")),
@@ -1094,7 +994,7 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SwitchRelays,
+            &Method::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
                 result: Some(json!(format!("[\"{RELAY_SECONDARY_WSS}\"]"))),
@@ -1111,7 +1011,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SignEvent,
+            &Method::SignEvent,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-auth".to_owned(),
                 result: Some(json!("auth_url")),
@@ -1122,7 +1022,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetPublicKey,
+            &Method::GetPublicKey,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-key".to_owned(),
                 result: Some(json!("bad-key")),
@@ -1133,7 +1033,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Connect,
+            &Method::Connect,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-connect".to_owned(),
                 result: None,
@@ -1144,7 +1044,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetPublicKey,
+            &Method::GetPublicKey,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-key".to_owned(),
                 result: None,
@@ -1155,7 +1055,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Ping,
+            &Method::Ping,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-ping".to_owned(),
                 result: Some(json!("nope")),
@@ -1166,7 +1066,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Ping,
+            &Method::Ping,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-ping".to_owned(),
                 result: None,
@@ -1177,7 +1077,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Nip04Encrypt,
+            &Method::Nip04Encrypt,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-nip04".to_owned(),
                 result: Some(json!(5)),
@@ -1188,7 +1088,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Nip04Encrypt,
+            &Method::Nip04Encrypt,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-nip04".to_owned(),
                 result: None,
@@ -1199,7 +1099,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SignEvent,
+            &Method::SignEvent,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-event".to_owned(),
                 result: Some(json!("not-json")),
@@ -1210,7 +1110,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SignEvent,
+            &Method::SignEvent,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-event".to_owned(),
                 result: Some(json!(5)),
@@ -1221,7 +1121,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SignEvent,
+            &Method::SignEvent,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-event".to_owned(),
                 result: None,
@@ -1232,7 +1132,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Nip04Decrypt,
+            &Method::Nip04Decrypt,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-nip04d".to_owned(),
                 result: None,
@@ -1243,7 +1143,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Nip44Encrypt,
+            &Method::Nip44Encrypt,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-nip44e".to_owned(),
                 result: None,
@@ -1254,7 +1154,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Nip44Decrypt,
+            &Method::Nip44Decrypt,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-nip44d".to_owned(),
                 result: None,
@@ -1265,7 +1165,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SwitchRelays,
+            &Method::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
                 result: Some(json!("[invalid")),
@@ -1276,7 +1176,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SwitchRelays,
+            &Method::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
                 result: Some(json!([1])),
@@ -1287,7 +1187,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SwitchRelays,
+            &Method::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
                 result: Some(json!(["http://relay.example.com"])),
@@ -1298,7 +1198,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::SwitchRelays,
+            &Method::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
                 result: Some(json!(5)),
@@ -1309,7 +1209,7 @@ fn response_surface_covers_success_and_error_paths() {
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::Logout,
+            &Method::Logout,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-logout".to_owned(),
                 result: Some(json!("not-ack")),
@@ -1327,12 +1227,9 @@ fn pending_connection_poll_outcome_uses_typed_variants() {
         radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
             user_public_key: test_public_key(),
             relays: vec![relay(RELAY_PRIMARY_WSS), relay(RELAY_SECONDARY_WSS)],
-            permissions: RadrootsNostrConnectPermissions::from(vec![
-                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
-                RadrootsNostrConnectPermission::with_parameter(
-                    RadrootsNostrConnectMethod::SignEvent,
-                    "kind:1",
-                ),
+            permissions: Permissions::from(vec![
+                Permission::new(Method::Ping),
+                Permission::with_parameter(Method::SignEvent, "kind:1"),
             ]),
         };
 

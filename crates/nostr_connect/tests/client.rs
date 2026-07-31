@@ -6,13 +6,13 @@ use nostr::{
     Event, EventBuilder, Keys, Kind, PublicKey, RelayUrl, SecretKey, Tag, Timestamp, UnsignedEvent,
 };
 use radroots_nostr_connect::prelude::{
-    RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientEventOutcome,
+    Method, RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientEventOutcome,
     RadrootsNostrConnectClientProgress, RadrootsNostrConnectClientRequest,
     RadrootsNostrConnectClientTarget, RadrootsNostrConnectClientTransport,
     RadrootsNostrConnectClientTransportFuture, RadrootsNostrConnectError,
-    RadrootsNostrConnectMethod, RadrootsNostrConnectRemoteSessionCapability,
-    RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    build_request_event, execute_request_with_transport, parse_response_event,
+    RadrootsNostrConnectRemoteSessionCapability, RadrootsNostrConnectRequest,
+    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse, build_request_event,
+    execute_request_with_transport, parse_response_event,
 };
 use std::collections::VecDeque;
 use test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB, FIXTURE_CAROL, RELAY_PRIMARY_WSS};
@@ -276,14 +276,8 @@ fn ignores_response_from_unexpected_signer_identity() {
         RadrootsNostrConnectResponse::Pong,
     );
 
-    let outcome = parse_response_event(
-        &client_keys,
-        &target,
-        "req-ping",
-        &RadrootsNostrConnectMethod::Ping,
-        &response,
-    )
-    .expect("parse response");
+    let outcome = parse_response_event(&client_keys, &target, "req-ping", &Method::Ping, &response)
+        .expect("parse response");
 
     assert_eq!(outcome, RadrootsNostrConnectClientEventOutcome::Ignore);
 }
@@ -298,14 +292,8 @@ fn ignores_non_rpc_kind_from_expected_signer() {
         .sign_with_keys(&remote_keys)
         .expect("non-rpc response");
 
-    let outcome = parse_response_event(
-        &client_keys,
-        &target,
-        "req-ping",
-        &RadrootsNostrConnectMethod::Ping,
-        &response,
-    )
-    .expect("parse response");
+    let outcome = parse_response_event(&client_keys, &target, "req-ping", &Method::Ping, &response)
+        .expect("parse response");
 
     assert_eq!(outcome, RadrootsNostrConnectClientEventOutcome::Ignore);
 }
@@ -419,14 +407,8 @@ fn reports_decryption_failure_from_expected_signer() {
     .sign_with_keys(&remote_keys)
     .expect("malformed response");
 
-    let error = parse_response_event(
-        &client_keys,
-        &target,
-        "req-ping",
-        &RadrootsNostrConnectMethod::Ping,
-        &malformed,
-    )
-    .expect_err("decrypt failure");
+    let error = parse_response_event(&client_keys, &target, "req-ping", &Method::Ping, &malformed)
+        .expect_err("decrypt failure");
 
     assert!(matches!(
         error,
@@ -446,14 +428,9 @@ fn parses_auth_challenge_as_progress_without_consuming_final_response() {
         RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/continue".to_owned()),
     );
 
-    let outcome = parse_response_event(
-        &client_keys,
-        &target,
-        "req-sign",
-        &RadrootsNostrConnectMethod::SignEvent,
-        &auth,
-    )
-    .expect("parse auth");
+    let outcome =
+        parse_response_event(&client_keys, &target, "req-sign", &Method::SignEvent, &auth)
+            .expect("parse auth");
 
     assert_eq!(
         outcome,

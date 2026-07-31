@@ -3,12 +3,10 @@ mod test_fixtures;
 
 use nostr::{EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
-    RADROOTS_NOSTR_CONNECT_CLIENT_METADATA_JSON_MAX_BYTES,
-    RADROOTS_NOSTR_CONNECT_CLIENT_NAME_MAX_BYTES, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR,
-    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectError, RadrootsNostrConnectMethod,
-    RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
-    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
+    CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES, ClientMetadata, Method, Permission,
+    Permissions, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
+    RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
+    RadrootsNostrConnectResponseEnvelope, Uri,
 };
 use serde_json::{Value, json};
 use test_fixtures::{
@@ -18,6 +16,11 @@ use test_fixtures::{
 
 fn test_public_key() -> PublicKey {
     PublicKey::parse(FIXTURE_ALICE.public_key_hex).expect("public key")
+}
+
+fn test_identity_public_key() -> radroots_identity::PublicKey {
+    radroots_identity::PublicKey::from_hex(FIXTURE_ALICE.public_key_hex)
+        .expect("identity public key")
 }
 
 fn test_keys() -> Keys {
@@ -41,12 +44,9 @@ fn remote_session_capability()
             RelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay 1"),
             RelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 2"),
         ],
-        permissions: RadrootsNostrConnectPermissions::from(vec![
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
-            RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::SignEvent,
-                "kind:1",
-            ),
+        permissions: Permissions::from(vec![
+            Permission::new(Method::Ping),
+            Permission::with_parameter(Method::SignEvent, "kind:1"),
         ]),
     }
 }
@@ -61,29 +61,29 @@ fn parses_client_uri_with_current_spec_query_fields() {
         encode_uri_component(APP_PRIMARY_HTTPS),
         encode_uri_component(&logo_url()),
     );
-    let parsed = RadrootsNostrConnectUri::parse(&uri).expect("parse client uri");
+    let parsed = Uri::parse(&uri).expect("parse client uri");
 
     match parsed {
-        RadrootsNostrConnectUri::Client(client) => {
-            assert_eq!(client.client_public_key, test_public_key());
-            assert_eq!(client.relays.len(), 2);
-            assert_eq!(client.secret, "0s8j2djs");
-            assert_eq!(client.metadata.name.as_deref(), Some("My Client"));
+        Uri::Client(client) => {
+            assert_eq!(client.client_public_key(), test_identity_public_key());
+            assert_eq!(client.relays().len(), 2);
+            assert_eq!(client.secret(), "0s8j2djs");
+            assert_eq!(client.metadata().name.as_deref(), Some("My Client"));
             assert_eq!(
-                client.metadata.requested_permissions,
-                RadrootsNostrConnectPermissions::from(vec![
-                    RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Encrypt,),
-                    RadrootsNostrConnectPermission::with_parameter(
-                        RadrootsNostrConnectMethod::SignEvent,
-                        "1059",
-                    ),
+                client.metadata().requested_permissions,
+                Permissions::from(vec![
+                    Permission::new(Method::Nip44Encrypt,),
+                    Permission::with_parameter(Method::SignEvent, "1059",),
                 ])
             );
             assert_eq!(
-                client.metadata.url.as_deref(),
+                client.metadata().url.as_deref(),
                 Some(format!("{APP_PRIMARY_HTTPS}/").as_str())
             );
-            assert_eq!(client.metadata.image.as_deref(), Some(logo_url().as_str()));
+            assert_eq!(
+                client.metadata().image.as_deref(),
+                Some(logo_url().as_str())
+            );
         }
         other => panic!("expected client uri, got {other:?}"),
     }
@@ -96,9 +96,9 @@ fn parses_bunker_uri_and_roundtrips() {
         FIXTURE_ALICE.public_key_hex,
         encode_uri_component(RELAY_PRIMARY_WSS),
     );
-    let parsed = RadrootsNostrConnectUri::parse(&source).expect("parse bunker uri");
+    let parsed = Uri::parse(&source).expect("parse bunker uri");
     let rendered = parsed.to_string();
-    let reparsed = RadrootsNostrConnectUri::parse(&rendered).expect("reparse bunker uri");
+    let reparsed = Uri::parse(&rendered).expect("reparse bunker uri");
     assert_eq!(parsed, reparsed);
 }
 
@@ -109,19 +109,19 @@ fn rejects_client_uri_without_required_secret() {
         FIXTURE_ALICE.public_key_hex,
         encode_uri_component(RELAY_PRIMARY_WSS),
     );
-    assert!(RadrootsNostrConnectUri::parse(&source).is_err());
+    assert!(Uri::parse(&source).is_err());
 }
 
 #[test]
 fn requested_permissions_roundtrip_as_csv() {
-    let permissions = RadrootsNostrConnectPermissions::from(vec![
-        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Encrypt),
-        RadrootsNostrConnectPermission::with_parameter(RadrootsNostrConnectMethod::SignEvent, "13"),
+    let permissions = Permissions::from(vec![
+        Permission::new(Method::Nip44Encrypt),
+        Permission::with_parameter(Method::SignEvent, "13"),
     ]);
 
     let rendered = permissions.to_string();
     assert_eq!(rendered, "nip44_encrypt,sign_event:13");
-    let reparsed: RadrootsNostrConnectPermissions = rendered.parse().expect("parse permissions");
+    let reparsed: Permissions = rendered.parse().expect("parse permissions");
     assert_eq!(permissions, reparsed);
 }
 
@@ -130,12 +130,9 @@ fn connect_request_roundtrips_requested_permissions() {
     let request = RadrootsNostrConnectRequest::Connect {
         remote_signer_public_key: test_public_key(),
         secret: Some("abcd".to_owned()),
-        requested_permissions: RadrootsNostrConnectPermissions::from(vec![
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Encrypt),
-            RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::SignEvent,
-                "1059",
-            ),
+        requested_permissions: Permissions::from(vec![
+            Permission::new(Method::Nip44Encrypt),
+            Permission::with_parameter(Method::SignEvent, "1059"),
         ]),
         client_metadata: None,
     };
@@ -164,9 +161,9 @@ fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
     let request = RadrootsNostrConnectRequest::Connect {
         remote_signer_public_key: test_public_key(),
         secret: None,
-        requested_permissions: RadrootsNostrConnectPermissions::default(),
-        client_metadata: Some(RadrootsNostrConnectClientMetadata {
-            requested_permissions: RadrootsNostrConnectPermissions::default(),
+        requested_permissions: Permissions::default(),
+        client_metadata: Some(ClientMetadata {
+            requested_permissions: Permissions::default(),
             name: Some(" My Client ".to_owned()),
             url: Some(APP_PRIMARY_HTTPS.to_owned()),
             image: Some(logo_url()),
@@ -219,7 +216,7 @@ fn logout_request_and_acknowledgement_roundtrip() {
     );
 
     let response = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::Logout,
+        &Method::Logout,
         RadrootsNostrConnectResponseEnvelope {
             id: "req-logout".to_owned(),
             result: Some(Value::String("ack".to_owned())),
@@ -257,11 +254,11 @@ fn rejects_invalid_client_metadata() {
         encode_uri_component(RELAY_PRIMARY_WSS),
         encode_uri_component("file:///tmp/client"),
     );
-    assert!(RadrootsNostrConnectUri::parse(&invalid_scheme).is_err());
+    assert!(Uri::parse(&invalid_scheme).is_err());
 
-    let oversized_name = RadrootsNostrConnectClientMetadata {
-        requested_permissions: RadrootsNostrConnectPermissions::default(),
-        name: Some("a".repeat(RADROOTS_NOSTR_CONNECT_CLIENT_NAME_MAX_BYTES + 1)),
+    let oversized_name = ClientMetadata {
+        requested_permissions: Permissions::default(),
+        name: Some("a".repeat(CLIENT_NAME_MAX_BYTES + 1)),
         url: None,
         image: None,
     };
@@ -270,10 +267,10 @@ fn rejects_invalid_client_metadata() {
         Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "name", .. })
     ));
 
-    let oversized_payload = "x".repeat(RADROOTS_NOSTR_CONNECT_CLIENT_METADATA_JSON_MAX_BYTES + 1);
+    let oversized_payload = "x".repeat(CLIENT_METADATA_JSON_MAX_BYTES + 1);
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
-            RadrootsNostrConnectMethod::Connect,
+            Method::Connect,
             vec![
                 test_public_key().to_hex(),
                 String::new(),
@@ -319,11 +316,9 @@ fn switch_relays_response_accepts_array_or_null() {
         result: Some(json!([RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS])),
         error: None,
     };
-    let parsed = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::SwitchRelays,
-        relays_response,
-    )
-    .expect("parse relay list");
+    let parsed =
+        RadrootsNostrConnectResponse::from_envelope(&Method::SwitchRelays, relays_response)
+            .expect("parse relay list");
     assert_eq!(
         parsed,
         RadrootsNostrConnectResponse::RelayList(vec![
@@ -333,7 +328,7 @@ fn switch_relays_response_accepts_array_or_null() {
     );
 
     let unchanged = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::SwitchRelays,
+        &Method::SwitchRelays,
         RadrootsNostrConnectResponseEnvelope {
             id: "req-switch".to_owned(),
             result: Some(Value::Null),
@@ -361,7 +356,7 @@ fn get_session_capability_request_and_response_roundtrip() {
             .into_envelope("resp-cap")
             .expect("serialize response");
     let decoded_response = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::GetSessionCapability,
+        &Method::GetSessionCapability,
         response_envelope,
     )
     .expect("deserialize response");
@@ -374,7 +369,7 @@ fn get_session_capability_request_and_response_roundtrip() {
 #[test]
 fn auth_url_response_parses_from_result_and_error_fields() {
     let response = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::SignEvent,
+        &Method::SignEvent,
         RadrootsNostrConnectResponseEnvelope {
             id: "req-auth".to_owned(),
             result: Some(json!("auth_url")),
@@ -392,7 +387,7 @@ fn auth_url_response_parses_from_result_and_error_fields() {
 #[test]
 fn get_public_key_pending_response_parses_as_typed_pending_connection() {
     let response = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::GetPublicKey,
+        &Method::GetPublicKey,
         RadrootsNostrConnectResponseEnvelope {
             id: "req-pending".to_owned(),
             result: None,
@@ -415,11 +410,8 @@ fn sign_event_response_roundtrips_signed_event_json_string() {
     let envelope = RadrootsNostrConnectResponse::SignedEvent(event.clone())
         .into_envelope("req-sign")
         .expect("serialize response");
-    let parsed = RadrootsNostrConnectResponse::from_envelope(
-        &RadrootsNostrConnectMethod::SignEvent,
-        envelope,
-    )
-    .expect("parse signed event response");
+    let parsed = RadrootsNostrConnectResponse::from_envelope(&Method::SignEvent, envelope)
+        .expect("parse signed event response");
 
     assert_eq!(parsed, RadrootsNostrConnectResponse::SignedEvent(event));
 }
@@ -458,29 +450,29 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
             "nip46.metadata.invalid" => {
                 let count = input["count"].as_u64().expect("metadata repeat count") as usize;
                 let repeat = input["repeat"].as_str().expect("metadata repeat value");
-                let metadata = RadrootsNostrConnectClientMetadata {
+                let metadata = ClientMetadata {
                     name: Some(repeat.repeat(count)),
-                    ..RadrootsNostrConnectClientMetadata::default()
+                    ..ClientMetadata::default()
                 };
                 let error = metadata.normalized().expect_err("invalid metadata vector");
                 assert_vector_error(id, expected, error);
             }
             "nip46.uri.valid" => {
                 let uri = input["uri"].as_str().expect("NIP-46 URI");
-                let parsed = RadrootsNostrConnectUri::parse(uri)
-                    .unwrap_or_else(|error| panic!("{id}: parse URI: {error}"));
+                let parsed =
+                    Uri::parse(uri).unwrap_or_else(|error| panic!("{id}: parse URI: {error}"));
                 assert_uri_vector(id, parsed, expected);
             }
             "nip46.uri.invalid" => {
                 let uri = input["uri"].as_str().expect("NIP-46 URI");
-                let error = RadrootsNostrConnectUri::parse(uri).expect_err("invalid URI vector");
+                let error = Uri::parse(uri).expect_err("invalid URI vector");
                 assert_vector_error(id, expected, error);
             }
             "nip46.response.valid" => {
                 let method = input["method"]
                     .as_str()
                     .expect("response method")
-                    .parse::<RadrootsNostrConnectMethod>()
+                    .parse::<Method>()
                     .expect("typed response method");
                 let envelope: RadrootsNostrConnectResponseEnvelope =
                     serde_json::from_value(input["envelope"].clone())
@@ -499,7 +491,7 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
                 let method = input["method"]
                     .as_str()
                     .expect("response method")
-                    .parse::<RadrootsNostrConnectMethod>()
+                    .parse::<Method>()
                     .expect("typed response method");
                 let envelope: RadrootsNostrConnectResponseEnvelope =
                     serde_json::from_value(input["envelope"].clone())
@@ -513,7 +505,7 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
     }
 }
 
-fn assert_uri_vector(id: &str, parsed: RadrootsNostrConnectUri, expected: &Value) {
+fn assert_uri_vector(id: &str, parsed: Uri, expected: &Value) {
     let expected_relays = expected["relays"]
         .as_array()
         .expect("expected relays")
@@ -522,42 +514,42 @@ fn assert_uri_vector(id: &str, parsed: RadrootsNostrConnectUri, expected: &Value
         .collect::<Vec<_>>();
 
     match parsed {
-        RadrootsNostrConnectUri::Bunker(uri) => {
+        Uri::Bunker(uri) => {
             assert_eq!(expected["variant"], "bunker", "{id}");
             let relays = uri
-                .relays
+                .relays()
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>();
             assert_eq!(relays, expected_relays, "{id}");
-            assert_eq!(uri.secret.as_deref(), expected["secret"].as_str(), "{id}");
+            assert_eq!(uri.secret(), expected["secret"].as_str(), "{id}");
         }
-        RadrootsNostrConnectUri::Client(uri) => {
+        Uri::Client(uri) => {
             assert_eq!(expected["variant"], "nostrconnect", "{id}");
             let relays = uri
-                .relays
+                .relays()
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>();
             assert_eq!(relays, expected_relays, "{id}");
-            assert_eq!(uri.secret, expected["secret"].as_str().expect("secret"));
+            assert_eq!(uri.secret(), expected["secret"].as_str().expect("secret"));
             assert_eq!(
-                uri.metadata.name.as_deref(),
+                uri.metadata().name.as_deref(),
                 expected["metadata"]["name"].as_str(),
                 "{id}"
             );
             assert_eq!(
-                uri.metadata.url.as_deref(),
+                uri.metadata().url.as_deref(),
                 expected["metadata"]["url"].as_str(),
                 "{id}"
             );
             assert_eq!(
-                uri.metadata.image.as_deref(),
+                uri.metadata().image.as_deref(),
                 expected["metadata"]["image"].as_str(),
                 "{id}"
             );
             assert_eq!(
-                uri.metadata.requested_permissions.to_string(),
+                uri.metadata().requested_permissions.to_string(),
                 expected["metadata"]["permissions"]
                     .as_str()
                     .expect("permissions"),

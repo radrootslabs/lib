@@ -430,12 +430,13 @@ mod tests {
         ));
         assert!(!request_allowed_by_permissions(
             &vec![RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::Custom("do_thing".into()),
+                RadrootsNostrConnectMethod::custom("do_thing").expect("valid custom NIP-46 method"),
                 "scoped",
             )]
             .into(),
             &RadrootsNostrConnectRequest::Custom {
-                method: RadrootsNostrConnectMethod::Custom("do_thing".into()),
+                method: RadrootsNostrConnectMethod::custom("do_thing")
+                    .expect("valid custom NIP-46 method"),
                 params: vec!["value".into()],
             },
         ));
@@ -445,11 +446,11 @@ mod tests {
         ));
         assert!(permission_matches(
             &RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::Custom("scoped".into()),
+                RadrootsNostrConnectMethod::custom("scoped").expect("valid custom NIP-46 method"),
                 "alpha",
             ),
             &RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::Custom("scoped".into()),
+                RadrootsNostrConnectMethod::custom("scoped").expect("valid custom NIP-46 method"),
                 "alpha",
             ),
         ));
@@ -471,7 +472,8 @@ mod tests {
         let switch_relays = RadrootsNostrConnectRequest::SwitchRelays;
         let sign_event = RadrootsNostrConnectRequest::SignEvent(unsigned_event(7));
         let custom = RadrootsNostrConnectRequest::Custom {
-            method: RadrootsNostrConnectMethod::Custom("do_thing".into()),
+            method: RadrootsNostrConnectMethod::custom("do_thing")
+                .expect("valid custom NIP-46 method"),
             params: vec!["a".into()],
         };
 
