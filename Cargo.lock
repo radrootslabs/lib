@@ -4682,6 +4682,7 @@ dependencies = [
  "directories",
  "futures",
  "hex",
+ "nostr",
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",
@@ -4802,6 +4803,7 @@ name = "radroots_outbox"
 version = "0.1.0-alpha"
 dependencies = [
  "hex",
+ "nostr",
  "radroots_event",
  "radroots_event_store",
  "radroots_identity",

@@ -13,14 +13,11 @@ use std::net::SocketAddr;
 use futures::Stream;
 use nostr_sdk::{Client, ClientBuilder, ClientOptions};
 
-use crate::RadrootsRelayTransportError;
+use crate::{RadrootsRelayTransportError, RelayUrl};
+use nostr::{Keys, SecretKey, SubscriptionId};
 use radroots_nostr::event::Event as RadrootsNostrEvent;
 use radroots_nostr::event::EventId as RadrootsNostrEventId;
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrPublicKey;
-use radroots_nostr::types::RadrootsNostrRelayUrl;
-use radroots_nostr::types::RadrootsNostrSubscriptionId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsNostrRelayStatus {
@@ -50,7 +47,7 @@ fn normalize_relay_status(value: nostr_sdk::RelayStatus) -> RadrootsNostrRelaySt
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrMonitorNotification {
     StatusChanged {
-        relay_url: RadrootsNostrRelayUrl,
+        relay_url: RelayUrl,
         status: RadrootsNostrRelayStatus,
     },
 }
@@ -109,7 +106,7 @@ fn normalize_monitor_notification(
     match notification {
         nostr_sdk::prelude::MonitorNotification::StatusChanged { relay_url, status } => {
             RadrootsNostrMonitorNotification::StatusChanged {
-                relay_url,
+                relay_url: RelayUrl::from_normalized_transport(relay_url.to_string()),
                 status: normalize_relay_status(status),
             }
         }
@@ -119,8 +116,8 @@ fn normalize_monitor_notification(
 #[derive(Debug, Clone)]
 pub struct RadrootsNostrOutput<T> {
     pub val: T,
-    pub success: HashSet<RadrootsNostrRelayUrl>,
-    pub failed: HashMap<RadrootsNostrRelayUrl, String>,
+    pub success: HashSet<RelayUrl>,
+    pub failed: HashMap<RelayUrl, String>,
 }
 
 fn normalize_output<T>(output: nostr_sdk::prelude::Output<T>) -> RadrootsNostrOutput<T>
@@ -129,8 +126,90 @@ where
 {
     RadrootsNostrOutput {
         val: output.val,
+        success: output
+            .success
+            .into_iter()
+            .map(|url| RelayUrl::from_normalized_transport(url.to_string()))
+            .collect(),
+        failed: output
+            .failed
+            .into_iter()
+            .map(|(url, error)| (RelayUrl::from_normalized_transport(url.to_string()), error))
+            .collect(),
+    }
+}
+
+fn normalize_subscription_output(
+    output: nostr_sdk::prelude::Output<SubscriptionId>,
+) -> RadrootsNostrOutput<RadrootsNostrSubscriptionId> {
+    let output = normalize_output(output);
+    RadrootsNostrOutput {
+        val: RadrootsNostrSubscriptionId(output.val.to_string()),
         success: output.success,
         failed: output.failed,
+    }
+}
+
+/// An opaque local credential for the compatibility Nostr transport client.
+///
+/// Secret material cannot be cloned, formatted, or serialized through this
+/// boundary. Hosts should retain their authoritative credential and create a
+/// short-lived transport credential only when constructing a client.
+///
+/// ```compile_fail
+/// use radroots_transport_nostr::RadrootsNostrClientKey;
+///
+/// let key = RadrootsNostrClientKey::generate();
+/// let duplicated = key.clone();
+/// ```
+pub struct RadrootsNostrClientKey {
+    inner: Keys,
+}
+
+impl RadrootsNostrClientKey {
+    pub fn generate() -> Self {
+        Self {
+            inner: Keys::generate(),
+        }
+    }
+
+    pub fn from_secret_key_bytes(
+        secret_key: [u8; 32],
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let secret_key = SecretKey::from_slice(&secret_key)
+            .map_err(|error| RadrootsRelayTransportError::ClientConfig(error.to_string()))?;
+        Ok(Self {
+            inner: Keys::new(secret_key),
+        })
+    }
+
+    pub fn public_key_hex(&self) -> String {
+        self.inner.public_key().to_hex()
+    }
+
+    fn into_inner(self) -> Keys {
+        self.inner
+    }
+}
+
+impl Debug for RadrootsNostrClientKey {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("RadrootsNostrClientKey([REDACTED])")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsNostrSubscriptionId(String);
+
+impl RadrootsNostrSubscriptionId {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl core::fmt::Display for RadrootsNostrSubscriptionId {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(self.as_str())
     }
 }
 
@@ -149,6 +228,7 @@ impl Stream for RadrootsNostrEventStream {
 #[derive(Clone)]
 pub struct RadrootsNostrRelay {
     inner: nostr_sdk::Relay,
+    url: RelayUrl,
 }
 
 impl RadrootsNostrRelay {
@@ -156,8 +236,8 @@ impl RadrootsNostrRelay {
         self.inner.is_connected()
     }
 
-    pub fn url(&self) -> &RadrootsNostrRelayUrl {
-        self.inner.url()
+    pub fn url(&self) -> &RelayUrl {
+        &self.url
     }
 }
 
@@ -282,19 +362,19 @@ impl RadrootsNostrClient {
         }
     }
 
-    pub fn new(keys: RadrootsNostrKeys) -> Self {
+    pub fn new(keys: RadrootsNostrClientKey) -> Self {
         Self {
-            inner: Client::new(keys),
+            inner: Client::new(keys.into_inner()),
             monitor: None,
         }
     }
 
     pub fn from_keys_with_options(
-        keys: RadrootsNostrKeys,
+        keys: RadrootsNostrClientKey,
         options: RadrootsNostrClientOptions,
     ) -> Self {
         let inner = ClientBuilder::new()
-            .signer(keys)
+            .signer(keys.into_inner())
             .opts(options.to_client_options())
             .build();
         Self {
@@ -303,9 +383,9 @@ impl RadrootsNostrClient {
         }
     }
 
-    pub fn new_with_monitor(keys: RadrootsNostrKeys, monitor: RadrootsNostrMonitor) -> Self {
+    pub fn new_with_monitor(keys: RadrootsNostrClientKey, monitor: RadrootsNostrMonitor) -> Self {
         let inner = Client::builder()
-            .signer(keys)
+            .signer(keys.into_inner())
             .monitor(monitor.inner.clone())
             .build();
         Self {
@@ -318,10 +398,11 @@ impl RadrootsNostrClient {
         self.inner.has_signer().await
     }
 
-    pub async fn public_key(&self) -> Result<RadrootsNostrPublicKey, RadrootsRelayTransportError> {
+    pub async fn public_key_hex(&self) -> Result<String, RadrootsRelayTransportError> {
         self.inner
             .public_key()
             .await
+            .map(|public_key| public_key.to_hex())
             .map_err(|error| RadrootsRelayTransportError::Client(error.to_string()))
     }
 
@@ -369,12 +450,15 @@ impl RadrootsNostrClient {
             .map_err(|error| RadrootsRelayTransportError::Client(error.to_string()))
     }
 
-    pub async fn relays(&self) -> HashMap<RadrootsNostrRelayUrl, RadrootsNostrRelay> {
+    pub async fn relays(&self) -> HashMap<RelayUrl, RadrootsNostrRelay> {
         self.inner
             .relays()
             .await
             .into_iter()
-            .map(|(url, inner)| (url, RadrootsNostrRelay { inner }))
+            .map(|(url, inner)| {
+                let url = RelayUrl::from_normalized_transport(url.to_string());
+                (url.clone(), RadrootsNostrRelay { inner, url })
+            })
             .collect()
     }
 
@@ -425,29 +509,31 @@ impl RadrootsNostrClient {
                 options.map(RadrootsNostrSubscribeAutoCloseOptions::into_sdk),
             )
             .await
-            .map(normalize_output)
+            .map(normalize_subscription_output)
             .map_err(|error| RadrootsRelayTransportError::Client(error.to_string()))
     }
 
     pub async fn subscribe_to_relays(
         &self,
-        relays: &[RadrootsNostrRelayUrl],
+        relays: &[RelayUrl],
         filter: RadrootsNostrFilter,
         options: Option<RadrootsNostrSubscribeAutoCloseOptions>,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrSubscriptionId>, RadrootsRelayTransportError> {
         self.inner
             .subscribe_to(
-                relays.iter().cloned(),
+                relays.iter().map(RelayUrl::as_str),
                 filter,
                 options.map(RadrootsNostrSubscribeAutoCloseOptions::into_sdk),
             )
             .await
-            .map(normalize_output)
+            .map(normalize_subscription_output)
             .map_err(|error| RadrootsRelayTransportError::Client(error.to_string()))
     }
 
     pub async fn unsubscribe(&self, subscription_id: &RadrootsNostrSubscriptionId) {
-        self.inner.unsubscribe(subscription_id).await;
+        self.inner
+            .unsubscribe(&SubscriptionId::new(subscription_id.as_str()))
+            .await;
     }
 
     /// Relays a caller-supplied signed event.
@@ -467,11 +553,11 @@ impl RadrootsNostrClient {
 
     pub async fn send_event_to_relays(
         &self,
-        relays: &[RadrootsNostrRelayUrl],
+        relays: &[RelayUrl],
         event: &RadrootsNostrEvent,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsRelayTransportError> {
         self.inner
-            .send_event_to(relays.iter().cloned(), event)
+            .send_event_to(relays.iter().map(RelayUrl::as_str), event)
             .await
             .map(normalize_output)
             .map_err(|error| RadrootsRelayTransportError::Client(error.to_string()))
@@ -502,4 +588,22 @@ pub async fn radroots_nostr_fetch_event_by_id(
         .first()
         .ok_or_else(|| RadrootsRelayTransportError::EventNotFound(event_id.to_hex()))?;
     Ok(event.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_key_debug_output_is_redacted() {
+        let key = RadrootsNostrClientKey::generate();
+
+        assert_eq!(format!("{key:?}"), "RadrootsNostrClientKey([REDACTED])");
+        assert!(!format!("{key:?}").contains(&key.public_key_hex()));
+    }
+
+    #[test]
+    fn client_key_rejects_invalid_secret_scalar() {
+        assert!(RadrootsNostrClientKey::from_secret_key_bytes([0; 32]).is_err());
+    }
 }

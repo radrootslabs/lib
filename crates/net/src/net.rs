@@ -145,7 +145,7 @@ impl Net {
     }
 
     #[cfg(feature = "nostr-client")]
-    pub fn selected_nostr_keys(&self) -> Option<radroots_nostr::types::RadrootsNostrKeys> {
+    pub fn selected_nostr_keys(&self) -> Option<nostr::Keys> {
         let signer = self.selected_nostr_signer()?;
         self.accounts
             .resolve_signing_keys_for_signer(&signer)
@@ -171,9 +171,9 @@ impl NetHandle {
 mod tests {
     use crate::builder::NetBuilder;
     #[cfg(feature = "nostr-client")]
-    use radroots_identity::{PublicIdentity, PublicKey};
+    use nostr::Keys as RadrootsNostrKeys;
     #[cfg(feature = "nostr-client")]
-    use radroots_nostr::types::RadrootsNostrKeys;
+    use radroots_identity::{PublicIdentity, PublicKey};
     #[cfg(feature = "nostr-client")]
     use radroots_nostr_signer::prelude::{
         RadrootsNostrRemoteSessionSignerCapability, RadrootsNostrSignerCapability,

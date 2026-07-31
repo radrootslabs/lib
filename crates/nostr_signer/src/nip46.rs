@@ -1,3 +1,4 @@
+use nostr::{PublicKey as RadrootsNostrPublicKey, RelayUrl as RadrootsNostrRelayUrl};
 use nostr::{
     UnsignedEvent,
     filter::{Alphabet, SingleLetterTag},
@@ -5,12 +6,10 @@ use nostr::{
 use radroots_identity::PublicIdentity;
 use radroots_nostr::event::Event as RadrootsNostrEvent;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
+use radroots_nostr::event::RadrootsNostrGenericEventBuilder;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
-use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
-use radroots_nostr::types::RadrootsNostrPublicKey;
-use radroots_nostr::types::RadrootsNostrRelayUrl;
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectError, RadrootsNostrConnectPermissions,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
@@ -857,13 +856,13 @@ mod tests {
     };
     use crate::store::RadrootsNostrSignerStore;
     use crate::test_support::{fixture_alice_identity, fixture_carol_public_key, primary_relay};
+    use nostr::PublicKey as RadrootsNostrPublicKey;
     use nostr::{Keys, SecretKey, Timestamp, UnsignedEvent};
     use radroots_identity::{PublicIdentity, PublicKey as IdentityPublicKey};
     use radroots_nostr::event::Event as RadrootsNostrEvent;
     use radroots_nostr::event::Kind as RadrootsNostrKind;
+    use radroots_nostr::event::RadrootsNostrGenericEventBuilder;
     use radroots_nostr::tag::TagKind as RadrootsNostrTagKind;
-    use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
-    use radroots_nostr::types::RadrootsNostrPublicKey;
     use radroots_nostr_connect::prelude::{
         RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectMethod,
         RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,

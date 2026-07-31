@@ -11,20 +11,17 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use core::time::Duration;
 use futures::StreamExt;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrRelayUrl;
 use radroots_transport_nostr::{
-    RadrootsNostrClient, RadrootsNostrMonitor, RadrootsNostrMonitorNotification,
-    RadrootsNostrRelayStatus,
+    RadrootsNostrClient, RadrootsNostrClientKey, RadrootsNostrMonitor,
+    RadrootsNostrMonitorNotification, RadrootsNostrRelayStatus, RelayUrl,
 };
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-#[derive(Clone)]
 pub struct RadrootsNostrRuntimeBuilder {
-    keys: Option<RadrootsNostrKeys>,
+    keys: Option<RadrootsNostrClientKey>,
     relays: Vec<String>,
     queue_capacity: usize,
     monitor_capacity: usize,
@@ -45,7 +42,7 @@ impl RadrootsNostrRuntimeBuilder {
         }
     }
 
-    pub fn keys(mut self, keys: RadrootsNostrKeys) -> Self {
+    pub fn keys(mut self, keys: RadrootsNostrClientKey) -> Self {
         self.keys = Some(keys);
         self
     }
@@ -128,7 +125,7 @@ struct RadrootsNostrRuntimeInner {
     relays: Mutex<Vec<String>>,
     queue_tx: mpsc::Sender<RadrootsNostrRuntimeEvent>,
     queue_rx: Mutex<mpsc::Receiver<RadrootsNostrRuntimeEvent>>,
-    statuses: Mutex<HashMap<RadrootsNostrRelayUrl, RadrootsNostrRelayStatus>>,
+    statuses: Mutex<HashMap<RelayUrl, RadrootsNostrRelayStatus>>,
     last_error: Mutex<Option<String>>,
     monitor_task: Mutex<Option<JoinHandle<()>>>,
     subscription_tasks: Mutex<HashMap<String, JoinHandle<()>>>,
@@ -467,7 +464,7 @@ mod tests {
 
     fn sample_runtime() -> RadrootsNostrRuntime {
         RadrootsNostrRuntimeBuilder::new()
-            .keys(RadrootsNostrKeys::generate())
+            .keys(RadrootsNostrClientKey::generate())
             .add_relay("wss://relay.example.com")
             .build()
             .expect("runtime should build")
@@ -487,7 +484,7 @@ mod tests {
     #[test]
     fn build_requires_relays() {
         let result = RadrootsNostrRuntimeBuilder::new()
-            .keys(RadrootsNostrKeys::generate())
+            .keys(RadrootsNostrClientKey::generate())
             .build();
         assert!(matches!(
             result,
@@ -498,7 +495,7 @@ mod tests {
     #[test]
     fn queue_capacity_must_be_positive() {
         let result = RadrootsNostrRuntimeBuilder::new()
-            .keys(RadrootsNostrKeys::generate())
+            .keys(RadrootsNostrClientKey::generate())
             .add_relay("wss://relay.example.com")
             .queue_capacity(0)
             .build();
@@ -511,7 +508,7 @@ mod tests {
     #[test]
     fn monitor_capacity_must_be_positive() {
         let result = RadrootsNostrRuntimeBuilder::new()
-            .keys(RadrootsNostrKeys::generate())
+            .keys(RadrootsNostrClientKey::generate())
             .add_relay("wss://relay.example.com")
             .monitor_capacity(0)
             .build();
@@ -525,7 +522,7 @@ mod tests {
     fn build_accepts_event_sink() {
         let sink = Arc::new(RadrootsNostrInMemoryEventSink::new());
         let result = RadrootsNostrRuntimeBuilder::new()
-            .keys(RadrootsNostrKeys::generate())
+            .keys(RadrootsNostrClientKey::generate())
             .add_relay("wss://relay.example.com")
             .event_sink(sink)
             .build();

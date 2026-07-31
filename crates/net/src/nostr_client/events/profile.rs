@@ -1,9 +1,9 @@
 use crate::error::{NetError, Result};
+use nostr::PublicKey as RadrootsNostrPublicKey;
 use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_event_codec::profile::RadrootsProfileData;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
-use radroots_nostr::types::RadrootsNostrPublicKey;
 
 use crate::nostr_client::manager::NostrClientManager;
 

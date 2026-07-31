@@ -48,7 +48,7 @@ impl RadrootsNostrEventSink for RadrootsNostrInMemoryEventSink {
 mod tests {
     use super::*;
     use nostr::EventBuilder;
-    use radroots_nostr::types::RadrootsNostrKeys;
+    use nostr::Keys as RadrootsNostrKeys;
 
     #[test]
     fn in_memory_sink_tracks_events() {

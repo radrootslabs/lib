@@ -18,11 +18,11 @@ mod relays;
 
 #[cfg(feature = "client")]
 pub use client::{
-    RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrEventStream,
-    RadrootsNostrMonitor, RadrootsNostrMonitorNotification, RadrootsNostrMonitorReceiveError,
-    RadrootsNostrMonitorReceiver, RadrootsNostrOutput, RadrootsNostrRelay,
-    RadrootsNostrRelayStatus, RadrootsNostrSubscribeAutoCloseOptions,
-    radroots_nostr_fetch_event_by_id,
+    RadrootsNostrClient, RadrootsNostrClientKey, RadrootsNostrClientOptions,
+    RadrootsNostrEventStream, RadrootsNostrMonitor, RadrootsNostrMonitorNotification,
+    RadrootsNostrMonitorReceiveError, RadrootsNostrMonitorReceiver, RadrootsNostrOutput,
+    RadrootsNostrRelay, RadrootsNostrRelayStatus, RadrootsNostrSubscribeAutoCloseOptions,
+    RadrootsNostrSubscriptionId, radroots_nostr_fetch_event_by_id,
 };
 pub use error::RadrootsRelayTransportError;
 #[cfg(all(feature = "storage", feature = "runtime-tokio"))]

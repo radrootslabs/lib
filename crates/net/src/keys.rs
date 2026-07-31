@@ -3,10 +3,9 @@ use crate::config::{KeyFormat, KeyPersistenceConfig};
 #[cfg(feature = "nostr-client")]
 use crate::error::{NetError, Result};
 #[cfg(feature = "nostr-client")]
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecp256k1SecretKey;
-use radroots_nostr::types::RadrootsNostrSecretKey;
-use radroots_nostr::types::RadrootsNostrToBech32;
+use nostr::nips::nip19::ToBech32 as RadrootsNostrToBech32;
+use nostr::secp256k1::SecretKey as RadrootsNostrSecp256k1SecretKey;
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 #[cfg(feature = "nostr-client")]
 use serde::Deserialize;
 #[cfg(feature = "nostr-client")]

@@ -480,6 +480,34 @@ fn production_api_declares_no_traits_or_host_runtime_implementations() {
     );
 }
 
+#[test]
+fn workspace_consumers_do_not_use_superseded_nostr_alias_paths() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let crates_dir = manifest_dir
+        .parent()
+        .expect("Nostr crate must have a crates directory")
+        .to_path_buf();
+
+    for source_path in rust_sources(&crates_dir) {
+        if source_path.starts_with(&manifest_dir) {
+            continue;
+        }
+        let source = fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", source_path.display()));
+        for forbidden in [
+            "radroots_nostr::error::",
+            "radroots_nostr::prelude",
+            "radroots_nostr::types::",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{} still imports superseded Nostr path `{forbidden}`",
+                source_path.display()
+            );
+        }
+    }
+}
+
 fn rust_sources(root: &Path) -> Vec<PathBuf> {
     let mut pending = vec![root.to_path_buf()];
     let mut sources = Vec::new();

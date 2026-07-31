@@ -1,10 +1,10 @@
 use alloc::string::String;
+use nostr::PublicKey as RadrootsNostrPublicKey;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::events::post::radroots_nostr_post_events_filter;
 #[cfg(feature = "nostr-client")]
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 use radroots_nostr::filter::radroots_nostr_kind;
-use radroots_nostr::types::RadrootsNostrPublicKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsNostrSubscriptionPolicy {
@@ -105,7 +105,7 @@ impl RadrootsNostrSubscriptionSpec {
 mod tests {
     use super::*;
     #[cfg(feature = "nostr-client")]
-    use radroots_nostr::types::RadrootsNostrKeys;
+    use nostr::Keys as RadrootsNostrKeys;
 
     fn base_spec() -> RadrootsNostrSubscriptionSpec {
         RadrootsNostrSubscriptionSpec {

@@ -1046,12 +1046,11 @@ fn ensure_raw_event_matches_signed_event(
 mod tests {
     use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
     use nostr::JsonUtil;
+    use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
     use radroots_event::draft::{EventDraft, SignedEvent};
     use radroots_event::envelope::kind::KIND_GEOCHAT;
     use radroots_event::wire::Nip01EventWire;
     use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
-    use radroots_nostr::types::RadrootsNostrKeys;
-    use radroots_nostr::types::RadrootsNostrSecretKey;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";

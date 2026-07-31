@@ -52,7 +52,7 @@ mod tests {
     use super::*;
     use crate::config::RadrootsNostrdbConfig;
     use nostr::EventBuilder;
-    use radroots_nostr::types::RadrootsNostrKeys;
+    use nostr::Keys as RadrootsNostrKeys;
     use tempfile::TempDir;
 
     #[test]

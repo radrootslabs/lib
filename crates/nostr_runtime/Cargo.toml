@@ -15,7 +15,7 @@ readme = "README"
 default = ["std", "nostr-client", "rt"]
 std = []
 rt = ["std", "dep:futures", "dep:tokio"]
-nostr-client = ["std", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
+nostr-client = ["std", "dep:nostr", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
 nostrdb = ["nostr-client"]
 
 [dependencies]
@@ -23,10 +23,10 @@ radroots_nostr = { workspace = true, optional = true, default-features = true }
 radroots_transport_nostr = { workspace = true, optional = true, default-features = false, features = [
   "client",
 ] }
+nostr = { workspace = true, optional = true, features = ["std"] }
 futures = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
-nostr = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }

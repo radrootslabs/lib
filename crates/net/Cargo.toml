@@ -27,6 +27,7 @@ nostr-client = [
   "dep:tempfile",
   "dep:serde_json",
   "dep:radroots_nostr",
+  "dep:nostr",
   "dep:radroots_transport_nostr",
 ]
 directories = ["std", "dep:directories"]
@@ -45,8 +46,8 @@ radroots_event_codec = { workspace = true, optional = true, default-features = t
 ] }
 radroots_nostr = { workspace = true, optional = true, default-features = true, features = [
   "events",
-  "codec",
 ] }
+nostr = { workspace = true, optional = true, features = ["std"] }
 radroots_transport_nostr = { workspace = true, optional = true, default-features = false, features = [
   "client",
 ] }

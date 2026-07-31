@@ -2,9 +2,9 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 use super::inner::Inner;
+use nostr::Keys as RadrootsNostrKeys;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::events::post::radroots_nostr_post_events_filter;
-use radroots_nostr::types::RadrootsNostrKeys;
 
 #[derive(Clone)]
 pub struct NostrClientManager {

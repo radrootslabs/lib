@@ -1,5 +1,6 @@
 use futures::future::BoxFuture;
 use nostr::{EventBuilder, JsonUtil};
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::envelope::kind::{
     KIND_DELETION_REQUEST, KIND_FOLLOW, KIND_GEOCHAT, KIND_POST, KIND_PROFILE,
@@ -15,8 +16,6 @@ use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 use radroots_nostr::filter::radroots_nostr_filter_tag;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
 use radroots_nostr::tag::TagKind as RadrootsNostrTagKind;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput,
     RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventState, RadrootsOutboxOperationInput,

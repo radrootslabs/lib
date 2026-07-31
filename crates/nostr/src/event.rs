@@ -10,6 +10,9 @@ use radroots_event::id::Nip01Coordinate;
 
 use crate::Error;
 
+#[cfg(feature = "events")]
+pub use crate::types::{RadrootsNostrExternalSigningRequest, RadrootsNostrGenericEventBuilder};
+
 /// Upstream Nostr coordinate used only at the explicit protocol boundary.
 pub type Coordinate = nostr::nips::nip01::Coordinate;
 /// Upstream Nostr event used only at the explicit protocol boundary.

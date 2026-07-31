@@ -3393,6 +3393,7 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxEr
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
     use radroots_event::envelope::kind::{
         KIND_CLASSIFIED_LISTING, KIND_FOLLOW, KIND_GEOCHAT, KIND_HTTP_AUTH, KIND_RELAY_AUTH,
     };
@@ -3406,8 +3407,6 @@ mod tests {
     };
     use radroots_identity::PublicKey;
     use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
-    use radroots_nostr::types::RadrootsNostrKeys;
-    use radroots_nostr::types::RadrootsNostrSecretKey;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";

@@ -358,8 +358,8 @@ mod tests {
     use crate::test_fixtures::{FIXTURE_ALICE_EMAIL, FIXTURE_ALICE_USERNAME};
     use futures::StreamExt;
     use nostr::EventBuilder;
+    use nostr::Keys as RadrootsNostrKeys;
     use radroots_nostr::event::Metadata as RadrootsNostrMetadata;
-    use radroots_nostr::types::RadrootsNostrKeys;
     use std::sync::atomic::Ordering;
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;

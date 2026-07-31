@@ -29,6 +29,10 @@ impl RadrootsRelayUrlPolicy {
 pub struct RelayUrl(String);
 
 impl RelayUrl {
+    pub(crate) fn from_normalized_transport(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
     pub fn parse(
         value: impl AsRef<str>,
         policy: RadrootsRelayUrlPolicy,

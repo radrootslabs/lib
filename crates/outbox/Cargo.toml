@@ -35,6 +35,7 @@ sqlx = { workspace = true, optional = true, features = ["derive"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+nostr = { workspace = true, features = ["std"] }
 radroots_identity = { workspace = true, default-features = false, features = [
   "std",
 ] }

@@ -1373,11 +1373,10 @@ mod tests {
         unproven_relay_stream_completion,
     };
     use nostr::JsonUtil;
+    use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
     use radroots_event_store::{RadrootsEventVisibility, RadrootsNip09SuppressionReason};
     use radroots_nostr::event::Kind as RadrootsNostrKind;
     use radroots_nostr::filter::Filter as RadrootsNostrFilter;
-    use radroots_nostr::types::RadrootsNostrKeys;
-    use radroots_nostr::types::RadrootsNostrSecretKey;
     use std::collections::HashMap;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
