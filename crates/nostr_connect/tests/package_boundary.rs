@@ -1,5 +1,10 @@
 use std::collections::BTreeSet;
 
+use radroots_nostr_connect::{
+    BunkerUri, Client, ClientUri, Error, Method, Permission, Request, Response, Server,
+    client::Transport,
+};
+
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const CLIENT: &str = include_str!("../src/client.rs");
 const METHOD: &str = include_str!("../src/method.rs");
@@ -43,24 +48,74 @@ fn manifest_has_final_identity_feature_vocabulary_and_radroots_dependencies() {
             "radroots_protocol",
         ])
     );
+    assert_eq!(
+        table_keys(MANIFEST, "[dependencies]"),
+        BTreeSet::from([
+            "nostr",
+            "radroots_event",
+            "radroots_identity",
+            "radroots_nostr",
+            "radroots_protocol",
+            "serde",
+            "serde_json",
+            "thiserror",
+            "url",
+        ])
+    );
+    assert_eq!(
+        table_keys(MANIFEST, "[dev-dependencies]"),
+        BTreeSet::from(["tokio"])
+    );
+    for forbidden in [
+        "keyring",
+        "nostr-sdk",
+        "reqwest",
+        "sqlx",
+        "radroots_secrets",
+        "radroots_storage",
+        "radroots_transport_nostr",
+    ] {
+        assert!(
+            !table_keys(MANIFEST, "[dependencies]").contains(forbidden),
+            "protocol package acquired forbidden production dependency `{forbidden}`"
+        );
+    }
 }
 
 #[test]
 fn crate_root_contains_the_approved_module_skeleton() {
-    for module in [
-        "client",
-        "error",
-        "message",
-        "method",
-        "permission",
-        "server",
-        "uri",
-    ] {
-        assert!(
-            ROOT.contains(&format!("pub mod {module};")),
-            "crate root is missing `{module}`"
-        );
-    }
+    let final_root = ROOT
+        .split("// Transitional compatibility surface")
+        .next()
+        .expect("final root declarations");
+    assert_eq!(
+        declarations(final_root, "pub mod "),
+        BTreeSet::from([
+            "client",
+            "error",
+            "message",
+            "method",
+            "permission",
+            "server",
+            "uri",
+        ])
+    );
+    assert_eq!(
+        final_root
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("pub use "))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "pub use client::Client;",
+            "pub use error::RadrootsNostrConnectError as Error;",
+            "pub use message::{Request, Response};",
+            "pub use method::Method;",
+            "pub use permission::Permission;",
+            "pub use server::Server;",
+            "pub use uri::{BunkerUri, ClientUri};",
+        ])
+    );
 
     assert!(SERVER.starts_with("//! Relay- and persistence-independent NIP-46 server state."));
     assert!(ROOT.contains("pub use server::Server;"));
@@ -69,6 +124,48 @@ fn crate_root_contains_the_approved_module_skeleton() {
         ROOT.contains("Step 143 removes this module"),
         "the temporary prelude must carry an exact removal checkpoint"
     );
+}
+
+#[test]
+fn approved_root_exports_and_transport_trait_compile() {
+    fn assert_value<T: Send + Sync>() {}
+    fn assert_error<T: core::error::Error + Send + Sync>() {}
+    fn accept_transport(_: &mut dyn Transport) {}
+
+    assert_value::<BunkerUri>();
+    assert_value::<Client>();
+    assert_value::<ClientUri>();
+    assert_value::<Method>();
+    assert_value::<Permission>();
+    assert_value::<Request>();
+    assert_value::<Response>();
+    assert_value::<Server>();
+    assert_error::<Error>();
+    let _ = accept_transport;
+
+    let public_traits = CLIENT
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("pub trait "))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        public_traits,
+        BTreeSet::from([
+            "pub trait RadrootsNostrConnectClientTransport {",
+            "pub trait Transport: Send {",
+        ]),
+        "only the final host transport SPI and Step 143 compatibility trait may remain"
+    );
+    for forbidden in [
+        "Relay", "Runtime", "Session", "Storage", "Secret", "Approval",
+    ] {
+        assert!(
+            public_traits
+                .iter()
+                .all(|trait_line| !trait_line.contains(forbidden)),
+            "protocol package exposes forbidden owner trait containing `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -156,6 +253,17 @@ fn table_keys<'a>(source: &'a str, header: &str) -> BTreeSet<&'a str> {
                 return None;
             }
             line.split_once('=').map(|(key, _)| key.trim())
+        })
+        .collect()
+}
+
+fn declarations<'a>(source: &'a str, prefix: &str) -> BTreeSet<&'a str> {
+    source
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| {
+            line.strip_prefix(prefix)
+                .and_then(|name| name.strip_suffix(';'))
         })
         .collect()
 }
