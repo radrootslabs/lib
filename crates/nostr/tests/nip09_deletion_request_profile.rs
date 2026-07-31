@@ -1,3 +1,4 @@
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::{
     envelope::kind::KIND_DELETION_REQUEST,
     post::deletion::{
@@ -5,14 +6,13 @@ use radroots_event::{
     },
 };
 use radroots_event_codec::admission::deletion::verify_and_admit_nip09_deletion_request_event;
-use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::Error;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::event::radroots_event_from_nostr;
-use radroots_nostr::events::deletion::radroots_nostr_build_nip09_deletion_request_event;
-use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecretKey;
+use radroots_nostr::event::from_nostr;
+use radroots_nostr::event::{
+    GenericBuilder, build_nip09_deletion_request as build_nip09_deletion_request_event,
+};
 use radroots_test_fixtures::{FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
 const CREATED_AT: u64 = 1_784_347_200;
@@ -33,7 +33,7 @@ fn typed_nip09_deletion_request_signs_exact_tags_and_admits() {
         tag(&["k", "30402"]),
     ];
 
-    let event = radroots_nostr_build_nip09_deletion_request_event(&request)
+    let event = build_nip09_deletion_request_event(&request)
         .expect("typed NIP-09 builder")
         .custom_created_at(created_at)
         .sign_with_keys(&fixture_keys())
@@ -46,7 +46,7 @@ fn typed_nip09_deletion_request_signs_exact_tags_and_admits() {
     event.verify().expect("valid deletion-request signature");
 
     let admitted = verify_and_admit_nip09_deletion_request_event(
-        radroots_event_from_nostr(&event).expect("deletion-request event adapter"),
+        from_nostr(&event).expect("deletion-request event adapter"),
     )
     .expect("deletion-request admission");
     assert_eq!(
@@ -70,7 +70,7 @@ fn typed_nip09_deletion_request_signs_exact_tags_and_admits() {
 
 #[test]
 fn generic_kind_five_builder_cannot_bypass_typed_deletion_authoring() {
-    let error = RadrootsNostrGenericEventBuilder::new(
+    let error = GenericBuilder::new(
         RadrootsNostrKind::Custom(KIND_DELETION_REQUEST as u16),
         "Raw deletion request",
     )
@@ -79,7 +79,7 @@ fn generic_kind_five_builder_cannot_bypass_typed_deletion_authoring() {
 
     assert!(matches!(
         error,
-        RadrootsNostrError::TypedAuthoringRequired { kind }
+        Error::TypedAuthoringRequired { kind }
             if kind == KIND_DELETION_REQUEST as u16
     ));
 }

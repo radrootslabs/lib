@@ -30,7 +30,7 @@ impl SignatureVerifier for NostrSignatureVerifier {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsNostrEventVerification {
+pub enum Verification {
     Verified,
     IdVerified,
     IdMismatch,
@@ -38,20 +38,20 @@ pub enum RadrootsNostrEventVerification {
     MalformedEnvelope,
 }
 
-pub fn radroots_nostr_verify_event(event: &EventEnvelope) -> RadrootsNostrEventVerification {
+pub fn verify_event(event: &EventEnvelope) -> Verification {
     let result = validate_nostr_kind(event)
         .and_then(|()| verify::id(RawEvent::new(event.clone())))
         .and_then(|event| verify::signature(event, &NostrSignatureVerifier));
     match result {
-        Ok(_) => RadrootsNostrEventVerification::Verified,
+        Ok(_) => Verification::Verified,
         Err(error) => verification_error_status(&error),
     }
 }
 
-pub fn radroots_nostr_verify_event_id(event: &EventEnvelope) -> RadrootsNostrEventVerification {
+pub fn verify_event_id(event: &EventEnvelope) -> Verification {
     let result = validate_nostr_kind(event).and_then(|()| verify::id(RawEvent::new(event.clone())));
     match result {
-        Ok(_) => RadrootsNostrEventVerification::IdVerified,
+        Ok(_) => Verification::IdVerified,
         Err(error) => verification_error_status(&error),
     }
 }
@@ -62,37 +62,37 @@ fn validate_nostr_kind(event: &EventEnvelope) -> Result<(), VerificationError> {
         .map_err(|_| VerificationError::MalformedEnvelope)
 }
 
-fn verification_error_status(error: &VerificationError) -> RadrootsNostrEventVerification {
+fn verification_error_status(error: &VerificationError) -> Verification {
     match error {
-        VerificationError::IdMismatch { .. } => RadrootsNostrEventVerification::IdMismatch,
-        VerificationError::SignatureInvalid => RadrootsNostrEventVerification::SignatureInvalid,
+        VerificationError::IdMismatch { .. } => Verification::IdMismatch,
+        VerificationError::SignatureInvalid => Verification::SignatureInvalid,
         VerificationError::MalformedEnvelope | VerificationError::ContractValidation(_) => {
-            RadrootsNostrEventVerification::MalformedEnvelope
+            Verification::MalformedEnvelope
         }
-        _ => RadrootsNostrEventVerification::MalformedEnvelope,
+        _ => Verification::MalformedEnvelope,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event_convert::radroots_event_from_nostr;
-    use crate::events::radroots_nostr_build_event_unchecked;
+    use crate::event_convert::from_nostr;
+    use crate::events::build_event_unchecked;
     use crate::test_fixtures::FIXTURE_ALICE;
-    use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp};
+    use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
+    use nostr::SecretKey;
     use radroots_event::{
         envelope::EventEnvelopeParts, envelope::kind::KIND_POST,
         wire::compute_canonical_nip01_event_id,
     };
 
     fn fixture_keys() -> RadrootsNostrKeys {
-        let secret_key =
-            RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).expect("secret key");
+        let secret_key = SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).expect("secret key");
         RadrootsNostrKeys::new(secret_key)
     }
 
     fn signed_event() -> EventEnvelope {
-        let raw_event = radroots_nostr_build_event_unchecked(
+        let raw_event = build_event_unchecked(
             KIND_POST,
             "hello",
             vec![vec!["t".to_owned(), "soil".to_owned()]],
@@ -101,7 +101,7 @@ mod tests {
         .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_000))
         .sign_with_keys(&fixture_keys())
         .expect("signed event");
-        radroots_event_from_nostr(&raw_event).expect("Radroots event envelope")
+        from_nostr(&raw_event).expect("Radroots event envelope")
     }
 
     fn envelope_with(
@@ -126,14 +126,8 @@ mod tests {
     fn verifies_signed_event_id_and_signature() {
         let event = signed_event();
 
-        assert_eq!(
-            radroots_nostr_verify_event(&event),
-            RadrootsNostrEventVerification::Verified
-        );
-        assert_eq!(
-            radroots_nostr_verify_event_id(&event),
-            RadrootsNostrEventVerification::IdVerified
-        );
+        assert_eq!(verify_event(&event), Verification::Verified);
+        assert_eq!(verify_event_id(&event), Verification::IdVerified);
     }
 
     #[test]
@@ -146,10 +140,7 @@ mod tests {
             original.signature_hex(),
         );
 
-        assert_eq!(
-            radroots_nostr_verify_event(&event),
-            RadrootsNostrEventVerification::IdMismatch
-        );
+        assert_eq!(verify_event(&event), Verification::IdMismatch);
     }
 
     #[test]
@@ -165,10 +156,7 @@ mod tests {
             sig,
         );
 
-        assert_eq!(
-            radroots_nostr_verify_event(&event),
-            RadrootsNostrEventVerification::SignatureInvalid
-        );
+        assert_eq!(verify_event(&event), Verification::SignatureInvalid);
     }
 
     #[test]
@@ -181,14 +169,8 @@ mod tests {
             original.signature_hex(),
         );
 
-        assert_eq!(
-            radroots_nostr_verify_event(&event),
-            RadrootsNostrEventVerification::MalformedEnvelope
-        );
-        assert_eq!(
-            radroots_nostr_verify_event_id(&event),
-            RadrootsNostrEventVerification::MalformedEnvelope
-        );
+        assert_eq!(verify_event(&event), Verification::MalformedEnvelope);
+        assert_eq!(verify_event_id(&event), Verification::MalformedEnvelope);
     }
 
     #[test]
@@ -215,13 +197,7 @@ mod tests {
         })
         .expect("envelope");
 
-        assert_eq!(
-            radroots_nostr_verify_event(&event),
-            RadrootsNostrEventVerification::MalformedEnvelope
-        );
-        assert_eq!(
-            radroots_nostr_verify_event_id(&event),
-            RadrootsNostrEventVerification::MalformedEnvelope
-        );
+        assert_eq!(verify_event(&event), Verification::MalformedEnvelope);
+        assert_eq!(verify_event_id(&event), Verification::MalformedEnvelope);
     }
 }

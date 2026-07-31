@@ -10,13 +10,13 @@ use radroots_event::envelope::kind::KIND_PROFILE;
 use radroots_event_codec::decode::job::{JobEventBorrow, JobEventLike};
 
 #[derive(Clone, Debug)]
-pub struct RadrootsNostrEventAdapter<'a> {
+pub struct EventAdapter<'a> {
     evt: &'a RadrootsNostrEvent,
     id_hex: String,
     author_hex: String,
 }
 
-impl<'a> RadrootsNostrEventAdapter<'a> {
+impl<'a> EventAdapter<'a> {
     #[inline]
     pub fn new(evt: &'a RadrootsNostrEvent) -> Self {
         Self {
@@ -36,7 +36,7 @@ impl<'a> RadrootsNostrEventAdapter<'a> {
     }
 }
 
-impl<'a> JobEventBorrow<'a> for RadrootsNostrEventAdapter<'a> {
+impl<'a> JobEventBorrow<'a> for EventAdapter<'a> {
     #[inline]
     fn raw_id(&'a self) -> String {
         self.id_hex.clone()
@@ -58,7 +58,7 @@ impl<'a> JobEventBorrow<'a> for RadrootsNostrEventAdapter<'a> {
     }
 }
 
-impl JobEventLike for RadrootsNostrEventAdapter<'_> {
+impl JobEventLike for EventAdapter<'_> {
     fn raw_id(&self) -> String {
         self.id_hex.clone()
     }

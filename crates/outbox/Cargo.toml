@@ -42,6 +42,7 @@ radroots_identity = { workspace = true, default-features = false, features = [
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",
+  "signing",
 ] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

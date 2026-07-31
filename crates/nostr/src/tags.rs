@@ -7,13 +7,13 @@ use alloc::{
 
 use nostr::nips::nip04;
 
-use crate::error::RadrootsNostrTagsResolveError;
+use crate::error::ResolveError;
 use crate::types::{
     RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
     RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard,
 };
 
-pub fn radroots_nostr_tag_first_value(tag: &RadrootsNostrTag, key: &str) -> Option<String> {
+pub fn tag_first_value(tag: &RadrootsNostrTag, key: &str) -> Option<String> {
     if tag.kind() == RadrootsNostrTagKind::custom(key) {
         tag.content().map(|v| v.to_string())
     } else {
@@ -21,31 +21,29 @@ pub fn radroots_nostr_tag_first_value(tag: &RadrootsNostrTag, key: &str) -> Opti
     }
 }
 
-pub fn radroots_nostr_tag_at_value(tag: &RadrootsNostrTag, index: usize) -> Option<String> {
+pub fn tag_at_value(tag: &RadrootsNostrTag, index: usize) -> Option<String> {
     tag.as_slice().get(index).cloned()
 }
 
-pub fn radroots_nostr_tag_slice(tag: &RadrootsNostrTag, start: usize) -> Option<Vec<String>> {
+pub fn tag_slice(tag: &RadrootsNostrTag, start: usize) -> Option<Vec<String>> {
     tag.as_slice().get(start..).map(|s| s.to_vec())
 }
 
-pub fn radroots_nostr_tag_relays_parse(
-    tag: &RadrootsNostrTag,
-) -> Option<&Vec<RadrootsNostrRelayUrl>> {
+pub fn tag_relays_parse(tag: &RadrootsNostrTag) -> Option<&Vec<RadrootsNostrRelayUrl>> {
     match tag.as_standardized()? {
         RadrootsNostrTagStandard::Relays(urls) => Some(urls),
         _ => None,
     }
 }
 
-pub fn radroots_nostr_tags_match(tag: &RadrootsNostrTag) -> Option<(&str, &[String])> {
+pub fn tags_match(tag: &RadrootsNostrTag) -> Option<(&str, &[String])> {
     let values = tag.as_slice();
     values
         .split_first()
         .map(|(key, tag_values)| (key.as_str(), tag_values))
 }
 
-pub fn radroots_nostr_tag_match_l(tag: &RadrootsNostrTag) -> Option<(&str, f64)> {
+pub fn tag_match_l(tag: &RadrootsNostrTag) -> Option<(&str, f64)> {
     let values = tag.as_slice();
     if values.len() >= 3
         && values[0].eq_ignore_ascii_case("l")
@@ -56,7 +54,7 @@ pub fn radroots_nostr_tag_match_l(tag: &RadrootsNostrTag) -> Option<(&str, f64)>
     None
 }
 
-pub fn radroots_nostr_tag_match_location(tag: &RadrootsNostrTag) -> Option<(&str, &str, &str)> {
+pub fn tag_match_location(tag: &RadrootsNostrTag) -> Option<(&str, &str, &str)> {
     let values = tag.as_slice();
     if values.len() >= 4 && values[0] == "location" {
         Some((values[1].as_str(), values[2].as_str(), values[3].as_str()))
@@ -65,31 +63,31 @@ pub fn radroots_nostr_tag_match_location(tag: &RadrootsNostrTag) -> Option<(&str
     }
 }
 
-pub fn radroots_nostr_tag_match_geohash(tag: &RadrootsNostrTag) -> Option<String> {
+pub fn tag_match_geohash(tag: &RadrootsNostrTag) -> Option<String> {
     match tag.as_standardized()? {
         RadrootsNostrTagStandard::Geohash(geohash) => Some(geohash.clone()),
         _ => None,
     }
 }
 
-pub fn radroots_nostr_tag_match_title(tag: &RadrootsNostrTag) -> Option<String> {
+pub fn tag_match_title(tag: &RadrootsNostrTag) -> Option<String> {
     match tag.as_standardized()? {
         RadrootsNostrTagStandard::Title(title) => Some(title.clone()),
         _ => None,
     }
 }
 
-pub fn radroots_nostr_tag_match_summary(tag: &RadrootsNostrTag) -> Option<String> {
+pub fn tag_match_summary(tag: &RadrootsNostrTag) -> Option<String> {
     match tag.as_standardized()? {
         RadrootsNostrTagStandard::Summary(summary) => Some(summary.clone()),
         _ => None,
     }
 }
 
-pub fn radroots_nostr_tags_resolve(
+pub fn tags_resolve(
     event: &RadrootsNostrEvent,
     keys: &RadrootsNostrKeys,
-) -> Result<Vec<RadrootsNostrTag>, RadrootsNostrTagsResolveError> {
+) -> Result<Vec<RadrootsNostrTag>, ResolveError> {
     if !event
         .tags
         .iter()
@@ -107,12 +105,12 @@ pub fn radroots_nostr_tags_resolve(
                 None
             }
         })
-        .ok_or_else(|| RadrootsNostrTagsResolveError::MissingPTag(Box::new(event.clone())))?;
+        .ok_or_else(|| ResolveError::MissingPTag(Box::new(event.clone())))?;
     if recipient != keys.public_key() {
-        return Err(RadrootsNostrTagsResolveError::NotRecipient);
+        return Err(ResolveError::NotRecipient);
     }
     let cleartext = nip04::decrypt(keys.secret_key(), &event.pubkey, &event.content)
-        .map_err(|e| RadrootsNostrTagsResolveError::DecryptionError(e.to_string()))?;
+        .map_err(|e| ResolveError::DecryptionError(e.to_string()))?;
     let decrypted_tags: nostr::event::tag::list::Tags = serde_json::from_str(&cleartext)?;
     Ok(decrypted_tags.to_vec())
 }

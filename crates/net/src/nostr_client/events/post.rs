@@ -1,16 +1,15 @@
 use crate::error::{NetError, Result};
 use radroots_event::{post::AuthoredUpdate, post::reply::AuthoredNip10Reply};
 use radroots_event_codec::{parsed::RadrootsParsedData, post::decode::LegacyPost};
-use radroots_nostr::events::post::radroots_nostr_build_update_event;
-use radroots_nostr::events::post::radroots_nostr_post_events_filter;
-use radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event;
+use radroots_nostr::event::build_nip10_reply;
+use radroots_nostr::event::build_update;
+use radroots_nostr::event::post_filter;
 
 use crate::nostr_client::manager::NostrClientManager;
 
 impl NostrClientManager {
     pub async fn publish_update_event(&self, update: &AuthoredUpdate) -> Result<String> {
-        let builder =
-            radroots_nostr_build_update_event(update).map_err(|e| NetError::Msg(e.to_string()))?;
+        let builder = build_update(update).map_err(|e| NetError::Msg(e.to_string()))?;
         let event = builder
             .sign_with_keys(&self.inner.keys)
             .map_err(|error| NetError::Msg(error.to_string()))?;
@@ -30,8 +29,7 @@ impl NostrClientManager {
     }
 
     pub async fn publish_nip10_reply_event(&self, reply: &AuthoredNip10Reply) -> Result<String> {
-        let builder = radroots_nostr_build_nip10_reply_event(reply)
-            .map_err(|e| NetError::Msg(e.to_string()))?;
+        let builder = build_nip10_reply(reply).map_err(|e| NetError::Msg(e.to_string()))?;
         let event = builder
             .sign_with_keys(&self.inner.keys)
             .map_err(|error| NetError::Msg(error.to_string()))?;
@@ -58,7 +56,7 @@ impl NostrClientManager {
         limit: u16,
         since_unix: Option<u64>,
     ) -> Result<Vec<RadrootsParsedData<LegacyPost>>> {
-        let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);
+        let filter = post_filter(Some(limit), since_unix);
         let events = self
             .inner
             .client
@@ -67,7 +65,7 @@ impl NostrClientManager {
             .map_err(|error| NetError::Msg(error.to_string()))?;
         Ok(events
             .into_iter()
-            .map(|event| radroots_nostr::event_adapters::to_post_event_metadata(&event))
+            .map(|event| radroots_nostr::event::to_post_event_metadata(&event))
             .collect())
     }
 

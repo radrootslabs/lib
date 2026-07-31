@@ -1636,7 +1636,7 @@ mod tests {
     use radroots_event_codec::encode::farm as farm_list_sets;
     use radroots_event_codec::encode::list_set as list_set_encode;
     use radroots_event_codec::encode::plot as plot_encode;
-    use radroots_nostr::event::radroots_event_from_nostr;
+    use radroots_nostr::event::from_nostr;
     use radroots_replica_schema::farm::IFarmFields;
     use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
     use radroots_replica_schema::farm_member::IFarmMemberFields;
@@ -2072,7 +2072,7 @@ mod tests {
         .custom_created_at(Timestamp::from_secs(created_at))
         .sign_with_keys(&keys)
         .expect("signed listing event");
-        radroots_event_from_nostr(&event).expect("listing event adapter")
+        from_nostr(&event).expect("listing event adapter")
     }
 
     fn focused_listing_event(author: &str, created_at: u64, d_tag: &str) -> EventEnvelope {

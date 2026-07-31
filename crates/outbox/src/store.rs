@@ -3406,7 +3406,7 @@ mod tests {
         canonical_trade_mutation_content,
     };
     use radroots_identity::PublicKey;
-    use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+    use radroots_nostr::signing::sign_frozen_draft;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -3589,8 +3589,7 @@ mod tests {
 
     fn signed_trade_mutation(canonical: &TradeCanonicalMutationV1) -> (EventDraft, SignedEvent) {
         let draft = trade_mutation_draft(canonical);
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed trade event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed trade event");
         (draft, signed_event)
     }
 
@@ -4286,8 +4285,8 @@ mod tests {
             .expect("pool outbox");
 
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight");
-        let signed_event = radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft)
-            .expect("signed preflight event");
+        let signed_event =
+            sign_frozen_draft(&fixture_keys(), &draft).expect("signed preflight event");
         let input = signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
             .with_idempotency_key("preflight-idem");
         outbox
@@ -4312,8 +4311,8 @@ mod tests {
             .expect("matching existing preflight");
 
         let changed_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight changed");
-        let changed_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &changed_draft)
-            .expect("changed signed event");
+        let changed_signed =
+            sign_frozen_draft(&fixture_keys(), &changed_draft).expect("changed signed event");
         let conflict = signed_operation_input(changed_draft, changed_signed, 1_100)
             .with_idempotency_key("preflight-idem");
         assert!(matches!(
@@ -4324,9 +4323,8 @@ mod tests {
         ));
 
         let transaction_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "transaction");
-        let transaction_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &transaction_draft)
-                .expect("transaction signed event");
+        let transaction_signed = sign_frozen_draft(&fixture_keys(), &transaction_draft)
+            .expect("transaction signed event");
         let transaction_input =
             signed_operation_input(transaction_draft.clone(), transaction_signed, 2_000)
                 .with_idempotency_key("transaction-idem");
@@ -4343,9 +4341,8 @@ mod tests {
 
         let transaction_changed =
             generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "transaction changed");
-        let transaction_changed_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &transaction_changed)
-                .expect("transaction changed signed event");
+        let transaction_changed_signed = sign_frozen_draft(&fixture_keys(), &transaction_changed)
+            .expect("transaction changed signed event");
         let transaction_conflict =
             signed_operation_input(transaction_changed, transaction_changed_signed, 2_100)
                 .with_idempotency_key("transaction-idem");
@@ -4465,8 +4462,8 @@ mod tests {
     async fn defensive_storage_decoding_and_remaining_idempotency_edges_are_explicit() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "defensive storage");
-        let signed_event = radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft)
-            .expect("signed defensive event");
+        let signed_event =
+            sign_frozen_draft(&fixture_keys(), &draft).expect("signed defensive event");
         let signed_receipt = outbox
             .enqueue_signed_operation(signed_operation_input(
                 draft.clone(),
@@ -4477,8 +4474,8 @@ mod tests {
             .expect("signed insert without idempotency key");
 
         let keyed_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "keyed public insert");
-        let keyed_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &keyed_draft)
-            .expect("keyed signed event");
+        let keyed_signed =
+            sign_frozen_draft(&fixture_keys(), &keyed_draft).expect("keyed signed event");
         outbox
             .enqueue_signed_operation(
                 signed_operation_input(keyed_draft, keyed_signed, 1_100)
@@ -4487,8 +4484,8 @@ mod tests {
             .await
             .expect("keyed public signed insert");
         let changed_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "keyed public conflict");
-        let changed_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &changed_draft)
-            .expect("changed signed event");
+        let changed_signed =
+            sign_frozen_draft(&fixture_keys(), &changed_draft).expect("changed signed event");
         assert!(matches!(
             outbox
                 .enqueue_signed_operation(
@@ -4504,9 +4501,8 @@ mod tests {
             FIXTURE_ALICE_PUBLIC_KEY_HEX,
             "not a semantic trade mutation",
         );
-        let invalid_trade_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &invalid_trade_draft)
-                .expect("invalid trade draft still forms a valid signed event");
+        let invalid_trade_signed = sign_frozen_draft(&fixture_keys(), &invalid_trade_draft)
+            .expect("invalid trade draft still forms a valid signed event");
         assert!(matches!(
             outbox
                 .preflight_signed_trade_mutation_idempotency(&signed_trade_mutation_input(
@@ -4567,9 +4563,8 @@ mod tests {
             .expect("trade insert without idempotency key");
 
         let transaction_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "transaction no key");
-        let transaction_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &transaction_draft)
-                .expect("transaction signed event");
+        let transaction_signed = sign_frozen_draft(&fixture_keys(), &transaction_draft)
+            .expect("transaction signed event");
         let mut transaction = outbox.pool().begin().await.expect("begin transaction");
         outbox
             .enqueue_signed_operation_in_transaction(
@@ -4911,8 +4906,7 @@ mod tests {
         ));
 
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "plan lifecycle");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("sign plan lifecycle");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("sign plan lifecycle");
         let first = outbox
             .enqueue_signed_operation(
                 RadrootsOutboxSignedOperationInput::new(
@@ -5085,8 +5079,7 @@ mod tests {
             .enqueue_operation(operation_input(draft.clone(), 1_000))
             .await
             .expect("enqueue unsigned");
-        let signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("sign queued event");
+        let signed = sign_frozen_draft(&fixture_keys(), &draft).expect("sign queued event");
         let claimed = outbox
             .claim_next_ready_event("signer", "sign-claim", 2_000, 1_000)
             .await
@@ -5106,8 +5099,8 @@ mod tests {
         ));
 
         let other_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "different event");
-        let other_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &other_draft)
-            .expect("sign different event");
+        let other_signed =
+            sign_frozen_draft(&fixture_keys(), &other_draft).expect("sign different event");
         assert!(matches!(
             outbox
                 .complete_signing(receipt.outbox_event_id, "sign-claim", other_signed, 1_020,)
@@ -5266,8 +5259,8 @@ mod tests {
 
         let signed_outbox = RadrootsOutbox::open_memory().await.expect("open signed");
         let signed_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed race");
-        let signed_event = radroots_nostr_sign_frozen_draft(&fixture_keys(), &signed_draft)
-            .expect("sign race event");
+        let signed_event =
+            sign_frozen_draft(&fixture_keys(), &signed_draft).expect("sign race event");
         signed_outbox
             .enqueue_signed_operation(signed_operation_input(signed_draft, signed_event, 1_000))
             .await
@@ -5291,8 +5284,7 @@ mod tests {
     async fn claimed_publish_mutations_enforce_plan_identity_and_atomic_updates() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "publish guards");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("sign publish guards");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("sign publish guards");
         let receipt = outbox
             .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
             .await
@@ -5532,8 +5524,7 @@ mod tests {
                 FIXTURE_ALICE_PUBLIC_KEY_HEX,
             )
             .expect("ephemeral draft");
-            let signed_event =
-                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed");
+            let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed");
 
             let unsigned_error = outbox
                 .enqueue_operation(operation_input(draft.clone(), 1_000))
@@ -5873,8 +5864,7 @@ mod tests {
     async fn no_wait_delivery_plan_persists_directly_and_completes_without_target_satisfaction() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "no wait");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -6168,8 +6158,7 @@ mod tests {
     async fn signed_enqueue_claims_ready_delivery_targets_and_records_attempts() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(signed_operation_input(draft, signed_event.clone(), 1_000))
             .await
@@ -6271,8 +6260,7 @@ mod tests {
     async fn required_target_plan_evaluation_uses_persisted_fingerprints() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "required target");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let optional = nostr_target(NOSTR_PRIMARY_WSS);
         let required = nostr_target(NOSTR_SECONDARY_WSS);
         let receipt = outbox
@@ -6382,8 +6370,7 @@ mod tests {
             FIXTURE_ALICE_PUBLIC_KEY_HEX,
             "required target optional failure",
         );
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let optional = nostr_target(NOSTR_PRIMARY_WSS);
         let required = nostr_target(NOSTR_SECONDARY_WSS);
         let receipt = outbox
@@ -6515,8 +6502,7 @@ mod tests {
         ] {
             let outbox = RadrootsOutbox::open_memory().await.expect("open");
             let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, terminal_status.as_str());
-            let signed_event =
-                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+            let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
             let receipt = outbox
                 .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
@@ -6621,8 +6607,7 @@ mod tests {
     async fn publish_claims_one_delivery_plan_and_rejects_sibling_target_outcomes() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "duplicate endpoint plans");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let first = outbox
             .enqueue_signed_operation(
                 RadrootsOutboxSignedOperationInput::new(
@@ -6764,8 +6749,7 @@ mod tests {
     async fn active_plan_terminal_failure_leaves_sibling_claimable() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "plan scoped terminal");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let first = outbox
             .enqueue_signed_operation(
                 RadrootsOutboxSignedOperationInput::new(
@@ -6907,8 +6891,7 @@ mod tests {
     async fn cancel_claimed_event_marks_every_delivery_plan_cancelled() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "cancel all plans");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let first = outbox
             .enqueue_signed_operation(
                 RadrootsOutboxSignedOperationInput::new(
@@ -6991,8 +6974,7 @@ mod tests {
     async fn quorum_accepted_delivery_plan_round_trips_and_completes_after_required_target() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "at least");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7059,8 +7041,7 @@ mod tests {
     async fn publish_attempt_stays_retryable_while_delivery_targets_remain_ready() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "retryable");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
             .await
@@ -7101,8 +7082,7 @@ mod tests {
     async fn reticulum_reject_targets_are_deferred_until_implemented_and_not_ready() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum rejected");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7171,8 +7151,7 @@ mod tests {
     async fn reticulum_deferred_targets_do_not_retry_or_satisfy_delivery() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7239,8 +7218,7 @@ mod tests {
         let default_behavior_draft =
             generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred");
         let default_behavior_signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &default_behavior_draft)
-                .expect("signed event");
+            sign_frozen_draft(&fixture_keys(), &default_behavior_draft).expect("signed event");
         let default_behavior_preflight = outbox
             .preflight_signed_operation_idempotency(&RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7268,8 +7246,7 @@ mod tests {
     async fn repeated_reticulum_signed_delivery_reuses_one_logical_operation_and_plan() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum repeated");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let first = outbox
             .enqueue_signed_operation(
                 RadrootsOutboxSignedOperationInput::new(
@@ -7337,8 +7314,8 @@ mod tests {
     async fn reticulum_events_report_deferred_records() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let reject_draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum record");
-        let reject_signed_event = radroots_nostr_sign_frozen_draft(&fixture_keys(), &reject_draft)
-            .expect("reticulum signed event");
+        let reject_signed_event =
+            sign_frozen_draft(&fixture_keys(), &reject_draft).expect("reticulum signed event");
         let reject = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7359,8 +7336,7 @@ mod tests {
         let deferred_draft =
             generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred record");
         let deferred_signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &deferred_draft)
-                .expect("deferred signed event");
+            sign_frozen_draft(&fixture_keys(), &deferred_draft).expect("deferred signed event");
         let deferred = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7491,8 +7467,7 @@ mod tests {
             .expect("claim")
             .expect("claimed");
         assert_eq!(claimed.active_delivery_plan_id, None);
-        let signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
+        let signed = sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
 
         outbox
             .complete_signing(receipt.outbox_event_id, "claim-a", signed, 1_100)
@@ -7528,8 +7503,7 @@ mod tests {
     async fn explicit_all_targets_completes_after_nostr_success_with_reticulum_preserved() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "explicit all targets");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7630,8 +7604,7 @@ mod tests {
     async fn explicit_quorum_rejects_deferred_targets_as_required_success_capacity() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "explicit quorum");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let err = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7667,8 +7640,7 @@ mod tests {
     async fn explicit_nostr_and_reticulum_preserves_ready_nostr_work() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "explicit reticulum");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7724,8 +7696,7 @@ mod tests {
     async fn accepted_delivery_target_can_advance_to_strict_success_status() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "accepted then delivered");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
@@ -7832,8 +7803,7 @@ mod tests {
         ] {
             let outbox = RadrootsOutbox::open_memory().await.expect("open");
             let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, content);
-            let signed_event =
-                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+            let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
             let receipt = outbox
                 .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
@@ -7976,8 +7946,7 @@ mod tests {
         ] {
             let outbox = RadrootsOutbox::open_memory().await.expect("open");
             let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, content);
-            let signed_event =
-                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+            let signed_event = sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
             let receipt = outbox
                 .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
@@ -8110,8 +8079,7 @@ mod tests {
             .await
             .expect("claim")
             .expect("claimed");
-        let signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
+        let signed = sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
         outbox
             .complete_signing(
                 receipt.outbox_event_id,
@@ -8181,8 +8149,7 @@ mod tests {
             .await
             .expect("claim")
             .expect("claimed");
-        let signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
+        let signed = sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
         outbox
             .complete_signing(
                 receipt.outbox_event_id,
@@ -8242,8 +8209,7 @@ mod tests {
             .await
             .expect("claim")
             .expect("claimed");
-        let signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
+        let signed = sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
         let mut wire = signed.wire().clone();
         wire.sig = "0".repeat(128);
         let raw_json = serde_json::to_string(&wire).expect("invalid-signature wire JSON");

@@ -6,22 +6,22 @@ extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
 
-use crate::error::RadrootsNostrError;
-use crate::events::radroots_nostr_build_event_unchecked;
-use crate::types::{RadrootsNostrGenericEventBuilder, RadrootsNostrMetadata};
+use crate::error::Error;
+use crate::events::build_event_unchecked;
+use crate::types::{GenericBuilder, RadrootsNostrMetadata};
 use radroots_event::envelope::kind::KIND_APPLICATION_HANDLER;
 
 #[derive(Debug, Clone)]
-pub struct RadrootsNostrApplicationHandlerSpec {
-    pub kinds: Vec<u32>,
-    pub identifier: Option<String>,
-    pub metadata: Option<RadrootsNostrMetadata>,
-    pub extra_tags: Vec<Vec<String>>,
-    pub relays: Vec<String>,
-    pub nostrconnect_url: Option<String>,
+pub struct ApplicationHandlerSpec {
+    kinds: Vec<u32>,
+    identifier: Option<String>,
+    metadata: Option<RadrootsNostrMetadata>,
+    extra_tags: Vec<Vec<String>>,
+    relays: Vec<String>,
+    nostrconnect_url: Option<String>,
 }
 
-impl RadrootsNostrApplicationHandlerSpec {
+impl ApplicationHandlerSpec {
     pub fn new(kinds: Vec<u32>) -> Self {
         Self {
             kinds,
@@ -32,13 +32,67 @@ impl RadrootsNostrApplicationHandlerSpec {
             nostrconnect_url: None,
         }
     }
+
+    #[must_use]
+    pub fn with_identifier(mut self, identifier: impl Into<String>) -> Self {
+        self.identifier = Some(identifier.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: RadrootsNostrMetadata) -> Self {
+        self.metadata = Some(metadata);
+        self
+    }
+
+    #[must_use]
+    pub fn with_extra_tags(mut self, extra_tags: Vec<Vec<String>>) -> Self {
+        self.extra_tags = extra_tags;
+        self
+    }
+
+    #[must_use]
+    pub fn with_relays(mut self, relays: Vec<String>) -> Self {
+        self.relays = relays;
+        self
+    }
+
+    #[must_use]
+    pub fn with_nostr_connect_url(mut self, url: impl Into<String>) -> Self {
+        self.nostrconnect_url = Some(url.into());
+        self
+    }
+
+    pub fn kinds(&self) -> &[u32] {
+        &self.kinds
+    }
+
+    pub fn identifier(&self) -> Option<&str> {
+        self.identifier.as_deref()
+    }
+
+    pub fn metadata(&self) -> Option<&RadrootsNostrMetadata> {
+        self.metadata.as_ref()
+    }
+
+    pub fn extra_tags(&self) -> &[Vec<String>] {
+        &self.extra_tags
+    }
+
+    pub fn relays(&self) -> &[String] {
+        &self.relays
+    }
+
+    pub fn nostr_connect_url(&self) -> Option<&str> {
+        self.nostrconnect_url.as_deref()
+    }
 }
 
-pub fn radroots_nostr_build_application_handler_event(
-    spec: &RadrootsNostrApplicationHandlerSpec,
-) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrError> {
+pub fn build_application_handler_event(
+    spec: &ApplicationHandlerSpec,
+) -> Result<GenericBuilder, Error> {
     if spec.kinds.is_empty() {
-        return Err(RadrootsNostrError::FilterTagError(
+        return Err(Error::FilterTagError(
             "application handler kinds are empty".to_string(),
         ));
     }
@@ -50,7 +104,7 @@ pub fn radroots_nostr_build_application_handler_event(
 
     let mut content = String::new();
     if let Some(md) = spec.metadata.as_ref()
-        && radroots_nostr_metadata_has_fields(md)
+        && metadata_has_fields(md)
     {
         content = serde_json::to_string(md).unwrap_or_default();
     }
@@ -80,11 +134,11 @@ pub fn radroots_nostr_build_application_handler_event(
         tags.push(tag.clone());
     }
 
-    let builder = radroots_nostr_build_event_unchecked(KIND_APPLICATION_HANDLER, content, tags)?;
-    Ok(RadrootsNostrGenericEventBuilder::from_unchecked(builder))
+    let builder = build_event_unchecked(KIND_APPLICATION_HANDLER, content, tags)?;
+    Ok(GenericBuilder::from_unchecked(builder))
 }
 
-pub fn radroots_nostr_metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
+pub fn metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
     md.name.is_some()
         || md.display_name.is_some()
         || md.about.is_some()
@@ -99,14 +153,12 @@ pub fn radroots_nostr_metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::radroots_nostr_metadata_has_fields;
+    use super::metadata_has_fields;
     use crate::types::RadrootsNostrMetadata;
 
     #[test]
     fn metadata_has_fields_false_when_empty() {
-        assert!(!radroots_nostr_metadata_has_fields(
-            &RadrootsNostrMetadata::default()
-        ));
+        assert!(!metadata_has_fields(&RadrootsNostrMetadata::default()));
     }
 
     #[test]
@@ -115,6 +167,6 @@ mod tests {
             about: Some("ready".to_string()),
             ..Default::default()
         };
-        assert!(radroots_nostr_metadata_has_fields(&metadata));
+        assert!(metadata_has_fields(&metadata));
     }
 }

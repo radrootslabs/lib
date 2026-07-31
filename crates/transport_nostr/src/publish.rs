@@ -1050,7 +1050,7 @@ mod tests {
     use radroots_event::draft::{EventDraft, SignedEvent};
     use radroots_event::envelope::kind::KIND_GEOCHAT;
     use radroots_event::wire::Nip01EventWire;
-    use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+    use radroots_nostr::signing::sign_frozen_draft;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -1070,7 +1070,7 @@ mod tests {
             FIXTURE_ALICE_PUBLIC_KEY_HEX,
         )
         .expect("draft");
-        let signed_event = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
+        let signed_event = sign_frozen_draft(&keys, &draft).expect("signed event");
         let raw_event = RadrootsNostrEvent::from_json(signed_event.raw_json()).expect("raw event");
         (raw_event, signed_event)
     }

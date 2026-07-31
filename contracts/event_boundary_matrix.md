@@ -102,8 +102,8 @@ event id wins at equal time. Side-specific errors identify an invalid previous
 or current candidate before revision comparison.
 
 The `radroots_nostr` `events` feature seals strict FoodAvailability wire parts
-behind a builder whose timestamp cannot be mutated after validation. It supports
-local signing and typed client publication; generic authoring rejects focused
+behind a builder whose timestamp cannot be mutated after validation. With the
+`signing` feature it supports local signing; generic authoring rejects focused
 and mixed kind-`30402` profiles. Signed-event relay remains transport-only.
 The non-default `legacy-ingest` replica feature verifies kind-`30402` NIP-01
 events first, selects the raw addressable head before profile decoding, and
@@ -205,8 +205,9 @@ relay availability.
 
 The event-contract registry v7 classifies `radroots.social.comment.v1` as
 `TypedOnly` for authoring and `AdmissionOnly` for matching. Registry versions
-`1` through `6` are stale. Generic kind-`1111` signing and client publication
-fail before signer access. The complete operation surface is exactly
+`1` through `6` are stale. Generic kind-`1111` signing fails before signer
+access; publication remains transport-owned. The complete operation surface
+is exactly
 `social.comment.build_authored_draft`,
 `social.comment.project_verified_event`, and
 `social.comment.verify_and_admit_event`.
@@ -252,8 +253,8 @@ qualifying inputs.
 
 The event-contract registry v7 classifies
 `radroots.social.deletion_request.v1` as `TypedOnly` for authoring and
-`AdmissionOnly` for matching. Generic kind-`5` signing and client publication
-fail before signer access.
+`AdmissionOnly` for matching. Generic kind-`5` signing fails before signer
+access; publication remains transport-owned.
 
 The complete operation surface is exactly
 `social.deletion_request.build_authored_draft`,
@@ -275,9 +276,9 @@ not weaken or add effect fields to the request corpus.
 | profile | 0 | AuthoredProfile / RadrootsInboundProfileMetadata | events.profile.publish, events.profile.list, events.profile.get | publish must use `profile.build_authored_draft`; inbound projection must use `profile.parse_inbound_metadata`; authored output is deterministic JSON with no marker tag |
 | follow | 3 | Follow | events.follow.publish, events.follow.list, events.follow.get | replaceable event |
 | post | 1 | AuthoredUpdate / AuthoredPhotoUpdate / AuthoredAsk / RadrootsInboundPostProjection | events.post.publish, events.post.list, events.post.get | ordinary kind-1 reads remain generic; exact root-card subtypes require verified admission; any `e` tag produces a thread-excluded candidate without a Reply claim |
-| reply | 1 | AuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder | social.reply.build_authored_draft, social.reply.project_verified_event, social.reply.verify_and_admit_event | strict marked direct/nested NIP-10 authoring; verified marked or positional inbound admission with advisory-metadata diagnostics; never a root card; target existence, kind, author, and relay availability are not proven |
-| comment | 1111 | AuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder | social.comment.build_authored_draft, social.comment.project_verified_event, social.comment.verify_and_admit_event | strict NIP-22 event/address roots limited to kinds `30402`, `31922`, and `31923`; tolerant verified projection; registry-v7 typed-only authoring and admission-only matching |
-| deletion_request | 5 | AuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / RadrootsNostrNip09DeletionRequestEventBuilder | social.deletion_request.build_authored_draft, social.deletion_request.project_verified_event, social.deletion_request.verify_and_admit_event, social.deletion_request.evaluate_suppression | effect-free NIP-09 request authoring and verified projection plus pure immutable suppression evaluation; same-author direct event targets and inclusive address cutoffs; kind-5 immunity; advisory kinds ignored; registry-v7 typed-only authoring and admission-only matching |
+| reply | 1 | AuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / Nip10ReplyBuilder | social.reply.build_authored_draft, social.reply.project_verified_event, social.reply.verify_and_admit_event | strict marked direct/nested NIP-10 authoring; verified marked or positional inbound admission with advisory-metadata diagnostics; never a root card; target existence, kind, author, and relay availability are not proven |
+| comment | 1111 | AuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / Nip22CommentBuilder | social.comment.build_authored_draft, social.comment.project_verified_event, social.comment.verify_and_admit_event | strict NIP-22 event/address roots limited to kinds `30402`, `31922`, and `31923`; tolerant verified projection; registry-v7 typed-only authoring and admission-only matching |
+| deletion_request | 5 | AuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / Nip09DeletionRequestBuilder | social.deletion_request.build_authored_draft, social.deletion_request.project_verified_event, social.deletion_request.verify_and_admit_event, social.deletion_request.evaluate_suppression | effect-free NIP-09 request authoring and verified projection plus pure immutable suppression evaluation; same-author direct event targets and inclusive address cutoffs; kind-5 immunity; advisory kinds ignored; registry-v7 typed-only authoring and admission-only matching |
 | reaction | 7 | Reaction | events.reaction.publish, events.reaction.list, events.reaction.get | requires event, pubkey, or address tags |
 | repost | 6 | Repost | events.repost.publish, events.repost.list, events.repost.get | NIP-18 kind-1 repost surface |
 | generic_repost | 16 | GenericRepost | events.generic_repost.publish, events.generic_repost.list, events.generic_repost.get | NIP-18 generic repost surface |
@@ -304,7 +305,7 @@ not weaken or add effect fields to the request corpus.
 | document | 30361 | Document | events.document.publish, events.document.list, events.document.get | requires `d` and pubkey tags; optional address tag |
 | resource_area | 30370 | ResourceArea | events.resource_area.publish, events.resource_area.list, events.resource_area.get | addressable; GCS location and `g` tag required |
 | resource_cap | 30371 | ResourceHarvestCap | events.resource_cap.publish, events.resource_cap.list, events.resource_cap.get | addressable; required address, pubkey, key, start, and end tags |
-| food_availability | 30402 | FoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder | food_availability.build_authored_draft, food_availability.project_verified_event, food_availability.verify_and_admit_event, food_availability.validate_revision | focused `radroots.food.availability.v1` profile; strict deterministic authoring, verified projection/admission, stable-coordinate revision validation, sealed Nostr signing/publication, generic-authoring reservation, and raw-head-first partitioning only behind the non-default `legacy-ingest` replica feature; BUD-02 upload evidence remains a runtime prerequisite |
+| food_availability | 30402 | FoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / FoodAvailabilityBuilder | food_availability.build_authored_draft, food_availability.project_verified_event, food_availability.verify_and_admit_event, food_availability.validate_revision | focused `radroots.food.availability.v1` profile; strict deterministic authoring, verified projection/admission, stable-coordinate revision validation, sealed Nostr signing, transport-owned publication, generic-authoring reservation, and raw-head-first partitioning only behind the non-default `legacy-ingest` replica feature; BUD-02 upload evidence remains a runtime prerequisite |
 | operational_listing | 30402 | OperationalListing | events.operational_listing.publish, events.operational_listing.list, events.operational_listing.get | NIP-99 classified-listing kind with the richer Radroots operational profile; canonical Markdown content and tags; farm author required |
 | dvm_request | 5000-5999 | JobRequest | events.dvm_request.publish, events.dvm_request.list, events.dvm_request.get | generic DVM request surface |
 | dvm_result | 6000-6999 | JobResult | events.dvm_result.publish, events.dvm_result.list, events.dvm_result.get | generic DVM result surface |

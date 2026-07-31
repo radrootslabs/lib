@@ -4,19 +4,18 @@ use alloc::{string::String, vec::Vec};
 
 use nostr::nips::nip90::{DataVendingMachineStatus, JobFeedbackData};
 
-use crate::error::RadrootsNostrError;
+use crate::error::Error;
 use crate::types::{
-    RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrGenericEventBuilder,
-    RadrootsNostrTag,
+    GenericBuilder, RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrTag,
 };
 
-pub fn radroots_nostr_build_event_job_result(
+pub fn build_event_job_result(
     job_request: &RadrootsNostrEvent,
     payload: impl Into<String>,
     millisats: u64,
     bolt11: Option<String>,
     tags: Option<Vec<RadrootsNostrTag>>,
-) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrError> {
+) -> Result<GenericBuilder, Error> {
     let builder = RadrootsNostrEventBuilderUnchecked::job_result(
         job_request.clone(),
         payload,
@@ -25,15 +24,15 @@ pub fn radroots_nostr_build_event_job_result(
     )?
     .tags(tags.unwrap_or_default())
     .allow_self_tagging();
-    Ok(RadrootsNostrGenericEventBuilder::from_unchecked(builder))
+    Ok(GenericBuilder::from_unchecked(builder))
 }
 
-pub fn radroots_nostr_build_event_job_feedback(
+pub fn build_event_job_feedback(
     job_request: &RadrootsNostrEvent,
     status: &str,
     extra_info: Option<String>,
     tags: Option<Vec<RadrootsNostrTag>>,
-) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrError> {
+) -> Result<GenericBuilder, Error> {
     let status = status
         .parse::<DataVendingMachineStatus>()
         .unwrap_or(DataVendingMachineStatus::Error);
@@ -42,5 +41,5 @@ pub fn radroots_nostr_build_event_job_feedback(
     let builder = RadrootsNostrEventBuilderUnchecked::job_feedback(feedback_data)
         .tags(tags.unwrap_or_default())
         .allow_self_tagging();
-    Ok(RadrootsNostrGenericEventBuilder::from_unchecked(builder))
+    Ok(GenericBuilder::from_unchecked(builder))
 }

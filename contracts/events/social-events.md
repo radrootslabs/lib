@@ -181,12 +181,12 @@ and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
 frozen-draft signing boundary repeats that validation, so stale version-`1`
 through version-`6` drafts must be rebuilt. Typed root posts, Replies,
-Comments, and Deletion Requests enter Nostr signing and client publication
-only through opaque typed builders that expose timestamp selection and
-signing, but no raw tag/content mutation or public conversion to the upstream
-builder. The opaque generic builder rejects kind `0`, every kind `1` event,
-kind `5`, and kind `1111` at both direct signing and client publication before
-a signer is consulted.
+Comments, and Deletion Requests enter Nostr signing only through opaque typed
+builders that expose timestamp selection and signing, but no raw tag/content
+mutation or public conversion to the upstream builder. Publication remains a
+transport concern operating on signed events. The opaque generic builder
+rejects kind `0`, every kind `1` event, kind `5`, and kind `1111` before a
+signer is consulted.
 
 ### NIP-10 Reply Trust Layers
 
@@ -217,8 +217,8 @@ Strict authoring is deterministic. A direct Reply emits
 two-element `p` tag. A nested Reply emits the root `e` tag, then
 `["e",<parent-id>,<relay-or-empty>,"reply"]`, then the root and parent author
 `p` tags in that order; equal authors are emitted once. No other authored tag
-shape is accepted. Signing and client publication are exposed only through the
-sealed `RadrootsNostrNip10ReplyEventBuilder`.
+shape is accepted. Signing is exposed only through the sealed
+`Nip10ReplyBuilder`; publication remains transport-owned.
 
 Inbound projection requires a signature-and-id verified envelope. It accepts
 preferred marked `e` references, including the optional NIP-10 author hint, and
@@ -688,13 +688,13 @@ enter this comparison. Kind, author, `d`, and `published_at` must remain stable.
 have a later `created_at`, or the lower event id when both timestamps are equal. Invalid previous
 and current inputs have side-specific errors.
 
-With the `events` feature, `radroots_nostr_build_food_availability_event` fixes `created_at` during
+With the `events` feature, `build_food_availability_event` fixes `created_at` during
 typed construction, derives the exact strict wire parts, and returns a sealed builder with no raw
-tag, content, or timestamp mutation. The builder supports local signing and, with the `client`
-feature, typed relay publication. Generic builder signing and client publication reject focused and
-mixed-marker kind-`30402` events before signer access. Marker-free generic NIP-99 and
-operational-only builders remain available for explicit compatibility, while relaying an already
-signed event remains transport-only and establishes no Radroots authoring claim.
+tag, content, or timestamp mutation. With the `signing` feature, the builder supports local signing.
+Generic builder signing rejects focused and mixed-marker kind-`30402` events before signer access.
+Marker-free generic NIP-99 and operational-only builders remain available for explicit
+compatibility. Relay publication remains transport-only and establishes no Radroots authoring
+claim.
 
 Behind the explicit non-default `legacy-ingest` feature, legacy replica ingestion verifies
 kind-`30402` identifiers and signatures before acquiring its write transaction, then selects the

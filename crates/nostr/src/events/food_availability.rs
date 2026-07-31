@@ -1,7 +1,7 @@
 //! Sealed authoring for focused Radroots FoodAvailability events.
 
 use crate::{
-    error::RadrootsNostrError,
+    error::Error,
     types::{
         RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys,
         RadrootsNostrTimestamp,
@@ -18,34 +18,30 @@ use radroots_event_codec::encode::food_availability::authored_food_availability_
 /// caller must prove successful BUD-02 upload before signing or publication.
 ///
 /// ```compile_fail
-/// use radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
-/// use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+/// use radroots_nostr::event::{FoodAvailabilityBuilder, Timestamp};
 ///
-/// fn replace_validated_timestamp(builder: RadrootsNostrFoodAvailabilityEventBuilder) {
-///     let _ = builder.custom_created_at(RadrootsNostrTimestamp::from_secs(1));
+/// fn replace_validated_timestamp(builder: FoodAvailabilityBuilder) {
+///     let _ = builder.custom_created_at(Timestamp::from_secs(1));
 /// }
 /// ```
 ///
 /// ```compile_fail
-/// use radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
+/// use radroots_nostr::event::FoodAvailabilityBuilder;
 ///
-/// fn expose_raw_builder(builder: RadrootsNostrFoodAvailabilityEventBuilder) {
+/// fn expose_raw_builder(builder: FoodAvailabilityBuilder) {
 ///     let _: nostr::EventBuilder = builder.into();
 /// }
 /// ```
 #[must_use = "FoodAvailability event builders must be signed or published"]
-pub struct RadrootsNostrFoodAvailabilityEventBuilder {
+pub struct FoodAvailabilityBuilder {
     inner: RadrootsNostrEventBuilderUnchecked,
 }
 
-impl RadrootsNostrFoodAvailabilityEventBuilder {
+impl FoodAvailabilityBuilder {
     /// Signs the validated event directly with local keys.
     ///
     /// Media-bearing callers must prove successful BUD-02 upload first.
-    pub fn sign_with_keys(
-        self,
-        keys: &RadrootsNostrKeys,
-    ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+    pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
         Ok(self.inner.sign_with_keys(keys)?)
     }
 }
@@ -53,12 +49,12 @@ impl RadrootsNostrFoodAvailabilityEventBuilder {
 /// Builds a sealed Nostr builder from strict FoodAvailability details.
 ///
 /// This validates media descriptors but does not attest BUD-02 upload.
-pub fn radroots_nostr_build_food_availability_event(
+pub fn build_food_availability_event(
     details: &FoodAvailabilityDetails,
     created_at: RadrootsNostrTimestamp,
-) -> Result<RadrootsNostrFoodAvailabilityEventBuilder, RadrootsNostrError> {
+) -> Result<FoodAvailabilityBuilder, Error> {
     let parts = authored_food_availability_to_wire_parts(details, created_at.as_secs())?;
-    let inner = super::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?
+    let inner = super::build_event_unchecked(parts.kind, parts.content, parts.tags)?
         .custom_created_at(created_at);
-    Ok(RadrootsNostrFoodAvailabilityEventBuilder { inner })
+    Ok(FoodAvailabilityBuilder { inner })
 }

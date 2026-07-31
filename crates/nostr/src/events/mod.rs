@@ -23,19 +23,19 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 #[cfg(any(feature = "events", test))]
-use crate::error::RadrootsNostrError;
+use crate::error::Error;
 #[cfg(any(feature = "events", test))]
 use crate::types::{
     RadrootsNostrEventBuilderUnchecked, RadrootsNostrKind, RadrootsNostrTag, RadrootsNostrTagKind,
 };
 
 #[cfg(any(feature = "events", test))]
-pub(crate) fn radroots_nostr_build_event_unchecked(
+pub(crate) fn build_event_unchecked(
     kind_u32: u32,
     content: impl Into<String>,
     tag_slices: Vec<Vec<String>>,
-) -> Result<RadrootsNostrEventBuilderUnchecked, RadrootsNostrError> {
-    let kind = u16::try_from(kind_u32).map_err(|_| RadrootsNostrError::KindOutOfRange {
+) -> Result<RadrootsNostrEventBuilderUnchecked, Error> {
+    let kind = u16::try_from(kind_u32).map_err(|_| Error::KindOutOfRange {
         kind: kind_u32,
         max: u16::MAX,
     })?;
@@ -62,8 +62,8 @@ pub(crate) fn radroots_nostr_build_event_unchecked(
 mod tests {
     use alloc::{vec, vec::Vec};
 
-    use super::radroots_nostr_build_event_unchecked;
-    use crate::error::RadrootsNostrError;
+    use super::build_event_unchecked;
+    use crate::error::Error;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use crate::types::{RadrootsNostrPublicKey, RadrootsNostrTagKind};
 
@@ -76,7 +76,7 @@ mod tests {
             vec!["p".to_string(), pubkey_hex.to_string()],
         ];
 
-        let builder = radroots_nostr_build_event_unchecked(1, "test", tags).expect("builder");
+        let builder = build_event_unchecked(1, "test", tags).expect("builder");
         let event = builder.build(pubkey);
 
         let has_self_tag = event.tags.iter().any(|tag| {
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn build_event_accepts_maximum_nip01_kind() {
-        let builder = radroots_nostr_build_event_unchecked(u32::from(u16::MAX), "test", Vec::new())
+        let builder = build_event_unchecked(u32::from(u16::MAX), "test", Vec::new())
             .expect("maximum NIP-01 kind");
         let event = builder
             .build(RadrootsNostrPublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("pubkey"));
@@ -104,8 +104,8 @@ mod tests {
     fn build_event_rejects_kind_overflow() {
         let kind = u32::from(u16::MAX) + 1;
         assert!(matches!(
-            radroots_nostr_build_event_unchecked(kind, "test", Vec::new()),
-            Err(RadrootsNostrError::KindOutOfRange {
+            build_event_unchecked(kind, "test", Vec::new()),
+            Err(Error::KindOutOfRange {
                 kind: actual,
                 max: u16::MAX
             }) if actual == kind

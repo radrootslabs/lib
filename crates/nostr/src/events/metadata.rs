@@ -1,7 +1,7 @@
 //! Sealed authoring for validated NIP-01 profile metadata events.
 
 #[cfg(feature = "events")]
-use crate::error::RadrootsNostrError;
+use crate::error::Error;
 #[cfg(feature = "events")]
 use crate::types::RadrootsNostrEvent;
 #[cfg(feature = "events")]
@@ -18,12 +18,12 @@ use radroots_event_codec::encode::profile::authored_profile_to_wire_parts;
 /// BUD-02 upload completion before signing or publication.
 #[cfg(feature = "events")]
 #[must_use = "Profile event builders must be signed or published"]
-pub struct RadrootsNostrProfileEventBuilder {
+pub struct ProfileBuilder {
     inner: RadrootsNostrEventBuilderUnchecked,
 }
 
 #[cfg(feature = "events")]
-impl RadrootsNostrProfileEventBuilder {
+impl ProfileBuilder {
     /// Sets the event timestamp without changing the validated Profile shape.
     pub fn custom_created_at(mut self, created_at: RadrootsNostrTimestamp) -> Self {
         self.inner = self.inner.custom_created_at(created_at);
@@ -31,21 +31,15 @@ impl RadrootsNostrProfileEventBuilder {
     }
 
     /// Signs the validated Profile directly with local keys.
-    pub fn sign_with_keys(
-        self,
-        keys: &RadrootsNostrKeys,
-    ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+    pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
         Ok(self.inner.sign_with_keys(keys)?)
     }
 }
 
 /// Builds a sealed kind-0 event from the strict authored Profile contract.
 #[cfg(feature = "events")]
-pub fn radroots_nostr_build_profile_event(
-    profile: &AuthoredProfile,
-) -> Result<RadrootsNostrProfileEventBuilder, RadrootsNostrError> {
+pub fn build_profile_event(profile: &AuthoredProfile) -> Result<ProfileBuilder, Error> {
     let parts = authored_profile_to_wire_parts(profile)?;
-    let inner =
-        crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;
-    Ok(RadrootsNostrProfileEventBuilder { inner })
+    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
+    Ok(ProfileBuilder { inner })
 }

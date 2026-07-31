@@ -5,27 +5,27 @@
 
 #![forbid(unsafe_code)]
 
-use crate::error::RadrootsNostrError;
-use crate::events::radroots_nostr_build_event_unchecked;
+use crate::error::Error;
+use crate::events::build_event_unchecked;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
 use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::wire::Nip01EventWire;
 
-pub fn radroots_nostr_sign_frozen_draft(
+pub fn sign_frozen_draft(
     keys: &RadrootsNostrKeys,
     draft: &EventDraft,
-) -> Result<SignedEvent, RadrootsNostrError> {
+) -> Result<SignedEvent, Error> {
     draft.validate_for_signing()?;
     let actual_pubkey = keys.public_key().to_hex();
     if actual_pubkey != draft.expected_pubkey().to_hex() {
-        return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
+        return Err(Error::FrozenDraftPubkeyMismatch {
             expected_pubkey: draft.expected_pubkey().to_hex().to_owned(),
             actual_pubkey,
         });
     }
 
-    let event = radroots_nostr_build_event_unchecked(
+    let event = build_event_unchecked(
         draft.kind_u32(),
         draft.content().to_owned(),
         draft.tags_as_vec(),
@@ -35,7 +35,7 @@ pub fn radroots_nostr_sign_frozen_draft(
     let actual_event_id = event.id.to_hex();
     let expected_event_id = draft.expected_event_id_hex();
     if actual_event_id != expected_event_id {
-        return Err(RadrootsNostrError::FrozenDraftEventIdMismatch {
+        return Err(Error::FrozenDraftEventIdMismatch {
             expected_event_id,
             actual_event_id,
         });
@@ -48,16 +48,17 @@ pub fn radroots_nostr_sign_frozen_draft(
 
 #[cfg(test)]
 mod tests {
-    use super::radroots_nostr_sign_frozen_draft;
-    use crate::error::RadrootsNostrError;
+    use super::sign_frozen_draft;
+    use crate::error::Error;
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
-    use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
+    use crate::types::RadrootsNostrKeys;
     use nostr::JsonUtil;
+    use nostr::SecretKey;
     use radroots_event::draft::EventDraft;
     use radroots_event::envelope::kind::KIND_GEOCHAT;
 
     fn fixture_keys(secret_key_hex: &str) -> RadrootsNostrKeys {
-        let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
+        let secret_key = SecretKey::from_hex(secret_key_hex).expect("secret key");
         RadrootsNostrKeys::new(secret_key)
     }
 
@@ -77,7 +78,7 @@ mod tests {
     fn sign_frozen_draft_uses_fixed_created_at_and_expected_id() {
         let keys = fixture_keys(FIXTURE_ALICE.secret_key_hex);
         let draft = generic_draft(FIXTURE_ALICE.public_key_hex);
-        let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
+        let signed = sign_frozen_draft(&keys, &draft).expect("signed event");
 
         assert_eq!(signed.id_str(), draft.expected_event_id_hex());
         assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
@@ -96,12 +97,9 @@ mod tests {
     fn sign_frozen_draft_rejects_wrong_signer() {
         let keys = fixture_keys(FIXTURE_BOB.secret_key_hex);
         let draft = generic_draft(FIXTURE_ALICE.public_key_hex);
-        let error = radroots_nostr_sign_frozen_draft(&keys, &draft).expect_err("wrong signer");
+        let error = sign_frozen_draft(&keys, &draft).expect_err("wrong signer");
 
-        assert!(matches!(
-            error,
-            RadrootsNostrError::FrozenDraftPubkeyMismatch { .. }
-        ));
+        assert!(matches!(error, Error::FrozenDraftPubkeyMismatch { .. }));
     }
 
     #[test]

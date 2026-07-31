@@ -1,3 +1,4 @@
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::food::availability::{
     FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityImage,
@@ -8,15 +9,13 @@ use radroots_event::media::AuthoredImage;
 use radroots_event_codec::admission::food_availability::{
     RadrootsFoodAvailabilityAdmissionOutcome, verify_and_admit_food_availability_event,
 };
-use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::Error;
+use radroots_nostr::event::GenericBuilder;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::event::radroots_event_from_nostr;
-use radroots_nostr::events::food_availability::radroots_nostr_build_food_availability_event;
+use radroots_nostr::event::build_food_availability as build_food_availability_event;
+use radroots_nostr::event::from_nostr;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
-use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
 
 const CREATED_AT: u64 = 1_784_347_200;
@@ -25,7 +24,7 @@ const CREATED_AT: u64 = 1_784_347_200;
 fn typed_food_builder_signs_the_exact_strict_profile() {
     let keys = fixture_keys();
     let created_at = RadrootsNostrTimestamp::from_secs(CREATED_AT);
-    let event = radroots_nostr_build_food_availability_event(&details(), created_at)
+    let event = build_food_availability_event(&details(), created_at)
         .expect("typed FoodAvailability builder")
         .sign_with_keys(&keys)
         .expect("signed FoodAvailability event");
@@ -58,7 +57,7 @@ fn typed_food_builder_signs_the_exact_strict_profile() {
     );
     event.verify().expect("valid NIP-01 event");
 
-    let envelope = radroots_event_from_nostr(&event).expect("Radroots event adapter");
+    let envelope = from_nostr(&event).expect("Radroots event adapter");
     assert!(matches!(
         verify_and_admit_food_availability_event(envelope)
             .expect("verified FoodAvailability admission"),
@@ -68,24 +67,19 @@ fn typed_food_builder_signs_the_exact_strict_profile() {
 
 #[test]
 fn typed_food_builder_keeps_timestamp_validation_inside_construction() {
-    let error = radroots_nostr_build_food_availability_event(
-        &details(),
-        RadrootsNostrTimestamp::from_secs(1_784_347_000),
-    )
-    .err()
-    .expect("created_at before published_at must fail");
+    let error =
+        build_food_availability_event(&details(), RadrootsNostrTimestamp::from_secs(1_784_347_000))
+            .err()
+            .expect("created_at before published_at must fail");
 
-    assert!(matches!(
-        error,
-        RadrootsNostrError::FoodAvailabilityEncode(_)
-    ));
+    assert!(matches!(error, Error::FoodAvailabilityEncode(_)));
 }
 
 #[test]
 fn typed_food_builder_preserves_a_byte_verified_blossom_image_tuple() {
     let image = blossom_image();
     let image_url = image.url().to_owned();
-    let event = radroots_nostr_build_food_availability_event(
+    let event = build_food_availability_event(
         &details_with_images(vec![image]),
         RadrootsNostrTimestamp::from_secs(CREATED_AT),
     )
@@ -125,10 +119,10 @@ fn generic_builder_reserves_focused_and_ambiguous_listing_profiles() {
         ],
     ] {
         assert!(matches!(
-            RadrootsNostrGenericEventBuilder::new(kind, "reserved")
+            GenericBuilder::new(kind, "reserved")
                 .tags(tags)
                 .sign_with_keys(&keys),
-            Err(RadrootsNostrError::TypedAuthoringRequired { kind: 30_402 })
+            Err(Error::TypedAuthoringRequired { kind: 30_402 })
         ));
     }
 }
@@ -148,7 +142,7 @@ fn generic_builder_retains_marker_free_and_operational_nip99_compatibility() {
             RadrootsNostrTag::parse(["radroots:primary_bin", "bin-1"]).expect("operational marker"),
         ],
     ] {
-        let event = RadrootsNostrGenericEventBuilder::new(kind, "compatible")
+        let event = GenericBuilder::new(kind, "compatible")
             .tags(tags)
             .custom_created_at(RadrootsNostrTimestamp::from_secs(CREATED_AT))
             .sign_with_keys(&keys)

@@ -17,10 +17,10 @@ use radroots_signing::{
     status::{SignProgress, SignProgressStage, SignerAvailability},
 };
 
-use crate::{
-    draft_signing::radroots_nostr_sign_frozen_draft, error::RadrootsNostrError, key::SecretKey,
-};
+use crate::{Error as NostrError, key::SecretKey};
 use radroots_identity::PublicKey;
+
+pub use crate::draft_signing::sign_frozen_draft;
 
 type Clock = fn() -> Result<u64, SigningError>;
 
@@ -97,8 +97,8 @@ impl Signer for LocalSigner {
                 &SignProgress::stage(SignProgressStage::Validating)
                     .expect("validating progress never requires a challenge"),
             );
-            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
-                .map_err(normalize_nostr_error)?;
+            let signed_event =
+                sign_frozen_draft(&self.keys, request.draft()).map_err(normalize_nostr_error)?;
             request.report_progress(
                 &SignProgress::stage(SignProgressStage::VerifyingOutput)
                     .expect("verification progress never requires a challenge"),
@@ -125,10 +125,10 @@ fn system_time_unix() -> Result<u64, SigningError> {
         .map_err(|source| SigningError::with_source(Kind::InternalError, source))
 }
 
-fn normalize_nostr_error(source: RadrootsNostrError) -> SigningError {
+fn normalize_nostr_error(source: NostrError) -> SigningError {
     let kind = match &source {
-        RadrootsNostrError::FrozenDraftPubkeyMismatch { .. } => Kind::AuthorizationDenied,
-        RadrootsNostrError::FrozenDraftEventIdMismatch { .. } => Kind::SignerOutputInvalid,
+        NostrError::FrozenDraftPubkeyMismatch { .. } => Kind::AuthorizationDenied,
+        NostrError::FrozenDraftEventIdMismatch { .. } => Kind::SignerOutputInvalid,
         _ => Kind::InternalError,
     };
     SigningError::with_source(kind, source)

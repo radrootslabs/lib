@@ -7,7 +7,7 @@ use alloc::{boxed::Box, string::String};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum RadrootsNostrError {
+pub enum Error {
     #[error("invalid Nostr public key")]
     InvalidPublicKey,
 
@@ -114,26 +114,26 @@ pub enum RadrootsNostrError {
     FilterTagError(String),
 }
 
-impl From<nostr::event::Error> for RadrootsNostrError {
+impl From<nostr::event::Error> for Error {
     fn from(error: nostr::event::Error) -> Self {
         Self::EventError(error)
     }
 }
 
-impl From<nostr::event::builder::Error> for RadrootsNostrError {
+impl From<nostr::event::builder::Error> for Error {
     fn from(error: nostr::event::builder::Error) -> Self {
         Self::EventBuildError(error)
     }
 }
 
-impl From<nostr::key::Error> for RadrootsNostrError {
+impl From<nostr::key::Error> for Error {
     fn from(error: nostr::key::Error) -> Self {
         Self::KeyError(error)
     }
 }
 
 #[derive(Debug, Error)]
-pub enum RadrootsNostrTagsResolveError {
+pub enum ResolveError {
     #[error("Missing public key 'p' tag in encrypted event: {0:?}")]
     MissingPTag(Box<nostr::Event>),
 

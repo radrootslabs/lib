@@ -1,15 +1,13 @@
 #![forbid(unsafe_code)]
 
-use crate::error::RadrootsNostrError;
+use crate::error::Error;
 use crate::types::RadrootsNostrEvent as RadrootsNostrRawEvent;
 use radroots_event::{
     envelope::EventEnvelope, envelope::EventEnvelopeError, envelope::EventEnvelopeParts,
     tag::EventPtr,
 };
 
-pub fn radroots_event_from_nostr(
-    event: &RadrootsNostrRawEvent,
-) -> Result<EventEnvelope, EventEnvelopeError> {
+pub fn from_nostr(event: &RadrootsNostrRawEvent) -> Result<EventEnvelope, EventEnvelopeError> {
     EventEnvelope::new(EventEnvelopeParts {
         id: event.id.to_string(),
         author: event.pubkey.to_string(),
@@ -25,25 +23,23 @@ pub fn radroots_event_from_nostr(
 ///
 /// This adapter performs no network access and does not imply that the event's
 /// identifier or signature has been verified.
-pub fn nostr_event_from_radroots(
-    event: &EventEnvelope,
-) -> Result<RadrootsNostrRawEvent, RadrootsNostrError> {
-    let kind = u16::try_from(event.kind_u32()).map_err(|_| RadrootsNostrError::KindOutOfRange {
+pub fn to_nostr(event: &EventEnvelope) -> Result<RadrootsNostrRawEvent, Error> {
+    let kind = u16::try_from(event.kind_u32()).map_err(|_| Error::KindOutOfRange {
         kind: event.kind_u32(),
         max: u16::MAX,
     })?;
     let id = nostr::EventId::from_slice(event.id().as_bytes())
-        .map_err(|_| RadrootsNostrError::EventConversion { field: "id" })?;
+        .map_err(|_| Error::EventConversion { field: "id" })?;
     let public_key = nostr::PublicKey::from_slice(event.author().as_bytes())
-        .map_err(|_| RadrootsNostrError::EventConversion { field: "author" })?;
+        .map_err(|_| Error::EventConversion { field: "author" })?;
     let signature = nostr::secp256k1::schnorr::Signature::from_slice(event.sig().as_bytes())
-        .map_err(|_| RadrootsNostrError::EventConversion { field: "signature" })?;
+        .map_err(|_| Error::EventConversion { field: "signature" })?;
     let tags = event
         .tags_as_vec()
         .into_iter()
         .map(nostr::Tag::parse)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| RadrootsNostrError::EventConversion { field: "tags" })?;
+        .map_err(|_| Error::EventConversion { field: "tags" })?;
 
     Ok(nostr::Event::new(
         id,
@@ -56,7 +52,7 @@ pub fn nostr_event_from_radroots(
     ))
 }
 
-pub fn radroots_event_ptr_from_nostr(event: &RadrootsNostrRawEvent) -> EventPtr {
+pub fn pointer_from_nostr(event: &RadrootsNostrRawEvent) -> EventPtr {
     EventPtr {
         id: event.id.to_string(),
         relays: None,
@@ -66,22 +62,22 @@ pub fn radroots_event_ptr_from_nostr(event: &RadrootsNostrRawEvent) -> EventPtr 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::radroots_nostr_build_event_unchecked;
+    use crate::events::build_event_unchecked;
     use crate::test_fixtures::FIXTURE_ALICE;
-    use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp};
+    use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
+    use nostr::SecretKey;
     use radroots_event::{
         envelope::EventEnvelopeParts,
         wire::{DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT},
     };
 
     fn fixture_keys() -> RadrootsNostrKeys {
-        let secret_key =
-            RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).expect("secret key");
+        let secret_key = SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).expect("secret key");
         RadrootsNostrKeys::new(secret_key)
     }
 
     fn signed_event(content: String, tags: Vec<Vec<String>>) -> RadrootsNostrRawEvent {
-        radroots_nostr_build_event_unchecked(1, content, tags)
+        build_event_unchecked(1, content, tags)
             .expect("builder")
             .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_000))
             .sign_with_keys(&fixture_keys())
@@ -94,9 +90,9 @@ mod tests {
             "harvest update".to_owned(),
             vec![vec!["t".to_owned(), "soil".to_owned()]],
         );
-        let envelope = radroots_event_from_nostr(&original).expect("Radroots envelope");
+        let envelope = from_nostr(&original).expect("Radroots envelope");
 
-        let converted = nostr_event_from_radroots(&envelope).expect("Nostr event");
+        let converted = to_nostr(&envelope).expect("Nostr event");
 
         assert_eq!(converted, original);
     }
@@ -104,7 +100,7 @@ mod tests {
     #[test]
     fn conversion_rejects_kind_outside_nostr_range() {
         let original = signed_event(String::new(), Vec::new());
-        let envelope = radroots_event_from_nostr(&original).expect("Radroots envelope");
+        let envelope = from_nostr(&original).expect("Radroots envelope");
         let kind = u32::from(u16::MAX) + 1;
         let widened = EventEnvelope::new(EventEnvelopeParts {
             id: envelope.id_hex(),
@@ -118,8 +114,8 @@ mod tests {
         .expect("wider Radroots kind");
 
         assert!(matches!(
-            nostr_event_from_radroots(&widened),
-            Err(RadrootsNostrError::KindOutOfRange {
+            to_nostr(&widened),
+            Err(Error::KindOutOfRange {
                 kind: actual,
                 max: u16::MAX,
             }) if actual == kind
@@ -132,7 +128,7 @@ mod tests {
         let event = signed_event(content, Vec::new());
 
         assert_eq!(
-            radroots_event_from_nostr(&event),
+            from_nostr(&event),
             Err(EventEnvelopeError::ContentTooLarge {
                 max: DEFAULT_CONTENT_MAX_BYTES,
                 actual: DEFAULT_CONTENT_MAX_BYTES + 1,
@@ -148,7 +144,7 @@ mod tests {
         let event = signed_event(String::new(), vec![tag]);
 
         assert_eq!(
-            radroots_event_from_nostr(&event),
+            from_nostr(&event),
             Err(EventEnvelopeError::TooManyTagElements {
                 max: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
                 actual: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT + 1,

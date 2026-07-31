@@ -33,7 +33,7 @@ impl NostrClientManager {
             .filter(|event| event.kind == RadrootsNostrKind::Metadata)
             .max_by_key(|event| event.created_at);
         if let Some(e) = ev {
-            if let Some(meta) = radroots_nostr::event_adapters::to_profile_event_metadata(&e) {
+            if let Some(meta) = radroots_nostr::event::to_profile_event_metadata(&e) {
                 return Ok(Some(meta));
             }
             return Err(NetError::Msg(

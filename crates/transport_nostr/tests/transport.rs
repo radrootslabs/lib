@@ -9,11 +9,11 @@ use radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES;
 use radroots_event_store::{
     RadrootsEventStore, RadrootsTransportObservationRow, RadrootsTransportObservationType,
 };
-use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
-use radroots_nostr::filter::radroots_nostr_filter_tag;
+use radroots_nostr::filter::with_tag;
+use radroots_nostr::signing::sign_frozen_draft;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
 use radroots_nostr::tag::TagKind as RadrootsNostrTagKind;
 use radroots_outbox::{
@@ -475,8 +475,7 @@ async fn complete_claimed_signing(
     if let Some(signed_event) = claimed.signed_event.clone() {
         return signed_event;
     }
-    let signed_event =
-        radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed event");
+    let signed_event = sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed event");
     outbox
         .complete_signing(
             claimed.outbox_event_id,
@@ -598,7 +597,7 @@ fn invalid_contract_shape_raw_event() -> String {
 }
 
 fn post_relay_fetch_filter(limit: usize) -> RadrootsNostrFilter {
-    radroots_nostr_filter_tag(
+    with_tag(
         RadrootsNostrFilter::new()
             .kind(RadrootsNostrKind::Custom(
                 u16::try_from(KIND_POST).expect("post kind must fit NIP-01"),
@@ -2614,7 +2613,7 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
         },
     ]);
-    let filter = radroots_nostr_filter_tag(
+    let filter = with_tag(
         RadrootsNostrFilter::new()
             .kind(RadrootsNostrKind::Custom(
                 u16::try_from(KIND_POST).expect("post kind must fit NIP-01"),
@@ -2769,7 +2768,7 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
     let skipped = signed_event_with_kind_and_hashtag("shared fetch skipped", KIND_POST, "soil");
     let wrong_tag =
         signed_event_with_kind_and_hashtag("shared fetch wrong tag", KIND_POST, "compost");
-    let filter = radroots_nostr_filter_tag(
+    let filter = with_tag(
         RadrootsNostrFilter::new()
             .kind(RadrootsNostrKind::Custom(
                 u16::try_from(KIND_POST).expect("post kind must fit NIP-01"),

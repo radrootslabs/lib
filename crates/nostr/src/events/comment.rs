@@ -1,7 +1,7 @@
 //! Sealed authoring for strict NIP-22 Comment events.
 
 use crate::{
-    error::RadrootsNostrError,
+    error::Error,
     types::{
         RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys,
         RadrootsNostrTimestamp,
@@ -15,43 +15,37 @@ use radroots_event_codec::encode::comment::authored_nip22_comment_to_wire_parts;
 /// The wrapper exposes no raw builder conversion or tag/content mutation.
 ///
 /// ```compile_fail
-/// use radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder;
+/// use radroots_nostr::event::Nip22CommentBuilder;
 ///
-/// fn expose_raw_builder(builder: RadrootsNostrNip22CommentEventBuilder) {
+/// fn expose_raw_builder(builder: Nip22CommentBuilder) {
 ///     let _: nostr::EventBuilder = builder.into();
 /// }
 /// ```
 #[must_use = "NIP-22 Comment builders must be signed or published"]
-pub struct RadrootsNostrNip22CommentEventBuilder {
+pub struct Nip22CommentBuilder {
     inner: RadrootsNostrEventBuilderUnchecked,
 }
 
-impl RadrootsNostrNip22CommentEventBuilder {
+impl Nip22CommentBuilder {
     pub fn custom_created_at(mut self, created_at: RadrootsNostrTimestamp) -> Self {
         self.inner = self.inner.custom_created_at(created_at);
         self
     }
 
-    pub fn sign_with_keys(
-        self,
-        keys: &RadrootsNostrKeys,
-    ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+    pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
         Ok(self.inner.sign_with_keys(keys)?)
     }
 }
 
-pub fn radroots_nostr_build_nip22_comment_event(
+pub fn build_nip22_comment_event(
     comment: &AuthoredNip22Comment,
-) -> Result<RadrootsNostrNip22CommentEventBuilder, RadrootsNostrError> {
+) -> Result<Nip22CommentBuilder, Error> {
     builder_from_wire_parts(authored_nip22_comment_to_wire_parts(comment))
 }
 
-fn builder_from_wire_parts(
-    parts: Nip01EventWireParts,
-) -> Result<RadrootsNostrNip22CommentEventBuilder, RadrootsNostrError> {
-    let inner =
-        crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;
-    Ok(RadrootsNostrNip22CommentEventBuilder { inner })
+fn builder_from_wire_parts(parts: Nip01EventWireParts) -> Result<Nip22CommentBuilder, Error> {
+    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
+    Ok(Nip22CommentBuilder { inner })
 }
 
 #[cfg(test)]
@@ -74,7 +68,7 @@ mod tests {
         .expect("root");
         let comment = AuthoredNip22Comment::top_level_event("Comment", root).expect("comment");
         let keys = RadrootsNostrKeys::generate();
-        let event = radroots_nostr_build_nip22_comment_event(&comment)
+        let event = build_nip22_comment_event(&comment)
             .expect("builder")
             .custom_created_at(RadrootsNostrTimestamp::from_secs(1_800_000_000))
             .sign_with_keys(&keys)

@@ -5,8 +5,8 @@ use nostr::{
 };
 use radroots_identity::PublicIdentity;
 use radroots_nostr::event::Event as RadrootsNostrEvent;
+use radroots_nostr::event::GenericBuilder;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
-use radroots_nostr::event::RadrootsNostrGenericEventBuilder;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
@@ -182,12 +182,12 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
         client_public_key: RadrootsNostrPublicKey,
         request_id: impl Into<String>,
         response: RadrootsNostrConnectResponse,
-    ) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrSignerError> {
+    ) -> Result<GenericBuilder, RadrootsNostrSignerError> {
         let envelope = response.into_envelope(request_id.into())?;
         let payload = serde_json::to_string(&envelope).map_err(RadrootsNostrConnectError::from)?;
         let ciphertext = self.signer.encrypt_response(&client_public_key, &payload)?;
 
-        Ok(RadrootsNostrGenericEventBuilder::new(
+        Ok(GenericBuilder::new(
             RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND),
             ciphertext,
         )
@@ -317,7 +317,7 @@ where
         client_public_key: RadrootsNostrPublicKey,
         request_id: impl Into<String>,
         response: RadrootsNostrConnectResponse,
-    ) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrSignerError> {
+    ) -> Result<GenericBuilder, RadrootsNostrSignerError> {
         self.codec
             .build_response_event(client_public_key, request_id, response)
     }
@@ -860,8 +860,8 @@ mod tests {
     use nostr::{Keys, SecretKey, Timestamp, UnsignedEvent};
     use radroots_identity::{PublicIdentity, PublicKey as IdentityPublicKey};
     use radroots_nostr::event::Event as RadrootsNostrEvent;
+    use radroots_nostr::event::GenericBuilder;
     use radroots_nostr::event::Kind as RadrootsNostrKind;
-    use radroots_nostr::event::RadrootsNostrGenericEventBuilder;
     use radroots_nostr::tag::TagKind as RadrootsNostrTagKind;
     use radroots_nostr_connect::prelude::{
         RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectMethod,
@@ -1222,7 +1222,7 @@ mod tests {
         let client_public_key = fixture_carol_public_key();
         let request = request_message("req-parse", RadrootsNostrConnectRequest::Ping);
         let raw = serde_json::to_string(&request).expect("serialize request");
-        let event = RadrootsNostrGenericEventBuilder::new(
+        let event = GenericBuilder::new(
             RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND),
             raw,
         )

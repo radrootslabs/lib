@@ -22,7 +22,7 @@ use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
 /// Adapts an event through the compatibility-only legacy post projection.
 ///
 /// This helper discards tags and does not establish product profile admission.
-/// Use `verify_and_admit_post_event` over `radroots_event_from_nostr` whenever
+/// Use `verify_and_admit_post_event` over `from_nostr` whenever
 /// the caller needs root Update, PhotoUpdate, or Ask admission. Its explicit
 /// thread-excluded outcome makes no Reply claim.
 pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<LegacyPost> {

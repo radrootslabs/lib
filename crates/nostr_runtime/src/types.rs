@@ -1,10 +1,10 @@
 use alloc::string::String;
 use nostr::PublicKey as RadrootsNostrPublicKey;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::events::post::radroots_nostr_post_events_filter;
+use radroots_nostr::event::post_filter;
 #[cfg(feature = "nostr-client")]
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
-use radroots_nostr::filter::radroots_nostr_kind;
+use radroots_nostr::filter::kind as nostr_kind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsNostrSubscriptionPolicy {
@@ -59,7 +59,7 @@ impl RadrootsNostrSubscriptionSpec {
         since_unix: Option<u64>,
         policy: RadrootsNostrSubscriptionPolicy,
     ) -> Self {
-        Self::streaming(radroots_nostr_post_events_filter(limit, since_unix)).with_policy(policy)
+        Self::streaming(post_filter(limit, since_unix)).with_policy(policy)
     }
 
     #[cfg(feature = "nostr-client")]
@@ -69,7 +69,7 @@ impl RadrootsNostrSubscriptionSpec {
         since_unix: Option<u64>,
         policy: RadrootsNostrSubscriptionPolicy,
     ) -> Self {
-        let mut filter = RadrootsNostrFilter::new().kind(radroots_nostr_kind(kind));
+        let mut filter = RadrootsNostrFilter::new().kind(nostr_kind(kind));
         if let Some(limit) = limit {
             filter = filter.limit(limit.into());
         }

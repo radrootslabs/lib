@@ -1,6 +1,7 @@
 #![cfg(feature = "blossom")]
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use nostr::Keys as RadrootsNostrKeys;
 use radroots_blossom::{
     Sha256,
     authorization::{
@@ -11,15 +12,14 @@ use radroots_blossom::{
     },
 };
 use radroots_nostr::blossom::{
-    RadrootsNostrBlossomError, radroots_nostr_decode_verify_blossom_authorization_header,
-    radroots_nostr_encode_blossom_authorization_header, radroots_nostr_sign_blossom_authorization,
+    AuthorizationError, decode_verify_authorization_header, encode_authorization_header,
+    sign_authorization,
 };
 use radroots_nostr::{
     event::{
         Event as RadrootsNostrEvent, Kind as RadrootsNostrKind, Timestamp as RadrootsNostrTimestamp,
     },
     tag::Tag as RadrootsNostrTag,
-    types::RadrootsNostrKeys,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -94,11 +94,9 @@ fn execute_vector(vector: &Vector) {
     let validation = vector_validation(vector);
     match vector.kind.as_str() {
         "blossom.bud11.nostr.decode_verify.valid" => {
-            let verified = radroots_nostr_decode_verify_blossom_authorization_header(
-                input_str(vector, "header"),
-                &validation,
-            )
-            .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
+            let verified =
+                decode_verify_authorization_header(input_str(vector, "header"), &validation)
+                    .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
             assert_eq!(
                 verified.event_id().to_string(),
                 expected_str(vector, "event_id"),
@@ -159,16 +157,14 @@ fn execute_vector(vector: &Vector) {
             );
         }
         "blossom.bud11.nostr.decode_verify.invalid" => {
-            let error = radroots_nostr_decode_verify_blossom_authorization_header(
-                input_str(vector, "header"),
-                &validation,
-            )
-            .expect_err("invalid BUD-11 Nostr vector must fail");
+            let error =
+                decode_verify_authorization_header(input_str(vector, "header"), &validation)
+                    .expect_err("invalid BUD-11 Nostr vector must fail");
             assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
             if let Some(actual_kind) = vector.expected.get("actual_kind") {
                 assert_eq!(
                     error,
-                    RadrootsNostrBlossomError::InvalidEventKind {
+                    AuthorizationError::InvalidEventKind {
                         actual: actual_kind.as_u64().expect("actual_kind must be u64"),
                     },
                     "{}",
@@ -366,11 +362,10 @@ fn sign_raw(kind: u16, content: &str, tags: Vec<RadrootsNostrTag>) -> RadrootsNo
 #[test]
 fn blossom_authored_claim_signs_and_roundtrips_without_signature_assumptions() {
     let claim = authored_claim();
-    let signed = radroots_nostr_sign_blossom_authorization(&keys(), &claim)
-        .expect("sign authored authorization");
+    let signed = sign_authorization(&keys(), &claim).expect("sign authored authorization");
     let wire = claim.wire_parts();
 
-    let header = radroots_nostr_encode_blossom_authorization_header(&signed);
+    let header = encode_authorization_header(&signed);
     let event = event_from_header(header.as_str());
 
     assert_eq!(event.kind.as_u16(), wire.kind());
@@ -397,8 +392,7 @@ fn blossom_authored_claim_signs_and_roundtrips_without_signature_assumptions() {
     assert!(!format!("{signed:?}").contains(&event.sig.to_string()));
 
     let verified =
-        radroots_nostr_decode_verify_blossom_authorization_header(header.as_str(), &validation())
-            .expect("verify header");
+        decode_verify_authorization_header(header.as_str(), &validation()).expect("verify header");
     assert_eq!(verified.event_id(), event.id);
     assert_eq!(verified.author(), keys().public_key());
     assert_eq!(verified.created_at(), event.created_at);
@@ -413,61 +407,49 @@ fn blossom_authored_claim_signs_and_roundtrips_without_signature_assumptions() {
 
 #[test]
 fn blossom_header_rejects_noncanonical_and_malformed_encodings() {
-    let signed = radroots_nostr_sign_blossom_authorization(&keys(), &authored_claim())
-        .expect("sign authored authorization");
-    let valid = radroots_nostr_encode_blossom_authorization_header(&signed).into_string();
+    let signed =
+        sign_authorization(&keys(), &authored_claim()).expect("sign authored authorization");
+    let valid = encode_authorization_header(&signed).into_string();
     let policy = validation();
 
     for accepted in [
         valid.replacen("Nostr ", "nostr ", 1),
         valid.replacen("Nostr ", "NOSTR   ", 1),
     ] {
-        radroots_nostr_decode_verify_blossom_authorization_header(&accepted, &policy)
+        decode_verify_authorization_header(&accepted, &policy)
             .expect("auth-scheme is case-insensitive and accepts 1*SP");
     }
 
     let cases = [
         (
             format!(" {valid}"),
-            RadrootsNostrBlossomError::InvalidHeaderWhitespace,
+            AuthorizationError::InvalidHeaderWhitespace,
         ),
         (
             "Nostr e 30".to_owned(),
-            RadrootsNostrBlossomError::InvalidHeaderWhitespace,
+            AuthorizationError::InvalidHeaderWhitespace,
         ),
-        (
-            "Nostr".to_owned(),
-            RadrootsNostrBlossomError::InvalidHeaderScheme,
-        ),
-        (
-            "Nostr ".to_owned(),
-            RadrootsNostrBlossomError::EmptyHeaderPayload,
-        ),
+        ("Nostr".to_owned(), AuthorizationError::InvalidHeaderScheme),
+        ("Nostr ".to_owned(), AuthorizationError::EmptyHeaderPayload),
         (
             format!("{valid}="),
-            RadrootsNostrBlossomError::HeaderPaddingForbidden,
+            AuthorizationError::HeaderPaddingForbidden,
         ),
         (
             "Nostr +".to_owned(),
-            RadrootsNostrBlossomError::InvalidHeaderBase64,
+            AuthorizationError::InvalidHeaderBase64,
         ),
         (
             "Nostr Zh".to_owned(),
-            RadrootsNostrBlossomError::NonCanonicalHeaderBase64,
+            AuthorizationError::NonCanonicalHeaderBase64,
         ),
-        (
-            "Nostr _w".to_owned(),
-            RadrootsNostrBlossomError::InvalidHeaderUtf8,
-        ),
-        (
-            "Nostr e30".to_owned(),
-            RadrootsNostrBlossomError::InvalidEventJson,
-        ),
+        ("Nostr _w".to_owned(), AuthorizationError::InvalidHeaderUtf8),
+        ("Nostr e30".to_owned(), AuthorizationError::InvalidEventJson),
     ];
 
     for (header, expected) in cases {
         assert_eq!(
-            radroots_nostr_decode_verify_blossom_authorization_header(&header, &policy),
+            decode_verify_authorization_header(&header, &policy),
             Err(expected),
             "{header}"
         );
@@ -476,9 +458,9 @@ fn blossom_header_rejects_noncanonical_and_malformed_encodings() {
 
 #[test]
 fn blossom_header_rejects_kind_narrowing_and_json_shape_laundering() {
-    let signed = radroots_nostr_sign_blossom_authorization(&keys(), &authored_claim())
-        .expect("sign authored authorization");
-    let encoded = radroots_nostr_encode_blossom_authorization_header(&signed);
+    let signed =
+        sign_authorization(&keys(), &authored_claim()).expect("sign authored authorization");
+    let encoded = encode_authorization_header(&signed);
     let event_json =
         serde_json::to_string(&event_from_header(encoded.as_str())).expect("event JSON");
     let policy = validation();
@@ -486,37 +468,34 @@ fn blossom_header_rejects_kind_narrowing_and_json_shape_laundering() {
     let cases = [
         (
             event_json.replacen("\"kind\":24242", "\"kind\":89778", 1),
-            RadrootsNostrBlossomError::InvalidEventKind { actual: 89_778 },
+            AuthorizationError::InvalidEventKind { actual: 89_778 },
         ),
         (
             format!(
                 "{},\"unknown\":true}}",
                 event_json.strip_suffix('}').unwrap()
             ),
-            RadrootsNostrBlossomError::InvalidEventJson,
+            AuthorizationError::InvalidEventJson,
         ),
         (
             event_json.replacen("\"content\":", "\"unknown\":", 1),
-            RadrootsNostrBlossomError::InvalidEventJson,
+            AuthorizationError::InvalidEventJson,
         ),
         (
             event_json.replacen("\"kind\":24242", "\"kind\":24242,\"kind\":24242", 1),
-            RadrootsNostrBlossomError::InvalidEventJson,
+            AuthorizationError::InvalidEventJson,
         ),
         (
             event_json.replacen("\"kind\":24242", "\"kind\":\"24242\"", 1),
-            RadrootsNostrBlossomError::InvalidEventJson,
+            AuthorizationError::InvalidEventJson,
         ),
-        ("[]".to_owned(), RadrootsNostrBlossomError::InvalidEventJson),
-        ("{".to_owned(), RadrootsNostrBlossomError::InvalidEventJson),
+        ("[]".to_owned(), AuthorizationError::InvalidEventJson),
+        ("{".to_owned(), AuthorizationError::InvalidEventJson),
     ];
 
     for (json, expected) in cases {
         assert_eq!(
-            radroots_nostr_decode_verify_blossom_authorization_header(
-                &raw_json_header(&json),
-                &policy,
-            ),
+            decode_verify_authorization_header(&raw_json_header(&json), &policy,),
             Err(expected),
             "{json}"
         );
@@ -529,19 +508,16 @@ fn blossom_header_authenticates_before_claim_parsing() {
 
     let wrong_kind = sign_raw(1, "", Vec::new());
     assert_eq!(
-        radroots_nostr_decode_verify_blossom_authorization_header(
-            &raw_header(&wrong_kind),
-            &policy
-        ),
-        Err(RadrootsNostrBlossomError::InvalidEventKind { actual: 1 })
+        decode_verify_authorization_header(&raw_header(&wrong_kind), &policy),
+        Err(AuthorizationError::InvalidEventKind { actual: 1 })
     );
 
     let malformed_claim = sign_raw(RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND, "", Vec::new());
     let mut bad_id = malformed_claim.clone();
     bad_id.content.push('x');
     assert_eq!(
-        radroots_nostr_decode_verify_blossom_authorization_header(&raw_header(&bad_id), &policy),
-        Err(RadrootsNostrBlossomError::InvalidEventId)
+        decode_verify_authorization_header(&raw_header(&bad_id), &policy),
+        Err(AuthorizationError::InvalidEventId)
     );
 
     let mut bad_signature = malformed_claim.clone();
@@ -554,27 +530,21 @@ fn blossom_header_authenticates_before_claim_parsing() {
     assert!(bad_signature.verify_id());
     assert!(!bad_signature.verify_signature());
     assert_eq!(
-        radroots_nostr_decode_verify_blossom_authorization_header(
-            &raw_header(&bad_signature),
-            &policy
-        ),
-        Err(RadrootsNostrBlossomError::InvalidEventSignature)
+        decode_verify_authorization_header(&raw_header(&bad_signature), &policy),
+        Err(AuthorizationError::InvalidEventSignature)
     );
 
     let raw_tags: Vec<Vec<String>> = Vec::new();
     let pure_error = AuthorizationClaim::parse("", CREATED_AT, &raw_tags)
         .expect_err("empty content is not a claim");
-    let adapter_error = radroots_nostr_decode_verify_blossom_authorization_header(
-        &raw_header(&malformed_claim),
-        &policy,
-    )
-    .expect_err("authenticated malformed claim must fail");
+    let adapter_error = decode_verify_authorization_header(&raw_header(&malformed_claim), &policy)
+        .expect_err("authenticated malformed claim must fail");
     assert_eq!(adapter_error.code(), pure_error.code());
     assert_eq!(adapter_error.blossom_claim_error(), Some(&pure_error));
     assert_eq!(adapter_error.to_string(), pure_error.to_string());
 
-    let signed = radroots_nostr_sign_blossom_authorization(&keys(), &authored_claim())
-        .expect("sign authored authorization");
+    let signed =
+        sign_authorization(&keys(), &authored_claim()).expect("sign authored authorization");
     let media_policy = AuthorizationValidation::new(
         AuthorizationTarget::Media(hash()),
         server(),
@@ -583,8 +553,8 @@ fn blossom_header_authenticates_before_claim_parsing() {
         RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS,
     )
     .expect("media validation policy");
-    let validation_error = radroots_nostr_decode_verify_blossom_authorization_header(
-        radroots_nostr_encode_blossom_authorization_header(&signed).as_str(),
+    let validation_error = decode_verify_authorization_header(
+        encode_authorization_header(&signed).as_str(),
         &media_policy,
     )
     .expect_err("upload claim must not authorize media endpoint");
@@ -594,22 +564,22 @@ fn blossom_header_authenticates_before_claim_parsing() {
 #[test]
 fn blossom_adapter_error_codes_are_stable_and_distinct() {
     let errors = [
-        RadrootsNostrBlossomError::InvalidHeaderWhitespace,
-        RadrootsNostrBlossomError::InvalidHeaderScheme,
-        RadrootsNostrBlossomError::EmptyHeaderPayload,
-        RadrootsNostrBlossomError::HeaderPaddingForbidden,
-        RadrootsNostrBlossomError::InvalidHeaderBase64,
-        RadrootsNostrBlossomError::NonCanonicalHeaderBase64,
-        RadrootsNostrBlossomError::InvalidHeaderUtf8,
-        RadrootsNostrBlossomError::InvalidEventJson,
-        RadrootsNostrBlossomError::InvalidEventKind { actual: 1 },
-        RadrootsNostrBlossomError::InvalidEventId,
-        RadrootsNostrBlossomError::InvalidEventSignature,
-        RadrootsNostrBlossomError::EventSigning,
+        AuthorizationError::InvalidHeaderWhitespace,
+        AuthorizationError::InvalidHeaderScheme,
+        AuthorizationError::EmptyHeaderPayload,
+        AuthorizationError::HeaderPaddingForbidden,
+        AuthorizationError::InvalidHeaderBase64,
+        AuthorizationError::NonCanonicalHeaderBase64,
+        AuthorizationError::InvalidHeaderUtf8,
+        AuthorizationError::InvalidEventJson,
+        AuthorizationError::InvalidEventKind { actual: 1 },
+        AuthorizationError::InvalidEventId,
+        AuthorizationError::InvalidEventSignature,
+        AuthorizationError::EventSigning,
     ];
     let mut codes = errors
         .iter()
-        .map(RadrootsNostrBlossomError::code)
+        .map(AuthorizationError::code)
         .collect::<Vec<_>>();
     let before = codes.len();
     codes.sort_unstable();

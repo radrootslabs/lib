@@ -111,7 +111,7 @@ message state.
   `radroots_event`, `radroots_event_codec`, or versioned `radroots_protocol`
   contracts.
 - Explicit Nostr boundary aliases use the upstream NIP-01 JSON representation.
-- `RadrootsNostrExternalSigningRequest` serializes only as the standard
+- `event::ExternalSigningRequest` serializes only as the standard
   unsigned Nostr event after reserved-kind and authoring-policy validation.
 - Returned externally signed events are accepted only when author, canonical
   event ID, and the complete NIP-01 signature verify against the request.
@@ -148,9 +148,7 @@ authority, upload completion, referenced-event existence, or relay trust.
 | `blossom` | no | Adds BUD-11 signed HTTP authorization value creation and verification; no HTTP client or endpoint operation. |
 
 Features are additive. `--no-default-features` provides the portable
-`no_std + alloc` conversion core. The manifest's `codec` feature is a
-non-release compatibility switch used by older focused adapters; it is not in
-the supported public feature vocabulary.
+`no_std + alloc` conversion core.
 
 ## Intended consumers
 

@@ -27,7 +27,7 @@ use radroots_event_codec::encode::{EventEncodeError, message as message_encode};
 /// Stable, source-redacted failures from the focused NIP-17 adapter.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum RadrootsNip17Error {
+pub enum Error {
     MessageEncode,
     MessageDecode,
     GiftWrap,
@@ -36,7 +36,7 @@ pub enum RadrootsNip17Error {
     UnsupportedRumorKind { kind: u32 },
 }
 
-impl RadrootsNip17Error {
+impl Error {
     /// Returns a stable machine-readable failure code.
     #[must_use]
     pub const fn code(&self) -> &'static str {
@@ -51,7 +51,7 @@ impl RadrootsNip17Error {
     }
 }
 
-impl core::fmt::Display for RadrootsNip17Error {
+impl core::fmt::Display for Error {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::MessageEncode => formatter.write_str("failed to encode NIP-17 message"),
@@ -66,77 +66,109 @@ impl core::fmt::Display for RadrootsNip17Error {
     }
 }
 
-impl core::error::Error for RadrootsNip17Error {}
+impl core::error::Error for Error {}
 
-impl From<EventEncodeError> for RadrootsNip17Error {
+impl From<EventEncodeError> for Error {
     fn from(_: EventEncodeError) -> Self {
         Self::MessageEncode
     }
 }
 
-impl From<EventParseError> for RadrootsNip17Error {
+impl From<EventParseError> for Error {
     fn from(_: EventParseError) -> Self {
         Self::MessageDecode
     }
 }
 
-impl From<nip59::Error> for RadrootsNip17Error {
+impl From<nip59::Error> for Error {
     fn from(_: nip59::Error) -> Self {
         Self::GiftWrap
     }
 }
 
-impl From<nostr::event::builder::Error> for RadrootsNip17Error {
+impl From<nostr::event::builder::Error> for Error {
     fn from(_: nostr::event::builder::Error) -> Self {
         Self::GiftWrap
     }
 }
 
-impl From<nostr::signer::SignerError> for RadrootsNip17Error {
+impl From<nostr::signer::SignerError> for Error {
     fn from(_: nostr::signer::SignerError) -> Self {
         Self::Signer
     }
 }
 
-impl From<nostr::key::Error> for RadrootsNip17Error {
+impl From<nostr::key::Error> for Error {
     fn from(_: nostr::key::Error) -> Self {
         Self::InvalidRecipient
     }
 }
 
 #[derive(Clone)]
-pub enum RadrootsNip17Rumor {
+pub enum Rumor {
     Message(RadrootsParsedData<Message>),
     MessageFile(Box<RadrootsParsedData<MessageFile>>),
 }
 
-impl core::fmt::Debug for RadrootsNip17Rumor {
+impl core::fmt::Debug for Rumor {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Message(_) => formatter
-                .debug_struct("RadrootsNip17Rumor::Message")
+                .debug_struct("Rumor::Message")
                 .finish_non_exhaustive(),
             Self::MessageFile(_) => formatter
-                .debug_struct("RadrootsNip17Rumor::MessageFile")
+                .debug_struct("Rumor::MessageFile")
                 .finish_non_exhaustive(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct RadrootsNip17WrapOptions {
-    pub include_sender: bool,
-    pub rumor_created_at: Option<u64>,
-    pub gift_wrap_tags: Vec<Vec<String>>,
+pub struct WrapOptions {
+    include_sender: bool,
+    rumor_created_at: Option<u64>,
+    gift_wrap_tags: Vec<Vec<String>>,
 }
 
-impl Default for RadrootsNip17WrapOptions {
+impl Default for WrapOptions {
     fn default() -> Self {
         Self {
             include_sender: true,
             rumor_created_at: None,
             gift_wrap_tags: Vec::new(),
         }
+    }
+}
+
+impl WrapOptions {
+    #[must_use]
+    pub fn include_sender(mut self, include_sender: bool) -> Self {
+        self.include_sender = include_sender;
+        self
+    }
+
+    #[must_use]
+    pub fn with_rumor_created_at(mut self, created_at: u64) -> Self {
+        self.rumor_created_at = Some(created_at);
+        self
+    }
+
+    #[must_use]
+    pub fn with_gift_wrap_tags(mut self, tags: Vec<Vec<String>>) -> Self {
+        self.gift_wrap_tags = tags;
+        self
+    }
+
+    pub const fn includes_sender(&self) -> bool {
+        self.include_sender
+    }
+
+    pub const fn rumor_created_at(&self) -> Option<u64> {
+        self.rumor_created_at
+    }
+
+    pub fn gift_wrap_tags(&self) -> &[Vec<String>] {
+        &self.gift_wrap_tags
     }
 }
 
@@ -157,9 +189,9 @@ fn rumor_from_parts(
     parts: Nip01EventWireParts,
     author: PublicKey,
     created_at: Option<u64>,
-) -> Result<UnsignedEvent, RadrootsNip17Error> {
-    let kind = u16::try_from(parts.kind)
-        .map_err(|_| RadrootsNip17Error::UnsupportedRumorKind { kind: parts.kind })?;
+) -> Result<UnsignedEvent, Error> {
+    let kind =
+        u16::try_from(parts.kind).map_err(|_| Error::UnsupportedRumorKind { kind: parts.kind })?;
     let tags = tags_from_slices(&parts.tags);
     let timestamp = match created_at {
         Some(ts) => Timestamp::from_secs(ts),
@@ -172,7 +204,7 @@ fn rumor_from_parts(
 
 fn parse_recipients(
     recipients: &[radroots_event::social::message::MessageRecipient],
-) -> Result<Vec<PublicKey>, RadrootsNip17Error> {
+) -> Result<Vec<PublicKey>, Error> {
     let mut out = Vec::with_capacity(recipients.len());
     for recipient in recipients {
         out.push(recipient.public_key.parse::<PublicKey>()?);
@@ -191,8 +223,8 @@ async fn wrap_rumor<T>(
     signer: &T,
     rumor: UnsignedEvent,
     mut recipients: Vec<PublicKey>,
-    options: &RadrootsNip17WrapOptions,
-) -> Result<Vec<Event>, RadrootsNip17Error>
+    options: &WrapOptions,
+) -> Result<Vec<Event>, Error>
 where
     T: NostrSigner,
 {
@@ -211,11 +243,11 @@ where
     Ok(out)
 }
 
-pub async fn radroots_nostr_wrap_message<T>(
+pub async fn wrap_message<T>(
     signer: &T,
     message: &Message,
-    options: RadrootsNip17WrapOptions,
-) -> Result<Vec<Event>, RadrootsNip17Error>
+    options: WrapOptions,
+) -> Result<Vec<Event>, Error>
 where
     T: NostrSigner,
 {
@@ -226,11 +258,11 @@ where
     wrap_rumor(signer, rumor, recipients, &options).await
 }
 
-pub async fn radroots_nostr_wrap_message_file<T>(
+pub async fn wrap_message_file<T>(
     signer: &T,
     message: &MessageFile,
-    options: RadrootsNip17WrapOptions,
-) -> Result<Vec<Event>, RadrootsNip17Error>
+    options: WrapOptions,
+) -> Result<Vec<Event>, Error>
 where
     T: NostrSigner,
 {
@@ -241,10 +273,7 @@ where
     wrap_rumor(signer, rumor, recipients, &options).await
 }
 
-pub async fn radroots_nostr_unwrap_gift_wrap<T>(
-    signer: &T,
-    gift_wrap: &Event,
-) -> Result<RadrootsNip17Rumor, RadrootsNip17Error>
+pub async fn unwrap_gift_wrap<T>(signer: &T, gift_wrap: &Event) -> Result<Rumor, Error>
 where
     T: NostrSigner,
 {
@@ -266,7 +295,7 @@ where
         KIND_MESSAGE => {
             let metadata =
                 message_decode::data_from_event(id, author, published_at, kind, content, tags)?;
-            Ok(RadrootsNip17Rumor::Message(metadata))
+            Ok(Rumor::Message(metadata))
         }
         KIND_MESSAGE_FILE => {
             let metadata = message_file_decode::data_from_event(
@@ -277,9 +306,9 @@ where
                 content,
                 tags,
             )?;
-            Ok(RadrootsNip17Rumor::MessageFile(Box::new(metadata)))
+            Ok(Rumor::MessageFile(Box::new(metadata)))
         }
-        other => Err(RadrootsNip17Error::UnsupportedRumorKind { kind: other }),
+        other => Err(Error::UnsupportedRumorKind { kind: other }),
     }
 }
 
@@ -325,25 +354,22 @@ mod tests {
                 author,
                 Some(1_700_000_000),
             ),
-            Err(RadrootsNip17Error::UnsupportedRumorKind { kind }) if kind == overflow
+            Err(Error::UnsupportedRumorKind { kind }) if kind == overflow
         ));
     }
 
     #[test]
     fn adapter_error_codes_are_stable_and_source_redacted() {
         let errors = [
-            RadrootsNip17Error::MessageEncode,
-            RadrootsNip17Error::MessageDecode,
-            RadrootsNip17Error::GiftWrap,
-            RadrootsNip17Error::Signer,
-            RadrootsNip17Error::InvalidRecipient,
-            RadrootsNip17Error::UnsupportedRumorKind { kind: 70_000 },
+            Error::MessageEncode,
+            Error::MessageDecode,
+            Error::GiftWrap,
+            Error::Signer,
+            Error::InvalidRecipient,
+            Error::UnsupportedRumorKind { kind: 70_000 },
         ];
         assert_eq!(
-            errors
-                .iter()
-                .map(RadrootsNip17Error::code)
-                .collect::<Vec<_>>(),
+            errors.iter().map(Error::code).collect::<Vec<_>>(),
             vec![
                 "message_encode",
                 "message_decode",
@@ -373,22 +399,16 @@ mod tests {
             reply_to: None,
             subject: None,
         };
-        let options = RadrootsNip17WrapOptions {
-            include_sender: false,
-            rumor_created_at: Some(1700000000),
-            gift_wrap_tags: Vec::new(),
-        };
+        let options = WrapOptions::default()
+            .include_sender(false)
+            .with_rumor_created_at(1_700_000_000);
 
-        let events = radroots_nostr_wrap_message(&sender, &message, options)
-            .await
-            .unwrap();
+        let events = wrap_message(&sender, &message, options).await.unwrap();
         assert_eq!(events.len(), 1);
 
-        let rumor = radroots_nostr_unwrap_gift_wrap(&receiver, &events[0])
-            .await
-            .unwrap();
+        let rumor = unwrap_gift_wrap(&receiver, &events[0]).await.unwrap();
         match rumor {
-            RadrootsNip17Rumor::Message(metadata) => {
+            Rumor::Message(metadata) => {
                 assert_eq!(metadata.data.content, "hello");
                 assert_eq!(metadata.data.recipients.len(), 1);
             }
@@ -420,20 +440,14 @@ mod tests {
             thumb: None,
             fallbacks: Vec::new(),
         };
-        let options = RadrootsNip17WrapOptions {
-            include_sender: false,
-            rumor_created_at: Some(1700000001),
-            gift_wrap_tags: Vec::new(),
-        };
+        let options = WrapOptions::default()
+            .include_sender(false)
+            .with_rumor_created_at(1_700_000_001);
 
-        let events = radroots_nostr_wrap_message_file(&sender, &message, options)
-            .await
-            .unwrap();
+        let events = wrap_message_file(&sender, &message, options).await.unwrap();
         assert_eq!(events.len(), 1);
 
-        let rumor = radroots_nostr_unwrap_gift_wrap(&receiver, &events[0])
-            .await
-            .unwrap();
+        let rumor = unwrap_gift_wrap(&receiver, &events[0]).await.unwrap();
         let rendered = format!("{rumor:?}");
         for private_value in [
             message.file_url.as_str(),
@@ -444,7 +458,7 @@ mod tests {
             assert!(!rendered.contains(private_value));
         }
         match rumor {
-            RadrootsNip17Rumor::MessageFile(metadata) => {
+            Rumor::MessageFile(metadata) => {
                 assert_eq!(metadata.data.file_url, message.file_url);
                 assert_eq!(metadata.data.encrypted_hash, message.encrypted_hash);
             }

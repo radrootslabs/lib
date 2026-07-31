@@ -1,11 +1,10 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::profile::AuthoredProfile;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::events::metadata::radroots_nostr_build_profile_event;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecretKey;
+use radroots_nostr::event::build_profile as build_profile_event;
 
 #[test]
 fn typed_profile_builder_preserves_the_strict_replacement_snapshot() {
@@ -19,7 +18,7 @@ fn typed_profile_builder_preserves_the_strict_replacement_snapshot() {
         .with_about("Tree fruit")
         .with_bot(false);
 
-    let event = radroots_nostr_build_profile_event(&profile)
+    let event = build_profile_event(&profile)
         .unwrap()
         .custom_created_at(created_at)
         .sign_with_keys(&keys)

@@ -1,3 +1,4 @@
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::{
     envelope::kind::{
         KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
@@ -11,14 +12,11 @@ use radroots_event_codec::{
     admission::comment::verify_and_admit_nip22_comment_event,
     decode::comment::RadrootsInboundNip22CommentPosition,
 };
-use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::Error;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::event::radroots_event_from_nostr;
-use radroots_nostr::events::comment::radroots_nostr_build_nip22_comment_event;
-use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecretKey;
+use radroots_nostr::event::from_nostr;
+use radroots_nostr::event::{GenericBuilder, build_nip22_comment as build_nip22_comment_event};
 use radroots_test_fixtures::{
     FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX,
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
@@ -136,7 +134,7 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
         (nested_event, nested_event_tags, "nested"),
         (nested_address, nested_address_tags, "nested"),
     ] {
-        let event = radroots_nostr_build_nip22_comment_event(&comment)
+        let event = build_nip22_comment_event(&comment)
             .expect("typed Comment builder")
             .custom_created_at(created_at)
             .sign_with_keys(&keys)
@@ -147,7 +145,7 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
         event.verify().expect("valid Comment signature");
 
         let admitted = verify_and_admit_nip22_comment_event(
-            radroots_event_from_nostr(&event).expect("Comment event adapter"),
+            from_nostr(&event).expect("Comment event adapter"),
         )
         .expect("Comment admission");
         assert_eq!(
@@ -160,13 +158,13 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
 #[test]
 fn generic_kind_1111_builder_cannot_bypass_typed_comment_authoring() {
     let kind = RadrootsNostrKind::Custom(KIND_COMMENT as u16);
-    let error = RadrootsNostrGenericEventBuilder::new(kind, "Raw Comment")
+    let error = GenericBuilder::new(kind, "Raw Comment")
         .sign_with_keys(&fixture_keys())
         .expect_err("generic kind 1111 must be reserved");
 
     assert!(matches!(
         error,
-        RadrootsNostrError::TypedAuthoringRequired { kind: actual }
+        Error::TypedAuthoringRequired { kind: actual }
             if actual == KIND_COMMENT as u16
     ));
 }

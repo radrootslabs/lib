@@ -1,3 +1,4 @@
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 use radroots_event_codec::{
     admission::{
@@ -6,15 +7,13 @@ use radroots_event_codec::{
     },
     decode::reply::RadrootsNip10ReplyStyle,
 };
-use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::Error;
+use radroots_nostr::event::GenericBuilder;
 use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::event::radroots_event_from_nostr;
-use radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event;
+use radroots_nostr::event::build_nip10_reply as build_nip10_reply_event;
+use radroots_nostr::event::from_nostr;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
-use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
-use radroots_nostr::types::RadrootsNostrKeys;
-use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_test_fixtures::{
     FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX,
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
@@ -36,7 +35,7 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
 
     let direct =
         AuthoredNip10Reply::direct("Direct reply", root.clone()).expect("authored direct reply");
-    let direct_event = radroots_nostr_build_nip10_reply_event(&direct)
+    let direct_event = build_nip10_reply_event(&direct)
         .expect("typed direct Reply builder")
         .custom_created_at(created_at)
         .sign_with_keys(&keys)
@@ -60,7 +59,7 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
     );
     let nested =
         AuthoredNip10Reply::nested("Nested reply", root, parent).expect("authored nested reply");
-    let nested_event = radroots_nostr_build_nip10_reply_event(&nested)
+    let nested_event = build_nip10_reply_event(&nested)
         .expect("typed nested Reply builder")
         .custom_created_at(created_at)
         .sign_with_keys(&keys)
@@ -77,7 +76,7 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
     );
     nested_event.verify().expect("valid nested Reply signature");
     let admitted = verify_and_admit_nip10_reply_event(
-        radroots_event_from_nostr(&nested_event).expect("nested Reply adapter"),
+        from_nostr(&nested_event).expect("nested Reply adapter"),
     )
     .expect("nested Reply admission");
     assert!(!admitted.projection().is_direct());
@@ -103,12 +102,12 @@ fn signed_nip10_reply_is_thread_excluded_before_semantic_reply_admission() {
         ),
     )
     .expect("authored direct reply");
-    let event = radroots_nostr_build_nip10_reply_event(&reply)
+    let event = build_nip10_reply_event(&reply)
         .expect("typed Reply builder")
         .custom_created_at(RadrootsNostrTimestamp::from_secs(CREATED_AT))
         .sign_with_keys(&fixture_keys())
         .expect("signed Reply");
-    let envelope = radroots_event_from_nostr(&event).expect("Radroots event adapter");
+    let envelope = from_nostr(&event).expect("Radroots event adapter");
 
     let candidate = match verify_and_admit_post_event(envelope).expect("post admission") {
         RadrootsPostAdmissionOutcome::ThreadExcluded(candidate) => candidate,
@@ -143,7 +142,7 @@ fn verified_legacy_positional_nip10_reply_remains_tolerated_inbound() {
         .custom_created_at(RadrootsNostrTimestamp::from_secs(CREATED_AT))
         .sign_with_keys(&keys)
         .expect("signed inbound fixture");
-    let envelope = radroots_event_from_nostr(&event).expect("Radroots event adapter");
+    let envelope = from_nostr(&event).expect("Radroots event adapter");
     let admitted =
         verify_and_admit_nip10_reply_event(envelope).expect("legacy positional Reply admission");
 
@@ -161,19 +160,16 @@ fn verified_legacy_positional_nip10_reply_remains_tolerated_inbound() {
 #[test]
 fn generic_kind_one_builder_cannot_bypass_typed_nip10_reply_authoring() {
     let keys = fixture_keys();
-    let marked_reply = RadrootsNostrGenericEventBuilder::text_note("Raw marked reply").tags([
+    let marked_reply = GenericBuilder::text_note("Raw marked reply").tags([
         RadrootsNostrTag::parse(["e", ROOT_EVENT_ID, RELAY_PRIMARY_WSS, "root"])
             .expect("root reference"),
         RadrootsNostrTag::parse(["p", FIXTURE_BOB_PUBLIC_KEY_HEX]).expect("root author reference"),
     ]);
 
-    for builder in [
-        RadrootsNostrGenericEventBuilder::text_note("Raw root"),
-        marked_reply,
-    ] {
+    for builder in [GenericBuilder::text_note("Raw root"), marked_reply] {
         assert!(matches!(
             builder.sign_with_keys(&keys),
-            Err(RadrootsNostrError::TypedAuthoringRequired { kind })
+            Err(Error::TypedAuthoringRequired { kind })
                 if kind == RadrootsNostrKind::TextNote.as_u16()
         ));
     }

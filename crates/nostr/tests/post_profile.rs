@@ -1,6 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
+use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     media::AuthoredImage,
@@ -8,13 +9,9 @@ use radroots_event::{
         AuthoredAsk, AuthoredPhotoUpdate, AuthoredPostImage, AuthoredUpdate, PostImageDimensions,
     },
 };
-use radroots_nostr::{
-    event::Timestamp as RadrootsNostrTimestamp,
-    events::post::{
-        radroots_nostr_build_ask_event, radroots_nostr_build_photo_update_event,
-        radroots_nostr_build_update_event,
-    },
-    types::{RadrootsNostrKeys, RadrootsNostrSecretKey},
+use radroots_nostr::event::{
+    Timestamp as RadrootsNostrTimestamp, build_ask as build_ask_event,
+    build_photo_update as build_photo_update_event, build_update as build_update_event,
 };
 
 #[test]
@@ -24,7 +21,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
     );
     let created_at = RadrootsNostrTimestamp::from_secs(1_784_347_200);
     let update = AuthoredUpdate::new("Farm update").unwrap();
-    let event = radroots_nostr_build_update_event(&update)
+    let event = build_update_event(&update)
         .unwrap()
         .custom_created_at(created_at)
         .sign_with_keys(&keys)
@@ -37,7 +34,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
     let image = authored_image();
     let photo =
         AuthoredPhotoUpdate::new(format!("Harvest {}", image.url()), vec![image.clone()]).unwrap();
-    let event = radroots_nostr_build_photo_update_event(&photo)
+    let event = build_photo_update_event(&photo)
         .unwrap()
         .custom_created_at(created_at)
         .sign_with_keys(&keys)
@@ -47,7 +44,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
     assert!(event.verify().is_ok());
 
     let ask = AuthoredAsk::new(format!("Is this ready? {}", image.url()), vec![image]).unwrap();
-    let event = radroots_nostr_build_ask_event(&ask)
+    let event = build_ask_event(&ask)
         .unwrap()
         .custom_created_at(created_at)
         .sign_with_keys(&keys)

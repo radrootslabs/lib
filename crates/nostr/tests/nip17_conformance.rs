@@ -4,8 +4,7 @@ use nostr::{Keys, SecretKey};
 use radroots_event::social::message::{Message, MessageRecipient};
 use radroots_event::social::message_file::{MessageFile, MessageFileDimensions};
 use radroots_nostr::nip17::{
-    RadrootsNip17Rumor, RadrootsNip17WrapOptions, radroots_nostr_unwrap_gift_wrap,
-    radroots_nostr_wrap_message, radroots_nostr_wrap_message_file,
+    Rumor, WrapOptions, unwrap_gift_wrap, wrap_message, wrap_message_file,
 };
 use radroots_test_fixtures::{
     FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
@@ -96,12 +95,12 @@ async fn execute_message_roundtrip(vector: &Vector) {
         reply_to: None,
         subject: Some(input_str(vector, "subject").to_owned()),
     };
-    let events = radroots_nostr_wrap_message(&sender, &message, options(vector))
+    let events = wrap_message(&sender, &message, options(vector))
         .await
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(events.len(), expected_u64(vector, "event_count") as usize);
 
-    let rumor = radroots_nostr_unwrap_gift_wrap(&receiver, &events[0])
+    let rumor = unwrap_gift_wrap(&receiver, &events[0])
         .await
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     let rendered = format!("{rumor:?}");
@@ -113,7 +112,7 @@ async fn execute_message_roundtrip(vector: &Vector) {
         assert!(!rendered.contains(private_value), "{}", vector.id);
     }
     match rumor {
-        RadrootsNip17Rumor::Message(metadata) => {
+        Rumor::Message(metadata) => {
             assert_eq!(
                 metadata.author,
                 expected_str(vector, "author"),
@@ -179,12 +178,12 @@ async fn execute_message_file_roundtrip(vector: &Vector) {
         thumb: None,
         fallbacks: Vec::new(),
     };
-    let events = radroots_nostr_wrap_message_file(&sender, &message, options(vector))
+    let events = wrap_message_file(&sender, &message, options(vector))
         .await
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(events.len(), expected_u64(vector, "event_count") as usize);
 
-    let rumor = radroots_nostr_unwrap_gift_wrap(&receiver, &events[0])
+    let rumor = unwrap_gift_wrap(&receiver, &events[0])
         .await
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     let rendered = format!("{rumor:?}");
@@ -199,7 +198,7 @@ async fn execute_message_file_roundtrip(vector: &Vector) {
         assert!(!rendered.contains(private_value), "{}", vector.id);
     }
     match rumor {
-        RadrootsNip17Rumor::MessageFile(metadata) => {
+        Rumor::MessageFile(metadata) => {
             assert_eq!(
                 metadata.author,
                 expected_str(vector, "author"),
@@ -262,7 +261,7 @@ async fn execute_invalid_recipient(vector: &Vector) {
         reply_to: None,
         subject: None,
     };
-    let error = radroots_nostr_wrap_message(&sender, &message, options(vector))
+    let error = wrap_message(&sender, &message, options(vector))
         .await
         .expect_err("invalid recipient vector must fail");
     assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
@@ -271,12 +270,10 @@ async fn execute_invalid_recipient(vector: &Vector) {
     assert!(!rendered.contains(&message.content), "{}", vector.id);
 }
 
-fn options(vector: &Vector) -> RadrootsNip17WrapOptions {
-    RadrootsNip17WrapOptions {
-        include_sender: false,
-        rumor_created_at: Some(input_u64(vector, "created_at")),
-        gift_wrap_tags: Vec::new(),
-    }
+fn options(vector: &Vector) -> WrapOptions {
+    WrapOptions::default()
+        .include_sender(false)
+        .with_rumor_created_at(input_u64(vector, "created_at"))
 }
 
 fn sender_keys() -> Keys {

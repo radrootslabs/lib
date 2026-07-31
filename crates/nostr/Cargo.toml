@@ -27,13 +27,12 @@ std = [
   "radroots_identity/std",
 ]
 blossom = ["std", "dep:base64", "dep:radroots_blossom"]
-codec = []
 events = [
   "std",
   "radroots_event/serde",
   "radroots_event_codec/json",
 ]
-nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
+nip17 = ["events", "nostr/nip44", "nostr/nip59"]
 signing = [
   "events",
   "dep:radroots_signing",
@@ -80,15 +79,15 @@ required-features = ["events"]
 
 [[test]]
 name = "nip10_reply_profile"
-required-features = ["codec", "events"]
+required-features = ["events"]
 
 [[test]]
 name = "nip09_deletion_request_profile"
-required-features = ["codec", "events"]
+required-features = ["events"]
 
 [[test]]
 name = "nip22_comment_profile"
-required-features = ["codec", "events"]
+required-features = ["events"]
 
 [[test]]
 name = "blossom_conformance"

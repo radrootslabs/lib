@@ -22,6 +22,8 @@ const README: &str = include_str!("../README.md");
 const SIGNING_MODULE: &str = include_str!("../src/signing.rs");
 const TAG_MODULE: &str = include_str!("../src/tag.rs");
 const TYPES_MODULE: &str = include_str!("../src/types.rs");
+const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_nostr.txt");
 const IDENTITY_MANIFEST: &str = include_str!("../../identity/Cargo.toml");
 const IDENTITY_KEY_MODULE: &str = include_str!("../../identity/src/key.rs");
 const TRANSPORT_MANIFEST: &str = include_str!("../../transport_nostr/Cargo.toml");
@@ -102,12 +104,11 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
     }
 
     let features = table_keys(MANIFEST, "[features]");
-    for required in ["default", "std", "events", "signing", "nip17", "blossom"] {
-        assert!(
-            features.contains(required),
-            "manifest is missing supported feature `{required}`"
-        );
-    }
+    assert_eq!(
+        features,
+        BTreeSet::from(["blossom", "default", "events", "nip17", "signing", "std"]),
+        "manifest feature vocabulary must match the Release V1 charter"
+    );
     for feature in features {
         let declaration = table_value(MANIFEST, "[features]", feature)
             .unwrap_or_else(|| panic!("missing feature declaration `{feature}`"));
@@ -145,13 +146,29 @@ fn crate_root_establishes_the_final_public_module_skeleton() {
         .collect::<Vec<_>>();
     assert_eq!(
         root_reexports,
-        ["pub use error::RadrootsNostrError as Error;"],
+        ["pub use error::Error;"],
         "the crate root must re-export only the canonical Error alias"
     );
     assert!(
         !ROOT.contains("pub mod prelude"),
         "lower-level Nostr crate must not publish a broad prelude"
     );
+    for retired in [
+        "codec_adapters",
+        "draft_signing",
+        "error",
+        "event_adapters",
+        "event_verify",
+        "events",
+        "job_adapter",
+        "types",
+        "util",
+    ] {
+        assert!(
+            !ROOT.contains(&format!("pub mod {retired};")),
+            "superseded module remains public: `{retired}`"
+        );
+    }
 }
 
 #[test]
@@ -375,7 +392,7 @@ fn local_signer_consumes_only_the_opaque_secret_boundary() {
 fn focused_nip_and_blossom_features_own_no_network_operations() {
     for required in [
         "blossom = [\"std\", \"dep:base64\", \"dep:radroots_blossom\"]",
-        "nip17 = [\"std\", \"codec\", \"nostr/nip44\", \"nostr/nip59\"]",
+        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\"]",
     ] {
         assert!(
             MANIFEST.contains(required),
@@ -383,9 +400,9 @@ fn focused_nip_and_blossom_features_own_no_network_operations() {
         );
     }
     for required in [
-        "pub async fn radroots_nostr_wrap_message<T>(",
-        "pub async fn radroots_nostr_wrap_message_file<T>(",
-        "pub async fn radroots_nostr_unwrap_gift_wrap<T>(",
+        "pub async fn wrap_message<T>(",
+        "pub async fn wrap_message_file<T>(",
+        "pub async fn unwrap_gift_wrap<T>(",
         "pub const fn code(&self) -> &'static str",
     ] {
         assert!(
@@ -394,9 +411,9 @@ fn focused_nip_and_blossom_features_own_no_network_operations() {
         );
     }
     for required in [
-        "pub fn radroots_nostr_sign_blossom_authorization(",
-        "pub fn radroots_nostr_encode_blossom_authorization_header(",
-        "pub fn radroots_nostr_decode_verify_blossom_authorization_header(",
+        "pub fn sign_authorization(",
+        "pub fn encode_authorization_header(",
+        "pub fn decode_verify_authorization_header(",
     ] {
         assert!(
             BLOSSOM_MODULE.contains(required),
@@ -495,9 +512,16 @@ fn workspace_consumers_do_not_use_superseded_nostr_alias_paths() {
         let source = fs::read_to_string(&source_path)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", source_path.display()));
         for forbidden in [
+            "radroots_nostr::codec_adapters::",
+            "radroots_nostr::draft_signing::",
             "radroots_nostr::error::",
+            "radroots_nostr::event_adapters::",
+            "radroots_nostr::event_verify::",
+            "radroots_nostr::events::",
+            "radroots_nostr::job_adapter::",
             "radroots_nostr::prelude",
             "radroots_nostr::types::",
+            "radroots_nostr::util::",
         ] {
             assert!(
                 !source.contains(forbidden),
@@ -505,6 +529,62 @@ fn workspace_consumers_do_not_use_superseded_nostr_alias_paths() {
                 source_path.display()
             );
         }
+    }
+}
+
+#[test]
+fn superseded_surface_retirement_is_explicit_and_release_bounded() {
+    assert!(!MANIFEST.contains("codec = []"));
+    for forbidden in ["pub fn radroots_nostr_", "pub async fn radroots_nostr_"] {
+        for source_path in rust_sources(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")) {
+            let source = fs::read_to_string(&source_path).unwrap_or_else(|error| {
+                panic!("failed to read {}: {error}", source_path.display())
+            });
+            assert!(
+                !source.contains(forbidden),
+                "{} retains prefixed public item `{forbidden}`",
+                source_path.display()
+            );
+        }
+    }
+    for required in [
+        "publish = false",
+        "outside the authorized `oss/lib` and `oss/sdk` crate-surface edit boundary",
+        "no compatibility path was restored",
+        "Step 313 is the exact final pre-release audit",
+    ] {
+        let authority = if required == "publish = false" {
+            MANIFEST
+        } else {
+            COMPATIBILITY
+        };
+        assert!(
+            authority.contains(required),
+            "retirement contract is missing `{required}`"
+        );
+    }
+
+    let public_modules = PUBLIC_API
+        .lines()
+        .filter_map(|line| line.strip_prefix("pub mod radroots_nostr::"))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        public_modules,
+        BTreeSet::from([
+            "blossom", "event", "filter", "key", "nip17", "signing", "tag"
+        ]),
+        "reviewed API baseline must expose only chartered modules"
+    );
+    for forbidden in [
+        "::RadrootsNostr",
+        "::radroots_nostr_",
+        "pub radroots_nostr::event::ApplicationHandlerSpec::",
+        "pub radroots_nostr::nip17::WrapOptions::",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "reviewed API baseline retains forbidden surface `{forbidden}`"
+        );
     }
 }
 

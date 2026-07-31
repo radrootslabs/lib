@@ -1903,8 +1903,8 @@ const REPLY_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/events/reply.rs",
         required_fragments: &[
-            "pub struct RadrootsNostrNip10ReplyEventBuilder",
-            "pub fn radroots_nostr_build_nip10_reply_event",
+            "pub struct Nip10ReplyBuilder",
+            "pub fn build_nip10_reply_event",
         ],
     },
 ];
@@ -1943,8 +1943,8 @@ const COMMENT_WITNESSES: [EventBoundarySourceWitness; 7] = [
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/events/comment.rs",
         required_fragments: &[
-            "pub struct RadrootsNostrNip22CommentEventBuilder",
-            "pub fn radroots_nostr_build_nip22_comment_event",
+            "pub struct Nip22CommentBuilder",
+            "pub fn build_nip22_comment_event",
         ],
     },
     EventBoundarySourceWitness {
@@ -1990,8 +1990,8 @@ const DELETION_WITNESSES: [EventBoundarySourceWitness; 7] = [
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/events/deletion.rs",
         required_fragments: &[
-            "pub struct RadrootsNostrNip09DeletionRequestEventBuilder",
-            "pub fn radroots_nostr_build_nip09_deletion_request_event",
+            "pub struct Nip09DeletionRequestBuilder",
+            "pub fn build_nip09_deletion_request_event",
         ],
     },
     EventBoundarySourceWitness {
@@ -2055,10 +2055,7 @@ const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/nip17.rs",
-        required_fragments: &[
-            "pub async fn radroots_nostr_wrap_message<T>(",
-            "KIND_MESSAGE =>",
-        ],
+        required_fragments: &["pub async fn wrap_message<T>(", "KIND_MESSAGE =>"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/lib.rs",
@@ -2077,10 +2074,7 @@ const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/nip17.rs",
-        required_fragments: &[
-            "pub async fn radroots_nostr_wrap_message_file<T>(",
-            "KIND_MESSAGE_FILE =>",
-        ],
+        required_fragments: &["pub async fn wrap_message_file<T>(", "KIND_MESSAGE_FILE =>"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/lib.rs",
@@ -2099,7 +2093,7 @@ const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/nip17.rs",
-        required_fragments: &["pub async fn radroots_nostr_unwrap_gift_wrap<T>("],
+        required_fragments: &["pub async fn unwrap_gift_wrap<T>("],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/lib.rs",
@@ -2227,7 +2221,7 @@ const APP_HANDLER_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/events/application_handler.rs",
-        required_fragments: &["pub fn radroots_nostr_build_application_handler_event("],
+        required_fragments: &["pub fn build_application_handler_event("],
     },
 ];
 
@@ -2647,7 +2641,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "reply",
         kind: "1",
-        radroots_type: "AuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder",
+        radroots_type: "AuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / Nip10ReplyBuilder",
         rpc_methods: &[
             "social.reply.build_authored_draft",
             "social.reply.project_verified_event",
@@ -2658,7 +2652,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "comment",
         kind: "1111",
-        radroots_type: "AuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder",
+        radroots_type: "AuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / Nip22CommentBuilder",
         rpc_methods: &[
             "social.comment.build_authored_draft",
             "social.comment.project_verified_event",
@@ -2669,7 +2663,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "deletion_request",
         kind: "5",
-        radroots_type: "AuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / RadrootsNostrNip09DeletionRequestEventBuilder",
+        radroots_type: "AuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / Nip09DeletionRequestBuilder",
         rpc_methods: &[
             "social.deletion_request.build_authored_draft",
             "social.deletion_request.project_verified_event",
@@ -2947,7 +2941,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "food_availability",
         kind: "30402",
-        radroots_type: "FoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder",
+        radroots_type: "FoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / FoodAvailabilityBuilder",
         rpc_methods: &[
             "food_availability.build_authored_draft",
             "food_availability.project_verified_event",

@@ -4,7 +4,7 @@ use tokio::runtime::Handle;
 use super::inner::Inner;
 use nostr::Keys as RadrootsNostrKeys;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
-use radroots_nostr::events::post::radroots_nostr_post_events_filter;
+use radroots_nostr::event::post_filter;
 
 #[derive(Clone)]
 pub struct NostrClientManager {
@@ -44,7 +44,7 @@ impl NostrClientManager {
                 let mut since =
                     since_unix.unwrap_or_else(|| RadrootsNostrTimestamp::now().as_secs());
                 loop {
-                    let filter = radroots_nostr_post_events_filter(None, Some(since));
+                    let filter = post_filter(None, Some(since));
 
                     let mut stream = match inner
                         .client
@@ -59,7 +59,7 @@ impl NostrClientManager {
                     };
 
                     while let Some(event) = stream.next().await {
-                        let meta = radroots_nostr::event_adapters::to_post_event_metadata(&event);
+                        let meta = radroots_nostr::event::to_post_event_metadata(&event);
                         let ts = event.created_at.as_secs();
                         since = ts.saturating_add(1);
                         let _ = inner.post_events_tx.send(meta);

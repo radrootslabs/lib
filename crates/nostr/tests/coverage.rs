@@ -3,33 +3,28 @@ mod test_fixtures;
 
 use std::borrow::Cow;
 
-use nostr::nips::nip04;
+use nostr::{Keys as RadrootsNostrKeys, RelayUrl as RadrootsNostrRelayUrl, nips::nip04};
 #[cfg(feature = "events")]
 use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
-use radroots_nostr::error::RadrootsNostrTagsResolveError;
-use radroots_nostr::events::jobs::{
-    radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result,
-};
-use radroots_nostr::events::post::radroots_nostr_post_events_filter;
 #[cfg(feature = "events")]
-use radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event;
+use radroots_nostr::event::build_nip10_reply as build_nip10_reply_event;
+use radroots_nostr::event::{Kind as RadrootsNostrKind, Timestamp as RadrootsNostrTimestamp};
+use radroots_nostr::event::{
+    build_job_feedback as build_event_job_feedback, build_job_result as build_event_job_result,
+    created_at_u32_saturating, event_created_at_u32_saturating, post_filter as post_events_filter,
+};
 use radroots_nostr::filter::{
-    radroots_nostr_filter_kind, radroots_nostr_filter_new_events, radroots_nostr_filter_tag,
-    radroots_nostr_kind,
+    for_kind as filter_kind, kind, since_now as filter_new_events, with_tag as filter_tag,
 };
 use radroots_nostr::key::{parse_public_key, public_key_from_nostr, public_key_to_npub};
 use radroots_nostr::tag::{
-    Tag as RadrootsNostrTag, TagKind as RadrootsNostrTagKind,
-    TagStandard as RadrootsNostrTagStandard, radroots_nostr_tag_at_value,
-    radroots_nostr_tag_first_value, radroots_nostr_tag_match_geohash, radroots_nostr_tag_match_l,
-    radroots_nostr_tag_match_location, radroots_nostr_tag_match_summary,
-    radroots_nostr_tag_match_title, radroots_nostr_tag_relays_parse, radroots_nostr_tag_slice,
-    radroots_nostr_tags_match, radroots_nostr_tags_resolve,
-};
-use radroots_nostr::util::{created_at_u32_saturating, event_created_at_u32_saturating};
-use radroots_nostr::{
-    event::{Kind as RadrootsNostrKind, Timestamp as RadrootsNostrTimestamp},
-    types::{RadrootsNostrKeys, RadrootsNostrRelayUrl},
+    ResolveError, Tag as RadrootsNostrTag, TagKind as RadrootsNostrTagKind,
+    TagStandard as RadrootsNostrTagStandard, first_value as tag_first_value,
+    match_geohash as tag_match_geohash, match_location as tag_match_location,
+    match_location_coordinate as tag_match_l, match_parts as tags_match,
+    match_summary as tag_match_summary, match_title as tag_match_title,
+    relay_urls as tag_relays_parse, resolve as tags_resolve, value_at as tag_at_value,
+    values_from as tag_slice,
 };
 use test_fixtures::RELAY_PRIMARY_WSS;
 
@@ -71,7 +66,7 @@ fn job_event_builders_are_callable() {
         .sign_with_keys(&keys)
         .expect("non-job request");
 
-    let job_result = radroots_nostr_build_event_job_result(
+    let job_result = build_event_job_result(
         &job_request,
         "ok",
         1,
@@ -83,7 +78,7 @@ fn job_event_builders_are_callable() {
         .sign_with_keys(&keys)
         .expect("job result signs through the generic boundary");
 
-    let feedback_ok = radroots_nostr_build_event_job_feedback(
+    let feedback_ok = build_event_job_feedback(
         &job_request,
         "success",
         Some("extra".to_string()),
@@ -94,14 +89,13 @@ fn job_event_builders_are_callable() {
         .sign_with_keys(&keys)
         .expect("job feedback signs through the generic boundary");
 
-    let feedback_invalid =
-        radroots_nostr_build_event_job_feedback(&job_request, "invalid-status", None, None)
-            .expect("job feedback fallback builder");
+    let feedback_invalid = build_event_job_feedback(&job_request, "invalid-status", None, None)
+        .expect("job feedback fallback builder");
     let _ = feedback_invalid
         .sign_with_keys(&keys)
         .expect("fallback job feedback signs through the generic boundary");
 
-    let invalid_job_result = radroots_nostr_build_event_job_result(
+    let invalid_job_result = build_event_job_result(
         &non_job_request,
         "ok",
         1,
@@ -113,8 +107,8 @@ fn job_event_builders_are_callable() {
 
 #[test]
 fn post_helpers_cover_success_and_error_paths() {
-    let _ = radroots_nostr_post_events_filter(None, None);
-    let _ = radroots_nostr_post_events_filter(Some(10), Some(1_700_000_000));
+    let _ = post_events_filter(None, None);
+    let _ = post_events_filter(Some(10), Some(1_700_000_000));
 
     #[cfg(feature = "events")]
     {
@@ -132,8 +126,7 @@ fn post_helpers_cover_success_and_error_paths() {
                 .expect("root reference");
         let direct = AuthoredNip10Reply::direct("direct reply", root_reference.clone())
             .expect("direct reply");
-        let direct_builder =
-            radroots_nostr_build_nip10_reply_event(&direct).expect("direct reply builder");
+        let direct_builder = build_nip10_reply_event(&direct).expect("direct reply builder");
         let _ = direct_builder
             .sign_with_keys(&keys)
             .expect("direct reply signs through the typed boundary");
@@ -142,8 +135,7 @@ fn post_helpers_cover_success_and_error_paths() {
             .expect("parent reference");
         let nested = AuthoredNip10Reply::nested("nested reply", root_reference, parent_reference)
             .expect("nested reply");
-        let nested_builder =
-            radroots_nostr_build_nip10_reply_event(&nested).expect("nested reply builder");
+        let nested_builder = build_nip10_reply_event(&nested).expect("nested reply builder");
         let _ = nested_builder
             .sign_with_keys(&keys)
             .expect("nested reply signs through the typed boundary");
@@ -164,24 +156,21 @@ fn post_helpers_cover_success_and_error_paths() {
 
 #[test]
 fn filter_helpers_cover_all_paths() {
-    let filter = radroots_nostr_filter_kind(1);
-    let filtered = radroots_nostr_filter_tag(filter, "p", vec!["x".to_string()]);
+    let filter = filter_kind(1);
+    let filtered = filter_tag(filter, "p", vec!["x".to_string()]);
     assert!(filtered.is_ok());
 
-    let empty_tag =
-        radroots_nostr_filter_tag(radroots_nostr_filter_kind(1), "", vec!["x".to_string()]);
+    let empty_tag = filter_tag(filter_kind(1), "", vec!["x".to_string()]);
     assert!(empty_tag.is_err());
 
-    let multi_tag =
-        radroots_nostr_filter_tag(radroots_nostr_filter_kind(1), "pp", vec!["x".to_string()]);
+    let multi_tag = filter_tag(filter_kind(1), "pp", vec!["x".to_string()]);
     assert!(multi_tag.is_err());
 
-    let invalid_tag =
-        radroots_nostr_filter_tag(radroots_nostr_filter_kind(1), "1", vec!["x".to_string()]);
+    let invalid_tag = filter_tag(filter_kind(1), "1", vec!["x".to_string()]);
     assert!(invalid_tag.is_err());
 
-    let _ = radroots_nostr_kind(30000);
-    let _ = radroots_nostr_filter_new_events(radroots_nostr_filter_kind(1));
+    let _ = kind(30000);
+    let _ = filter_new_events(filter_kind(1));
 }
 
 #[test]
@@ -207,50 +196,44 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
         RadrootsNostrTagKind::Custom(Cow::Borrowed("x")),
         vec!["v1".to_string(), "v2".to_string()],
     );
+    assert_eq!(tag_first_value(&custom_tag, "x"), Some("v1".to_string()));
+    assert_eq!(tag_first_value(&custom_tag, "y"), None);
+    assert_eq!(tag_at_value(&custom_tag, 0), Some("x".to_string()));
+    assert_eq!(tag_at_value(&custom_tag, 9), None);
     assert_eq!(
-        radroots_nostr_tag_first_value(&custom_tag, "x"),
-        Some("v1".to_string())
-    );
-    assert_eq!(radroots_nostr_tag_first_value(&custom_tag, "y"), None);
-    assert_eq!(
-        radroots_nostr_tag_at_value(&custom_tag, 0),
-        Some("x".to_string())
-    );
-    assert_eq!(radroots_nostr_tag_at_value(&custom_tag, 9), None);
-    assert_eq!(
-        radroots_nostr_tag_slice(&custom_tag, 1),
+        tag_slice(&custom_tag, 1),
         Some(vec!["v1".to_string(), "v2".to_string()])
     );
-    assert_eq!(radroots_nostr_tag_slice(&custom_tag, 9), None);
-    let matched = radroots_nostr_tags_match(&custom_tag).expect("custom match");
+    assert_eq!(tag_slice(&custom_tag, 9), None);
+    let matched = tags_match(&custom_tag).expect("custom match");
     assert_eq!(matched.0, "x");
     assert_eq!(matched.1, ["v1".to_string(), "v2".to_string()]);
 
     let relays_tag = RadrootsNostrTag::from_standardized(RadrootsNostrTagStandard::Relays(vec![
         RadrootsNostrRelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay"),
     ]));
-    assert!(radroots_nostr_tag_relays_parse(&relays_tag).is_some());
+    assert!(tag_relays_parse(&relays_tag).is_some());
     let relays_non_match =
         RadrootsNostrTag::from_standardized(RadrootsNostrTagStandard::Title("x".to_string()));
-    assert!(radroots_nostr_tag_relays_parse(&relays_non_match).is_none());
-    assert!(radroots_nostr_tag_relays_parse(&custom_tag).is_none());
+    assert!(tag_relays_parse(&relays_non_match).is_none());
+    assert!(tag_relays_parse(&custom_tag).is_none());
 
     let l_tag = RadrootsNostrTag::custom(
         RadrootsNostrTagKind::Custom(Cow::Borrowed("l")),
         vec!["12.5".to_string(), "kg".to_string()],
     );
-    assert_eq!(radroots_nostr_tag_match_l(&l_tag), Some(("kg", 12.5)));
+    assert_eq!(tag_match_l(&l_tag), Some(("kg", 12.5)));
     let bad_l_tag = RadrootsNostrTag::custom(
         RadrootsNostrTagKind::Custom(Cow::Borrowed("l")),
         vec!["abc".to_string(), "kg".to_string()],
     );
-    assert_eq!(radroots_nostr_tag_match_l(&bad_l_tag), None);
-    assert_eq!(radroots_nostr_tag_match_l(&custom_tag), None);
+    assert_eq!(tag_match_l(&bad_l_tag), None);
+    assert_eq!(tag_match_l(&custom_tag), None);
     let short_l_tag = RadrootsNostrTag::custom(
         RadrootsNostrTagKind::Custom(Cow::Borrowed("l")),
         vec!["12.5".to_string()],
     );
-    assert_eq!(radroots_nostr_tag_match_l(&short_l_tag), None);
+    assert_eq!(tag_match_l(&short_l_tag), None);
 
     let location_tag = RadrootsNostrTag::custom(
         RadrootsNostrTagKind::Custom(Cow::Borrowed("location")),
@@ -261,7 +244,7 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
         ],
     );
     assert_eq!(
-        radroots_nostr_tag_match_location(&location_tag),
+        tag_match_location(&location_tag),
         Some(("se", "stockholm", "city"))
     );
     let location_non_match = RadrootsNostrTag::custom(
@@ -272,36 +255,27 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
             "city".to_string(),
         ],
     );
-    assert_eq!(radroots_nostr_tag_match_location(&location_non_match), None);
-    assert_eq!(radroots_nostr_tag_match_location(&custom_tag), None);
+    assert_eq!(tag_match_location(&location_non_match), None);
+    assert_eq!(tag_match_location(&custom_tag), None);
 
     let geohash_tag =
         RadrootsNostrTag::from_standardized(RadrootsNostrTagStandard::Geohash("u4pr".to_string()));
-    assert_eq!(
-        radroots_nostr_tag_match_geohash(&geohash_tag),
-        Some("u4pr".to_string())
-    );
+    assert_eq!(tag_match_geohash(&geohash_tag), Some("u4pr".to_string()));
     let title_tag =
         RadrootsNostrTag::from_standardized(RadrootsNostrTagStandard::Title("title".to_string()));
-    assert_eq!(radroots_nostr_tag_match_geohash(&title_tag), None);
-    assert_eq!(radroots_nostr_tag_match_geohash(&custom_tag), None);
+    assert_eq!(tag_match_geohash(&title_tag), None);
+    assert_eq!(tag_match_geohash(&custom_tag), None);
 
-    assert_eq!(
-        radroots_nostr_tag_match_title(&title_tag),
-        Some("title".to_string())
-    );
+    assert_eq!(tag_match_title(&title_tag), Some("title".to_string()));
     let summary_tag = RadrootsNostrTag::from_standardized(RadrootsNostrTagStandard::Summary(
         "summary".to_string(),
     ));
-    assert_eq!(radroots_nostr_tag_match_title(&summary_tag), None);
-    assert_eq!(radroots_nostr_tag_match_title(&custom_tag), None);
+    assert_eq!(tag_match_title(&summary_tag), None);
+    assert_eq!(tag_match_title(&custom_tag), None);
 
-    assert_eq!(
-        radroots_nostr_tag_match_summary(&summary_tag),
-        Some("summary".to_string())
-    );
-    assert_eq!(radroots_nostr_tag_match_summary(&geohash_tag), None);
-    assert_eq!(radroots_nostr_tag_match_summary(&custom_tag), None);
+    assert_eq!(tag_match_summary(&summary_tag), Some("summary".to_string()));
+    assert_eq!(tag_match_summary(&geohash_tag), None);
+    assert_eq!(tag_match_summary(&custom_tag), None);
 
     let clear_event = text_event_with_tags(
         &keys,
@@ -310,7 +284,7 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
             vec!["x".to_string(), "v".to_string()],
         )],
     );
-    let resolved = radroots_nostr_tags_resolve(&clear_event, &keys).expect("clear tags");
+    let resolved = tags_resolve(&clear_event, &keys).expect("clear tags");
     assert_eq!(resolved.len(), 1);
 
     let encrypted_missing_p = text_event_with_tags(
@@ -320,19 +294,13 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
             vec!["encrypted".to_string()],
         )],
     );
-    let missing_p = radroots_nostr_tags_resolve(&encrypted_missing_p, &keys);
-    assert!(matches!(
-        missing_p,
-        Err(RadrootsNostrTagsResolveError::MissingPTag(_))
-    ));
+    let missing_p = tags_resolve(&encrypted_missing_p, &keys);
+    assert!(matches!(missing_p, Err(ResolveError::MissingPTag(_))));
 
     let sender = make_keys();
     let encrypted_invalid_p = encrypted_event_with_p_tag(&sender, "cipher", "not-a-pubkey");
-    let invalid_p = radroots_nostr_tags_resolve(&encrypted_invalid_p, &keys);
-    assert!(matches!(
-        invalid_p,
-        Err(RadrootsNostrTagsResolveError::MissingPTag(_))
-    ));
+    let invalid_p = tags_resolve(&encrypted_invalid_p, &keys);
+    assert!(matches!(invalid_p, Err(ResolveError::MissingPTag(_))));
 
     let encrypted_empty_p_content = nostr::EventBuilder::new(RadrootsNostrKind::TextNote, "cipher")
         .tags(vec![
@@ -344,45 +312,32 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
         ])
         .sign_with_keys(&sender)
         .expect("sign encrypted event with empty p tag");
-    let empty_p_content = radroots_nostr_tags_resolve(&encrypted_empty_p_content, &keys);
-    assert!(matches!(
-        empty_p_content,
-        Err(RadrootsNostrTagsResolveError::MissingPTag(_))
-    ));
+    let empty_p_content = tags_resolve(&encrypted_empty_p_content, &keys);
+    assert!(matches!(empty_p_content, Err(ResolveError::MissingPTag(_))));
 
     let encrypted_not_recipient =
         encrypted_event_with_p_tag(&sender, "cipher", &other.public_key().to_hex());
-    let not_recipient = radroots_nostr_tags_resolve(&encrypted_not_recipient, &keys);
-    assert!(matches!(
-        not_recipient,
-        Err(RadrootsNostrTagsResolveError::NotRecipient)
-    ));
+    let not_recipient = tags_resolve(&encrypted_not_recipient, &keys);
+    assert!(matches!(not_recipient, Err(ResolveError::NotRecipient)));
 
     let encrypted_bad_cipher =
         encrypted_event_with_p_tag(&sender, "not-ciphertext", &keys.public_key().to_hex());
-    let bad_cipher = radroots_nostr_tags_resolve(&encrypted_bad_cipher, &keys);
-    assert!(matches!(
-        bad_cipher,
-        Err(RadrootsNostrTagsResolveError::DecryptionError(_))
-    ));
+    let bad_cipher = tags_resolve(&encrypted_bad_cipher, &keys);
+    assert!(matches!(bad_cipher, Err(ResolveError::DecryptionError(_))));
 
     let encrypted_cleartext = nip04::encrypt(sender.secret_key(), &keys.public_key(), "[]")
         .expect("encrypt cleartext tags");
     let encrypted_ok =
         encrypted_event_with_p_tag(&sender, encrypted_cleartext, &keys.public_key().to_hex());
-    let resolved_encrypted =
-        radroots_nostr_tags_resolve(&encrypted_ok, &keys).expect("resolve tags");
+    let resolved_encrypted = tags_resolve(&encrypted_ok, &keys).expect("resolve tags");
     assert!(resolved_encrypted.is_empty());
 
     let encrypted_bad_json = nip04::encrypt(sender.secret_key(), &keys.public_key(), "not-json")
         .expect("encrypt invalid tags payload");
     let encrypted_bad_json_event =
         encrypted_event_with_p_tag(&sender, encrypted_bad_json, &keys.public_key().to_hex());
-    let bad_json = radroots_nostr_tags_resolve(&encrypted_bad_json_event, &keys);
-    assert!(matches!(
-        bad_json,
-        Err(RadrootsNostrTagsResolveError::ParseError(_))
-    ));
+    let bad_json = tags_resolve(&encrypted_bad_json_event, &keys);
+    assert!(matches!(bad_json, Err(ResolveError::ParseError(_))));
 }
 
 #[test]
