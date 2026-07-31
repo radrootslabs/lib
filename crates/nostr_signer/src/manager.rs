@@ -20,10 +20,8 @@ use crate::model::{
 use crate::store::{RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore};
 use nostr::{PublicKey, RelayUrl};
 use radroots_identity::PublicIdentity;
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
-    RadrootsNostrConnectRequestMessage,
+use radroots_nostr_connect::{
+    Method, Request, message::RequestMessage, permission::Permissions, uri::ClientMetadata,
 };
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -196,9 +194,9 @@ impl RadrootsNostrSignerManager {
     pub fn evaluate_connect_request(
         &self,
         client_public_key: PublicKey,
-        request: RadrootsNostrConnectRequest,
+        request: Request,
     ) -> Result<RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerError> {
-        let RadrootsNostrConnectRequest::Connect {
+        let Request::Connect {
             remote_signer_public_key,
             secret,
             requested_permissions,
@@ -323,7 +321,7 @@ impl RadrootsNostrSignerManager {
     pub fn set_granted_permissions(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        granted_permissions: RadrootsNostrConnectPermissions,
+        granted_permissions: Permissions,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
         self.update_state_with(|state| {
             let updated_at_unix = now_unix_secs();
@@ -353,7 +351,7 @@ impl RadrootsNostrSignerManager {
     pub fn approve_connection(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        granted_permissions: RadrootsNostrConnectPermissions,
+        granted_permissions: Permissions,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
         self.update_state_with(|state| {
             let updated_at_unix = now_unix_secs();
@@ -476,7 +474,7 @@ impl RadrootsNostrSignerManager {
     pub fn set_pending_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
         self.update_state_with(|state| {
             let record = find_connection_mut(state, connection_id)?;
@@ -763,12 +761,9 @@ impl RadrootsNostrSignerManager {
     pub fn evaluate_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
     ) -> Result<RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError> {
-        if matches!(
-            request_message.request,
-            RadrootsNostrConnectRequest::Connect { .. }
-        ) {
+        if matches!(request_message.request, Request::Connect { .. }) {
             return Err(RadrootsNostrSignerError::InvalidState(
                 "connect requests must be evaluated via evaluate_connect_request".into(),
             ));
@@ -886,7 +881,7 @@ impl RadrootsNostrSignerManager {
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
         request_id: impl AsRef<str>,
-        method: RadrootsNostrConnectMethod,
+        method: Method,
         decision: RadrootsNostrSignerRequestDecision,
         message: Option<String>,
     ) -> Result<RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerError> {
@@ -1031,8 +1026,8 @@ fn validate_public_identity(_identity: &PublicIdentity) -> Result<(), RadrootsNo
 }
 
 fn validate_granted_permissions(
-    requested_permissions: &RadrootsNostrConnectPermissions,
-    granted_permissions: &RadrootsNostrConnectPermissions,
+    requested_permissions: &Permissions,
+    granted_permissions: &Permissions,
 ) -> Result<(), RadrootsNostrSignerError> {
     if requested_permissions.is_empty() {
         return Ok(());
@@ -1053,7 +1048,7 @@ fn validate_granted_permissions(
 
 fn evaluate_request_action(
     record: &mut RadrootsNostrSignerConnectionRecord,
-    request_message: &RadrootsNostrConnectRequestMessage,
+    request_message: &RequestMessage,
     request_at_unix: u64,
 ) -> Result<RadrootsNostrSignerRequestAction, RadrootsNostrSignerError> {
     if record.is_terminal() {
@@ -1096,9 +1091,7 @@ fn evaluate_request_action(
     })
 }
 
-fn normalize_permissions(
-    permissions: RadrootsNostrConnectPermissions,
-) -> RadrootsNostrConnectPermissions {
+fn normalize_permissions(permissions: Permissions) -> Permissions {
     let mut permissions = permissions.into_vec();
     permissions.sort();
     permissions.dedup();
@@ -1106,9 +1099,9 @@ fn normalize_permissions(
 }
 
 fn normalize_client_metadata(
-    mut metadata: RadrootsNostrConnectClientMetadata,
-) -> Result<RadrootsNostrConnectClientMetadata, RadrootsNostrSignerError> {
-    metadata.requested_permissions = RadrootsNostrConnectPermissions::default();
+    mut metadata: ClientMetadata,
+) -> Result<ClientMetadata, RadrootsNostrSignerError> {
+    metadata.requested_permissions = Permissions::default();
     Ok(metadata.normalized()?)
 }
 
@@ -1218,9 +1211,7 @@ mod tests {
     };
     use nostr::{PublicKey, Timestamp};
     use radroots_identity::PublicIdentity;
-    use radroots_nostr_connect::prelude::{
-        RadrootsNostrConnectPermission, UnsignedEvent as ConnectUnsignedEvent,
-    };
+    use radroots_nostr_connect::{Permission, message::UnsignedEvent as ConnectUnsignedEvent};
     use serde_json::json;
     use std::sync::Arc;
     use std::thread;
@@ -1237,28 +1228,19 @@ mod tests {
         radroots_nostr::key::public_key_from_nostr(public_key).expect("identity public key")
     }
 
-    fn permission(
-        method: RadrootsNostrConnectMethod,
-        parameter: Option<&str>,
-    ) -> RadrootsNostrConnectPermission {
+    fn permission(method: Method, parameter: Option<&str>) -> Permission {
         match parameter {
-            Some(parameter) => RadrootsNostrConnectPermission::with_parameter(method, parameter),
-            None => RadrootsNostrConnectPermission::new(method),
+            Some(parameter) => Permission::with_parameter(method, parameter),
+            None => Permission::new(method),
         }
     }
 
-    fn request_message(id: &str) -> RadrootsNostrConnectRequestMessage {
-        RadrootsNostrConnectRequestMessage::new(
-            id,
-            radroots_nostr_connect::prelude::RadrootsNostrConnectRequest::Ping,
-        )
+    fn request_message(id: &str) -> RequestMessage {
+        RequestMessage::new(id, radroots_nostr_connect::Request::Ping)
     }
 
-    fn request_message_with_request(
-        id: &str,
-        request: RadrootsNostrConnectRequest,
-    ) -> RadrootsNostrConnectRequestMessage {
-        RadrootsNostrConnectRequestMessage::new(id, request)
+    fn request_message_with_request(id: &str, request: Request) -> RequestMessage {
+        RequestMessage::new(id, request)
     }
 
     fn unsigned_event(kind: u16) -> ConnectUnsignedEvent {
@@ -1443,7 +1425,7 @@ mod tests {
 
     #[test]
     fn auth_replay_audit_replacement_rejects_identity_mismatches() {
-        let audit = |connection_id: &str, method: RadrootsNostrConnectMethod| {
+        let audit = |connection_id: &str, method: Method| {
             RadrootsNostrSignerRequestAuditRecord::new(
                 RadrootsNostrSignerRequestId::parse("req-auth-replay").expect("request id"),
                 RadrootsNostrSignerConnectionId::parse(connection_id).expect("connection id"),
@@ -1454,20 +1436,14 @@ mod tests {
             )
         };
         let mut state = RadrootsNostrSignerStoreState::default();
-        replace_or_insert_auth_replay_audit(
-            &mut state,
-            audit("conn-auth-replay", RadrootsNostrConnectMethod::Ping),
-        )
-        .expect("insert audit");
-        replace_or_insert_auth_replay_audit(
-            &mut state,
-            audit("conn-auth-replay", RadrootsNostrConnectMethod::Ping),
-        )
-        .expect("replace matching audit");
+        replace_or_insert_auth_replay_audit(&mut state, audit("conn-auth-replay", Method::Ping))
+            .expect("insert audit");
+        replace_or_insert_auth_replay_audit(&mut state, audit("conn-auth-replay", Method::Ping))
+            .expect("replace matching audit");
 
         for replacement in [
-            audit("conn-other", RadrootsNostrConnectMethod::Ping),
-            audit("conn-auth-replay", RadrootsNostrConnectMethod::Logout),
+            audit("conn-other", Method::Ping),
+            audit("conn-auth-replay", Method::Logout),
         ] {
             let error = replace_or_insert_auth_replay_audit(&mut state, replacement)
                 .expect_err("reject mismatched audit");
@@ -1549,8 +1525,8 @@ mod tests {
             .set_signer_identity(public_identity(0x5))
             .expect("set signer");
 
-        let sign_event = permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1"));
-        let ping = permission(RadrootsNostrConnectMethod::Ping, None);
+        let sign_event = permission(Method::SignEvent, Some("kind:1"));
+        let ping = permission(Method::Ping, None);
         let record = manager
             .register_connection(
                 RadrootsNostrSignerConnectionDraft::new(public_key(0x6), public_identity(0x7))
@@ -1585,17 +1561,13 @@ mod tests {
         manager
             .set_signer_identity(fixture_alice_identity())
             .expect("set signer identity");
-        let requested_permissions = vec![permission(RadrootsNostrConnectMethod::Ping, None)].into();
+        let requested_permissions = vec![permission(Method::Ping, None)].into();
         let record = manager
             .register_connection(
                 RadrootsNostrSignerConnectionDraft::new(public_key(0x90), public_identity(0x91))
                     .with_requested_permissions(requested_permissions)
-                    .with_client_metadata(RadrootsNostrConnectClientMetadata {
-                        requested_permissions: vec![permission(
-                            RadrootsNostrConnectMethod::Nip44Encrypt,
-                            None,
-                        )]
-                        .into(),
+                    .with_client_metadata(ClientMetadata {
+                        requested_permissions: vec![permission(Method::Nip44Encrypt, None)].into(),
                         name: Some(" Example Client ".into()),
                         url: Some("https://client.example.com".into()),
                         image: None,
@@ -1609,7 +1581,7 @@ mod tests {
         assert!(metadata.requested_permissions.is_empty());
         assert_eq!(
             record.requested_permissions.as_slice(),
-            &[permission(RadrootsNostrConnectMethod::Ping, None)]
+            &[permission(Method::Ping, None)]
         );
     }
 
@@ -1703,14 +1675,11 @@ mod tests {
             .set_signer_identity(public_identity(0x18))
             .expect("set signer");
         let requested = vec![
-            permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1")),
-            permission(RadrootsNostrConnectMethod::Ping, None),
+            permission(Method::SignEvent, Some("kind:1")),
+            permission(Method::Ping, None),
         ];
         let granted = vec![requested[1].clone()];
-        let invalid = vec![permission(
-            RadrootsNostrConnectMethod::Nip44Encrypt,
-            Some("kind:1"),
-        )];
+        let invalid = vec![permission(Method::Nip44Encrypt, Some("kind:1"))];
         let pending = manager
             .register_connection(
                 RadrootsNostrSignerConnectionDraft::new(public_key(0x19), public_identity(0x20))
@@ -1770,10 +1739,7 @@ mod tests {
             ))
             .expect("register auto");
         let err = manager
-            .approve_connection(
-                &auto.connection_id,
-                RadrootsNostrConnectPermissions::default(),
-            )
+            .approve_connection(&auto.connection_id, Permissions::default())
             .expect_err("approval not required");
         assert!(err.to_string().contains("approval not required"));
 
@@ -1892,7 +1858,7 @@ mod tests {
         let grants_err = manager
             .set_granted_permissions(
                 &active.connection_id,
-                vec![permission(RadrootsNostrConnectMethod::Ping, None)].into(),
+                vec![permission(Method::Ping, None)].into(),
             )
             .expect_err("update grants revoked");
         assert!(
@@ -1960,7 +1926,7 @@ mod tests {
             .record_request(
                 &record.connection_id,
                 " request-1 ",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Challenged,
                 Some(" challenge ".into()),
             )
@@ -1972,7 +1938,7 @@ mod tests {
             .record_request(
                 &record.connection_id,
                 "request-2",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Denied,
                 Some("   ".into()),
             )
@@ -1995,7 +1961,7 @@ mod tests {
             .record_request(
                 &record.connection_id,
                 "   ",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Denied,
                 None,
             )
@@ -2404,10 +2370,7 @@ mod tests {
         let challenged = manager
             .evaluate_request(
                 &record.connection_id,
-                RadrootsNostrConnectRequestMessage::new(
-                    "req-auth-preview",
-                    RadrootsNostrConnectRequest::GetPublicKey,
-                ),
+                RequestMessage::new("req-auth-preview", Request::GetPublicKey),
             )
             .expect("evaluate challenged request");
         assert_eq!(
@@ -3282,14 +3245,13 @@ mod tests {
             .expect("set signer");
 
         let missing_id = RadrootsNostrSignerConnectionId::parse("missing-2").expect("id");
-        let missing_permissions: RadrootsNostrConnectPermissions =
-            vec![permission(RadrootsNostrConnectMethod::Ping, None)].into();
+        let missing_permissions: Permissions = vec![permission(Method::Ping, None)].into();
 
         let missing_grants = manager
             .set_granted_permissions(&missing_id, missing_permissions.clone())
             .expect_err("missing grants");
         let missing_approve = manager
-            .approve_connection(&missing_id, RadrootsNostrConnectPermissions::default())
+            .approve_connection(&missing_id, Permissions::default())
             .expect_err("missing approve");
         let missing_reject = manager
             .reject_connection(&missing_id, None)
@@ -3319,7 +3281,7 @@ mod tests {
             .record_request(
                 &missing_id,
                 "req-missing",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Denied,
                 None,
             )
@@ -3341,7 +3303,7 @@ mod tests {
             assert!(err.to_string().contains("connection not found"));
         }
 
-        let requested = vec![permission(RadrootsNostrConnectMethod::Ping, None)];
+        let requested = vec![permission(Method::Ping, None)];
         let pending = manager
             .register_connection(
                 RadrootsNostrSignerConnectionDraft::new(public_key(0x52), public_identity(0x53))
@@ -3354,11 +3316,7 @@ mod tests {
         let invalid_approve = manager
             .approve_connection(
                 &pending.connection_id,
-                vec![permission(
-                    RadrootsNostrConnectMethod::Nip44Encrypt,
-                    Some("kind:1"),
-                )]
-                .into(),
+                vec![permission(Method::Nip44Encrypt, Some("kind:1"))].into(),
             )
             .expect_err("invalid approve grants");
         assert!(
@@ -3468,10 +3426,10 @@ mod tests {
         let err = manager
             .evaluate_connect_request(
                 public_key(0x58),
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: signer_identity.public_key(),
                     secret: Some("secret".into()),
-                    requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    requested_permissions: Permissions::default(),
                     client_metadata: None,
                 },
             )
@@ -3497,13 +3455,10 @@ mod tests {
             .register_connection(connect_draft)
             .expect_err("poisoned register");
         let grants_err = manager
-            .set_granted_permissions(
-                &connection_id,
-                vec![permission(RadrootsNostrConnectMethod::Ping, None)].into(),
-            )
+            .set_granted_permissions(&connection_id, vec![permission(Method::Ping, None)].into())
             .expect_err("poisoned set grants");
         let approve_err = manager
-            .approve_connection(&connection_id, RadrootsNostrConnectPermissions::default())
+            .approve_connection(&connection_id, Permissions::default())
             .expect_err("poisoned approve");
         let reject_err = manager
             .reject_connection(&connection_id, Some("reason".into()))
@@ -3545,7 +3500,7 @@ mod tests {
             .record_request(
                 &connection_id,
                 "req-1",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Allowed,
                 None,
             )
@@ -3730,7 +3685,7 @@ mod tests {
         expect_none_lookup(none_lookup);
 
         let non_connect_err = manager
-            .evaluate_connect_request(client_public_key, RadrootsNostrConnectRequest::Ping)
+            .evaluate_connect_request(client_public_key, Request::Ping)
             .expect_err("non-connect evaluation");
         assert!(
             non_connect_err
@@ -3741,10 +3696,10 @@ mod tests {
         let missing_signer_err = RadrootsNostrSignerManager::new_in_memory()
             .evaluate_connect_request(
                 client_public_key,
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: None,
-                    requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    requested_permissions: Permissions::default(),
                     client_metadata: None,
                 },
             )
@@ -3754,10 +3709,10 @@ mod tests {
         let signer_mismatch_err = manager
             .evaluate_connect_request(
                 client_public_key,
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: connect_public_key(public_key(0x66)),
                     secret: None,
-                    requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    requested_permissions: Permissions::default(),
                     client_metadata: None,
                 },
             )
@@ -3771,12 +3726,12 @@ mod tests {
         let existing_connect = manager
             .evaluate_connect_request(
                 client_public_key,
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: Some(" connect-secret ".into()),
                     requested_permissions: vec![
-                        permission(RadrootsNostrConnectMethod::Ping, None),
-                        permission(RadrootsNostrConnectMethod::Ping, None),
+                        permission(Method::Ping, None),
+                        permission(Method::Ping, None),
                     ]
                     .into(),
                     client_metadata: None,
@@ -3788,21 +3743,17 @@ mod tests {
         let registration_connect = manager
             .evaluate_connect_request(
                 public_key(0x67),
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: Some(" fresh-secret ".into()),
                     requested_permissions: vec![
-                        permission(RadrootsNostrConnectMethod::Ping, None),
-                        permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1")),
-                        permission(RadrootsNostrConnectMethod::Ping, None),
+                        permission(Method::Ping, None),
+                        permission(Method::SignEvent, Some("kind:1")),
+                        permission(Method::Ping, None),
                     ]
                     .into(),
-                    client_metadata: Some(RadrootsNostrConnectClientMetadata {
-                        requested_permissions: vec![permission(
-                            RadrootsNostrConnectMethod::Nip44Encrypt,
-                            None,
-                        )]
-                        .into(),
+                    client_metadata: Some(ClientMetadata {
+                        requested_permissions: vec![permission(Method::Nip44Encrypt, None)].into(),
                         name: Some(" Example Client ".into()),
                         url: Some("https://client.example.com".into()),
                         image: None,
@@ -3820,18 +3771,18 @@ mod tests {
         assert_eq!(
             proposal.requested_permissions.as_slice(),
             &[
-                permission(RadrootsNostrConnectMethod::Ping, None),
-                permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1")),
+                permission(Method::Ping, None),
+                permission(Method::SignEvent, Some("kind:1")),
             ]
         );
 
         let existing_secret_mismatch = manager
             .evaluate_connect_request(
                 public_key(0x68),
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: Some("connect-secret".into()),
-                    requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    requested_permissions: Permissions::default(),
                     client_metadata: None,
                 },
             )
@@ -3854,11 +3805,7 @@ mod tests {
             .register_connection(
                 RadrootsNostrSignerConnectionDraft::new(public_key(0x72), public_identity(0x73))
                     .with_requested_permissions(
-                        vec![permission(
-                            RadrootsNostrConnectMethod::SignEvent,
-                            Some("kind:1"),
-                        )]
-                        .into(),
+                        vec![permission(Method::SignEvent, Some("kind:1"))].into(),
                     ),
             )
             .expect("register active");
@@ -3866,7 +3813,7 @@ mod tests {
         let get_public_key = manager
             .evaluate_request(
                 &active.connection_id,
-                request_message_with_request("req-get", RadrootsNostrConnectRequest::GetPublicKey),
+                request_message_with_request("req-get", Request::GetPublicKey),
             )
             .expect("evaluate get_public_key");
         expect_allowed_user_public_key(&get_public_key.action);
@@ -3879,10 +3826,7 @@ mod tests {
         let allowed_sign = manager
             .evaluate_request(
                 &active.connection_id,
-                request_message_with_request(
-                    "req-sign-1",
-                    RadrootsNostrConnectRequest::SignEvent(unsigned_event(1)),
-                ),
+                request_message_with_request("req-sign-1", Request::SignEvent(unsigned_event(1))),
             )
             .expect("evaluate sign allowed");
         expect_allowed_without_response_hint(&allowed_sign.action);
@@ -3890,10 +3834,7 @@ mod tests {
         let denied_sign = manager
             .evaluate_request(
                 &active.connection_id,
-                request_message_with_request(
-                    "req-sign-2",
-                    RadrootsNostrConnectRequest::SignEvent(unsigned_event(2)),
-                ),
+                request_message_with_request("req-sign-2", Request::SignEvent(unsigned_event(2))),
             )
             .expect("evaluate sign denied");
         assert_eq!(denied_sign.denied_reason(), Some("unauthorized sign_event"));
@@ -3959,10 +3900,10 @@ mod tests {
                 &active.connection_id,
                 request_message_with_request(
                     "req-connect",
-                    RadrootsNostrConnectRequest::Connect {
+                    Request::Connect {
                         remote_signer_public_key: connect_public_key(active.client_public_key),
                         secret: None,
-                        requested_permissions: RadrootsNostrConnectPermissions::default(),
+                        requested_permissions: Permissions::default(),
                         client_metadata: None,
                     },
                 ),
@@ -4018,7 +3959,7 @@ mod tests {
         let invalid_request_id = manager
             .evaluate_request(
                 &active.connection_id,
-                request_message_with_request("   ", RadrootsNostrConnectRequest::Ping),
+                request_message_with_request("   ", Request::Ping),
             )
             .expect_err("invalid request id");
         assert!(
@@ -4054,7 +3995,7 @@ mod tests {
             Some(RadrootsNostrSignerAuthChallenge::new(api_primary_https(), 1).expect("challenge"));
         let invalid_pending = evaluate_request_action(
             &mut pending_record,
-            &request_message_with_request("   ", RadrootsNostrConnectRequest::Ping),
+            &request_message_with_request("   ", Request::Ping),
             1,
         )
         .expect_err("invalid pending request");

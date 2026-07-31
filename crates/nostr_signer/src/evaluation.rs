@@ -6,12 +6,11 @@ use crate::model::{
 };
 use nostr::PublicKey;
 use radroots_identity::PublicIdentity;
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRemoteSessionCapability,
-    RadrootsNostrConnectRequest,
-};
 use radroots_nostr_connect::uri::RelayUrl as ConnectRelayUrl;
+use radroots_nostr_connect::{
+    Method, Permission, Request, message::RemoteSessionCapability, permission::Permissions,
+    uri::ClientMetadata,
+};
 
 #[derive(Debug, Clone)]
 pub enum RadrootsNostrSignerSessionLookup {
@@ -24,8 +23,8 @@ pub enum RadrootsNostrSignerSessionLookup {
 pub struct RadrootsNostrSignerConnectProposal {
     pub client_public_key: PublicKey,
     pub connect_secret: Option<String>,
-    pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
-    pub requested_permissions: RadrootsNostrConnectPermissions,
+    pub client_metadata: Option<ClientMetadata>,
+    pub requested_permissions: Permissions,
 }
 
 #[derive(Debug, Clone)]
@@ -39,14 +38,14 @@ pub enum RadrootsNostrSignerRequestResponseHint {
     None,
     Pong,
     UserPublicKey(radroots_identity::PublicKey),
-    RemoteSessionCapability(RadrootsNostrConnectRemoteSessionCapability),
+    RemoteSessionCapability(RemoteSessionCapability),
     RelayList(Vec<ConnectRelayUrl>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrSignerRequestAction {
     Allowed {
-        required_permission: Option<RadrootsNostrConnectPermission>,
+        required_permission: Option<Permission>,
         response_hint: RadrootsNostrSignerRequestResponseHint,
     },
     Denied {
@@ -61,7 +60,7 @@ pub enum RadrootsNostrSignerRequestAction {
 #[derive(Debug, Clone)]
 pub struct RadrootsNostrSignerRequestEvaluation {
     pub request_id: RadrootsNostrSignerRequestId,
-    pub method: RadrootsNostrConnectMethod,
+    pub method: Method,
     pub connection: RadrootsNostrSignerConnectionRecord,
     pub audit: RadrootsNostrSignerRequestAuditRecord,
     pub action: RadrootsNostrSignerRequestAction,
@@ -104,15 +103,13 @@ impl RadrootsNostrSignerRequestAction {
     }
 }
 
-pub(crate) fn required_permission_for_request(
-    request: &RadrootsNostrConnectRequest,
-) -> Option<RadrootsNostrConnectPermission> {
+pub(crate) fn required_permission_for_request(request: &Request) -> Option<Permission> {
     radroots_nostr_connect::server::required_permission(request)
 }
 
 pub(crate) fn request_allowed_by_permissions(
-    granted_permissions: &RadrootsNostrConnectPermissions,
-    request: &RadrootsNostrConnectRequest,
+    granted_permissions: &Permissions,
+    request: &Request,
 ) -> bool {
     let Some(required_permission) = required_permission_for_request(request) else {
         return true;
@@ -126,17 +123,15 @@ pub(crate) fn request_allowed_by_permissions(
 
 pub(crate) fn response_hint_for_request(
     connection: &RadrootsNostrSignerConnectionRecord,
-    request: &RadrootsNostrConnectRequest,
+    request: &Request,
 ) -> Result<RadrootsNostrSignerRequestResponseHint, RadrootsNostrSignerError> {
     match request {
-        RadrootsNostrConnectRequest::GetPublicKey => {
-            Ok(RadrootsNostrSignerRequestResponseHint::UserPublicKey(
-                identity_public_key(&connection.user_identity)?,
-            ))
-        }
-        RadrootsNostrConnectRequest::GetSessionCapability => Ok(
+        Request::GetPublicKey => Ok(RadrootsNostrSignerRequestResponseHint::UserPublicKey(
+            identity_public_key(&connection.user_identity)?,
+        )),
+        Request::GetSessionCapability => Ok(
             RadrootsNostrSignerRequestResponseHint::RemoteSessionCapability(
-                RadrootsNostrConnectRemoteSessionCapability {
+                RemoteSessionCapability {
                     user_public_key: identity_public_key(&connection.user_identity)?,
                     relays: connection
                         .relays
@@ -147,24 +142,19 @@ pub(crate) fn response_hint_for_request(
                 },
             ),
         ),
-        RadrootsNostrConnectRequest::Ping => Ok(RadrootsNostrSignerRequestResponseHint::Pong),
-        RadrootsNostrConnectRequest::SwitchRelays => {
-            Ok(RadrootsNostrSignerRequestResponseHint::RelayList(
-                connection
-                    .relays
-                    .iter()
-                    .map(|relay| ConnectRelayUrl::parse(&relay.to_string()))
-                    .collect::<Result<Vec<_>, _>>()?,
-            ))
-        }
+        Request::Ping => Ok(RadrootsNostrSignerRequestResponseHint::Pong),
+        Request::SwitchRelays => Ok(RadrootsNostrSignerRequestResponseHint::RelayList(
+            connection
+                .relays
+                .iter()
+                .map(|relay| ConnectRelayUrl::parse(&relay.to_string()))
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
         _ => Ok(RadrootsNostrSignerRequestResponseHint::None),
     }
 }
 
-fn permission_matches(
-    granted_permission: &RadrootsNostrConnectPermission,
-    required_permission: &RadrootsNostrConnectPermission,
-) -> bool {
+fn permission_matches(granted_permission: &Permission, required_permission: &Permission) -> bool {
     if granted_permission.method != required_permission.method {
         return false;
     }
@@ -174,8 +164,8 @@ fn permission_matches(
         granted_permission.parameter.as_deref(),
         required_permission.parameter.as_deref(),
     ) {
-        (RadrootsNostrConnectMethod::SignEvent, None, _) => true,
-        (RadrootsNostrConnectMethod::SignEvent, Some(parameter), Some(required)) => {
+        (Method::SignEvent, None, _) => true,
+        (Method::SignEvent, Some(parameter), Some(required)) => {
             parameter == required || parameter == sign_event_kind_suffix(required)
         }
         (_, None, _) => true,
@@ -203,7 +193,7 @@ mod tests {
         fixture_carol_public_key, fixture_diego_identity, primary_relay, synthetic_public_key,
     };
     use nostr::{PublicKey, Timestamp};
-    use radroots_nostr_connect::prelude::UnsignedEvent as ConnectUnsignedEvent;
+    use radroots_nostr_connect::message::UnsignedEvent as ConnectUnsignedEvent;
     use serde_json::json;
 
     fn public_key(index: u32) -> PublicKey {
@@ -277,7 +267,7 @@ mod tests {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_response_hint_remote_session_capability(
         hint: RadrootsNostrSignerRequestResponseHint,
-        expected_permissions: RadrootsNostrConnectPermissions,
+        expected_permissions: Permissions,
     ) {
         match hint {
             RadrootsNostrSignerRequestResponseHint::RemoteSessionCapability(capability) => {
@@ -292,16 +282,12 @@ mod tests {
 
     #[test]
     fn connect_proposal_builds_connection_draft() {
-        let requested_permissions: RadrootsNostrConnectPermissions =
-            vec![RadrootsNostrConnectPermission::new(
-                RadrootsNostrConnectMethod::Nip04Encrypt,
-            )]
-            .into();
+        let requested_permissions: Permissions = vec![Permission::new(Method::Nip04Encrypt)].into();
         let proposal = RadrootsNostrSignerConnectProposal {
             client_public_key: public_key(5),
             connect_secret: Some("secret".into()),
-            client_metadata: Some(RadrootsNostrConnectClientMetadata {
-                requested_permissions: RadrootsNostrConnectPermissions::default(),
+            client_metadata: Some(ClientMetadata {
+                requested_permissions: Permissions::default(),
                 name: Some("Example Client".into()),
                 url: Some("https://client.example.com/".into()),
                 image: None,
@@ -325,7 +311,7 @@ mod tests {
             client_public_key: public_key(7),
             connect_secret: None,
             client_metadata: None,
-            requested_permissions: RadrootsNostrConnectPermissions::default(),
+            requested_permissions: Permissions::default(),
         }
         .into_connection_draft(fixture_bob_identity());
         assert!(no_secret.connect_secret.is_none());
@@ -343,22 +329,19 @@ mod tests {
             )
             .expect("challenge"),
             pending_request: crate::model::RadrootsNostrSignerPendingRequest::new(
-                radroots_nostr_connect::prelude::RadrootsNostrConnectRequestMessage::new(
-                    "req-1",
-                    RadrootsNostrConnectRequest::Ping,
-                ),
+                radroots_nostr_connect::message::RequestMessage::new("req-1", Request::Ping),
                 1,
             )
             .expect("pending"),
         };
         let evaluation = RadrootsNostrSignerRequestEvaluation {
             request_id: RadrootsNostrSignerRequestId::new_v7(),
-            method: RadrootsNostrConnectMethod::Ping,
+            method: Method::Ping,
             connection: connection(),
             audit: crate::model::RadrootsNostrSignerRequestAuditRecord::new(
                 RadrootsNostrSignerRequestId::new_v7(),
                 crate::model::RadrootsNostrSignerConnectionId::new_v7(),
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 crate::model::RadrootsNostrSignerRequestDecision::Denied,
                 Some("unauthorized".into()),
                 1,
@@ -382,63 +365,56 @@ mod tests {
     fn request_permission_matching_covers_generic_and_sign_event_forms() {
         let kind_one = unsigned_event(1);
         let kind_two = unsigned_event(2);
-        let sign_kind = RadrootsNostrConnectPermission::with_parameter(
-            RadrootsNostrConnectMethod::SignEvent,
-            "kind:1",
-        );
-        let sign_numeric = RadrootsNostrConnectPermission::with_parameter(
-            RadrootsNostrConnectMethod::SignEvent,
-            "1",
-        );
-        let sign_all = RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::SignEvent);
-        let nip44 = RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Encrypt);
+        let sign_kind = Permission::with_parameter(Method::SignEvent, "kind:1");
+        let sign_numeric = Permission::with_parameter(Method::SignEvent, "1");
+        let sign_all = Permission::new(Method::SignEvent);
+        let nip44 = Permission::new(Method::Nip44Encrypt);
 
         assert!(request_allowed_by_permissions(
             &vec![sign_kind.clone()].into(),
-            &RadrootsNostrConnectRequest::SignEvent(kind_one.clone()),
+            &Request::SignEvent(kind_one.clone()),
         ));
         assert!(request_allowed_by_permissions(
             &vec![sign_numeric].into(),
-            &RadrootsNostrConnectRequest::SignEvent(kind_one),
+            &Request::SignEvent(kind_one),
         ));
         assert!(request_allowed_by_permissions(
             &vec![sign_all].into(),
-            &RadrootsNostrConnectRequest::SignEvent(kind_two),
+            &Request::SignEvent(kind_two),
         ));
         assert!(!request_allowed_by_permissions(
             &vec![sign_kind, nip44].into(),
-            &RadrootsNostrConnectRequest::Nip04Encrypt {
+            &Request::Nip04Encrypt {
                 public_key: connect_public_key(public_key(7)),
                 plaintext: "hello".into(),
             },
         ));
         assert!(request_allowed_by_permissions(
-            &RadrootsNostrConnectPermissions::default(),
-            &RadrootsNostrConnectRequest::Ping,
+            &Permissions::default(),
+            &Request::Ping,
         ));
         assert!(!request_allowed_by_permissions(
-            &vec![RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::custom("do_thing").expect("valid custom NIP-46 method"),
+            &vec![Permission::with_parameter(
+                Method::custom("do_thing").expect("valid custom NIP-46 method"),
                 "scoped",
             )]
             .into(),
-            &RadrootsNostrConnectRequest::Custom {
-                method: RadrootsNostrConnectMethod::custom("do_thing")
-                    .expect("valid custom NIP-46 method"),
+            &Request::Custom {
+                method: Method::custom("do_thing").expect("valid custom NIP-46 method"),
                 params: vec!["value".into()],
             },
         ));
         assert!(permission_matches(
-            &RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip04Encrypt),
-            &RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip04Encrypt),
+            &Permission::new(Method::Nip04Encrypt),
+            &Permission::new(Method::Nip04Encrypt),
         ));
         assert!(permission_matches(
-            &RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::custom("scoped").expect("valid custom NIP-46 method"),
+            &Permission::with_parameter(
+                Method::custom("scoped").expect("valid custom NIP-46 method"),
                 "alpha",
             ),
-            &RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::custom("scoped").expect("valid custom NIP-46 method"),
+            &Permission::with_parameter(
+                Method::custom("scoped").expect("valid custom NIP-46 method"),
                 "alpha",
             ),
         ));
@@ -448,20 +424,19 @@ mod tests {
     fn required_permission_and_response_hint_cover_request_variants() {
         let connection = connection();
         let public_key = public_key(8);
-        let connect = RadrootsNostrConnectRequest::Connect {
+        let connect = Request::Connect {
             remote_signer_public_key: connect_public_key(public_key),
             secret: Some("secret".into()),
-            requested_permissions: RadrootsNostrConnectPermissions::default(),
+            requested_permissions: Permissions::default(),
             client_metadata: None,
         };
-        let ping = RadrootsNostrConnectRequest::Ping;
-        let get_public_key = RadrootsNostrConnectRequest::GetPublicKey;
-        let get_session_capability = RadrootsNostrConnectRequest::GetSessionCapability;
-        let switch_relays = RadrootsNostrConnectRequest::SwitchRelays;
-        let sign_event = RadrootsNostrConnectRequest::SignEvent(unsigned_event(7));
-        let custom = RadrootsNostrConnectRequest::Custom {
-            method: RadrootsNostrConnectMethod::custom("do_thing")
-                .expect("valid custom NIP-46 method"),
+        let ping = Request::Ping;
+        let get_public_key = Request::GetPublicKey;
+        let get_session_capability = Request::GetSessionCapability;
+        let switch_relays = Request::SwitchRelays;
+        let sign_event = Request::SignEvent(unsigned_event(7));
+        let custom = Request::Custom {
+            method: Method::custom("do_thing").expect("valid custom NIP-46 method"),
             params: vec!["a".into()],
         };
 
@@ -470,7 +445,7 @@ mod tests {
         assert!(required_permission_for_request(&get_public_key).is_none());
         assert!(required_permission_for_request(&get_session_capability).is_none());
         assert_eq!(
-            required_permission_for_request(&RadrootsNostrConnectRequest::Nip04Decrypt {
+            required_permission_for_request(&Request::Nip04Decrypt {
                 public_key: connect_public_key(public_key),
                 ciphertext: "cipher".into(),
             })
@@ -479,7 +454,7 @@ mod tests {
             "nip04_decrypt"
         );
         assert_eq!(
-            required_permission_for_request(&RadrootsNostrConnectRequest::Nip44Encrypt {
+            required_permission_for_request(&Request::Nip44Encrypt {
                 public_key: connect_public_key(public_key),
                 plaintext: "hello".into(),
             })
@@ -488,7 +463,7 @@ mod tests {
             "nip44_encrypt"
         );
         assert_eq!(
-            required_permission_for_request(&RadrootsNostrConnectRequest::Nip44Decrypt {
+            required_permission_for_request(&Request::Nip44Decrypt {
                 public_key: connect_public_key(public_key),
                 ciphertext: "cipher".into(),
             })
@@ -518,7 +493,7 @@ mod tests {
         assert_response_hint_none(
             response_hint_for_request(
                 &connection,
-                &RadrootsNostrConnectRequest::Nip04Decrypt {
+                &Request::Nip04Decrypt {
                     public_key: connect_public_key(public_key),
                     ciphertext: "cipher".into(),
                 },

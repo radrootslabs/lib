@@ -1,7 +1,7 @@
 use crate::model::{RadrootsNostrSignerConnectionId, RadrootsNostrSignerConnectionRecord};
 use nostr::RelayUrl;
 use radroots_identity::{AccountId, PublicIdentity};
-use radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions;
+use radroots_nostr_connect::permission::Permissions;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ pub struct RadrootsNostrRemoteSessionSignerCapability {
     pub signer_identity: PublicIdentity,
     pub user_identity: PublicIdentity,
     pub relays: Vec<RelayUrl>,
-    pub permissions: RadrootsNostrConnectPermissions,
+    pub permissions: Permissions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +65,7 @@ impl RadrootsNostrRemoteSessionSignerCapability {
             signer_identity,
             user_identity,
             relays: Vec::new(),
-            permissions: RadrootsNostrConnectPermissions::default(),
+            permissions: Permissions::default(),
         }
     }
 
@@ -74,7 +74,7 @@ impl RadrootsNostrRemoteSessionSignerCapability {
         self
     }
 
-    pub fn with_permissions(mut self, permissions: RadrootsNostrConnectPermissions) -> Self {
+    pub fn with_permissions(mut self, permissions: Permissions) -> Self {
         self.permissions = permissions;
         self
     }
@@ -170,9 +170,7 @@ mod tests {
         fixture_diego_public_key, primary_relay, secondary_relay,
     };
     use radroots_identity::PublicIdentity;
-    use radroots_nostr_connect::prelude::{
-        RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
-    };
+    use radroots_nostr_connect::{Method, Permission};
 
     fn assert_public_identity_matches(actual: &PublicIdentity, expected: &PublicIdentity) {
         assert_eq!(actual, expected);
@@ -210,12 +208,7 @@ mod tests {
                 fixture_diego_public_key(),
                 user_identity.clone(),
             )
-            .with_requested_permissions(
-                vec![RadrootsNostrConnectPermission::new(
-                    RadrootsNostrConnectMethod::Ping,
-                )]
-                .into(),
-            )
+            .with_requested_permissions(vec![Permission::new(Method::Ping)].into())
             .with_relays(vec![primary_relay()]),
             1,
         );
@@ -238,12 +231,7 @@ mod tests {
             fixture_alice_identity(),
             fixture_bob_identity(),
         )
-        .with_permissions(
-            vec![RadrootsNostrConnectPermission::new(
-                RadrootsNostrConnectMethod::SwitchRelays,
-            )]
-            .into(),
-        )
+        .with_permissions(vec![Permission::new(Method::SwitchRelays)].into())
         .with_relays(vec![primary_relay()]);
 
         assert_eq!(capability.permissions.as_slice().len(), 1);
@@ -300,12 +288,9 @@ mod tests {
         .with_relays(remote.relays.clone())
         .with_permissions(remote.permissions.clone());
         let remote_changed_relays = remote.clone().with_relays(vec![secondary_relay()]);
-        let remote_changed_permissions = remote.clone().with_permissions(
-            vec![RadrootsNostrConnectPermission::new(
-                RadrootsNostrConnectMethod::Ping,
-            )]
-            .into(),
-        );
+        let remote_changed_permissions = remote
+            .clone()
+            .with_permissions(vec![Permission::new(Method::Ping)].into());
         let mut remote_changed_signer = remote.clone();
         remote_changed_signer.signer_identity = fixture_alice_identity();
         let mut remote_changed_user = remote.clone();

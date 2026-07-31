@@ -2,9 +2,8 @@ use crate::error::RadrootsNostrSignerError;
 use hex::encode as hex_encode;
 use nostr::{PublicKey, RelayUrl};
 use radroots_identity::PublicIdentity;
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequestMessage,
+use radroots_nostr_connect::{
+    Method, Permission, message::RequestMessage, permission::Permissions, uri::ClientMetadata,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
@@ -97,7 +96,7 @@ pub struct RadrootsNostrSignerAuthChallenge {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadrootsNostrSignerPendingRequest {
-    pub request_message: RadrootsNostrConnectRequestMessage,
+    pub request_message: RequestMessage,
     pub created_at_unix: u64,
 }
 
@@ -113,7 +112,7 @@ pub struct RadrootsNostrSignerPermissionGrant {
         serialize_with = "serialize_permission",
         deserialize_with = "deserialize_permission"
     )]
-    pub permission: RadrootsNostrConnectPermission,
+    pub permission: Permission,
     pub granted_at_unix: u64,
 }
 
@@ -122,8 +121,8 @@ pub struct RadrootsNostrSignerConnectionDraft {
     pub client_public_key: PublicKey,
     pub user_identity: PublicIdentity,
     pub connect_secret: Option<String>,
-    pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
-    pub requested_permissions: RadrootsNostrConnectPermissions,
+    pub client_metadata: Option<ClientMetadata>,
+    pub requested_permissions: Permissions,
     pub relays: Vec<RelayUrl>,
     pub approval_requirement: RadrootsNostrSignerApprovalRequirement,
 }
@@ -144,8 +143,8 @@ pub struct RadrootsNostrSignerConnectionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connect_secret_consumed_at_unix: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
-    pub requested_permissions: RadrootsNostrConnectPermissions,
+    pub client_metadata: Option<ClientMetadata>,
+    pub requested_permissions: Permissions,
     #[serde(default)]
     pub granted_permissions: Vec<RadrootsNostrSignerPermissionGrant>,
     #[serde(default)]
@@ -173,7 +172,7 @@ pub struct RadrootsNostrSignerConnectionRecord {
 pub struct RadrootsNostrSignerRequestAuditRecord {
     pub request_id: RadrootsNostrSignerRequestId,
     pub connection_id: RadrootsNostrSignerConnectionId,
-    pub method: RadrootsNostrConnectMethod,
+    pub method: Method,
     pub decision: RadrootsNostrSignerRequestDecision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -411,20 +410,17 @@ impl<'de> Deserialize<'de> for RadrootsNostrSignerAuthChallenge {
 
 impl RadrootsNostrSignerPendingRequest {
     pub fn new(
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
         created_at_unix: u64,
     ) -> Result<Self, RadrootsNostrSignerError> {
         let normalized_id = RadrootsNostrSignerRequestId::parse(&request_message.id)?;
         Ok(Self {
-            request_message: RadrootsNostrConnectRequestMessage::new(
-                normalized_id.as_str(),
-                request_message.request,
-            ),
+            request_message: RequestMessage::new(normalized_id.as_str(), request_message.request),
             created_at_unix,
         })
     }
 
-    pub fn request_message(&self) -> RadrootsNostrConnectRequestMessage {
+    pub fn request_message(&self) -> RequestMessage {
         self.request_message.clone()
     }
 
@@ -447,7 +443,7 @@ impl RadrootsNostrSignerAuthorizationOutcome {
 }
 
 impl RadrootsNostrSignerPermissionGrant {
-    pub fn new(permission: RadrootsNostrConnectPermission, granted_at_unix: u64) -> Self {
+    pub fn new(permission: Permission, granted_at_unix: u64) -> Self {
         Self {
             permission,
             granted_at_unix,
@@ -462,7 +458,7 @@ impl RadrootsNostrSignerConnectionDraft {
             user_identity,
             connect_secret: None,
             client_metadata: None,
-            requested_permissions: RadrootsNostrConnectPermissions::default(),
+            requested_permissions: Permissions::default(),
             relays: Vec::new(),
             approval_requirement: RadrootsNostrSignerApprovalRequirement::NotRequired,
         }
@@ -473,18 +469,12 @@ impl RadrootsNostrSignerConnectionDraft {
         self
     }
 
-    pub fn with_requested_permissions(
-        mut self,
-        requested_permissions: RadrootsNostrConnectPermissions,
-    ) -> Self {
+    pub fn with_requested_permissions(mut self, requested_permissions: Permissions) -> Self {
         self.requested_permissions = requested_permissions;
         self
     }
 
-    pub fn with_client_metadata(
-        mut self,
-        client_metadata: RadrootsNostrConnectClientMetadata,
-    ) -> Self {
+    pub fn with_client_metadata(mut self, client_metadata: ClientMetadata) -> Self {
         self.client_metadata = Some(client_metadata);
         self
     }
@@ -549,7 +539,7 @@ impl RadrootsNostrSignerConnectionRecord {
         }
     }
 
-    pub fn granted_permissions(&self) -> RadrootsNostrConnectPermissions {
+    pub fn granted_permissions(&self) -> Permissions {
         self.granted_permissions
             .iter()
             .map(|grant| grant.permission.clone())
@@ -557,14 +547,14 @@ impl RadrootsNostrSignerConnectionRecord {
             .into()
     }
 
-    pub fn effective_permissions(&self) -> RadrootsNostrConnectPermissions {
+    pub fn effective_permissions(&self) -> Permissions {
         let granted_permissions = self.granted_permissions();
         if !granted_permissions.is_empty() {
             granted_permissions
         } else if self.approval_state == RadrootsNostrSignerApprovalState::NotRequired {
             self.requested_permissions.clone()
         } else {
-            RadrootsNostrConnectPermissions::default()
+            Permissions::default()
         }
     }
 
@@ -648,7 +638,7 @@ impl RadrootsNostrSignerRequestAuditRecord {
     pub fn new(
         request_id: RadrootsNostrSignerRequestId,
         connection_id: RadrootsNostrSignerConnectionId,
-        method: RadrootsNostrConnectMethod,
+        method: Method,
         decision: RadrootsNostrSignerRequestDecision,
         message: Option<String>,
         created_at_unix: u64,
@@ -716,19 +706,14 @@ impl Default for RadrootsNostrSignerStoreState {
     }
 }
 
-fn serialize_permission<S>(
-    permission: &RadrootsNostrConnectPermission,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
+fn serialize_permission<S>(permission: &Permission, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
     serializer.serialize_str(&permission.to_string())
 }
 
-fn deserialize_permission<'de, D>(
-    deserializer: D,
-) -> Result<RadrootsNostrConnectPermission, D::Error>
+fn deserialize_permission<'de, D>(deserializer: D) -> Result<Permission, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -784,11 +769,8 @@ mod tests {
         synthetic_public_key(index)
     }
 
-    fn request_message(id: &str) -> RadrootsNostrConnectRequestMessage {
-        RadrootsNostrConnectRequestMessage::new(
-            id,
-            radroots_nostr_connect::prelude::RadrootsNostrConnectRequest::Ping,
-        )
+    fn request_message(id: &str) -> RequestMessage {
+        RequestMessage::new(id, radroots_nostr_connect::Request::Ping)
     }
 
     #[test]
@@ -846,13 +828,10 @@ mod tests {
 
     #[test]
     fn connection_draft_builders_apply_values() {
-        let permission = RadrootsNostrConnectPermission::with_parameter(
-            RadrootsNostrConnectMethod::SignEvent,
-            "kind:1",
-        );
+        let permission = Permission::with_parameter(Method::SignEvent, "kind:1");
         let relay = primary_relay();
-        let metadata = RadrootsNostrConnectClientMetadata {
-            requested_permissions: RadrootsNostrConnectPermissions::default(),
+        let metadata = ClientMetadata {
+            requested_permissions: Permissions::default(),
             name: Some("Example Client".into()),
             url: None,
             image: None,
@@ -1044,7 +1023,7 @@ mod tests {
 
     #[test]
     fn granted_permissions_and_request_audit_build_correctly() {
-        let permission = RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping);
+        let permission = Permission::new(Method::Ping);
         let grant = RadrootsNostrSignerPermissionGrant::new(permission.clone(), 42);
         let mut record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::parse("conn-2").expect("id"),
@@ -1056,7 +1035,7 @@ mod tests {
         let audit = RadrootsNostrSignerRequestAuditRecord::new(
             RadrootsNostrSignerRequestId::parse("req-2").expect("request"),
             RadrootsNostrSignerConnectionId::parse("conn-2").expect("id"),
-            RadrootsNostrConnectMethod::Ping,
+            Method::Ping,
             RadrootsNostrSignerRequestDecision::Allowed,
             Some("ok".into()),
             25,
@@ -1069,10 +1048,7 @@ mod tests {
         let json = serde_json::to_string(&record.granted_permissions[0]).expect("serialize grant");
         let decoded: RadrootsNostrSignerPermissionGrant =
             serde_json::from_str(&json).expect("deserialize grant");
-        assert_eq!(
-            decoded.permission,
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping)
-        );
+        assert_eq!(decoded.permission, Permission::new(Method::Ping));
     }
 
     #[test]
@@ -1125,10 +1101,7 @@ mod tests {
 
     #[test]
     fn effective_permissions_prefers_grants_then_auto_requested_then_empty() {
-        let requested: RadrootsNostrConnectPermissions = vec![RadrootsNostrConnectPermission::new(
-            RadrootsNostrConnectMethod::Nip04Encrypt,
-        )]
-        .into();
+        let requested: Permissions = vec![Permission::new(Method::Nip04Encrypt)].into();
         let auto_record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
             public_identity(0x31),
@@ -1140,15 +1113,12 @@ mod tests {
 
         let mut granted_record = auto_record.clone();
         granted_record.granted_permissions = vec![RadrootsNostrSignerPermissionGrant::new(
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+            Permission::new(Method::Ping),
             2,
         )];
         assert_eq!(
             granted_record.effective_permissions(),
-            vec![RadrootsNostrConnectPermission::new(
-                RadrootsNostrConnectMethod::Ping
-            )]
-            .into()
+            vec![Permission::new(Method::Ping)].into()
         );
 
         let mut approved_without_grants = auto_record;
@@ -1164,14 +1134,11 @@ mod tests {
                 serialize_with = "serialize_permission",
                 deserialize_with = "deserialize_permission"
             )]
-            permission: RadrootsNostrConnectPermission,
+            permission: Permission,
         }
 
         let wrapper = PermissionWrapper {
-            permission: RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::SignEvent,
-                "kind:1",
-            ),
+            permission: Permission::with_parameter(Method::SignEvent, "kind:1"),
         };
 
         let json = serde_json::to_vec_pretty(&wrapper).expect("serialize wrapper");

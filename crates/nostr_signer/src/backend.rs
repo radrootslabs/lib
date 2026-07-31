@@ -17,10 +17,7 @@ use crate::model::{
 };
 use nostr::{Event, Keys, PublicKey, RelayUrl, UnsignedEvent};
 use radroots_identity::{AccountId, PublicIdentity, PublicKey as IdentityPublicKey};
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
-    RadrootsNostrConnectRequestMessage,
-};
+use radroots_nostr_connect::{Method, Request, message::RequestMessage, permission::Permissions};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,7 +99,7 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
     fn evaluate_connect_request(
         &self,
         client_public_key: PublicKey,
-        request: RadrootsNostrConnectRequest,
+        request: Request,
     ) -> Result<RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerError>;
 
     fn register_connection(
@@ -113,13 +110,13 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
     fn set_granted_permissions(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        granted_permissions: RadrootsNostrConnectPermissions,
+        granted_permissions: Permissions,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError>;
 
     fn approve_connection(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        granted_permissions: RadrootsNostrConnectPermissions,
+        granted_permissions: Permissions,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError>;
 
     fn reject_connection(
@@ -149,7 +146,7 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
     fn set_pending_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError>;
 
     fn authorize_auth_challenge(
@@ -201,7 +198,7 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
     fn evaluate_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
     ) -> Result<RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError>;
 
     fn evaluate_auth_replay_publish_workflow(
@@ -213,7 +210,7 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
         request_id: &str,
-        method: RadrootsNostrConnectMethod,
+        method: Method,
         decision: RadrootsNostrSignerRequestDecision,
         message: Option<String>,
     ) -> Result<RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerError>;
@@ -438,7 +435,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     fn evaluate_connect_request(
         &self,
         client_public_key: PublicKey,
-        request: RadrootsNostrConnectRequest,
+        request: Request,
     ) -> Result<RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerError> {
         self.manager
             .evaluate_connect_request(client_public_key, request)
@@ -454,7 +451,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     fn set_granted_permissions(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        granted_permissions: RadrootsNostrConnectPermissions,
+        granted_permissions: Permissions,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
         self.manager
             .set_granted_permissions(connection_id, granted_permissions)
@@ -463,7 +460,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     fn approve_connection(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        granted_permissions: RadrootsNostrConnectPermissions,
+        granted_permissions: Permissions,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
         self.manager
             .approve_connection(connection_id, granted_permissions)
@@ -504,7 +501,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     fn set_pending_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
     ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
         self.manager
             .set_pending_request(connection_id, request_message)
@@ -592,7 +589,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     fn evaluate_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
-        request_message: RadrootsNostrConnectRequestMessage,
+        request_message: RequestMessage,
     ) -> Result<RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError> {
         self.manager
             .evaluate_request(connection_id, request_message)
@@ -610,7 +607,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
         request_id: &str,
-        method: RadrootsNostrConnectMethod,
+        method: Method,
         decision: RadrootsNostrSignerRequestDecision,
         message: Option<String>,
     ) -> Result<RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerError> {
@@ -670,10 +667,7 @@ mod tests {
     };
     use nostr::{EventBuilder, EventId, Keys, Kind};
     use radroots_identity::{PublicIdentity, PublicKey as IdentityPublicKey};
-    use radroots_nostr_connect::prelude::{
-        RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequest,
-        RadrootsNostrConnectRequestMessage,
-    };
+    use radroots_nostr_connect::{Method, Permission, Request, message::RequestMessage};
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::sync::Arc;
     use std::sync::RwLock;
@@ -849,7 +843,7 @@ mod tests {
         fn evaluate_connect_request(
             &self,
             _client_public_key: nostr::PublicKey,
-            _request: RadrootsNostrConnectRequest,
+            _request: Request,
         ) -> Result<RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerError> {
             unreachable!("evaluate_connect_request not used in tests")
         }
@@ -864,7 +858,7 @@ mod tests {
         fn set_granted_permissions(
             &self,
             _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
-            _granted_permissions: radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions,
+            _granted_permissions: radroots_nostr_connect::permission::Permissions,
         ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
             unreachable!("set_granted_permissions not used in tests")
         }
@@ -872,7 +866,7 @@ mod tests {
         fn approve_connection(
             &self,
             _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
-            _granted_permissions: radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions,
+            _granted_permissions: radroots_nostr_connect::permission::Permissions,
         ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
             unreachable!("approve_connection not used in tests")
         }
@@ -912,7 +906,7 @@ mod tests {
         fn set_pending_request(
             &self,
             _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
-            _request_message: RadrootsNostrConnectRequestMessage,
+            _request_message: RequestMessage,
         ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
             unreachable!("set_pending_request not used in tests")
         }
@@ -985,7 +979,7 @@ mod tests {
         fn evaluate_request(
             &self,
             _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
-            _request_message: RadrootsNostrConnectRequestMessage,
+            _request_message: RequestMessage,
         ) -> Result<crate::evaluation::RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError>
         {
             unreachable!("evaluate_request not used in tests")
@@ -1003,7 +997,7 @@ mod tests {
             &self,
             _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
             _request_id: &str,
-            _method: RadrootsNostrConnectMethod,
+            _method: Method,
             _decision: RadrootsNostrSignerRequestDecision,
             _message: Option<String>,
         ) -> Result<crate::model::RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerError>
@@ -1302,13 +1296,10 @@ mod tests {
         let evaluation = backend
             .evaluate_connect_request(
                 synthetic_public_key(0x93),
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: embedded_public_identity(&identity).public_key(),
                     secret: Some("connect-secret".into()),
-                    requested_permissions: vec![RadrootsNostrConnectPermission::new(
-                        RadrootsNostrConnectMethod::Ping,
-                    )]
-                    .into(),
+                    requested_permissions: vec![Permission::new(Method::Ping)].into(),
                     client_metadata: None,
                 },
             )
@@ -1353,12 +1344,12 @@ mod tests {
             .record_request(
                 &connection.connection_id,
                 "req-1",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Allowed,
                 None,
             )
             .expect("record request");
-        assert_eq!(audit.method, RadrootsNostrConnectMethod::Ping);
+        assert_eq!(audit.method, Method::Ping);
     }
 
     #[test]
@@ -1371,13 +1362,10 @@ mod tests {
         let connect_evaluation = backend_trait
             .evaluate_connect_request(
                 synthetic_public_key(0xa1),
-                RadrootsNostrConnectRequest::Connect {
+                Request::Connect {
                     remote_signer_public_key: embedded_public_identity(&identity).public_key(),
                     secret: Some("connect-secret-2".into()),
-                    requested_permissions: vec![RadrootsNostrConnectPermission::new(
-                        RadrootsNostrConnectMethod::Ping,
-                    )]
-                    .into(),
+                    requested_permissions: vec![Permission::new(Method::Ping)].into(),
                     client_metadata: None,
                 },
             )
@@ -1433,10 +1421,7 @@ mod tests {
         let evaluation = backend_trait
             .evaluate_request(
                 &connection.connection_id,
-                RadrootsNostrConnectRequestMessage::new(
-                    "req-ping",
-                    RadrootsNostrConnectRequest::Ping,
-                ),
+                RequestMessage::new("req-ping", Request::Ping),
             )
             .expect("evaluate request");
         assert!(matches!(
@@ -1455,20 +1440,12 @@ mod tests {
                     synthetic_public_key(0xab),
                     synthetic_public_identity(0xac),
                 )
-                .with_requested_permissions(
-                    vec![RadrootsNostrConnectPermission::new(
-                        RadrootsNostrConnectMethod::Ping,
-                    )]
-                    .into(),
-                )
+                .with_requested_permissions(vec![Permission::new(Method::Ping)].into())
                 .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register pending connection");
-        let granted_permissions: radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions =
-            vec![RadrootsNostrConnectPermission::new(
-                RadrootsNostrConnectMethod::Ping,
-            )]
-            .into();
+        let granted_permissions: radroots_nostr_connect::permission::Permissions =
+            vec![Permission::new(Method::Ping)].into();
         let granted = backend_trait
             .set_granted_permissions(
                 &pending_connection.connection_id,
@@ -1530,7 +1507,7 @@ mod tests {
             .record_request(
                 &connection.connection_id,
                 "req-audit",
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Allowed,
                 None,
             )
@@ -1571,12 +1548,7 @@ mod tests {
                     synthetic_public_key(0xa7),
                     synthetic_public_identity(0xa8),
                 )
-                .with_requested_permissions(
-                    vec![RadrootsNostrConnectPermission::new(
-                        RadrootsNostrConnectMethod::Ping,
-                    )]
-                    .into(),
-                ),
+                .with_requested_permissions(vec![Permission::new(Method::Ping)].into()),
             )
             .expect("register auth connection");
         backend_trait
@@ -1588,10 +1560,7 @@ mod tests {
         let pending = backend_trait
             .set_pending_request(
                 &auth_connection.connection_id,
-                RadrootsNostrConnectRequestMessage::new(
-                    "req-auth-replay",
-                    RadrootsNostrConnectRequest::Ping,
-                ),
+                RequestMessage::new("req-auth-replay", Request::Ping),
             )
             .expect("set pending request");
         assert!(pending.pending_request.is_some());
@@ -1665,12 +1634,7 @@ mod tests {
                     synthetic_public_key(0x97),
                     synthetic_public_identity(0x98),
                 )
-                .with_requested_permissions(
-                    vec![RadrootsNostrConnectPermission::new(
-                        RadrootsNostrConnectMethod::Ping,
-                    )]
-                    .into(),
-                ),
+                .with_requested_permissions(vec![Permission::new(Method::Ping)].into()),
             )
             .expect("register connection");
         backend
@@ -1679,10 +1643,7 @@ mod tests {
         backend
             .set_pending_request(
                 &connection.connection_id,
-                RadrootsNostrConnectRequestMessage::new(
-                    "req-auth",
-                    RadrootsNostrConnectRequest::Ping,
-                ),
+                RequestMessage::new("req-auth", Request::Ping),
             )
             .expect("set pending request");
 

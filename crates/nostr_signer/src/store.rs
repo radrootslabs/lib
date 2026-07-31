@@ -25,10 +25,7 @@ use nostr::RelayUrl;
 #[cfg(feature = "native")]
 use radroots_identity::PublicIdentity;
 #[cfg(feature = "native")]
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectRequestMessage,
-};
+use radroots_nostr_connect::{Method, Permission, message::RequestMessage, uri::ClientMetadata};
 #[cfg(feature = "native")]
 use radroots_sql_core::SqlExecutor;
 #[cfg(feature = "native")]
@@ -252,9 +249,8 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                         row.connection_id
                     ))
                 })?;
-            let request_message = parse_json_field::<RadrootsNostrConnectRequestMessage>(
-                row.request_message_json.as_str(),
-            )?;
+            let request_message =
+                parse_json_field::<RequestMessage>(row.request_message_json.as_str())?;
             state.connections[index].pending_request = Some(
                 RadrootsNostrSignerPendingRequest::new(request_message, row.created_at_unix)?,
             );
@@ -515,7 +511,7 @@ impl SignerConnectionRow {
             client_metadata: self
                 .client_metadata_json
                 .as_deref()
-                .map(parse_json_field::<RadrootsNostrConnectClientMetadata>)
+                .map(parse_json_field::<ClientMetadata>)
                 .transpose()?,
             granted_permissions: Vec::new(),
             relays: Vec::new(),
@@ -548,7 +544,7 @@ impl SignerConnectionPermissionGrantRow {
         Ok(RadrootsNostrSignerPermissionGrant {
             permission: self
                 .permission
-                .parse::<RadrootsNostrConnectPermission>()
+                .parse::<Permission>()
                 .map_err(|error| RadrootsNostrSignerError::Store(error.to_string()))?,
             granted_at_unix: self.granted_at_unix,
         })
@@ -600,7 +596,7 @@ impl SignerRequestAuditRow {
             connection_id: self.connection_id.parse()?,
             method: self
                 .method
-                .parse::<RadrootsNostrConnectMethod>()
+                .parse::<Method>()
                 .map_err(|error| RadrootsNostrSignerError::Store(error.to_string()))?,
             decision: parse_request_decision(self.decision.as_str())?,
             message: self.message,
@@ -881,10 +877,9 @@ mod tests {
         primary_relay, secondary_relay,
     };
     #[cfg(feature = "native")]
-    use radroots_nostr_connect::prelude::{
-        RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod,
-        RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
-        RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage,
+    use radroots_nostr_connect::{
+        Method, Permission, Request, message::RequestMessage, permission::Permissions,
+        uri::ClientMetadata,
     };
     use std::thread;
 
@@ -990,8 +985,8 @@ mod tests {
     }
 
     #[cfg(feature = "native")]
-    fn sample_request_message(id: &str) -> RadrootsNostrConnectRequestMessage {
-        RadrootsNostrConnectRequestMessage::new(id, RadrootsNostrConnectRequest::Ping)
+    fn sample_request_message(id: &str) -> RequestMessage {
+        RequestMessage::new(id, Request::Ping)
     }
 
     #[cfg(feature = "native")]
@@ -1004,8 +999,8 @@ mod tests {
             signer_identity.clone(),
             RadrootsNostrSignerConnectionDraft::new(fixture_carol_public_key(), user_identity)
                 .with_connect_secret("sqlite-secret")
-                .with_client_metadata(RadrootsNostrConnectClientMetadata {
-                    requested_permissions: RadrootsNostrConnectPermissions::default(),
+                .with_client_metadata(ClientMetadata {
+                    requested_permissions: Permissions::default(),
                     name: Some("Example Client".to_owned()),
                     url: Some("https://client.example.com/".to_owned()),
                     image: Some("https://client.example.com/icon.png".to_owned()),
@@ -1013,11 +1008,8 @@ mod tests {
                 .with_relays(vec![primary_relay(), secondary_relay()])
                 .with_requested_permissions(
                     vec![
-                        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
-                        RadrootsNostrConnectPermission::with_parameter(
-                            RadrootsNostrConnectMethod::SignEvent,
-                            "kind:1",
-                        ),
+                        Permission::new(Method::Ping),
+                        Permission::with_parameter(Method::SignEvent, "kind:1"),
                     ]
                     .into(),
                 )
@@ -1033,15 +1025,9 @@ mod tests {
         connection.last_request_at_unix = Some(135);
         connection.mark_connect_secret_consumed(125);
         connection.granted_permissions = vec![
+            RadrootsNostrSignerPermissionGrant::new(Permission::new(Method::Ping), 110),
             RadrootsNostrSignerPermissionGrant::new(
-                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
-                110,
-            ),
-            RadrootsNostrSignerPermissionGrant::new(
-                RadrootsNostrConnectPermission::with_parameter(
-                    RadrootsNostrConnectMethod::SignEvent,
-                    "kind:1",
-                ),
+                Permission::with_parameter(Method::SignEvent, "kind:1"),
                 111,
             ),
         ];
@@ -1064,7 +1050,7 @@ mod tests {
             audit_records: vec![RadrootsNostrSignerRequestAuditRecord::new(
                 RadrootsNostrSignerRequestId::parse("audit-1").expect("request id"),
                 connection_id,
-                RadrootsNostrConnectMethod::Ping,
+                Method::Ping,
                 RadrootsNostrSignerRequestDecision::Allowed,
                 Some("permitted".to_owned()),
                 150,

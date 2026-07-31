@@ -82,8 +82,8 @@ impl From<radroots_nostr::Error> for RadrootsNostrSignerError {
     }
 }
 
-impl From<radroots_nostr_connect::prelude::RadrootsNostrConnectError> for RadrootsNostrSignerError {
-    fn from(value: radroots_nostr_connect::prelude::RadrootsNostrConnectError) -> Self {
+impl From<radroots_nostr_connect::Error> for RadrootsNostrSignerError {
+    fn from(value: radroots_nostr_connect::Error) -> Self {
         Self::InvalidState(value.to_string())
     }
 }
@@ -132,10 +132,7 @@ mod tests {
     #[test]
     fn converts_nostr_connect_error() {
         let converted: RadrootsNostrSignerError =
-            radroots_nostr_connect::prelude::RadrootsNostrConnectError::InvalidMethod(
-                "bad".to_string(),
-            )
-            .into();
+            radroots_nostr_connect::Error::InvalidMethod("bad".to_string()).into();
         assert!(converted.to_string().starts_with("invalid signer state:"));
     }
 
