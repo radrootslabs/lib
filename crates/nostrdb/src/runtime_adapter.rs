@@ -1,6 +1,6 @@
 use crate::ingest::RadrootsNostrdbIngestSource;
 use crate::nostrdb::RadrootsNostrdb;
-use radroots_nostr::prelude::RadrootsNostrEvent;
+use radroots_nostr::event::Event as RadrootsNostrEvent;
 use radroots_nostr_runtime::prelude::RadrootsNostrEventSink;
 use std::sync::Arc;
 
@@ -52,7 +52,7 @@ mod tests {
     use super::*;
     use crate::config::RadrootsNostrdbConfig;
     use nostr::EventBuilder;
-    use radroots_nostr::prelude::RadrootsNostrKeys;
+    use radroots_nostr::types::RadrootsNostrKeys;
     use tempfile::TempDir;
 
     #[test]

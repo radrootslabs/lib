@@ -12,7 +12,8 @@ use radroots_event_store::{
     RadrootsEventPersistence, RadrootsEventStore, RadrootsEventVisibility,
     RadrootsTransportObservation, RadrootsTransportObservationType,
 };
-use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrFilter};
+use radroots_nostr::event::Event as RadrootsNostrEvent;
+use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 use radroots_transport::{Target, TransportId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1373,9 +1374,10 @@ mod tests {
     };
     use nostr::JsonUtil;
     use radroots_event_store::{RadrootsEventVisibility, RadrootsNip09SuppressionReason};
-    use radroots_nostr::prelude::{
-        RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey,
-    };
+    use radroots_nostr::event::Kind as RadrootsNostrKind;
+    use radroots_nostr::filter::Filter as RadrootsNostrFilter;
+    use radroots_nostr::types::RadrootsNostrKeys;
+    use radroots_nostr::types::RadrootsNostrSecretKey;
     use std::collections::HashMap;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =

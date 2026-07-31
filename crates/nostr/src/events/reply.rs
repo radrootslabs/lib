@@ -13,7 +13,7 @@ use radroots_event_codec::encode::reply::authored_nip10_reply_to_wire_parts;
 /// The wrapper exposes no raw builder conversion or tag/content mutation.
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::RadrootsNostrNip10ReplyEventBuilder;
+/// use radroots_nostr::events::reply::RadrootsNostrNip10ReplyEventBuilder;
 ///
 /// fn expose_raw_builder(builder: RadrootsNostrNip10ReplyEventBuilder) {
 ///     let _: nostr::EventBuilder = builder.into();

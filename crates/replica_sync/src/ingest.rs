@@ -1636,7 +1636,7 @@ mod tests {
     use radroots_event_codec::encode::farm as farm_list_sets;
     use radroots_event_codec::encode::list_set as list_set_encode;
     use radroots_event_codec::encode::plot as plot_encode;
-    use radroots_nostr::prelude::radroots_event_from_nostr;
+    use radroots_nostr::event::radroots_event_from_nostr;
     use radroots_replica_schema::farm::IFarmFields;
     use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
     use radroots_replica_schema::farm_member::IFarmMemberFields;

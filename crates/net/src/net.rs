@@ -145,7 +145,7 @@ impl Net {
     }
 
     #[cfg(feature = "nostr-client")]
-    pub fn selected_nostr_keys(&self) -> Option<radroots_nostr::prelude::RadrootsNostrKeys> {
+    pub fn selected_nostr_keys(&self) -> Option<radroots_nostr::types::RadrootsNostrKeys> {
         let signer = self.selected_nostr_signer()?;
         self.accounts
             .resolve_signing_keys_for_signer(&signer)
@@ -173,7 +173,7 @@ mod tests {
     #[cfg(feature = "nostr-client")]
     use radroots_identity::{PublicIdentity, PublicKey};
     #[cfg(feature = "nostr-client")]
-    use radroots_nostr::prelude::RadrootsNostrKeys;
+    use radroots_nostr::types::RadrootsNostrKeys;
     #[cfg(feature = "nostr-client")]
     use radroots_nostr_signer::prelude::{
         RadrootsNostrRemoteSessionSignerCapability, RadrootsNostrSignerCapability,

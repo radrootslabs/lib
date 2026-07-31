@@ -5,11 +5,14 @@ use radroots_event::{
     },
 };
 use radroots_event_codec::admission::deletion::verify_and_admit_nip09_deletion_request_event;
-use radroots_nostr::prelude::{
-    RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
-    RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
-    radroots_nostr_build_nip09_deletion_request_event,
-};
+use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::event::Kind as RadrootsNostrKind;
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::event::radroots_event_from_nostr;
+use radroots_nostr::events::deletion::radroots_nostr_build_nip09_deletion_request_event;
+use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_test_fixtures::{FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
 const CREATED_AT: u64 = 1_784_347_200;

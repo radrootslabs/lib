@@ -1,10 +1,9 @@
 use crate::error::{NetError, Result};
 use radroots_event::{post::AuthoredUpdate, post::reply::AuthoredNip10Reply};
 use radroots_event_codec::{parsed::RadrootsParsedData, post::decode::LegacyPost};
-use radroots_nostr::prelude::{
-    radroots_nostr_build_nip10_reply_event, radroots_nostr_build_update_event,
-    radroots_nostr_post_events_filter,
-};
+use radroots_nostr::events::post::radroots_nostr_build_update_event;
+use radroots_nostr::events::post::radroots_nostr_post_events_filter;
+use radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event;
 
 use crate::nostr_client::manager::NostrClientManager;
 

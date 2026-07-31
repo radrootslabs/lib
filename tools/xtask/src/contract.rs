@@ -2062,7 +2062,7 @@ const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/lib.rs",
-        required_fragments: &["radroots_nostr_wrap_message"],
+        required_fragments: &["pub mod nip17;"],
     },
 ];
 
@@ -2084,7 +2084,7 @@ const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/lib.rs",
-        required_fragments: &["radroots_nostr_wrap_message_file"],
+        required_fragments: &["pub mod nip17;"],
     },
 ];
 
@@ -2103,7 +2103,7 @@ const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/lib.rs",
-        required_fragments: &["radroots_nostr_unwrap_gift_wrap"],
+        required_fragments: &["pub mod nip17;"],
     },
 ];
 

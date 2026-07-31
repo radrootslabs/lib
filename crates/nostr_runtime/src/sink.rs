@@ -1,6 +1,6 @@
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use radroots_nostr::prelude::RadrootsNostrEvent;
+use radroots_nostr::event::Event as RadrootsNostrEvent;
 use std::sync::Mutex;
 
 pub trait RadrootsNostrEventSink: Send + Sync {
@@ -48,7 +48,7 @@ impl RadrootsNostrEventSink for RadrootsNostrInMemoryEventSink {
 mod tests {
     use super::*;
     use nostr::EventBuilder;
-    use radroots_nostr::prelude::RadrootsNostrKeys;
+    use radroots_nostr::types::RadrootsNostrKeys;
 
     #[test]
     fn in_memory_sink_tracks_events() {

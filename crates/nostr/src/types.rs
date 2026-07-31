@@ -34,7 +34,7 @@ pub type RadrootsNostrUrl = nostr::Url;
 /// deserialization boundary.
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::RadrootsNostrExternalSigningRequest;
+/// use radroots_nostr::types::RadrootsNostrExternalSigningRequest;
 ///
 /// let _: RadrootsNostrExternalSigningRequest =
 ///     serde_json::from_str("{}").expect("request");
@@ -111,9 +111,8 @@ impl serde::Serialize for RadrootsNostrExternalSigningRequest {
 /// The upstream unsigned builder is intentionally inaccessible:
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::{
-///     RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
-/// };
+/// use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+/// use radroots_nostr::event::Kind as RadrootsNostrKind;
 ///
 /// let builder = RadrootsNostrGenericEventBuilder::new(
 ///     RadrootsNostrKind::Custom(30_001),
@@ -123,9 +122,8 @@ impl serde::Serialize for RadrootsNostrExternalSigningRequest {
 /// ```
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::{
-///     RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
-/// };
+/// use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+/// use radroots_nostr::event::Kind as RadrootsNostrKind;
 ///
 /// let builder = RadrootsNostrGenericEventBuilder::new(
 ///     RadrootsNostrKind::Custom(30_001),
@@ -135,10 +133,9 @@ impl serde::Serialize for RadrootsNostrExternalSigningRequest {
 /// ```
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::{
-///     RadrootsNostrGenericEventBuilder, RadrootsNostrKeys,
-///     RadrootsNostrKind,
-/// };
+/// use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+/// use radroots_nostr::types::RadrootsNostrKeys;
+/// use radroots_nostr::event::Kind as RadrootsNostrKind;
 ///
 /// let builder = RadrootsNostrGenericEventBuilder::new(
 ///     RadrootsNostrKind::Custom(30_001),

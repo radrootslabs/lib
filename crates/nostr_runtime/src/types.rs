@@ -1,9 +1,10 @@
 use alloc::string::String;
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::events::post::radroots_nostr_post_events_filter;
 #[cfg(feature = "nostr-client")]
-use radroots_nostr::prelude::{
-    RadrootsNostrFilter, RadrootsNostrPublicKey, RadrootsNostrTimestamp, radroots_nostr_kind,
-    radroots_nostr_post_events_filter,
-};
+use radroots_nostr::filter::Filter as RadrootsNostrFilter;
+use radroots_nostr::filter::radroots_nostr_kind;
+use radroots_nostr::types::RadrootsNostrPublicKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsNostrSubscriptionPolicy {
@@ -104,13 +105,13 @@ impl RadrootsNostrSubscriptionSpec {
 mod tests {
     use super::*;
     #[cfg(feature = "nostr-client")]
-    use radroots_nostr::prelude::RadrootsNostrKeys;
+    use radroots_nostr::types::RadrootsNostrKeys;
 
     fn base_spec() -> RadrootsNostrSubscriptionSpec {
         RadrootsNostrSubscriptionSpec {
             name: None,
             #[cfg(feature = "nostr-client")]
-            filter: radroots_nostr::prelude::RadrootsNostrFilter::new(),
+            filter: radroots_nostr::filter::Filter::new(),
             policy: RadrootsNostrSubscriptionPolicy::Streaming,
             stream_timeout_secs: RadrootsNostrSubscriptionSpec::DEFAULT_STREAM_TIMEOUT_SECS,
             reconnect_delay_millis: RadrootsNostrSubscriptionSpec::DEFAULT_RECONNECT_DELAY_MILLIS,

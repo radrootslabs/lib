@@ -94,7 +94,20 @@ fn crate_root_establishes_the_final_public_module_skeleton() {
             "crate root is missing final module `{module}`"
         );
     }
-    assert!(ROOT.contains("pub use error::RadrootsNostrError as Error;"));
+    let root_reexports = ROOT
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("pub use "))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        root_reexports,
+        ["pub use error::RadrootsNostrError as Error;"],
+        "the crate root must re-export only the canonical Error alias"
+    );
+    assert!(
+        !ROOT.contains("pub mod prelude"),
+        "lower-level Nostr crate must not publish a broad prelude"
+    );
 }
 
 #[test]

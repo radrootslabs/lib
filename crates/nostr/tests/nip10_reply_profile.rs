@@ -6,11 +6,15 @@ use radroots_event_codec::{
     },
     decode::reply::RadrootsNip10ReplyStyle,
 };
-use radroots_nostr::prelude::{
-    RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
-    RadrootsNostrSecretKey, RadrootsNostrTag, RadrootsNostrTimestamp, radroots_event_from_nostr,
-    radroots_nostr_build_nip10_reply_event,
-};
+use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::event::Kind as RadrootsNostrKind;
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::event::radroots_event_from_nostr;
+use radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event;
+use radroots_nostr::tag::Tag as RadrootsNostrTag;
+use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_test_fixtures::{
     FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX,
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,

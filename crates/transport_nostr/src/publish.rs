@@ -25,7 +25,7 @@ use crate::RadrootsRelayOutcomeKind;
 #[cfg(feature = "client")]
 use nostr::JsonUtil;
 #[cfg(feature = "client")]
-use radroots_nostr::prelude::RadrootsNostrEvent;
+use radroots_nostr::event::Event as RadrootsNostrEvent;
 
 #[cfg(feature = "client")]
 const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -1049,9 +1049,9 @@ mod tests {
     use radroots_event::draft::{EventDraft, SignedEvent};
     use radroots_event::envelope::kind::KIND_GEOCHAT;
     use radroots_event::wire::Nip01EventWire;
-    use radroots_nostr::prelude::{
-        RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
-    };
+    use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+    use radroots_nostr::types::RadrootsNostrKeys;
+    use radroots_nostr::types::RadrootsNostrSecretKey;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";

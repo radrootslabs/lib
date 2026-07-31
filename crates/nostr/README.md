@@ -15,6 +15,8 @@ primitives for the `radroots` core libraries.
 
 This crate owns no relay client, HTTP client, endpoint operation, retry loop,
 network runtime, persistence, account selection, or outbox orchestration.
+Its public API is consumed through explicit owning modules; it intentionally
+publishes no broad prelude.
 
 The `blossom` feature signs kind-24242 authorization events and encodes or
 verifies their `Authorization: Nostr` HTTP values. It does not publish these

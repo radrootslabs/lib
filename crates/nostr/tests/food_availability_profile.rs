@@ -8,11 +8,15 @@ use radroots_event::media::AuthoredImage;
 use radroots_event_codec::admission::food_availability::{
     RadrootsFoodAvailabilityAdmissionOutcome, verify_and_admit_food_availability_event,
 };
-use radroots_nostr::prelude::{
-    RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
-    RadrootsNostrSecretKey, RadrootsNostrTag, RadrootsNostrTimestamp, radroots_event_from_nostr,
-    radroots_nostr_build_food_availability_event,
-};
+use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::event::Kind as RadrootsNostrKind;
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::event::radroots_event_from_nostr;
+use radroots_nostr::events::food_availability::radroots_nostr_build_food_availability_event;
+use radroots_nostr::tag::Tag as RadrootsNostrTag;
+use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
 
 const CREATED_AT: u64 = 1_784_347_200;

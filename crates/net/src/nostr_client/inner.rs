@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use radroots_event_codec::{parsed::RadrootsParsedData, post::decode::LegacyPost};
-use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrRelayUrl};
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrRelayUrl;
 use radroots_transport_nostr::{
     RadrootsNostrClient, RadrootsNostrMonitor, RadrootsNostrRelayStatus,
 };

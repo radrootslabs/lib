@@ -13,7 +13,7 @@ use radroots_event_codec::encode::comment::authored_nip22_comment_to_wire_parts;
 /// The wrapper exposes no raw builder conversion or tag/content mutation.
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::RadrootsNostrNip22CommentEventBuilder;
+/// use radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder;
 ///
 /// fn expose_raw_builder(builder: RadrootsNostrNip22CommentEventBuilder) {
 ///     let _: nostr::EventBuilder = builder.into();

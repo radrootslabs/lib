@@ -2,10 +2,10 @@
 mod test_fixtures;
 
 use radroots_event::profile::AuthoredProfile;
-use radroots_nostr::prelude::{
-    RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
-    radroots_nostr_build_profile_event,
-};
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::events::metadata::radroots_nostr_build_profile_event;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrSecretKey;
 
 #[test]
 fn typed_profile_builder_preserves_the_strict_replacement_snapshot() {

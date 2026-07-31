@@ -15,7 +15,7 @@ use radroots_event_codec::encode::deletion::authored_nip09_deletion_request_to_w
 /// effect.
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::RadrootsNostrNip09DeletionRequestEventBuilder;
+/// use radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder;
 ///
 /// fn expose_raw_builder(builder: RadrootsNostrNip09DeletionRequestEventBuilder) {
 ///     let _: nostr::EventBuilder = builder.into();
@@ -23,9 +23,8 @@ use radroots_event_codec::encode::deletion::authored_nip09_deletion_request_to_w
 /// ```
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::{
-///     RadrootsNostrNip09DeletionRequestEventBuilder, RadrootsNostrTag,
-/// };
+/// use radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder;
+/// use radroots_nostr::tag::Tag as RadrootsNostrTag;
 ///
 /// fn mutate_validated_tags(
 ///     builder: RadrootsNostrNip09DeletionRequestEventBuilder,

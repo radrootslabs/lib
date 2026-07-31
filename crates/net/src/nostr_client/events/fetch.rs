@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 
 use crate::error::{NetError, Result};
-use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrFilter};
+use radroots_nostr::event::Event as RadrootsNostrEvent;
+use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 
 use crate::nostr_client::manager::NostrClientManager;
 

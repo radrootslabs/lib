@@ -16,9 +16,8 @@ use radroots_event_codec::encode::food_availability::authored_food_availability_
 /// caller must prove successful BUD-02 upload before signing or publication.
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::{
-///     RadrootsNostrFoodAvailabilityEventBuilder, RadrootsNostrTimestamp,
-/// };
+/// use radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
+/// use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 ///
 /// fn replace_validated_timestamp(builder: RadrootsNostrFoodAvailabilityEventBuilder) {
 ///     let _ = builder.custom_created_at(RadrootsNostrTimestamp::from_secs(1));
@@ -26,7 +25,7 @@ use radroots_event_codec::encode::food_availability::authored_food_availability_
 /// ```
 ///
 /// ```compile_fail
-/// use radroots_nostr::prelude::RadrootsNostrFoodAvailabilityEventBuilder;
+/// use radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
 ///
 /// fn expose_raw_builder(builder: RadrootsNostrFoodAvailabilityEventBuilder) {
 ///     let _: nostr::EventBuilder = builder.into();

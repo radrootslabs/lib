@@ -11,11 +11,14 @@ use radroots_event_codec::{
     admission::comment::verify_and_admit_nip22_comment_event,
     decode::comment::RadrootsInboundNip22CommentPosition,
 };
-use radroots_nostr::prelude::{
-    RadrootsNostrError, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
-    RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
-    radroots_nostr_build_nip22_comment_event,
-};
+use radroots_nostr::error::RadrootsNostrError;
+use radroots_nostr::event::Kind as RadrootsNostrKind;
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::event::radroots_event_from_nostr;
+use radroots_nostr::events::comment::radroots_nostr_build_nip22_comment_event;
+use radroots_nostr::types::RadrootsNostrGenericEventBuilder;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrSecretKey;
 use radroots_test_fixtures::{
     FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX,
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,

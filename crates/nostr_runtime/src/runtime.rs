@@ -10,7 +10,9 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use core::time::Duration;
 use futures::StreamExt;
-use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrRelayUrl, RadrootsNostrTimestamp};
+use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrRelayUrl;
 use radroots_transport_nostr::{
     RadrootsNostrClient, RadrootsNostrMonitor, RadrootsNostrMonitorNotification,
     RadrootsNostrRelayStatus,
@@ -461,7 +463,7 @@ mod tests {
     use super::*;
     use crate::sink::RadrootsNostrInMemoryEventSink;
     use alloc::sync::Arc;
-    use radroots_nostr::prelude::RadrootsNostrFilter;
+    use radroots_nostr::filter::Filter as RadrootsNostrFilter;
 
     fn sample_runtime() -> RadrootsNostrRuntime {
         RadrootsNostrRuntimeBuilder::new()

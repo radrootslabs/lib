@@ -14,10 +14,13 @@ use futures::Stream;
 use nostr_sdk::{Client, ClientBuilder, ClientOptions};
 
 use crate::RadrootsRelayTransportError;
-use radroots_nostr::prelude::{
-    RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKeys,
-    RadrootsNostrPublicKey, RadrootsNostrRelayUrl, RadrootsNostrSubscriptionId,
-};
+use radroots_nostr::event::Event as RadrootsNostrEvent;
+use radroots_nostr::event::EventId as RadrootsNostrEventId;
+use radroots_nostr::filter::Filter as RadrootsNostrFilter;
+use radroots_nostr::types::RadrootsNostrKeys;
+use radroots_nostr::types::RadrootsNostrPublicKey;
+use radroots_nostr::types::RadrootsNostrRelayUrl;
+use radroots_nostr::types::RadrootsNostrSubscriptionId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsNostrRelayStatus {

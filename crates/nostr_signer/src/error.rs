@@ -76,8 +76,8 @@ impl From<nostr::event::Error> for RadrootsNostrSignerError {
     }
 }
 
-impl From<radroots_nostr::prelude::RadrootsNostrError> for RadrootsNostrSignerError {
-    fn from(value: radroots_nostr::prelude::RadrootsNostrError) -> Self {
+impl From<radroots_nostr::error::RadrootsNostrError> for RadrootsNostrSignerError {
+    fn from(value: radroots_nostr::error::RadrootsNostrError) -> Self {
         Self::InvalidState(value.to_string())
     }
 }
@@ -125,8 +125,7 @@ mod tests {
     #[test]
     fn converts_nostr_filter_error() {
         let converted: RadrootsNostrSignerError =
-            radroots_nostr::prelude::RadrootsNostrError::FilterTagError("bad tag".to_string())
-                .into();
+            radroots_nostr::error::RadrootsNostrError::FilterTagError("bad tag".to_string()).into();
         assert!(converted.to_string().starts_with("invalid signer state:"));
     }
 
