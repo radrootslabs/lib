@@ -9,6 +9,7 @@ pub mod permission;
 pub mod server;
 pub mod uri;
 
+pub use client::Client;
 pub use error::RadrootsNostrConnectError as Error;
 pub use message::{Request, Response};
 pub use method::Method;
@@ -20,9 +21,11 @@ pub use uri::{BunkerUri, ClientUri};
 #[doc(hidden)]
 pub mod prelude {
     pub use crate::client::{
-        RadrootsNostrConnectClientEventOutcome, RadrootsNostrConnectClientProgress,
-        RadrootsNostrConnectClientRequest, RadrootsNostrConnectClientTarget,
-        RadrootsNostrConnectClientTransport, RadrootsNostrConnectClientTransportFuture,
+        CancellationPhase, CancellationToken, Client, ClientEvent, Completion, EventOutcome,
+        Operation, Progress, RadrootsNostrConnectClientEventOutcome,
+        RadrootsNostrConnectClientProgress, RadrootsNostrConnectClientRequest,
+        RadrootsNostrConnectClientTarget, RadrootsNostrConnectClientTransport,
+        RadrootsNostrConnectClientTransportFuture, Receive, Target, Transport, TransportFuture,
         build_request_event, execute_request_with_transport, parse_response_event,
     };
     pub use crate::error::RadrootsNostrConnectError;

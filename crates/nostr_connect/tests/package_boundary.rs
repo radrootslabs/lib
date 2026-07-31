@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const CLIENT: &str = include_str!("../src/client.rs");
 const METHOD: &str = include_str!("../src/method.rs");
 const PERMISSION: &str = include_str!("../src/permission.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -96,6 +97,30 @@ fn uri_method_and_permission_types_use_canonical_owners_and_names() {
     }
     assert!(URI.contains("use radroots_identity::PublicKey;"));
     assert!(URI.contains("radroots_nostr::key::parse_public_key"));
+}
+
+#[test]
+fn client_root_and_transport_use_package_owned_state_machine_types() {
+    assert!(ROOT.contains("pub use client::Client;"));
+    for required in [
+        "pub struct Client {",
+        "pub struct ClientEvent(Event);",
+        "pub struct Target {",
+        "pub trait Transport: Send {",
+        "pub enum CancellationPhase {",
+    ] {
+        assert!(CLIENT.contains(required), "client is missing `{required}`");
+    }
+    for forbidden in [
+        "pub struct Client {\n    pub ",
+        "pub struct ClientEvent(pub ",
+        "pub struct Target {\n    pub ",
+    ] {
+        assert!(
+            !CLIENT.contains(forbidden),
+            "client exposes representation through `{forbidden}`"
+        );
+    }
 }
 
 fn table_keys<'a>(source: &'a str, header: &str) -> BTreeSet<&'a str> {
