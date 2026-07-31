@@ -141,6 +141,36 @@ fn active_sources_use_canonical_transport_type_names() {
 }
 
 #[test]
+fn temporary_transport_mapping_is_publish_frozen_until_step_235() {
+    let manifest = manifest_dir();
+    let cargo_manifest = read_source(&manifest.join("Cargo.toml"));
+    let transport = read_source(&manifest.join("src/transport.rs"));
+    let deviations = read_source(&manifest.join("../../docs/implementation/deviations.toml"));
+
+    assert!(cargo_manifest.contains("publish = false"));
+    for required in [
+        "pub enum SatisfactionPolicy",
+        "pub struct TargetSet",
+        "transport_satisfaction_policy",
+    ] {
+        assert!(
+            transport.contains(required),
+            "the bounded Step 235 migration inventory is missing `{required}`"
+        );
+    }
+    for required in [
+        "id = \"RCRV1-DEV-007\"",
+        "affected_steps = [\"122\", \"170\", \"235\", \"305\"]",
+        "SDK-local unpublished target-set and satisfaction-policy mapping only until Step 235",
+    ] {
+        assert!(
+            deviations.contains(required),
+            "the Step 235 final-removal record is missing `{required}`"
+        );
+    }
+}
+
+#[test]
 fn active_sources_do_not_describe_compatibility_paths() {
     for path in active_source_files() {
         let source = read_source(&path).to_lowercase();

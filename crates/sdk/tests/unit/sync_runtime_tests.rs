@@ -1009,7 +1009,7 @@ async fn radrootsd_delivery_policy_rejects_non_accepted_satisfaction_before_daem
 #[cfg(feature = "radrootsd-execution")]
 #[test]
 fn radrootsd_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
-    let target = Target::reticulum().expect("Reticulum target");
+    let target = Target::new(TransportId::RETICULUM, "reticulum:local").expect("Reticulum target");
     let record = RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id: 1,
         delivery_plan_id: 1,
@@ -1190,7 +1190,8 @@ async fn radrootsd_local_validation_errors_release_claim_before_daemon_publish()
         .expect("stored before");
     assert!(!stored_before.event_store_ingested);
     assert_eq!(stored_before.event_store_ingested_at_ms, None);
-    let reticulum_target = Target::reticulum().expect("Reticulum target");
+    let reticulum_target =
+        Target::new(TransportId::RETICULUM, "reticulum:local").expect("Reticulum target");
     claimed.delivery_targets[0].transport_kind = *reticulum_target.kind();
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri().clone();
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint().clone();
@@ -1320,7 +1321,8 @@ async fn radrootsd_local_validation_failure_keeps_sibling_plan_ready_and_claimab
         .expect("stored before");
     let ingested_before = stored_before.event_store_ingested;
     let ingested_at_before = stored_before.event_store_ingested_at_ms;
-    let reticulum_target = Target::reticulum().expect("Reticulum target");
+    let reticulum_target =
+        Target::new(TransportId::RETICULUM, "reticulum:local").expect("Reticulum target");
     claimed.delivery_targets[0].transport_kind = *reticulum_target.kind();
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri().clone();
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint().clone();

@@ -294,20 +294,28 @@ fn reticulum_agent_endpoint_rejects_non_agent_endpoint_families() {
 
 #[test]
 fn explicit_target_sets_reject_noncanonical_reticulum_endpoints() {
-    for invalid in [
-        " reticulum:local".to_owned(),
-        "reticulum:local ".to_owned(),
+    for invalid in [" reticulum:local", "reticulum:local "] {
+        assert_eq!(
+            Target::new(TransportId::RETICULUM, invalid)
+                .expect_err("syntactically invalid transport target"),
+            RadrootsTransportError::InvalidTargetUri
+        );
+    }
+
+    for noncanonical in [
         "RETICULUM:deferred-until-implemented".to_owned(),
         "reticulum:Preview-Unavailable".to_owned(),
         ["reticulum:", "pre", "view"].concat(),
         "reticulum:local-alt".to_owned(),
         "reticulum:custom".to_owned(),
     ] {
-        assert_eq!(
-            Target::new(TransportId::RETICULUM, invalid.as_str())
-                .expect_err("invalid Reticulum target"),
-            RadrootsTransportError::InvalidTargetUri
-        );
+        let target = Target::new(TransportId::RETICULUM, noncanonical.as_str())
+            .expect("transport-neutral target");
+        assert!(matches!(
+            TargetSet::transport_targets(vec![target]),
+            Err(RadrootsSdkError::InvalidRequest { ref message })
+                if message == "Reticulum endpoint must be reticulum:local"
+        ));
     }
 }
 
