@@ -1,11 +1,11 @@
 use super::*;
 #[cfg(feature = "signer-adapters")]
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
+use nostr::Keys as RadrootsNostrKeys;
 use radroots_event::contract::AuthorRole;
 use radroots_event::draft::{EventDraft, SignedEvent, SignedEventParts};
 use radroots_event::envelope::kind::{KIND_FARM, KIND_GEOCHAT};
 use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
-use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_signing::{
     Error as SigningError, SignReceipt, SignRequest, SignerStatus, actor::ActorSource,
     error::Kind as SigningErrorKind, signer::BoxFuture,

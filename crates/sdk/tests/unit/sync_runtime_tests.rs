@@ -17,6 +17,7 @@ use crate::adapters::radrootsd::{RadrootsdError, RadrootsdPublishAdapter, Radroo
 #[cfg(feature = "radrootsd-execution")]
 use crate::workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow};
 use futures::future::BoxFuture;
+use nostr::Keys as RadrootsNostrKeys;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_event::contract::AuthorRole;
 #[cfg(feature = "radrootsd-execution")]
@@ -27,7 +28,6 @@ use radroots_event::id::EventId;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
-use radroots_nostr::types::RadrootsNostrKeys;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_outbox::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanStatus,
@@ -101,7 +101,7 @@ impl RadrootsdFixtureSigner {
     fn sign_frozen_draft(
         &self,
         draft: &EventDraft,
-    ) -> Result<radroots_event::SignedEvent, radroots_nostr::error::RadrootsNostrError> {
+    ) -> Result<radroots_event::SignedEvent, radroots_nostr::Error> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft)
     }
 }

@@ -153,10 +153,10 @@ pub use crate::signer_provider::{
     RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS,
     RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS, RadrootsSdkLocalKeySigner,
     RadrootsSdkLocalSignerCapability, RadrootsSdkMycNip46RequestPolicy, RadrootsSdkMycNip46Signer,
-    RadrootsSdkNip46Transport, RadrootsSdkNip46TransportFuture, RadrootsSdkSignReceipt,
-    RadrootsSdkSignRequest, RadrootsSdkSignerCapability, RadrootsSdkSignerMode,
-    RadrootsSdkSignerProgress, RadrootsSdkSignerProgressSink, RadrootsSdkSignerProvider,
-    RadrootsSdkSignerState, RadrootsSdkSignerStatus,
+    RadrootsSdkNip46ClientKey, RadrootsSdkNip46Transport, RadrootsSdkNip46TransportFuture,
+    RadrootsSdkSignReceipt, RadrootsSdkSignRequest, RadrootsSdkSignerCapability,
+    RadrootsSdkSignerMode, RadrootsSdkSignerProgress, RadrootsSdkSignerProgressSink,
+    RadrootsSdkSignerProvider, RadrootsSdkSignerState, RadrootsSdkSignerStatus,
     radroots_sdk_myc_nip46_product_permission_strings, radroots_sdk_myc_nip46_product_permissions,
 };
 #[cfg(feature = "runtime")]

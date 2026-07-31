@@ -26,7 +26,6 @@ static LOCAL_SIGNER: LazyLock<Arc<LocalSigner>> =
 static LOCAL_SIGNER_PUBLIC_KEY: LazyLock<String> =
     LazyLock::new(|| LOCAL_SIGNER.public_key().to_hex());
 static REMOTE_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
-static CLIENT_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
 
 fn user_keys() -> RadrootsNostrKeys {
     USER_KEYS.clone()
@@ -50,8 +49,16 @@ fn remote_keys() -> RadrootsNostrKeys {
     REMOTE_KEYS.clone()
 }
 
-fn client_keys() -> RadrootsNostrKeys {
-    CLIENT_KEYS.clone()
+fn client_keys() -> RadrootsSdkNip46ClientKey {
+    RadrootsSdkNip46ClientKey::generate()
+}
+
+#[test]
+fn nip46_client_key_debug_output_is_always_redacted() {
+    assert_eq!(
+        format!("{:?}", RadrootsSdkNip46ClientKey::generate()),
+        "RadrootsSdkNip46ClientKey(\"[redacted]\")"
+    );
 }
 
 fn actor() -> Actor {

@@ -1,13 +1,13 @@
+use nostr::Keys as RadrootsNostrKeys;
 use radroots_event::envelope::kind::KIND_TRADE_PROPOSAL;
 use radroots_nostr::event::Event as RadrootsNostrEvent;
-use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
 };
 use radroots_sdk::{
-    RadrootsClient, RadrootsSdkMycNip46Signer, RadrootsSdkNip46Transport,
-    RadrootsSdkNip46TransportFuture, RadrootsSdkSignerMode, RadrootsSdkSignerProvider,
-    radroots_sdk_myc_nip46_product_permission_strings,
+    RadrootsClient, RadrootsSdkMycNip46Signer, RadrootsSdkNip46ClientKey,
+    RadrootsSdkNip46Transport, RadrootsSdkNip46TransportFuture, RadrootsSdkSignerMode,
+    RadrootsSdkSignerProvider, radroots_sdk_myc_nip46_product_permission_strings,
 };
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ impl RadrootsSdkNip46Transport for ExampleNip46Transport {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client_keys = RadrootsNostrKeys::generate();
+    let client_key = RadrootsSdkNip46ClientKey::generate();
     let remote_signer_keys = RadrootsNostrKeys::generate();
     let user_keys = RadrootsNostrKeys::generate();
     let target = RadrootsNostrConnectClientTarget::new(
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![nostr::RelayUrl::parse("wss://relay.example.com")?],
     );
     let signer = RadrootsSdkMycNip46Signer::new(
-        client_keys,
+        client_key,
         target,
         user_keys.public_key().to_hex(),
         Arc::new(ExampleNip46Transport),

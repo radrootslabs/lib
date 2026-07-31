@@ -1,4 +1,6 @@
 use crate::{RadrootsSdkError, workflow_runtime::signing_operation_id};
+use core::fmt;
+use nostr::Keys as RadrootsNostrKeys;
 use nostr::{JsonUtil, Kind, PublicKey as NostrPublicKey, Tag, Tags, Timestamp, UnsignedEvent};
 use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::envelope::kind::{
@@ -8,7 +10,6 @@ use radroots_event::envelope::kind::{
 use radroots_event::wire::Nip01EventWire;
 use radroots_identity::PublicKey;
 use radroots_nostr::event::Event as RadrootsNostrEvent;
-use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientRequest, RadrootsNostrConnectClientTarget,
     RadrootsNostrConnectClientTransport, RadrootsNostrConnectClientTransportFuture,
@@ -38,6 +39,53 @@ pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
     KIND_TRADE_CANCELLATION,
 ];
 pub const RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS: u64 = 30_000;
+
+/// Opaque client key used only to authenticate and encrypt one NIP-46 session.
+///
+/// The key is single-owner, cannot be serialized, and never exposes its
+/// secret representation. Generate it explicitly and move it into
+/// [`RadrootsSdkMycNip46Signer::new`].
+///
+/// ```compile_fail
+/// use radroots_sdk::RadrootsSdkNip46ClientKey;
+///
+/// let key = RadrootsSdkNip46ClientKey::generate();
+/// let _duplicate = key.clone();
+/// ```
+///
+/// ```compile_fail
+/// use radroots_sdk::RadrootsSdkNip46ClientKey;
+///
+/// let key = RadrootsSdkNip46ClientKey::generate();
+/// let _json = serde_json::to_string(&key)?;
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+pub struct RadrootsSdkNip46ClientKey {
+    keys: RadrootsNostrKeys,
+}
+
+impl RadrootsSdkNip46ClientKey {
+    /// Generates fresh client key material for one NIP-46 signer session.
+    #[must_use]
+    pub fn generate() -> Self {
+        Self {
+            keys: RadrootsNostrKeys::generate(),
+        }
+    }
+
+    fn into_keys(self) -> RadrootsNostrKeys {
+        self.keys
+    }
+}
+
+impl fmt::Debug for RadrootsSdkNip46ClientKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("RadrootsSdkNip46ClientKey")
+            .field(&"[redacted]")
+            .finish()
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -343,13 +391,13 @@ pub struct RadrootsSdkMycNip46Signer {
 
 impl RadrootsSdkMycNip46Signer {
     pub fn new(
-        client_keys: RadrootsNostrKeys,
+        client_key: RadrootsSdkNip46ClientKey,
         target: RadrootsNostrConnectClientTarget,
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
     ) -> Result<Self, RadrootsSdkError> {
         Self::new_with_request_policy(
-            client_keys,
+            client_key,
             target,
             user_pubkey,
             transport,
@@ -358,14 +406,14 @@ impl RadrootsSdkMycNip46Signer {
     }
 
     pub fn new_with_request_policy(
-        client_keys: RadrootsNostrKeys,
+        client_key: RadrootsSdkNip46ClientKey,
         target: RadrootsNostrConnectClientTarget,
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
         request_policy: RadrootsSdkMycNip46RequestPolicy,
     ) -> Result<Self, RadrootsSdkError> {
         Self::new_with_request_id_generator(
-            client_keys,
+            client_key,
             target,
             user_pubkey,
             transport,
@@ -375,7 +423,7 @@ impl RadrootsSdkMycNip46Signer {
     }
 
     fn new_with_request_id_generator(
-        client_keys: RadrootsNostrKeys,
+        client_key: RadrootsSdkNip46ClientKey,
         target: RadrootsNostrConnectClientTarget,
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
@@ -389,7 +437,7 @@ impl RadrootsSdkMycNip46Signer {
             }
         })?;
         Ok(Self {
-            client_keys,
+            client_keys: client_key.into_keys(),
             target,
             user_pubkey,
             transport,

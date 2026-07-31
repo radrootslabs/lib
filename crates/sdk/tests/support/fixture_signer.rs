@@ -1,5 +1,5 @@
+use nostr::Keys as RadrootsNostrKeys;
 use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
-use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_signing::{
     Error, SignReceipt, SignRequest, Signer, SignerStatus, error::Kind, signer::BoxFuture,
 };
@@ -49,7 +49,7 @@ impl FixtureSigner {
     pub fn sign_frozen_draft(
         &self,
         draft: &radroots_event::EventDraft,
-    ) -> Result<radroots_event::SignedEvent, radroots_nostr::error::RadrootsNostrError> {
+    ) -> Result<radroots_event::SignedEvent, radroots_nostr::Error> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft)
     }
 }

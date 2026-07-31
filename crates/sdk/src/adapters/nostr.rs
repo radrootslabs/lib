@@ -1,7 +1,10 @@
 use core::time::Duration;
 
+#[cfg(test)]
+use nostr::Keys as RadrootsNostrKeys;
 use radroots_nostr::event::{Event as RadrootsNostrEvent, EventId as RadrootsNostrEventId};
-use radroots_nostr::types::RadrootsNostrKeys;
+#[cfg(test)]
+use radroots_transport_nostr::RadrootsNostrClientKey;
 use radroots_transport_nostr::{
     RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrOutput,
     RadrootsRelayTransportError,
@@ -15,8 +18,11 @@ pub fn signerless_client_with_options(options: RadrootsNostrClientOptions) -> Ra
     RadrootsNostrClient::new_signerless_with_options(options)
 }
 
-pub fn client_from_keys(keys: RadrootsNostrKeys) -> RadrootsNostrClient {
-    RadrootsNostrClient::new(keys)
+#[cfg(test)]
+pub(crate) fn client_from_keys(keys: RadrootsNostrKeys) -> RadrootsNostrClient {
+    let key = RadrootsNostrClientKey::from_secret_key_bytes(keys.secret_key().to_secret_bytes())
+        .expect("an existing Nostr key remains valid at the transport boundary");
+    RadrootsNostrClient::new(key)
 }
 
 pub async fn configure_write_relays(
@@ -32,7 +38,8 @@ pub async fn configure_write_relays(
     Ok(())
 }
 
-pub async fn connected_client_from_keys(
+#[cfg(test)]
+pub(crate) async fn connected_client_from_keys(
     keys: RadrootsNostrKeys,
     relay_urls: &[String],
     connect_timeout: Duration,
