@@ -1,6 +1,7 @@
 use core::time::Duration;
 
-use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrKeys};
+use radroots_nostr::event::{Event as RadrootsNostrEvent, EventId as RadrootsNostrEventId};
+use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_transport_nostr::{
     RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrOutput,
     RadrootsRelayTransportError,

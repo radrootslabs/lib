@@ -7,7 +7,8 @@ use radroots_event::envelope::kind::{
 };
 use radroots_event::wire::Nip01EventWire;
 use radroots_identity::PublicKey;
-use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys};
+use radroots_nostr::event::Event as RadrootsNostrEvent;
+use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientRequest, RadrootsNostrConnectClientTarget,
     RadrootsNostrConnectClientTransport, RadrootsNostrConnectClientTransportFuture,

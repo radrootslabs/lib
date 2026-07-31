@@ -6,7 +6,8 @@ use radroots_event::draft::EventDraft;
 use radroots_event::envelope::kind::{
     KIND_CLASSIFIED_LISTING, KIND_COOP, KIND_FARM, TRADE_MUTATION_EVENT_KINDS,
 };
-use radroots_nostr::{prelude::RadrootsNostrEvent, signing::LocalSigner};
+use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+use radroots_nostr::{event::Event as RadrootsNostrEvent, signing::LocalSigner};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
@@ -113,8 +114,7 @@ fn frozen_draft_with(
 }
 
 fn sign_event(keys: &RadrootsNostrKeys, draft: &EventDraft) -> RadrootsNostrEvent {
-    let signed =
-        radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(keys, draft).expect("signed");
+    let signed = radroots_nostr_sign_frozen_draft(keys, draft).expect("signed");
     RadrootsNostrEvent::from_json(signed.raw_json()).expect("event")
 }
 
@@ -557,8 +557,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     let remote_keys = remote_keys();
     let user_keys = user_keys();
     let draft = frozen_draft();
-    let signed = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&user_keys, &draft)
-        .expect("signed");
+    let signed = radroots_nostr_sign_frozen_draft(&user_keys, &draft).expect("signed");
     let signed_event = RadrootsNostrEvent::from_json(signed.raw_json()).expect("event");
     let transport = Arc::new(MockNip46Transport::new(
         remote_keys.clone(),
@@ -719,8 +718,7 @@ async fn myc_nip46_provider_reports_preflight_and_progress_sink_edges() {
 async fn myc_nip46_provider_returns_completion_progress_errors_after_remote_sign() {
     let user_keys = user_keys();
     let draft = frozen_draft();
-    let signed = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&user_keys, &draft)
-        .expect("signed");
+    let signed = radroots_nostr_sign_frozen_draft(&user_keys, &draft).expect("signed");
     let signed_event = RadrootsNostrEvent::from_json(signed.raw_json()).expect("event");
     let (signer, transport) = myc_signer_with_responses(vec![MockNip46Response::Respond(
         RadrootsNostrConnectResponse::SignedEvent(signed_event),

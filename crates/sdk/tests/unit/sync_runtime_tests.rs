@@ -26,7 +26,8 @@ use radroots_event::envelope::kind::KIND_FARM;
 use radroots_event::id::EventId;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+use radroots_nostr::types::RadrootsNostrKeys;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_outbox::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanStatus,

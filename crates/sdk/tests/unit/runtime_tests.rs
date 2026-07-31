@@ -1975,7 +1975,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .build()
         .await
         .expect("populated sdk");
-    let populated_event_keys = radroots_nostr::prelude::RadrootsNostrKeys::generate();
+    let populated_event_keys = radroots_nostr::types::RadrootsNostrKeys::generate();
     let populated_event_draft = radroots_event::draft::EventDraft::new(
         "radroots.farm.profile.v1",
         radroots_event::envelope::kind::KIND_FARM,
@@ -1985,7 +1985,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         populated_event_keys.public_key().to_hex(),
     )
     .expect("event draft");
-    let populated_event = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(
+    let populated_event = radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft(
         &populated_event_keys,
         &populated_event_draft,
     )

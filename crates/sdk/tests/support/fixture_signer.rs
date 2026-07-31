@@ -1,4 +1,5 @@
-use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+use radroots_nostr::types::RadrootsNostrKeys;
 use radroots_signing::{
     Error, SignReceipt, SignRequest, Signer, SignerStatus, error::Kind, signer::BoxFuture,
 };
