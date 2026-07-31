@@ -6,8 +6,12 @@ pub mod error;
 pub mod message;
 pub mod method;
 pub mod permission;
+pub mod server;
 pub mod uri;
 
+// Transitional compatibility surface for consumers migrated in Step 141.
+// Publication remains disabled, and Step 143 removes this module.
+#[doc(hidden)]
 pub mod prelude {
     pub use crate::client::{
         RadrootsNostrConnectClientEventOutcome, RadrootsNostrConnectClientProgress,

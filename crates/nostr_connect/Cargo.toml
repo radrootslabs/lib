@@ -15,7 +15,19 @@ readme = "README.md"
 [lib]
 name = "radroots_nostr_connect"
 
+[features]
+default = ["serde"]
+serde = [
+  "radroots_event/serde",
+  "radroots_identity/serde",
+  "radroots_protocol/serde",
+]
+
 [dependencies]
+radroots_event = { workspace = true, default-features = false }
+radroots_identity = { workspace = true, default-features = false }
+radroots_nostr = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
 nostr = { workspace = true, features = ["std", "nip44"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

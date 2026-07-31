@@ -4743,6 +4743,10 @@ name = "radroots_nostr_connect"
 version = "0.1.0-alpha"
 dependencies = [
  "nostr",
+ "radroots_event",
+ "radroots_identity",
+ "radroots_nostr",
+ "radroots_protocol",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
