@@ -11,6 +11,7 @@ use radroots_nostr::{event::Event as RadrootsNostrEvent, signing::LocalSigner};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
+    SignedEvent as ConnectSignedEvent,
 };
 use radroots_signing::actor::ActorSource;
 use std::collections::VecDeque;
@@ -29,6 +30,10 @@ static REMOTE_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKey
 
 fn user_keys() -> RadrootsNostrKeys {
     USER_KEYS.clone()
+}
+
+fn connect_signed_event(event: RadrootsNostrEvent) -> ConnectSignedEvent {
+    ConnectSignedEvent::from_json(&event.as_json()).expect("connect signed event")
 }
 
 fn user_pubkey() -> &'static str {
@@ -569,7 +574,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     let transport = Arc::new(MockNip46Transport::new(
         remote_keys.clone(),
         vec![MockNip46Response::Respond(
-            RadrootsNostrConnectResponse::SignedEvent(signed_event),
+            RadrootsNostrConnectResponse::SignedEvent(connect_signed_event(signed_event)),
         )],
     ));
     let target = RadrootsNostrConnectClientTarget::new(
@@ -612,6 +617,8 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
         RadrootsNostrConnectRequest::SignEvent(unsigned_event) => unsigned_event,
         other => panic!("unexpected NIP-46 request: {other:?}"),
     };
+    let sign_event_request: nostr::UnsignedEvent =
+        serde_json::from_str(&sign_event_request.as_json()).expect("unsigned event payload");
     let request_tags = sign_event_request
         .tags
         .clone()
@@ -728,7 +735,7 @@ async fn myc_nip46_provider_returns_completion_progress_errors_after_remote_sign
     let signed = sign_frozen_draft(&user_keys, &draft).expect("signed");
     let signed_event = RadrootsNostrEvent::from_json(signed.raw_json()).expect("event");
     let (signer, transport) = myc_signer_with_responses(vec![MockNip46Response::Respond(
-        RadrootsNostrConnectResponse::SignedEvent(signed_event),
+        RadrootsNostrConnectResponse::SignedEvent(connect_signed_event(signed_event)),
     )]);
     let actor = actor();
     let mut observed = Vec::new();
@@ -1016,7 +1023,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
         let transport = Arc::new(MockNip46Transport::new(
             remote_keys.clone(),
             vec![MockNip46Response::Respond(
-                RadrootsNostrConnectResponse::SignedEvent(signed_event),
+                RadrootsNostrConnectResponse::SignedEvent(connect_signed_event(signed_event)),
             )],
         ));
         let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());

@@ -15,7 +15,7 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientTransport, RadrootsNostrConnectClientTransportFuture,
     RadrootsNostrConnectError, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
     RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest, RadrootsNostrConnectResponse,
-    execute_request_with_transport,
+    UnsignedEvent as ConnectUnsignedEvent, execute_request_with_transport,
 };
 use radroots_signing::{
     Actor, SignReceipt, SignRequest, Signer,
@@ -617,6 +617,8 @@ fn sign_event_request_from_frozen_draft(
         tags: Tags::from_list(tags),
         content: draft.content().to_owned(),
     };
+    let unsigned_event = ConnectUnsignedEvent::from_json(&unsigned_event.as_json())
+        .map_err(|error| nip46_sign_event_protocol_error(error.to_string()))?;
     Ok(RadrootsNostrConnectRequest::SignEvent(unsigned_event))
 }
 
