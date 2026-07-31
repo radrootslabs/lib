@@ -71,7 +71,8 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
     }
     assert_eq!(
         dependencies
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|dependency| dependency.starts_with("radroots_"))
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
@@ -82,6 +83,49 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
             "radroots_signing",
         ])
     );
+
+    for forbidden in [
+        "keyring",
+        "nostr-sdk",
+        "nostr_sdk",
+        "radroots_outbox",
+        "radroots_storage",
+        "radroots_transport",
+        "reqwest",
+        "sqlx",
+        "tokio",
+    ] {
+        assert!(
+            !dependencies.contains(forbidden),
+            "portable Nostr adapter must not depend on `{forbidden}`"
+        );
+    }
+
+    let features = table_keys(MANIFEST, "[features]");
+    for required in ["default", "std", "events", "signing", "nip17", "blossom"] {
+        assert!(
+            features.contains(required),
+            "manifest is missing supported feature `{required}`"
+        );
+    }
+    for feature in features {
+        let declaration = table_value(MANIFEST, "[features]", feature)
+            .unwrap_or_else(|| panic!("missing feature declaration `{feature}`"));
+        for forbidden in [
+            "client",
+            "http",
+            "network",
+            "relay",
+            "reqwest",
+            "runtime",
+            "transport",
+        ] {
+            assert!(
+                !declaration.contains(forbidden),
+                "feature `{feature}` activates forbidden live-I/O authority `{forbidden}`"
+            );
+        }
+    }
 }
 
 #[test]
@@ -394,6 +438,46 @@ fn focused_nip_and_blossom_features_own_no_network_operations() {
             "README retains removed network ownership statement `{forbidden}`"
         );
     }
+}
+
+#[test]
+fn production_api_declares_no_traits_or_host_runtime_implementations() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut public_traits = BTreeSet::new();
+
+    for source_path in rust_sources(&manifest_dir.join("src")) {
+        let source = fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", source_path.display()));
+        let production = source.split("\n#[cfg(test)]").next().unwrap_or(&source);
+        for line in production.lines() {
+            let trimmed = line.trim_start();
+            if let Some(name) = trimmed
+                .strip_prefix("pub trait ")
+                .and_then(|rest| rest.split([':', '<', ' ']).next())
+            {
+                public_traits.insert(name.to_owned());
+            }
+            for forbidden in [
+                "nostr_sdk::",
+                "reqwest::",
+                "sqlx::",
+                "tokio::spawn",
+                "std::net::",
+                "std::thread::spawn",
+            ] {
+                assert!(
+                    !trimmed.contains(forbidden),
+                    "{} owns forbidden host/runtime implementation `{forbidden}`: {trimmed}",
+                    source_path.display()
+                );
+            }
+        }
+    }
+
+    assert!(
+        public_traits.is_empty(),
+        "concrete protocol adapter must not publish an SPI trait: {public_traits:?}"
+    );
 }
 
 fn rust_sources(root: &Path) -> Vec<PathBuf> {
