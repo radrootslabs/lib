@@ -1,3 +1,5 @@
+//! Low-level NIP-90 job request, result, and feedback event helpers.
+
 use alloc::{string::String, vec::Vec};
 
 use nostr::nips::nip90::{DataVendingMachineStatus, JobFeedbackData};

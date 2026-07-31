@@ -1,3 +1,8 @@
+//! Exact local signing helpers for frozen canonical Radroots drafts.
+//!
+//! Successful functions return a signed value and have no persistence or
+//! publication commit point.
+
 #![forbid(unsafe_code)]
 
 use crate::error::RadrootsNostrError;

@@ -1,3 +1,8 @@
+//! NIP-01 identity/signature verification for inbound Nostr events.
+//!
+//! Cryptographic verification does not establish product-contract admission,
+//! referenced-event existence, relay trust, or application authorization.
+
 #![forbid(unsafe_code)]
 
 use radroots_event::{

@@ -1,4 +1,7 @@
 //! Concrete local Nostr implementation of the generic signing SPI.
+//!
+//! Signing is local and in-memory. Success returns a verified receipt without
+//! persisting or publishing it; dropping the future creates no durable effect.
 
 use core::fmt;
 use std::{

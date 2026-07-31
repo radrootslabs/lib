@@ -1,3 +1,9 @@
+//! Typed Nostr event authoring profiles used by the Radroots adapter.
+//!
+//! Focused builders seal reserved kinds and canonical tag construction before
+//! signer access. Live publication, persistence, and retry policy remain
+//! outside this module.
+
 #[cfg(feature = "events")]
 pub mod application_handler;
 #[cfg(feature = "events")]

@@ -1,4 +1,7 @@
 //! Explicit construction of portable Nostr subscription filters.
+//!
+//! Filters are passive protocol values. Constructing one does not subscribe,
+//! contact a relay, install a clock, or retain runtime state.
 
 use crate::error::RadrootsNostrError;
 use crate::event::Kind;

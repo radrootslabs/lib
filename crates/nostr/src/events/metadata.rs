@@ -1,3 +1,5 @@
+//! Sealed authoring for validated NIP-01 profile metadata events.
+
 #[cfg(feature = "events")]
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "events")]

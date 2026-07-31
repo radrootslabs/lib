@@ -1,3 +1,8 @@
+//! Compatibility adapters between upstream Nostr values and event-codec data.
+//!
+//! The module contains pure value transformations and performs no storage or
+//! network operations.
+
 extern crate alloc;
 use alloc::{string::String, vec::Vec};
 

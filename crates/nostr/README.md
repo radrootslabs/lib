@@ -1,143 +1,177 @@
 # radroots_nostr
 
-This is the README for `radroots_nostr`, which provides shared Nostr protocol
-primitives for the `radroots` core libraries.
+`radroots_nostr` is the portable Nostr protocol adapter for Radroots. It
+converts between canonical Radroots identity/event values and Nostr protocol
+values, provides typed NIP helpers, and supplies an optional concrete local
+implementation of the `radroots_signing` SPI.
 
-## Overview
+This crate owns no relay client. It owns no sockets, HTTP client, relay pool,
+database, account store, retry loop, scheduler, executor, or process-global
+state. Live Nostr transport belongs in `radroots_transport_nostr`; application
+composition belongs in `radroots_sdk` or an advanced host.
 
- * typed filters, tags, events, relay metadata, parsers, and utility helpers;
- * adapters between `radroots_event`, `radroots_event_codec`, and Nostr wire
-   representations;
- * strict BUD-11 signed HTTP authorization adapters behind the `blossom`
-   feature;
- * focused NIP-17/NIP-59 message wrapping behind the `nip17` feature; and
- * an opaque local signer adapter behind the `signing` feature.
+The authoritative package charter is the
+[`radroots_nostr` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#10-radroots_nostr).
 
-This crate owns no relay client, HTTP client, endpoint operation, retry loop,
-network runtime, persistence, account selection, or outbox orchestration.
-Its public API is consumed through explicit owning modules; it intentionally
-publishes no broad prelude.
+## Quick start
 
-The `blossom` feature signs kind-24242 authorization events and encodes or
-verifies their `Authorization: Nostr` HTTP values. It does not publish these
-ephemeral authorization events to relays. Pure BUD-11 claim parsing and policy
-validation remain in `radroots_blossom`.
+Convert a canonical Radroots public key to and from its NIP-19 `npub`
+representation:
 
-The `nip17` feature wraps and unwraps typed Radroots message and message-file
+```rust
+use radroots_identity::PublicKey;
+use radroots_nostr::key::{public_key_from_npub, public_key_to_npub};
+
+let public_key = PublicKey::from_hex(
+    "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+)?;
+let npub = public_key_to_npub(public_key)?;
+
+assert_eq!(public_key_from_npub(&npub)?, public_key);
+# Ok::<(), Box<dyn core::error::Error>>(())
+```
+
+The same flow is available as a standalone example:
+
+```sh
+cargo run -p radroots_nostr --example identity_conversion
+```
+
+## Public boundary
+
+The durable public modules are organized by responsibility:
+
+- `event` converts event identifiers, coordinates, and signed NIP-01 values.
+- `filter` constructs explicit Nostr subscription filters.
+- `key` converts public identities, provides NIP-19 helpers, and—with
+  `signing`—owns opaque local secret-key handling and NIP-49 operations.
+- `tag` converts ordered tag parts and exposes focused tag inspection helpers.
+- `signing` implements `radroots_signing::Signer` for local Nostr keys.
+- `nip17` wraps and unwraps typed Radroots message events with NIP-17/NIP-59.
+- `blossom` signs and verifies BUD-11 HTTP authorization values.
+
+`Error` is the only intended root export. Protocol representations that must
+cross the adapter are exposed from the module that owns the conversion, rather
+than through a root prelude or wildcard alias set.
+
+## Event model and typed authoring
+
+Canonical product drafts and verified events belong to `radroots_event`.
+Encoding, signature verification, contract admission, and typed inbound
+projection belong to `radroots_event_codec`. This crate performs the explicit
+translation to or from Nostr protocol values.
+
+With `events`, typed builders cover the supported Profile, Update,
+PhotoUpdate, Ask, Reply, Comment, deletion-request, and FoodAvailability
+authoring profiles. Sealed focused builders fix the event kind and canonical
+tag model before signer access. Generic builders reject reserved typed kinds;
+relaying an already signed event is a transport operation and does not grant a
+typed Radroots authoring claim.
+
+Conversion and verification are deterministic for their inputs. Inbound
+admission proves the received event and its typed projection; it does not prove
+that referenced events, authors, addresses, relays, or external resources
+exist.
+
+## Local signing
+
+The `signing` feature provides an opaque `key::SecretKey` and a concrete local
+signer adapter. Secret-bearing values are single-owner, are not serializable,
+and always redact `Debug` output. Public identities are converted to the
+canonical `radroots_identity::PublicKey` boundary before they leave the
+adapter.
+
+NIP-19 `nsec` export and NIP-49 encryption/decryption are explicit operations.
+`secret_key_to_nsec` deliberately returns plaintext secret material; callers
+must treat that string as a credential, avoid logs and serialization, and
+zeroize or discard it promptly. Password, ciphertext, and plaintext failures
+are normalized so error values do not retain caller-supplied secret text.
+
+## Side effects, cancellation, and commit points
+
+This crate performs in-memory parsing, validation, encoding, cryptography, and
+local signing only. It never opens a network connection, writes a file or
+database, selects an account, publishes an event, or installs a runtime.
+
+Some cryptographic adapters are async because their upstream protocol
+operations are async. Dropping one of those futures cancels local computation
+and creates no external durable effect. The crate has no remote publication or
+persistence commit point: the only successful result is the value returned to
+the caller. A transport or host that later publishes or stores that value owns
+its own cancellation and commit semantics.
+
+The `blossom` module creates and verifies signed `Authorization: Nostr` values
+but never sends an HTTP request. The `nip17` module creates and opens gift-wrap
 events. It does not select relays, deliver events, retry operations, or persist
 message state.
 
-The `events` feature is std-backed. With it, kind-1 root publication is
-available only through typed Update, PhotoUpdate, and Ask builders backed by
-the strict `radroots_event_codec` wire operations. NIP-10 Reply publication is
-separately available through the typed direct or nested Reply model and its
-sealed builder. Authored Replies always emit marked `root` and optional
-`reply` event references plus the required referenced-author `p` tags.
-Verified inbound projection also accepts deprecated positional NIP-10
-references for interoperability and preserves valid supplemental unmarked `e`
-references as citations. Empty marker slots remain absent even when an optional
-fifth-element author hint is present. Missing or malformed advisory
-participant, middle citation, relay, and referenced-author metadata is retained
-as ordered diagnostics instead of erasing an unambiguous Reply. A Reply remains
-thread content and can never enter root-card admission. Reply admission proves
-the Reply event's NIP-01 id and signature; it does not prove that a referenced
-target exists, is kind `1`, or was authored by the declared referenced author.
+## Serialization contract
 
-Strict
-[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
-Comment publication is separately exposed through
-`RadrootsNostrNip22CommentEventBuilder`. Its only input is a checked
-`AuthoredNip22Comment`; callers may choose the timestamp and sign or
-publish, but cannot mutate the kind, content, or canonical
-root, parent, kind, and participant tags. The profile admits event or address
-roots only for kinds `30402`, `31922`, and `31923`; it has no external
-`I`/`i` or kind-`1` root surface.
+- Canonical durable Radroots data should be serialized through
+  `radroots_event`, `radroots_event_codec`, or versioned `radroots_protocol`
+  contracts.
+- Explicit Nostr boundary aliases use the upstream NIP-01 JSON representation.
+- `RadrootsNostrExternalSigningRequest` serializes only as the standard
+  unsigned Nostr event after reserved-kind and authoring-policy validation.
+- Returned externally signed events are accepted only when author, canonical
+  event ID, and the complete NIP-01 signature verify against the request.
+- Secret-bearing key and local-signer values do not implement serialization.
 
-Reply and Comment authoring and verified projection share the portable
-`NostrRelayHint` profile rather than the generic relay URL type. It
-accepts only exact lowercase `ws://` or `wss://` visible-ASCII URLs with a
-canonical lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6
-authority, an optional canonical port `1..65535`, and RFC 3986
-path-abempty/query syntax using uppercase `%HH` escapes. Rejected inbound hints
-remain verbatim in ordered raw-tag diagnostics. The hint profile does not own
-the event boundary's separate 4,096-byte tag-element budget.
+Deserializing protocol data never establishes product admission, account
+authority, upload completion, referenced-event existence, or relay trust.
 
-Inbound Comment projection is owned by `radroots_event_codec` and accepts only
-an id-and-signature verified kind-`1111` envelope.
-`RadrootsInboundNip22CommentProjection` retains the order-independent
-authority projection, and `RadrootsAdmittedNip22CommentEvent` keeps it bound to
-the verified envelope. Malformed optional relay or participant metadata
-remains diagnostic, while cardinality, unsupported roots, coordinate
-conflicts, and valid-but-conflicting author hints fail admission. Admission
-does not prove any referenced target or relay. The registry-v7 contract is
-`TypedOnly` for authoring and `AdmissionOnly` for matching, with registry
-versions `1` through `6` stale.
+## Security guidance
 
-Strict
-[NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md)
-deletion-request publication is exposed through the sealed
-`RadrootsNostrNip09DeletionRequestEventBuilder`. Its only input is a checked
-`AuthoredNip09DeletionRequest`; callers may choose the timestamp and
-sign or publish, but cannot mutate the kind, content, or canonical `e`, `a`,
-and derived `k` tags. Generic kind-5 builders are rejected before signer
-access. Admission proves only the signed deletion-request event and its typed
-projection. It does not prove target authorship, existence, deletion
-authorization, applicability, relay handling, or any deletion effect.
+- Parse untrusted protocol data through the checked conversion/admission
+  functions; do not infer Radroots product validity from a syntactically valid
+  upstream event.
+- Treat event content, tags, relay hints, Blossom claims, and NIP-17 plaintext
+  as untrusted input even after signature verification.
+- BUD-11 authorization events are ephemeral credentials for a specific HTTP
+  operation. This crate does not transmit them or manage replay protection for
+  a server.
+- Typed media descriptors prove bytes and metadata, not successful BUD-02
+  upload. The composing runtime must establish upload completion separately.
+- NIP-49 protects exported key material at rest; callers still own password
+  handling, ciphertext storage, memory hygiene, and access control.
+- The crate forbids unsafe code and does not expose a live Nostr client or an
+  ambient authority boundary.
 
-The former free-form text-note post builder is removed. Generic protocol
-builders reject kind-0 Profile events, every kind-1 event, every kind-5
-deletion request, and kind-1111 Comments at both direct signing and
-client-publication boundaries before signer access. Typed media builders can
-sign or publish only after the owning runtime separately proves successful
-BUD-02 upload completion; their byte-verified descriptors do not attest upload
-completion. The generic net manager intentionally exposes no direct
-PhotoUpdate or media Ask publisher.
+## Features
 
-The complete governed Comment operation namespace remains
-`social.comment.build_authored_draft`,
-`social.comment.project_verified_event`, and
-`social.comment.verify_and_admit_event`. The typed builder and client
-publication surface consume that strict contract; they do not add a fourth
-wire operation. Comment inputs retain the 131072-byte content, 1024-tag,
-4096-total-element, 4096-byte element, 131072-byte aggregate tag, and
-262144-byte compact signed-wire ceilings proven by the canonical
-self-contained 114-case conformance corpus.
+| Feature | Default | Contract |
+| --- | --- | --- |
+| `std` | yes | Enables standard-library support required by selected upstream protocol operations; it adds no network, storage, runtime, or global initialization. |
+| `events` | yes | Enables typed event builders, deterministic Radroots/Nostr event conversion, and verified event adapters. |
+| `signing` | no | Adds opaque local secret handling, NIP-49 helpers, draft signing, and the concrete local `radroots_signing::Signer` adapter. |
+| `nip17` | no | Adds focused NIP-17/NIP-59 typed message and message-file wrapping/unwrapping; no delivery or persistence. |
+| `blossom` | no | Adds BUD-11 signed HTTP authorization value creation and verification; no HTTP client or endpoint operation. |
 
-Focused FoodAvailability kind-30402 authoring likewise uses a sealed builder.
-Its `created_at` is fixed during strict construction and cannot be changed
-after wire validation. Generic direct signing and client publication reject
-focused or mixed FoodAvailability/Operational Listing markers before signer
-access; marker-free NIP-99 and operational-only compatibility builders remain
-available. Relaying an already signed event remains a transport operation and
-does not establish typed FoodAvailability authoring.
+Features are additive. `--no-default-features` provides the portable
+`no_std + alloc` conversion core. The manifest's `codec` feature is a
+non-release compatibility switch used by older focused adapters; it is not in
+the supported public feature vocabulary.
 
-The opaque generic-builder policy governs Radroots builder signing and client
-publication. It does not redefine the standard NIP-46 `sign_event` method or a
-signer backend's externally supplied unsigned-event operation. Those are
-explicit low-level Nostr interoperability boundaries; their outputs carry no
-Radroots typed product-authoring claim and are not product authoring entry
-points.
+## Intended consumers
 
-Generic protocol events that require an external custody provider finalize
-through `RadrootsNostrExternalSigningRequest`. The opaque request is available
-without the relay-client feature and serializes as a standard unsigned Nostr
-event only after generic typed-authoring reservations pass. It accepts a
-returned event only when the author and canonical event id match the request
-and the complete NIP-01 event verifies. It exposes no raw mutable builder,
-unsigned-event conversion, or unchecked deserialization path.
+- `radroots_nostr_connect` uses explicit Nostr conversion while owning NIP-46
+  protocol state.
+- `radroots_transport_nostr` performs live relay I/O behind the generic
+  transport contracts.
+- `radroots_sdk` composes local or remote signing, storage, and transport.
+- Myc and `radrootsd` consume focused protocol adapters without moving their
+  host authority into this crate.
+- Advanced Rust hosts may use this package directly for offline conversion,
+  verification, or a local signer adapter.
 
-Strict kind-0 Profile publication uses
-`RadrootsNostrProfileEventBuilder`, constructed only from
-`AuthoredProfile`. The sealed wrapper permits timestamp selection and
-local signing or client publication, but no raw kind, content, or tag
-mutation. A media-bearing Profile still requires runtime-owned proof of
-successful BUD-02 upload before it reaches this authoring boundary.
+Applications that only need ordinary Radroots workflows should normally use
+`radroots` or `radroots_sdk`.
 
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_nostr` distribution are
 
- Copyright (c) 2025 Tyson Lupul
+Copyright (c) 2025 Tyson Lupul
 
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see LICENSE included in the `radroots_nostr` distribution.

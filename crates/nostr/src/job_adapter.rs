@@ -1,3 +1,8 @@
+//! Nostr conversion helpers for legacy job event payloads.
+//!
+//! This module only maps supplied values; it does not schedule work, contact a
+//! relay, or persist job state.
+
 #![forbid(unsafe_code)]
 
 use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};

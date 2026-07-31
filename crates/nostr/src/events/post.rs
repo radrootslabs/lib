@@ -1,3 +1,5 @@
+//! Typed authoring and filtering for supported Radroots social root events.
+
 #[cfg(feature = "events")]
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "events")]

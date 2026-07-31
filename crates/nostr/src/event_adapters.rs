@@ -1,3 +1,8 @@
+//! Deterministic adapters for typed Radroots event payloads and Nostr tags.
+//!
+//! These helpers transform already-supplied values only; they perform no
+//! relay I/O, persistence, account selection, or runtime initialization.
+
 #[cfg(feature = "events")]
 use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_from_tag_value,

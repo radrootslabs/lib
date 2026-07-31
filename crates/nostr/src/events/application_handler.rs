@@ -1,3 +1,5 @@
+//! Typed authoring helpers for NIP-89 application-handler announcements.
+
 #![forbid(unsafe_code)]
 
 extern crate alloc;

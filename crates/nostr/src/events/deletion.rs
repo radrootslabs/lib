@@ -1,3 +1,5 @@
+//! Sealed authoring for validated NIP-09 deletion requests.
+
 use crate::{
     error::RadrootsNostrError,
     types::{

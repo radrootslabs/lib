@@ -1,3 +1,5 @@
+//! Sealed authoring for focused Radroots FoodAvailability events.
+
 use crate::{
     error::RadrootsNostrError,
     types::{

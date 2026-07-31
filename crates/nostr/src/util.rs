@@ -1,3 +1,5 @@
+//! Small deterministic helpers for upstream Nostr protocol values.
+
 use crate::types::{RadrootsNostrEvent, RadrootsNostrTimestamp};
 
 pub fn created_at_u32_saturating(ts: RadrootsNostrTimestamp) -> u32 {

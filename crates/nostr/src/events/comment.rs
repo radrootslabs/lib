@@ -1,3 +1,5 @@
+//! Sealed authoring for strict NIP-22 Comment events.
+
 use crate::{
     error::RadrootsNostrError,
     types::{

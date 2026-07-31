@@ -1,3 +1,5 @@
+//! Sealed authoring for strict marked NIP-10 Reply events.
+
 use crate::{
     error::RadrootsNostrError,
     types::{

@@ -1,0 +1,408 @@
+pub mod radroots_nostr
+pub mod radroots_nostr::blossom
+#[non_exhaustive] pub enum radroots_nostr::blossom::RadrootsNostrBlossomError
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::BlossomClaim(radroots_blossom::error::Error)
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::EmptyHeaderPayload
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::EventSigning
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::HeaderPaddingForbidden
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidEventId
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidEventJson
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidEventKind
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidEventKind::actual: u64
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidEventSignature
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidHeaderBase64
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidHeaderScheme
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidHeaderUtf8
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::InvalidHeaderWhitespace
+pub radroots_nostr::blossom::RadrootsNostrBlossomError::NonCanonicalHeaderBase64
+impl radroots_nostr::blossom::RadrootsNostrBlossomError
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomError::blossom_claim_error(&self) -> core::option::Option<&radroots_blossom::error::Error>
+pub const fn radroots_nostr::blossom::RadrootsNostrBlossomError::code(&self) -> &'static str
+impl core::convert::From<radroots_blossom::error::Error> for radroots_nostr::blossom::RadrootsNostrBlossomError
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomError::from(radroots_blossom::error::Error) -> Self
+impl core::error::Error for radroots_nostr::blossom::RadrootsNostrBlossomError
+impl core::fmt::Display for radroots_nostr::blossom::RadrootsNostrBlossomError
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader(_)
+impl radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader::as_str(&self) -> &str
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader::into_string(self) -> alloc::string::String
+impl core::convert::AsRef<str> for radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader::as_ref(&self) -> &str
+impl core::fmt::Debug for radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader
+pub fn radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization
+impl radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization
+pub fn radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization::author(&self) -> radroots_nostr::types::RadrootsNostrPublicKey
+pub fn radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization::created_at(&self) -> radroots_nostr::event::Timestamp
+pub fn radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization::event_id(&self) -> radroots_nostr::event::EventId
+impl core::fmt::Debug for radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization
+pub fn radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization
+impl radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization
+pub fn radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization::author(&self) -> radroots_nostr::types::RadrootsNostrPublicKey
+pub fn radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization::claim(&self) -> &radroots_blossom::authorization::ValidatedAuthorizationClaim
+pub fn radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization::created_at(&self) -> radroots_nostr::event::Timestamp
+pub fn radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization::event_id(&self) -> radroots_nostr::event::EventId
+impl core::fmt::Debug for radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization
+pub fn radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_nostr::blossom::radroots_nostr_decode_verify_blossom_authorization_header(&str, &radroots_blossom::authorization::AuthorizationValidation) -> core::result::Result<radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization, radroots_nostr::blossom::RadrootsNostrBlossomError>
+pub fn radroots_nostr::blossom::radroots_nostr_encode_blossom_authorization_header(&radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization) -> radroots_nostr::blossom::RadrootsNostrBlossomAuthorizationHeader
+pub fn radroots_nostr::blossom::radroots_nostr_sign_blossom_authorization(&radroots_nostr::types::RadrootsNostrKeys, &radroots_blossom::authorization::AuthoredUploadClaim) -> core::result::Result<radroots_nostr::blossom::RadrootsNostrSignedBlossomAuthorization, radroots_nostr::blossom::RadrootsNostrBlossomError>
+pub mod radroots_nostr::codec_adapters
+pub fn radroots_nostr::codec_adapters::to_job_feedback_index(&radroots_nostr::event::Event) -> core::result::Result<radroots_event_codec::parsed::RadrootsParsedEvent<radroots_event::social::job_feedback::JobFeedback>, radroots_event_codec::job::error::JobParseError>
+pub fn radroots_nostr::codec_adapters::to_job_feedback_metadata(&radroots_nostr::event::Event) -> core::result::Result<radroots_event_codec::parsed::RadrootsParsedData<radroots_event::social::job_feedback::JobFeedback>, radroots_event_codec::job::error::JobParseError>
+pub fn radroots_nostr::codec_adapters::to_job_request_index(&radroots_nostr::event::Event) -> core::result::Result<radroots_event_codec::parsed::RadrootsParsedEvent<radroots_event::social::job_request::JobRequest>, radroots_event_codec::job::error::JobParseError>
+pub fn radroots_nostr::codec_adapters::to_job_request_metadata(&radroots_nostr::event::Event) -> core::result::Result<radroots_event_codec::parsed::RadrootsParsedData<radroots_event::social::job_request::JobRequest>, radroots_event_codec::job::error::JobParseError>
+pub fn radroots_nostr::codec_adapters::to_job_result_index(&radroots_nostr::event::Event) -> core::result::Result<radroots_event_codec::parsed::RadrootsParsedEvent<radroots_event::social::job_result::JobResult>, radroots_event_codec::job::error::JobParseError>
+pub fn radroots_nostr::codec_adapters::to_job_result_metadata(&radroots_nostr::event::Event) -> core::result::Result<radroots_event_codec::parsed::RadrootsParsedData<radroots_event::social::job_result::JobResult>, radroots_event_codec::job::error::JobParseError>
+pub mod radroots_nostr::draft_signing
+pub fn radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft(&radroots_nostr::types::RadrootsNostrKeys, &radroots_event::draft::EventDraft) -> core::result::Result<radroots_event::draft::SignedEvent, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::error
+pub enum radroots_nostr::error::RadrootsNostrError
+pub radroots_nostr::error::RadrootsNostrError::CoordinateConversion
+pub radroots_nostr::error::RadrootsNostrError::DraftError(radroots_event::draft::DraftError)
+pub radroots_nostr::error::RadrootsNostrError::EventBuildError(nostr::event::builder::Error)
+pub radroots_nostr::error::RadrootsNostrError::EventConversion
+pub radroots_nostr::error::RadrootsNostrError::EventConversion::field: &'static str
+pub radroots_nostr::error::RadrootsNostrError::EventError(nostr::event::error::Error)
+pub radroots_nostr::error::RadrootsNostrError::EventWire(radroots_event::wire::v1::EventWireError)
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningAuthorMismatch
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningAuthorMismatch::actual: nostr::key::public_key::PublicKey
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningAuthorMismatch::expected: nostr::key::public_key::PublicKey
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningEventIdMismatch
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningEventIdMismatch::actual: nostr::event::id::EventId
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningEventIdMismatch::expected: nostr::event::id::EventId
+pub radroots_nostr::error::RadrootsNostrError::ExternalSigningEventInvalid(nostr::event::error::Error)
+pub radroots_nostr::error::RadrootsNostrError::FilterTagError(alloc::string::String)
+pub radroots_nostr::error::RadrootsNostrError::FoodAvailabilityEncode(radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError)
+pub radroots_nostr::error::RadrootsNostrError::FrozenDraftEventIdMismatch
+pub radroots_nostr::error::RadrootsNostrError::FrozenDraftEventIdMismatch::actual_event_id: alloc::string::String
+pub radroots_nostr::error::RadrootsNostrError::FrozenDraftEventIdMismatch::expected_event_id: alloc::string::String
+pub radroots_nostr::error::RadrootsNostrError::FrozenDraftPubkeyMismatch
+pub radroots_nostr::error::RadrootsNostrError::FrozenDraftPubkeyMismatch::actual_pubkey: alloc::string::String
+pub radroots_nostr::error::RadrootsNostrError::FrozenDraftPubkeyMismatch::expected_pubkey: alloc::string::String
+pub radroots_nostr::error::RadrootsNostrError::InvalidEncryptedSecretKey
+pub radroots_nostr::error::RadrootsNostrError::InvalidNpub
+pub radroots_nostr::error::RadrootsNostrError::InvalidPublicKey
+pub radroots_nostr::error::RadrootsNostrError::InvalidSecretKey
+pub radroots_nostr::error::RadrootsNostrError::KeyError(nostr::key::Error)
+pub radroots_nostr::error::RadrootsNostrError::KindOutOfRange
+pub radroots_nostr::error::RadrootsNostrError::KindOutOfRange::kind: u32
+pub radroots_nostr::error::RadrootsNostrError::KindOutOfRange::max: u16
+pub radroots_nostr::error::RadrootsNostrError::ProfileEncode(radroots_event_codec::profile::authored::RadrootsAuthoredProfileEncodeError)
+pub radroots_nostr::error::RadrootsNostrError::SecretKeyDecryption
+pub radroots_nostr::error::RadrootsNostrError::SecretKeyEncryption
+pub radroots_nostr::error::RadrootsNostrError::SignedEvent(radroots_event::draft::SignedEventError)
+pub radroots_nostr::error::RadrootsNostrError::TagConversion
+pub radroots_nostr::error::RadrootsNostrError::TypedAuthoringRequired
+pub radroots_nostr::error::RadrootsNostrError::TypedAuthoringRequired::kind: u16
+impl core::convert::From<nostr::event::builder::Error> for radroots_nostr::error::RadrootsNostrError
+pub fn radroots_nostr::error::RadrootsNostrError::from(nostr::event::builder::Error) -> Self
+impl core::convert::From<nostr::event::error::Error> for radroots_nostr::error::RadrootsNostrError
+pub fn radroots_nostr::error::RadrootsNostrError::from(nostr::event::error::Error) -> Self
+impl core::convert::From<nostr::key::Error> for radroots_nostr::error::RadrootsNostrError
+pub fn radroots_nostr::error::RadrootsNostrError::from(nostr::key::Error) -> Self
+pub enum radroots_nostr::error::RadrootsNostrTagsResolveError
+pub radroots_nostr::error::RadrootsNostrTagsResolveError::DecryptionError(alloc::string::String)
+pub radroots_nostr::error::RadrootsNostrTagsResolveError::MissingPTag(alloc::boxed::Box<nostr::event::Event>)
+pub radroots_nostr::error::RadrootsNostrTagsResolveError::NotRecipient
+pub radroots_nostr::error::RadrootsNostrTagsResolveError::ParseError(serde_json::error::Error)
+pub mod radroots_nostr::event
+pub struct radroots_nostr::event::RadrootsNostrExternalSigningRequest
+impl radroots_nostr::types::RadrootsNostrExternalSigningRequest
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::complete(self, radroots_nostr::event::Event) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::expected_event_id(&self) -> radroots_nostr::event::EventId
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::expected_public_key(&self) -> radroots_nostr::types::RadrootsNostrPublicKey
+impl serde_core::ser::Serialize for radroots_nostr::types::RadrootsNostrExternalSigningRequest
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub struct radroots_nostr::event::RadrootsNostrGenericEventBuilder
+impl radroots_nostr::types::RadrootsNostrGenericEventBuilder
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::allow_self_tagging(self) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::dedup_tags(self) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::into_external_signing_request(self, radroots_nostr::types::RadrootsNostrPublicKey) -> core::result::Result<radroots_nostr::types::RadrootsNostrExternalSigningRequest, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::new(radroots_nostr::event::Kind, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::pow(self, u8) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::tag(self, radroots_nostr::tag::Tag) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::tags<I>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = radroots_nostr::tag::Tag>
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::text_note(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_nostr::event::coordinate_from_nostr(&radroots_nostr::event::Coordinate) -> core::result::Result<radroots_event::id::Nip01Coordinate, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::event::coordinate_to_nostr(&radroots_event::id::Nip01Coordinate) -> core::result::Result<radroots_nostr::event::Coordinate, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::event::nostr_event_from_radroots(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::event::radroots_event_from_nostr(&radroots_nostr::event::Event) -> core::result::Result<radroots_event::envelope::EventEnvelope, radroots_event::envelope::EventEnvelopeError>
+pub fn radroots_nostr::event::radroots_event_ptr_from_nostr(&radroots_nostr::event::Event) -> radroots_event::tag::EventPtr
+pub type radroots_nostr::event::Coordinate = nostr::nips::nip01::Coordinate
+pub type radroots_nostr::event::Event = nostr::event::Event
+pub type radroots_nostr::event::EventId = nostr::event::id::EventId
+pub type radroots_nostr::event::Kind = nostr::event::kind::Kind
+pub type radroots_nostr::event::Metadata = nostr::nips::nip01::Metadata
+pub type radroots_nostr::event::Timestamp = nostr::types::time::Timestamp
+pub mod radroots_nostr::event_adapters
+pub fn radroots_nostr::event_adapters::to_post_event_metadata(&radroots_nostr::event::Event) -> radroots_event_codec::parsed::RadrootsParsedData<radroots_event_codec::post::decode::LegacyPost>
+pub fn radroots_nostr::event_adapters::to_profile_event_metadata(&radroots_nostr::event::Event) -> core::option::Option<radroots_event_codec::parsed::RadrootsParsedData<radroots_event_codec::profile::RadrootsProfileData>>
+pub mod radroots_nostr::event_verify
+pub enum radroots_nostr::event_verify::RadrootsNostrEventVerification
+pub radroots_nostr::event_verify::RadrootsNostrEventVerification::IdMismatch
+pub radroots_nostr::event_verify::RadrootsNostrEventVerification::IdVerified
+pub radroots_nostr::event_verify::RadrootsNostrEventVerification::MalformedEnvelope
+pub radroots_nostr::event_verify::RadrootsNostrEventVerification::SignatureInvalid
+pub radroots_nostr::event_verify::RadrootsNostrEventVerification::Verified
+pub struct radroots_nostr::event_verify::NostrSignatureVerifier
+impl radroots_event::verification::SignatureVerifier for radroots_nostr::event_verify::NostrSignatureVerifier
+pub fn radroots_nostr::event_verify::NostrSignatureVerifier::verify_signature(&self, &radroots_event::envelope::EventEnvelope) -> core::result::Result<(), radroots_event::verification::Error>
+pub fn radroots_nostr::event_verify::radroots_nostr_verify_event(&radroots_event::envelope::EventEnvelope) -> radroots_nostr::event_verify::RadrootsNostrEventVerification
+pub fn radroots_nostr::event_verify::radroots_nostr_verify_event_id(&radroots_event::envelope::EventEnvelope) -> radroots_nostr::event_verify::RadrootsNostrEventVerification
+pub mod radroots_nostr::events
+pub mod radroots_nostr::events::application_handler
+pub struct radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec
+pub radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::extra_tags: alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+pub radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::identifier: core::option::Option<alloc::string::String>
+pub radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::kinds: alloc::vec::Vec<u32>
+pub radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::metadata: core::option::Option<radroots_nostr::event::Metadata>
+pub radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::nostrconnect_url: core::option::Option<alloc::string::String>
+pub radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::relays: alloc::vec::Vec<alloc::string::String>
+impl radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec
+pub fn radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec::new(alloc::vec::Vec<u32>) -> Self
+pub fn radroots_nostr::events::application_handler::radroots_nostr_build_application_handler_event(&radroots_nostr::events::application_handler::RadrootsNostrApplicationHandlerSpec) -> core::result::Result<radroots_nostr::types::RadrootsNostrGenericEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::application_handler::radroots_nostr_metadata_has_fields(&radroots_nostr::event::Metadata) -> bool
+pub mod radroots_nostr::events::comment
+pub struct radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder
+impl radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder
+pub fn radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::comment::radroots_nostr_build_nip22_comment_event(&radroots_event::post::comment::AuthoredNip22Comment) -> core::result::Result<radroots_nostr::events::comment::RadrootsNostrNip22CommentEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::events::deletion
+pub struct radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder
+impl radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder
+pub fn radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::deletion::radroots_nostr_build_nip09_deletion_request_event(&radroots_event::post::deletion::AuthoredNip09DeletionRequest) -> core::result::Result<radroots_nostr::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::events::food_availability
+pub struct radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder
+impl radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder
+pub fn radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::food_availability::radroots_nostr_build_food_availability_event(&radroots_event::food::availability::FoodAvailabilityDetails, radroots_nostr::event::Timestamp) -> core::result::Result<radroots_nostr::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::events::jobs
+pub fn radroots_nostr::events::jobs::radroots_nostr_build_event_job_feedback(&radroots_nostr::event::Event, &str, core::option::Option<alloc::string::String>, core::option::Option<alloc::vec::Vec<radroots_nostr::tag::Tag>>) -> core::result::Result<radroots_nostr::types::RadrootsNostrGenericEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::jobs::radroots_nostr_build_event_job_result(&radroots_nostr::event::Event, impl core::convert::Into<alloc::string::String>, u64, core::option::Option<alloc::string::String>, core::option::Option<alloc::vec::Vec<radroots_nostr::tag::Tag>>) -> core::result::Result<radroots_nostr::types::RadrootsNostrGenericEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::events::metadata
+pub struct radroots_nostr::events::metadata::RadrootsNostrProfileEventBuilder
+impl radroots_nostr::events::metadata::RadrootsNostrProfileEventBuilder
+pub fn radroots_nostr::events::metadata::RadrootsNostrProfileEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::events::metadata::RadrootsNostrProfileEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::metadata::radroots_nostr_build_profile_event(&radroots_event::profile::AuthoredProfile) -> core::result::Result<radroots_nostr::events::metadata::RadrootsNostrProfileEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::events::post
+pub struct radroots_nostr::events::post::RadrootsNostrPostEventBuilder
+impl radroots_nostr::events::post::RadrootsNostrPostEventBuilder
+pub fn radroots_nostr::events::post::RadrootsNostrPostEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::events::post::RadrootsNostrPostEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::post::radroots_nostr_build_ask_event(&radroots_event::post::AuthoredAsk) -> core::result::Result<radroots_nostr::events::post::RadrootsNostrPostEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::post::radroots_nostr_build_photo_update_event(&radroots_event::post::AuthoredPhotoUpdate) -> core::result::Result<radroots_nostr::events::post::RadrootsNostrPostEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::post::radroots_nostr_build_update_event(&radroots_event::post::AuthoredUpdate) -> core::result::Result<radroots_nostr::events::post::RadrootsNostrPostEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::post::radroots_nostr_post_events_filter(core::option::Option<u16>, core::option::Option<u64>) -> radroots_nostr::filter::Filter
+pub mod radroots_nostr::events::reply
+pub struct radroots_nostr::events::reply::RadrootsNostrNip10ReplyEventBuilder
+impl radroots_nostr::events::reply::RadrootsNostrNip10ReplyEventBuilder
+pub fn radroots_nostr::events::reply::RadrootsNostrNip10ReplyEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::events::reply::RadrootsNostrNip10ReplyEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event(&radroots_event::post::reply::AuthoredNip10Reply) -> core::result::Result<radroots_nostr::events::reply::RadrootsNostrNip10ReplyEventBuilder, radroots_nostr::error::RadrootsNostrError>
+pub mod radroots_nostr::filter
+pub fn radroots_nostr::filter::radroots_nostr_filter_kind(u16) -> radroots_nostr::filter::Filter
+pub fn radroots_nostr::filter::radroots_nostr_filter_new_events(radroots_nostr::filter::Filter) -> radroots_nostr::filter::Filter
+pub fn radroots_nostr::filter::radroots_nostr_filter_tag(radroots_nostr::filter::Filter, &str, alloc::vec::Vec<alloc::string::String>) -> core::result::Result<radroots_nostr::filter::Filter, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::filter::radroots_nostr_kind(u16) -> radroots_nostr::event::Kind
+pub type radroots_nostr::filter::Filter = nostr::filter::Filter
+pub mod radroots_nostr::job_adapter
+pub struct radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>
+impl<'a> radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>::new(&'a radroots_nostr::event::Event) -> Self
+impl radroots_event_codec::job::traits::JobEventLike for radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_author(&self) -> alloc::string::String
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_content(&self) -> alloc::string::String
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_id(&self) -> alloc::string::String
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_kind(&self) -> u32
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_published_at(&self) -> u64
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_sig(&self) -> alloc::string::String
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'_>::raw_tags(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+impl<'a> radroots_event_codec::job::traits::JobEventBorrow<'a> for radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>::raw_author(&'a self) -> alloc::string::String
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>::raw_content(&'a self) -> &'a str
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>::raw_id(&'a self) -> alloc::string::String
+pub fn radroots_nostr::job_adapter::RadrootsNostrEventAdapter<'a>::raw_kind(&'a self) -> u32
+pub mod radroots_nostr::key
+pub enum radroots_nostr::key::Nip49KeySecurity
+pub radroots_nostr::key::Nip49KeySecurity::Medium
+pub radroots_nostr::key::Nip49KeySecurity::Unknown
+pub radroots_nostr::key::Nip49KeySecurity::Weak
+impl core::convert::From<radroots_nostr::key::Nip49KeySecurity> for nostr::nips::nip49::KeySecurity
+pub fn nostr::nips::nip49::KeySecurity::from(radroots_nostr::key::Nip49KeySecurity) -> Self
+pub struct radroots_nostr::key::Nip49Options
+impl radroots_nostr::key::Nip49Options
+pub const fn radroots_nostr::key::Nip49Options::key_security(self) -> radroots_nostr::key::Nip49KeySecurity
+pub const fn radroots_nostr::key::Nip49Options::log_n(self) -> u8
+pub const fn radroots_nostr::key::Nip49Options::new(u8, radroots_nostr::key::Nip49KeySecurity) -> Self
+impl core::default::Default for radroots_nostr::key::Nip49Options
+pub fn radroots_nostr::key::Nip49Options::default() -> Self
+pub struct radroots_nostr::key::SecretKey
+impl radroots_nostr::key::SecretKey
+pub fn radroots_nostr::key::SecretKey::generate() -> Self
+pub fn radroots_nostr::key::SecretKey::parse(&str) -> core::result::Result<Self, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::SecretKey::public_key(&self) -> core::result::Result<radroots_identity::key::PublicKey, radroots_nostr::error::RadrootsNostrError>
+impl core::fmt::Debug for radroots_nostr::key::SecretKey
+pub fn radroots_nostr::key::SecretKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_nostr::key::decrypt_secret_key_nip49(&str, &str) -> core::result::Result<radroots_nostr::key::SecretKey, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::encrypt_secret_key_nip49(&radroots_nostr::key::SecretKey, &str) -> core::result::Result<alloc::string::String, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::encrypt_secret_key_nip49_with_options(&radroots_nostr::key::SecretKey, &str, radroots_nostr::key::Nip49Options) -> core::result::Result<alloc::string::String, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::parse_public_key(&str) -> core::result::Result<radroots_identity::key::PublicKey, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::parse_secret_key(&str) -> core::result::Result<radroots_nostr::key::SecretKey, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::public_key_from_nostr(nostr::key::public_key::PublicKey) -> core::result::Result<radroots_identity::key::PublicKey, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::public_key_from_npub(&str) -> core::result::Result<radroots_identity::key::PublicKey, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::public_key_to_nostr(radroots_identity::key::PublicKey) -> core::result::Result<nostr::key::public_key::PublicKey, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::public_key_to_npub(radroots_identity::key::PublicKey) -> core::result::Result<alloc::string::String, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::key::secret_key_to_nsec(&radroots_nostr::key::SecretKey) -> alloc::string::String
+pub mod radroots_nostr::nip17
+#[non_exhaustive] pub enum radroots_nostr::nip17::RadrootsNip17Error
+pub radroots_nostr::nip17::RadrootsNip17Error::GiftWrap
+pub radroots_nostr::nip17::RadrootsNip17Error::InvalidRecipient
+pub radroots_nostr::nip17::RadrootsNip17Error::MessageDecode
+pub radroots_nostr::nip17::RadrootsNip17Error::MessageEncode
+pub radroots_nostr::nip17::RadrootsNip17Error::Signer
+pub radroots_nostr::nip17::RadrootsNip17Error::UnsupportedRumorKind
+pub radroots_nostr::nip17::RadrootsNip17Error::UnsupportedRumorKind::kind: u32
+impl radroots_nostr::nip17::RadrootsNip17Error
+pub const fn radroots_nostr::nip17::RadrootsNip17Error::code(&self) -> &'static str
+impl core::convert::From<nostr::event::builder::Error> for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::from(nostr::event::builder::Error) -> Self
+impl core::convert::From<nostr::key::Error> for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::from(nostr::key::Error) -> Self
+impl core::convert::From<nostr::nips::nip59::Error> for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::from(nostr::nips::nip59::Error) -> Self
+impl core::convert::From<nostr::signer::SignerError> for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::from(nostr::signer::SignerError) -> Self
+impl core::convert::From<radroots_event_codec::error::EventEncodeError> for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::from(radroots_event_codec::error::EventEncodeError) -> Self
+impl core::convert::From<radroots_event_codec::error::EventParseError> for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::from(radroots_event_codec::error::EventParseError) -> Self
+impl core::error::Error for radroots_nostr::nip17::RadrootsNip17Error
+impl core::fmt::Display for radroots_nostr::nip17::RadrootsNip17Error
+pub fn radroots_nostr::nip17::RadrootsNip17Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_nostr::nip17::RadrootsNip17Rumor
+pub radroots_nostr::nip17::RadrootsNip17Rumor::Message(radroots_event_codec::parsed::RadrootsParsedData<radroots_event::social::message::Message>)
+pub radroots_nostr::nip17::RadrootsNip17Rumor::MessageFile(alloc::boxed::Box<radroots_event_codec::parsed::RadrootsParsedData<radroots_event::social::message_file::MessageFile>>)
+impl core::fmt::Debug for radroots_nostr::nip17::RadrootsNip17Rumor
+pub fn radroots_nostr::nip17::RadrootsNip17Rumor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr::nip17::RadrootsNip17WrapOptions
+pub radroots_nostr::nip17::RadrootsNip17WrapOptions::gift_wrap_tags: alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+pub radroots_nostr::nip17::RadrootsNip17WrapOptions::include_sender: bool
+pub radroots_nostr::nip17::RadrootsNip17WrapOptions::rumor_created_at: core::option::Option<u64>
+impl core::default::Default for radroots_nostr::nip17::RadrootsNip17WrapOptions
+pub fn radroots_nostr::nip17::RadrootsNip17WrapOptions::default() -> Self
+pub async fn radroots_nostr::nip17::radroots_nostr_unwrap_gift_wrap<T>(&T, &nostr::event::Event) -> core::result::Result<radroots_nostr::nip17::RadrootsNip17Rumor, radroots_nostr::nip17::RadrootsNip17Error> where T: nostr::signer::NostrSigner
+pub async fn radroots_nostr::nip17::radroots_nostr_wrap_message<T>(&T, &radroots_event::social::message::Message, radroots_nostr::nip17::RadrootsNip17WrapOptions) -> core::result::Result<alloc::vec::Vec<nostr::event::Event>, radroots_nostr::nip17::RadrootsNip17Error> where T: nostr::signer::NostrSigner
+pub async fn radroots_nostr::nip17::radroots_nostr_wrap_message_file<T>(&T, &radroots_event::social::message_file::MessageFile, radroots_nostr::nip17::RadrootsNip17WrapOptions) -> core::result::Result<alloc::vec::Vec<nostr::event::Event>, radroots_nostr::nip17::RadrootsNip17Error> where T: nostr::signer::NostrSigner
+pub mod radroots_nostr::signing
+pub struct radroots_nostr::signing::LocalSigner
+impl radroots_nostr::signing::LocalSigner
+pub fn radroots_nostr::signing::LocalSigner::generate() -> core::result::Result<Self, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::signing::LocalSigner::new(radroots_nostr::key::SecretKey) -> core::result::Result<Self, radroots_nostr::error::RadrootsNostrError>
+pub const fn radroots_nostr::signing::LocalSigner::public_key(&self) -> radroots_identity::key::PublicKey
+impl core::fmt::Debug for radroots_nostr::signing::LocalSigner
+pub fn radroots_nostr::signing::LocalSigner::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl radroots_signing::signer::Signer for radroots_nostr::signing::LocalSigner
+pub fn radroots_nostr::signing::LocalSigner::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
+pub fn radroots_nostr::signing::LocalSigner::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>
+pub mod radroots_nostr::tag
+pub fn radroots_nostr::tag::from_parts(alloc::vec::Vec<alloc::string::String>) -> core::result::Result<radroots_nostr::tag::Tag, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::tag::radroots_nostr_tag_at_value(&radroots_nostr::tag::Tag, usize) -> core::option::Option<alloc::string::String>
+pub fn radroots_nostr::tag::radroots_nostr_tag_first_value(&radroots_nostr::tag::Tag, &str) -> core::option::Option<alloc::string::String>
+pub fn radroots_nostr::tag::radroots_nostr_tag_match_geohash(&radroots_nostr::tag::Tag) -> core::option::Option<alloc::string::String>
+pub fn radroots_nostr::tag::radroots_nostr_tag_match_l(&radroots_nostr::tag::Tag) -> core::option::Option<(&str, f64)>
+pub fn radroots_nostr::tag::radroots_nostr_tag_match_location(&radroots_nostr::tag::Tag) -> core::option::Option<(&str, &str, &str)>
+pub fn radroots_nostr::tag::radroots_nostr_tag_match_summary(&radroots_nostr::tag::Tag) -> core::option::Option<alloc::string::String>
+pub fn radroots_nostr::tag::radroots_nostr_tag_match_title(&radroots_nostr::tag::Tag) -> core::option::Option<alloc::string::String>
+pub fn radroots_nostr::tag::radroots_nostr_tag_relays_parse(&radroots_nostr::tag::Tag) -> core::option::Option<&alloc::vec::Vec<radroots_nostr::types::RadrootsNostrRelayUrl>>
+pub fn radroots_nostr::tag::radroots_nostr_tag_slice(&radroots_nostr::tag::Tag, usize) -> core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub fn radroots_nostr::tag::radroots_nostr_tags_match(&radroots_nostr::tag::Tag) -> core::option::Option<(&str, &[alloc::string::String])>
+pub fn radroots_nostr::tag::radroots_nostr_tags_resolve(&radroots_nostr::event::Event, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<alloc::vec::Vec<radroots_nostr::tag::Tag>, radroots_nostr::error::RadrootsNostrTagsResolveError>
+pub fn radroots_nostr::tag::to_parts(&radroots_nostr::tag::Tag) -> alloc::vec::Vec<alloc::string::String>
+pub type radroots_nostr::tag::Tag = nostr::event::tag::Tag
+pub type radroots_nostr::tag::TagKind<'a> = nostr::event::tag::kind::TagKind<'a>
+pub type radroots_nostr::tag::TagStandard = nostr::event::tag::standard::TagStandard
+pub mod radroots_nostr::types
+pub use radroots_nostr::types::RadrootsNostrFromBech32
+pub use radroots_nostr::types::RadrootsNostrSecp256k1SecretKey
+pub use radroots_nostr::types::RadrootsNostrToBech32
+pub struct radroots_nostr::types::RadrootsNostrExternalSigningRequest
+impl radroots_nostr::types::RadrootsNostrExternalSigningRequest
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::complete(self, radroots_nostr::event::Event) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::expected_event_id(&self) -> radroots_nostr::event::EventId
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::expected_public_key(&self) -> radroots_nostr::types::RadrootsNostrPublicKey
+impl serde_core::ser::Serialize for radroots_nostr::types::RadrootsNostrExternalSigningRequest
+pub fn radroots_nostr::types::RadrootsNostrExternalSigningRequest::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub struct radroots_nostr::types::RadrootsNostrGenericEventBuilder
+impl radroots_nostr::types::RadrootsNostrGenericEventBuilder
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::allow_self_tagging(self) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::dedup_tags(self) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::into_external_signing_request(self, radroots_nostr::types::RadrootsNostrPublicKey) -> core::result::Result<radroots_nostr::types::RadrootsNostrExternalSigningRequest, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::new(radroots_nostr::event::Kind, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::pow(self, u8) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::sign_with_keys(self, &radroots_nostr::types::RadrootsNostrKeys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::error::RadrootsNostrError>
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::tag(self, radroots_nostr::tag::Tag) -> Self
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::tags<I>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = radroots_nostr::tag::Tag>
+pub fn radroots_nostr::types::RadrootsNostrGenericEventBuilder::text_note(impl core::convert::Into<alloc::string::String>) -> Self
+pub type radroots_nostr::types::RadrootsNostrKeys = nostr::key::Keys
+pub type radroots_nostr::types::RadrootsNostrPublicKey = nostr::key::public_key::PublicKey
+pub type radroots_nostr::types::RadrootsNostrRelayUrl = nostr::types::url::RelayUrl
+pub type radroots_nostr::types::RadrootsNostrSecretKey = nostr::key::secret_key::SecretKey
+pub type radroots_nostr::types::RadrootsNostrSubscriptionId = nostr::message::SubscriptionId
+pub type radroots_nostr::types::RadrootsNostrUrl = url::Url
+pub mod radroots_nostr::util
+pub fn radroots_nostr::util::created_at_u32_saturating(radroots_nostr::event::Timestamp) -> u32
+pub fn radroots_nostr::util::event_created_at_u32_saturating(&radroots_nostr::event::Event) -> u32
+pub enum radroots_nostr::Error
+pub radroots_nostr::Error::CoordinateConversion
+pub radroots_nostr::Error::DraftError(radroots_event::draft::DraftError)
+pub radroots_nostr::Error::EventBuildError(nostr::event::builder::Error)
+pub radroots_nostr::Error::EventConversion
+pub radroots_nostr::Error::EventConversion::field: &'static str
+pub radroots_nostr::Error::EventError(nostr::event::error::Error)
+pub radroots_nostr::Error::EventWire(radroots_event::wire::v1::EventWireError)
+pub radroots_nostr::Error::ExternalSigningAuthorMismatch
+pub radroots_nostr::Error::ExternalSigningAuthorMismatch::actual: nostr::key::public_key::PublicKey
+pub radroots_nostr::Error::ExternalSigningAuthorMismatch::expected: nostr::key::public_key::PublicKey
+pub radroots_nostr::Error::ExternalSigningEventIdMismatch
+pub radroots_nostr::Error::ExternalSigningEventIdMismatch::actual: nostr::event::id::EventId
+pub radroots_nostr::Error::ExternalSigningEventIdMismatch::expected: nostr::event::id::EventId
+pub radroots_nostr::Error::ExternalSigningEventInvalid(nostr::event::error::Error)
+pub radroots_nostr::Error::FilterTagError(alloc::string::String)
+pub radroots_nostr::Error::FoodAvailabilityEncode(radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError)
+pub radroots_nostr::Error::FrozenDraftEventIdMismatch
+pub radroots_nostr::Error::FrozenDraftEventIdMismatch::actual_event_id: alloc::string::String
+pub radroots_nostr::Error::FrozenDraftEventIdMismatch::expected_event_id: alloc::string::String
+pub radroots_nostr::Error::FrozenDraftPubkeyMismatch
+pub radroots_nostr::Error::FrozenDraftPubkeyMismatch::actual_pubkey: alloc::string::String
+pub radroots_nostr::Error::FrozenDraftPubkeyMismatch::expected_pubkey: alloc::string::String
+pub radroots_nostr::Error::InvalidEncryptedSecretKey
+pub radroots_nostr::Error::InvalidNpub
+pub radroots_nostr::Error::InvalidPublicKey
+pub radroots_nostr::Error::InvalidSecretKey
+pub radroots_nostr::Error::KeyError(nostr::key::Error)
+pub radroots_nostr::Error::KindOutOfRange
+pub radroots_nostr::Error::KindOutOfRange::kind: u32
+pub radroots_nostr::Error::KindOutOfRange::max: u16
+pub radroots_nostr::Error::ProfileEncode(radroots_event_codec::profile::authored::RadrootsAuthoredProfileEncodeError)
+pub radroots_nostr::Error::SecretKeyDecryption
+pub radroots_nostr::Error::SecretKeyEncryption
+pub radroots_nostr::Error::SignedEvent(radroots_event::draft::SignedEventError)
+pub radroots_nostr::Error::TagConversion
+pub radroots_nostr::Error::TypedAuthoringRequired
+pub radroots_nostr::Error::TypedAuthoringRequired::kind: u16
+impl core::convert::From<nostr::event::builder::Error> for radroots_nostr::error::RadrootsNostrError
+pub fn radroots_nostr::error::RadrootsNostrError::from(nostr::event::builder::Error) -> Self
+impl core::convert::From<nostr::event::error::Error> for radroots_nostr::error::RadrootsNostrError
+pub fn radroots_nostr::error::RadrootsNostrError::from(nostr::event::error::Error) -> Self
+impl core::convert::From<nostr::key::Error> for radroots_nostr::error::RadrootsNostrError
+pub fn radroots_nostr::error::RadrootsNostrError::from(nostr::key::Error) -> Self

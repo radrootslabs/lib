@@ -1,3 +1,9 @@
+//! Low-level Nostr protocol values and checked generic authoring requests.
+//!
+//! This compatibility-oriented module does not grant typed Radroots product
+//! admission. Prefer the focused `event`, `key`, `tag`, and `events` modules
+//! for new code.
+
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "std")]

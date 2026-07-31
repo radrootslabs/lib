@@ -1,3 +1,8 @@
+//! Normalized Nostr adapter failures.
+//!
+//! Errors describe stable failure categories without retaining secret keys,
+//! passwords, plaintext messages, or caller-supplied credential strings.
+
 use alloc::{boxed::Box, string::String};
 use thiserror::Error;
 
