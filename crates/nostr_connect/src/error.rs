@@ -20,6 +20,14 @@ pub enum RadrootsNostrConnectError {
     InvalidClientEvent,
     #[error("invalid NIP-46 client state: {reason}")]
     InvalidClientState { reason: &'static str },
+    #[error("invalid NIP-46 server request: {reason}")]
+    InvalidServerRequest { reason: &'static str },
+    #[error("invalid NIP-46 server state: {reason}")]
+    InvalidServerState { reason: &'static str },
+    #[error("unsupported NIP-46 method `{0}`")]
+    UnsupportedMethod(crate::method::Method),
+    #[error("replayed NIP-46 request")]
+    ReplayedRequest,
     #[error("invalid NIP-46 request id: {reason}")]
     InvalidRequestId { reason: &'static str },
     #[error("NIP-46 response id does not match the request")]

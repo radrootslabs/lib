@@ -62,7 +62,8 @@ fn crate_root_contains_the_approved_module_skeleton() {
         );
     }
 
-    assert!(SERVER.starts_with("//! NIP-46 server-side protocol state."));
+    assert!(SERVER.starts_with("//! Relay- and persistence-independent NIP-46 server state."));
+    assert!(ROOT.contains("pub use server::Server;"));
     assert!(ROOT.contains("#[doc(hidden)]\npub mod prelude"));
     assert!(
         ROOT.contains("Step 143 removes this module"),

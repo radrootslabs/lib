@@ -14,6 +14,7 @@ pub use error::RadrootsNostrConnectError as Error;
 pub use message::{Request, Response};
 pub use method::Method;
 pub use permission::Permission;
+pub use server::Server;
 pub use uri::{BunkerUri, ClientUri};
 
 // Transitional compatibility surface for consumers migrated in Step 141.

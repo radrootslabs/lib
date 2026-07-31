@@ -107,37 +107,7 @@ impl RadrootsNostrSignerRequestAction {
 pub(crate) fn required_permission_for_request(
     request: &RadrootsNostrConnectRequest,
 ) -> Option<RadrootsNostrConnectPermission> {
-    match request {
-        RadrootsNostrConnectRequest::Connect { .. }
-        | RadrootsNostrConnectRequest::GetPublicKey
-        | RadrootsNostrConnectRequest::GetSessionCapability
-        | RadrootsNostrConnectRequest::Ping
-        | RadrootsNostrConnectRequest::Logout => None,
-        RadrootsNostrConnectRequest::SignEvent(unsigned_event) => {
-            Some(RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::SignEvent,
-                format!("kind:{}", unsigned_event.kind()),
-            ))
-        }
-        RadrootsNostrConnectRequest::Nip04Encrypt { .. } => Some(
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip04Encrypt),
-        ),
-        RadrootsNostrConnectRequest::Nip04Decrypt { .. } => Some(
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip04Decrypt),
-        ),
-        RadrootsNostrConnectRequest::Nip44Encrypt { .. } => Some(
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Encrypt),
-        ),
-        RadrootsNostrConnectRequest::Nip44Decrypt { .. } => Some(
-            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Nip44Decrypt),
-        ),
-        RadrootsNostrConnectRequest::SwitchRelays => Some(RadrootsNostrConnectPermission::new(
-            RadrootsNostrConnectMethod::SwitchRelays,
-        )),
-        RadrootsNostrConnectRequest::Custom { method, .. } => {
-            Some(RadrootsNostrConnectPermission::new(method.clone()))
-        }
-    }
+    radroots_nostr_connect::server::required_permission(request)
 }
 
 pub(crate) fn request_allowed_by_permissions(
