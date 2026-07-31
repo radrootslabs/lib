@@ -7,6 +7,9 @@ use radroots_nostr::{Error as _, event as _, filter as _, key as _, tag as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const KEY_MODULE: &str = include_str!("../src/key.rs");
+const IDENTITY_MANIFEST: &str = include_str!("../../identity/Cargo.toml");
+const IDENTITY_KEY_MODULE: &str = include_str!("../../identity/src/key.rs");
 const TRANSPORT_MANIFEST: &str = include_str!("../../transport_nostr/Cargo.toml");
 const TRANSPORT_ROOT: &str = include_str!("../../transport_nostr/src/lib.rs");
 
@@ -158,6 +161,63 @@ fn live_client_and_http_ownership_belongs_to_transport_nostr() {
                 source_path.display()
             );
         }
+    }
+}
+
+#[test]
+fn nostr_key_conversion_is_explicit_and_identity_remains_public_only() {
+    for required in [
+        "nostr/nip49",
+        "pub fn public_key_to_nostr",
+        "pub fn public_key_from_nostr",
+        "pub fn public_key_to_npub",
+        "pub fn public_key_from_npub",
+        "pub fn parse_public_key",
+        "pub fn parse_secret_key",
+        "pub fn secret_key_to_nsec",
+        "pub fn encrypt_secret_key_nip49",
+        "pub fn encrypt_secret_key_nip49_with_options",
+        "pub fn decrypt_secret_key_nip49",
+    ] {
+        let authority = if required == "nostr/nip49" {
+            MANIFEST
+        } else {
+            KEY_MODULE
+        };
+        assert!(
+            authority.contains(required),
+            "Nostr key authority is missing `{required}`"
+        );
+    }
+
+    for forbidden in ["nostr =", "nip49", "nsec", "ncryptsec", "SecretKey"] {
+        assert!(
+            !IDENTITY_MANIFEST.contains(forbidden),
+            "identity manifest regained Nostr secret ownership `{forbidden}`"
+        );
+        assert!(
+            !IDENTITY_KEY_MODULE.contains(forbidden),
+            "identity key module regained Nostr secret ownership `{forbidden}`"
+        );
+    }
+
+    for secret_function in [
+        "parse_secret_key",
+        "secret_key_to_nsec",
+        "encrypt_secret_key_nip49",
+        "encrypt_secret_key_nip49_with_options",
+        "decrypt_secret_key_nip49",
+    ] {
+        let signature = format!("pub fn {secret_function}");
+        let position = KEY_MODULE
+            .find(&signature)
+            .unwrap_or_else(|| panic!("missing secret adapter `{secret_function}`"));
+        let prefix = &KEY_MODULE[..position];
+        let nearby = &prefix[prefix.len().saturating_sub(160)..];
+        assert!(
+            nearby.contains("#[cfg(feature = \"signing\")]"),
+            "secret adapter `{secret_function}` is not signing-gated"
+        );
     }
 }
 

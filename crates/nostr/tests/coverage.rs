@@ -17,7 +17,7 @@ use radroots_nostr::filter::{
     radroots_nostr_filter_kind, radroots_nostr_filter_new_events, radroots_nostr_filter_tag,
     radroots_nostr_kind,
 };
-use radroots_nostr::parse::{radroots_nostr_parse_pubkey, radroots_nostr_parse_pubkeys};
+use radroots_nostr::key::{parse_public_key, public_key_from_nostr, public_key_to_npub};
 use radroots_nostr::tags::{
     radroots_nostr_tag_at_value, radroots_nostr_tag_first_value, radroots_nostr_tag_match_geohash,
     radroots_nostr_tag_match_l, radroots_nostr_tag_match_location,
@@ -29,9 +29,7 @@ use radroots_nostr::types::{
     RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrRelayUrl, RadrootsNostrTag,
     RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
 };
-use radroots_nostr::util::{
-    created_at_u32_saturating, event_created_at_u32_saturating, radroots_nostr_npub_string,
-};
+use radroots_nostr::util::{created_at_u32_saturating, event_created_at_u32_saturating};
 use test_fixtures::RELAY_PRIMARY_WSS;
 
 fn make_keys() -> RadrootsNostrKeys {
@@ -189,17 +187,14 @@ fn filter_helpers_cover_all_paths() {
 fn parse_helpers_cover_success_and_failure() {
     let keys = make_keys();
     let pubkey_hex = keys.public_key().to_hex();
-    let ok = radroots_nostr_parse_pubkey(pubkey_hex.as_str());
+    let ok = parse_public_key(pubkey_hex.as_str());
     assert!(ok.is_ok());
 
-    let invalid = radroots_nostr_parse_pubkey("invalid");
+    let invalid = parse_public_key("invalid");
     assert!(invalid.is_err());
 
-    let parsed = radroots_nostr_parse_pubkeys(std::slice::from_ref(&pubkey_hex));
-    assert!(parsed.is_ok());
-
-    let parse_err = radroots_nostr_parse_pubkeys(&[pubkey_hex, "invalid".to_string()]);
-    assert!(parse_err.is_err());
+    let npub = public_key_to_npub(ok.expect("public key")).expect("npub");
+    assert!(parse_public_key(&npub).is_ok());
 }
 
 #[test]
@@ -392,8 +387,9 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
 #[test]
 fn util_helpers_cover_conversion_paths() {
     let keys = make_keys();
-    let npub = radroots_nostr_npub_string(&keys.public_key());
-    assert!(npub.is_some());
+    let native = public_key_from_nostr(keys.public_key()).expect("native public key");
+    let npub = public_key_to_npub(native).expect("npub");
+    assert!(npub.starts_with("npub1"));
 
     let max = RadrootsNostrTimestamp::from(u64::from(u32::MAX));
     let overflow = RadrootsNostrTimestamp::from(u64::from(u32::MAX) + 1);

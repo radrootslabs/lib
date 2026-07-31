@@ -12,7 +12,6 @@ pub mod event;
 pub mod events;
 pub mod filter;
 pub mod key;
-pub mod parse;
 pub mod tag;
 pub mod tags;
 pub mod types;
@@ -106,7 +105,12 @@ pub mod prelude {
         radroots_nostr_metadata_has_fields,
     };
 
-    pub use crate::parse::{radroots_nostr_parse_pubkey, radroots_nostr_parse_pubkeys};
+    #[cfg(feature = "nip17")]
+    pub use crate::nip17::{
+        RadrootsNip17Error, RadrootsNip17Rumor, RadrootsNip17WrapOptions,
+        radroots_nostr_unwrap_gift_wrap, radroots_nostr_wrap_message,
+        radroots_nostr_wrap_message_file,
+    };
     pub use crate::tags::*;
     pub use crate::types::{
         RadrootsNostrCoordinate, RadrootsNostrEvent, RadrootsNostrEventId,
@@ -116,14 +120,6 @@ pub mod prelude {
         RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey, RadrootsNostrSubscriptionId,
         RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
         RadrootsNostrToBech32, RadrootsNostrUrl,
-    };
-    pub use crate::util::radroots_nostr_npub_string;
-
-    #[cfg(feature = "nip17")]
-    pub use crate::nip17::{
-        RadrootsNip17Error, RadrootsNip17Rumor, RadrootsNip17WrapOptions,
-        radroots_nostr_unwrap_gift_wrap, radroots_nostr_wrap_message,
-        radroots_nostr_wrap_message_file,
     };
 
     #[cfg(feature = "events")]

@@ -34,7 +34,12 @@ events = [
   "radroots_event_codec/json",
 ]
 nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
-signing = ["events", "dep:radroots_signing", "radroots_signing/std"]
+signing = [
+  "events",
+  "dep:radroots_signing",
+  "nostr/nip49",
+  "radroots_signing/std",
+]
 
 [dependencies]
 base64 = { workspace = true, optional = true }

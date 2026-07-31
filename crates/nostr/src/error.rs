@@ -3,6 +3,28 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RadrootsNostrError {
+    #[error("invalid Nostr public key")]
+    InvalidPublicKey,
+
+    #[error("invalid NIP-19 npub public key")]
+    InvalidNpub,
+
+    #[cfg(feature = "signing")]
+    #[error("invalid Nostr secret key")]
+    InvalidSecretKey,
+
+    #[cfg(feature = "signing")]
+    #[error("invalid NIP-49 encrypted secret key")]
+    InvalidEncryptedSecretKey,
+
+    #[cfg(feature = "signing")]
+    #[error("NIP-49 secret-key encryption failed")]
+    SecretKeyEncryption,
+
+    #[cfg(feature = "signing")]
+    #[error("NIP-49 secret-key decryption failed")]
+    SecretKeyDecryption,
+
     #[error("Nostr event kind {kind} exceeds {max}")]
     KindOutOfRange { kind: u32, max: u16 },
 
