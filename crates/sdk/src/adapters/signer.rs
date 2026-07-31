@@ -1,11 +1,11 @@
-pub use radroots_nostr_connect::prelude::{
-    RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RADROOTS_NOSTR_CONNECT_RPC_KIND,
-    RadrootsNostrConnectBunkerUri, RadrootsNostrConnectClientMetadata,
-    RadrootsNostrConnectClientUri, RadrootsNostrConnectError, RadrootsNostrConnectMethod,
-    RadrootsNostrConnectPendingConnectionPollOutcome, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRemoteSessionCapability,
-    RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
+pub use radroots_nostr_connect::{
+    BunkerUri, ClientUri, Error, Method, Permission, Request, Response,
+    message::{
+        PENDING_CONNECTION_ERROR, PendingConnectionOutcome, RPC_KIND, RemoteSessionCapability,
+        RequestMessage, ResponseEnvelope,
+    },
+    permission::Permissions,
+    uri::{ClientMetadata, Uri},
 };
 pub use radroots_nostr_signer::prelude::{
     RadrootsNostrEmbeddedSignerBackend, RadrootsNostrLocalSignerAvailability,

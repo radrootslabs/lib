@@ -1,8 +1,8 @@
 use nostr::Keys as RadrootsNostrKeys;
 use radroots_event::envelope::kind::KIND_TRADE_PROPOSAL;
 use radroots_nostr::event::Event as RadrootsNostrEvent;
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
+use radroots_nostr_connect::{
+    Error as NostrConnectError, client::Target, uri::RelayUrl as ConnectRelayUrl,
 };
 use radroots_sdk::{
     RadrootsClient, RadrootsSdkMycNip46Signer, RadrootsSdkNip46ClientKey,
@@ -24,7 +24,7 @@ impl RadrootsSdkNip46Transport for ExampleNip46Transport {
     fn next_response_event<'a>(
         &'a self,
     ) -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent> {
-        Box::pin(async { Err(RadrootsNostrConnectError::RequestTimedOut) })
+        Box::pin(async { Err(NostrConnectError::RequestTimedOut) })
     }
 }
 
@@ -33,10 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_key = RadrootsSdkNip46ClientKey::generate();
     let remote_signer_keys = RadrootsNostrKeys::generate();
     let user_keys = RadrootsNostrKeys::generate();
-    let target = RadrootsNostrConnectClientTarget::new(
-        remote_signer_keys.public_key(),
-        vec![nostr::RelayUrl::parse("wss://relay.example.com")?],
-    );
+    let remote_signer_public_key =
+        radroots_nostr::key::public_key_from_nostr(remote_signer_keys.public_key())?;
+    let target = Target::try_new(
+        remote_signer_public_key,
+        vec![ConnectRelayUrl::parse("wss://relay.example.com")?],
+    )?;
     let signer = RadrootsSdkMycNip46Signer::new(
         client_key,
         target,

@@ -10,12 +10,14 @@ use radroots_event::envelope::kind::{
 use radroots_event::wire::Nip01EventWire;
 use radroots_identity::PublicKey;
 use radroots_nostr::event::Event as RadrootsNostrEvent;
-use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectClientRequest, RadrootsNostrConnectClientTarget,
-    RadrootsNostrConnectClientTransport, RadrootsNostrConnectClientTransportFuture,
-    RadrootsNostrConnectError, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest, RadrootsNostrConnectResponse,
-    UnsignedEvent as ConnectUnsignedEvent, execute_request_with_transport,
+use radroots_nostr_connect::{
+    Error as NostrConnectError, Method, Permission, Request, Response,
+    client::{
+        CancellationToken, Client, ClientEvent, Completion, Progress, Receive, Target, Transport,
+        TransportFuture,
+    },
+    message::{RequestId, UnsignedEvent as ConnectUnsignedEvent},
+    permission::Permissions,
 };
 use radroots_signing::{
     Actor, SignReceipt, SignRequest, Signer,
@@ -26,7 +28,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
 
-pub type RadrootsSdkNip46TransportFuture<'a, T> = RadrootsNostrConnectClientTransportFuture<'a, T>;
+pub type RadrootsSdkNip46TransportFuture<'a, T> = TransportFuture<'a, T>;
 pub type RadrootsSdkLocalSignerCapability = dyn Signer;
 
 pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
@@ -381,8 +383,7 @@ impl Default for RadrootsSdkMycNip46RequestPolicy {
 
 #[derive(Clone)]
 pub struct RadrootsSdkMycNip46Signer {
-    client_keys: RadrootsNostrKeys,
-    target: RadrootsNostrConnectClientTarget,
+    client: Arc<Client>,
     user_pubkey: PublicKey,
     transport: Arc<dyn RadrootsSdkNip46Transport>,
     request_policy: RadrootsSdkMycNip46RequestPolicy,
@@ -392,7 +393,7 @@ pub struct RadrootsSdkMycNip46Signer {
 impl RadrootsSdkMycNip46Signer {
     pub fn new(
         client_key: RadrootsSdkNip46ClientKey,
-        target: RadrootsNostrConnectClientTarget,
+        target: Target,
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
     ) -> Result<Self, RadrootsSdkError> {
@@ -407,7 +408,7 @@ impl RadrootsSdkMycNip46Signer {
 
     pub fn new_with_request_policy(
         client_key: RadrootsSdkNip46ClientKey,
-        target: RadrootsNostrConnectClientTarget,
+        target: Target,
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
         request_policy: RadrootsSdkMycNip46RequestPolicy,
@@ -424,21 +425,23 @@ impl RadrootsSdkMycNip46Signer {
 
     fn new_with_request_id_generator(
         client_key: RadrootsSdkNip46ClientKey,
-        target: RadrootsNostrConnectClientTarget,
+        target: Target,
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
         request_policy: RadrootsSdkMycNip46RequestPolicy,
         request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
     ) -> Result<Self, RadrootsSdkError> {
         RadrootsSdkMycNip46RequestPolicy::new(request_policy.request_timeout())?;
+        let client_secret = client_key.into_keys().secret_key().to_secret_hex();
+        let client = Client::from_secret(client_secret.as_str(), target)
+            .map_err(sdk_error_from_nip46_error)?;
         let user_pubkey = PublicKey::from_hex(user_pubkey.as_ref()).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
                 message: format!("myc_nip46 user pubkey is invalid: {error}"),
             }
         })?;
         Ok(Self {
-            client_keys: client_key.into_keys(),
-            target,
+            client: Arc::new(client),
             user_pubkey,
             transport,
             request_policy,
@@ -451,8 +454,8 @@ impl RadrootsSdkMycNip46Signer {
             mode: RadrootsSdkSignerMode::MycNip46,
             state: RadrootsSdkSignerState::Ready,
             signer_pubkey: self.user_pubkey.to_hex(),
-            remote_signer_pubkey: Some(self.target.remote_signer_public_key.to_hex()),
-            relay_count: self.target.relays.len(),
+            remote_signer_pubkey: Some(self.client.target().remote_signer_public_key().to_hex()),
+            relay_count: self.client.target().relays().len(),
         }
     }
 
@@ -460,8 +463,14 @@ impl RadrootsSdkMycNip46Signer {
         RadrootsSdkSignerCapability {
             mode: RadrootsSdkSignerMode::MycNip46,
             signer_pubkey: self.user_pubkey.to_hex(),
-            remote_signer_pubkey: Some(self.target.remote_signer_public_key.to_hex()),
-            relays: self.target.relays.iter().map(ToString::to_string).collect(),
+            remote_signer_pubkey: Some(self.client.target().remote_signer_public_key().to_hex()),
+            relays: self
+                .client
+                .target()
+                .relays()
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             can_sign_events: true,
             nip46_permissions: radroots_sdk_myc_nip46_product_permission_strings(),
         }
@@ -487,42 +496,52 @@ impl RadrootsSdkMycNip46Signer {
             .into());
         }
         let sign_event_request = sign_event_request_from_frozen_draft(sign_request.draft())?;
-        let request_id = self.next_request_id();
+        let request_id =
+            RequestId::parse(self.next_request_id()).map_err(sdk_error_from_nip46_error)?;
         let mut adapter = RadrootsSdkNip46TransportAdapter {
             transport: self.transport.as_ref(),
+            request_timeout: self.request_policy.request_timeout(),
         };
         let mut progress_error = None;
-        let request_future = execute_request_with_transport(
-            &self.client_keys,
-            &self.target,
-            RadrootsNostrConnectClientRequest::new(request_id, sign_event_request),
-            &mut adapter,
-            |progress| {
-                let sdk_progress = match progress {
-                    radroots_nostr_connect::prelude::RadrootsNostrConnectClientProgress::AuthChallenge {
-                        url,
-                    } => RadrootsSdkSignerProgress::AuthChallenge {
-                        mode: RadrootsSdkSignerMode::MycNip46,
-                        url,
-                    },
-                };
-                if let Err(error) = request.emit_progress(sdk_progress) {
-                    progress_error = Some(error);
-                    return Err(RadrootsNostrConnectError::Transport {
-                        reason: "SDK signer progress sink failed".to_owned(),
-                    });
-                }
-                Ok(())
-            },
-        );
-        let response = timeout(self.request_policy.request_timeout(), request_future)
-            .await
-            .map_err(|_| RadrootsNostrConnectError::RequestTimedOut)
-            .and_then(|response| response);
+        let cancellation = CancellationToken::new();
+        let completion = self
+            .client
+            .execute(
+                request_id,
+                sign_event_request,
+                &mut adapter,
+                &cancellation,
+                |progress| {
+                    let sdk_progress = match progress {
+                        Progress::AuthChallenge { url } => {
+                            RadrootsSdkSignerProgress::AuthChallenge {
+                                mode: RadrootsSdkSignerMode::MycNip46,
+                                url,
+                            }
+                        }
+                    };
+                    if let Err(error) = request.emit_progress(sdk_progress) {
+                        progress_error = Some(error);
+                        return Err(NostrConnectError::Transport {
+                            reason: "SDK signer progress sink failed".to_owned(),
+                        });
+                    }
+                    Ok(())
+                },
+            )
+            .await;
         if let Some(error) = progress_error {
             return Err(error);
         }
-        let response = response.map_err(sdk_error_from_nip46_error)?;
+        let response = match completion.map_err(sdk_error_from_nip46_error)? {
+            Completion::Response(response) => *response,
+            Completion::Cancelled(phase) => {
+                return Err(RadrootsSdkError::SignerTransport {
+                    mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
+                    reason: format!("NIP-46 request cancelled {phase:?}"),
+                });
+            }
+        };
         let signed_event = signed_event_from_nip46_response(operation_kind.as_str(), response)?;
         let receipt = SignReceipt::from_signed_event(&sign_request, signed_event, unix_time_now()?)
             .map_err(|error| match error.kind() {
@@ -541,7 +560,7 @@ impl RadrootsSdkMycNip46Signer {
             operation_kind.as_str(),
             RadrootsSdkSignerMode::MycNip46,
             self.user_pubkey.to_hex(),
-            Some(self.target.remote_signer_public_key.to_hex()),
+            Some(self.client.target().remote_signer_public_key().to_hex()),
             receipt,
         ))
     }
@@ -563,15 +582,10 @@ impl RadrootsSdkMycNip46RequestIdGenerator for RadrootsSdkUuidNip46RequestIdGene
     }
 }
 
-pub fn radroots_sdk_myc_nip46_product_permissions() -> RadrootsNostrConnectPermissions {
+pub fn radroots_sdk_myc_nip46_product_permissions() -> Permissions {
     RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS
         .iter()
-        .map(|kind| {
-            RadrootsNostrConnectPermission::with_parameter(
-                RadrootsNostrConnectMethod::SignEvent,
-                kind.to_string(),
-            )
-        })
+        .map(|kind| Permission::with_parameter(Method::SignEvent, kind.to_string()))
         .collect::<Vec<_>>()
         .into()
 }
@@ -586,26 +600,49 @@ pub fn radroots_sdk_myc_nip46_product_permission_strings() -> Vec<String> {
 
 struct RadrootsSdkNip46TransportAdapter<'a> {
     transport: &'a dyn RadrootsSdkNip46Transport,
+    request_timeout: Duration,
 }
 
-impl RadrootsNostrConnectClientTransport for RadrootsSdkNip46TransportAdapter<'_> {
-    fn publish_request_event<'a>(
-        &'a mut self,
-        event: RadrootsNostrEvent,
-    ) -> RadrootsNostrConnectClientTransportFuture<'a, ()> {
+impl Transport for RadrootsSdkNip46TransportAdapter<'_> {
+    fn publish<'a>(&'a mut self, event: ClientEvent) -> TransportFuture<'a, ()> {
+        let event = match RadrootsNostrEvent::from_json(event.as_json()) {
+            Ok(event) => event,
+            Err(error) => {
+                return Box::pin(async move {
+                    Err(NostrConnectError::Transport {
+                        reason: format!("invalid SDK NIP-46 publication: {error}"),
+                    })
+                });
+            }
+        };
         self.transport.publish_request_event(event)
     }
 
-    fn next_response_event<'a>(
+    fn receive<'a>(
         &'a mut self,
-    ) -> RadrootsNostrConnectClientTransportFuture<'a, RadrootsNostrEvent> {
-        self.transport.next_response_event()
+        cancellation: &'a CancellationToken,
+    ) -> TransportFuture<'a, Receive> {
+        if cancellation.is_cancelled() {
+            return Box::pin(async { Ok(Receive::Cancelled) });
+        }
+        let next = self.transport.next_response_event();
+        let request_timeout = self.request_timeout;
+        Box::pin(async move {
+            match timeout(request_timeout, next).await {
+                Ok(Ok(event)) => {
+                    if cancellation.is_cancelled() {
+                        return Ok(Receive::Cancelled);
+                    }
+                    ClientEvent::from_json(event.as_json().as_str()).map(Receive::event)
+                }
+                Ok(Err(error)) => Err(error),
+                Err(_) => Ok(Receive::TimedOut),
+            }
+        })
     }
 }
 
-fn sign_event_request_from_frozen_draft(
-    draft: &EventDraft,
-) -> Result<RadrootsNostrConnectRequest, RadrootsSdkError> {
+fn sign_event_request_from_frozen_draft(draft: &EventDraft) -> Result<Request, RadrootsSdkError> {
     let public_key = nip46_unsigned_event_pubkey(draft)?;
     let kind = nip46_unsigned_event_kind(draft)?;
     let tags = nip46_unsigned_event_tags(draft)?;
@@ -619,7 +656,7 @@ fn sign_event_request_from_frozen_draft(
     };
     let unsigned_event = ConnectUnsignedEvent::from_json(&unsigned_event.as_json())
         .map_err(|error| nip46_sign_event_protocol_error(error.to_string()))?;
-    Ok(RadrootsNostrConnectRequest::SignEvent(unsigned_event))
+    Ok(Request::SignEvent(unsigned_event))
 }
 
 fn nip46_unsigned_event_pubkey(draft: &EventDraft) -> Result<NostrPublicKey, RadrootsSdkError> {
@@ -662,10 +699,10 @@ fn nip46_sign_event_protocol_error(reason: String) -> RadrootsSdkError {
 
 fn signed_event_from_nip46_response(
     operation_kind: &str,
-    response: RadrootsNostrConnectResponse,
+    response: Response,
 ) -> Result<SignedEvent, RadrootsSdkError> {
     match response {
-        RadrootsNostrConnectResponse::SignedEvent(event) => {
+        Response::SignedEvent(event) => {
             let raw_json = event.as_json();
             let wire = Nip01EventWire::parse_json(raw_json.as_str()).map_err(|error| {
                 RadrootsSdkError::SignerProtocol {
@@ -687,18 +724,14 @@ fn signed_event_from_nip46_response(
                     reason: format!("remote signed event signature is invalid: {error}"),
                 })
         }
-        RadrootsNostrConnectResponse::Error { error, .. } => {
-            Err(RadrootsSdkError::SignerRequestRejected {
-                mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
-                reason: error,
-            })
-        }
-        RadrootsNostrConnectResponse::PendingConnection => {
-            Err(RadrootsSdkError::SignerAuthChallengePending {
-                mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
-                auth_url: None,
-            })
-        }
+        Response::Error { error, .. } => Err(RadrootsSdkError::SignerRequestRejected {
+            mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
+            reason: error,
+        }),
+        Response::PendingConnection => Err(RadrootsSdkError::SignerAuthChallengePending {
+            mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
+            auth_url: None,
+        }),
         other => Err(RadrootsSdkError::SignerProtocol {
             mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
             reason: format!("unexpected NIP-46 response for {operation_kind}: {other:?}"),
@@ -706,21 +739,21 @@ fn signed_event_from_nip46_response(
     }
 }
 
-fn sdk_error_from_nip46_error(error: RadrootsNostrConnectError) -> RadrootsSdkError {
+fn sdk_error_from_nip46_error(error: NostrConnectError) -> RadrootsSdkError {
     match error {
-        RadrootsNostrConnectError::RequestTimedOut => RadrootsSdkError::SignerRequestTimedOut {
+        NostrConnectError::RequestTimedOut => RadrootsSdkError::SignerRequestTimedOut {
             mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
         },
-        RadrootsNostrConnectError::Transport { reason } => RadrootsSdkError::SignerTransport {
+        NostrConnectError::Transport { reason } => RadrootsSdkError::SignerTransport {
             mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
             reason,
         },
-        RadrootsNostrConnectError::Encrypt { reason }
-        | RadrootsNostrConnectError::Decrypt { reason }
-        | RadrootsNostrConnectError::Sign { reason }
-        | RadrootsNostrConnectError::Json(reason)
-        | RadrootsNostrConnectError::InvalidRequestPayload { reason, .. }
-        | RadrootsNostrConnectError::InvalidResponsePayload { reason, .. } => {
+        NostrConnectError::Encrypt { reason }
+        | NostrConnectError::Decrypt { reason }
+        | NostrConnectError::Sign { reason }
+        | NostrConnectError::Json(reason)
+        | NostrConnectError::InvalidRequestPayload { reason, .. }
+        | NostrConnectError::InvalidResponsePayload { reason, .. } => {
             RadrootsSdkError::SignerProtocol {
                 mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
                 reason,

@@ -280,3 +280,33 @@ fn signer_transition_surface_is_private_hidden_and_scheduled_for_removal() {
     assert!(transition_record.contains("oss/cli"));
     assert!(transition_record.contains("oss/studio_app"));
 }
+
+#[test]
+fn signer_consumers_use_the_final_nostr_connect_state_machine() {
+    let manifest = manifest_dir();
+    for relative in [
+        "src/signer_provider.rs",
+        "src/adapters/signer.rs",
+        "examples/sdk_v1_myc_nip46_signer_setup.rs",
+    ] {
+        let source = read_source(&manifest.join(relative));
+        for retired in [
+            "radroots_nostr_connect::prelude",
+            "RadrootsNostrConnectClient",
+            "RadrootsNostrConnectMethod",
+            "RadrootsNostrConnectPermission",
+            "RadrootsNostrConnectRequest",
+            "RadrootsNostrConnectResponse",
+            "RADROOTS_NOSTR_CONNECT_",
+        ] {
+            assert!(
+                !source.contains(retired),
+                "{relative} retains retired Nostr Connect surface `{retired}`"
+            );
+        }
+    }
+
+    let provider = read_source(&manifest.join("src/signer_provider.rs"));
+    assert!(provider.contains("impl Transport for RadrootsSdkNip46TransportAdapter"));
+    assert!(provider.contains(".client\n            .execute("));
+}
