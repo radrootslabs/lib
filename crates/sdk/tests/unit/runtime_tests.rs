@@ -1985,11 +1985,9 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         populated_event_keys.public_key().to_hex(),
     )
     .expect("event draft");
-    let populated_event = radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft(
-        &populated_event_keys,
-        &populated_event_draft,
-    )
-    .expect("signed event");
+    let populated_event =
+        radroots_nostr::signing::sign_frozen_draft(&populated_event_keys, &populated_event_draft)
+            .expect("signed event");
     let populated_ingest = radroots_event_store::RadrootsEventIngest::from_signed_event(
         populated_event,
         1_700_000_002_000,

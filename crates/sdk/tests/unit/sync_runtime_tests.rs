@@ -27,7 +27,7 @@ use radroots_event::envelope::kind::KIND_FARM;
 use radroots_event::id::EventId;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+use radroots_nostr::signing::sign_frozen_draft;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_outbox::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanStatus,
@@ -102,7 +102,7 @@ impl RadrootsdFixtureSigner {
         &self,
         draft: &EventDraft,
     ) -> Result<radroots_event::SignedEvent, radroots_nostr::Error> {
-        radroots_nostr_sign_frozen_draft(&self.keys, draft)
+        sign_frozen_draft(&self.keys, draft)
     }
 }
 
@@ -114,8 +114,8 @@ impl Signer for RadrootsdFixtureSigner {
 
     fn sign(&self, request: SignRequest) -> SigningFuture<'_, Result<SignReceipt, SigningError>> {
         Box::pin(async move {
-            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
-                .map_err(|source| {
+            let signed_event =
+                sign_frozen_draft(&self.keys, request.draft()).map_err(|source| {
                     SigningError::with_source(SigningErrorKind::InternalError, source)
                 })?;
             SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)

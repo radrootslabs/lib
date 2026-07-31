@@ -5,7 +5,7 @@ use nostr::Keys as RadrootsNostrKeys;
 use radroots_event::contract::AuthorRole;
 use radroots_event::draft::{EventDraft, SignedEvent, SignedEventParts};
 use radroots_event::envelope::kind::{KIND_FARM, KIND_GEOCHAT};
-use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+use radroots_nostr::signing::sign_frozen_draft;
 use radroots_signing::{
     Error as SigningError, SignReceipt, SignRequest, SignerStatus, actor::ActorSource,
     error::Kind as SigningErrorKind, signer::BoxFuture,
@@ -98,8 +98,8 @@ impl Signer for WorkflowSigner {
 
     fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, SigningError>> {
         Box::pin(async move {
-            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
-                .map_err(|source| {
+            let signed_event =
+                sign_frozen_draft(&self.keys, request.draft()).map_err(|source| {
                     SigningError::with_source(SigningErrorKind::InternalError, source)
                 })?;
             SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)

@@ -1,5 +1,5 @@
 use nostr::Keys as RadrootsNostrKeys;
-use radroots_nostr::draft_signing::radroots_nostr_sign_frozen_draft;
+use radroots_nostr::signing::sign_frozen_draft;
 use radroots_signing::{
     Error, SignReceipt, SignRequest, Signer, SignerStatus, error::Kind, signer::BoxFuture,
 };
@@ -50,7 +50,7 @@ impl FixtureSigner {
         &self,
         draft: &radroots_event::EventDraft,
     ) -> Result<radroots_event::SignedEvent, radroots_nostr::Error> {
-        radroots_nostr_sign_frozen_draft(&self.keys, draft)
+        sign_frozen_draft(&self.keys, draft)
     }
 }
 
@@ -61,7 +61,7 @@ impl Signer for FixtureSigner {
 
     fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
         Box::pin(async move {
-            let signed_event = radroots_nostr_sign_frozen_draft(&self.keys, request.draft())
+            let signed_event = sign_frozen_draft(&self.keys, request.draft())
                 .map_err(|source| Error::with_source(Kind::AuthorizationDenied, source))?;
             SignReceipt::from_signed_event(&request, signed_event, 1_700_000_001)
         })
