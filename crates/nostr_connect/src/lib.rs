@@ -10,6 +10,7 @@ pub mod server;
 pub mod uri;
 
 pub use error::RadrootsNostrConnectError as Error;
+pub use message::{Request, Response};
 pub use method::Method;
 pub use permission::Permission;
 pub use uri::{BunkerUri, ClientUri};
@@ -26,11 +27,21 @@ pub mod prelude {
     };
     pub use crate::error::RadrootsNostrConnectError;
     pub use crate::message::{
-        RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RADROOTS_NOSTR_CONNECT_RPC_KIND,
-        RadrootsNostrConnectPendingConnectionPollOutcome,
-        RadrootsNostrConnectRemoteSessionCapability, RadrootsNostrConnectRequest,
-        RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-        RadrootsNostrConnectResponseEnvelope,
+        PENDING_CONNECTION_ERROR, PendingConnectionOutcome, REMOTE_CAPABILITY_RELAY_COUNT_MAX,
+        REQUEST_ID_MAX_BYTES, REQUEST_PARAM_COUNT_MAX, REQUEST_PARAM_MAX_BYTES,
+        REQUEST_PARAMS_MAX_BYTES, RESPONSE_ERROR_MAX_BYTES, RESPONSE_RESULT_MAX_BYTES, RPC_KIND,
+        RemoteSessionCapability, Request, RequestId, RequestMessage, Response, ResponseEnvelope,
+        ResponseValidator, SignedEvent, UnsignedEvent,
+    };
+    pub use crate::message::{
+        PENDING_CONNECTION_ERROR as RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR,
+        PendingConnectionOutcome as RadrootsNostrConnectPendingConnectionPollOutcome,
+        RPC_KIND as RADROOTS_NOSTR_CONNECT_RPC_KIND,
+        RemoteSessionCapability as RadrootsNostrConnectRemoteSessionCapability,
+        Request as RadrootsNostrConnectRequest,
+        RequestMessage as RadrootsNostrConnectRequestMessage,
+        Response as RadrootsNostrConnectResponse,
+        ResponseEnvelope as RadrootsNostrConnectResponseEnvelope,
     };
     pub use crate::method::Method;
     pub use crate::method::Method as RadrootsNostrConnectMethod;

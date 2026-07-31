@@ -1,9 +1,5 @@
 use crate::error::RadrootsNostrConnectError;
-use crate::message::{
-    RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectRequest,
-    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope,
-};
+use crate::message::{RPC_KIND, Request, RequestMessage, Response, ResponseEnvelope};
 use crate::method::Method;
 use nostr::nips::nip44::{self, Version};
 use nostr::{Event, EventBuilder, Keys, Kind, PublicKey, RelayUrl, Tag};
@@ -31,11 +27,11 @@ impl RadrootsNostrConnectClientTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsNostrConnectClientRequest {
     pub request_id: String,
-    pub request: RadrootsNostrConnectRequest,
+    pub request: Request,
 }
 
 impl RadrootsNostrConnectClientRequest {
-    pub fn new(request_id: impl Into<String>, request: RadrootsNostrConnectRequest) -> Self {
+    pub fn new(request_id: impl Into<String>, request: Request) -> Self {
         Self {
             request_id: request_id.into(),
             request,
@@ -46,8 +42,8 @@ impl RadrootsNostrConnectClientRequest {
         self.request.method()
     }
 
-    pub fn into_message(self) -> RadrootsNostrConnectRequestMessage {
-        RadrootsNostrConnectRequestMessage::new(self.request_id, self.request)
+    pub fn into_message(self) -> RequestMessage {
+        RequestMessage::new(self.request_id, self.request)
     }
 }
 
@@ -60,7 +56,7 @@ pub enum RadrootsNostrConnectClientProgress {
 pub enum RadrootsNostrConnectClientEventOutcome {
     Ignore,
     Progress(RadrootsNostrConnectClientProgress),
-    Response(RadrootsNostrConnectResponse),
+    Response(Response),
 }
 
 pub trait RadrootsNostrConnectClientTransport {
@@ -77,7 +73,7 @@ pub trait RadrootsNostrConnectClientTransport {
 pub fn build_request_event(
     client_keys: &Keys,
     target: &RadrootsNostrConnectClientTarget,
-    message: RadrootsNostrConnectRequestMessage,
+    message: RequestMessage,
 ) -> Result<Event, RadrootsNostrConnectError> {
     let payload = serde_json::to_string(&message).map_err(RadrootsNostrConnectError::from)?;
     let ciphertext = nip44::encrypt(
@@ -88,7 +84,7 @@ pub fn build_request_event(
     )
     .map_err(encrypt_error)?;
 
-    EventBuilder::new(Kind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND), ciphertext)
+    EventBuilder::new(Kind::Custom(RPC_KIND), ciphertext)
         .tag(Tag::public_key(target.remote_signer_public_key))
         .sign_with_keys(client_keys)
         .map_err(sign_error)
@@ -101,7 +97,7 @@ pub fn parse_response_event(
     method: &Method,
     event: &Event,
 ) -> Result<RadrootsNostrConnectClientEventOutcome, RadrootsNostrConnectError> {
-    if event.kind != Kind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND) {
+    if event.kind != Kind::Custom(RPC_KIND) {
         return Ok(RadrootsNostrConnectClientEventOutcome::Ignore);
     }
 
@@ -127,19 +123,17 @@ pub fn parse_response_event(
         reason: error.to_string(),
     })?;
 
-    let envelope: RadrootsNostrConnectResponseEnvelope =
+    let envelope: ResponseEnvelope =
         serde_json::from_str(&decrypted).map_err(RadrootsNostrConnectError::from)?;
     if envelope.id != request_id {
         return Ok(RadrootsNostrConnectClientEventOutcome::Ignore);
     }
 
-    let response = RadrootsNostrConnectResponse::from_envelope(method, envelope)?;
+    let response = Response::from_envelope(method, envelope)?;
     Ok(match response {
-        RadrootsNostrConnectResponse::AuthUrl(url) => {
-            RadrootsNostrConnectClientEventOutcome::Progress(
-                RadrootsNostrConnectClientProgress::AuthChallenge { url },
-            )
-        }
+        Response::AuthUrl(url) => RadrootsNostrConnectClientEventOutcome::Progress(
+            RadrootsNostrConnectClientProgress::AuthChallenge { url },
+        ),
         response => RadrootsNostrConnectClientEventOutcome::Response(response),
     })
 }
@@ -150,7 +144,7 @@ pub async fn execute_request_with_transport<T, F>(
     request: RadrootsNostrConnectClientRequest,
     transport: &mut T,
     mut on_progress: F,
-) -> Result<RadrootsNostrConnectResponse, RadrootsNostrConnectError>
+) -> Result<Response, RadrootsNostrConnectError>
 where
     T: RadrootsNostrConnectClientTransport,
     F: FnMut(RadrootsNostrConnectClientProgress) -> Result<(), RadrootsNostrConnectError>,

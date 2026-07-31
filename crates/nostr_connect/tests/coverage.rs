@@ -1,14 +1,16 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use nostr::{Event, EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
+use nostr::{Event, EventBuilder, JsonUtil, Keys, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
     CLIENT_URL_MAX_BYTES, ClientMetadata, Method, Permission, Permissions,
     RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
     RadrootsNostrConnectPendingConnectionPollOutcome, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope, Uri,
+    RadrootsNostrConnectResponseEnvelope, SignedEvent as ConnectSignedEvent,
+    UnsignedEvent as ConnectUnsignedEvent, Uri,
 };
+use radroots_nostr_connect::uri::RelayUrl;
 use serde_json::{Value, json};
 use std::str::FromStr;
 use test_fixtures::{
@@ -16,8 +18,8 @@ use test_fixtures::{
     RELAY_TERTIARY_WSS,
 };
 
-fn test_public_key() -> PublicKey {
-    PublicKey::parse(FIXTURE_ALICE.public_key_hex).expect("public key")
+fn test_public_key() -> radroots_identity::PublicKey {
+    radroots_identity::PublicKey::from_hex(FIXTURE_ALICE.public_key_hex).expect("public key")
 }
 
 fn test_keys() -> Keys {
@@ -433,7 +435,10 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             Vec::new(),
         ),
         (
-            RadrootsNostrConnectRequest::SignEvent(unsigned_event()),
+            RadrootsNostrConnectRequest::SignEvent(
+                ConnectUnsignedEvent::from_json(&unsigned_event().as_json())
+                    .expect("unsigned event payload"),
+            ),
             Method::SignEvent,
             vec![serde_json::to_string(&unsigned_event()).expect("serialize unsigned event")],
         ),
@@ -751,9 +756,13 @@ fn response_surface_covers_success_and_error_paths() {
             ),
         ),
         (
-            RadrootsNostrConnectResponse::SignedEvent(event.clone()),
+            RadrootsNostrConnectResponse::SignedEvent(
+                ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload"),
+            ),
             Method::SignEvent,
-            RadrootsNostrConnectResponse::SignedEvent(event.clone()),
+            RadrootsNostrConnectResponse::SignedEvent(
+                ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload"),
+            ),
         ),
         (
             RadrootsNostrConnectResponse::Pong,
@@ -978,7 +987,9 @@ fn response_surface_covers_success_and_error_paths() {
             },
         )
         .expect("parse object event"),
-        RadrootsNostrConnectResponse::SignedEvent(event)
+        RadrootsNostrConnectResponse::SignedEvent(
+            ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload")
+        )
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
@@ -1007,7 +1018,7 @@ fn response_surface_covers_success_and_error_paths() {
 
     assert!(matches!(
         RadrootsNostrConnectResponse::AuthUrl("not-a-url".to_owned()).into_envelope("req"),
-        Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "not-a-url"
+        Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "[redacted auth URL]"
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
@@ -1018,7 +1029,7 @@ fn response_surface_covers_success_and_error_paths() {
                 error: Some("not-a-url".to_owned()),
             },
         ),
-        Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "not-a-url"
+        Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "[redacted auth URL]"
     ));
     assert!(matches!(
         RadrootsNostrConnectResponse::from_envelope(
@@ -1281,6 +1292,6 @@ fn pending_connection_poll_outcome_uses_typed_variants() {
     assert!(matches!(
         RadrootsNostrConnectResponse::Pong.into_pending_connection_poll_outcome(),
         RadrootsNostrConnectPendingConnectionPollOutcome::UnexpectedResponse { response }
-            if response == "Pong"
+            if response == "pong"
     ));
 }

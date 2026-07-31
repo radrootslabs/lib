@@ -3,7 +3,8 @@ mod test_fixtures;
 
 use nostr::nips::nip44::{self, Version};
 use nostr::{
-    Event, EventBuilder, Keys, Kind, PublicKey, RelayUrl, SecretKey, Tag, Timestamp, UnsignedEvent,
+    Event, EventBuilder, JsonUtil, Keys, Kind, PublicKey, RelayUrl, SecretKey, Tag, Timestamp,
+    UnsignedEvent,
 };
 use radroots_nostr_connect::prelude::{
     Method, RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientEventOutcome,
@@ -11,7 +12,8 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientTarget, RadrootsNostrConnectClientTransport,
     RadrootsNostrConnectClientTransportFuture, RadrootsNostrConnectError,
     RadrootsNostrConnectRemoteSessionCapability, RadrootsNostrConnectRequest,
-    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse, build_request_event,
+    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
+    SignedEvent as ConnectSignedEvent, UnsignedEvent as ConnectUnsignedEvent, build_request_event,
     execute_request_with_transport, parse_response_event,
 };
 use std::collections::VecDeque;
@@ -36,6 +38,10 @@ fn other_keys() -> Keys {
 
 fn relay() -> RelayUrl {
     RelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay")
+}
+
+fn identity_public_key(public_key: PublicKey) -> radroots_identity::PublicKey {
+    radroots_nostr::key::public_key_from_nostr(public_key).expect("identity public key")
 }
 
 fn target(remote_keys: &Keys) -> RadrootsNostrConnectClientTarget {
@@ -104,8 +110,10 @@ fn untagged_response_event(
 
 fn remote_session_capability(remote_keys: &Keys) -> RadrootsNostrConnectRemoteSessionCapability {
     RadrootsNostrConnectRemoteSessionCapability {
-        user_public_key: remote_keys.public_key(),
-        relays: vec![relay()],
+        user_public_key: identity_public_key(remote_keys.public_key()),
+        relays: vec![
+            radroots_nostr_connect::uri::RelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay"),
+        ],
         permissions: Vec::new().into(),
     }
 }
@@ -159,7 +167,7 @@ async fn executes_connect_request_and_secret_echo_response() {
         RadrootsNostrConnectClientRequest::new(
             "req-connect",
             RadrootsNostrConnectRequest::Connect {
-                remote_signer_public_key: remote_keys.public_key(),
+                remote_signer_public_key: identity_public_key(remote_keys.public_key()),
                 secret: Some("connect-secret".to_owned()),
                 requested_permissions: Vec::new().into(),
                 client_metadata: None,
@@ -321,7 +329,9 @@ async fn executes_request_through_transport_with_auth_progress() {
             &remote_keys,
             client_keys.public_key(),
             "req-sign",
-            RadrootsNostrConnectResponse::SignedEvent(signed.clone()),
+            RadrootsNostrConnectResponse::SignedEvent(
+                ConnectSignedEvent::from_json(&signed.as_json()).expect("signed event payload"),
+            ),
         ),
     ];
     let mut transport = MockTransport::new(inbound);
@@ -332,7 +342,12 @@ async fn executes_request_through_transport_with_auth_progress() {
         &target,
         RadrootsNostrConnectClientRequest::new(
             "req-sign",
-            RadrootsNostrConnectRequest::SignEvent(unsigned_event(remote_keys.public_key())),
+            RadrootsNostrConnectRequest::SignEvent(
+                ConnectUnsignedEvent::from_json(
+                    &unsigned_event(remote_keys.public_key()).as_json(),
+                )
+                .expect("unsigned event payload"),
+            ),
         ),
         &mut transport,
         |event| {
@@ -350,7 +365,12 @@ async fn executes_request_through_transport_with_auth_progress() {
             url: "https://auth.example.com/challenge".to_owned()
         }]
     );
-    assert_eq!(response, RadrootsNostrConnectResponse::SignedEvent(signed));
+    assert_eq!(
+        response,
+        RadrootsNostrConnectResponse::SignedEvent(
+            ConnectSignedEvent::from_json(&signed.as_json()).expect("signed event payload")
+        )
+    );
 }
 
 #[tokio::test]

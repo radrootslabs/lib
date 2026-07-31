@@ -210,6 +210,8 @@ impl RadrootsNostrSignerManager {
             ));
         };
 
+        let remote_signer_public_key =
+            radroots_nostr::key::public_key_to_nostr(remote_signer_public_key)?;
         let (connect_secret, existing_connection) =
             self.resolve_connect_request_context(remote_signer_public_key, secret)?;
         if let Some(connection) = existing_connection {
@@ -1214,9 +1216,11 @@ mod tests {
         api_primary_https, fixture_alice_identity, primary_relay, secondary_relay,
         synthetic_public_identity, synthetic_public_key, tertiary_relay,
     };
-    use nostr::{PublicKey, Timestamp, UnsignedEvent};
+    use nostr::{PublicKey, Timestamp};
     use radroots_identity::PublicIdentity;
-    use radroots_nostr_connect::prelude::RadrootsNostrConnectPermission;
+    use radroots_nostr_connect::prelude::{
+        RadrootsNostrConnectPermission, UnsignedEvent as ConnectUnsignedEvent,
+    };
     use serde_json::json;
     use std::sync::Arc;
     use std::thread;
@@ -1227,6 +1231,10 @@ mod tests {
 
     fn public_key(index: u32) -> PublicKey {
         synthetic_public_key(index)
+    }
+
+    fn connect_public_key(public_key: PublicKey) -> radroots_identity::PublicKey {
+        radroots_nostr::key::public_key_from_nostr(public_key).expect("identity public key")
     }
 
     fn permission(
@@ -1253,14 +1261,17 @@ mod tests {
         RadrootsNostrConnectRequestMessage::new(id, request)
     }
 
-    fn unsigned_event(kind: u16) -> UnsignedEvent {
-        serde_json::from_value(json!({
-            "pubkey": public_key(0xa1).to_hex(),
-            "created_at": Timestamp::from(1).as_secs(),
-            "kind": kind,
-            "tags": [],
-            "content": "hello"
-        }))
+    fn unsigned_event(kind: u16) -> ConnectUnsignedEvent {
+        ConnectUnsignedEvent::from_json(
+            &json!({
+                "pubkey": public_key(0xa1).to_hex(),
+                "created_at": Timestamp::from(1).as_secs(),
+                "kind": kind,
+                "tags": [],
+                "content": "hello"
+            })
+            .to_string(),
+        )
         .expect("unsigned event")
     }
 
@@ -1564,7 +1575,7 @@ mod tests {
             RadrootsNostrSignerApprovalState::NotRequired
         );
         assert_eq!(record.auth_state, RadrootsNostrSignerAuthState::NotRequired);
-        assert_eq!(record.requested_permissions.as_slice(), &[sign_event, ping]);
+        assert_eq!(record.requested_permissions.as_slice(), &[ping, sign_event]);
         assert_eq!(record.relays, vec![secondary_relay(), primary_relay()]);
     }
 
@@ -3458,10 +3469,7 @@ mod tests {
             .evaluate_connect_request(
                 public_key(0x58),
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: PublicKey::from_hex(
-                        &signer_identity.public_key().to_hex(),
-                    )
-                    .expect("signer public key"),
+                    remote_signer_public_key: signer_identity.public_key(),
                     secret: Some("secret".into()),
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
                     client_metadata: None,
@@ -3734,7 +3742,7 @@ mod tests {
             .evaluate_connect_request(
                 client_public_key,
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: signer_public_key,
+                    remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: None,
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
                     client_metadata: None,
@@ -3747,7 +3755,7 @@ mod tests {
             .evaluate_connect_request(
                 client_public_key,
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: public_key(0x66),
+                    remote_signer_public_key: connect_public_key(public_key(0x66)),
                     secret: None,
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
                     client_metadata: None,
@@ -3764,7 +3772,7 @@ mod tests {
             .evaluate_connect_request(
                 client_public_key,
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: signer_public_key,
+                    remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: Some(" connect-secret ".into()),
                     requested_permissions: vec![
                         permission(RadrootsNostrConnectMethod::Ping, None),
@@ -3781,7 +3789,7 @@ mod tests {
             .evaluate_connect_request(
                 public_key(0x67),
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: signer_public_key,
+                    remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: Some(" fresh-secret ".into()),
                     requested_permissions: vec![
                         permission(RadrootsNostrConnectMethod::Ping, None),
@@ -3812,8 +3820,8 @@ mod tests {
         assert_eq!(
             proposal.requested_permissions.as_slice(),
             &[
-                permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1")),
                 permission(RadrootsNostrConnectMethod::Ping, None),
+                permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1")),
             ]
         );
 
@@ -3821,7 +3829,7 @@ mod tests {
             .evaluate_connect_request(
                 public_key(0x68),
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: signer_public_key,
+                    remote_signer_public_key: connect_public_key(signer_public_key),
                     secret: Some("connect-secret".into()),
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
                     client_metadata: None,
@@ -3952,7 +3960,7 @@ mod tests {
                 request_message_with_request(
                     "req-connect",
                     RadrootsNostrConnectRequest::Connect {
-                        remote_signer_public_key: active.client_public_key,
+                        remote_signer_public_key: connect_public_key(active.client_public_key),
                         secret: None,
                         requested_permissions: RadrootsNostrConnectPermissions::default(),
                         client_metadata: None,

@@ -1,13 +1,15 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use nostr::{EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
+use nostr::{EventBuilder, JsonUtil, Keys, PublicKey, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
     CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES, ClientMetadata, Method, Permission,
     Permissions, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope, Uri,
+    RadrootsNostrConnectResponseEnvelope, SignedEvent as ConnectSignedEvent,
+    UnsignedEvent as ConnectUnsignedEvent, Uri,
 };
+use radroots_nostr_connect::uri::RelayUrl as ConnectRelayUrl;
 use serde_json::{Value, json};
 use test_fixtures::{
     APP_PRIMARY_HTTPS, CDN_PRIMARY_HTTPS, FIXTURE_ALICE, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
@@ -39,10 +41,10 @@ fn logo_url() -> String {
 fn remote_session_capability()
 -> radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
     radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
-        user_public_key: test_public_key(),
+        user_public_key: test_identity_public_key(),
         relays: vec![
-            RelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay 1"),
-            RelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 2"),
+            ConnectRelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay 1"),
+            ConnectRelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 2"),
         ],
         permissions: Permissions::from(vec![
             Permission::new(Method::Ping),
@@ -128,7 +130,7 @@ fn requested_permissions_roundtrip_as_csv() {
 #[test]
 fn connect_request_roundtrips_requested_permissions() {
     let request = RadrootsNostrConnectRequest::Connect {
-        remote_signer_public_key: test_public_key(),
+        remote_signer_public_key: test_identity_public_key(),
         secret: Some("abcd".to_owned()),
         requested_permissions: Permissions::from(vec![
             Permission::new(Method::Nip44Encrypt),
@@ -159,7 +161,7 @@ fn connect_request_roundtrips_requested_permissions() {
 #[test]
 fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
     let request = RadrootsNostrConnectRequest::Connect {
-        remote_signer_public_key: test_public_key(),
+        remote_signer_public_key: test_identity_public_key(),
         secret: None,
         requested_permissions: Permissions::default(),
         client_metadata: Some(ClientMetadata {
@@ -295,7 +297,10 @@ fn sign_event_request_roundtrips_unsigned_event_payload() {
 
     let message = RadrootsNostrConnectRequestMessage::new(
         "req-sign",
-        RadrootsNostrConnectRequest::SignEvent(unsigned_event.clone()),
+        RadrootsNostrConnectRequest::SignEvent(
+            ConnectUnsignedEvent::from_json(&unsigned_event.as_json())
+                .expect("unsigned event payload"),
+        ),
     );
     let encoded = serde_json::to_value(&message).expect("serialize sign request");
     assert_eq!(encoded["method"], "sign_event");
@@ -305,7 +310,10 @@ fn sign_event_request_roundtrips_unsigned_event_payload() {
     assert_eq!(decoded, message);
     assert_eq!(
         decoded.request,
-        RadrootsNostrConnectRequest::SignEvent(unsigned_event)
+        RadrootsNostrConnectRequest::SignEvent(
+            ConnectUnsignedEvent::from_json(&unsigned_event.as_json())
+                .expect("unsigned event payload"),
+        )
     );
 }
 
@@ -322,8 +330,8 @@ fn switch_relays_response_accepts_array_or_null() {
     assert_eq!(
         parsed,
         RadrootsNostrConnectResponse::RelayList(vec![
-            RelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 1"),
-            RelayUrl::parse(RELAY_TERTIARY_WSS).expect("relay 2"),
+            ConnectRelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 1"),
+            ConnectRelayUrl::parse(RELAY_TERTIARY_WSS).expect("relay 2"),
         ])
     );
 
@@ -407,13 +415,20 @@ fn sign_event_response_roundtrips_signed_event_json_string() {
         .sign_with_keys(&keys)
         .expect("sign event");
 
-    let envelope = RadrootsNostrConnectResponse::SignedEvent(event.clone())
-        .into_envelope("req-sign")
-        .expect("serialize response");
+    let envelope = RadrootsNostrConnectResponse::SignedEvent(
+        ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload"),
+    )
+    .into_envelope("req-sign")
+    .expect("serialize response");
     let parsed = RadrootsNostrConnectResponse::from_envelope(&Method::SignEvent, envelope)
         .expect("parse signed event response");
 
-    assert_eq!(parsed, RadrootsNostrConnectResponse::SignedEvent(event));
+    assert_eq!(
+        parsed,
+        RadrootsNostrConnectResponse::SignedEvent(
+            ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload")
+        )
+    );
 }
 
 #[test]

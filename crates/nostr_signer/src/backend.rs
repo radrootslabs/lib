@@ -1303,7 +1303,7 @@ mod tests {
             .evaluate_connect_request(
                 synthetic_public_key(0x93),
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: identity.public_key(),
+                    remote_signer_public_key: embedded_public_identity(&identity).public_key(),
                     secret: Some("connect-secret".into()),
                     requested_permissions: vec![RadrootsNostrConnectPermission::new(
                         RadrootsNostrConnectMethod::Ping,
@@ -1372,7 +1372,7 @@ mod tests {
             .evaluate_connect_request(
                 synthetic_public_key(0xa1),
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: identity.public_key(),
+                    remote_signer_public_key: embedded_public_identity(&identity).public_key(),
                     secret: Some("connect-secret-2".into()),
                     requested_permissions: vec![RadrootsNostrConnectPermission::new(
                         RadrootsNostrConnectMethod::Ping,

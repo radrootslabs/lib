@@ -12,6 +12,16 @@ pub enum RadrootsNostrConnectError {
     Transport { reason: String },
     #[error("NIP-46 request timed out")]
     RequestTimedOut,
+    #[error("invalid NIP-46 request id: {reason}")]
+    InvalidRequestId { reason: &'static str },
+    #[error("NIP-46 response id does not match the request")]
+    WrongRequestId,
+    #[error("NIP-46 response signer does not match the expected signer")]
+    WrongResponseSigner,
+    #[error("replayed NIP-46 response")]
+    ReplayedResponse,
+    #[error("invalid NIP-46 response envelope: {reason}")]
+    InvalidResponseEnvelope { reason: &'static str },
     #[error("invalid NIP-46 method `{0}`")]
     InvalidMethod(String),
     #[error("invalid NIP-46 permission `{0}`")]
