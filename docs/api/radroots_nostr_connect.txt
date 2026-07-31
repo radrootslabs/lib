@@ -1,0 +1,682 @@
+pub mod radroots_nostr_connect
+pub mod radroots_nostr_connect::client
+pub enum radroots_nostr_connect::client::CancellationPhase
+pub radroots_nostr_connect::client::CancellationPhase::AfterPublication
+pub radroots_nostr_connect::client::CancellationPhase::BeforePublication
+pub enum radroots_nostr_connect::client::Completion
+pub radroots_nostr_connect::client::Completion::Cancelled(radroots_nostr_connect::client::CancellationPhase)
+pub radroots_nostr_connect::client::Completion::Response(alloc::boxed::Box<radroots_nostr_connect::message::Response>)
+impl radroots_nostr_connect::client::Completion
+pub fn radroots_nostr_connect::client::Completion::response(radroots_nostr_connect::message::Response) -> Self
+pub enum radroots_nostr_connect::client::EventOutcome
+pub radroots_nostr_connect::client::EventOutcome::Complete(alloc::boxed::Box<radroots_nostr_connect::message::Response>)
+pub radroots_nostr_connect::client::EventOutcome::Ignore
+pub radroots_nostr_connect::client::EventOutcome::Progress(radroots_nostr_connect::client::Progress)
+pub enum radroots_nostr_connect::client::Progress
+pub radroots_nostr_connect::client::Progress::AuthChallenge
+pub radroots_nostr_connect::client::Progress::AuthChallenge::url: alloc::string::String
+impl core::fmt::Debug for radroots_nostr_connect::client::Progress
+pub fn radroots_nostr_connect::client::Progress::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome::Ignore
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome::Progress(radroots_nostr_connect::client::RadrootsNostrConnectClientProgress)
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome::Response(radroots_nostr_connect::message::Response)
+pub enum radroots_nostr_connect::client::RadrootsNostrConnectClientProgress
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientProgress::AuthChallenge
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientProgress::AuthChallenge::url: alloc::string::String
+pub enum radroots_nostr_connect::client::Receive
+pub radroots_nostr_connect::client::Receive::Cancelled
+pub radroots_nostr_connect::client::Receive::Event(alloc::boxed::Box<radroots_nostr_connect::client::ClientEvent>)
+pub radroots_nostr_connect::client::Receive::TimedOut
+impl radroots_nostr_connect::client::Receive
+pub fn radroots_nostr_connect::client::Receive::event(radroots_nostr_connect::client::ClientEvent) -> Self
+pub struct radroots_nostr_connect::client::CancellationToken(_)
+impl radroots_nostr_connect::client::CancellationToken
+pub fn radroots_nostr_connect::client::CancellationToken::cancel(&self)
+pub fn radroots_nostr_connect::client::CancellationToken::is_cancelled(&self) -> bool
+pub fn radroots_nostr_connect::client::CancellationToken::new() -> Self
+pub struct radroots_nostr_connect::client::Client
+impl radroots_nostr_connect::client::Client
+pub async fn radroots_nostr_connect::client::Client::execute<T, F>(&self, radroots_nostr_connect::message::RequestId, radroots_nostr_connect::message::Request, &mut T, &radroots_nostr_connect::client::CancellationToken, F) -> core::result::Result<radroots_nostr_connect::client::Completion, radroots_nostr_connect::error::RadrootsNostrConnectError> where T: radroots_nostr_connect::client::Transport + ?core::marker::Sized, F: core::ops::function::FnMut(radroots_nostr_connect::client::Progress) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::from_secret(&str, radroots_nostr_connect::client::Target) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::generate(radroots_nostr_connect::client::Target) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::prepare(&self, radroots_nostr_connect::message::RequestId, radroots_nostr_connect::message::Request) -> core::result::Result<radroots_nostr_connect::client::Operation<'_>, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::public_key(&self) -> core::result::Result<radroots_identity::key::PublicKey, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::target(&self) -> &radroots_nostr_connect::client::Target
+impl core::fmt::Debug for radroots_nostr_connect::client::Client
+pub fn radroots_nostr_connect::client::Client::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::client::ClientEvent(_)
+impl radroots_nostr_connect::client::ClientEvent
+pub fn radroots_nostr_connect::client::ClientEvent::as_json(&self) -> alloc::string::String
+pub fn radroots_nostr_connect::client::ClientEvent::from_json(&str) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::client::ClientEvent
+pub fn radroots_nostr_connect::client::ClientEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::client::Operation<'a>
+impl radroots_nostr_connect::client::Operation<'_>
+pub fn radroots_nostr_connect::client::Operation<'_>::cancel(&mut self) -> core::result::Result<radroots_nostr_connect::client::CancellationPhase, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Operation<'_>::mark_published(&mut self) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Operation<'_>::publication(&self) -> core::result::Result<&radroots_nostr_connect::client::ClientEvent, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Operation<'_>::select(&mut self, &radroots_nostr_connect::client::ClientEvent) -> core::result::Result<radroots_nostr_connect::client::EventOutcome, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::client::Operation<'_>
+pub fn radroots_nostr_connect::client::Operation<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::client::RadrootsNostrConnectClientRequest
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::request: radroots_nostr_connect::message::Request
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::request_id: alloc::string::String
+impl radroots_nostr_connect::client::RadrootsNostrConnectClientRequest
+pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::into_message(self) -> radroots_nostr_connect::message::RequestMessage
+pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::method(&self) -> radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::new(impl core::convert::Into<alloc::string::String>, radroots_nostr_connect::message::Request) -> Self
+pub struct radroots_nostr_connect::client::RadrootsNostrConnectClientTarget
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientTarget::relays: alloc::vec::Vec<nostr::types::url::RelayUrl>
+pub radroots_nostr_connect::client::RadrootsNostrConnectClientTarget::remote_signer_public_key: nostr::key::public_key::PublicKey
+impl radroots_nostr_connect::client::RadrootsNostrConnectClientTarget
+pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientTarget::new(nostr::key::public_key::PublicKey, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> Self
+pub struct radroots_nostr_connect::client::Target
+impl radroots_nostr_connect::client::Target
+pub fn radroots_nostr_connect::client::Target::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
+pub const fn radroots_nostr_connect::client::Target::remote_signer_public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_nostr_connect::client::Target::try_new(radroots_identity::key::PublicKey, alloc::vec::Vec<radroots_nostr_connect::uri::RelayUrl>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub const radroots_nostr_connect::client::CLIENT_EVENT_MAX_BYTES: usize
+pub trait radroots_nostr_connect::client::RadrootsNostrConnectClientTransport
+pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientTransport::next_response_event<'a>(&'a mut self) -> radroots_nostr_connect::client::RadrootsNostrConnectClientTransportFuture<'a, nostr::event::Event>
+pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientTransport::publish_request_event<'a>(&'a mut self, nostr::event::Event) -> radroots_nostr_connect::client::RadrootsNostrConnectClientTransportFuture<'a, ()>
+pub trait radroots_nostr_connect::client::Transport: core::marker::Send
+pub fn radroots_nostr_connect::client::Transport::publish<'a>(&'a mut self, radroots_nostr_connect::client::ClientEvent) -> radroots_nostr_connect::client::TransportFuture<'a, ()>
+pub fn radroots_nostr_connect::client::Transport::receive<'a>(&'a mut self, &'a radroots_nostr_connect::client::CancellationToken) -> radroots_nostr_connect::client::TransportFuture<'a, radroots_nostr_connect::client::Receive>
+pub fn radroots_nostr_connect::client::build_request_event(&nostr::key::Keys, &radroots_nostr_connect::client::RadrootsNostrConnectClientTarget, radroots_nostr_connect::message::RequestMessage) -> core::result::Result<nostr::event::Event, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub async fn radroots_nostr_connect::client::execute_request_with_transport<T, F>(&nostr::key::Keys, &radroots_nostr_connect::client::RadrootsNostrConnectClientTarget, radroots_nostr_connect::client::RadrootsNostrConnectClientRequest, &mut T, F) -> core::result::Result<radroots_nostr_connect::message::Response, radroots_nostr_connect::error::RadrootsNostrConnectError> where T: radroots_nostr_connect::client::RadrootsNostrConnectClientTransport, F: core::ops::function::FnMut(radroots_nostr_connect::client::RadrootsNostrConnectClientProgress) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::parse_response_event(&nostr::key::Keys, &radroots_nostr_connect::client::RadrootsNostrConnectClientTarget, &str, &radroots_nostr_connect::method::Method, &nostr::event::Event) -> core::result::Result<radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub type radroots_nostr_connect::client::RadrootsNostrConnectClientTransportFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<T, radroots_nostr_connect::error::RadrootsNostrConnectError>> + core::marker::Send + 'a)>>
+pub type radroots_nostr_connect::client::TransportFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<T, radroots_nostr_connect::error::RadrootsNostrConnectError>> + core::marker::Send + 'a)>>
+pub mod radroots_nostr_connect::error
+pub enum radroots_nostr_connect::error::RadrootsNostrConnectError
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::ClientMetadataTooLarge
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::ClientMetadataTooLarge::max: usize
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::ClientMetadataTooLarge::received: usize
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Decrypt
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Decrypt::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Encrypt
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Encrypt::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientEvent
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientKey
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientMetadata
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientMetadata::field: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientMetadata::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientState
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientState::reason: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientTarget
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidClientTarget::reason: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidMethod(alloc::string::String)
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidParams
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidParams::expected: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidParams::method: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidParams::received: usize
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidPermission(alloc::string::String)
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidPublicKey
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidPublicKey::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidPublicKey::value: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRelayUrl
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRelayUrl::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRelayUrl::value: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRequestId
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRequestId::reason: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRequestPayload
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRequestPayload::method: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidRequestPayload::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidResponseEnvelope
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidResponseEnvelope::reason: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidResponsePayload
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidResponsePayload::method: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidResponsePayload::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidServerRequest
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidServerRequest::reason: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidServerState
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidServerState::reason: &'static str
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidUri
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidUriScheme(alloc::string::String)
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidUrl
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidUrl::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::InvalidUrl::value: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Json(alloc::string::String)
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::MissingPublicKey
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::MissingRelay
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::MissingResult
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::MissingSecret
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::ReplayedRequest
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::ReplayedResponse
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::RequestTimedOut
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Sign
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Sign::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Transport
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::Transport::reason: alloc::string::String
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::UnsupportedMethod(radroots_nostr_connect::method::Method)
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::WrongRequestId
+pub radroots_nostr_connect::error::RadrootsNostrConnectError::WrongResponseSigner
+impl core::convert::From<serde_json::error::Error> for radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::error::RadrootsNostrConnectError::from(serde_json::error::Error) -> Self
+pub mod radroots_nostr_connect::message
+pub enum radroots_nostr_connect::message::PendingConnectionOutcome
+pub radroots_nostr_connect::message::PendingConnectionOutcome::Approved(radroots_identity::key::PublicKey)
+pub radroots_nostr_connect::message::PendingConnectionOutcome::ApprovedCapability(radroots_nostr_connect::message::RemoteSessionCapability)
+pub radroots_nostr_connect::message::PendingConnectionOutcome::AuthChallenge
+pub radroots_nostr_connect::message::PendingConnectionOutcome::AuthChallenge::url: alloc::string::String
+pub radroots_nostr_connect::message::PendingConnectionOutcome::PendingApproval
+pub radroots_nostr_connect::message::PendingConnectionOutcome::Rejected
+pub radroots_nostr_connect::message::PendingConnectionOutcome::Rejected::message: alloc::string::String
+pub radroots_nostr_connect::message::PendingConnectionOutcome::UnexpectedResponse
+pub radroots_nostr_connect::message::PendingConnectionOutcome::UnexpectedResponse::response: alloc::string::String
+pub enum radroots_nostr_connect::message::Request
+pub radroots_nostr_connect::message::Request::Connect
+pub radroots_nostr_connect::message::Request::Connect::client_metadata: core::option::Option<radroots_nostr_connect::uri::ClientMetadata>
+pub radroots_nostr_connect::message::Request::Connect::remote_signer_public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::message::Request::Connect::requested_permissions: radroots_nostr_connect::permission::Permissions
+pub radroots_nostr_connect::message::Request::Connect::secret: core::option::Option<alloc::string::String>
+pub radroots_nostr_connect::message::Request::Custom
+pub radroots_nostr_connect::message::Request::Custom::method: radroots_nostr_connect::method::Method
+pub radroots_nostr_connect::message::Request::Custom::params: alloc::vec::Vec<alloc::string::String>
+pub radroots_nostr_connect::message::Request::GetPublicKey
+pub radroots_nostr_connect::message::Request::GetSessionCapability
+pub radroots_nostr_connect::message::Request::Logout
+pub radroots_nostr_connect::message::Request::Nip04Decrypt
+pub radroots_nostr_connect::message::Request::Nip04Decrypt::ciphertext: alloc::string::String
+pub radroots_nostr_connect::message::Request::Nip04Decrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::message::Request::Nip04Encrypt
+pub radroots_nostr_connect::message::Request::Nip04Encrypt::plaintext: alloc::string::String
+pub radroots_nostr_connect::message::Request::Nip04Encrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::message::Request::Nip44Decrypt
+pub radroots_nostr_connect::message::Request::Nip44Decrypt::ciphertext: alloc::string::String
+pub radroots_nostr_connect::message::Request::Nip44Decrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::message::Request::Nip44Encrypt
+pub radroots_nostr_connect::message::Request::Nip44Encrypt::plaintext: alloc::string::String
+pub radroots_nostr_connect::message::Request::Nip44Encrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::message::Request::Ping
+pub radroots_nostr_connect::message::Request::SignEvent(radroots_nostr_connect::message::UnsignedEvent)
+pub radroots_nostr_connect::message::Request::SwitchRelays
+impl radroots_nostr_connect::message::Request
+pub fn radroots_nostr_connect::message::Request::from_parts(radroots_nostr_connect::method::Method, alloc::vec::Vec<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::Request::method(&self) -> radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::message::Request::to_params(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::message::Request
+pub fn radroots_nostr_connect::message::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_nostr_connect::message::Response
+pub radroots_nostr_connect::message::Response::AuthUrl(alloc::string::String)
+pub radroots_nostr_connect::message::Response::ConnectAcknowledged
+pub radroots_nostr_connect::message::Response::ConnectSecretEcho(alloc::string::String)
+pub radroots_nostr_connect::message::Response::Custom
+pub radroots_nostr_connect::message::Response::Custom::error: core::option::Option<alloc::string::String>
+pub radroots_nostr_connect::message::Response::Custom::result: core::option::Option<serde_json::value::Value>
+pub radroots_nostr_connect::message::Response::Error
+pub radroots_nostr_connect::message::Response::Error::error: alloc::string::String
+pub radroots_nostr_connect::message::Response::Error::result: core::option::Option<serde_json::value::Value>
+pub radroots_nostr_connect::message::Response::LogoutAcknowledged
+pub radroots_nostr_connect::message::Response::Nip04Decrypt(alloc::string::String)
+pub radroots_nostr_connect::message::Response::Nip04Encrypt(alloc::string::String)
+pub radroots_nostr_connect::message::Response::Nip44Decrypt(alloc::string::String)
+pub radroots_nostr_connect::message::Response::Nip44Encrypt(alloc::string::String)
+pub radroots_nostr_connect::message::Response::PendingConnection
+pub radroots_nostr_connect::message::Response::Pong
+pub radroots_nostr_connect::message::Response::RelayList(alloc::vec::Vec<radroots_nostr_connect::uri::RelayUrl>)
+pub radroots_nostr_connect::message::Response::RelayListUnchanged
+pub radroots_nostr_connect::message::Response::RemoteSessionCapability(radroots_nostr_connect::message::RemoteSessionCapability)
+pub radroots_nostr_connect::message::Response::SignedEvent(radroots_nostr_connect::message::SignedEvent)
+pub radroots_nostr_connect::message::Response::UserPublicKey(radroots_identity::key::PublicKey)
+impl radroots_nostr_connect::message::Response
+pub fn radroots_nostr_connect::message::Response::from_envelope(&radroots_nostr_connect::method::Method, radroots_nostr_connect::message::ResponseEnvelope) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::Response::into_envelope(self, impl core::convert::Into<alloc::string::String>) -> core::result::Result<radroots_nostr_connect::message::ResponseEnvelope, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::Response::into_pending_connection_poll_outcome(self) -> radroots_nostr_connect::message::PendingConnectionOutcome
+impl core::fmt::Debug for radroots_nostr_connect::message::Response
+pub fn radroots_nostr_connect::message::Response::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::message::RemoteSessionCapability
+impl radroots_nostr_connect::message::RemoteSessionCapability
+pub fn radroots_nostr_connect::message::RemoteSessionCapability::permissions(&self) -> &radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::message::RemoteSessionCapability::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
+pub fn radroots_nostr_connect::message::RemoteSessionCapability::try_new(radroots_identity::key::PublicKey, alloc::vec::Vec<radroots_nostr_connect::uri::RelayUrl>, radroots_nostr_connect::permission::Permissions) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub const fn radroots_nostr_connect::message::RemoteSessionCapability::user_public_key(&self) -> radroots_identity::key::PublicKey
+impl serde_core::ser::Serialize for radroots_nostr_connect::message::RemoteSessionCapability
+pub fn radroots_nostr_connect::message::RemoteSessionCapability::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::message::RemoteSessionCapability
+pub fn radroots_nostr_connect::message::RemoteSessionCapability::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::message::RequestId(_)
+impl radroots_nostr_connect::message::RequestId
+pub fn radroots_nostr_connect::message::RequestId::as_str(&self) -> &str
+pub fn radroots_nostr_connect::message::RequestId::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Display for radroots_nostr_connect::message::RequestId
+pub fn radroots_nostr_connect::message::RequestId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::message::RequestId
+pub type radroots_nostr_connect::message::RequestId::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::message::RequestId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_nostr_connect::message::RequestId
+pub fn radroots_nostr_connect::message::RequestId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::message::RequestId
+pub fn radroots_nostr_connect::message::RequestId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::message::RequestMessage
+impl radroots_nostr_connect::message::RequestMessage
+pub fn radroots_nostr_connect::message::RequestMessage::correlate(&self, radroots_nostr_connect::message::ResponseEnvelope) -> core::result::Result<radroots_nostr_connect::message::Response, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::RequestMessage::payload(&self) -> &radroots_nostr_connect::message::Request
+pub fn radroots_nostr_connect::message::RequestMessage::request_id(&self) -> core::result::Result<radroots_nostr_connect::message::RequestId, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::RequestMessage::try_new(impl core::convert::Into<alloc::string::String>, radroots_nostr_connect::message::Request) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl serde_core::ser::Serialize for radroots_nostr_connect::message::RequestMessage
+pub fn radroots_nostr_connect::message::RequestMessage::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::message::RequestMessage
+pub fn radroots_nostr_connect::message::RequestMessage::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::message::ResponseEnvelope
+impl radroots_nostr_connect::message::ResponseEnvelope
+pub fn radroots_nostr_connect::message::ResponseEnvelope::error(&self) -> core::option::Option<&str>
+pub fn radroots_nostr_connect::message::ResponseEnvelope::request_id(&self) -> core::result::Result<radroots_nostr_connect::message::RequestId, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::ResponseEnvelope::result(&self) -> core::option::Option<&serde_json::value::Value>
+pub fn radroots_nostr_connect::message::ResponseEnvelope::try_new(impl core::convert::Into<alloc::string::String>, core::option::Option<serde_json::value::Value>, core::option::Option<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::ResponseEnvelope::validate(&self) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::message::ResponseEnvelope
+pub fn radroots_nostr_connect::message::ResponseEnvelope::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_nostr_connect::message::ResponseEnvelope
+pub fn radroots_nostr_connect::message::ResponseEnvelope::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::message::ResponseEnvelope
+pub fn radroots_nostr_connect::message::ResponseEnvelope::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::message::ResponseValidator
+impl radroots_nostr_connect::message::ResponseValidator
+pub fn radroots_nostr_connect::message::ResponseValidator::new(radroots_nostr_connect::message::RequestId, radroots_identity::key::PublicKey) -> Self
+pub fn radroots_nostr_connect::message::ResponseValidator::validate(&mut self, radroots_identity::key::PublicKey, impl core::convert::Into<alloc::string::String>, &radroots_nostr_connect::message::ResponseEnvelope) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub struct radroots_nostr_connect::message::SignedEvent(_)
+impl radroots_nostr_connect::message::SignedEvent
+pub fn radroots_nostr_connect::message::SignedEvent::as_json(&self) -> alloc::string::String
+pub fn radroots_nostr_connect::message::SignedEvent::from_json(&str) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::message::SignedEvent
+pub fn radroots_nostr_connect::message::SignedEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::message::UnsignedEvent(_)
+impl radroots_nostr_connect::message::UnsignedEvent
+pub fn radroots_nostr_connect::message::UnsignedEvent::as_json(&self) -> alloc::string::String
+pub fn radroots_nostr_connect::message::UnsignedEvent::from_json(&str) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::UnsignedEvent::kind(&self) -> u16
+impl core::fmt::Debug for radroots_nostr_connect::message::UnsignedEvent
+pub fn radroots_nostr_connect::message::UnsignedEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_nostr_connect::message::PENDING_CONNECTION_ERROR: &str
+pub const radroots_nostr_connect::message::REMOTE_CAPABILITY_RELAY_COUNT_MAX: usize
+pub const radroots_nostr_connect::message::REQUEST_ID_MAX_BYTES: usize
+pub const radroots_nostr_connect::message::REQUEST_PARAMS_MAX_BYTES: usize
+pub const radroots_nostr_connect::message::REQUEST_PARAM_COUNT_MAX: usize
+pub const radroots_nostr_connect::message::REQUEST_PARAM_MAX_BYTES: usize
+pub const radroots_nostr_connect::message::RESPONSE_ERROR_MAX_BYTES: usize
+pub const radroots_nostr_connect::message::RESPONSE_RESULT_MAX_BYTES: usize
+pub const radroots_nostr_connect::message::RPC_KIND: u16
+pub mod radroots_nostr_connect::method
+pub enum radroots_nostr_connect::method::Method
+pub radroots_nostr_connect::method::Method::Connect
+pub radroots_nostr_connect::method::Method::Custom(radroots_nostr_connect::method::CustomMethod)
+pub radroots_nostr_connect::method::Method::GetPublicKey
+pub radroots_nostr_connect::method::Method::GetSessionCapability
+pub radroots_nostr_connect::method::Method::Logout
+pub radroots_nostr_connect::method::Method::Nip04Decrypt
+pub radroots_nostr_connect::method::Method::Nip04Encrypt
+pub radroots_nostr_connect::method::Method::Nip44Decrypt
+pub radroots_nostr_connect::method::Method::Nip44Encrypt
+pub radroots_nostr_connect::method::Method::Ping
+pub radroots_nostr_connect::method::Method::SignEvent
+pub radroots_nostr_connect::method::Method::SwitchRelays
+impl radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::as_str(&self) -> &str
+pub fn radroots_nostr_connect::method::Method::custom(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Display for radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::method::Method
+pub type radroots_nostr_connect::method::Method::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::method::Method::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::method::CustomMethod(_)
+impl radroots_nostr_connect::method::CustomMethod
+pub fn radroots_nostr_connect::method::CustomMethod::as_str(&self) -> &str
+pub const radroots_nostr_connect::method::METHOD_MAX_BYTES: usize
+pub mod radroots_nostr_connect::permission
+pub struct radroots_nostr_connect::permission::Permission
+impl radroots_nostr_connect::permission::Permission
+pub fn radroots_nostr_connect::permission::Permission::matches_request(&self, &radroots_nostr_connect::method::Method, core::option::Option<&str>) -> bool
+pub fn radroots_nostr_connect::permission::Permission::matches_sign_event_kind(&self, u32) -> bool
+pub fn radroots_nostr_connect::permission::Permission::method(&self) -> &radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::permission::Permission::new(radroots_nostr_connect::method::Method) -> Self
+pub fn radroots_nostr_connect::permission::Permission::parameter(&self) -> core::option::Option<&str>
+pub fn radroots_nostr_connect::permission::Permission::try_with_parameter(radroots_nostr_connect::method::Method, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Display for radroots_nostr_connect::permission::Permission
+pub fn radroots_nostr_connect::permission::Permission::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::permission::Permission
+pub type radroots_nostr_connect::permission::Permission::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::permission::Permission::from_str(&str) -> core::result::Result<Self, Self::Err>
+pub struct radroots_nostr_connect::permission::Permissions(_)
+impl radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::permission::Permissions::allows_request(&self, &radroots_nostr_connect::method::Method, core::option::Option<&str>) -> bool
+pub fn radroots_nostr_connect::permission::Permissions::allows_sign_event_kind(&self, u32) -> bool
+pub fn radroots_nostr_connect::permission::Permissions::as_slice(&self) -> &[radroots_nostr_connect::permission::Permission]
+pub fn radroots_nostr_connect::permission::Permissions::into_vec(self) -> alloc::vec::Vec<radroots_nostr_connect::permission::Permission>
+pub fn radroots_nostr_connect::permission::Permissions::is_empty(&self) -> bool
+pub fn radroots_nostr_connect::permission::Permissions::new() -> Self
+pub fn radroots_nostr_connect::permission::Permissions::try_from_vec(alloc::vec::Vec<radroots_nostr_connect::permission::Permission>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::convert::From<alloc::vec::Vec<radroots_nostr_connect::permission::Permission>> for radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::permission::Permissions::from(alloc::vec::Vec<radroots_nostr_connect::permission::Permission>) -> Self
+impl core::fmt::Display for radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::permission::Permissions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::permission::Permissions
+pub type radroots_nostr_connect::permission::Permissions::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::permission::Permissions::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::permission::Permissions::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::permission::Permissions::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_nostr_connect::permission::PERMISSIONS_MAX_BYTES: usize
+pub const radroots_nostr_connect::permission::PERMISSION_COUNT_MAX: usize
+pub const radroots_nostr_connect::permission::PERMISSION_PARAMETER_MAX_BYTES: usize
+pub mod radroots_nostr_connect::server
+pub struct radroots_nostr_connect::server::Server
+impl radroots_nostr_connect::server::Server
+pub fn radroots_nostr_connect::server::Server::new() -> Self
+pub fn radroots_nostr_connect::server::Server::parse(&mut self, impl core::convert::Into<alloc::string::String>, &str) -> core::result::Result<radroots_nostr_connect::server::ServerRequest, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::server::Server::with_supported_extensions(impl core::iter::traits::collect::IntoIterator<Item = radroots_nostr_connect::method::Method>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::default::Default for radroots_nostr_connect::server::Server
+pub fn radroots_nostr_connect::server::Server::default() -> Self
+pub struct radroots_nostr_connect::server::ServerRequest
+impl radroots_nostr_connect::server::ServerRequest
+pub fn radroots_nostr_connect::server::ServerRequest::is_allowed_by(&self, &radroots_nostr_connect::permission::Permissions) -> bool
+pub fn radroots_nostr_connect::server::ServerRequest::request(&self) -> &radroots_nostr_connect::message::Request
+pub fn radroots_nostr_connect::server::ServerRequest::request_id(&self) -> &radroots_nostr_connect::message::RequestId
+pub fn radroots_nostr_connect::server::ServerRequest::required_permission(&self) -> core::option::Option<&radroots_nostr_connect::permission::Permission>
+pub fn radroots_nostr_connect::server::ServerRequest::respond(self, radroots_nostr_connect::message::Response) -> core::result::Result<radroots_nostr_connect::server::ServerResponse, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub struct radroots_nostr_connect::server::ServerResponse
+impl radroots_nostr_connect::server::ServerResponse
+pub fn radroots_nostr_connect::server::ServerResponse::as_json(&self) -> &str
+pub fn radroots_nostr_connect::server::ServerResponse::envelope(&self) -> &radroots_nostr_connect::message::ResponseEnvelope
+impl core::fmt::Debug for radroots_nostr_connect::server::ServerResponse
+pub fn radroots_nostr_connect::server::ServerResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_nostr_connect::server::SERVER_MESSAGE_MAX_BYTES: usize
+pub const radroots_nostr_connect::server::SERVER_REPLAY_WINDOW_MAX: usize
+pub fn radroots_nostr_connect::server::required_permission(&radroots_nostr_connect::message::Request) -> core::option::Option<radroots_nostr_connect::permission::Permission>
+pub mod radroots_nostr_connect::uri
+pub enum radroots_nostr_connect::uri::Uri
+pub radroots_nostr_connect::uri::Uri::Bunker(radroots_nostr_connect::uri::BunkerUri)
+pub radroots_nostr_connect::uri::Uri::Client(radroots_nostr_connect::uri::ClientUri)
+impl radroots_nostr_connect::uri::Uri
+pub fn radroots_nostr_connect::uri::Uri::parse(&str) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Display for radroots_nostr_connect::uri::Uri
+pub fn radroots_nostr_connect::uri::Uri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::uri::Uri
+pub type radroots_nostr_connect::uri::Uri::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::uri::Uri::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::Uri
+pub fn radroots_nostr_connect::uri::Uri::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::Uri
+pub fn radroots_nostr_connect::uri::Uri::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::uri::BunkerUri
+impl radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
+pub const fn radroots_nostr_connect::uri::BunkerUri::remote_signer_public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_nostr_connect::uri::BunkerUri::secret(&self) -> core::option::Option<&str>
+impl core::fmt::Debug for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::uri::ClientMetadata
+impl radroots_nostr_connect::uri::ClientMetadata
+pub fn radroots_nostr_connect::uri::ClientMetadata::from_connect_param(&str) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::uri::ClientMetadata::image(&self) -> core::option::Option<&str>
+pub fn radroots_nostr_connect::uri::ClientMetadata::is_display_empty(&self) -> bool
+pub fn radroots_nostr_connect::uri::ClientMetadata::name(&self) -> core::option::Option<&str>
+pub fn radroots_nostr_connect::uri::ClientMetadata::new() -> Self
+pub fn radroots_nostr_connect::uri::ClientMetadata::normalized(self) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::uri::ClientMetadata::requested_permissions(&self) -> &radroots_nostr_connect::permission::Permissions
+pub fn radroots_nostr_connect::uri::ClientMetadata::to_connect_param(&self) -> core::result::Result<alloc::string::String, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::uri::ClientMetadata::url(&self) -> core::option::Option<&str>
+pub fn radroots_nostr_connect::uri::ClientMetadata::with_image(self, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::uri::ClientMetadata::with_name(self, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::uri::ClientMetadata::with_requested_permissions(self, radroots_nostr_connect::permission::Permissions) -> Self
+pub fn radroots_nostr_connect::uri::ClientMetadata::with_url(self, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::ClientMetadata
+pub fn radroots_nostr_connect::uri::ClientMetadata::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::ClientMetadata
+pub fn radroots_nostr_connect::uri::ClientMetadata::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::uri::ClientUri
+impl radroots_nostr_connect::uri::ClientUri
+pub const fn radroots_nostr_connect::uri::ClientUri::client_public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_nostr_connect::uri::ClientUri::metadata(&self) -> &radroots_nostr_connect::uri::ClientMetadata
+pub fn radroots_nostr_connect::uri::ClientUri::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
+pub fn radroots_nostr_connect::uri::ClientUri::secret(&self) -> &str
+impl core::fmt::Debug for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::uri::RelayUrl(_)
+impl radroots_nostr_connect::uri::RelayUrl
+pub fn radroots_nostr_connect::uri::RelayUrl::parse(&str) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::uri::RelayUrl
+pub fn radroots_nostr_connect::uri::RelayUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_nostr_connect::uri::RelayUrl
+pub fn radroots_nostr_connect::uri::RelayUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::uri::RelayUrl
+pub type radroots_nostr_connect::uri::RelayUrl::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::uri::RelayUrl::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::RelayUrl
+pub fn radroots_nostr_connect::uri::RelayUrl::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::RelayUrl
+pub fn radroots_nostr_connect::uri::RelayUrl::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_nostr_connect::uri::BUNKER_URI_SCHEME: &str
+pub const radroots_nostr_connect::uri::CLIENT_METADATA_JSON_MAX_BYTES: usize
+pub const radroots_nostr_connect::uri::CLIENT_NAME_MAX_BYTES: usize
+pub const radroots_nostr_connect::uri::CLIENT_URL_MAX_BYTES: usize
+pub const radroots_nostr_connect::uri::RELAY_COUNT_MAX: usize
+pub const radroots_nostr_connect::uri::SECRET_MAX_BYTES: usize
+pub const radroots_nostr_connect::uri::URI_MAX_BYTES: usize
+pub const radroots_nostr_connect::uri::URI_SCHEME: &str
+pub enum radroots_nostr_connect::Error
+pub radroots_nostr_connect::Error::ClientMetadataTooLarge
+pub radroots_nostr_connect::Error::ClientMetadataTooLarge::max: usize
+pub radroots_nostr_connect::Error::ClientMetadataTooLarge::received: usize
+pub radroots_nostr_connect::Error::Decrypt
+pub radroots_nostr_connect::Error::Decrypt::reason: alloc::string::String
+pub radroots_nostr_connect::Error::Encrypt
+pub radroots_nostr_connect::Error::Encrypt::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidClientEvent
+pub radroots_nostr_connect::Error::InvalidClientKey
+pub radroots_nostr_connect::Error::InvalidClientMetadata
+pub radroots_nostr_connect::Error::InvalidClientMetadata::field: &'static str
+pub radroots_nostr_connect::Error::InvalidClientMetadata::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidClientState
+pub radroots_nostr_connect::Error::InvalidClientState::reason: &'static str
+pub radroots_nostr_connect::Error::InvalidClientTarget
+pub radroots_nostr_connect::Error::InvalidClientTarget::reason: &'static str
+pub radroots_nostr_connect::Error::InvalidMethod(alloc::string::String)
+pub radroots_nostr_connect::Error::InvalidParams
+pub radroots_nostr_connect::Error::InvalidParams::expected: &'static str
+pub radroots_nostr_connect::Error::InvalidParams::method: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidParams::received: usize
+pub radroots_nostr_connect::Error::InvalidPermission(alloc::string::String)
+pub radroots_nostr_connect::Error::InvalidPublicKey
+pub radroots_nostr_connect::Error::InvalidPublicKey::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidPublicKey::value: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidRelayUrl
+pub radroots_nostr_connect::Error::InvalidRelayUrl::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidRelayUrl::value: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidRequestId
+pub radroots_nostr_connect::Error::InvalidRequestId::reason: &'static str
+pub radroots_nostr_connect::Error::InvalidRequestPayload
+pub radroots_nostr_connect::Error::InvalidRequestPayload::method: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidRequestPayload::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidResponseEnvelope
+pub radroots_nostr_connect::Error::InvalidResponseEnvelope::reason: &'static str
+pub radroots_nostr_connect::Error::InvalidResponsePayload
+pub radroots_nostr_connect::Error::InvalidResponsePayload::method: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidResponsePayload::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidServerRequest
+pub radroots_nostr_connect::Error::InvalidServerRequest::reason: &'static str
+pub radroots_nostr_connect::Error::InvalidServerState
+pub radroots_nostr_connect::Error::InvalidServerState::reason: &'static str
+pub radroots_nostr_connect::Error::InvalidUri
+pub radroots_nostr_connect::Error::InvalidUriScheme(alloc::string::String)
+pub radroots_nostr_connect::Error::InvalidUrl
+pub radroots_nostr_connect::Error::InvalidUrl::reason: alloc::string::String
+pub radroots_nostr_connect::Error::InvalidUrl::value: alloc::string::String
+pub radroots_nostr_connect::Error::Json(alloc::string::String)
+pub radroots_nostr_connect::Error::MissingPublicKey
+pub radroots_nostr_connect::Error::MissingRelay
+pub radroots_nostr_connect::Error::MissingResult
+pub radroots_nostr_connect::Error::MissingSecret
+pub radroots_nostr_connect::Error::ReplayedRequest
+pub radroots_nostr_connect::Error::ReplayedResponse
+pub radroots_nostr_connect::Error::RequestTimedOut
+pub radroots_nostr_connect::Error::Sign
+pub radroots_nostr_connect::Error::Sign::reason: alloc::string::String
+pub radroots_nostr_connect::Error::Transport
+pub radroots_nostr_connect::Error::Transport::reason: alloc::string::String
+pub radroots_nostr_connect::Error::UnsupportedMethod(radroots_nostr_connect::method::Method)
+pub radroots_nostr_connect::Error::WrongRequestId
+pub radroots_nostr_connect::Error::WrongResponseSigner
+impl core::convert::From<serde_json::error::Error> for radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::error::RadrootsNostrConnectError::from(serde_json::error::Error) -> Self
+pub enum radroots_nostr_connect::Method
+pub radroots_nostr_connect::Method::Connect
+pub radroots_nostr_connect::Method::Custom(radroots_nostr_connect::method::CustomMethod)
+pub radroots_nostr_connect::Method::GetPublicKey
+pub radroots_nostr_connect::Method::GetSessionCapability
+pub radroots_nostr_connect::Method::Logout
+pub radroots_nostr_connect::Method::Nip04Decrypt
+pub radroots_nostr_connect::Method::Nip04Encrypt
+pub radroots_nostr_connect::Method::Nip44Decrypt
+pub radroots_nostr_connect::Method::Nip44Encrypt
+pub radroots_nostr_connect::Method::Ping
+pub radroots_nostr_connect::Method::SignEvent
+pub radroots_nostr_connect::Method::SwitchRelays
+impl radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::as_str(&self) -> &str
+pub fn radroots_nostr_connect::method::Method::custom(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Display for radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::method::Method
+pub type radroots_nostr_connect::method::Method::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::method::Method::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::method::Method::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub enum radroots_nostr_connect::Request
+pub radroots_nostr_connect::Request::Connect
+pub radroots_nostr_connect::Request::Connect::client_metadata: core::option::Option<radroots_nostr_connect::uri::ClientMetadata>
+pub radroots_nostr_connect::Request::Connect::remote_signer_public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::Request::Connect::requested_permissions: radroots_nostr_connect::permission::Permissions
+pub radroots_nostr_connect::Request::Connect::secret: core::option::Option<alloc::string::String>
+pub radroots_nostr_connect::Request::Custom
+pub radroots_nostr_connect::Request::Custom::method: radroots_nostr_connect::method::Method
+pub radroots_nostr_connect::Request::Custom::params: alloc::vec::Vec<alloc::string::String>
+pub radroots_nostr_connect::Request::GetPublicKey
+pub radroots_nostr_connect::Request::GetSessionCapability
+pub radroots_nostr_connect::Request::Logout
+pub radroots_nostr_connect::Request::Nip04Decrypt
+pub radroots_nostr_connect::Request::Nip04Decrypt::ciphertext: alloc::string::String
+pub radroots_nostr_connect::Request::Nip04Decrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::Request::Nip04Encrypt
+pub radroots_nostr_connect::Request::Nip04Encrypt::plaintext: alloc::string::String
+pub radroots_nostr_connect::Request::Nip04Encrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::Request::Nip44Decrypt
+pub radroots_nostr_connect::Request::Nip44Decrypt::ciphertext: alloc::string::String
+pub radroots_nostr_connect::Request::Nip44Decrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::Request::Nip44Encrypt
+pub radroots_nostr_connect::Request::Nip44Encrypt::plaintext: alloc::string::String
+pub radroots_nostr_connect::Request::Nip44Encrypt::public_key: radroots_identity::key::PublicKey
+pub radroots_nostr_connect::Request::Ping
+pub radroots_nostr_connect::Request::SignEvent(radroots_nostr_connect::message::UnsignedEvent)
+pub radroots_nostr_connect::Request::SwitchRelays
+impl radroots_nostr_connect::message::Request
+pub fn radroots_nostr_connect::message::Request::from_parts(radroots_nostr_connect::method::Method, alloc::vec::Vec<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::Request::method(&self) -> radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::message::Request::to_params(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Debug for radroots_nostr_connect::message::Request
+pub fn radroots_nostr_connect::message::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_nostr_connect::Response
+pub radroots_nostr_connect::Response::AuthUrl(alloc::string::String)
+pub radroots_nostr_connect::Response::ConnectAcknowledged
+pub radroots_nostr_connect::Response::ConnectSecretEcho(alloc::string::String)
+pub radroots_nostr_connect::Response::Custom
+pub radroots_nostr_connect::Response::Custom::error: core::option::Option<alloc::string::String>
+pub radroots_nostr_connect::Response::Custom::result: core::option::Option<serde_json::value::Value>
+pub radroots_nostr_connect::Response::Error
+pub radroots_nostr_connect::Response::Error::error: alloc::string::String
+pub radroots_nostr_connect::Response::Error::result: core::option::Option<serde_json::value::Value>
+pub radroots_nostr_connect::Response::LogoutAcknowledged
+pub radroots_nostr_connect::Response::Nip04Decrypt(alloc::string::String)
+pub radroots_nostr_connect::Response::Nip04Encrypt(alloc::string::String)
+pub radroots_nostr_connect::Response::Nip44Decrypt(alloc::string::String)
+pub radroots_nostr_connect::Response::Nip44Encrypt(alloc::string::String)
+pub radroots_nostr_connect::Response::PendingConnection
+pub radroots_nostr_connect::Response::Pong
+pub radroots_nostr_connect::Response::RelayList(alloc::vec::Vec<radroots_nostr_connect::uri::RelayUrl>)
+pub radroots_nostr_connect::Response::RelayListUnchanged
+pub radroots_nostr_connect::Response::RemoteSessionCapability(radroots_nostr_connect::message::RemoteSessionCapability)
+pub radroots_nostr_connect::Response::SignedEvent(radroots_nostr_connect::message::SignedEvent)
+pub radroots_nostr_connect::Response::UserPublicKey(radroots_identity::key::PublicKey)
+impl radroots_nostr_connect::message::Response
+pub fn radroots_nostr_connect::message::Response::from_envelope(&radroots_nostr_connect::method::Method, radroots_nostr_connect::message::ResponseEnvelope) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::Response::into_envelope(self, impl core::convert::Into<alloc::string::String>) -> core::result::Result<radroots_nostr_connect::message::ResponseEnvelope, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::message::Response::into_pending_connection_poll_outcome(self) -> radroots_nostr_connect::message::PendingConnectionOutcome
+impl core::fmt::Debug for radroots_nostr_connect::message::Response
+pub fn radroots_nostr_connect::message::Response::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::BunkerUri
+impl radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
+pub const fn radroots_nostr_connect::uri::BunkerUri::remote_signer_public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_nostr_connect::uri::BunkerUri::secret(&self) -> core::option::Option<&str>
+impl core::fmt::Debug for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::BunkerUri
+pub fn radroots_nostr_connect::uri::BunkerUri::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::Client
+impl radroots_nostr_connect::client::Client
+pub async fn radroots_nostr_connect::client::Client::execute<T, F>(&self, radroots_nostr_connect::message::RequestId, radroots_nostr_connect::message::Request, &mut T, &radroots_nostr_connect::client::CancellationToken, F) -> core::result::Result<radroots_nostr_connect::client::Completion, radroots_nostr_connect::error::RadrootsNostrConnectError> where T: radroots_nostr_connect::client::Transport + ?core::marker::Sized, F: core::ops::function::FnMut(radroots_nostr_connect::client::Progress) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::from_secret(&str, radroots_nostr_connect::client::Target) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::generate(radroots_nostr_connect::client::Target) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::prepare(&self, radroots_nostr_connect::message::RequestId, radroots_nostr_connect::message::Request) -> core::result::Result<radroots_nostr_connect::client::Operation<'_>, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::public_key(&self) -> core::result::Result<radroots_identity::key::PublicKey, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::client::Client::target(&self) -> &radroots_nostr_connect::client::Target
+impl core::fmt::Debug for radroots_nostr_connect::client::Client
+pub fn radroots_nostr_connect::client::Client::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr_connect::ClientUri
+impl radroots_nostr_connect::uri::ClientUri
+pub const fn radroots_nostr_connect::uri::ClientUri::client_public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_nostr_connect::uri::ClientUri::metadata(&self) -> &radroots_nostr_connect::uri::ClientMetadata
+pub fn radroots_nostr_connect::uri::ClientUri::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
+pub fn radroots_nostr_connect::uri::ClientUri::secret(&self) -> &str
+impl core::fmt::Debug for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_nostr_connect::uri::ClientUri
+pub fn radroots_nostr_connect::uri::ClientUri::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_nostr_connect::Permission
+impl radroots_nostr_connect::permission::Permission
+pub fn radroots_nostr_connect::permission::Permission::matches_request(&self, &radroots_nostr_connect::method::Method, core::option::Option<&str>) -> bool
+pub fn radroots_nostr_connect::permission::Permission::matches_sign_event_kind(&self, u32) -> bool
+pub fn radroots_nostr_connect::permission::Permission::method(&self) -> &radroots_nostr_connect::method::Method
+pub fn radroots_nostr_connect::permission::Permission::new(radroots_nostr_connect::method::Method) -> Self
+pub fn radroots_nostr_connect::permission::Permission::parameter(&self) -> core::option::Option<&str>
+pub fn radroots_nostr_connect::permission::Permission::try_with_parameter(radroots_nostr_connect::method::Method, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::fmt::Display for radroots_nostr_connect::permission::Permission
+pub fn radroots_nostr_connect::permission::Permission::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_nostr_connect::permission::Permission
+pub type radroots_nostr_connect::permission::Permission::Err = radroots_nostr_connect::error::RadrootsNostrConnectError
+pub fn radroots_nostr_connect::permission::Permission::from_str(&str) -> core::result::Result<Self, Self::Err>
+pub struct radroots_nostr_connect::Server
+impl radroots_nostr_connect::server::Server
+pub fn radroots_nostr_connect::server::Server::new() -> Self
+pub fn radroots_nostr_connect::server::Server::parse(&mut self, impl core::convert::Into<alloc::string::String>, &str) -> core::result::Result<radroots_nostr_connect::server::ServerRequest, radroots_nostr_connect::error::RadrootsNostrConnectError>
+pub fn radroots_nostr_connect::server::Server::with_supported_extensions(impl core::iter::traits::collect::IntoIterator<Item = radroots_nostr_connect::method::Method>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
+impl core::default::Default for radroots_nostr_connect::server::Server
+pub fn radroots_nostr_connect::server::Server::default() -> Self

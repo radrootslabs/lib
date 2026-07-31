@@ -1,3 +1,5 @@
+//! Normalized Nostr Connect errors.
+
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

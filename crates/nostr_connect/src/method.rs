@@ -1,3 +1,5 @@
+//! Standard and extension NIP-46 method identifiers.
+
 use crate::error::RadrootsNostrConnectError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;

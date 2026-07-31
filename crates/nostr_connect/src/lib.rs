@@ -1,5 +1,7 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![doc = include_str!("../README.md")]
 
 pub mod client;
 pub mod error;

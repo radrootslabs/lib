@@ -1,3 +1,5 @@
+//! Canonical NIP-46 permissions and bounded permission sets.
+
 use crate::error::RadrootsNostrConnectError;
 use crate::method::Method;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

@@ -1,3 +1,5 @@
+//! Validated `nostrconnect://` and `bunker://` URI models.
+
 use crate::error::RadrootsNostrConnectError;
 use crate::permission::Permissions;
 use radroots_identity::PublicKey;

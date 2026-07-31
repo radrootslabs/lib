@@ -1,3 +1,5 @@
+//! Bounded NIP-46 request, response, and correlation models.
+
 use crate::error::RadrootsNostrConnectError;
 use crate::method::Method;
 use crate::permission::Permissions;

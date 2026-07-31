@@ -1,3 +1,5 @@
+//! Relay-independent client state and the host transport SPI.
+
 use crate::error::RadrootsNostrConnectError;
 use crate::message::{
     RPC_KIND, Request, RequestId, RequestMessage, Response, ResponseEnvelope, ResponseValidator,

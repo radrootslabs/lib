@@ -6,6 +6,9 @@ use radroots_nostr_connect::{
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const README: &str = include_str!("../README.md");
+const EXAMPLE: &str = include_str!("../examples/prepare_request.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_nostr_connect.txt");
 const CLIENT: &str = include_str!("../src/client.rs");
 const METHOD: &str = include_str!("../src/method.rs");
 const PERMISSION: &str = include_str!("../src/permission.rs");
@@ -266,6 +269,47 @@ fn workspace_signer_consumers_use_only_final_protocol_paths() {
                 "workspace signer consumer retains retired protocol surface `{retired}`"
             );
         }
+    }
+}
+
+#[test]
+fn package_documentation_and_reviewed_api_baseline_cover_the_public_contract() {
+    for section in [
+        "## Canonical surface",
+        "## Features and supported targets",
+        "## Serialization and compatibility",
+        "## Security, side effects, and commit points",
+        "## Intended consumers",
+        "## Package charter",
+    ] {
+        assert!(README.contains(section), "README is missing `{section}`");
+    }
+    for required in [
+        "Client::generate",
+        "Target::try_new",
+        "Request::Ping",
+        "operation.publication()",
+    ] {
+        assert!(
+            EXAMPLE.contains(required),
+            "example is missing `{required}`"
+        );
+    }
+    for export in [
+        "pub struct radroots_nostr_connect::Client",
+        "pub struct radroots_nostr_connect::Server",
+        "pub enum radroots_nostr_connect::Method",
+        "pub struct radroots_nostr_connect::Permission",
+        "pub enum radroots_nostr_connect::Request",
+        "pub enum radroots_nostr_connect::Response",
+        "pub struct radroots_nostr_connect::BunkerUri",
+        "pub struct radroots_nostr_connect::ClientUri",
+        "pub enum radroots_nostr_connect::Error",
+    ] {
+        assert!(
+            PUBLIC_API.contains(export),
+            "reviewed API baseline is missing `{export}`"
+        );
     }
 }
 

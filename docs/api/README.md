@@ -40,3 +40,4 @@ expand a package beyond its charter.
 | `radroots_signing` | [`radroots_signing.txt`](radroots_signing.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_transport` | [`radroots_transport.txt`](radroots_transport.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_nostr` | [`radroots_nostr.txt`](radroots_nostr.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots_nostr_connect` | [`radroots_nostr_connect.txt`](radroots_nostr_connect.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
