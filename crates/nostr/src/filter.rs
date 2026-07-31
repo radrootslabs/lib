@@ -1,14 +1,19 @@
+//! Explicit construction of portable Nostr subscription filters.
+
 use crate::error::RadrootsNostrError;
+use crate::event::Kind;
 #[cfg(feature = "std")]
-use crate::types::RadrootsNostrTimestamp;
-use crate::types::{RadrootsNostrFilter, RadrootsNostrKind};
+use crate::event::Timestamp;
 use alloc::{string::String, string::ToString, vec::Vec};
 
+/// Upstream Nostr filter used only at the explicit protocol boundary.
+pub type Filter = nostr::Filter;
+
 pub fn radroots_nostr_filter_tag(
-    filter: RadrootsNostrFilter,
+    filter: Filter,
     tag: &str,
     values: Vec<String>,
-) -> Result<RadrootsNostrFilter, RadrootsNostrError> {
+) -> Result<Filter, RadrootsNostrError> {
     let mut chars = tag.chars();
     let tag_char = chars
         .next()
@@ -23,15 +28,15 @@ pub fn radroots_nostr_filter_tag(
     Ok(filter.custom_tags(tag_key, values))
 }
 
-pub fn radroots_nostr_kind(kind: u16) -> RadrootsNostrKind {
-    RadrootsNostrKind::Custom(kind)
+pub fn radroots_nostr_kind(kind: u16) -> Kind {
+    Kind::Custom(kind)
 }
 
-pub fn radroots_nostr_filter_kind(kind: u16) -> RadrootsNostrFilter {
-    RadrootsNostrFilter::new().kind(RadrootsNostrKind::Custom(kind))
+pub fn radroots_nostr_filter_kind(kind: u16) -> Filter {
+    Filter::new().kind(Kind::Custom(kind))
 }
 
 #[cfg(feature = "std")]
-pub fn radroots_nostr_filter_new_events(filter: RadrootsNostrFilter) -> RadrootsNostrFilter {
-    filter.since(RadrootsNostrTimestamp::now())
+pub fn radroots_nostr_filter_new_events(filter: Filter) -> Filter {
+    filter.since(Timestamp::now())
 }

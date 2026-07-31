@@ -13,7 +13,7 @@ pub mod events;
 pub mod filter;
 pub mod key;
 pub mod tag;
-pub mod tags;
+mod tags;
 pub mod types;
 pub mod util;
 
@@ -40,7 +40,7 @@ pub mod event_adapters;
 #[cfg(feature = "events")]
 pub mod draft_signing;
 #[cfg(feature = "events")]
-pub mod event_convert;
+mod event_convert;
 #[cfg(feature = "events")]
 pub mod event_verify;
 
@@ -105,21 +105,34 @@ pub mod prelude {
         radroots_nostr_metadata_has_fields,
     };
 
+    pub use crate::event::{
+        Coordinate as RadrootsNostrCoordinate, Event as RadrootsNostrEvent,
+        EventId as RadrootsNostrEventId, Kind as RadrootsNostrKind,
+        Metadata as RadrootsNostrMetadata, Timestamp as RadrootsNostrTimestamp,
+    };
+    pub use crate::filter::Filter as RadrootsNostrFilter;
     #[cfg(feature = "nip17")]
     pub use crate::nip17::{
         RadrootsNip17Error, RadrootsNip17Rumor, RadrootsNip17WrapOptions,
         radroots_nostr_unwrap_gift_wrap, radroots_nostr_wrap_message,
         radroots_nostr_wrap_message_file,
     };
-    pub use crate::tags::*;
+    pub use crate::tag::{
+        Tag as RadrootsNostrTag, TagKind as RadrootsNostrTagKind,
+        TagStandard as RadrootsNostrTagStandard,
+    };
+    pub use crate::tag::{
+        radroots_nostr_tag_at_value, radroots_nostr_tag_first_value,
+        radroots_nostr_tag_match_geohash, radroots_nostr_tag_match_l,
+        radroots_nostr_tag_match_location, radroots_nostr_tag_match_summary,
+        radroots_nostr_tag_match_title, radroots_nostr_tag_relays_parse, radroots_nostr_tag_slice,
+        radroots_nostr_tags_match, radroots_nostr_tags_resolve,
+    };
     pub use crate::types::{
-        RadrootsNostrCoordinate, RadrootsNostrEvent, RadrootsNostrEventId,
-        RadrootsNostrExternalSigningRequest, RadrootsNostrFilter, RadrootsNostrFromBech32,
-        RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
-        RadrootsNostrMetadata, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
-        RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey, RadrootsNostrSubscriptionId,
-        RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
-        RadrootsNostrToBech32, RadrootsNostrUrl,
+        RadrootsNostrExternalSigningRequest, RadrootsNostrFromBech32,
+        RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrPublicKey,
+        RadrootsNostrRelayUrl, RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey,
+        RadrootsNostrSubscriptionId, RadrootsNostrToBech32, RadrootsNostrUrl,
     };
 
     #[cfg(feature = "events")]
@@ -129,7 +142,7 @@ pub mod prelude {
     pub use crate::draft_signing::radroots_nostr_sign_frozen_draft;
 
     #[cfg(feature = "events")]
-    pub use crate::event_convert::{
+    pub use crate::event::{
         nostr_event_from_radroots, radroots_event_from_nostr, radroots_event_ptr_from_nostr,
     };
 

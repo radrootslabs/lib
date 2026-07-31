@@ -31,6 +31,12 @@ pub enum RadrootsNostrError {
     #[error("Radroots event field {field} cannot be represented by Nostr")]
     EventConversion { field: &'static str },
 
+    #[error("Radroots event coordinate cannot be represented by Nostr")]
+    CoordinateConversion,
+
+    #[error("Radroots event tag cannot be represented by Nostr")]
+    TagConversion,
+
     #[error("Nostr event kind {kind} requires typed authoring")]
     TypedAuthoringRequired { kind: u16 },
 

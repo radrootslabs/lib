@@ -9,11 +9,12 @@ use radroots_event::{
     },
 };
 use radroots_nostr::{
+    event::Timestamp as RadrootsNostrTimestamp,
     events::post::{
         radroots_nostr_build_ask_event, radroots_nostr_build_photo_update_event,
         radroots_nostr_build_update_event,
     },
-    types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp},
+    types::{RadrootsNostrKeys, RadrootsNostrSecretKey},
 };
 
 #[test]

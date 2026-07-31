@@ -14,9 +14,12 @@ use radroots_nostr::blossom::{
     RadrootsNostrBlossomError, radroots_nostr_decode_verify_blossom_authorization_header,
     radroots_nostr_encode_blossom_authorization_header, radroots_nostr_sign_blossom_authorization,
 };
-use radroots_nostr::types::{
-    RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrTag,
-    RadrootsNostrTimestamp,
+use radroots_nostr::{
+    event::{
+        Event as RadrootsNostrEvent, Kind as RadrootsNostrKind, Timestamp as RadrootsNostrTimestamp,
+    },
+    tag::Tag as RadrootsNostrTag,
+    types::RadrootsNostrKeys,
 };
 use serde::Deserialize;
 use serde_json::Value;

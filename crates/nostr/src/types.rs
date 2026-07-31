@@ -7,22 +7,23 @@ use radroots_event::listing::classified::{
     ClassifiedListingPartition, classify_classified_listing_marker_names,
 };
 
-pub type RadrootsNostrCoordinate = nostr::nips::nip01::Coordinate;
-pub type RadrootsNostrEvent = nostr::Event;
+#[cfg(feature = "events")]
+pub(crate) use crate::event::Metadata as RadrootsNostrMetadata;
+pub(crate) use crate::event::{
+    Event as RadrootsNostrEvent, EventId as RadrootsNostrEventId, Kind as RadrootsNostrKind,
+    Timestamp as RadrootsNostrTimestamp,
+};
+pub(crate) use crate::filter::Filter as RadrootsNostrFilter;
+pub(crate) use crate::tag::{
+    Tag as RadrootsNostrTag, TagKind as RadrootsNostrTagKind,
+    TagStandard as RadrootsNostrTagStandard,
+};
 pub(crate) type RadrootsNostrEventBuilderUnchecked = nostr::EventBuilder;
-pub type RadrootsNostrEventId = nostr::EventId;
-pub type RadrootsNostrFilter = nostr::Filter;
-pub type RadrootsNostrKind = nostr::Kind;
 pub type RadrootsNostrKeys = nostr::Keys;
-pub type RadrootsNostrMetadata = nostr::Metadata;
 pub type RadrootsNostrPublicKey = nostr::PublicKey;
 pub type RadrootsNostrRelayUrl = nostr::RelayUrl;
 pub type RadrootsNostrSecretKey = nostr::SecretKey;
 pub type RadrootsNostrSubscriptionId = nostr::SubscriptionId;
-pub type RadrootsNostrTag = nostr::Tag;
-pub type RadrootsNostrTagKind<'a> = nostr::TagKind<'a>;
-pub type RadrootsNostrTagStandard = nostr::TagStandard;
-pub type RadrootsNostrTimestamp = nostr::Timestamp;
 pub type RadrootsNostrUrl = nostr::Url;
 
 /// A checked generic event prepared for an external signer.

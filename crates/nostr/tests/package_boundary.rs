@@ -3,11 +3,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[allow(unused_imports)]
-use radroots_nostr::{Error as _, event as _, filter as _, key as _, tag as _};
+use radroots_nostr::{
+    Error as _,
+    event::{Coordinate as _, Event as _, EventId as _, Kind as _, Metadata as _, Timestamp as _},
+    filter::Filter as _,
+    key as _,
+    tag::{Tag as _, TagKind as _, TagStandard as _},
+};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const EVENT_MODULE: &str = include_str!("../src/event.rs");
+const FILTER_MODULE: &str = include_str!("../src/filter.rs");
 const KEY_MODULE: &str = include_str!("../src/key.rs");
+const TAG_MODULE: &str = include_str!("../src/tag.rs");
+const TYPES_MODULE: &str = include_str!("../src/types.rs");
 const IDENTITY_MANIFEST: &str = include_str!("../../identity/Cargo.toml");
 const IDENTITY_KEY_MODULE: &str = include_str!("../../identity/src/key.rs");
 const TRANSPORT_MANIFEST: &str = include_str!("../../transport_nostr/Cargo.toml");
@@ -81,6 +91,59 @@ fn crate_root_establishes_the_final_public_module_skeleton() {
         );
     }
     assert!(ROOT.contains("pub use error::RadrootsNostrError as Error;"));
+}
+
+#[test]
+fn protocol_values_are_exposed_only_at_explicit_adapter_modules() {
+    for (module, aliases) in [
+        (
+            EVENT_MODULE,
+            [
+                "pub type Coordinate",
+                "pub type Event",
+                "pub type EventId",
+                "pub type Kind",
+                "pub type Metadata",
+                "pub type Timestamp",
+            ]
+            .as_slice(),
+        ),
+        (FILTER_MODULE, ["pub type Filter"].as_slice()),
+        (
+            TAG_MODULE,
+            ["pub type Tag", "pub type TagKind", "pub type TagStandard"].as_slice(),
+        ),
+    ] {
+        for alias in aliases {
+            assert!(
+                module.contains(alias),
+                "explicit adapter module is missing `{alias}`"
+            );
+        }
+    }
+
+    for forbidden in [
+        "pub type RadrootsNostrCoordinate",
+        "pub type RadrootsNostrEvent",
+        "pub type RadrootsNostrEventId",
+        "pub type RadrootsNostrFilter",
+        "pub type RadrootsNostrKind",
+        "pub type RadrootsNostrMetadata",
+        "pub type RadrootsNostrTag",
+        "pub type RadrootsNostrTagKind",
+        "pub type RadrootsNostrTagStandard",
+        "pub type RadrootsNostrTimestamp",
+    ] {
+        assert!(
+            !TYPES_MODULE.contains(forbidden),
+            "broad predecessor alias remains public in types: `{forbidden}`"
+        );
+    }
+
+    assert!(ROOT.contains("mod event_convert;"));
+    assert!(ROOT.contains("mod tags;"));
+    assert!(!ROOT.contains("pub mod event_convert;"));
+    assert!(!ROOT.contains("pub mod tags;"));
 }
 
 #[test]
