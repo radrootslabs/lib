@@ -20,6 +20,10 @@ use uuid::Uuid;
 
 static USER_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
 static USER_PUBLIC_KEY: LazyLock<String> = LazyLock::new(|| USER_KEYS.public_key().to_hex());
+static LOCAL_SIGNER: LazyLock<Arc<LocalSigner>> =
+    LazyLock::new(|| Arc::new(LocalSigner::generate().expect("generated local signer")));
+static LOCAL_SIGNER_PUBLIC_KEY: LazyLock<String> =
+    LazyLock::new(|| LOCAL_SIGNER.public_key().to_hex());
 static REMOTE_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
 static CLIENT_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
 
@@ -31,9 +35,13 @@ fn user_pubkey() -> &'static str {
     USER_PUBLIC_KEY.as_str()
 }
 
-fn local_sdk_signer(keys: RadrootsNostrKeys) -> RadrootsSdkLocalKeySigner {
-    let signer_pubkey = keys.public_key().to_hex();
-    RadrootsSdkLocalKeySigner::from_signer(LocalSigner::new(keys), signer_pubkey)
+fn local_signer_pubkey() -> &'static str {
+    LOCAL_SIGNER_PUBLIC_KEY.as_str()
+}
+
+fn local_sdk_signer() -> RadrootsSdkLocalKeySigner {
+    let signer: Arc<RadrootsSdkLocalSignerCapability> = LOCAL_SIGNER.clone();
+    RadrootsSdkLocalKeySigner::from_shared_signer(signer, LOCAL_SIGNER.public_key())
         .expect("sdk local signer")
 }
 
@@ -54,6 +62,15 @@ fn actor() -> Actor {
     .expect("actor")
 }
 
+fn local_actor() -> Actor {
+    Actor::from_public_key_hex(
+        local_signer_pubkey(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Farmer],
+    )
+    .expect("local signer actor")
+}
+
 fn frozen_draft() -> EventDraft {
     frozen_draft_with(
         "radroots.farm.profile.v1",
@@ -61,6 +78,17 @@ fn frozen_draft() -> EventDraft {
         KIND_FARM,
         1_700_000_000,
         vec![vec!["d".to_owned(), "sdk-signer".to_owned()]],
+        "{}",
+    )
+}
+
+fn local_frozen_draft() -> EventDraft {
+    frozen_draft_with(
+        "radroots.farm.profile.v1",
+        local_signer_pubkey(),
+        KIND_FARM,
+        1_700_000_000,
+        vec![vec!["d".to_owned(), "sdk-local-signer".to_owned()]],
         "{}",
     )
 }
@@ -235,10 +263,10 @@ impl RadrootsSdkNip46Transport for HangingNip46Transport {
 
 #[tokio::test]
 async fn local_key_provider_signs_authorized_frozen_draft() {
-    let signer = local_sdk_signer(user_keys());
+    let signer = local_sdk_signer();
     let provider = RadrootsSdkSignerProvider::LocalKey(signer.clone());
-    let draft = frozen_draft();
-    let actor = actor();
+    let draft = local_frozen_draft();
+    let actor = local_actor();
     let mut progress = Vec::new();
 
     let receipt = provider
@@ -257,7 +285,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
     assert_eq!(provider.status(), signer.status());
     assert!(provider.capability().nip46_permissions.is_empty());
     assert_eq!(receipt.mode, RadrootsSdkSignerMode::LocalKey);
-    assert_eq!(receipt.signer_pubkey, user_pubkey());
+    assert_eq!(receipt.signer_pubkey, local_signer_pubkey());
     assert_eq!(receipt.signed_event_id, draft.expected_event_id_hex());
     assert_eq!(
         progress,
@@ -274,9 +302,9 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
 
 #[tokio::test]
 async fn local_key_provider_returns_progress_sink_errors_without_transport_state() {
-    let signer = local_sdk_signer(user_keys());
-    let draft = frozen_draft();
-    let actor = actor();
+    let signer = local_sdk_signer();
+    let draft = local_frozen_draft();
+    let actor = local_actor();
     let wrong_actor = Actor::from_public_key_hex(
         &"a".repeat(64),
         ActorSource::ExplicitPublicKey,
@@ -1010,8 +1038,8 @@ async fn sdk_builder_installs_configured_signer_provider() {
         .build()
         .await
         .expect("empty sdk");
-    let draft = frozen_draft();
-    let signer_actor = actor();
+    let draft = local_frozen_draft();
+    let signer_actor = local_actor();
     let error = empty_sdk
         .sign_with_configured_signer(RadrootsSdkSignRequest::new(
             "farm.publish",
@@ -1026,7 +1054,7 @@ async fn sdk_builder_installs_configured_signer_provider() {
             if mode == "configured" && reason.contains("no SDK signer provider")
     ));
 
-    let signer = local_sdk_signer(user_keys());
+    let signer = local_sdk_signer();
     let sdk = crate::RadrootsClient::builder()
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()

@@ -7,7 +7,6 @@ use radroots_event::listing::operational::{
     OperationalListingDeliveryMethod, OperationalListingProduct, OperationalListingPublicLocation,
     OperationalListingStatus,
 };
-use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_nostr::signing::LocalSigner;
 use radroots_sdk::{
     ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,
@@ -20,9 +19,9 @@ const RELAY: &str = "wss://relay.example.com";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let keys = RadrootsNostrKeys::generate();
-    let seller = keys.public_key().to_hex();
-    let signer = RadrootsSdkLocalKeySigner::from_signer(LocalSigner::new(keys), seller.as_str())?;
+    let signer = LocalSigner::generate()?;
+    let seller = signer.public_key().to_hex();
+    let signer = RadrootsSdkLocalKeySigner::from_signer(signer, seller.as_str())?;
     let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))

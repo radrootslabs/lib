@@ -18,7 +18,6 @@ use radroots_event::{
     },
 };
 use radroots_identity::PublicKey;
-use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_nostr::signing::LocalSigner;
 use radroots_signing::{Actor, actor::ActorSource};
 use radroots_trade::model::RadrootsTradePrivateTermsStateV1;
@@ -37,9 +36,9 @@ fn trade_id() -> TradeId {
 }
 
 fn local_signer() -> (String, LocalSigner) {
-    let keys = RadrootsNostrKeys::generate();
-    let pubkey = keys.public_key().to_hex();
-    (pubkey, LocalSigner::new(keys))
+    let signer = LocalSigner::generate().expect("local signer");
+    let pubkey = signer.public_key().to_hex();
+    (pubkey, signer)
 }
 
 #[tokio::test]
