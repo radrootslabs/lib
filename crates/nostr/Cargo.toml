@@ -27,14 +27,12 @@ std = [
   "radroots_identity/std",
 ]
 blossom = ["std", "dep:base64", "dep:radroots_blossom"]
-client = ["std", "dep:nostr-sdk"]
 codec = []
 events = [
   "std",
   "radroots_event/serde",
   "radroots_event_codec/json",
 ]
-http = ["dep:reqwest"]
 nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
 signing = ["events", "dep:radroots_signing", "radroots_signing/std"]
 
@@ -48,11 +46,6 @@ radroots_signing = { workspace = true, optional = true, default-features = false
 nostr = { workspace = true, default-features = false, features = [
   "alloc",
   "nip04",
-] }
-nostr-sdk = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true, default-features = false, features = [
-  "json",
-  "rustls-tls",
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -3,8 +3,7 @@ use radroots_event::{post::AuthoredUpdate, post::reply::AuthoredNip10Reply};
 use radroots_event_codec::{parsed::RadrootsParsedData, post::decode::LegacyPost};
 use radroots_nostr::prelude::{
     radroots_nostr_build_nip10_reply_event, radroots_nostr_build_update_event,
-    radroots_nostr_fetch_post_events, radroots_nostr_send_nip10_reply_event,
-    radroots_nostr_send_post_event,
+    radroots_nostr_post_events_filter,
 };
 
 use crate::nostr_client::manager::NostrClientManager;
@@ -13,9 +12,15 @@ impl NostrClientManager {
     pub async fn publish_update_event(&self, update: &AuthoredUpdate) -> Result<String> {
         let builder =
             radroots_nostr_build_update_event(update).map_err(|e| NetError::Msg(e.to_string()))?;
-        let out = radroots_nostr_send_post_event(&self.inner.client, builder)
+        let event = builder
+            .sign_with_keys(&self.inner.keys)
+            .map_err(|error| NetError::Msg(error.to_string()))?;
+        let out = self
+            .inner
+            .client
+            .send_event(&event)
             .await
-            .map_err(|e| NetError::Msg(e.to_string()))?;
+            .map_err(|error| NetError::Msg(error.to_string()))?;
         Ok(out.val.to_string())
     }
 
@@ -28,9 +33,15 @@ impl NostrClientManager {
     pub async fn publish_nip10_reply_event(&self, reply: &AuthoredNip10Reply) -> Result<String> {
         let builder = radroots_nostr_build_nip10_reply_event(reply)
             .map_err(|e| NetError::Msg(e.to_string()))?;
-        let out = radroots_nostr_send_nip10_reply_event(&self.inner.client, builder)
+        let event = builder
+            .sign_with_keys(&self.inner.keys)
+            .map_err(|error| NetError::Msg(error.to_string()))?;
+        let out = self
+            .inner
+            .client
+            .send_event(&event)
             .await
-            .map_err(|e| NetError::Msg(e.to_string()))?;
+            .map_err(|error| NetError::Msg(error.to_string()))?;
 
         Ok(out.val.to_string())
     }
@@ -48,10 +59,17 @@ impl NostrClientManager {
         limit: u16,
         since_unix: Option<u64>,
     ) -> Result<Vec<RadrootsParsedData<LegacyPost>>> {
-        let items = radroots_nostr_fetch_post_events(&self.inner.client, limit, since_unix)
+        let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);
+        let events = self
+            .inner
+            .client
+            .fetch_events(filter, core::time::Duration::from_secs(10))
             .await
-            .map_err(|e| NetError::Msg(e.to_string()))?;
-        Ok(items)
+            .map_err(|error| NetError::Msg(error.to_string()))?;
+        Ok(events
+            .into_iter()
+            .map(|event| radroots_nostr::event_adapters::to_post_event_metadata(&event))
+            .collect())
     }
 
     pub fn fetch_post_events_blocking(

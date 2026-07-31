@@ -6,15 +6,7 @@ use alloc::{string::String, vec::Vec};
 
 use crate::error::RadrootsNostrError;
 use crate::events::radroots_nostr_build_event_unchecked;
-#[cfg(feature = "client")]
-use crate::filter::radroots_nostr_filter_tag;
-#[cfg(feature = "client")]
-use crate::tags::radroots_nostr_tag_first_value;
-#[cfg(feature = "client")]
-use crate::types::{RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrKind};
 use crate::types::{RadrootsNostrGenericEventBuilder, RadrootsNostrMetadata};
-#[cfg(feature = "client")]
-use core::time::Duration;
 use radroots_event::envelope::kind::KIND_APPLICATION_HANDLER;
 
 #[derive(Debug, Clone)]
@@ -101,56 +93,6 @@ pub fn radroots_nostr_metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
         || md.lud06.is_some()
         || md.lud16.is_some()
         || !md.custom.is_empty()
-}
-
-#[cfg(feature = "client")]
-pub async fn radroots_nostr_publish_application_handler(
-    client: &crate::client::RadrootsNostrClient,
-    spec: &RadrootsNostrApplicationHandlerSpec,
-) -> Result<crate::types::RadrootsNostrOutput<crate::types::RadrootsNostrEventId>, RadrootsNostrError>
-{
-    let mut spec = spec.clone();
-    if spec.identifier.is_none()
-        && let Some(existing) = fetch_existing_identifier(client, &spec).await?
-    {
-        spec.identifier = Some(existing);
-    }
-    let builder = radroots_nostr_build_application_handler_event(&spec)?;
-    crate::client::radroots_nostr_send_event(client, builder).await
-}
-
-#[cfg(feature = "client")]
-async fn fetch_existing_identifier(
-    client: &crate::client::RadrootsNostrClient,
-    spec: &RadrootsNostrApplicationHandlerSpec,
-) -> Result<Option<String>, RadrootsNostrError> {
-    let first_kind = spec
-        .kinds
-        .first()
-        .ok_or_else(|| RadrootsNostrError::FilterTagError("kinds are empty".to_string()))?;
-    let application_handler_kind = u16::try_from(KIND_APPLICATION_HANDLER).map_err(|_| {
-        RadrootsNostrError::KindOutOfRange {
-            kind: KIND_APPLICATION_HANDLER,
-            max: u16::MAX,
-        }
-    })?;
-    let author = client.public_key().await?;
-    let filter = RadrootsNostrFilter::new()
-        .author(author)
-        .kind(RadrootsNostrKind::Custom(application_handler_kind));
-    let filter = radroots_nostr_filter_tag(filter, "k", vec![first_kind.to_string()])?;
-    let mut events = client.fetch_events(filter, Duration::from_secs(5)).await?;
-    events.sort_by_key(|event| event.created_at.as_secs());
-    let event = events.pop();
-    Ok(event.and_then(|event| tag_value(&event, "d")))
-}
-
-#[cfg(feature = "client")]
-fn tag_value(event: &RadrootsNostrEvent, key: &str) -> Option<String> {
-    event
-        .tags
-        .iter()
-        .find_map(|tag| radroots_nostr_tag_first_value(tag, key))
 }
 
 #[cfg(test)]

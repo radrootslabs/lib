@@ -19,10 +19,12 @@ default = ["std", "client", "storage", "runtime-tokio"]
 std = []
 client = [
   "dep:radroots_nostr",
+  "dep:nostr-sdk",
+  "dep:tokio",
   "radroots_nostr/std",
-  "radroots_nostr/client",
   "radroots_nostr/events",
 ]
+nip11 = ["client", "dep:reqwest"]
 storage = ["dep:radroots_event_store", "dep:radroots_outbox", "client"]
 runtime-tokio = [
   "dep:tokio",
@@ -42,7 +44,6 @@ radroots_event_store = { workspace = true, optional = true, default-features = f
 ] }
 radroots_nostr = { workspace = true, optional = true, default-features = false, features = [
   "std",
-  "client",
   "events",
 ] }
 radroots_outbox = { workspace = true, optional = true, default-features = false, features = [
@@ -52,10 +53,15 @@ radroots_outbox = { workspace = true, optional = true, default-features = false,
 radroots_transport = { workspace = true, default-features = false }
 futures = { workspace = true }
 nostr = { workspace = true, features = ["std"] }
+nostr-sdk = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["rt"] }
+tokio = { workspace = true, optional = true, features = ["rt", "sync"] }
 url = { workspace = true }
 
 [dev-dependencies]

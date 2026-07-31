@@ -51,11 +51,6 @@ impl RadrootsNostrNip09DeletionRequestEventBuilder {
     ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
         Ok(self.inner.sign_with_keys(keys)?)
     }
-
-    #[cfg(feature = "client")]
-    pub(crate) fn into_event_builder(self) -> RadrootsNostrEventBuilderUnchecked {
-        self.inner
-    }
 }
 
 pub fn radroots_nostr_build_nip09_deletion_request_event(

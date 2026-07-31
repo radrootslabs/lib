@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::RadrootsNostrClient;
 use crate::error::ensure_nonnegative_timestamp;
 use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransportError};
 use core::time::Duration;
@@ -11,7 +12,7 @@ use radroots_event_store::{
     RadrootsEventPersistence, RadrootsEventStore, RadrootsEventVisibility,
     RadrootsTransportObservation, RadrootsTransportObservationType,
 };
-use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter};
+use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrFilter};
 use radroots_transport::{Target, TransportId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

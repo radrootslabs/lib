@@ -4,6 +4,26 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RadrootsRelayTransportError {
+    #[cfg(feature = "client")]
+    #[error("Nostr client error: {0}")]
+    Client(String),
+
+    #[cfg(feature = "client")]
+    #[error("Nostr client database error: {0}")]
+    ClientDatabase(String),
+
+    #[cfg(feature = "client")]
+    #[error("Nostr protocol event error: {0}")]
+    NostrEvent(String),
+
+    #[cfg(feature = "client")]
+    #[error("Nostr client configuration error: {0}")]
+    ClientConfig(String),
+
+    #[cfg(feature = "client")]
+    #[error("Nostr event not found: {0}")]
+    EventNotFound(String),
+
     #[error("Relay URL parse failed for `{url}`: {reason}")]
     RelayUrlParse { url: String, reason: String },
 

@@ -21,9 +21,6 @@ use radroots_test_fixtures::{
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
 };
 
-#[cfg(feature = "client")]
-use radroots_nostr::prelude::RadrootsNostrClient;
-
 const CREATED_AT: u64 = 1_784_347_200;
 const ROOT_EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const ADDRESS_REVISION_ID: &str =
@@ -169,32 +166,6 @@ fn generic_kind_1111_builder_cannot_bypass_typed_comment_authoring() {
         RadrootsNostrError::TypedAuthoringRequired { kind: actual }
             if actual == KIND_COMMENT as u16
     ));
-}
-
-#[cfg(feature = "client")]
-#[tokio::test]
-async fn typed_nip22_comment_builder_reaches_client_publication() {
-    let client = RadrootsNostrClient::new(fixture_keys());
-    let comment = AuthoredNip22Comment::top_level_event(
-        "Publish Comment",
-        Nip22EventRootReference::parse(
-            ROOT_EVENT_ID,
-            FIXTURE_BOB_PUBLIC_KEY_HEX,
-            KIND_CLASSIFIED_LISTING,
-            None,
-        )
-        .expect("event root"),
-    )
-    .expect("Comment");
-    let builder =
-        radroots_nostr_build_nip22_comment_event(&comment).expect("typed Comment builder");
-
-    let error = client
-        .send_nip22_comment_event_builder(builder)
-        .await
-        .expect_err("no relay is configured");
-
-    assert!(matches!(error, RadrootsNostrError::ClientError(_)));
 }
 
 fn fixture_keys() -> RadrootsNostrKeys {

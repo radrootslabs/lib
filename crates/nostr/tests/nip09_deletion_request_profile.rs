@@ -12,11 +12,6 @@ use radroots_nostr::prelude::{
 };
 use radroots_test_fixtures::{FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
-#[cfg(feature = "client")]
-use radroots_nostr::prelude::{
-    RadrootsNostrClient, radroots_nostr_send_nip09_deletion_request_event,
-};
-
 const CREATED_AT: u64 = 1_784_347_200;
 const TARGET_EVENT_ID: &str = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
@@ -84,48 +79,6 @@ fn generic_kind_five_builder_cannot_bypass_typed_deletion_authoring() {
         RadrootsNostrError::TypedAuthoringRequired { kind }
             if kind == KIND_DELETION_REQUEST as u16
     ));
-}
-
-#[cfg(feature = "client")]
-#[tokio::test]
-async fn generic_kind_five_client_rejection_precedes_signer_access() {
-    let client = RadrootsNostrClient::new_signerless();
-    let builder = RadrootsNostrGenericEventBuilder::new(
-        RadrootsNostrKind::Custom(KIND_DELETION_REQUEST as u16),
-        "Raw deletion request",
-    );
-
-    let error = client
-        .send_event_builder(builder)
-        .await
-        .expect_err("generic kind 5 must fail before signer access");
-
-    assert!(matches!(
-        error,
-        RadrootsNostrError::TypedAuthoringRequired { kind }
-            if kind == KIND_DELETION_REQUEST as u16
-    ));
-}
-
-#[cfg(feature = "client")]
-#[tokio::test]
-async fn typed_nip09_deletion_request_reaches_client_publication() {
-    let client = RadrootsNostrClient::new(fixture_keys());
-    let method_builder = radroots_nostr_build_nip09_deletion_request_event(&request())
-        .expect("typed NIP-09 builder");
-    let helper_builder = radroots_nostr_build_nip09_deletion_request_event(&request())
-        .expect("typed NIP-09 builder");
-
-    let method_error = client
-        .send_nip09_deletion_request_event_builder(method_builder)
-        .await
-        .expect_err("no relay is configured");
-    let helper_error = radroots_nostr_send_nip09_deletion_request_event(&client, helper_builder)
-        .await
-        .expect_err("no relay is configured");
-
-    assert!(matches!(method_error, RadrootsNostrError::ClientError(_)));
-    assert!(matches!(helper_error, RadrootsNostrError::ClientError(_)));
 }
 
 fn request() -> AuthoredNip09DeletionRequest {

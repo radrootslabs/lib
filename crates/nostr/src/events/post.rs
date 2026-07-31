@@ -15,11 +15,6 @@ use radroots_event_codec::encode::post::{
     authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
 };
 
-#[cfg(all(feature = "client", feature = "events"))]
-use crate::client::RadrootsNostrClient;
-#[cfg(all(feature = "client", feature = "events"))]
-use core::time::Duration;
-
 /// A sealed builder for a validated Radroots root post profile.
 ///
 /// The wrapper intentionally exposes no raw builder conversion or tag/content
@@ -44,11 +39,6 @@ impl RadrootsNostrPostEventBuilder {
         keys: &RadrootsNostrKeys,
     ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
         Ok(self.inner.sign_with_keys(keys)?)
-    }
-
-    #[cfg(feature = "client")]
-    pub(crate) fn into_event_builder(self) -> RadrootsNostrEventBuilderUnchecked {
-        self.inner
     }
 }
 
@@ -94,33 +84,4 @@ fn builder_from_wire_parts(
     let inner =
         crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;
     Ok(RadrootsNostrPostEventBuilder { inner })
-}
-
-#[cfg(all(feature = "client", feature = "events"))]
-/// Fetches generic kind-1 events through the compatibility post projection.
-///
-/// The unmarked filter intentionally retains ordinary Nostr notes and replies.
-/// This compatibility read discards tags and does not establish Radroots
-/// product admission; product consumers must use the verified admission API.
-pub async fn radroots_nostr_fetch_post_events(
-    client: &RadrootsNostrClient,
-    limit: u16,
-    since_unix: Option<u64>,
-) -> Result<
-    Vec<
-        radroots_event_codec::decode::RadrootsParsedData<
-            radroots_event_codec::decode::post::LegacyPost,
-        >,
-    >,
-    RadrootsNostrError,
-> {
-    let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);
-
-    let events = client.fetch_events(filter, Duration::from_secs(10)).await?;
-    let out = events
-        .into_iter()
-        .map(|ev| crate::event_adapters::to_post_event_metadata(&ev))
-        .collect();
-
-    Ok(out)
 }

@@ -1,10 +1,9 @@
-use crate::client::RadrootsNostrClient;
-use crate::error::RadrootsNostrError;
+use crate::{RadrootsNostrClient, RadrootsRelayTransportError};
 
 pub async fn radroots_nostr_add_relay(
     client: &RadrootsNostrClient,
     url: &str,
-) -> Result<(), RadrootsNostrError> {
+) -> Result<(), RadrootsRelayTransportError> {
     client.add_relay(url).await?;
     Ok(())
 }
@@ -12,7 +11,7 @@ pub async fn radroots_nostr_add_relay(
 pub async fn radroots_nostr_remove_relay(
     client: &RadrootsNostrClient,
     url: &str,
-) -> Result<(), RadrootsNostrError> {
+) -> Result<(), RadrootsRelayTransportError> {
     client.remove_relay(url).await?;
     Ok(())
 }

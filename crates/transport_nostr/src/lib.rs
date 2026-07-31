@@ -1,15 +1,29 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "client")]
+mod client;
 mod error;
 #[cfg(feature = "storage")]
 mod fetch;
+#[cfg(feature = "nip11")]
+mod nip11;
 #[cfg(feature = "storage")]
 mod outbox;
 mod outcome;
 mod publish;
 mod relay;
+#[cfg(feature = "client")]
+mod relays;
 
+#[cfg(feature = "client")]
+pub use client::{
+    RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrEventStream,
+    RadrootsNostrMonitor, RadrootsNostrMonitorNotification, RadrootsNostrMonitorReceiveError,
+    RadrootsNostrMonitorReceiver, RadrootsNostrOutput, RadrootsNostrRelay,
+    RadrootsNostrRelayStatus, RadrootsNostrSubscribeAutoCloseOptions,
+    radroots_nostr_fetch_event_by_id,
+};
 pub use error::RadrootsRelayTransportError;
 #[cfg(all(feature = "storage", feature = "runtime-tokio"))]
 pub use fetch::fetch_relay_events_blocking;
@@ -25,6 +39,8 @@ pub use fetch::{
     RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest, RadrootsRelayFetchedEvent,
     RadrootsRelayFetchedEventsReceipt, fetch_and_ingest_relay_events, fetch_relay_events,
 };
+#[cfg(feature = "nip11")]
+pub use nip11::fetch_nip11;
 #[cfg(feature = "storage")]
 pub use outbox::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
@@ -40,3 +56,5 @@ pub use publish::{
     verified_signed_event_payload,
 };
 pub use relay::{RadrootsRelayTargetSet, RadrootsRelayUrlPolicy, RelayUrl};
+#[cfg(feature = "client")]
+pub use relays::{radroots_nostr_add_relay, radroots_nostr_connect, radroots_nostr_remove_relay};

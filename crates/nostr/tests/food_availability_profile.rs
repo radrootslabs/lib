@@ -15,9 +15,6 @@ use radroots_nostr::prelude::{
 };
 use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
 
-#[cfg(feature = "client")]
-use radroots_nostr::prelude::RadrootsNostrClient;
-
 const CREATED_AT: u64 = 1_784_347_200;
 
 #[test]
@@ -154,24 +151,6 @@ fn generic_builder_retains_marker_free_and_operational_nip99_compatibility() {
             .expect("non-focused NIP-99 remains generic-authorable");
         event.verify().expect("valid generic NIP-99 event");
     }
-}
-
-#[cfg(feature = "client")]
-#[tokio::test]
-async fn typed_food_builder_reaches_client_publication() {
-    let client = RadrootsNostrClient::new(fixture_keys());
-    let builder = radroots_nostr_build_food_availability_event(
-        &details(),
-        RadrootsNostrTimestamp::from_secs(CREATED_AT),
-    )
-    .expect("typed FoodAvailability builder");
-
-    let error = client
-        .send_food_availability_event_builder(builder)
-        .await
-        .expect_err("no relay is configured");
-
-    assert!(matches!(error, RadrootsNostrError::ClientError(_)));
 }
 
 fn fixture_keys() -> RadrootsNostrKeys {

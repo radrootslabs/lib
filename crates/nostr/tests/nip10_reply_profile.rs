@@ -16,9 +16,6 @@ use radroots_test_fixtures::{
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
 };
 
-#[cfg(feature = "client")]
-use radroots_nostr::prelude::RadrootsNostrClient;
-
 const CREATED_AT: u64 = 1_784_347_200;
 const ROOT_EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const PARENT_EVENT_ID: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
@@ -176,30 +173,6 @@ fn generic_kind_one_builder_cannot_bypass_typed_nip10_reply_authoring() {
                 if kind == RadrootsNostrKind::TextNote.as_u16()
         ));
     }
-}
-
-#[cfg(feature = "client")]
-#[tokio::test]
-async fn typed_nip10_reply_builder_reaches_client_publication() {
-    let client = RadrootsNostrClient::new(fixture_keys());
-    let reply = AuthoredNip10Reply::direct(
-        "Publish Reply",
-        reference(
-            ROOT_EVENT_ID,
-            FIXTURE_BOB_PUBLIC_KEY_HEX,
-            Some(RELAY_PRIMARY_WSS),
-        ),
-    )
-    .expect("authored direct reply");
-    let builder =
-        radroots_nostr_build_nip10_reply_event(&reply).expect("typed NIP-10 Reply builder");
-
-    let error = client
-        .send_nip10_reply_event_builder(builder)
-        .await
-        .expect_err("no relay is configured");
-
-    assert!(matches!(error, RadrootsNostrError::ClientError(_)));
 }
 
 fn fixture_keys() -> RadrootsNostrKeys {

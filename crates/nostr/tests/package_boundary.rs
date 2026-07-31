@@ -1,10 +1,14 @@
 use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[allow(unused_imports)]
 use radroots_nostr::{Error as _, event as _, filter as _, key as _, tag as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const TRANSPORT_MANIFEST: &str = include_str!("../../transport_nostr/Cargo.toml");
+const TRANSPORT_ROOT: &str = include_str!("../../transport_nostr/src/lib.rs");
 
 #[test]
 fn manifest_has_final_identity_features_and_radroots_dependencies() {
@@ -74,6 +78,107 @@ fn crate_root_establishes_the_final_public_module_skeleton() {
         );
     }
     assert!(ROOT.contains("pub use error::RadrootsNostrError as Error;"));
+}
+
+#[test]
+fn live_client_and_http_ownership_belongs_to_transport_nostr() {
+    for forbidden in [
+        "nostr-sdk",
+        "reqwest",
+        "client =",
+        "http =",
+        "radroots_nostr/client",
+    ] {
+        assert!(
+            !MANIFEST.contains(forbidden),
+            "portable manifest still owns forbidden live-client surface `{forbidden}`"
+        );
+    }
+
+    for forbidden in ["pub mod client;", "pub mod relays;", "pub mod nip11;"] {
+        assert!(
+            !ROOT.contains(forbidden),
+            "portable crate root still exposes live-client module `{forbidden}`"
+        );
+    }
+
+    for required in ["nostr-sdk", "reqwest", "nip11 = [\"client\""] {
+        assert!(
+            TRANSPORT_MANIFEST.contains(required),
+            "transport manifest is missing live-client ownership marker `{required}`"
+        );
+    }
+    for required in [
+        "mod client;",
+        "mod relays;",
+        "mod nip11;",
+        "pub use client::{",
+        "pub use nip11::fetch_nip11;",
+    ] {
+        assert!(
+            TRANSPORT_ROOT.contains(required),
+            "transport crate root is missing live-client owner `{required}`"
+        );
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    assert!(!manifest_dir.join("src/client.rs").exists());
+    assert!(!manifest_dir.join("src/relays.rs").exists());
+    assert!(!manifest_dir.join("src/nip11.rs").exists());
+    assert!(
+        manifest_dir
+            .join("../transport_nostr/src/client.rs")
+            .exists()
+    );
+    assert!(
+        manifest_dir
+            .join("../transport_nostr/src/relays.rs")
+            .exists()
+    );
+    assert!(
+        manifest_dir
+            .join("../transport_nostr/src/nip11.rs")
+            .exists()
+    );
+
+    let forbidden_source = [
+        "nostr_sdk",
+        "reqwest::",
+        "feature = \"client\"",
+        "feature = \"http\"",
+        "crate::client",
+    ];
+    for source_path in rust_sources(&manifest_dir.join("src")) {
+        let source = fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", source_path.display()));
+        for forbidden in forbidden_source {
+            assert!(
+                !source.contains(forbidden),
+                "{} still contains live-client ownership marker `{forbidden}`",
+                source_path.display()
+            );
+        }
+    }
+}
+
+fn rust_sources(root: &Path) -> Vec<PathBuf> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut sources = Vec::new();
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", directory.display()))
+        {
+            let path = entry
+                .expect("source directory entry must be readable")
+                .path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                sources.push(path);
+            }
+        }
+    }
+    sources
 }
 
 fn table_keys<'a>(source: &'a str, header: &str) -> BTreeSet<&'a str> {

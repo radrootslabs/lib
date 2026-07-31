@@ -1905,7 +1905,7 @@ const REPLY_WITNESSES: [EventBoundarySourceWitness; 5] = [
     },
 ];
 
-const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
+const COMMENT_WITNESSES: [EventBoundarySourceWitness; 7] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/relay_hint.rs",
         required_fragments: &["pub struct NostrRelayHint"],
@@ -1944,16 +1944,12 @@ const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/nostr/src/client.rs",
-        required_fragments: &["pub async fn send_nip22_comment_event_builder"],
-    },
-    EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_COMMENT: u32 = 1111;"],
     },
 ];
 
-const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
+const DELETION_WITNESSES: [EventBoundarySourceWitness; 7] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/deletion.rs",
         required_fragments: &["pub struct AuthoredNip09DeletionRequest"],
@@ -1993,10 +1989,6 @@ const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
             "pub struct RadrootsNostrNip09DeletionRequestEventBuilder",
             "pub fn radroots_nostr_build_nip09_deletion_request_event",
         ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/nostr/src/client.rs",
-        required_fragments: &["pub async fn send_nip09_deletion_request_event_builder"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2613,7 +2605,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
         required_fragments: &["pub struct RelayDocument"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/nostr/src/nip11.rs",
+        relative_path: "crates/transport_nostr/src/nip11.rs",
         required_fragments: &["pub async fn fetch_nip11(ws_url: &str) -> Option<RelayDocument>"],
     },
 ];

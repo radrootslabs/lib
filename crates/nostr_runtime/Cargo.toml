@@ -15,11 +15,12 @@ readme = "README"
 default = ["std", "nostr-client", "rt"]
 std = []
 rt = ["std", "dep:futures", "dep:tokio"]
-nostr-client = ["std", "dep:radroots_nostr"]
+nostr-client = ["std", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
 nostrdb = ["nostr-client"]
 
 [dependencies]
-radroots_nostr = { workspace = true, optional = true, default-features = true, features = [
+radroots_nostr = { workspace = true, optional = true, default-features = true }
+radroots_transport_nostr = { workspace = true, optional = true, default-features = false, features = [
   "client",
 ] }
 futures = { workspace = true, optional = true }

@@ -9,18 +9,6 @@ pub enum RadrootsNostrError {
     #[error("Radroots event field {field} cannot be represented by Nostr")]
     EventConversion { field: &'static str },
 
-    #[cfg(feature = "client")]
-    #[error("Client error: {0}")]
-    ClientError(#[from] nostr_sdk::client::Error),
-
-    #[cfg(feature = "client")]
-    #[error("Database error: {0}")]
-    DatabaseError(#[from] nostr_sdk::prelude::DatabaseError),
-
-    #[cfg(feature = "client")]
-    #[error("Client configuration error: {0}")]
-    ClientConfigError(String),
-
     #[error("Nostr event kind {kind} requires typed authoring")]
     TypedAuthoringRequired { kind: u16 },
 
@@ -41,9 +29,6 @@ pub enum RadrootsNostrError {
 
     #[error("Event error: {0}")]
     EventError(#[cfg_attr(feature = "std", source)] nostr::event::Error),
-
-    #[error("Event not found: {0}")]
-    EventNotFound(String),
 
     #[error("Event builder failure: {0}")]
     EventBuildError(#[cfg_attr(feature = "std", source)] nostr::event::builder::Error),

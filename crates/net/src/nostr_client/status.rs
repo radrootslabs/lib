@@ -1,4 +1,4 @@
-use radroots_nostr::prelude::{RadrootsNostrMonitorNotification, RadrootsNostrRelayStatus};
+use radroots_transport_nostr::{RadrootsNostrMonitorNotification, RadrootsNostrRelayStatus};
 use tracing::{info, warn};
 
 use super::manager::NostrClientManager;

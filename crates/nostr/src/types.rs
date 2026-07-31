@@ -224,14 +224,6 @@ impl RadrootsNostrGenericEventBuilder {
         Self { inner }
     }
 
-    #[cfg(feature = "client")]
-    pub(crate) fn into_checked_event_builder(
-        self,
-    ) -> Result<RadrootsNostrEventBuilderUnchecked, RadrootsNostrError> {
-        self.validate_generic_authoring_policy()?;
-        Ok(self.inner)
-    }
-
     #[cfg(feature = "std")]
     fn validate_generic_authoring_policy(&self) -> Result<(), RadrootsNostrError> {
         // Inspect an unsigned clone so rejection never consults a signer. PoW
@@ -283,30 +275,6 @@ pub use nostr::nips::nip19::{
     FromBech32 as RadrootsNostrFromBech32, ToBech32 as RadrootsNostrToBech32,
 };
 pub use nostr::secp256k1::SecretKey as RadrootsNostrSecp256k1SecretKey;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrMonitor = nostr_sdk::prelude::Monitor;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrMonitorNotification = nostr_sdk::prelude::MonitorNotification;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrOutput<T> = nostr_sdk::prelude::Output<T>;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrEventStream = nostr_sdk::pool::stream::BoxedStream<RadrootsNostrEvent>;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrRelay = nostr_sdk::Relay;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrRelayPoolNotification = nostr_sdk::RelayPoolNotification;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrRelayStatus = nostr_sdk::RelayStatus;
-
-#[cfg(feature = "client")]
-pub type RadrootsNostrSubscribeAutoCloseOptions = nostr_sdk::SubscribeAutoCloseOptions;
 
 #[cfg(test)]
 mod tests {

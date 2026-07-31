@@ -1,7 +1,7 @@
 use crate::error::{NetError, Result};
 use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_event_codec::profile::RadrootsProfileData;
-use radroots_nostr::prelude::{RadrootsNostrPublicKey, radroots_nostr_fetch_metadata_for_author};
+use radroots_nostr::prelude::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrPublicKey};
 
 use crate::nostr_client::manager::NostrClientManager;
 
@@ -10,13 +10,26 @@ impl NostrClientManager {
         &self,
         author: RadrootsNostrPublicKey,
     ) -> Result<Option<RadrootsParsedData<RadrootsProfileData>>> {
-        let ev = radroots_nostr_fetch_metadata_for_author(
-            &self.inner.client,
-            author,
-            core::time::Duration::from_secs(5),
-        )
-        .await
-        .map_err(|e| NetError::Msg(e.to_string()))?;
+        let filter = RadrootsNostrFilter::new()
+            .authors(vec![author])
+            .kind(RadrootsNostrKind::Metadata);
+        let stored = self
+            .inner
+            .client
+            .query_database(filter.clone())
+            .await
+            .map_err(|error| NetError::Msg(error.to_string()))?;
+        let fetched = self
+            .inner
+            .client
+            .fetch_events(filter, core::time::Duration::from_secs(5))
+            .await
+            .map_err(|error| NetError::Msg(error.to_string()))?;
+        let ev = stored
+            .into_iter()
+            .chain(fetched)
+            .filter(|event| event.kind == RadrootsNostrKind::Metadata)
+            .max_by_key(|event| event.created_at);
         if let Some(e) = ev {
             if let Some(meta) = radroots_nostr::event_adapters::to_profile_event_metadata(&e) {
                 return Ok(Some(meta));

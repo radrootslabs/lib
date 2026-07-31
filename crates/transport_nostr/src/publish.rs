@@ -19,11 +19,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
+#[cfg(feature = "client")]
+use crate::RadrootsNostrClient;
 use crate::RadrootsRelayOutcomeKind;
 #[cfg(feature = "client")]
 use nostr::JsonUtil;
 #[cfg(feature = "client")]
-use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent};
+use radroots_nostr::prelude::RadrootsNostrEvent;
 
 #[cfg(feature = "client")]
 const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -322,8 +324,20 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         | RadrootsRelayTransportError::InvalidPublishReceiptAttemptState { .. } => {
             RadrootsTransportError::InvalidTargetUri
         }
+        #[cfg(feature = "client")]
+        RadrootsRelayTransportError::NostrEvent(_)
+        | RadrootsRelayTransportError::NostrEventJson(_)
+        | RadrootsRelayTransportError::Json(_) => RadrootsTransportError::InvalidPayloadBytes,
+        #[cfg(not(feature = "client"))]
         RadrootsRelayTransportError::NostrEventJson(_) | RadrootsRelayTransportError::Json(_) => {
             RadrootsTransportError::InvalidPayloadBytes
+        }
+        #[cfg(feature = "client")]
+        RadrootsRelayTransportError::Client(_)
+        | RadrootsRelayTransportError::ClientDatabase(_)
+        | RadrootsRelayTransportError::ClientConfig(_)
+        | RadrootsRelayTransportError::EventNotFound(_) => {
+            RadrootsTransportError::InvalidTransportKind
         }
         RadrootsRelayTransportError::Transport(_) => RadrootsTransportError::InvalidTransportKind,
         RadrootsRelayTransportError::EmptyFetchFilters

@@ -27,6 +27,7 @@ nostr-client = [
   "dep:tempfile",
   "dep:serde_json",
   "dep:radroots_nostr",
+  "dep:radroots_transport_nostr",
 ]
 directories = ["std", "dep:directories"]
 fs-persistence = ["std", "dep:radroots_runtime_paths"]
@@ -43,9 +44,11 @@ radroots_event_codec = { workspace = true, optional = true, default-features = t
   "std",
 ] }
 radroots_nostr = { workspace = true, optional = true, default-features = true, features = [
-  "client",
   "events",
   "codec",
+] }
+radroots_transport_nostr = { workspace = true, optional = true, default-features = false, features = [
+  "client",
 ] }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }

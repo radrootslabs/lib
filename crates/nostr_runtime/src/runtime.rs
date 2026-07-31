@@ -10,9 +10,10 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use core::time::Duration;
 use futures::StreamExt;
-use radroots_nostr::prelude::{
-    RadrootsNostrClient, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrMonitorNotification,
-    RadrootsNostrRelayStatus, RadrootsNostrRelayUrl, RadrootsNostrTimestamp,
+use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrRelayUrl, RadrootsNostrTimestamp};
+use radroots_transport_nostr::{
+    RadrootsNostrClient, RadrootsNostrMonitor, RadrootsNostrMonitorNotification,
+    RadrootsNostrRelayStatus,
 };
 use std::collections::HashMap;
 use std::sync::Mutex;
