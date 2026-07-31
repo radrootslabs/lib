@@ -124,6 +124,24 @@ fn client_root_and_transport_use_package_owned_state_machine_types() {
     }
 }
 
+#[test]
+fn protocol_transport_boundary_has_no_relay_pool_or_runtime_owner() {
+    for forbidden in [
+        "nostr-sdk",
+        "nostr_sdk",
+        "tokio::runtime",
+        "RelayPool",
+        "Client::start",
+    ] {
+        assert!(
+            !CLIENT.contains(forbidden) && !MANIFEST.contains(forbidden),
+            "protocol transport retains forbidden owner `{forbidden}`"
+        );
+    }
+    assert!(CLIENT.contains("pub trait Transport: Send"));
+    assert!(CLIENT.contains("T: Transport + ?Sized"));
+}
+
 fn table_keys<'a>(source: &'a str, header: &str) -> BTreeSet<&'a str> {
     let Some((_, tail)) = source.split_once(header) else {
         panic!("manifest is missing {header}");

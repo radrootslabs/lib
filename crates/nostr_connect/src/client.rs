@@ -106,7 +106,7 @@ impl Client {
         mut on_progress: F,
     ) -> Result<Completion, RadrootsNostrConnectError>
     where
-        T: Transport,
+        T: Transport + ?Sized,
         F: FnMut(Progress) -> Result<(), RadrootsNostrConnectError>,
     {
         let mut operation = self.prepare(request_id, request)?;

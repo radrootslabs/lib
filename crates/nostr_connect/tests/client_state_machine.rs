@@ -106,6 +106,41 @@ impl Transport for MockTransport {
     }
 }
 
+async fn execute_through_dyn_transport(
+    client: &Client,
+    transport: &mut dyn Transport,
+    request_id: &str,
+) -> Result<Completion, Error> {
+    client
+        .execute(
+            RequestId::parse(request_id)?,
+            Request::Ping,
+            transport,
+            &CancellationToken::new(),
+            |_| Ok(()),
+        )
+        .await
+}
+
+#[tokio::test]
+async fn client_executes_through_dyn_transport_without_runtime_ownership() {
+    let remote_keys = keys(FIXTURE_BOB.secret_key_hex);
+    let client = client(&remote_keys);
+    let response = response_event(
+        &remote_keys,
+        client.public_key().expect("client public key"),
+        "request-dyn",
+        Response::Pong,
+    );
+    let mut transport = MockTransport::new([Receive::event(response)]);
+    assert_eq!(
+        execute_through_dyn_transport(&client, &mut transport, "request-dyn")
+            .await
+            .expect("completion"),
+        Completion::response(Response::Pong)
+    );
+}
+
 #[tokio::test]
 async fn client_completes_happy_path_after_one_publication() {
     let remote_keys = keys(FIXTURE_BOB.secret_key_hex);
