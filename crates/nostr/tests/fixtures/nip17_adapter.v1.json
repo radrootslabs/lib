@@ -1,0 +1,64 @@
+{
+  "suite": "nip17_adapter",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "message_roundtrip_single_recipient",
+      "kind": "nip17.message.roundtrip",
+      "input": {
+        "recipient_public_key": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+        "content": "Radroots NIP-17 conformance message",
+        "subject": "Conformance",
+        "created_at": 1700000000
+      },
+      "expected": {
+        "event_count": 1,
+        "author": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "published_at": 1700000000,
+        "content": "Radroots NIP-17 conformance message",
+        "subject": "Conformance",
+        "recipient_count": 1
+      }
+    },
+    {
+      "id": "message_file_roundtrip_single_recipient",
+      "kind": "nip17.message_file.roundtrip",
+      "input": {
+        "recipient_public_key": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+        "file_url": "https://files.example/conformance-encrypted.bin",
+        "file_type": "image/jpeg",
+        "encryption_algorithm": "aes-gcm",
+        "decryption_key": "fixture-decryption-key",
+        "decryption_nonce": "fixture-decryption-nonce",
+        "encrypted_hash": "fixture-encrypted-hash",
+        "size": 1200,
+        "width": 1200,
+        "height": 800,
+        "created_at": 1700000001
+      },
+      "expected": {
+        "event_count": 1,
+        "author": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "published_at": 1700000001,
+        "file_url": "https://files.example/conformance-encrypted.bin",
+        "file_type": "image/jpeg",
+        "encrypted_hash": "fixture-encrypted-hash",
+        "size": 1200,
+        "width": 1200,
+        "height": 800
+      }
+    },
+    {
+      "id": "message_rejects_invalid_recipient_without_echo",
+      "kind": "nip17.message.invalid_recipient",
+      "input": {
+        "recipient_public_key": "fixture-private-recipient-not-a-key",
+        "content": "fixture-private-content-must-not-escape",
+        "created_at": 1700000002
+      },
+      "expected": {
+        "error": "invalid_recipient"
+      }
+    }
+  ]
+}

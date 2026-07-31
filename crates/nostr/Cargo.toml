@@ -89,3 +89,11 @@ required-features = ["codec", "events"]
 [[test]]
 name = "nip22_comment_profile"
 required-features = ["codec", "events"]
+
+[[test]]
+name = "blossom_conformance"
+required-features = ["blossom"]
+
+[[test]]
+name = "nip17_conformance"
+required-features = ["nip17"]

@@ -16,6 +16,9 @@ const ROOT: &str = include_str!("../src/lib.rs");
 const EVENT_MODULE: &str = include_str!("../src/event.rs");
 const FILTER_MODULE: &str = include_str!("../src/filter.rs");
 const KEY_MODULE: &str = include_str!("../src/key.rs");
+const NIP17_MODULE: &str = include_str!("../src/nip17.rs");
+const BLOSSOM_MODULE: &str = include_str!("../src/blossom.rs");
+const README: &str = include_str!("../README.md");
 const SIGNING_MODULE: &str = include_str!("../src/signing.rs");
 const TAG_MODULE: &str = include_str!("../src/tag.rs");
 const TYPES_MODULE: &str = include_str!("../src/types.rs");
@@ -307,6 +310,75 @@ fn local_signer_consumes_only_the_opaque_secret_boundary() {
         assert!(
             !SIGNING_MODULE.contains(forbidden),
             "local signer leaks an upstream representation: `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn focused_nip_and_blossom_features_own_no_network_operations() {
+    for required in [
+        "blossom = [\"std\", \"dep:base64\", \"dep:radroots_blossom\"]",
+        "nip17 = [\"std\", \"codec\", \"nostr/nip44\", \"nostr/nip59\"]",
+    ] {
+        assert!(
+            MANIFEST.contains(required),
+            "focused feature contract is missing `{required}`"
+        );
+    }
+    for required in [
+        "pub async fn radroots_nostr_wrap_message<T>(",
+        "pub async fn radroots_nostr_wrap_message_file<T>(",
+        "pub async fn radroots_nostr_unwrap_gift_wrap<T>(",
+        "pub const fn code(&self) -> &'static str",
+    ] {
+        assert!(
+            NIP17_MODULE.contains(required),
+            "NIP-17 adapter is missing `{required}`"
+        );
+    }
+    for required in [
+        "pub fn radroots_nostr_sign_blossom_authorization(",
+        "pub fn radroots_nostr_encode_blossom_authorization_header(",
+        "pub fn radroots_nostr_decode_verify_blossom_authorization_header(",
+    ] {
+        assert!(
+            BLOSSOM_MODULE.contains(required),
+            "Blossom adapter is missing `{required}`"
+        );
+    }
+    for (name, source) in [("NIP-17", NIP17_MODULE), ("Blossom", BLOSSOM_MODULE)] {
+        for forbidden in [
+            "nostr_sdk",
+            "reqwest::",
+            "tokio::spawn",
+            "std::net",
+            "TcpStream",
+            "UdpSocket",
+            "RelayPool",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{name} adapter owns forbidden network operation `{forbidden}`"
+            );
+        }
+    }
+    let readme_words = README.split_whitespace().collect::<Vec<_>>().join(" ");
+    for required in [
+        "This crate owns no relay client",
+        "It does not select relays, deliver events, retry operations, or persist message state.",
+    ] {
+        assert!(
+            readme_words.contains(required),
+            "README is missing focused ownership statement `{required}`"
+        );
+    }
+    for forbidden in [
+        "Portable relay-client lifecycle",
+        "With the `client` feature",
+    ] {
+        assert!(
+            !README.contains(forbidden),
+            "README retains removed network ownership statement `{forbidden}`"
         );
     }
 }

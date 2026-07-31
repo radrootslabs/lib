@@ -1,4 +1,8 @@
-//! Signed BUD-11 HTTP authorization adapters.
+//! Signed BUD-11 HTTP authorization value adapters.
+//!
+//! This module signs, encodes, authenticates, and validates authorization
+//! values only. HTTP clients, endpoint operations, uploads, downloads,
+//! retries, and runtime ownership remain outside this crate.
 
 use core::fmt;
 

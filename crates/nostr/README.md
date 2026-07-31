@@ -6,18 +6,24 @@ primitives for the `radroots` core libraries.
 ## Overview
 
  * typed filters, tags, events, relay metadata, parsers, and utility helpers;
- * feature-gated client operations and relay-management helpers for active
-   network use;
  * adapters between `radroots_event`, `radroots_event_codec`, and Nostr wire
    representations;
  * strict BUD-11 signed HTTP authorization adapters behind the `blossom`
    feature;
- * optional NIP-11 and NIP-17 support across feature-gated builds.
+ * focused NIP-17/NIP-59 message wrapping behind the `nip17` feature; and
+ * an opaque local signer adapter behind the `signing` feature.
+
+This crate owns no relay client, HTTP client, endpoint operation, retry loop,
+network runtime, persistence, account selection, or outbox orchestration.
 
 The `blossom` feature signs kind-24242 authorization events and encodes or
 verifies their `Authorization: Nostr` HTTP values. It does not publish these
 ephemeral authorization events to relays. Pure BUD-11 claim parsing and policy
 validation remain in `radroots_blossom`.
+
+The `nip17` feature wraps and unwraps typed Radroots message and message-file
+events. It does not select relays, deliver events, retry operations, or persist
+message state.
 
 The `events` feature is std-backed. With it, kind-1 root publication is
 available only through typed Update, PhotoUpdate, and Ask builders backed by
@@ -124,14 +130,6 @@ Strict kind-0 Profile publication uses
 local signing or client publication, but no raw kind, content, or tag
 mutation. A media-bearing Profile still requires runtime-owned proof of
 successful BUD-02 upload before it reaches this authoring boundary.
-
-## Portable relay-client lifecycle
-
-With the `client` feature, callers can subscribe and publish to selected relay
-sets and explicitly unsubscribe through Radroots types. The wrapper does not
-create detached listeners or take ownership of subscription lifetime. The
-`client,events` feature combination is qualified for native targets and
-`wasm32-unknown-unknown`.
 
 ## Copyright
 

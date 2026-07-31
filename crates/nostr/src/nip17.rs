@@ -1,3 +1,9 @@
+//! Focused NIP-17/NIP-59 message wrapping and unwrapping.
+//!
+//! This module creates and opens protocol events only. Relay selection,
+//! delivery, retries, persistence, and runtime ownership remain outside this
+//! crate.
+
 #![forbid(unsafe_code)]
 
 extern crate alloc;
@@ -8,8 +14,6 @@ use nostr::nips::nip59;
 use nostr::{
     Event, EventBuilder, Kind, NostrSigner, PublicKey, Tag, TagKind, Timestamp, UnsignedEvent,
 };
-use thiserror::Error;
-
 use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_event::social::message::Message;
 use radroots_event::social::message_file::MessageFile;
@@ -20,28 +24,103 @@ use radroots_event_codec::decode::{EventParseError, message as message_decode};
 use radroots_event_codec::encode::message_file as message_file_encode;
 use radroots_event_codec::encode::{EventEncodeError, message as message_encode};
 
-#[derive(Debug, Error)]
+/// Stable, source-redacted failures from the focused NIP-17 adapter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RadrootsNip17Error {
-    #[error("Message encode error: {0}")]
-    MessageEncode(#[from] EventEncodeError),
-    #[error("Message decode error: {0}")]
-    MessageDecode(#[from] EventParseError),
-    #[error("NIP-59 error: {0}")]
-    Nip59(#[from] nip59::Error),
-    #[error("Event builder error: {0}")]
-    EventBuilder(#[from] nostr::event::builder::Error),
-    #[error("Signer error: {0}")]
-    Signer(#[from] nostr::signer::SignerError),
-    #[error("Key error: {0}")]
-    Key(#[from] nostr::key::Error),
-    #[error("Unsupported rumor kind: {0}")]
-    UnsupportedRumorKind(u32),
+    MessageEncode,
+    MessageDecode,
+    GiftWrap,
+    Signer,
+    InvalidRecipient,
+    UnsupportedRumorKind { kind: u32 },
 }
 
-#[derive(Clone, Debug)]
+impl RadrootsNip17Error {
+    /// Returns a stable machine-readable failure code.
+    #[must_use]
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::MessageEncode => "message_encode",
+            Self::MessageDecode => "message_decode",
+            Self::GiftWrap => "gift_wrap",
+            Self::Signer => "signer",
+            Self::InvalidRecipient => "invalid_recipient",
+            Self::UnsupportedRumorKind { .. } => "unsupported_rumor_kind",
+        }
+    }
+}
+
+impl core::fmt::Display for RadrootsNip17Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::MessageEncode => formatter.write_str("failed to encode NIP-17 message"),
+            Self::MessageDecode => formatter.write_str("failed to decode NIP-17 message"),
+            Self::GiftWrap => formatter.write_str("failed to process NIP-59 gift wrap"),
+            Self::Signer => formatter.write_str("NIP-17 signer failed"),
+            Self::InvalidRecipient => formatter.write_str("NIP-17 recipient is invalid"),
+            Self::UnsupportedRumorKind { kind } => {
+                write!(formatter, "unsupported NIP-17 rumor kind {kind}")
+            }
+        }
+    }
+}
+
+impl core::error::Error for RadrootsNip17Error {}
+
+impl From<EventEncodeError> for RadrootsNip17Error {
+    fn from(_: EventEncodeError) -> Self {
+        Self::MessageEncode
+    }
+}
+
+impl From<EventParseError> for RadrootsNip17Error {
+    fn from(_: EventParseError) -> Self {
+        Self::MessageDecode
+    }
+}
+
+impl From<nip59::Error> for RadrootsNip17Error {
+    fn from(_: nip59::Error) -> Self {
+        Self::GiftWrap
+    }
+}
+
+impl From<nostr::event::builder::Error> for RadrootsNip17Error {
+    fn from(_: nostr::event::builder::Error) -> Self {
+        Self::GiftWrap
+    }
+}
+
+impl From<nostr::signer::SignerError> for RadrootsNip17Error {
+    fn from(_: nostr::signer::SignerError) -> Self {
+        Self::Signer
+    }
+}
+
+impl From<nostr::key::Error> for RadrootsNip17Error {
+    fn from(_: nostr::key::Error) -> Self {
+        Self::InvalidRecipient
+    }
+}
+
+#[derive(Clone)]
 pub enum RadrootsNip17Rumor {
     Message(RadrootsParsedData<Message>),
     MessageFile(Box<RadrootsParsedData<MessageFile>>),
+}
+
+impl core::fmt::Debug for RadrootsNip17Rumor {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Message(_) => formatter
+                .debug_struct("RadrootsNip17Rumor::Message")
+                .finish_non_exhaustive(),
+            Self::MessageFile(_) => formatter
+                .debug_struct("RadrootsNip17Rumor::MessageFile")
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -80,7 +159,7 @@ fn rumor_from_parts(
     created_at: Option<u64>,
 ) -> Result<UnsignedEvent, RadrootsNip17Error> {
     let kind = u16::try_from(parts.kind)
-        .map_err(|_| RadrootsNip17Error::UnsupportedRumorKind(parts.kind))?;
+        .map_err(|_| RadrootsNip17Error::UnsupportedRumorKind { kind: parts.kind })?;
     let tags = tags_from_slices(&parts.tags);
     let timestamp = match created_at {
         Some(ts) => Timestamp::from_secs(ts),
@@ -200,7 +279,7 @@ where
             )?;
             Ok(RadrootsNip17Rumor::MessageFile(Box::new(metadata)))
         }
-        other => Err(RadrootsNip17Error::UnsupportedRumorKind(other)),
+        other => Err(RadrootsNip17Error::UnsupportedRumorKind { kind: other }),
     }
 }
 
@@ -246,8 +325,39 @@ mod tests {
                 author,
                 Some(1_700_000_000),
             ),
-            Err(RadrootsNip17Error::UnsupportedRumorKind(kind)) if kind == overflow
+            Err(RadrootsNip17Error::UnsupportedRumorKind { kind }) if kind == overflow
         ));
+    }
+
+    #[test]
+    fn adapter_error_codes_are_stable_and_source_redacted() {
+        let errors = [
+            RadrootsNip17Error::MessageEncode,
+            RadrootsNip17Error::MessageDecode,
+            RadrootsNip17Error::GiftWrap,
+            RadrootsNip17Error::Signer,
+            RadrootsNip17Error::InvalidRecipient,
+            RadrootsNip17Error::UnsupportedRumorKind { kind: 70_000 },
+        ];
+        assert_eq!(
+            errors
+                .iter()
+                .map(RadrootsNip17Error::code)
+                .collect::<Vec<_>>(),
+            vec![
+                "message_encode",
+                "message_decode",
+                "gift_wrap",
+                "signer",
+                "invalid_recipient",
+                "unsupported_rumor_kind",
+            ]
+        );
+        for error in &errors {
+            let rendered = format!("{error:?} {error}");
+            assert!(!rendered.contains("nsec"));
+            assert!(!rendered.contains("private"));
+        }
     }
 
     #[tokio::test]
@@ -324,6 +434,15 @@ mod tests {
         let rumor = radroots_nostr_unwrap_gift_wrap(&receiver, &events[0])
             .await
             .unwrap();
+        let rendered = format!("{rumor:?}");
+        for private_value in [
+            message.file_url.as_str(),
+            message.decryption_key.as_str(),
+            message.decryption_nonce.as_str(),
+            message.encrypted_hash.as_str(),
+        ] {
+            assert!(!rendered.contains(private_value));
+        }
         match rumor {
             RadrootsNip17Rumor::MessageFile(metadata) => {
                 assert_eq!(metadata.data.file_url, message.file_url);
