@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 #![no_std]
+#![doc(hidden)]
+#![doc = "Publish-frozen compatibility crate; use `radroots_secrets` for new integrations."]
 
 extern crate alloc;
 #[cfg(any(feature = "std", test))]

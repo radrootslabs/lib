@@ -3,6 +3,11 @@
 This is the README for `radroots_secret_vault`, which provides secret backend
 selection and wrapping semantics for the `radroots` core libraries.
 
+> Compatibility quarantine: this package is permanently `publish = false` and
+> must not gain new consumers. `radroots_secrets` is the replacement. Existing
+> first-party consumers migrate at their ordered release-refactor gates, and
+> Step 313 removes this package under `RCRV1-DEV-008`.
+
 ## Overview
 
  * backend kinds, capability models, policy types, and selection outcomes for

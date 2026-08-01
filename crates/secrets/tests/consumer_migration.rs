@@ -3,6 +3,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
+const PUBLISH_POLICY: &str = include_str!("../../../contracts/releases/publish_policy.toml");
+const SECRET_VAULT_MANIFEST: &str = include_str!("../../secret_vault/Cargo.toml");
+const SECRET_VAULT_ROOT: &str = include_str!("../../secret_vault/src/lib.rs");
+const SECRET_VAULT_README: &str = include_str!("../../secret_vault/README");
+const PROTECTED_STORE_MANIFEST: &str = include_str!("../../protected_store/Cargo.toml");
+const PROTECTED_STORE_ROOT: &str = include_str!("../../protected_store/src/lib.rs");
+const PROTECTED_STORE_README: &str = include_str!("../../protected_store/README");
 
 #[test]
 fn legacy_secret_dependencies_are_confined_to_publish_frozen_quarantines() {
@@ -53,6 +60,66 @@ fn quarantine_has_exact_future_removal_gates() {
         assert!(
             DEVIATIONS.contains(required),
             "secret consumer quarantine is missing `{required}`"
+        );
+    }
+}
+
+#[test]
+fn superseded_packages_are_fail_closed_compatibility_quarantines() {
+    for (package, manifest, root, readme) in [
+        (
+            "radroots_secret_vault",
+            SECRET_VAULT_MANIFEST,
+            SECRET_VAULT_ROOT,
+            SECRET_VAULT_README,
+        ),
+        (
+            "radroots_protected_store",
+            PROTECTED_STORE_MANIFEST,
+            PROTECTED_STORE_ROOT,
+            PROTECTED_STORE_README,
+        ),
+    ] {
+        for required in [
+            "publish = false",
+            "[package.metadata.radroots.compatibility]",
+            "status = \"publish_frozen\"",
+            "replacement = \"radroots_secrets\"",
+            "deviation = \"RCRV1-DEV-008\"",
+            "removal_step = 313",
+            "new_consumers_forbidden = true",
+        ] {
+            assert!(
+                manifest.contains(required),
+                "{package} manifest is missing `{required}`"
+            );
+        }
+        assert!(root.contains("#![doc(hidden)]"));
+        assert!(root.contains("use `radroots_secrets` for new integrations"));
+        assert!(readme.contains("Compatibility quarantine"));
+        assert!(readme.contains("Step 313 removes this package"));
+    }
+
+    let approved = PUBLISH_POLICY
+        .split_once("[workspace_classification]")
+        .map(|(publication, _)| publication)
+        .expect("workspace classification");
+    for package in ["radroots_secret_vault", "radroots_protected_store"] {
+        assert!(
+            !approved.contains(package),
+            "compatibility package cannot enter the approved release inventory: {package}"
+        );
+    }
+
+    let private = PUBLISH_POLICY
+        .split_once("private = [")
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map(|(entries, _)| entries)
+        .expect("private package classification");
+    for package in ["radroots_secret_vault", "radroots_protected_store"] {
+        assert!(
+            private.contains(&format!("\"{package}\"")),
+            "compatibility package must remain private: {package}"
         );
     }
 }

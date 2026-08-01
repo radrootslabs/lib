@@ -12,6 +12,13 @@ homepage.workspace = true
 documentation = "https://docs.rs/radroots_secret_vault"
 readme = "README"
 
+[package.metadata.radroots.compatibility]
+status = "publish_frozen"
+replacement = "radroots_secrets"
+deviation = "RCRV1-DEV-008"
+removal_step = 313
+new_consumers_forbidden = true
+
 [features]
 default = []
 std = []
