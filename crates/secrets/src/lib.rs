@@ -1,6 +1,8 @@
-//! Secret material and protected-storage abstractions for Radroots.
-
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![doc = include_str!("../README.md")]
 
 extern crate alloc;
 

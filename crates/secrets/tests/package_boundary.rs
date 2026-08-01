@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const README: &str = include_str!("../README.md");
+const EXAMPLE: &str = include_str!("../examples/explicit_memory_provider.rs");
 
 #[test]
 fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
@@ -102,6 +104,37 @@ fn crate_root_contains_only_the_approved_module_skeleton() {
             "pub use wrapping::KeyWrapping;"
         ])
     );
+}
+
+#[test]
+fn package_documentation_covers_the_security_and_host_contract() {
+    for required in [
+        "## Canonical surface",
+        "## Explicit provider and envelope flow",
+        "## Features and supported targets",
+        "## Security and serialization contract",
+        "## Side effects, cancellation, and commit points",
+        "## Intended consumers",
+        "public API baseline",
+        "implicit retry or fallback",
+    ] {
+        assert!(README.contains(required), "README is missing `{required}`");
+    }
+    assert!(ROOT.contains("#![doc = include_str!(\"../README.md\")]"));
+    assert!(MANIFEST.contains("name = \"explicit_memory_provider\""));
+    assert!(MANIFEST.contains("required-features = [\"memory\"]"));
+    for required in [
+        "MemoryProvider::new()",
+        "provider.provision(",
+        "EncryptedEnvelope::seal",
+        "EncryptedEnvelope::decode",
+        "decoded.open(&provider)",
+    ] {
+        assert!(
+            EXAMPLE.contains(required),
+            "example is missing `{required}`"
+        );
+    }
 }
 
 fn table_keys<'a>(source: &'a str, table: &str) -> BTreeSet<&'a str> {
