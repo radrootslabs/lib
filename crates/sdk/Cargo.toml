@@ -114,7 +114,12 @@ runtime = [
   "radroots_transport_nostr/storage",
   "radroots_transport_nostr/runtime-tokio",
 ]
-local-signer = ["runtime", "signing", "radroots_nostr/signing"]
+local-signer = [
+  "runtime",
+  "signing",
+  "dep:radroots_secrets",
+  "radroots_nostr/signing",
+]
 transport-nostr-runtime = [
   "runtime",
   "dep:radroots_nostr",
@@ -157,6 +162,7 @@ radroots_transport_nostr = { workspace = true, optional = true, default-features
 radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
 radroots_secret_vault = { workspace = true, optional = true, default-features = false }
+radroots_secrets = { workspace = true, optional = true, default-features = false }
 radroots_signing = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }

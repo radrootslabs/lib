@@ -1,5 +1,9 @@
 #![cfg(feature = "runtime")]
 
+// RCRV1-DEV-008: this module is the sole SDK quarantine for predecessor secret
+// storage until Step 179 transfers the private store into radroots_storage_sqlite.
+// New SDK secret integrations must use radroots_secrets.
+
 use crate::RadrootsSdkError;
 use radroots_event::envelope::kind::KIND_FARM;
 use radroots_event::id::{AddressableCoordinate, AddressableCoordinateParts};
