@@ -5,9 +5,9 @@ use radroots_event::{
     wire::Nip01EventWire,
 };
 use radroots_storage::{
-    EventStore,
+    Error, EventStore,
     event::{
-        AdmissionDisposition, AdmissionReceipt, AdmissionStage, Error, EventAdmission, EventPage,
+        AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPage,
         EventPosition, EventQuery, EventQueryBounds, EventSequence, SourceGeneration,
         StoredEventProvenance, StoredRawEvent, StoredVerifiedEvent, StoredVisibleEvent,
     },

@@ -1,6 +1,5 @@
 //! Canonical event persistence contracts.
 
-use core::fmt;
 use radroots_event::{EventId, SignedEvent, VerifiedEvent, admission::VisibleEvent};
 use radroots_transport::{
     BoxFuture,
@@ -8,7 +7,7 @@ use radroots_transport::{
 };
 use std::collections::BTreeSet;
 
-use crate::status::EventStoreStatus;
+use crate::{Error, status::EventStoreStatus};
 
 /// Maximum events returned by one storage query.
 pub const EVENT_QUERY_LIMIT_MAX: u16 = 1_000;
@@ -511,48 +510,3 @@ pub trait EventStore: Send + Sync {
         bounds: EventQueryBounds,
     ) -> BoxFuture<'_, Result<EventPage<StoredEventProvenance>, Error>>;
 }
-
-/// Stable, secret-safe event-storage failure.
-#[non_exhaustive]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Error {
-    InvalidSourceGeneration,
-    InvalidEventSequence,
-    InvalidEventQueryLimit,
-    EmptyEventQueryIds,
-    TooManyEventQueryIds,
-    DuplicateEventQueryId,
-    AdmissionEventMismatch,
-    AdmissionRegression,
-    EventConflict,
-    EventPageLimitExceeded,
-    CursorGenerationMismatch,
-    SourceGenerationChanged,
-    EventNotFound,
-    CorruptStoredEvent,
-    BackendUnavailable,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::InvalidSourceGeneration => "storage source generation is invalid",
-            Self::InvalidEventSequence => "storage event sequence is invalid",
-            Self::InvalidEventQueryLimit => "storage event query limit is invalid",
-            Self::EmptyEventQueryIds => "storage event id query is empty",
-            Self::TooManyEventQueryIds => "storage event id query exceeds its limit",
-            Self::DuplicateEventQueryId => "storage event id query contains a duplicate",
-            Self::AdmissionEventMismatch => "storage admission event identities do not match",
-            Self::AdmissionRegression => "storage admission cannot regress event state",
-            Self::EventConflict => "storage contains conflicting data for the event id",
-            Self::EventPageLimitExceeded => "storage event page exceeds its requested limit",
-            Self::CursorGenerationMismatch => "storage cursor belongs to another source generation",
-            Self::SourceGenerationChanged => "storage source generation changed",
-            Self::EventNotFound => "storage event was not found",
-            Self::CorruptStoredEvent => "storage event data is corrupt",
-            Self::BackendUnavailable => "storage backend is unavailable",
-        })
-    }
-}
-
-impl std::error::Error for Error {}

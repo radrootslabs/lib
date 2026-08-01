@@ -4,6 +4,7 @@
 
 pub mod atomic;
 pub mod backup;
+mod error;
 pub mod event;
 pub mod journal;
 #[cfg(feature = "memory")]
@@ -13,4 +14,6 @@ pub mod private_artifact;
 pub mod projection;
 pub mod status;
 
-pub use event::{Error, EventStore};
+pub use error::Error;
+pub use event::EventStore;
+pub use journal::Journal;

@@ -1,6 +1,6 @@
 //! Storage capability, health, and integrity status contracts.
 
-use crate::event::{Error, SourceGeneration};
+use crate::{Error, event::SourceGeneration};
 
 /// Current event-store operating mode.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
