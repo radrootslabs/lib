@@ -88,6 +88,25 @@ pub enum Error {
     PrivateArtifactTombstoned,
     InvalidExpiredArtifactQueryLimit,
     CorruptPrivateArtifactMetadata,
+    InvalidBackupId,
+    InvalidBackupVersion,
+    InvalidBackupTimestamp,
+    InvalidBackupMemberPath,
+    InvalidBackupMemberLength,
+    InvalidBackupManifest,
+    DuplicateBackupMember,
+    BackupSecretPolicyViolation,
+    BackupManifestPlanMismatch,
+    InvalidBackupTransition,
+    InvalidRestoreTimestamp,
+    InvalidRestoreTransition,
+    RestoreMemberVerificationFailed,
+    InvalidReliabilityRevision,
+    ReliabilityRevisionConflict,
+    ReliabilityOperationTerminal,
+    CorruptReliabilityOperation,
+    InvalidIntegrityStatus,
+    InvalidStorageStatus,
 }
 
 impl fmt::Display for Error {
@@ -193,6 +212,27 @@ impl fmt::Display for Error {
                 "storage expired-artifact query limit is invalid"
             }
             Self::CorruptPrivateArtifactMetadata => "storage private-artifact metadata is corrupt",
+            Self::InvalidBackupId => "storage backup id is invalid",
+            Self::InvalidBackupVersion => "storage backup version is invalid",
+            Self::InvalidBackupTimestamp => "storage backup timestamp is invalid",
+            Self::InvalidBackupMemberPath => "storage backup member path is invalid",
+            Self::InvalidBackupMemberLength => "storage backup member length is invalid",
+            Self::InvalidBackupManifest => "storage backup manifest is invalid",
+            Self::DuplicateBackupMember => "storage backup member is duplicated",
+            Self::BackupSecretPolicyViolation => "storage backup secret policy was violated",
+            Self::BackupManifestPlanMismatch => "storage backup manifest does not match its plan",
+            Self::InvalidBackupTransition => "storage backup transition is invalid",
+            Self::InvalidRestoreTimestamp => "storage restore timestamp is invalid",
+            Self::InvalidRestoreTransition => "storage restore transition is invalid",
+            Self::RestoreMemberVerificationFailed => "storage restore member verification failed",
+            Self::InvalidReliabilityRevision => "storage reliability revision is invalid",
+            Self::ReliabilityRevisionConflict => {
+                "storage reliability revision conflicts with durable state"
+            }
+            Self::ReliabilityOperationTerminal => "storage reliability operation is terminal",
+            Self::CorruptReliabilityOperation => "storage reliability operation is corrupt",
+            Self::InvalidIntegrityStatus => "storage integrity status is invalid",
+            Self::InvalidStorageStatus => "storage status is invalid",
         })
     }
 }

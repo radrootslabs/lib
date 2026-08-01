@@ -14,6 +14,7 @@ pub mod private_artifact;
 pub mod projection;
 pub mod status;
 
+pub use backup::StorageReliability;
 pub use error::Error;
 pub use event::EventStore;
 pub use journal::Journal;
