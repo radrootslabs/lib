@@ -2,7 +2,7 @@ use futures_executor::block_on;
 use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
-    AtomicStorage, EventStore, Journal,
+    AtomicStorage, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicWorkflow,
         CommitIngested, CommitSigned,
@@ -13,10 +13,24 @@ use radroots_storage::{
         PrepareOperation,
     },
     memory::MemoryStorage,
-    projection::{ProjectionCheckpoint, ProjectionGeneration, ProjectionId},
+    outbox::{
+        ClaimOutboxItems, DeliveryPlanDigest, EnqueueDisposition, EnqueueOutboxItem, LeaseId,
+        LeaseOwner, OutboxItemId, OutboxStage,
+    },
+    private_artifact::{
+        ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DurableSecretReference,
+        PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactRevision, RetentionPolicy,
+    },
+    projection::{
+        InvalidationReason, ProjectionCheckpoint, ProjectionGeneration, ProjectionHealth,
+        ProjectionId, ProjectionInvalidation, ProjectionRevision, RebuildStage, RebuildTicket,
+        RebuildTicketId, RebuildTransition,
+    },
 };
 use radroots_transport::{
-    Target, TransportId,
+    DeliveryRequest, Target, TargetSet, TransportId,
+    policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    sink::DeliveryPayload,
     source::{EventProvenance, ObservedEvent},
 };
 
@@ -64,6 +78,34 @@ fn atomic(id: u8, digest: u8, workflow: AtomicWorkflow) -> AtomicCommit {
     .expect("atomic commit")
 }
 
+fn delivery_request(event: SignedEvent) -> DeliveryRequest {
+    DeliveryRequest::new(
+        "memory-delivery",
+        DeliveryPayload::new(event),
+        TargetSet::new(vec![
+            Target::nostr_relay("wss://relay.example").expect("target"),
+        ])
+        .expect("target set"),
+        SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+        1_000,
+    )
+    .expect("delivery request")
+}
+
+fn private_metadata() -> PrivateArtifactMetadata {
+    PrivateArtifactMetadata::new(
+        PrivateArtifactId::new([9; 16]).expect("artifact id"),
+        ArtifactKind::parse("memory.private").expect("kind"),
+        ArtifactSchemaId::parse("memory.private.v1").expect("schema"),
+        ArtifactCommitment::new([8; 32]),
+        64,
+        DurableSecretReference::new("memory", "caller-owned-key", 1).expect("secret reference"),
+        RetentionPolicy::new(None, Some(300)).expect("retention"),
+        100,
+    )
+    .expect("metadata")
+}
+
 #[test]
 fn memory_event_and_journal_implement_the_canonical_spis() {
     let store = MemoryStorage::new(SourceGeneration::new([7; 32]).expect("generation"));
@@ -76,7 +118,12 @@ fn memory_event_and_journal_implement_the_canonical_spis() {
     .expect("query");
     assert_eq!(raw.items().len(), 1);
     assert_eq!(raw.items()[0].event().id(), &event_id);
-    assert_eq!(block_on(store.status()).expect("status").raw_events(), 1);
+    assert_eq!(
+        block_on(EventStore::status(&store))
+            .expect("status")
+            .raw_events(),
+        1
+    );
 
     let instance = OperationInstanceId::new([1; 16]).expect("instance");
     let prepared = block_on(store.prepare(prepare(instance))).expect("prepare");
@@ -141,31 +188,149 @@ fn memory_atomic_commits_share_event_and_journal_state_and_replay() {
         AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission(event, 20), None))),
     );
     block_on(store.commit(ingest)).expect("atomic ingest");
-    assert_eq!(block_on(store.status()).expect("status").raw_events(), 1);
+    assert_eq!(
+        block_on(EventStore::status(&store))
+            .expect("status")
+            .raw_events(),
+        1
+    );
 }
 
 #[test]
-fn unsupported_atomic_projection_leaves_event_state_unchanged() {
+fn memory_outbox_uses_caller_supplied_time_and_lease_identity() {
     let store = MemoryStorage::default();
-    let checkpoint = ProjectionCheckpoint::new(
-        ProjectionId::parse("memory.test").expect("projection id"),
-        ProjectionGeneration::new([4; 32]).expect("projection generation"),
-        None,
-        0,
-        200,
+    let item = EnqueueOutboxItem::new(
+        OutboxItemId::new([5; 16]).expect("item id"),
+        OperationInstanceId::new([5; 16]).expect("instance"),
+        DeliveryPlanDigest::new([5; 32]),
+        delivery_request(signed_event()),
+        100,
     )
-    .expect("checkpoint");
+    .expect("enqueue");
+    assert_eq!(
+        block_on(store.enqueue(item.clone()))
+            .expect("enqueue")
+            .disposition(),
+        EnqueueDisposition::Created
+    );
+    assert_eq!(
+        block_on(store.enqueue(item)).expect("replay").disposition(),
+        EnqueueDisposition::Replay
+    );
+    let claimed = block_on(
+        store.claim(
+            ClaimOutboxItems::new(
+                LeaseOwner::parse("memory-worker").expect("owner"),
+                LeaseId::new([6; 16]).expect("lease seed"),
+                200,
+                250,
+                1,
+            )
+            .expect("claim"),
+        ),
+    )
+    .expect("claim");
+    assert_eq!(claimed.len(), 1);
+    assert_eq!(claimed[0].record().stage(), OutboxStage::Leased);
+    assert_eq!(block_on(Outbox::status(&store)).expect("status").leased, 1);
+}
+
+#[test]
+fn memory_projection_rebuild_and_private_metadata_share_deterministic_state() {
+    let store = MemoryStorage::default();
+    let projection_id = ProjectionId::parse("memory.test").expect("projection id");
+    let initial_generation = ProjectionGeneration::new([4; 32]).expect("generation");
+    let replacement_generation = ProjectionGeneration::new([5; 32]).expect("generation");
+    let checkpoint =
+        ProjectionCheckpoint::new(projection_id.clone(), initial_generation, None, 0, 200)
+            .expect("checkpoint");
+    assert_eq!(
+        block_on(store.checkpoint(checkpoint))
+            .expect("checkpoint")
+            .health(),
+        ProjectionHealth::Ready
+    );
+    let invalidation = ProjectionInvalidation::new(
+        projection_id,
+        initial_generation,
+        replacement_generation,
+        InvalidationReason::ProjectionGenerationChanged,
+        210,
+    )
+    .expect("invalidation");
+    assert_eq!(
+        block_on(store.invalidate(invalidation.clone()))
+            .expect("invalidate")
+            .health(),
+        ProjectionHealth::Invalidated
+    );
+    let ticket_id = RebuildTicketId::new([7; 16]).expect("ticket id");
+    block_on(store.request_rebuild(RebuildTicket::requested(ticket_id, invalidation)))
+        .expect("request rebuild");
+    let running = block_on(store.transition_rebuild(RebuildTransition::start(
+        ticket_id,
+        ProjectionRevision::INITIAL,
+        220,
+    )))
+    .expect("start rebuild");
+    assert_eq!(running.stage(), RebuildStage::Running);
+
+    let metadata = private_metadata();
+    block_on(store.put_metadata(metadata.clone())).expect("put metadata");
+    assert_eq!(
+        block_on(store.expired(299, 1)).expect("not expired").len(),
+        0
+    );
+    assert_eq!(block_on(store.expired(300, 1)).expect("expired").len(), 1);
+    block_on(store.mark_expired(
+        metadata.artifact_id(),
+        PrivateArtifactRevision::INITIAL,
+        300,
+    ))
+    .expect("mark expired");
+    assert_eq!(
+        block_on(PrivateArtifactStore::status(&store))
+            .expect("status")
+            .expired,
+        1
+    );
+}
+
+#[test]
+fn atomic_projection_failure_leaves_event_and_checkpoint_unchanged() {
+    let store = MemoryStorage::default();
+    let projection_id = ProjectionId::parse("memory.atomic").expect("projection id");
+    let generation = ProjectionGeneration::new([4; 32]).expect("projection generation");
+    let first = ProjectionCheckpoint::new(projection_id.clone(), generation, None, 2, 200)
+        .expect("checkpoint");
+    block_on(store.checkpoint(first)).expect("initial checkpoint");
+    let regressing = ProjectionCheckpoint::new(projection_id.clone(), generation, None, 1, 201)
+        .expect("checkpoint");
     let request = atomic(
         4,
         4,
         AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
             admission(signed_event(), 20),
-            Some(checkpoint),
+            Some(regressing),
         ))),
     );
     assert_eq!(
         block_on(store.commit(request)),
-        Err(radroots_storage::Error::BackendUnavailable)
+        Err(radroots_storage::Error::ProjectionCheckpointRegression)
     );
-    assert_eq!(block_on(store.status()).expect("status").raw_events(), 0);
+    assert_eq!(
+        block_on(EventStore::status(&store))
+            .expect("status")
+            .raw_events(),
+        0
+    );
+    assert_eq!(
+        block_on(ProjectionStore::status(&store, projection_id))
+            .expect("projection status")
+            .expect("projection")
+            .checkpoint()
+            .expect("checkpoint")
+            .projected_rows(),
+        2
+    );
 }

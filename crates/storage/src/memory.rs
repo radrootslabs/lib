@@ -6,7 +6,7 @@ use radroots_transport::{BoxFuture, source::EventProvenance};
 use std::sync::{Mutex, MutexGuard};
 
 use crate::{
-    AtomicStorage, Error, EventStore, Journal,
+    AtomicStorage, Error, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDisposition, AtomicCommitId, AtomicCommitOutcome,
         AtomicCommitReceipt, AtomicWorkflow,
@@ -20,6 +20,21 @@ use crate::{
         IdempotencyKey, JournalStage, JournalTransition, OperationInstanceId, OperationRecord,
         PrepareDisposition, PrepareOperation, PrepareReceipt, RECOVERABLE_QUERY_LIMIT_MAX,
     },
+    outbox::{
+        ClaimOutboxItems, ClaimedOutboxItem, DeliveryAttemptEvidence, EnqueueDisposition,
+        EnqueueOutboxItem, EnqueueReceipt, LeaseId, OutboxItemId, OutboxLease, OutboxRecord,
+        OutboxRevision, OutboxStage, OutboxStatus,
+    },
+    private_artifact::{
+        DeletionReason, EXPIRED_ARTIFACT_QUERY_LIMIT_MAX, PrivateArtifactId,
+        PrivateArtifactMetadata, PrivateArtifactRevision, PrivateArtifactStage,
+        PrivateArtifactStatus,
+    },
+    projection::{
+        EventIndexCheckpoint, EventIndexManifest, ProjectionCheckpoint, ProjectionGeneration,
+        ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionStatus, RebuildStage,
+        RebuildTicket, RebuildTransition,
+    },
     status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
 };
 
@@ -30,10 +45,16 @@ struct EventEntry {
     provenance: Vec<EventProvenance>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct State {
     events: Vec<EventEntry>,
     journal: Vec<OperationRecord>,
+    outbox: Vec<OutboxRecord>,
+    projections: Vec<ProjectionStatus>,
+    rebuilds: Vec<RebuildTicket>,
+    event_index_manifests: Vec<EventIndexManifest>,
+    event_index_checkpoints: Vec<EventIndexCheckpoint>,
+    private_artifacts: Vec<PrivateArtifactMetadata>,
     atomic_receipts: Vec<AtomicCommitReceipt>,
 }
 
@@ -50,6 +71,12 @@ impl MemoryStorage {
             state: Mutex::new(State {
                 events: Vec::new(),
                 journal: Vec::new(),
+                outbox: Vec::new(),
+                projections: Vec::new(),
+                rebuilds: Vec::new(),
+                event_index_manifests: Vec::new(),
+                event_index_checkpoints: Vec::new(),
+                private_artifacts: Vec::new(),
                 atomic_receipts: Vec::new(),
             }),
         }
@@ -182,6 +209,75 @@ impl MemoryStorage {
         let next = record.transition(&transition)?;
         *record = next.clone();
         Ok(next)
+    }
+
+    fn enqueue_locked(state: &mut State, item: EnqueueOutboxItem) -> Result<EnqueueReceipt, Error> {
+        if let Some(record) = state
+            .outbox
+            .iter()
+            .find(|record| record.item_id() == item.item_id())
+        {
+            let candidate = item.into_record();
+            if record.operation_instance_id() != candidate.operation_instance_id()
+                || record.plan_digest() != candidate.plan_digest()
+                || record.request() != candidate.request()
+                || record.created_at_unix_ms() != candidate.created_at_unix_ms()
+            {
+                return Err(Error::OutboxPlanConflict);
+            }
+            return Ok(EnqueueReceipt::new(
+                EnqueueDisposition::Replay,
+                record.clone(),
+            ));
+        }
+        if state.outbox.iter().any(|record| {
+            record.operation_instance_id() == item.operation_instance_id()
+                && record.item_id() != item.item_id()
+        }) {
+            return Err(Error::OutboxPlanConflict);
+        }
+        let record = item.into_record();
+        state.outbox.push(record.clone());
+        Ok(EnqueueReceipt::new(EnqueueDisposition::Created, record))
+    }
+
+    fn checkpoint_locked(
+        state: &mut State,
+        checkpoint: ProjectionCheckpoint,
+    ) -> Result<ProjectionStatus, Error> {
+        if let Some(status) = state
+            .projections
+            .iter_mut()
+            .find(|status| status.projection_id() == checkpoint.projection_id())
+        {
+            if status.generation() != checkpoint.generation() {
+                return Err(Error::ProjectionCheckpointMismatch);
+            }
+            if status
+                .checkpoint()
+                .is_some_and(|prior| !checkpoint.advances(prior))
+            {
+                return Err(Error::ProjectionCheckpointRegression);
+            }
+            let next = ProjectionStatus::new(
+                checkpoint.projection_id().clone(),
+                checkpoint.generation(),
+                ProjectionHealth::Ready,
+                Some(checkpoint),
+                None,
+            )?;
+            *status = next.clone();
+            return Ok(next);
+        }
+        let status = ProjectionStatus::new(
+            checkpoint.projection_id().clone(),
+            checkpoint.generation(),
+            ProjectionHealth::Ready,
+            Some(checkpoint),
+            None,
+        )?;
+        state.projections.push(status.clone());
+        Ok(status)
     }
 }
 
@@ -395,6 +491,447 @@ impl Journal for MemoryStorage {
     }
 }
 
+impl Outbox for MemoryStorage {
+    fn enqueue(&self, item: EnqueueOutboxItem) -> BoxFuture<'_, Result<EnqueueReceipt, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            Self::enqueue_locked(&mut state, item)
+        })
+    }
+
+    fn item(&self, item_id: OutboxItemId) -> BoxFuture<'_, Result<Option<OutboxRecord>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .outbox
+                .iter()
+                .find(|record| record.item_id() == item_id)
+                .cloned())
+        })
+    }
+
+    fn claim(
+        &self,
+        request: ClaimOutboxItems,
+    ) -> BoxFuture<'_, Result<Vec<ClaimedOutboxItem>, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let mut claimed = Vec::new();
+            for record in &mut state.outbox {
+                if claimed.len() >= usize::from(request.limit()) || record.stage().is_terminal() {
+                    continue;
+                }
+                if record
+                    .retry_not_before_unix_ms()
+                    .is_some_and(|at| request.now_unix_ms() < at)
+                    || record
+                        .lease()
+                        .is_some_and(|lease| lease.is_active_at(request.now_unix_ms()))
+                {
+                    continue;
+                }
+                let lease = OutboxLease::new(
+                    request.lease_id_for(record.item_id()),
+                    request.owner().clone(),
+                    request.now_unix_ms(),
+                    request.lease_expires_at_unix_ms(),
+                )?;
+                record.claim(lease.clone())?;
+                claimed.push(ClaimedOutboxItem::new(record.clone(), lease));
+            }
+            Ok(claimed)
+        })
+    }
+
+    fn record_attempt(
+        &self,
+        evidence: DeliveryAttemptEvidence,
+    ) -> BoxFuture<'_, Result<OutboxRecord, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let record = state
+                .outbox
+                .iter_mut()
+                .find(|record| record.item_id() == evidence.item_id())
+                .ok_or(Error::OutboxItemNotFound)?;
+            record.record_attempt(evidence)?;
+            Ok(record.clone())
+        })
+    }
+
+    fn release(
+        &self,
+        item_id: OutboxItemId,
+        lease_id: LeaseId,
+        expected_revision: OutboxRevision,
+        released_at_unix_ms: u64,
+        retry_not_before_unix_ms: Option<u64>,
+    ) -> BoxFuture<'_, Result<OutboxRecord, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let record = state
+                .outbox
+                .iter_mut()
+                .find(|record| record.item_id() == item_id)
+                .ok_or(Error::OutboxItemNotFound)?;
+            record.release(
+                lease_id,
+                expected_revision,
+                released_at_unix_ms,
+                retry_not_before_unix_ms,
+            )?;
+            Ok(record.clone())
+        })
+    }
+
+    fn status(&self) -> BoxFuture<'_, Result<OutboxStatus, Error>> {
+        Box::pin(async move {
+            let state = self.state()?;
+            let mut status = OutboxStatus {
+                pending: 0,
+                leased: 0,
+                retryable: 0,
+                satisfied: 0,
+                exhausted: 0,
+            };
+            for record in &state.outbox {
+                let count = match record.stage() {
+                    OutboxStage::Pending => &mut status.pending,
+                    OutboxStage::Leased => &mut status.leased,
+                    OutboxStage::Retryable => &mut status.retryable,
+                    OutboxStage::Satisfied => &mut status.satisfied,
+                    OutboxStage::Exhausted => &mut status.exhausted,
+                };
+                *count = count.checked_add(1).ok_or(Error::CorruptOutboxRecord)?;
+            }
+            Ok(status)
+        })
+    }
+}
+
+impl ProjectionStore for MemoryStorage {
+    fn status(
+        &self,
+        projection_id: ProjectionId,
+    ) -> BoxFuture<'_, Result<Option<ProjectionStatus>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .projections
+                .iter()
+                .find(|status| status.projection_id() == &projection_id)
+                .cloned())
+        })
+    }
+
+    fn checkpoint(
+        &self,
+        checkpoint: ProjectionCheckpoint,
+    ) -> BoxFuture<'_, Result<ProjectionStatus, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            Self::checkpoint_locked(&mut state, checkpoint)
+        })
+    }
+
+    fn invalidate(
+        &self,
+        invalidation: ProjectionInvalidation,
+    ) -> BoxFuture<'_, Result<ProjectionStatus, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let status = state
+                .projections
+                .iter_mut()
+                .find(|status| status.projection_id() == invalidation.projection_id())
+                .ok_or(Error::ProjectionCheckpointMismatch)?;
+            if status.generation() != invalidation.invalid_generation() {
+                return Err(Error::ProjectionCheckpointMismatch);
+            }
+            let next = ProjectionStatus::new(
+                invalidation.projection_id().clone(),
+                invalidation.replacement_generation(),
+                ProjectionHealth::Invalidated,
+                None,
+                None,
+            )?;
+            *status = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn request_rebuild(
+        &self,
+        ticket: RebuildTicket,
+    ) -> BoxFuture<'_, Result<RebuildTicket, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state
+                .rebuilds
+                .iter()
+                .find(|existing| existing.ticket_id() == ticket.ticket_id())
+            {
+                return if existing == &ticket {
+                    Ok(existing.clone())
+                } else {
+                    Err(Error::ProjectionRevisionConflict)
+                };
+            }
+            let projection_id = ticket.invalidation().projection_id();
+            let status = state
+                .projections
+                .iter_mut()
+                .find(|status| status.projection_id() == projection_id)
+                .ok_or(Error::ProjectionCheckpointMismatch)?;
+            if status.generation() != ticket.invalidation().replacement_generation()
+                || status.health() != ProjectionHealth::Invalidated
+            {
+                return Err(Error::ProjectionCheckpointMismatch);
+            }
+            *status = ProjectionStatus::new(
+                projection_id.clone(),
+                status.generation(),
+                ProjectionHealth::Rebuilding,
+                None,
+                Some(ticket.ticket_id()),
+            )?;
+            state.rebuilds.push(ticket.clone());
+            Ok(ticket)
+        })
+    }
+
+    fn transition_rebuild(
+        &self,
+        transition: RebuildTransition,
+    ) -> BoxFuture<'_, Result<RebuildTicket, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let index = state
+                .rebuilds
+                .iter()
+                .position(|ticket| ticket.ticket_id() == transition.ticket_id())
+                .ok_or(Error::ProjectionRevisionConflict)?;
+            let next = state.rebuilds[index].transition(transition)?;
+            let projection_id = next.invalidation().projection_id();
+            let status = state
+                .projections
+                .iter_mut()
+                .find(|status| status.projection_id() == projection_id)
+                .ok_or(Error::CorruptProjectionRecord)?;
+            let (health, active_rebuild) = match next.stage() {
+                RebuildStage::Requested | RebuildStage::Running => {
+                    (ProjectionHealth::Rebuilding, Some(next.ticket_id()))
+                }
+                RebuildStage::Completed => (ProjectionHealth::Ready, None),
+                RebuildStage::Failed => (ProjectionHealth::Failed, None),
+            };
+            *status = ProjectionStatus::new(
+                projection_id.clone(),
+                next.invalidation().replacement_generation(),
+                health,
+                next.checkpoint().cloned(),
+                active_rebuild,
+            )?;
+            state.rebuilds[index] = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn event_index_manifest(
+        &self,
+        generation: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<Option<EventIndexManifest>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .event_index_manifests
+                .iter()
+                .find(|manifest| manifest.generation() == generation)
+                .cloned())
+        })
+    }
+
+    fn put_event_index_manifest(
+        &self,
+        manifest: EventIndexManifest,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state
+                .event_index_manifests
+                .iter()
+                .find(|existing| existing.generation() == manifest.generation())
+            {
+                return if existing == &manifest {
+                    Ok(())
+                } else {
+                    Err(Error::CorruptProjectionRecord)
+                };
+            }
+            state.event_index_manifests.push(manifest);
+            Ok(())
+        })
+    }
+
+    fn event_index_checkpoint(
+        &self,
+        generation: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<Option<EventIndexCheckpoint>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .event_index_checkpoints
+                .iter()
+                .find(|checkpoint| checkpoint.generation() == generation)
+                .cloned())
+        })
+    }
+
+    fn put_event_index_checkpoint(
+        &self,
+        checkpoint: EventIndexCheckpoint,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state
+                .event_index_checkpoints
+                .iter_mut()
+                .find(|existing| existing.generation() == checkpoint.generation())
+            {
+                if checkpoint.generated_at_unix_ms() < existing.generated_at_unix_ms() {
+                    return Err(Error::InvalidEventIndexCheckpoint);
+                }
+                *existing = checkpoint;
+            } else {
+                state.event_index_checkpoints.push(checkpoint);
+            }
+            Ok(())
+        })
+    }
+}
+
+impl PrivateArtifactStore for MemoryStorage {
+    fn put_metadata(
+        &self,
+        metadata: PrivateArtifactMetadata,
+    ) -> BoxFuture<'_, Result<PrivateArtifactMetadata, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state
+                .private_artifacts
+                .iter()
+                .find(|existing| existing.artifact_id() == metadata.artifact_id())
+            {
+                return if existing == &metadata {
+                    Ok(existing.clone())
+                } else {
+                    Err(Error::PrivateArtifactConflict)
+                };
+            }
+            state.private_artifacts.push(metadata.clone());
+            Ok(metadata)
+        })
+    }
+
+    fn metadata(
+        &self,
+        artifact_id: PrivateArtifactId,
+    ) -> BoxFuture<'_, Result<Option<PrivateArtifactMetadata>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .private_artifacts
+                .iter()
+                .find(|metadata| metadata.artifact_id() == artifact_id)
+                .cloned())
+        })
+    }
+
+    fn mark_expired(
+        &self,
+        artifact_id: PrivateArtifactId,
+        expected_revision: PrivateArtifactRevision,
+        at_unix_ms: u64,
+    ) -> BoxFuture<'_, Result<PrivateArtifactMetadata, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let metadata = state
+                .private_artifacts
+                .iter_mut()
+                .find(|metadata| metadata.artifact_id() == artifact_id)
+                .ok_or(Error::PrivateArtifactNotFound)?;
+            let next = metadata.mark_expired(expected_revision, at_unix_ms)?;
+            *metadata = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn tombstone(
+        &self,
+        artifact_id: PrivateArtifactId,
+        expected_revision: PrivateArtifactRevision,
+        at_unix_ms: u64,
+        reason: DeletionReason,
+    ) -> BoxFuture<'_, Result<PrivateArtifactMetadata, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let metadata = state
+                .private_artifacts
+                .iter_mut()
+                .find(|metadata| metadata.artifact_id() == artifact_id)
+                .ok_or(Error::PrivateArtifactNotFound)?;
+            let next = metadata.tombstone(expected_revision, at_unix_ms, reason)?;
+            *metadata = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn expired(
+        &self,
+        at_unix_ms: u64,
+        limit: u16,
+    ) -> BoxFuture<'_, Result<Vec<PrivateArtifactMetadata>, Error>> {
+        Box::pin(async move {
+            if at_unix_ms == 0 || limit == 0 || limit > EXPIRED_ARTIFACT_QUERY_LIMIT_MAX {
+                return Err(Error::InvalidExpiredArtifactQueryLimit);
+            }
+            Ok(self
+                .state()?
+                .private_artifacts
+                .iter()
+                .filter(|metadata| {
+                    metadata.stage() == PrivateArtifactStage::Active
+                        && metadata.retention().is_expired_at(at_unix_ms)
+                })
+                .take(usize::from(limit))
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn status(&self) -> BoxFuture<'_, Result<PrivateArtifactStatus, Error>> {
+        Box::pin(async move {
+            let state = self.state()?;
+            let mut status = PrivateArtifactStatus {
+                active: 0,
+                expired: 0,
+                tombstoned: 0,
+            };
+            for metadata in &state.private_artifacts {
+                let count = match metadata.stage() {
+                    PrivateArtifactStage::Active => &mut status.active,
+                    PrivateArtifactStage::Expired => &mut status.expired,
+                    PrivateArtifactStage::Tombstoned => &mut status.tombstoned,
+                };
+                *count = count
+                    .checked_add(1)
+                    .ok_or(Error::CorruptPrivateArtifactMetadata)?;
+            }
+            Ok(status)
+        })
+    }
+}
+
 impl AtomicStorage for MemoryStorage {
     fn commit(&self, request: AtomicCommit) -> BoxFuture<'_, Result<AtomicCommitReceipt, Error>> {
         Box::pin(async move {
@@ -416,16 +953,17 @@ impl AtomicStorage for MemoryStorage {
                     existing.outcome().clone(),
                 );
             }
+            let mut candidate = state.clone();
             let outcome = match request.workflow().clone() {
                 AtomicWorkflow::Prepared(operation) => AtomicCommitOutcome::Prepared {
-                    journal: Self::prepare_locked(&mut state, operation)?
+                    journal: Self::prepare_locked(&mut candidate, operation)?
                         .record()
                         .clone(),
                 },
                 AtomicWorkflow::Signed(signed) => {
                     let event_id = *signed.event().id();
                     let journal = Self::transition_locked(
-                        &mut state,
+                        &mut candidate,
                         JournalTransition::signed(
                             signed.instance_id(),
                             signed.expected_revision(),
@@ -434,15 +972,52 @@ impl AtomicStorage for MemoryStorage {
                     )?;
                     AtomicCommitOutcome::Signed { journal, event_id }
                 }
-                AtomicWorkflow::Ingested(ingested) if ingested.projection().is_none() => {
-                    AtomicCommitOutcome::Ingested {
-                        admission: self.admit_locked(&mut state, ingested.admission().clone())?,
-                        projection: None,
+                AtomicWorkflow::Enqueued(enqueued) => {
+                    let admission =
+                        self.admit_locked(&mut candidate, enqueued.admission().clone())?;
+                    let outbox = Self::enqueue_locked(&mut candidate, enqueued.outbox().clone())?
+                        .record()
+                        .clone();
+                    let journal = Self::transition_locked(
+                        &mut candidate,
+                        JournalTransition::committed(
+                            enqueued.instance_id(),
+                            enqueued.expected_revision(),
+                            *enqueued.admission().event_id(),
+                            enqueued.committed_at_unix_ms(),
+                        ),
+                    )?;
+                    AtomicCommitOutcome::Enqueued {
+                        journal,
+                        admission,
+                        outbox: Box::new(outbox),
                     }
                 }
-                AtomicWorkflow::Enqueued(_)
-                | AtomicWorkflow::Delivered(_)
-                | AtomicWorkflow::Ingested(_) => return Err(Error::BackendUnavailable),
+                AtomicWorkflow::Delivered(evidence) => {
+                    let record = candidate
+                        .outbox
+                        .iter_mut()
+                        .find(|record| record.item_id() == evidence.item_id())
+                        .ok_or(Error::OutboxItemNotFound)?;
+                    record.record_attempt(*evidence)?;
+                    AtomicCommitOutcome::Delivered {
+                        outbox: Box::new(record.clone()),
+                    }
+                }
+                AtomicWorkflow::Ingested(ingested) => {
+                    let admission =
+                        self.admit_locked(&mut candidate, ingested.admission().clone())?;
+                    let projection = ingested
+                        .projection()
+                        .cloned()
+                        .map(|checkpoint| Self::checkpoint_locked(&mut candidate, checkpoint))
+                        .transpose()?
+                        .map(Box::new);
+                    AtomicCommitOutcome::Ingested {
+                        admission,
+                        projection,
+                    }
+                }
             };
             let receipt = AtomicCommitReceipt::new(
                 &request,
@@ -450,7 +1025,8 @@ impl AtomicStorage for MemoryStorage {
                 request.requested_at_unix_ms(),
                 outcome,
             )?;
-            state.atomic_receipts.push(receipt.clone());
+            candidate.atomic_receipts.push(receipt.clone());
+            *state = candidate;
             Ok(receipt)
         })
     }
