@@ -1,0 +1,1 @@
+//! Versioned encrypted-envelope contracts.
