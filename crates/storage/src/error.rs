@@ -51,6 +51,27 @@ pub enum Error {
     OutboxLeaseExpired,
     OutboxRevisionConflict,
     CorruptOutboxRecord,
+    InvalidProjectionId,
+    InvalidProjectionGeneration,
+    InvalidProjectionRevision,
+    InvalidProjectionTimestamp,
+    InvalidProjectionInvalidation,
+    ProjectionCheckpointMismatch,
+    ProjectionCheckpointRegression,
+    ProjectionRevisionConflict,
+    InvalidRebuildTicketId,
+    InvalidRebuildTransition,
+    RebuildTicketTerminal,
+    InvalidEventIndexShardId,
+    InvalidEventIndexRange,
+    InvalidEventIndexArtifactPath,
+    InvalidEventIndexShardCount,
+    InvalidEventIndexTimestamp,
+    InvalidEventIndexManifest,
+    InvalidEventIndexCursor,
+    InvalidEventIndexCheckpoint,
+    DuplicateEventIndexShard,
+    CorruptProjectionRecord,
 }
 
 impl fmt::Display for Error {
@@ -103,6 +124,31 @@ impl fmt::Display for Error {
             Self::OutboxLeaseExpired => "storage outbox lease expired",
             Self::OutboxRevisionConflict => "storage outbox revision conflicts with durable state",
             Self::CorruptOutboxRecord => "storage outbox record is corrupt",
+            Self::InvalidProjectionId => "storage projection id is invalid",
+            Self::InvalidProjectionGeneration => "storage projection generation is invalid",
+            Self::InvalidProjectionRevision => "storage projection revision is invalid",
+            Self::InvalidProjectionTimestamp => "storage projection timestamp is invalid",
+            Self::InvalidProjectionInvalidation => "storage projection invalidation is invalid",
+            Self::ProjectionCheckpointMismatch => {
+                "storage projection checkpoint identity does not match"
+            }
+            Self::ProjectionCheckpointRegression => "storage projection checkpoint regressed",
+            Self::ProjectionRevisionConflict => {
+                "storage projection revision conflicts with durable state"
+            }
+            Self::InvalidRebuildTicketId => "storage projection rebuild ticket id is invalid",
+            Self::InvalidRebuildTransition => "storage projection rebuild transition is invalid",
+            Self::RebuildTicketTerminal => "storage projection rebuild ticket is terminal",
+            Self::InvalidEventIndexShardId => "storage event-index shard id is invalid",
+            Self::InvalidEventIndexRange => "storage event-index id range is invalid",
+            Self::InvalidEventIndexArtifactPath => "storage event-index artifact path is invalid",
+            Self::InvalidEventIndexShardCount => "storage event-index shard count is invalid",
+            Self::InvalidEventIndexTimestamp => "storage event-index timestamp is invalid",
+            Self::InvalidEventIndexManifest => "storage event-index manifest is invalid",
+            Self::InvalidEventIndexCursor => "storage event-index cursor is invalid",
+            Self::InvalidEventIndexCheckpoint => "storage event-index checkpoint is invalid",
+            Self::DuplicateEventIndexShard => "storage event-index shard is duplicated",
+            Self::CorruptProjectionRecord => "storage projection record is corrupt",
         })
     }
 }
