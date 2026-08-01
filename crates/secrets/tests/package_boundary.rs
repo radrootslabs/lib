@@ -14,7 +14,7 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
         "default = [\"std\", \"serde\"]",
         "memory = [\"std\"]",
         "file = [\"std\", \"dep:tempfile\"]",
-        "keyring = [\"std\"]",
+        "keyring = [\"std\", \"dep:keyring\"]",
     ] {
         assert!(
             MANIFEST.contains(required),

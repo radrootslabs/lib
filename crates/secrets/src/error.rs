@@ -125,6 +125,8 @@ pub enum Error {
     UnsafePath,
     /// Filesystem permissions allowed access outside the current user.
     InsecurePermissions,
+    /// An OS keyring service identifier failed portable validation.
+    InvalidServiceName,
     /// Envelope data exceeded the package-wide bound.
     EnvelopeTooLarge {
         /// Observed byte length.
@@ -244,6 +246,9 @@ impl fmt::Display for Error {
             Self::UnsafePath => formatter.write_str("secret provider path is unsafe"),
             Self::InsecurePermissions => {
                 formatter.write_str("secret provider permissions are insecure")
+            }
+            Self::InvalidServiceName => {
+                formatter.write_str("secret provider service name is invalid")
             }
             Self::EnvelopeTooLarge {
                 actual_bytes,
