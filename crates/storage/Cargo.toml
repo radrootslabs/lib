@@ -17,7 +17,13 @@ name = "radroots_storage"
 [features]
 default = ["memory", "serde"]
 memory = []
-serde = ["dep:serde"]
+serde = [
+  "dep:serde",
+  "radroots_event/serde",
+  "radroots_protocol/serde",
+  "radroots_trade/serde",
+  "radroots_transport/serde",
+]
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false }
@@ -28,6 +34,10 @@ serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ], optional = true }
+
+[dev-dependencies]
+futures-executor = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true

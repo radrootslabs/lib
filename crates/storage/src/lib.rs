@@ -12,3 +12,5 @@ pub mod outbox;
 pub mod private_artifact;
 pub mod projection;
 pub mod status;
+
+pub use event::{Error, EventStore};

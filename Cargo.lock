@@ -5123,11 +5123,13 @@ dependencies = [
 name = "radroots_storage"
 version = "0.1.0-alpha"
 dependencies = [
+ "futures-executor",
  "radroots_event",
  "radroots_protocol",
  "radroots_trade",
  "radroots_transport",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
