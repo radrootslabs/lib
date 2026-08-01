@@ -107,6 +107,11 @@ pub enum Error {
     CorruptReliabilityOperation,
     InvalidIntegrityStatus,
     InvalidStorageStatus,
+    InvalidAtomicCommitId,
+    InvalidAtomicCommitTimestamp,
+    AtomicCommitConflict,
+    AtomicWorkflowMismatch,
+    AtomicCommitFailed,
 }
 
 impl fmt::Display for Error {
@@ -233,6 +238,11 @@ impl fmt::Display for Error {
             Self::CorruptReliabilityOperation => "storage reliability operation is corrupt",
             Self::InvalidIntegrityStatus => "storage integrity status is invalid",
             Self::InvalidStorageStatus => "storage status is invalid",
+            Self::InvalidAtomicCommitId => "storage atomic commit id is invalid",
+            Self::InvalidAtomicCommitTimestamp => "storage atomic commit timestamp is invalid",
+            Self::AtomicCommitConflict => "storage atomic commit conflicts with durable state",
+            Self::AtomicWorkflowMismatch => "storage atomic workflow components do not match",
+            Self::AtomicCommitFailed => "storage atomic workflow did not commit",
         })
     }
 }
