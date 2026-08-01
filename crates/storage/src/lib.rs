@@ -17,3 +17,4 @@ pub mod status;
 pub use error::Error;
 pub use event::EventStore;
 pub use journal::Journal;
+pub use outbox::Outbox;
