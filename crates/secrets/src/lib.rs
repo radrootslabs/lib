@@ -18,3 +18,5 @@ pub mod wrapping;
 
 pub use error::Error;
 pub use id::{SecretId, SecretRef};
+pub use provider::SecretProvider;
+pub use wrapping::KeyWrapping;

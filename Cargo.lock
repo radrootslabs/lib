@@ -4972,8 +4972,10 @@ dependencies = [
 name = "radroots_secrets"
 version = "0.1.0-alpha"
 dependencies = [
+ "futures-executor",
  "serde",
  "serde_json",
+ "zeroize",
 ]
 
 [[package]]

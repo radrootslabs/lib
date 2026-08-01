@@ -50,7 +50,9 @@ fn crate_root_contains_only_the_approved_module_skeleton() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
             "pub use error::Error;",
-            "pub use id::{SecretId, SecretRef};"
+            "pub use id::{SecretId, SecretRef};",
+            "pub use provider::SecretProvider;",
+            "pub use wrapping::KeyWrapping;"
         ])
     );
 }
