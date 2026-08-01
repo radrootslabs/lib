@@ -93,6 +93,44 @@ pub enum Error {
         /// Normalized operation that failed.
         operation: Operation,
     },
+    /// Envelope data exceeded the package-wide bound.
+    EnvelopeTooLarge {
+        /// Observed byte length.
+        actual_bytes: usize,
+        /// Maximum accepted byte length.
+        max_bytes: usize,
+    },
+    /// Envelope bytes were truncated or structurally invalid.
+    EnvelopeMalformed,
+    /// The encoded envelope version is not supported.
+    UnsupportedEnvelopeVersion {
+        /// Observed version number.
+        version: u16,
+    },
+    /// The encoded cipher identifier is not supported.
+    UnsupportedCipher {
+        /// Observed cipher identifier.
+        cipher: u8,
+    },
+    /// The encoded key-source identifier is not supported.
+    UnsupportedKeySource {
+        /// Observed key-source identifier.
+        key_source: u8,
+    },
+    /// The encoded backend identifier is not supported.
+    UnsupportedBackend {
+        /// Observed backend identifier.
+        backend: u8,
+    },
+    /// A data-encryption key had an invalid length.
+    InvalidDataKeyLength {
+        /// Observed byte length.
+        actual_bytes: usize,
+    },
+    /// Authenticated encryption failed.
+    EncryptFailed,
+    /// Authentication or decryption failed.
+    DecryptFailed,
 }
 
 impl fmt::Display for SecretIdError {
@@ -154,6 +192,42 @@ impl fmt::Display for Error {
                 formatter,
                 "secret backend {backend:?} failed during {operation:?}"
             ),
+            Self::EnvelopeTooLarge {
+                actual_bytes,
+                max_bytes,
+            } => write!(
+                formatter,
+                "encrypted envelope is too large: {actual_bytes} bytes; maximum is {max_bytes}"
+            ),
+            Self::EnvelopeMalformed => formatter.write_str("encrypted envelope is malformed"),
+            Self::UnsupportedEnvelopeVersion { version } => {
+                write!(
+                    formatter,
+                    "encrypted envelope version {version} is unsupported"
+                )
+            }
+            Self::UnsupportedCipher { cipher } => {
+                write!(
+                    formatter,
+                    "encrypted envelope cipher {cipher} is unsupported"
+                )
+            }
+            Self::UnsupportedKeySource { key_source } => write!(
+                formatter,
+                "encrypted envelope key source {key_source} is unsupported"
+            ),
+            Self::UnsupportedBackend { backend } => {
+                write!(
+                    formatter,
+                    "encrypted envelope backend {backend} is unsupported"
+                )
+            }
+            Self::InvalidDataKeyLength { actual_bytes } => write!(
+                formatter,
+                "envelope data key must be 32 bytes; got {actual_bytes}"
+            ),
+            Self::EncryptFailed => formatter.write_str("encrypted envelope sealing failed"),
+            Self::DecryptFailed => formatter.write_str("encrypted envelope authentication failed"),
         }
     }
 }

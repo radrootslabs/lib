@@ -4972,7 +4972,9 @@ dependencies = [
 name = "radroots_secrets"
 version = "0.1.0-alpha"
 dependencies = [
+ "chacha20poly1305",
  "futures-executor",
+ "hex",
  "serde",
  "serde_json",
  "zeroize",

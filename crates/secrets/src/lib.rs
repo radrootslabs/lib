@@ -16,6 +16,7 @@ pub mod memory;
 pub mod provider;
 pub mod wrapping;
 
+pub use envelope::EncryptedEnvelope;
 pub use error::Error;
 pub use id::{SecretId, SecretRef};
 pub use provider::SecretProvider;

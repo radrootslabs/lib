@@ -126,6 +126,27 @@ pub enum BackendKind {
     External,
 }
 
+impl BackendKind {
+    pub(crate) const fn code(self) -> u8 {
+        match self {
+            Self::Memory => 1,
+            Self::File => 2,
+            Self::Keyring => 3,
+            Self::External => 4,
+        }
+    }
+
+    pub(crate) const fn from_code(code: u8) -> Result<Self, Error> {
+        match code {
+            1 => Ok(Self::Memory),
+            2 => Ok(Self::File),
+            3 => Ok(Self::Keyring),
+            4 => Ok(Self::External),
+            backend => Err(Error::UnsupportedBackend { backend }),
+        }
+    }
+}
+
 /// A single-owner capability handle for a secret held by a provider.
 ///
 /// Cloning and ordinary serialization are intentionally unavailable. Debug

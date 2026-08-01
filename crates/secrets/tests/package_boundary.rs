@@ -49,6 +49,7 @@ fn crate_root_contains_only_the_approved_module_skeleton() {
             .filter(|line| line.starts_with("pub use "))
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
+            "pub use envelope::EncryptedEnvelope;",
             "pub use error::Error;",
             "pub use id::{SecretId, SecretRef};",
             "pub use provider::SecretProvider;",
