@@ -25,10 +25,10 @@ use radroots_signing::{
 };
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::timeout;
 use uuid::Uuid;
 
-pub type RadrootsSdkNip46TransportFuture<'a, T> = TransportFuture<'a, T>;
 pub type RadrootsSdkLocalSignerCapability = dyn Signer;
 
 pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
@@ -42,32 +42,14 @@ pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
 ];
 pub const RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS: u64 = 30_000;
 
-/// Opaque client key used only to authenticate and encrypt one NIP-46 session.
-///
-/// The key is single-owner, cannot be serialized, and never exposes its
-/// secret representation. Generate it explicitly and move it into
-/// [`RadrootsSdkMycNip46Signer::new`].
-///
-/// ```compile_fail
-/// use radroots_sdk::RadrootsSdkNip46ClientKey;
-///
-/// let key = RadrootsSdkNip46ClientKey::generate();
-/// let _duplicate = key.clone();
-/// ```
-///
-/// ```compile_fail
-/// use radroots_sdk::RadrootsSdkNip46ClientKey;
-///
-/// let key = RadrootsSdkNip46ClientKey::generate();
-/// let _json = serde_json::to_string(&key)?;
-/// # Ok::<(), serde_json::Error>(())
-/// ```
+/// Private key transition surface retained through CLI migration Step 271; removed in Step 313.
+#[doc(hidden)]
 pub struct RadrootsSdkNip46ClientKey {
     keys: RadrootsNostrKeys,
 }
 
+#[doc(hidden)]
 impl RadrootsSdkNip46ClientKey {
-    /// Generates fresh client key material for one NIP-46 signer session.
     #[must_use]
     pub fn generate() -> Self {
         Self {
@@ -87,6 +69,21 @@ impl fmt::Debug for RadrootsSdkNip46ClientKey {
             .field(&"[redacted]")
             .finish()
     }
+}
+
+#[doc(hidden)]
+pub type RadrootsSdkNip46TransportFuture<'a, T> = TransportFuture<'a, T>;
+
+/// Private relay-event transition surface retained through CLI migration Step 271; removed in Step 313.
+#[doc(hidden)]
+pub trait RadrootsSdkNip46Transport: Send + Sync {
+    fn publish_request_event<'a>(
+        &'a self,
+        event: RadrootsNostrEvent,
+    ) -> RadrootsSdkNip46TransportFuture<'a, ()>;
+
+    fn next_response_event<'a>(&'a self)
+    -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -340,16 +337,6 @@ impl RadrootsSdkLocalKeySigner {
     }
 }
 
-pub trait RadrootsSdkNip46Transport: Send + Sync {
-    fn publish_request_event<'a>(
-        &'a self,
-        event: RadrootsNostrEvent,
-    ) -> RadrootsSdkNip46TransportFuture<'a, ()>;
-
-    fn next_response_event<'a>(&'a self)
-    -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent>;
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RadrootsSdkMycNip46RequestPolicy {
     request_timeout: Duration,
@@ -385,12 +372,13 @@ impl Default for RadrootsSdkMycNip46RequestPolicy {
 pub struct RadrootsSdkMycNip46Signer {
     client: Arc<Client>,
     user_pubkey: PublicKey,
-    transport: Arc<dyn RadrootsSdkNip46Transport>,
+    transport: Arc<AsyncMutex<Box<dyn Transport>>>,
     request_policy: RadrootsSdkMycNip46RequestPolicy,
     request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
 }
 
 impl RadrootsSdkMycNip46Signer {
+    #[doc(hidden)]
     pub fn new(
         client_key: RadrootsSdkNip46ClientKey,
         target: Target,
@@ -406,6 +394,7 @@ impl RadrootsSdkMycNip46Signer {
         )
     }
 
+    #[doc(hidden)]
     pub fn new_with_request_policy(
         client_key: RadrootsSdkNip46ClientKey,
         target: Target,
@@ -413,9 +402,44 @@ impl RadrootsSdkMycNip46Signer {
         transport: Arc<dyn RadrootsSdkNip46Transport>,
         request_policy: RadrootsSdkMycNip46RequestPolicy,
     ) -> Result<Self, RadrootsSdkError> {
+        let client_secret = client_key.into_keys().secret_key().to_secret_hex();
+        let client = Client::from_secret(client_secret.as_str(), target)
+            .map_err(sdk_error_from_nip46_error)?;
+        Self::from_client_with_request_policy(
+            client,
+            user_pubkey,
+            RadrootsSdkNip46RelayEventTransport { transport },
+            request_policy,
+        )
+    }
+
+    pub fn from_client<T>(
+        client: Client,
+        user_pubkey: impl AsRef<str>,
+        transport: T,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        T: Transport + 'static,
+    {
+        Self::from_client_with_request_policy(
+            client,
+            user_pubkey,
+            transport,
+            RadrootsSdkMycNip46RequestPolicy::default(),
+        )
+    }
+
+    pub fn from_client_with_request_policy<T>(
+        client: Client,
+        user_pubkey: impl AsRef<str>,
+        transport: T,
+        request_policy: RadrootsSdkMycNip46RequestPolicy,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        T: Transport + 'static,
+    {
         Self::new_with_request_id_generator(
-            client_key,
-            target,
+            client,
             user_pubkey,
             transport,
             request_policy,
@@ -423,18 +447,17 @@ impl RadrootsSdkMycNip46Signer {
         )
     }
 
-    fn new_with_request_id_generator(
-        client_key: RadrootsSdkNip46ClientKey,
-        target: Target,
+    fn new_with_request_id_generator<T>(
+        client: Client,
         user_pubkey: impl AsRef<str>,
-        transport: Arc<dyn RadrootsSdkNip46Transport>,
+        transport: T,
         request_policy: RadrootsSdkMycNip46RequestPolicy,
         request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
-    ) -> Result<Self, RadrootsSdkError> {
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        T: Transport + 'static,
+    {
         RadrootsSdkMycNip46RequestPolicy::new(request_policy.request_timeout())?;
-        let client_secret = client_key.into_keys().secret_key().to_secret_hex();
-        let client = Client::from_secret(client_secret.as_str(), target)
-            .map_err(sdk_error_from_nip46_error)?;
         let user_pubkey = PublicKey::from_hex(user_pubkey.as_ref()).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
                 message: format!("myc_nip46 user pubkey is invalid: {error}"),
@@ -443,7 +466,7 @@ impl RadrootsSdkMycNip46Signer {
         Ok(Self {
             client: Arc::new(client),
             user_pubkey,
-            transport,
+            transport: Arc::new(AsyncMutex::new(Box::new(transport))),
             request_policy,
             request_id_generator,
         })
@@ -498,8 +521,9 @@ impl RadrootsSdkMycNip46Signer {
         let sign_event_request = sign_event_request_from_frozen_draft(sign_request.draft())?;
         let request_id =
             RequestId::parse(self.next_request_id()).map_err(sdk_error_from_nip46_error)?;
-        let mut adapter = RadrootsSdkNip46TransportAdapter {
-            transport: self.transport.as_ref(),
+        let mut transport = self.transport.lock().await;
+        let mut adapter = RadrootsSdkNip46TimeoutTransport {
+            transport: transport.as_mut(),
             request_timeout: self.request_policy.request_timeout(),
         };
         let mut progress_error = None;
@@ -598,12 +622,16 @@ pub fn radroots_sdk_myc_nip46_product_permission_strings() -> Vec<String> {
         .collect()
 }
 
-struct RadrootsSdkNip46TransportAdapter<'a> {
-    transport: &'a dyn RadrootsSdkNip46Transport,
+struct RadrootsSdkNip46TimeoutTransport<'a> {
+    transport: &'a mut dyn Transport,
     request_timeout: Duration,
 }
 
-impl Transport for RadrootsSdkNip46TransportAdapter<'_> {
+struct RadrootsSdkNip46RelayEventTransport {
+    transport: Arc<dyn RadrootsSdkNip46Transport>,
+}
+
+impl Transport for RadrootsSdkNip46RelayEventTransport {
     fn publish<'a>(&'a mut self, event: ClientEvent) -> TransportFuture<'a, ()> {
         let event = match RadrootsNostrEvent::from_json(event.as_json()) {
             Ok(event) => event,
@@ -626,14 +654,37 @@ impl Transport for RadrootsSdkNip46TransportAdapter<'_> {
             return Box::pin(async { Ok(Receive::Cancelled) });
         }
         let next = self.transport.next_response_event();
+        Box::pin(async move {
+            let event = next.await?;
+            if cancellation.is_cancelled() {
+                return Ok(Receive::Cancelled);
+            }
+            ClientEvent::from_json(event.as_json().as_str()).map(Receive::event)
+        })
+    }
+}
+
+impl Transport for RadrootsSdkNip46TimeoutTransport<'_> {
+    fn publish<'a>(&'a mut self, event: ClientEvent) -> TransportFuture<'a, ()> {
+        self.transport.publish(event)
+    }
+
+    fn receive<'a>(
+        &'a mut self,
+        cancellation: &'a CancellationToken,
+    ) -> TransportFuture<'a, Receive> {
+        if cancellation.is_cancelled() {
+            return Box::pin(async { Ok(Receive::Cancelled) });
+        }
+        let next = self.transport.receive(cancellation);
         let request_timeout = self.request_timeout;
         Box::pin(async move {
             match timeout(request_timeout, next).await {
-                Ok(Ok(event)) => {
+                Ok(Ok(receive)) => {
                     if cancellation.is_cancelled() {
                         return Ok(Receive::Cancelled);
                     }
-                    ClientEvent::from_json(event.as_json().as_str()).map(Receive::event)
+                    Ok(receive)
                 }
                 Ok(Err(error)) => Err(error),
                 Err(_) => Ok(Receive::TimedOut),

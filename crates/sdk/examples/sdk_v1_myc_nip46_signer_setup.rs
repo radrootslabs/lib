@@ -1,36 +1,31 @@
 use nostr::Keys as RadrootsNostrKeys;
 use radroots_event::envelope::kind::KIND_TRADE_PROPOSAL;
-use radroots_nostr::event::Event as RadrootsNostrEvent;
 use radroots_nostr_connect::{
-    Error as NostrConnectError, client::Target, uri::RelayUrl as ConnectRelayUrl,
+    client::{CancellationToken, Client, ClientEvent, Receive, Target, Transport, TransportFuture},
+    uri::RelayUrl as ConnectRelayUrl,
 };
 use radroots_sdk::{
-    RadrootsClient, RadrootsSdkMycNip46Signer, RadrootsSdkNip46ClientKey,
-    RadrootsSdkNip46Transport, RadrootsSdkNip46TransportFuture, RadrootsSdkSignerMode,
-    RadrootsSdkSignerProvider, radroots_sdk_myc_nip46_product_permission_strings,
+    RadrootsClient, RadrootsSdkMycNip46Signer, RadrootsSdkSignerMode, RadrootsSdkSignerProvider,
+    radroots_sdk_myc_nip46_product_permission_strings,
 };
-use std::sync::Arc;
 
 struct ExampleNip46Transport;
 
-impl RadrootsSdkNip46Transport for ExampleNip46Transport {
-    fn publish_request_event<'a>(
-        &'a self,
-        _event: RadrootsNostrEvent,
-    ) -> RadrootsSdkNip46TransportFuture<'a, ()> {
+impl Transport for ExampleNip46Transport {
+    fn publish<'a>(&'a mut self, _event: ClientEvent) -> TransportFuture<'a, ()> {
         Box::pin(async { Ok(()) })
     }
 
-    fn next_response_event<'a>(
-        &'a self,
-    ) -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent> {
-        Box::pin(async { Err(NostrConnectError::RequestTimedOut) })
+    fn receive<'a>(
+        &'a mut self,
+        _cancellation: &'a CancellationToken,
+    ) -> TransportFuture<'a, Receive> {
+        Box::pin(async { Ok(Receive::TimedOut) })
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client_key = RadrootsSdkNip46ClientKey::generate();
     let remote_signer_keys = RadrootsNostrKeys::generate();
     let user_keys = RadrootsNostrKeys::generate();
     let remote_signer_public_key =
@@ -39,11 +34,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         remote_signer_public_key,
         vec![ConnectRelayUrl::parse("wss://relay.example.com")?],
     )?;
-    let signer = RadrootsSdkMycNip46Signer::new(
-        client_key,
-        target,
+    let client = Client::generate(target)?;
+    let signer = RadrootsSdkMycNip46Signer::from_client(
+        client,
         user_keys.public_key().to_hex(),
-        Arc::new(ExampleNip46Transport),
+        ExampleNip46Transport,
     )?;
     let sdk = RadrootsClient::builder()
         .signer_provider(RadrootsSdkSignerProvider::MycNip46(Box::new(signer)))

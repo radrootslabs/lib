@@ -285,7 +285,6 @@ fn signer_transition_surface_is_private_hidden_and_scheduled_for_removal() {
 fn signer_consumers_use_the_final_nostr_connect_state_machine() {
     let manifest = manifest_dir();
     for relative in [
-        "src/signer_provider.rs",
         "src/adapters/signer.rs",
         "examples/sdk_v1_myc_nip46_signer_setup.rs",
     ] {
@@ -298,6 +297,8 @@ fn signer_consumers_use_the_final_nostr_connect_state_machine() {
             "RadrootsNostrConnectRequest",
             "RadrootsNostrConnectResponse",
             "RADROOTS_NOSTR_CONNECT_",
+            "RadrootsSdkNip46ClientKey",
+            "RadrootsSdkNip46Transport",
         ] {
             assert!(
                 !source.contains(retired),
@@ -307,6 +308,19 @@ fn signer_consumers_use_the_final_nostr_connect_state_machine() {
     }
 
     let provider = read_source(&manifest.join("src/signer_provider.rs"));
-    assert!(provider.contains("impl Transport for RadrootsSdkNip46TransportAdapter"));
+    assert!(provider.contains("transport: Arc<AsyncMutex<Box<dyn Transport>>>"));
+    assert!(provider.contains("impl Transport for RadrootsSdkNip46TimeoutTransport"));
     assert!(provider.contains(".client\n            .execute("));
+    assert!(provider.contains("pub fn from_client<T>("));
+    assert!(provider.contains("CLI migration Step 271; removed in Step 313"));
+    for shim in [
+        "pub struct RadrootsSdkNip46ClientKey",
+        "pub type RadrootsSdkNip46TransportFuture",
+        "pub trait RadrootsSdkNip46Transport",
+    ] {
+        let position = provider
+            .find(shim)
+            .unwrap_or_else(|| panic!("missing compatibility shim `{shim}`"));
+        assert!(provider[..position].ends_with("#[doc(hidden)]\n"));
+    }
 }
