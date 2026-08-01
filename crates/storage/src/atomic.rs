@@ -1,0 +1,1 @@
+//! Atomic storage workflow contracts.

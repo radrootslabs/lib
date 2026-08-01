@@ -5122,6 +5122,13 @@ dependencies = [
 [[package]]
 name = "radroots_storage"
 version = "0.1.0-alpha"
+dependencies = [
+ "radroots_event",
+ "radroots_protocol",
+ "radroots_trade",
+ "radroots_transport",
+ "serde",
+]
 
 [[package]]
 name = "radroots_storage_sqlite"

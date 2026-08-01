@@ -1,0 +1,1 @@
+//! Durable operation journal contracts.
