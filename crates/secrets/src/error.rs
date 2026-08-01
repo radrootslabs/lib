@@ -39,6 +39,12 @@ pub enum PolicyRequirement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Operation {
+    /// Provision caller-supplied material.
+    Provision,
+    /// Rotate caller-supplied material.
+    Rotate,
+    /// Remove provider-owned material.
+    Remove,
     /// Wrap plaintext key material.
     Wrap,
     /// Unwrap protected key material.
@@ -93,6 +99,22 @@ pub enum Error {
         /// Normalized operation that failed.
         operation: Operation,
     },
+    /// The referenced provider-owned key was not found.
+    SecretNotFound {
+        /// Provider that did not contain the key.
+        backend: BackendKind,
+        /// Missing key revision.
+        key_version: u32,
+    },
+    /// The referenced provider-owned key already exists.
+    SecretAlreadyExists {
+        /// Provider that already contains the key.
+        backend: BackendKind,
+        /// Existing key revision.
+        key_version: u32,
+    },
+    /// A key rotation did not preserve identity or advance the version.
+    InvalidRotation,
     /// Envelope data exceeded the package-wide bound.
     EnvelopeTooLarge {
         /// Observed byte length.
@@ -192,6 +214,23 @@ impl fmt::Display for Error {
                 formatter,
                 "secret backend {backend:?} failed during {operation:?}"
             ),
+            Self::SecretNotFound {
+                backend,
+                key_version,
+            } => write!(
+                formatter,
+                "secret backend {backend:?} has no key at version {key_version}"
+            ),
+            Self::SecretAlreadyExists {
+                backend,
+                key_version,
+            } => write!(
+                formatter,
+                "secret backend {backend:?} already has key version {key_version}"
+            ),
+            Self::InvalidRotation => {
+                formatter.write_str("secret rotation must preserve identity and advance version")
+            }
             Self::EnvelopeTooLarge {
                 actual_bytes,
                 max_bytes,
