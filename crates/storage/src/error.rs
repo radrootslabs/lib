@@ -72,6 +72,22 @@ pub enum Error {
     InvalidEventIndexCheckpoint,
     DuplicateEventIndexShard,
     CorruptProjectionRecord,
+    InvalidPrivateArtifactId,
+    InvalidPrivateArtifactKind,
+    InvalidPrivateArtifactSchema,
+    InvalidPrivateArtifactSecretReference,
+    InvalidPrivateArtifactRetention,
+    InvalidPrivateArtifactRevision,
+    InvalidPrivateArtifactTimestamp,
+    InvalidPrivateArtifactMetadata,
+    PrivateArtifactNotFound,
+    PrivateArtifactConflict,
+    PrivateArtifactRevisionConflict,
+    PrivateArtifactRetentionActive,
+    PrivateArtifactNotExpired,
+    PrivateArtifactTombstoned,
+    InvalidExpiredArtifactQueryLimit,
+    CorruptPrivateArtifactMetadata,
 }
 
 impl fmt::Display for Error {
@@ -149,6 +165,34 @@ impl fmt::Display for Error {
             Self::InvalidEventIndexCheckpoint => "storage event-index checkpoint is invalid",
             Self::DuplicateEventIndexShard => "storage event-index shard is duplicated",
             Self::CorruptProjectionRecord => "storage projection record is corrupt",
+            Self::InvalidPrivateArtifactId => "storage private-artifact id is invalid",
+            Self::InvalidPrivateArtifactKind => "storage private-artifact kind is invalid",
+            Self::InvalidPrivateArtifactSchema => "storage private-artifact schema is invalid",
+            Self::InvalidPrivateArtifactSecretReference => {
+                "storage private-artifact secret reference is invalid"
+            }
+            Self::InvalidPrivateArtifactRetention => {
+                "storage private-artifact retention is invalid"
+            }
+            Self::InvalidPrivateArtifactRevision => "storage private-artifact revision is invalid",
+            Self::InvalidPrivateArtifactTimestamp => {
+                "storage private-artifact timestamp is invalid"
+            }
+            Self::InvalidPrivateArtifactMetadata => "storage private-artifact metadata is invalid",
+            Self::PrivateArtifactNotFound => "storage private artifact was not found",
+            Self::PrivateArtifactConflict => {
+                "storage private-artifact metadata conflicts with durable state"
+            }
+            Self::PrivateArtifactRevisionConflict => {
+                "storage private-artifact revision conflicts with durable state"
+            }
+            Self::PrivateArtifactRetentionActive => "storage private-artifact retention is active",
+            Self::PrivateArtifactNotExpired => "storage private artifact has not expired",
+            Self::PrivateArtifactTombstoned => "storage private artifact is tombstoned",
+            Self::InvalidExpiredArtifactQueryLimit => {
+                "storage expired-artifact query limit is invalid"
+            }
+            Self::CorruptPrivateArtifactMetadata => "storage private-artifact metadata is corrupt",
         })
     }
 }
