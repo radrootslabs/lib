@@ -4971,6 +4971,10 @@ dependencies = [
 [[package]]
 name = "radroots_secrets"
 version = "0.1.0-alpha"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "radroots_signing"

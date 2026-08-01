@@ -43,11 +43,15 @@ fn crate_root_contains_only_the_approved_module_skeleton() {
             "envelope", "error", "file", "id", "keyring", "memory", "provider", "wrapping",
         ])
     );
-    assert!(
+    assert_eq!(
         ROOT.lines()
             .map(str::trim)
-            .all(|line| !line.starts_with("pub use ")),
-        "behavioral root exports belong to later checkpoints"
+            .filter(|line| line.starts_with("pub use "))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "pub use error::Error;",
+            "pub use id::{SecretId, SecretRef};"
+        ])
     );
 }
 
