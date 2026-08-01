@@ -13,7 +13,7 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
         "[lib]\nname = \"radroots_secrets\"",
         "default = [\"std\", \"serde\"]",
         "memory = [\"std\"]",
-        "file = [\"std\"]",
+        "file = [\"std\", \"dep:tempfile\"]",
         "keyring = [\"std\"]",
     ] {
         assert!(

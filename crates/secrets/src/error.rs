@@ -39,12 +39,18 @@ pub enum PolicyRequirement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Operation {
+    /// Create or open a provider root.
+    Open,
     /// Provision caller-supplied material.
     Provision,
     /// Rotate caller-supplied material.
     Rotate,
     /// Remove provider-owned material.
     Remove,
+    /// Read protected provider state.
+    Read,
+    /// Persist protected provider state.
+    Write,
     /// Wrap plaintext key material.
     Wrap,
     /// Unwrap protected key material.
@@ -115,6 +121,10 @@ pub enum Error {
     },
     /// A key rotation did not preserve identity or advance the version.
     InvalidRotation,
+    /// A filesystem path was relative, traversing, symlinked, or not a file.
+    UnsafePath,
+    /// Filesystem permissions allowed access outside the current user.
+    InsecurePermissions,
     /// Envelope data exceeded the package-wide bound.
     EnvelopeTooLarge {
         /// Observed byte length.
@@ -230,6 +240,10 @@ impl fmt::Display for Error {
             ),
             Self::InvalidRotation => {
                 formatter.write_str("secret rotation must preserve identity and advance version")
+            }
+            Self::UnsafePath => formatter.write_str("secret provider path is unsafe"),
+            Self::InsecurePermissions => {
+                formatter.write_str("secret provider permissions are insecure")
             }
             Self::EnvelopeTooLarge {
                 actual_bytes,
