@@ -54,6 +54,32 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
             "reviewed API exposes forbidden plaintext or duplication surface `{forbidden}`"
         );
     }
+
+    for forbidden_dependency in [
+        "chacha20poly1305",
+        "futures_executor",
+        "keyring",
+        "serde_json",
+        "tempfile",
+        "zeroize",
+    ] {
+        assert!(
+            !exposes_crate_path(PUBLIC_API, forbidden_dependency),
+            "reviewed API leaks implementation dependency `{forbidden_dependency}`"
+        );
+    }
+}
+
+fn exposes_crate_path(public_api: &str, crate_name: &str) -> bool {
+    public_api
+        .split(|character: char| {
+            !(character.is_ascii_alphanumeric() || matches!(character, '_' | ':'))
+        })
+        .any(|token| {
+            token
+                .strip_prefix(crate_name)
+                .is_some_and(|remainder| remainder.starts_with("::"))
+        })
 }
 
 #[test]

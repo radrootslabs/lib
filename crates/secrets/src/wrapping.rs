@@ -183,6 +183,7 @@ pub trait KeyWrapping: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::SecretMaterial;
+    use alloc::vec::Vec;
     use zeroize::Zeroize;
 
     #[test]
