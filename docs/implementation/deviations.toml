@@ -37,6 +37,32 @@ normative_architecture_change = false
 adr_required = false
 
 [[deviation]]
+id = "RCRV1-DEV-008"
+date = "2026-08-01"
+status = "active"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["153", "155", "171", "179", "226", "288", "293", "313"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#12-radroots_secrets",
+  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+]
+source_evidence = [
+  "The final radroots_storage_sqlite scaffold can consume radroots_secrets immediately and has no predecessor secret dependency.",
+  "Step 179, not Step 153, owns transfer of the current SDK private database and its encrypted records into canonical SQLite storage.",
+  "Mixed publish-frozen runtime, Nostr-account, SimpleX preview, SDK private-store, Myc, and other external hosts still require predecessor vault/store behavior until their ordered migration steps.",
+]
+replacement_action = "Activate the final radroots_storage_sqlite and SDK dependency edges in Step 153; confine predecessor vault/store imports to exact publish-frozen quarantine packages and the SDK private-store module; Step 179 transfers canonical private storage, Steps 226/288/293 migrate the remaining SDK and downstream consumers, and Step 313 removes every remaining compatibility package and legacy name."
+verification = [
+  "Consumer-migration tests enumerate every lib package manifest that still names radroots_secret_vault or radroots_protected_store and reject any unapproved or publishable consumer.",
+  "Storage SQLite package-boundary tests require radroots_secrets and reject all predecessor secret package names.",
+  "SDK source-boundary tests confine predecessor imports to private_store.rs and require the final optional radroots_secrets dependency edge.",
+  "Step 155 release-policy validation keeps every quarantine package non-publishable until its exact removal gate.",
+]
+unresolved_risk = "Publish-frozen compatibility code remains reachable inside legacy runtime/private-preview paths until Steps 179, 226, 288, 293, and 313; no package-realistic publication may proceed while it remains."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
 id = "RCRV1-DEV-007"
 date = "2026-07-30"
 status = "active"

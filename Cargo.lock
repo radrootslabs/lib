@@ -5126,6 +5126,9 @@ version = "0.1.0-alpha"
 [[package]]
 name = "radroots_storage_sqlite"
 version = "0.1.0-alpha"
+dependencies = [
+ "radroots_secrets",
+]
 
 [[package]]
 name = "radroots_sync"
