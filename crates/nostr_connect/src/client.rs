@@ -457,15 +457,18 @@ fn build_request_event_for(
         .map_err(sign_error)
 }
 
+#[doc(hidden)]
 pub type RadrootsNostrConnectClientTransportFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, RadrootsNostrConnectError>> + Send + 'a>>;
 
+#[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsNostrConnectClientTarget {
     pub remote_signer_public_key: PublicKey,
     pub relays: Vec<RelayUrl>,
 }
 
+#[doc(hidden)]
 impl RadrootsNostrConnectClientTarget {
     pub fn new(remote_signer_public_key: PublicKey, relays: Vec<RelayUrl>) -> Self {
         Self {
@@ -475,12 +478,14 @@ impl RadrootsNostrConnectClientTarget {
     }
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsNostrConnectClientRequest {
     pub request_id: String,
     pub request: Request,
 }
 
+#[doc(hidden)]
 impl RadrootsNostrConnectClientRequest {
     pub fn new(request_id: impl Into<String>, request: Request) -> Self {
         Self {
@@ -498,11 +503,13 @@ impl RadrootsNostrConnectClientRequest {
     }
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrConnectClientProgress {
     AuthChallenge { url: String },
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrConnectClientEventOutcome {
     Ignore,
@@ -510,6 +517,7 @@ pub enum RadrootsNostrConnectClientEventOutcome {
     Response(Response),
 }
 
+#[doc(hidden)]
 pub trait RadrootsNostrConnectClientTransport {
     fn publish_request_event<'a>(
         &'a mut self,
@@ -521,6 +529,7 @@ pub trait RadrootsNostrConnectClientTransport {
     ) -> RadrootsNostrConnectClientTransportFuture<'a, Event>;
 }
 
+#[doc(hidden)]
 pub fn build_request_event(
     client_keys: &Keys,
     target: &RadrootsNostrConnectClientTarget,
@@ -541,6 +550,7 @@ pub fn build_request_event(
         .map_err(sign_error)
 }
 
+#[doc(hidden)]
 pub fn parse_response_event(
     client_keys: &Keys,
     target: &RadrootsNostrConnectClientTarget,
@@ -551,11 +561,9 @@ pub fn parse_response_event(
     if event.kind != Kind::Custom(RPC_KIND) {
         return Ok(RadrootsNostrConnectClientEventOutcome::Ignore);
     }
-
     if event.pubkey != target.remote_signer_public_key {
         return Ok(RadrootsNostrConnectClientEventOutcome::Ignore);
     }
-
     let client_public_key = client_keys.public_key();
     if !event
         .tags
@@ -567,7 +575,6 @@ pub fn parse_response_event(
     event
         .verify()
         .map_err(|_| RadrootsNostrConnectError::InvalidClientEvent)?;
-
     let decrypted = nip44::decrypt(
         client_keys.secret_key(),
         &target.remote_signer_public_key,
@@ -576,13 +583,11 @@ pub fn parse_response_event(
     .map_err(|error| RadrootsNostrConnectError::Decrypt {
         reason: error.to_string(),
     })?;
-
     let envelope: ResponseEnvelope =
         serde_json::from_str(&decrypted).map_err(RadrootsNostrConnectError::from)?;
     if envelope.id != request_id {
         return Ok(RadrootsNostrConnectClientEventOutcome::Ignore);
     }
-
     let response = Response::from_envelope(method, envelope)?;
     Ok(match response {
         Response::AuthUrl(url) => RadrootsNostrConnectClientEventOutcome::Progress(
@@ -592,6 +597,7 @@ pub fn parse_response_event(
     })
 }
 
+#[doc(hidden)]
 pub async fn execute_request_with_transport<T, F>(
     client_keys: &Keys,
     target: &RadrootsNostrConnectClientTarget,
@@ -607,7 +613,6 @@ where
     let request_id = request.request_id.clone();
     let event = build_request_event(client_keys, target, request.into_message())?;
     transport.publish_request_event(event).await?;
-
     loop {
         let event = transport.next_response_event().await?;
         match parse_response_event(client_keys, target, &request_id, &method, &event)? {

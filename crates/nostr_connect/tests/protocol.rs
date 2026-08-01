@@ -2,14 +2,16 @@
 mod test_fixtures;
 
 use nostr::{EventBuilder, JsonUtil, Keys, PublicKey, SecretKey, Timestamp, UnsignedEvent};
-use radroots_nostr_connect::prelude::{
-    CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES, ClientMetadata, Method, Permission,
-    Permissions, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
-    RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
-    RadrootsNostrConnectResponseEnvelope, SignedEvent as ConnectSignedEvent,
-    UnsignedEvent as ConnectUnsignedEvent, Uri,
+use radroots_nostr_connect::message::{
+    PENDING_CONNECTION_ERROR, RemoteSessionCapability, RequestMessage, ResponseEnvelope,
+    SignedEvent as ConnectSignedEvent, UnsignedEvent as ConnectUnsignedEvent,
 };
-use radroots_nostr_connect::uri::RelayUrl as ConnectRelayUrl;
+use radroots_nostr_connect::permission::Permissions;
+use radroots_nostr_connect::uri::{
+    CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES, ClientMetadata,
+    RelayUrl as ConnectRelayUrl, Uri,
+};
+use radroots_nostr_connect::{Error, Method, Permission, Request, Response};
 use serde_json::{Value, json};
 use test_fixtures::{
     APP_PRIMARY_HTTPS, CDN_PRIMARY_HTTPS, FIXTURE_ALICE, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
@@ -38,9 +40,8 @@ fn logo_url() -> String {
     format!("{CDN_PRIMARY_HTTPS}/logo.png")
 }
 
-fn remote_session_capability()
--> radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
-    radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
+fn remote_session_capability() -> RemoteSessionCapability {
+    RemoteSessionCapability {
         user_public_key: test_identity_public_key(),
         relays: vec![
             ConnectRelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay 1"),
@@ -129,7 +130,7 @@ fn requested_permissions_roundtrip_as_csv() {
 
 #[test]
 fn connect_request_roundtrips_requested_permissions() {
-    let request = RadrootsNostrConnectRequest::Connect {
+    let request = Request::Connect {
         remote_signer_public_key: test_identity_public_key(),
         secret: Some("abcd".to_owned()),
         requested_permissions: Permissions::from(vec![
@@ -138,7 +139,7 @@ fn connect_request_roundtrips_requested_permissions() {
         ]),
         client_metadata: None,
     };
-    let message = RadrootsNostrConnectRequestMessage::new("req-1", request);
+    let message = RequestMessage::new("req-1", request);
     let encoded = serde_json::to_value(&message).expect("serialize request");
     assert_eq!(
         encoded,
@@ -153,14 +154,13 @@ fn connect_request_roundtrips_requested_permissions() {
         })
     );
 
-    let decoded: RadrootsNostrConnectRequestMessage =
-        serde_json::from_value(encoded).expect("deserialize request");
+    let decoded: RequestMessage = serde_json::from_value(encoded).expect("deserialize request");
     assert_eq!(decoded, message);
 }
 
 #[test]
 fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
-    let request = RadrootsNostrConnectRequest::Connect {
+    let request = Request::Connect {
         remote_signer_public_key: test_identity_public_key(),
         secret: None,
         requested_permissions: Permissions::default(),
@@ -171,7 +171,7 @@ fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
             image: Some(logo_url()),
         }),
     };
-    let message = RadrootsNostrConnectRequestMessage::new("req-metadata", request);
+    let message = RequestMessage::new("req-metadata", request);
     let encoded = serde_json::to_value(&message).expect("serialize metadata request");
     assert_eq!(encoded["params"][1], "");
     assert_eq!(encoded["params"][2], "");
@@ -190,10 +190,10 @@ fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
         })
     );
 
-    let decoded: RadrootsNostrConnectRequestMessage =
+    let decoded: RequestMessage =
         serde_json::from_value(encoded.clone()).expect("deserialize metadata request");
     match &decoded.request {
-        RadrootsNostrConnectRequest::Connect {
+        Request::Connect {
             client_metadata: Some(metadata),
             ..
         } => {
@@ -210,23 +210,22 @@ fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
 
 #[test]
 fn logout_request_and_acknowledgement_roundtrip() {
-    let message =
-        RadrootsNostrConnectRequestMessage::new("req-logout", RadrootsNostrConnectRequest::Logout);
+    let message = RequestMessage::new("req-logout", Request::Logout);
     assert_eq!(
         serde_json::to_value(&message).expect("serialize logout"),
         json!({"id": "req-logout", "method": "logout", "params": []})
     );
 
-    let response = RadrootsNostrConnectResponse::from_envelope(
+    let response = Response::from_envelope(
         &Method::Logout,
-        RadrootsNostrConnectResponseEnvelope {
+        ResponseEnvelope {
             id: "req-logout".to_owned(),
             result: Some(Value::String("ack".to_owned())),
             error: None,
         },
     )
     .expect("parse logout acknowledgement");
-    assert_eq!(response, RadrootsNostrConnectResponse::LogoutAcknowledged);
+    assert_eq!(response, Response::LogoutAcknowledged);
     assert_eq!(
         response
             .into_envelope("req-logout")
@@ -248,7 +247,7 @@ fn rejects_invalid_client_metadata() {
             serde_json::to_string(&json!({"name": "line\nbreak"})).expect("metadata")
         ]
     });
-    assert!(serde_json::from_value::<RadrootsNostrConnectRequestMessage>(invalid_name).is_err());
+    assert!(serde_json::from_value::<RequestMessage>(invalid_name).is_err());
 
     let invalid_scheme = format!(
         "nostrconnect://{}?relay={}&secret=secret&url={}",
@@ -266,12 +265,12 @@ fn rejects_invalid_client_metadata() {
     };
     assert!(matches!(
         oversized_name.to_connect_param(),
-        Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "name", .. })
+        Err(Error::InvalidClientMetadata { field: "name", .. })
     ));
 
     let oversized_payload = "x".repeat(CLIENT_METADATA_JSON_MAX_BYTES + 1);
     assert!(matches!(
-        RadrootsNostrConnectRequest::from_parts(
+        Request::from_parts(
             Method::Connect,
             vec![
                 test_public_key().to_hex(),
@@ -280,7 +279,7 @@ fn rejects_invalid_client_metadata() {
                 oversized_payload,
             ],
         ),
-        Err(RadrootsNostrConnectError::ClientMetadataTooLarge { .. })
+        Err(Error::ClientMetadataTooLarge { .. })
     ));
 }
 
@@ -295,9 +294,9 @@ fn sign_event_request_roundtrips_unsigned_event_payload() {
     }))
     .expect("unsigned event");
 
-    let message = RadrootsNostrConnectRequestMessage::new(
+    let message = RequestMessage::new(
         "req-sign",
-        RadrootsNostrConnectRequest::SignEvent(
+        Request::SignEvent(
             ConnectUnsignedEvent::from_json(&unsigned_event.as_json())
                 .expect("unsigned event payload"),
         ),
@@ -305,12 +304,12 @@ fn sign_event_request_roundtrips_unsigned_event_payload() {
     let encoded = serde_json::to_value(&message).expect("serialize sign request");
     assert_eq!(encoded["method"], "sign_event");
 
-    let decoded: RadrootsNostrConnectRequestMessage =
+    let decoded: RequestMessage =
         serde_json::from_value(encoded).expect("deserialize sign request");
     assert_eq!(decoded, message);
     assert_eq!(
         decoded.request,
-        RadrootsNostrConnectRequest::SignEvent(
+        Request::SignEvent(
             ConnectUnsignedEvent::from_json(&unsigned_event.as_json())
                 .expect("unsigned event payload"),
         )
@@ -319,66 +318,59 @@ fn sign_event_request_roundtrips_unsigned_event_payload() {
 
 #[test]
 fn switch_relays_response_accepts_array_or_null() {
-    let relays_response = RadrootsNostrConnectResponseEnvelope {
+    let relays_response = ResponseEnvelope {
         id: "req-switch".to_owned(),
         result: Some(json!([RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS])),
         error: None,
     };
     let parsed =
-        RadrootsNostrConnectResponse::from_envelope(&Method::SwitchRelays, relays_response)
-            .expect("parse relay list");
+        Response::from_envelope(&Method::SwitchRelays, relays_response).expect("parse relay list");
     assert_eq!(
         parsed,
-        RadrootsNostrConnectResponse::RelayList(vec![
+        Response::RelayList(vec![
             ConnectRelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 1"),
             ConnectRelayUrl::parse(RELAY_TERTIARY_WSS).expect("relay 2"),
         ])
     );
 
-    let unchanged = RadrootsNostrConnectResponse::from_envelope(
+    let unchanged = Response::from_envelope(
         &Method::SwitchRelays,
-        RadrootsNostrConnectResponseEnvelope {
+        ResponseEnvelope {
             id: "req-switch".to_owned(),
             result: Some(Value::Null),
             error: None,
         },
     )
     .expect("parse null relay result");
-    assert_eq!(unchanged, RadrootsNostrConnectResponse::RelayListUnchanged);
+    assert_eq!(unchanged, Response::RelayListUnchanged);
 }
 
 #[test]
 fn get_session_capability_request_and_response_roundtrip() {
-    let request_message = RadrootsNostrConnectRequestMessage::new(
-        "req-cap",
-        RadrootsNostrConnectRequest::GetSessionCapability,
-    );
+    let request_message = RequestMessage::new("req-cap", Request::GetSessionCapability);
     let encoded_request = serde_json::to_value(&request_message).expect("serialize request");
-    let decoded_request: RadrootsNostrConnectRequestMessage =
+    let decoded_request: RequestMessage =
         serde_json::from_value(encoded_request).expect("deserialize request");
     assert_eq!(decoded_request, request_message);
 
     let capability = remote_session_capability();
-    let response_envelope =
-        RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone())
-            .into_envelope("resp-cap")
-            .expect("serialize response");
-    let decoded_response = RadrootsNostrConnectResponse::from_envelope(
-        &Method::GetSessionCapability,
-        response_envelope,
-    )
-    .expect("deserialize response");
+    let response_envelope = Response::RemoteSessionCapability(capability.clone())
+        .into_envelope("resp-cap")
+        .expect("serialize response");
+    let decoded_response =
+        Response::from_envelope(&Method::GetSessionCapability, response_envelope)
+            .expect("deserialize response");
     assert_eq!(
         decoded_response,
-        RadrootsNostrConnectResponse::RemoteSessionCapability(capability)
+        Response::RemoteSessionCapability(capability)
     );
 }
 
 #[test]
 fn auth_url_response_parses_from_result_and_error_fields() {
-    let response = RadrootsNostrConnectResponse::from_envelope(
+    let response = Response::from_envelope(
         &Method::SignEvent,
-        RadrootsNostrConnectResponseEnvelope {
+        ResponseEnvelope {
             id: "req-auth".to_owned(),
             result: Some(json!("auth_url")),
             error: Some("https://auth.example.com/challenge".to_owned()),
@@ -388,23 +380,23 @@ fn auth_url_response_parses_from_result_and_error_fields() {
 
     assert_eq!(
         response,
-        RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/challenge".to_owned())
+        Response::AuthUrl("https://auth.example.com/challenge".to_owned())
     );
 }
 
 #[test]
 fn get_public_key_pending_response_parses_as_typed_pending_connection() {
-    let response = RadrootsNostrConnectResponse::from_envelope(
+    let response = Response::from_envelope(
         &Method::GetPublicKey,
-        RadrootsNostrConnectResponseEnvelope {
+        ResponseEnvelope {
             id: "req-pending".to_owned(),
             result: None,
-            error: Some(RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR.to_owned()),
+            error: Some(PENDING_CONNECTION_ERROR.to_owned()),
         },
     )
     .expect("parse pending get_public_key response");
 
-    assert_eq!(response, RadrootsNostrConnectResponse::PendingConnection);
+    assert_eq!(response, Response::PendingConnection);
 }
 
 #[test]
@@ -415,17 +407,17 @@ fn sign_event_response_roundtrips_signed_event_json_string() {
         .sign_with_keys(&keys)
         .expect("sign event");
 
-    let envelope = RadrootsNostrConnectResponse::SignedEvent(
+    let envelope = Response::SignedEvent(
         ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload"),
     )
     .into_envelope("req-sign")
     .expect("serialize response");
-    let parsed = RadrootsNostrConnectResponse::from_envelope(&Method::SignEvent, envelope)
-        .expect("parse signed event response");
+    let parsed =
+        Response::from_envelope(&Method::SignEvent, envelope).expect("parse signed event response");
 
     assert_eq!(
         parsed,
-        RadrootsNostrConnectResponse::SignedEvent(
+        Response::SignedEvent(
             ConnectSignedEvent::from_json(&event.as_json()).expect("signed event payload")
         )
     );
@@ -448,18 +440,15 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
 
         match kind {
             "nip46.request.valid" => {
-                let message: RadrootsNostrConnectRequestMessage =
-                    serde_json::from_value(input["message"].clone())
-                        .unwrap_or_else(|error| panic!("{id}: parse request: {error}"));
+                let message: RequestMessage = serde_json::from_value(input["message"].clone())
+                    .unwrap_or_else(|error| panic!("{id}: parse request: {error}"));
                 let normalized = serde_json::to_value(message)
                     .unwrap_or_else(|error| panic!("{id}: serialize request: {error}"));
                 assert_eq!(normalized, expected["normalized_message"], "{id}");
             }
             "nip46.request.invalid" => {
-                let error = serde_json::from_value::<RadrootsNostrConnectRequestMessage>(
-                    input["message"].clone(),
-                )
-                .expect_err("invalid request vector");
+                let error = serde_json::from_value::<RequestMessage>(input["message"].clone())
+                    .expect_err("invalid request vector");
                 assert_vector_error(id, expected, error);
             }
             "nip46.metadata.invalid" => {
@@ -489,11 +478,10 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
                     .expect("response method")
                     .parse::<Method>()
                     .expect("typed response method");
-                let envelope: RadrootsNostrConnectResponseEnvelope =
-                    serde_json::from_value(input["envelope"].clone())
-                        .unwrap_or_else(|error| panic!("{id}: parse envelope: {error}"));
+                let envelope: ResponseEnvelope = serde_json::from_value(input["envelope"].clone())
+                    .unwrap_or_else(|error| panic!("{id}: parse envelope: {error}"));
                 let request_id = envelope.id.clone();
-                let response = RadrootsNostrConnectResponse::from_envelope(&method, envelope)
+                let response = Response::from_envelope(&method, envelope)
                     .unwrap_or_else(|error| panic!("{id}: parse response: {error}"));
                 let normalized = response
                     .into_envelope(request_id)
@@ -508,10 +496,9 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
                     .expect("response method")
                     .parse::<Method>()
                     .expect("typed response method");
-                let envelope: RadrootsNostrConnectResponseEnvelope =
-                    serde_json::from_value(input["envelope"].clone())
-                        .unwrap_or_else(|error| panic!("{id}: parse envelope: {error}"));
-                let error = RadrootsNostrConnectResponse::from_envelope(&method, envelope)
+                let envelope: ResponseEnvelope = serde_json::from_value(input["envelope"].clone())
+                    .unwrap_or_else(|error| panic!("{id}: parse envelope: {error}"));
+                let error = Response::from_envelope(&method, envelope)
                     .expect_err("invalid response vector");
                 assert_vector_error(id, expected, error);
             }

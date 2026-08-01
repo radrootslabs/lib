@@ -98,7 +98,7 @@ fn manifest_has_final_identity_feature_vocabulary_and_radroots_dependencies() {
 #[test]
 fn crate_root_contains_the_approved_module_skeleton() {
     let final_root = ROOT
-        .split("// Transitional compatibility surface")
+        .split("/// Private migration surface")
         .next()
         .expect("final root declarations");
     assert_eq!(
@@ -133,10 +133,8 @@ fn crate_root_contains_the_approved_module_skeleton() {
     assert!(SERVER.starts_with("//! Relay- and persistence-independent NIP-46 server state."));
     assert!(ROOT.contains("pub use server::Server;"));
     assert!(ROOT.contains("#[doc(hidden)]\npub mod prelude"));
-    assert!(
-        ROOT.contains("Step 143 removes this module"),
-        "the temporary prelude must carry an exact removal checkpoint"
-    );
+    assert!(ROOT.contains("Steps 271, 288, and 293"));
+    assert!(ROOT.contains("Step 313 removes the shim"));
 }
 
 #[test]
@@ -167,7 +165,7 @@ fn approved_root_exports_and_transport_trait_compile() {
             "pub trait RadrootsNostrConnectClientTransport {",
             "pub trait Transport: Send {",
         ]),
-        "only the final host transport SPI and Step 143 compatibility trait may remain"
+        "only the final host transport SPI and private migration shim may remain"
     );
     for forbidden in [
         "Relay", "Runtime", "Session", "Storage", "Secret", "Approval",
@@ -230,6 +228,39 @@ fn client_root_and_transport_use_package_owned_state_machine_types() {
         assert!(
             !CLIENT.contains(forbidden),
             "client exposes representation through `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn separate_repository_compatibility_is_hidden_unpublished_and_scheduled() {
+    assert!(MANIFEST.contains("publish = false"));
+    for item in [
+        "pub type RadrootsNostrConnectClientTransportFuture",
+        "pub struct RadrootsNostrConnectClientTarget",
+        "pub struct RadrootsNostrConnectClientRequest",
+        "pub enum RadrootsNostrConnectClientProgress",
+        "pub enum RadrootsNostrConnectClientEventOutcome",
+        "pub trait RadrootsNostrConnectClientTransport",
+        "pub fn build_request_event",
+        "pub fn parse_response_event",
+        "pub async fn execute_request_with_transport",
+    ] {
+        let position = CLIENT
+            .find(item)
+            .unwrap_or_else(|| panic!("missing `{item}`"));
+        assert!(
+            CLIENT[position.saturating_sub(100)..position].contains("#[doc(hidden)]"),
+            "compatibility item `{item}` must remain hidden"
+        );
+    }
+    for legacy in [
+        "RadrootsNostrConnectClient",
+        "radroots_nostr_connect::prelude",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(legacy),
+            "compatibility identity `{legacy}` leaked into the public API baseline"
         );
     }
 }

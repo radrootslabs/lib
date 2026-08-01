@@ -19,8 +19,11 @@ pub use permission::Permission;
 pub use server::Server;
 pub use uri::{BunkerUri, ClientUri};
 
-// Transitional compatibility surface for consumers migrated in Step 141.
-// Publication remains disabled, and Step 143 removes this module.
+/// Private migration surface for separate first-party repositories.
+///
+/// This module is excluded from the reviewed public API baseline, the package
+/// remains `publish = false`, consumers cut over in Steps 271, 288, and 293,
+/// and Step 313 removes the shim in full.
 #[doc(hidden)]
 pub mod prelude {
     pub use crate::client::{
@@ -49,25 +52,20 @@ pub mod prelude {
         Response as RadrootsNostrConnectResponse,
         ResponseEnvelope as RadrootsNostrConnectResponseEnvelope,
     };
-    pub use crate::method::Method;
-    pub use crate::method::Method as RadrootsNostrConnectMethod;
-    pub use crate::permission::{Permission, Permissions};
+    pub use crate::method::{Method, Method as RadrootsNostrConnectMethod};
     pub use crate::permission::{
-        Permission as RadrootsNostrConnectPermission,
+        Permission, Permission as RadrootsNostrConnectPermission, Permissions,
         Permissions as RadrootsNostrConnectPermissions,
     };
     pub use crate::uri::{
-        BUNKER_URI_SCHEME, BunkerUri, CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES,
-        CLIENT_URL_MAX_BYTES, ClientMetadata, ClientUri, URI_SCHEME, Uri,
-    };
-    pub use crate::uri::{
-        BUNKER_URI_SCHEME as RADROOTS_NOSTR_CONNECT_BUNKER_URI_SCHEME,
-        BunkerUri as RadrootsNostrConnectBunkerUri,
+        BUNKER_URI_SCHEME, BUNKER_URI_SCHEME as RADROOTS_NOSTR_CONNECT_BUNKER_URI_SCHEME,
+        BunkerUri, BunkerUri as RadrootsNostrConnectBunkerUri, CLIENT_METADATA_JSON_MAX_BYTES,
         CLIENT_METADATA_JSON_MAX_BYTES as RADROOTS_NOSTR_CONNECT_CLIENT_METADATA_JSON_MAX_BYTES,
+        CLIENT_NAME_MAX_BYTES,
         CLIENT_NAME_MAX_BYTES as RADROOTS_NOSTR_CONNECT_CLIENT_NAME_MAX_BYTES,
-        CLIENT_URL_MAX_BYTES as RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES,
-        ClientMetadata as RadrootsNostrConnectClientMetadata,
-        ClientUri as RadrootsNostrConnectClientUri,
-        URI_SCHEME as RADROOTS_NOSTR_CONNECT_URI_SCHEME, Uri as RadrootsNostrConnectUri,
+        CLIENT_URL_MAX_BYTES, CLIENT_URL_MAX_BYTES as RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES,
+        ClientMetadata, ClientMetadata as RadrootsNostrConnectClientMetadata, ClientUri,
+        ClientUri as RadrootsNostrConnectClientUri, URI_SCHEME,
+        URI_SCHEME as RADROOTS_NOSTR_CONNECT_URI_SCHEME, Uri, Uri as RadrootsNostrConnectUri,
     };
 }

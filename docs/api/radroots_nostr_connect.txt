@@ -17,13 +17,6 @@ pub radroots_nostr_connect::client::Progress::AuthChallenge
 pub radroots_nostr_connect::client::Progress::AuthChallenge::url: alloc::string::String
 impl core::fmt::Debug for radroots_nostr_connect::client::Progress
 pub fn radroots_nostr_connect::client::Progress::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome::Ignore
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome::Progress(radroots_nostr_connect::client::RadrootsNostrConnectClientProgress)
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome::Response(radroots_nostr_connect::message::Response)
-pub enum radroots_nostr_connect::client::RadrootsNostrConnectClientProgress
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientProgress::AuthChallenge
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientProgress::AuthChallenge::url: alloc::string::String
 pub enum radroots_nostr_connect::client::Receive
 pub radroots_nostr_connect::client::Receive::Cancelled
 pub radroots_nostr_connect::client::Receive::Event(alloc::boxed::Box<radroots_nostr_connect::client::ClientEvent>)
@@ -59,34 +52,15 @@ pub fn radroots_nostr_connect::client::Operation<'_>::publication(&self) -> core
 pub fn radroots_nostr_connect::client::Operation<'_>::select(&mut self, &radroots_nostr_connect::client::ClientEvent) -> core::result::Result<radroots_nostr_connect::client::EventOutcome, radroots_nostr_connect::error::RadrootsNostrConnectError>
 impl core::fmt::Debug for radroots_nostr_connect::client::Operation<'_>
 pub fn radroots_nostr_connect::client::Operation<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct radroots_nostr_connect::client::RadrootsNostrConnectClientRequest
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::request: radroots_nostr_connect::message::Request
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::request_id: alloc::string::String
-impl radroots_nostr_connect::client::RadrootsNostrConnectClientRequest
-pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::into_message(self) -> radroots_nostr_connect::message::RequestMessage
-pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::method(&self) -> radroots_nostr_connect::method::Method
-pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientRequest::new(impl core::convert::Into<alloc::string::String>, radroots_nostr_connect::message::Request) -> Self
-pub struct radroots_nostr_connect::client::RadrootsNostrConnectClientTarget
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientTarget::relays: alloc::vec::Vec<nostr::types::url::RelayUrl>
-pub radroots_nostr_connect::client::RadrootsNostrConnectClientTarget::remote_signer_public_key: nostr::key::public_key::PublicKey
-impl radroots_nostr_connect::client::RadrootsNostrConnectClientTarget
-pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientTarget::new(nostr::key::public_key::PublicKey, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> Self
 pub struct radroots_nostr_connect::client::Target
 impl radroots_nostr_connect::client::Target
 pub fn radroots_nostr_connect::client::Target::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
 pub const fn radroots_nostr_connect::client::Target::remote_signer_public_key(&self) -> radroots_identity::key::PublicKey
 pub fn radroots_nostr_connect::client::Target::try_new(radroots_identity::key::PublicKey, alloc::vec::Vec<radroots_nostr_connect::uri::RelayUrl>) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
 pub const radroots_nostr_connect::client::CLIENT_EVENT_MAX_BYTES: usize
-pub trait radroots_nostr_connect::client::RadrootsNostrConnectClientTransport
-pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientTransport::next_response_event<'a>(&'a mut self) -> radroots_nostr_connect::client::RadrootsNostrConnectClientTransportFuture<'a, nostr::event::Event>
-pub fn radroots_nostr_connect::client::RadrootsNostrConnectClientTransport::publish_request_event<'a>(&'a mut self, nostr::event::Event) -> radroots_nostr_connect::client::RadrootsNostrConnectClientTransportFuture<'a, ()>
 pub trait radroots_nostr_connect::client::Transport: core::marker::Send
 pub fn radroots_nostr_connect::client::Transport::publish<'a>(&'a mut self, radroots_nostr_connect::client::ClientEvent) -> radroots_nostr_connect::client::TransportFuture<'a, ()>
 pub fn radroots_nostr_connect::client::Transport::receive<'a>(&'a mut self, &'a radroots_nostr_connect::client::CancellationToken) -> radroots_nostr_connect::client::TransportFuture<'a, radroots_nostr_connect::client::Receive>
-pub fn radroots_nostr_connect::client::build_request_event(&nostr::key::Keys, &radroots_nostr_connect::client::RadrootsNostrConnectClientTarget, radroots_nostr_connect::message::RequestMessage) -> core::result::Result<nostr::event::Event, radroots_nostr_connect::error::RadrootsNostrConnectError>
-pub async fn radroots_nostr_connect::client::execute_request_with_transport<T, F>(&nostr::key::Keys, &radroots_nostr_connect::client::RadrootsNostrConnectClientTarget, radroots_nostr_connect::client::RadrootsNostrConnectClientRequest, &mut T, F) -> core::result::Result<radroots_nostr_connect::message::Response, radroots_nostr_connect::error::RadrootsNostrConnectError> where T: radroots_nostr_connect::client::RadrootsNostrConnectClientTransport, F: core::ops::function::FnMut(radroots_nostr_connect::client::RadrootsNostrConnectClientProgress) -> core::result::Result<(), radroots_nostr_connect::error::RadrootsNostrConnectError>
-pub fn radroots_nostr_connect::client::parse_response_event(&nostr::key::Keys, &radroots_nostr_connect::client::RadrootsNostrConnectClientTarget, &str, &radroots_nostr_connect::method::Method, &nostr::event::Event) -> core::result::Result<radroots_nostr_connect::client::RadrootsNostrConnectClientEventOutcome, radroots_nostr_connect::error::RadrootsNostrConnectError>
-pub type radroots_nostr_connect::client::RadrootsNostrConnectClientTransportFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<T, radroots_nostr_connect::error::RadrootsNostrConnectError>> + core::marker::Send + 'a)>>
 pub type radroots_nostr_connect::client::TransportFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<T, radroots_nostr_connect::error::RadrootsNostrConnectError>> + core::marker::Send + 'a)>>
 pub mod radroots_nostr_connect::error
 pub enum radroots_nostr_connect::error::RadrootsNostrConnectError

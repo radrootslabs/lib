@@ -372,7 +372,6 @@ async fn executes_request_through_transport_with_auth_progress() {
         )
     );
 }
-
 #[tokio::test]
 async fn ignores_events_not_addressed_by_expected_signer_and_client() {
     let client_keys = client_keys();

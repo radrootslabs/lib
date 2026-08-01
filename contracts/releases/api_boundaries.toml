@@ -117,8 +117,8 @@ observed_paths = [
   "nostr::RelayUrl",
 ]
 adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
-removal_step = 140
-rationale = "Legacy client state-machine signatures retain exact protocol types until the Nostr Connect transport split and conformance gate."
+removal_step = 313
+rationale = "Hidden, publish-frozen client signatures remain only for CLI, Myc, and residual first-party cutovers in Steps 271, 288, and 293."
 
 [[exception]]
 id = "RCRV1-API-007"
@@ -138,8 +138,8 @@ observed_paths = [
   "nostr::UnsignedEvent",
 ]
 adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
-removal_step = 140
-rationale = "Legacy request and response envelopes retain exact Nostr values until canonical package-owned envelopes are complete."
+removal_step = 313
+rationale = "Hidden, publish-frozen aliases remain only for CLI, Myc, and residual first-party cutovers in Steps 271, 288, and 293."
 
 [[exception]]
 id = "RCRV1-API-008"
@@ -152,5 +152,5 @@ items = [
 ]
 observed_paths = ["nostr::PublicKey", "nostr::RelayUrl"]
 adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
-removal_step = 140
-rationale = "Legacy URI wrappers retain exact upstream value types until URI normalization and the package conformance gate."
+removal_step = 313
+rationale = "Hidden, publish-frozen URI aliases remain only for CLI, Myc, and residual first-party cutovers in Steps 271, 288, and 293."
