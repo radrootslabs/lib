@@ -225,7 +225,7 @@ impl EncryptedEnvelope {
                 )
                 .map_err(|_| Error::DecryptFailed)
         })?;
-        SecretMaterial::from_slice(plaintext.as_slice())
+        SecretMaterial::from_owned(plaintext)
     }
 
     /// Returns the authenticated provider reference.

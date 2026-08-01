@@ -246,7 +246,7 @@ impl FileProvider {
                 )
                 .map_err(|_| Error::DecryptFailed)
         })?;
-        SecretMaterial::from_slice(plaintext.as_slice())
+        SecretMaterial::from_owned(plaintext)
     }
 
     fn persist_noclobber(&self, path: &Path, encoded: &[u8]) -> Result<(), Error> {

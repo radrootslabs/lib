@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::future::Future;
 use core::pin::Pin;
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 /// Maximum plaintext accepted by the generic wrapping boundary.
 pub const SECRET_MATERIAL_MAX_BYTES: usize = 64 * 1024;
@@ -22,7 +22,23 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// This type never implements `Clone` or `Serialize`, and its diagnostics are
 /// always redacted. Callers must opt in to the narrow [`Self::expose_secret`]
 /// scope when invoking cryptographic code.
-pub struct SecretMaterial(Vec<u8>);
+///
+/// ```compile_fail
+/// use radroots_secrets::wrapping::SecretMaterial;
+///
+/// let material = SecretMaterial::from_slice(b"secret")?;
+/// let _duplicate = material.clone();
+/// # Ok::<(), radroots_secrets::Error>(())
+/// ```
+///
+/// ```compile_fail
+/// use radroots_secrets::wrapping::SecretMaterial;
+///
+/// let material = SecretMaterial::from_slice(b"secret")?;
+/// let _json = serde_json::to_string(&material)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub struct SecretMaterial(Zeroizing<Box<[u8]>>);
 
 impl SecretMaterial {
     /// Copies caller-supplied material into a zeroizing owner.
@@ -33,12 +49,17 @@ impl SecretMaterial {
                 max_bytes: SECRET_MATERIAL_MAX_BYTES,
             });
         }
-        Ok(Self(bytes.to_vec()))
+        Ok(Self(Zeroizing::new(Box::from(bytes))))
+    }
+
+    pub(crate) fn from_owned(bytes: Vec<u8>) -> Result<Self, Error> {
+        let bytes = Zeroizing::new(bytes);
+        Self::from_slice(bytes.as_slice())
     }
 
     /// Exposes plaintext only for the lifetime of an explicit closure call.
     pub fn expose_secret<T>(&self, use_secret: impl FnOnce(&[u8]) -> T) -> T {
-        use_secret(self.0.as_slice())
+        use_secret(&self.0[..])
     }
 
     /// Returns the plaintext length without exposing its contents.
@@ -57,12 +78,6 @@ impl SecretMaterial {
 impl fmt::Debug for SecretMaterial {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SecretMaterial(<redacted>)")
-    }
-}
-
-impl Drop for SecretMaterial {
-    fn drop(&mut self) {
-        self.0.zeroize();
     }
 }
 
@@ -163,4 +178,25 @@ pub trait KeyWrapping: Send + Sync {
         &'a self,
         request: UnwrapRequest<'a>,
     ) -> BoxFuture<'a, Result<SecretMaterial, Error>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SecretMaterial;
+    use zeroize::Zeroize;
+
+    #[test]
+    fn owned_plaintext_buffer_zeroizes_in_place() {
+        let mut material =
+            SecretMaterial::from_slice(b"owned plaintext sentinel").expect("valid secret material");
+        let original_len = material.len();
+        material.0.zeroize();
+        assert_eq!(material.len(), original_len);
+        material.expose_secret(|bytes| assert!(bytes.iter().all(|byte| *byte == 0)));
+    }
+
+    #[test]
+    fn rejected_owned_plaintext_is_wrapped_before_validation() {
+        assert!(SecretMaterial::from_owned(Vec::new()).is_err());
+    }
 }
