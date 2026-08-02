@@ -229,7 +229,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_STORE_CARGO_MANIFEST_RELATIVE,
-        "abb8fafa1f817bf3f1cb60fdec90f04f0dc685fc8d0281eec9dd47ae5b167586",
+        "e821c1dd86e2ca0206aa30e22a3cca5c463b429f7332aa587379f2433f31b9a8",
     ),
     (
         TRANSPORT_CARGO_MANIFEST_RELATIVE,
@@ -237,7 +237,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "385bbd09be2e8f3a64f97d23d47a691fb48cc2f12ed87f692a36242e24f7851e",
+        "02e22f967966c6e67989554bfe643e057ac7ce6b1f3f40c897375432580d86b0",
     ),
 ];
 

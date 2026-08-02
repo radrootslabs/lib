@@ -4,22 +4,25 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 
 #[test]
-fn sqlite_storage_declares_the_final_backend_boundaries() {
+fn sync_depends_only_on_final_orchestration_boundaries() {
     assert_eq!(
         dependency_keys(MANIFEST),
         BTreeSet::from([
+            "radroots_event",
             "radroots_event_codec",
-            "radroots_secrets",
+            "radroots_protocol",
+            "radroots_signing",
             "radroots_storage",
+            "radroots_trade",
+            "radroots_transport",
         ])
     );
     for forbidden in [
         "radroots_event_store",
+        "radroots_event_index",
         "radroots_outbox",
         "radroots_runtime_store",
-        "radroots_protected_store",
-        "radroots_secret_vault",
-        "radroots_nostr_accounts",
+        "radroots_transport_nostr",
     ] {
         assert!(!MANIFEST.contains(forbidden));
         assert!(!ROOT.contains(forbidden));

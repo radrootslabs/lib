@@ -15,7 +15,9 @@ publish = false
 name = "radroots_storage_sqlite"
 
 [dependencies]
+radroots_event_codec = { workspace = true, default-features = false }
 radroots_secrets = { workspace = true, default-features = false }
+radroots_storage = { workspace = true, default-features = false }
 
 [lints]
 workspace = true
