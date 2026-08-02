@@ -1,3 +1,6 @@
+//! Publish-frozen compatibility models. Use `radroots_storage::projection` for
+//! new integrations. Step 313 removes this package.
+#![doc(hidden)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;

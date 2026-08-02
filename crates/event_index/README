@@ -1,5 +1,13 @@
 # radroots_event_index
 
+## Compatibility quarantine
+
+This package is a private, publish-frozen migration input. New integrations
+must use the projection and index contracts in `radroots_storage`. First-party
+SDK and indexer consumers still require these models while their ordered
+migrations are pending. Step 313 removes this package after those consumers
+have moved; adding new consumers is forbidden by `RCRV1-DEV-009`.
+
 This is the README for `radroots_event_index`, which provides indexed
 manifest and checkpoint models for the `radroots` core libraries.
 

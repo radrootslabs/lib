@@ -195,8 +195,8 @@ fn source_and_sink_are_independent_dyn_compatible_host_spis() {
     }
     for required in [
         "id = \"RCRV1-DEV-007\"",
-        "affected_steps = [\"122\", \"170\", \"235\", \"305\"]",
-        "runtime-owned unpublished shim until Step 170",
+        "affected_steps = [\"122\", \"170\", \"215\", \"235\", \"305\"]",
+        "runtime-owned unpublished shim until Step 215",
         "SDK-local unpublished target/satisfaction mapping until Step 235",
         "external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate",
     ] {

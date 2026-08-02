@@ -67,7 +67,7 @@ id = "RCRV1-DEV-007"
 date = "2026-07-30"
 status = "active"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
-affected_steps = ["122", "170", "235", "305"]
+affected_steps = ["122", "170", "215", "235", "305"]
 spec_anchors = [
   "docs/specs/radroots_crates_release_v1.md#9-radroots_transport",
   "docs/specs/radroots_crates_release_v1.md#111-separate-source-and-sink-contracts",
@@ -75,17 +75,46 @@ spec_anchors = [
 source_evidence = [
   "Step 120 migrated canonical adapters and registries to independent EventSource and EventSink contracts.",
   "Mixed runtime delivery workers still consume predecessor request and receipt models until their ordered RCLD 40 migration.",
+  "The runtime delivery worker also accepts opaque byte payloads, while the final EventSink contract accepts only verified SignedEvent values; deleting the bridge at Step 170 would silently remove a supported private runtime path before sync orchestration owns that decision.",
   "The standalone publish-frozen SDK still maps user-facing target and satisfaction models into predecessor outbox orchestration until Step 235.",
   "oss/cli/src/runtime/{config,sync,transport}.rs and oss/radrootsd/src/core/transport_publish.rs still import the predecessor identity aliases and Reticulum target helpers; those standalone repositories are outside the approved crate-surface mutation scope.",
 ]
-replacement_action = "Remove the monolithic trait from radroots_transport in Step 122; retain one explicitly named runtime-owned unpublished shim until Step 170, the SDK-local unpublished target/satisfaction mapping until Step 235, and documentation-hidden external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate."
+replacement_action = "Remove the monolithic trait from radroots_transport in Step 122; retain one explicitly named runtime-owned unpublished shim until Step 215 at the sync-orchestration retirement gate, the SDK-local unpublished target/satisfaction mapping until Step 235, and documentation-hidden external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate."
 verification = [
   "Transport source-boundary tests reject every removed public predecessor name and require the singular runtime-owned shim.",
   "Release policy keeps runtime and SDK publication disabled while either downstream shim exists.",
-  "Steps 170 and 235 are the exact fail-closed final-removal gates for the remaining downstream mappings.",
+  "Steps 215 and 235 are the exact fail-closed final-removal gates for the remaining runtime and SDK mappings.",
   "Step 305 rejects publication until oss/cli and oss/radrootsd no longer require the documentation-hidden external-consumer aliases and Reticulum helpers.",
 ]
 unresolved_risk = "Runtime, SDK, CLI, and daemon consumers retain bounded publish-frozen predecessor mappings; package-realistic publication remains blocked until every mapping is removed at its explicit gate."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-009"
+date = "2026-08-02"
+status = "active"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["170", "179", "189", "196", "201", "213", "226", "235", "263", "269", "288", "292", "313"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#13-radroots_storage",
+  "docs/specs/radroots_crates_release_v1.md#14-radroots_storage_sqlite",
+  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+]
+source_evidence = [
+  "The Step 170 first-party census found radroots_event_index consumers in the standalone CLI, SDK, SDK bindings, and indexer repositories.",
+  "The census found radroots_event_store and radroots_outbox consumers in the standalone CLI and SDK, plus active library transport_nostr orchestration scheduled to move in Step 196.",
+  "The census found radroots_runtime_store consumed by the standalone CLI, whose crate cutover is scheduled after the canonical library storage and sync implementations are complete.",
+  "Deleting these packages before their ordered migrations would make the independently buildable first-party repositories unresolvable and would remove the source data needed by the approved one-shot importer.",
+]
+replacement_action = "Keep radroots_event_index, radroots_event_store, radroots_outbox, and radroots_runtime_store as documentation-hidden publish-frozen compatibility packages with no new consumers; port durable behavior into radroots_storage_sqlite through Step 189, remove local transport coupling in Step 196, migrate library/SDK/binding/CLI/indexer consumers in their ordered steps, and delete every remaining package at Step 313."
+verification = [
+  "Package manifests carry machine-readable publish-frozen metadata naming the final replacement, deviation, Step 313 removal gate, and prohibition on new consumers.",
+  "A storage-owned quarantine test requires the four packages to remain private and absent from the approved publication inventory.",
+  "Workspace checks and tests prove current migration consumers remain buildable while publication stays frozen.",
+  "Step 313 performs the all-first-party forbidden-name search and final package deletion."
+]
+unresolved_risk = "Private compatibility implementations remain reachable until all standalone consumers migrate; package-realistic publication remains blocked until Step 313 removes them."
 normative_architecture_change = false
 adr_required = false
 

@@ -6,11 +6,17 @@ edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
-description = "Indexed event model for Radroots"
+description = "Publish-frozen compatibility models superseded by radroots_storage"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots_event_index"
 readme = "README"
+
+[package.metadata.radroots.compatibility]
+status = "publish_frozen"
+replacement = "radroots_storage"
+deviation = "RCRV1-DEV-009"
+removal_step = 313
+new_consumers_forbidden = true
 
 [features]
 default = ["serde"]

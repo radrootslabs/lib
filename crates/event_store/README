@@ -1,5 +1,14 @@
 # radroots_event_store
 
+## Compatibility quarantine
+
+This package is a private, publish-frozen migration implementation. New
+integrations must use backend-neutral `radroots_storage` with
+`radroots_storage_sqlite`. Existing first-party migration and transport inputs
+remain temporarily bound to this implementation. Step 313 removes this package
+after the ordered consumer cutovers; adding new consumers is forbidden by
+`RCRV1-DEV-009`.
+
 SQLx-backed canonical event-envelope storage for Radroots protocol events.
 
 ## Ingest boundary

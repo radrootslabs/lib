@@ -1,5 +1,14 @@
 # radroots_outbox
 
+## Compatibility quarantine
+
+This package is a private, publish-frozen migration implementation. New
+integrations must use the outbox contracts in `radroots_storage` with
+`radroots_storage_sqlite`. Existing first-party delivery orchestration still
+requires this implementation until its ordered sync migration.
+Step 313 removes this package; adding new consumers is forbidden by
+`RCRV1-DEV-009`.
+
 SQLx-backed deterministic Nostr publish outbox substrate for Rad Roots event
 workflows.
 

@@ -5304,6 +5304,7 @@ fn validate_raw_crate_attributes(relative: &str, source: &str) -> Result<(), Str
             "#![forbid(unsafe_code)]",
         ],
         EVENT_STORE_LIB_SOURCE_RELATIVE => &[
+            "#![doc(hidden)]",
             "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
             "#![forbid(unsafe_code)]",
         ],

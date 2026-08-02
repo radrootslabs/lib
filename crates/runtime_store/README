@@ -1,5 +1,14 @@
 # radroots_runtime_store
 
+## Compatibility quarantine
+
+This package is a private, publish-frozen migration implementation. New
+integrations must classify state into `radroots_storage`,
+`radroots_storage_sqlite`, or an explicit host-private store. The standalone CLI
+still consumes this broad predecessor boundary. Step 313 removes this package
+after downstream cutover; adding new consumers is forbidden by
+`RCRV1-DEV-009`.
+
 Shared runtime-store primitives for same-host Rad Roots runtimes.
 
 This crate owns the SQLite schema and typed API for the `shared/runtime_store`

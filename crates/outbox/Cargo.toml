@@ -6,10 +6,17 @@ edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
-description = "Publish queue model for Radroots"
+description = "Publish-frozen outbox compatibility implementation"
 repository.workspace = true
 homepage.workspace = true
 readme = "README"
+
+[package.metadata.radroots.compatibility]
+status = "publish_frozen"
+replacement = "radroots_storage + radroots_storage_sqlite"
+deviation = "RCRV1-DEV-009"
+removal_step = 313
+new_consumers_forbidden = true
 
 [features]
 default = ["sqlite", "runtime-tokio"]

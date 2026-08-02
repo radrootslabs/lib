@@ -1,3 +1,6 @@
+//! Publish-frozen compatibility implementation. Use `radroots_storage` and
+//! `radroots_storage_sqlite` for new integrations. Step 313 removes this package.
+#![doc(hidden)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 

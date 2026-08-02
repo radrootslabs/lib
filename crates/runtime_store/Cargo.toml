@@ -6,11 +6,17 @@ edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
-description = "Runtime store workspace for Radroots"
+description = "Publish-frozen runtime-store compatibility implementation"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots_runtime_store"
 readme = "README"
+
+[package.metadata.radroots.compatibility]
+status = "publish_frozen"
+replacement = "radroots_storage + radroots_storage_sqlite or host-private state"
+deviation = "RCRV1-DEV-009"
+removal_step = 313
+new_consumers_forbidden = true
 
 [lib]
 crate-type = ["rlib"]

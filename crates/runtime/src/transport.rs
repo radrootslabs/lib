@@ -17,14 +17,14 @@ use thiserror::Error;
 pub type RadrootsRuntimeTransportFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, RadrootsRuntimeTransportError>> + Send + 'a>>;
 
-/// Unpublished predecessor future alias; removed at Step 170.
+/// Unpublished predecessor future alias; removed at Step 215.
 #[doc(hidden)]
 pub type RadrootsRuntimeTransportShimFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, RadrootsTransportError>> + Send + 'a>>;
 
 /// Unpublished bridge for the predecessor mixed runtime delivery workers.
 ///
-/// This runtime-owned shim is retired at Step 170 in RCLD 40 when those
+/// This runtime-owned shim is retired at Step 215 in RCLD 40 when those
 /// workers move to the independent source and sink registries.
 #[doc(hidden)]
 pub trait RadrootsRuntimeTransportShim: Send + Sync {

@@ -1,3 +1,7 @@
+//! Publish-frozen compatibility implementation. Use `radroots_storage`,
+//! `radroots_storage_sqlite`, or host-private state for new integrations. Step
+//! 313 removes this package.
+#![doc(hidden)]
 #![forbid(unsafe_code)]
 
 mod error;
