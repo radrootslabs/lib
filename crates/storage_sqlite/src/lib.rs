@@ -9,6 +9,7 @@ pub mod open;
 pub mod status;
 
 mod event;
+mod journal;
 
 pub use config::OpenOptions;
 pub use event::SqliteStorage;

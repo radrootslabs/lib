@@ -1,0 +1,4 @@
+DROP INDEX radroots_runtime_journal_idempotency_idx;
+
+CREATE UNIQUE INDEX radroots_runtime_journal_idempotency_idx
+ON radroots_runtime_journal_operations(idempotency_key);

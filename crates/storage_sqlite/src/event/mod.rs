@@ -38,6 +38,14 @@ impl SqliteStorage {
         }
     }
 
+    pub(crate) const fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+    pub(crate) const fn event_mode(&self) -> EventStoreMode {
+        self.mode
+    }
+
     async fn selected(
         &self,
         query: &EventQuery,

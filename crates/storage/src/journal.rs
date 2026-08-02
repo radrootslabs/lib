@@ -6,9 +6,9 @@
 //! callers must receive committed state and may continue pending delivery.
 
 use core::fmt;
-use radroots_event::EventId;
-use radroots_protocol::runtime::v1::OperationId;
-use radroots_transport::BoxFuture;
+pub use radroots_event::EventId;
+pub use radroots_protocol::runtime::v1::OperationId;
+pub use radroots_transport::BoxFuture;
 
 use crate::Error;
 

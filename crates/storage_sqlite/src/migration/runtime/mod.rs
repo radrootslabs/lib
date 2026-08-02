@@ -6,12 +6,14 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
+#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
+const OPERATION_JOURNAL_V3_SQL: &str = include_str!("0003_operation_journal.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -118,6 +120,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "35b036ba84eff7135665c4ae42fa8232d8bacd8115805b03011a3eb76423f4b8",
         owned_objects: RUNTIME_V2_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 3,
+        name: "operation_journal",
+        up_sha256: "4caa69a316777cabfc647e6d022007c1433a5793b2a55679629e8fac4d50a0f0",
+        owned_objects: RUNTIME_V2_OBJECTS,
+    },
 ];
 
 #[allow(dead_code)] // Keeps raw SQL crate-private until the migration executor is installed.
@@ -125,6 +133,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(RUNTIME_V1_SQL),
         2 => Some(CANONICAL_EVENT_STORAGE_V2_SQL),
+        3 => Some(OPERATION_JOURNAL_V3_SQL),
         _ => None,
     }
 }
@@ -166,9 +175,9 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 2);
-        assert_eq!(MIGRATIONS.len(), 2);
-        let migration = MIGRATIONS[1];
+        assert_eq!(CURRENT_VERSION, 3);
+        assert_eq!(MIGRATIONS.len(), 3);
+        let migration = MIGRATIONS[2];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
@@ -194,7 +203,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(3), None);
+        assert_eq!(migration_sql(4), None);
     }
 
     #[tokio::test]
