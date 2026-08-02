@@ -480,6 +480,8 @@ impl SqliteStorage {
             } else {
                 EventStoreMode::ReadOnly
             },
+            options.mode(),
+            options.busy_timeout(),
             writer_lock,
         ))
     }

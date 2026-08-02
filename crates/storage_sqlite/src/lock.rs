@@ -37,7 +37,6 @@ impl WriterLock {
 
     /// Explicitly releases the writer lock for the later asynchronous close
     /// lifecycle. Dropping the guard remains a fail-safe release path.
-    #[allow(dead_code)] // Used by the explicit close lifecycle in its ordered RCL checkpoint.
     pub(crate) fn release(self) -> Result<(), Error> {
         FileExt::unlock(&self.file).map_err(|source| Error::WriterUnlockFailed {
             path: self.path.clone(),

@@ -13,14 +13,15 @@ use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 use std::sync::Arc;
 
 use crate::lock::WriterLock;
+use crate::status::StorageLifecycle;
 
 #[derive(Clone)]
 pub struct SqliteStorage {
-    pool: SqlitePool,
-    private_pool: SqlitePool,
-    generation: SourceGeneration,
-    mode: EventStoreMode,
-    _writer_lock: Option<Arc<WriterLock>>,
+    pub(crate) pool: SqlitePool,
+    pub(crate) private_pool: SqlitePool,
+    pub(crate) generation: SourceGeneration,
+    pub(crate) mode: EventStoreMode,
+    pub(crate) lifecycle: Arc<StorageLifecycle>,
 }
 
 struct StoredEventRow {
@@ -41,7 +42,7 @@ impl SqliteStorage {
             pool,
             generation,
             mode,
-            _writer_lock: None,
+            lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
         }
     }
 
@@ -57,7 +58,7 @@ impl SqliteStorage {
             private_pool,
             generation,
             mode,
-            _writer_lock: None,
+            lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
         }
     }
 
@@ -66,6 +67,8 @@ impl SqliteStorage {
         private_pool: SqlitePool,
         generation: SourceGeneration,
         mode: EventStoreMode,
+        open_mode: crate::OpenMode,
+        busy_timeout: std::time::Duration,
         writer_lock: Option<WriterLock>,
     ) -> Self {
         Self {
@@ -73,7 +76,7 @@ impl SqliteStorage {
             private_pool,
             generation,
             mode,
-            _writer_lock: writer_lock.map(Arc::new),
+            lifecycle: Arc::new(StorageLifecycle::new(open_mode, busy_timeout, writer_lock)),
         }
     }
 
