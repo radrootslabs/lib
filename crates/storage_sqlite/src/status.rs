@@ -68,6 +68,39 @@ impl StorageLifecycle {
             .map_or_else(integrity::unknown, Ok)
     }
 
+    pub(crate) fn require_open(&self) -> Result<(), Error> {
+        if self.shutdown.load(Ordering::Acquire) == OPEN {
+            Ok(())
+        } else {
+            Err(Error::BackendUnavailable)
+        }
+    }
+
+    pub(crate) fn record_integrity(
+        &self,
+        status: IntegrityStatus,
+    ) -> Result<IntegrityStatus, Error> {
+        let mut recorded = self
+            .integrity
+            .write()
+            .map_err(|_| Error::BackendUnavailable)?;
+        if let Some(previous) = *recorded {
+            let previous_time = previous
+                .checked_at_unix_ms()
+                .ok_or(Error::InvalidIntegrityStatus)?;
+            let candidate_time = status
+                .checked_at_unix_ms()
+                .ok_or(Error::InvalidIntegrityStatus)?;
+            if candidate_time < previous_time
+                || (candidate_time == previous_time && status != previous)
+            {
+                return Err(Error::InvalidIntegrityStatus);
+            }
+        }
+        *recorded = Some(status);
+        Ok(status)
+    }
+
     fn shutdown(&self) -> ShutdownState {
         match self.shutdown.load(Ordering::Acquire) {
             OPEN => ShutdownState::Open,

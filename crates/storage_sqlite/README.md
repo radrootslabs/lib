@@ -8,6 +8,11 @@ apply only the governed forward migrations. Fresh stores require a
 host-supplied `SourceGeneration` and creation timestamp; the crate never reads
 hidden entropy or a wall clock.
 
+Backend status and the last integrity result are passive. Hosts invoke
+`check_integrity` explicitly with their own positive timestamp when they want
+full SQLite and foreign-key validation across both owned files. `close` drains
+both pools and releases writable authority explicitly and idempotently.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

@@ -1,0 +1,12 @@
+schema_version = 1
+members = ["runtime.sqlite", "private.sqlite"]
+invocation = "explicit_only"
+checks = ["pragma_integrity_check", "pragma_foreign_key_check"]
+timestamp = "caller_supplied_positive_unix_ms"
+initial_passive_health = "unknown"
+passive_status_runs_checks = false
+recording = "latest_monotonic_checked_at"
+closed_backend = "reject"
+healthy = "all_members_verified"
+corrupt = "one_or_more_members_failed_a_completed_check"
+degraded = "one_or_more_members_could_not_complete_checks"
