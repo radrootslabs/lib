@@ -5136,10 +5136,13 @@ dependencies = [
 name = "radroots_storage_sqlite"
 version = "0.1.0-alpha"
 dependencies = [
+ "radroots_event",
  "radroots_event_codec",
  "radroots_secrets",
  "radroots_storage",
+ "radroots_transport",
  "serde",
+ "serde_json",
  "sha2",
  "sqlx",
  "tempfile",

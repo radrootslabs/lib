@@ -123,6 +123,7 @@ pub mod trade {
 
 #[cfg(feature = "json")]
 use radroots_event::{
+    SignedEvent,
     admission::RawEvent,
     wire::{DEFAULT_RAW_JSON_MAX_BYTES, Nip01EventWire},
 };
@@ -211,6 +212,25 @@ pub fn event(raw_json: &str) -> Result<RawEvent, DecodeError> {
         .into_unverified_envelope()
         .map_err(DecodeError::InvalidEnvelope)?;
     Ok(RawEvent::new(envelope))
+}
+
+/// Decodes compact NIP-01 JSON into an ID-verified signed event.
+#[cfg(feature = "json")]
+pub fn signed_event(raw_json: &str) -> Result<SignedEvent, DecodeError> {
+    let max = MAX_EVENT_JSON_BYTES;
+    let actual = raw_json.len();
+    if actual > max {
+        return Err(DecodeError::InputTooLarge { max, actual });
+    }
+    let wire = Nip01EventWire::parse_json(raw_json).map_err(map_wire_error)?;
+    SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| match error {
+        radroots_event::draft::SignedEventError::Envelope(error) => {
+            DecodeError::InvalidEnvelope(error)
+        }
+        radroots_event::draft::SignedEventError::Wire(error)
+        | radroots_event::draft::SignedEventError::RawJson(error) => map_wire_error(error),
+        radroots_event::draft::SignedEventError::RawJsonMismatch => DecodeError::InvalidJson,
+    })
 }
 
 #[cfg(feature = "json")]

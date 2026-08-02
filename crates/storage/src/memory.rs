@@ -411,11 +411,9 @@ impl EventStore for MemoryStorage {
                 .selected(&state, &query)?
                 .into_iter()
                 .filter_map(|entry| {
-                    entry
-                        .admission
-                        .verified_event()
-                        .cloned()
-                        .map(|event| StoredVerifiedEvent::new(entry.position, event))
+                    (entry.admission.stage() >= AdmissionStage::Verified).then(|| {
+                        StoredVerifiedEvent::new(entry.position, entry.admission.event().clone())
+                    })
                 })
                 .collect();
             EventPage::new(self.generation, items, None, query.bounds())
@@ -432,11 +430,9 @@ impl EventStore for MemoryStorage {
                 .selected(&state, &query)?
                 .into_iter()
                 .filter_map(|entry| {
-                    entry
-                        .admission
-                        .visible_event()
-                        .cloned()
-                        .map(|event| StoredVisibleEvent::new(entry.position, event))
+                    (entry.admission.stage() == AdmissionStage::Visible).then(|| {
+                        StoredVisibleEvent::new(entry.position, entry.admission.event().clone())
+                    })
                 })
                 .collect();
             EventPage::new(self.generation, items, None, query.bounds())

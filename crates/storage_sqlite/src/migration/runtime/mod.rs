@@ -6,10 +6,12 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 1;
+pub const CURRENT_VERSION: u32 = 2;
 
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
+#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
+const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -71,18 +73,58 @@ const RUNTIME_V1_OBJECTS: &[&str] = &[
     "radroots_runtime_source_generations_identity_guard",
 ];
 
+const RUNTIME_V2_OBJECTS: &[&str] = &[
+    "radroots_runtime_atomic_commits",
+    "radroots_runtime_delivery_evidence",
+    "radroots_runtime_delivery_evidence_item_idx",
+    "radroots_runtime_event_index_checkpoints",
+    "radroots_runtime_event_index_manifests",
+    "radroots_runtime_event_index_shards",
+    "radroots_runtime_event_provenance",
+    "radroots_runtime_event_provenance_observed_idx",
+    "radroots_runtime_events",
+    "radroots_runtime_events_admission_idx",
+    "radroots_runtime_events_delete_guard",
+    "radroots_runtime_events_event_id_idx",
+    "radroots_runtime_events_raw_update_guard",
+    "radroots_runtime_journal_idempotency_idx",
+    "radroots_runtime_journal_operations",
+    "radroots_runtime_journal_recovery_idx",
+    "radroots_runtime_outbox_items",
+    "radroots_runtime_outbox_ready_idx",
+    "radroots_runtime_outbox_targets",
+    "radroots_runtime_projection_checkpoints",
+    "radroots_runtime_projection_invalidations",
+    "radroots_runtime_projection_rebuilds",
+    "radroots_runtime_projection_rebuilds_stage_idx",
+    "radroots_runtime_source_generations",
+    "radroots_runtime_source_generations_active_idx",
+    "radroots_runtime_source_generations_delete_guard",
+    "radroots_runtime_source_generations_identity_guard",
+    "radroots_runtime_source_generations_sequence_guard",
+];
+
 /// Ordered, immutable runtime migration plan.
-pub const MIGRATIONS: &[MigrationDescriptor] = &[MigrationDescriptor {
-    version: 1,
-    name: "runtime_authority",
-    up_sha256: "3b869122dd5bd58f4a15e7a71fd1377879640b36cd496d7b3f15278ef1e128c9",
-    owned_objects: RUNTIME_V1_OBJECTS,
-}];
+pub const MIGRATIONS: &[MigrationDescriptor] = &[
+    MigrationDescriptor {
+        version: 1,
+        name: "runtime_authority",
+        up_sha256: "3b869122dd5bd58f4a15e7a71fd1377879640b36cd496d7b3f15278ef1e128c9",
+        owned_objects: RUNTIME_V1_OBJECTS,
+    },
+    MigrationDescriptor {
+        version: 2,
+        name: "canonical_event_storage",
+        up_sha256: "35b036ba84eff7135665c4ae42fa8232d8bacd8115805b03011a3eb76423f4b8",
+        owned_objects: RUNTIME_V2_OBJECTS,
+    },
+];
 
 #[allow(dead_code)] // Keeps raw SQL crate-private until the migration executor is installed.
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(RUNTIME_V1_SQL),
+        2 => Some(CANONICAL_EVENT_STORAGE_V2_SQL),
         _ => None,
     }
 }
@@ -124,9 +166,9 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 1);
-        assert_eq!(MIGRATIONS.len(), 1);
-        let migration = MIGRATIONS[0];
+        assert_eq!(CURRENT_VERSION, 2);
+        assert_eq!(MIGRATIONS.len(), 2);
+        let migration = MIGRATIONS[1];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
@@ -137,21 +179,22 @@ mod tests {
         assert!(!snapshot.raw_sql_public);
         assert_eq!(snapshot.authorities.len(), 8);
         assert_eq!(snapshot.source_invariants.len(), 5);
-        assert_eq!(snapshot.migrations.len(), 1);
-        assert_eq!(snapshot.migrations[0].version, migration.version());
-        assert_eq!(snapshot.migrations[0].name, migration.name());
-        assert_eq!(snapshot.migrations[0].sha256, migration.up_sha256());
-        assert_eq!(
-            snapshot.migrations[0].owned_objects,
-            migration.owned_objects()
-        );
+        assert_eq!(snapshot.migrations.len(), MIGRATIONS.len());
+        for (expected, actual) in snapshot.migrations.iter().zip(MIGRATIONS) {
+            assert_eq!(expected.version, actual.version());
+            assert_eq!(expected.name, actual.name());
+            assert_eq!(expected.sha256, actual.up_sha256());
+            assert_eq!(expected.owned_objects, actual.owned_objects());
+        }
     }
 
     #[test]
     fn embedded_migration_checksum_is_pinned() {
-        let actual = format!("{:x}", Sha256::digest(migration_sql(1).expect("v1 SQL")));
-        assert_eq!(actual, MIGRATIONS[0].up_sha256());
-        assert_eq!(migration_sql(2), None);
+        for migration in MIGRATIONS {
+            let sql = migration_sql(migration.version()).expect("registered SQL");
+            assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
+        }
+        assert_eq!(migration_sql(3), None);
     }
 
     #[tokio::test]
@@ -159,10 +202,12 @@ mod tests {
         let mut connection = SqliteConnection::connect("sqlite::memory:")
             .await
             .expect("open memory SQLite");
-        sqlx::raw_sql(migration_sql(1).expect("v1 SQL"))
-            .execute(&mut connection)
-            .await
-            .expect("apply runtime schema");
+        for migration in MIGRATIONS {
+            sqlx::raw_sql(migration_sql(migration.version()).expect("registered SQL"))
+                .execute(&mut connection)
+                .await
+                .expect("apply runtime schema");
+        }
 
         let rows = sqlx::query(
             "SELECT name FROM sqlite_schema \
@@ -176,7 +221,13 @@ mod tests {
             .iter()
             .map(|row| row.get::<String, _>("name"))
             .collect::<Vec<_>>();
-        assert_eq!(actual, MIGRATIONS[0].owned_objects());
+        assert_eq!(
+            actual,
+            MIGRATIONS
+                .last()
+                .expect("current migration")
+                .owned_objects()
+        );
 
         let foreign_key_violations = sqlx::query("PRAGMA foreign_key_check")
             .fetch_all(&mut connection)

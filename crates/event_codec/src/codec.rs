@@ -22,6 +22,12 @@ impl Codec {
         decode::event(raw_json)
     }
 
+    /// Decodes canonical NIP-01 JSON and verifies its declared event ID.
+    #[cfg(feature = "json")]
+    pub fn decode_signed_event(raw_json: &str) -> Result<radroots_event::SignedEvent, DecodeError> {
+        decode::signed_event(raw_json)
+    }
+
     /// Encodes a native event envelope as compact NIP-01 JSON.
     #[cfg(feature = "json")]
     pub fn encode_event(

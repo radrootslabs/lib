@@ -1,9 +1,12 @@
 //! Canonical event persistence contracts.
 
-use radroots_event::{EventId, SignedEvent, VerifiedEvent, admission::VisibleEvent};
+pub use radroots_event::EventId;
+use radroots_event::{SignedEvent, VerifiedEvent, admission::VisibleEvent};
+pub use radroots_transport::BoxFuture;
 use radroots_transport::{
-    BoxFuture,
-    source::{EventProvenance, ObservedEvent},
+    TransportId,
+    source::{EventProvenance, FetchCursor, ObservedEvent},
+    target::TargetFingerprint,
 };
 use std::collections::BTreeSet;
 
@@ -362,15 +365,19 @@ impl StoredRawEvent {
     }
 }
 
-/// Signature-verified event returned from canonical storage.
+/// Canonical event returned with durable signature-verification evidence.
+///
+/// The signed event is returned rather than forging an in-memory verification
+/// typestate from persisted bytes. [`EventStore`] guarantees that only records
+/// durably admitted at [`AdmissionStage::Verified`] or later appear here.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredVerifiedEvent {
     position: EventPosition,
-    event: VerifiedEvent,
+    event: SignedEvent,
 }
 
 impl StoredVerifiedEvent {
-    pub const fn new(position: EventPosition, event: VerifiedEvent) -> Self {
+    pub const fn new(position: EventPosition, event: SignedEvent) -> Self {
         Self { position, event }
     }
 
@@ -378,20 +385,24 @@ impl StoredVerifiedEvent {
         self.position
     }
 
-    pub const fn event(&self) -> &VerifiedEvent {
+    pub const fn event(&self) -> &SignedEvent {
         &self.event
     }
 }
 
-/// Visibility-authorized event returned from canonical storage.
+/// Canonical event returned with durable visibility evidence.
+///
+/// The signed event is returned rather than rerunning a host authorization
+/// policy during a storage read. [`EventStore`] guarantees that only records
+/// durably admitted at [`AdmissionStage::Visible`] appear here.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredVisibleEvent {
     position: EventPosition,
-    event: VisibleEvent,
+    event: SignedEvent,
 }
 
 impl StoredVisibleEvent {
-    pub const fn new(position: EventPosition, event: VisibleEvent) -> Self {
+    pub const fn new(position: EventPosition, event: SignedEvent) -> Self {
         Self { position, event }
     }
 
@@ -399,7 +410,7 @@ impl StoredVisibleEvent {
         self.position
     }
 
-    pub const fn event(&self) -> &VisibleEvent {
+    pub const fn event(&self) -> &SignedEvent {
         &self.event
     }
 }
@@ -469,6 +480,27 @@ impl StoredEventProvenance {
 
     pub const fn provenance(&self) -> &EventProvenance {
         &self.provenance
+    }
+
+    /// Reconstructs validated backend-neutral provenance from durable fields.
+    pub fn from_stored_parts(
+        position: EventPosition,
+        transport_id: &str,
+        target_fingerprint: &str,
+        observed_at_unix_ms: u64,
+        cursor: Option<&str>,
+    ) -> Result<Self, Error> {
+        let transport_id =
+            TransportId::parse(transport_id).map_err(|_| Error::CorruptStoredEvent)?;
+        let target =
+            TargetFingerprint::parse(target_fingerprint).map_err(|_| Error::CorruptStoredEvent)?;
+        let mut provenance = EventProvenance::new(transport_id, target, observed_at_unix_ms)
+            .map_err(|_| Error::CorruptStoredEvent)?;
+        if let Some(cursor) = cursor {
+            provenance = provenance
+                .with_cursor(FetchCursor::parse(cursor).map_err(|_| Error::CorruptStoredEvent)?);
+        }
+        Ok(Self::new(position, provenance))
     }
 }
 

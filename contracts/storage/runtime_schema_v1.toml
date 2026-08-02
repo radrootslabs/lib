@@ -1,9 +1,9 @@
 schema_version = 1
 database = "runtime.sqlite"
 minimum_version = 1
-current_version = 1
-migration_name = "runtime_authority"
-migration_sha256 = "3b869122dd5bd58f4a15e7a71fd1377879640b36cd496d7b3f15278ef1e128c9"
+current_version = 2
+migration_name = "canonical_event_storage"
+migration_sha256 = "35b036ba84eff7135665c4ae42fa8232d8bacd8115805b03011a3eb76423f4b8"
 forward_only = true
 raw_sql_public = false
 
@@ -58,4 +58,40 @@ owned_objects = [
   "radroots_runtime_source_generations",
   "radroots_runtime_source_generations_delete_guard",
   "radroots_runtime_source_generations_identity_guard",
+]
+
+[[migrations]]
+version = 2
+name = "canonical_event_storage"
+sha256 = "35b036ba84eff7135665c4ae42fa8232d8bacd8115805b03011a3eb76423f4b8"
+
+owned_objects = [
+  "radroots_runtime_atomic_commits",
+  "radroots_runtime_delivery_evidence",
+  "radroots_runtime_delivery_evidence_item_idx",
+  "radroots_runtime_event_index_checkpoints",
+  "radroots_runtime_event_index_manifests",
+  "radroots_runtime_event_index_shards",
+  "radroots_runtime_event_provenance",
+  "radroots_runtime_event_provenance_observed_idx",
+  "radroots_runtime_events",
+  "radroots_runtime_events_admission_idx",
+  "radroots_runtime_events_delete_guard",
+  "radroots_runtime_events_event_id_idx",
+  "radroots_runtime_events_raw_update_guard",
+  "radroots_runtime_journal_idempotency_idx",
+  "radroots_runtime_journal_operations",
+  "radroots_runtime_journal_recovery_idx",
+  "radroots_runtime_outbox_items",
+  "radroots_runtime_outbox_ready_idx",
+  "radroots_runtime_outbox_targets",
+  "radroots_runtime_projection_checkpoints",
+  "radroots_runtime_projection_invalidations",
+  "radroots_runtime_projection_rebuilds",
+  "radroots_runtime_projection_rebuilds_stage_idx",
+  "radroots_runtime_source_generations",
+  "radroots_runtime_source_generations_active_idx",
+  "radroots_runtime_source_generations_delete_guard",
+  "radroots_runtime_source_generations_identity_guard",
+  "radroots_runtime_source_generations_sequence_guard",
 ]

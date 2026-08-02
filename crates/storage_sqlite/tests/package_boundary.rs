@@ -23,8 +23,11 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "radroots_event_codec",
             "radroots_secrets",
             "radroots_storage",
+            "sqlx",
         ])
     );
+    assert!(!ROOT.contains("SqlitePool"));
+    assert!(!ROOT.contains("sqlx"));
     for forbidden in [
         "radroots_event_store",
         "radroots_outbox",

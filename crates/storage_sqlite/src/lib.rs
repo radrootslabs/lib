@@ -8,5 +8,8 @@ pub mod migration;
 pub mod open;
 pub mod status;
 
+mod event;
+
 pub use config::OpenOptions;
+pub use event::SqliteStorage;
 pub use open::{Error, OpenMode, Paths};
