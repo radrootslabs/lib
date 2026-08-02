@@ -19,41 +19,9 @@ impl Journal for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            if let Some(row) = sqlx::query(
-                "SELECT * FROM radroots_runtime_journal_operations
-                 WHERE idempotency_key = ?",
-            )
-            .bind(operation.idempotency_key().as_str())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            {
-                let record = decode_record(&row)?;
-                if record.operation_id() != operation.operation_id()
-                    || record.input_digest() != operation.input_digest()
-                    || record.instance_id() != operation.instance_id()
-                {
-                    return Err(Error::IdempotencyConflict);
-                }
-                transaction.commit().await.map_err(map_backend)?;
-                return Ok(PrepareReceipt::new(PrepareDisposition::Replay, record));
-            }
-            if sqlx::query_scalar::<_, i64>(
-                "SELECT 1 FROM radroots_runtime_journal_operations WHERE instance_id = ?",
-            )
-            .bind(operation.instance_id().as_bytes().as_slice())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            .is_some()
-            {
-                return Err(Error::OperationIdentityMismatch);
-            }
-
-            let record = operation.into_record()?;
-            insert_record(&mut transaction, &record).await?;
+            let receipt = prepare_transaction(&mut transaction, operation).await?;
             transaction.commit().await.map_err(map_backend)?;
-            Ok(PrepareReceipt::new(PrepareDisposition::Created, record))
+            Ok(receipt)
         })
     }
 
@@ -105,38 +73,7 @@ impl Journal for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            let row = sqlx::query(
-                "SELECT * FROM radroots_runtime_journal_operations WHERE instance_id = ?",
-            )
-            .bind(transition.instance_id().as_bytes().as_slice())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            .ok_or(Error::OperationNotFound)?;
-            let current = decode_record(&row)?;
-            let next = current.transition(&transition)?;
-            let (stage, event_id, recovery, committed_at) = encode_state(next.state());
-            let result = sqlx::query(
-                "UPDATE radroots_runtime_journal_operations SET
-                   revision = ?, stage = ?, event_id = ?, recovery_record = ?,
-                   cancellation_state = ?, committed_at_unix_ms = ?, updated_at_unix_ms = ?
-                 WHERE instance_id = ? AND revision = ?",
-            )
-            .bind(i64_from_u64(next.revision().get())?)
-            .bind(stage)
-            .bind(event_id)
-            .bind(recovery)
-            .bind(cancellation_name(next.cancellation()))
-            .bind(committed_at.map(i64_from_u64).transpose()?)
-            .bind(i64_from_u64(updated_at(&next))?)
-            .bind(next.instance_id().as_bytes().as_slice())
-            .bind(i64_from_u64(current.revision().get())?)
-            .execute(&mut *transaction)
-            .await
-            .map_err(map_backend)?;
-            if result.rows_affected() != 1 {
-                return Err(Error::JournalRevisionConflict);
-            }
+            let next = transition_transaction(&mut transaction, transition).await?;
             transaction.commit().await.map_err(map_backend)?;
             Ok(next)
         })
@@ -161,6 +98,83 @@ impl Journal for SqliteStorage {
             .collect()
         })
     }
+}
+
+pub(crate) async fn prepare_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    operation: PrepareOperation,
+) -> Result<PrepareReceipt, Error> {
+    if let Some(row) = sqlx::query(
+        "SELECT * FROM radroots_runtime_journal_operations
+         WHERE idempotency_key = ?",
+    )
+    .bind(operation.idempotency_key().as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_backend)?
+    {
+        let record = decode_record(&row)?;
+        if record.operation_id() != operation.operation_id()
+            || record.input_digest() != operation.input_digest()
+            || record.instance_id() != operation.instance_id()
+        {
+            return Err(Error::IdempotencyConflict);
+        }
+        return Ok(PrepareReceipt::new(PrepareDisposition::Replay, record));
+    }
+    if sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM radroots_runtime_journal_operations WHERE instance_id = ?",
+    )
+    .bind(operation.instance_id().as_bytes().as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_backend)?
+    .is_some()
+    {
+        return Err(Error::OperationIdentityMismatch);
+    }
+
+    let record = operation.into_record()?;
+    insert_record(transaction, &record).await?;
+    Ok(PrepareReceipt::new(PrepareDisposition::Created, record))
+}
+
+pub(crate) async fn transition_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    transition: JournalTransition,
+) -> Result<OperationRecord, Error> {
+    let row =
+        sqlx::query("SELECT * FROM radroots_runtime_journal_operations WHERE instance_id = ?")
+            .bind(transition.instance_id().as_bytes().as_slice())
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(map_backend)?
+            .ok_or(Error::OperationNotFound)?;
+    let current = decode_record(&row)?;
+    let next = current.transition(&transition)?;
+    let (stage, event_id, recovery, committed_at) = encode_state(next.state());
+    let result = sqlx::query(
+        "UPDATE radroots_runtime_journal_operations SET
+           revision = ?, stage = ?, event_id = ?, recovery_record = ?,
+           cancellation_state = ?, committed_at_unix_ms = ?, updated_at_unix_ms = ?
+         WHERE instance_id = ? AND revision = ?",
+    )
+    .bind(i64_from_u64(next.revision().get())?)
+    .bind(stage)
+    .bind(event_id)
+    .bind(recovery)
+    .bind(cancellation_name(next.cancellation()))
+    .bind(committed_at.map(i64_from_u64).transpose()?)
+    .bind(i64_from_u64(updated_at(&next))?)
+    .bind(next.instance_id().as_bytes().as_slice())
+    .bind(i64_from_u64(current.revision().get())?)
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_backend)?;
+    if result.rows_affected() != 1 {
+        return Err(Error::JournalRevisionConflict);
+    }
+    Ok(next)
 }
 
 impl SqliteStorage {
@@ -267,6 +281,117 @@ fn decode_record(row: &sqlx::sqlite::SqliteRow) -> Result<OperationRecord, Error
         cancellation,
     )
     .map_err(|_| Error::CorruptJournalRecord)
+}
+
+pub(crate) fn encode_record_snapshot(record: &OperationRecord) -> Result<Vec<u8>, Error> {
+    let mut bytes = Vec::with_capacity(160);
+    bytes.push(1);
+    bytes.extend_from_slice(record.instance_id().as_bytes());
+    snapshot_put_string(&mut bytes, record.operation_id().as_str())?;
+    snapshot_put_string(&mut bytes, record.idempotency_key().as_str())?;
+    bytes.extend_from_slice(record.input_digest().as_bytes());
+    bytes.extend_from_slice(&record.prepared_at_unix_ms().to_be_bytes());
+    bytes.extend_from_slice(&record.revision().get().to_be_bytes());
+    match record.state() {
+        JournalState::Prepared => bytes.push(0),
+        JournalState::Signed { event_id } => {
+            bytes.push(1);
+            bytes.extend_from_slice(event_id.as_bytes());
+        }
+        JournalState::Recoverable(recovery) => {
+            bytes.push(2);
+            snapshot_put_blob(&mut bytes, encode_recovery(recovery).as_slice())?;
+        }
+        JournalState::Committed {
+            event_id,
+            committed_at_unix_ms,
+        } => {
+            bytes.push(3);
+            bytes.extend_from_slice(event_id.as_bytes());
+            bytes.extend_from_slice(&committed_at_unix_ms.to_be_bytes());
+        }
+    }
+    bytes.push(match record.cancellation() {
+        CancellationState::NotRequested => 0,
+        CancellationState::CancelledBeforeCommit => 1,
+        CancellationState::ObservedAfterCommit => 2,
+    });
+    Ok(bytes)
+}
+
+pub(crate) fn decode_record_snapshot(bytes: &[u8]) -> Result<OperationRecord, Error> {
+    let mut offset = 0;
+    if take_byte(bytes, &mut offset)? != 1 {
+        return Err(Error::CorruptJournalRecord);
+    }
+    let instance_id = OperationInstanceId::new(take_array(bytes, &mut offset)?)
+        .map_err(|_| Error::CorruptJournalRecord)?;
+    let operation_id = OperationId::parse(snapshot_take_string(bytes, &mut offset)?)
+        .map_err(|_| Error::CorruptJournalRecord)?;
+    let idempotency_key = IdempotencyKey::parse(snapshot_take_string(bytes, &mut offset)?)
+        .map_err(|_| Error::CorruptJournalRecord)?;
+    let input_digest = IdempotencyDigest::new(take_array(bytes, &mut offset)?);
+    let prepared_at_unix_ms = u64::from_be_bytes(take_array(bytes, &mut offset)?);
+    let revision = JournalRevision::new(u64::from_be_bytes(take_array(bytes, &mut offset)?))
+        .map_err(|_| Error::CorruptJournalRecord)?;
+    let state = match take_byte(bytes, &mut offset)? {
+        0 => JournalState::Prepared,
+        1 => JournalState::Signed {
+            event_id: EventId::from_bytes(take_array(bytes, &mut offset)?),
+        },
+        2 => JournalState::Recoverable(decode_recovery(snapshot_take_blob(bytes, &mut offset)?)?),
+        3 => JournalState::Committed {
+            event_id: EventId::from_bytes(take_array(bytes, &mut offset)?),
+            committed_at_unix_ms: u64::from_be_bytes(take_array(bytes, &mut offset)?),
+        },
+        _ => return Err(Error::CorruptJournalRecord),
+    };
+    let cancellation = match take_byte(bytes, &mut offset)? {
+        0 => CancellationState::NotRequested,
+        1 => CancellationState::CancelledBeforeCommit,
+        2 => CancellationState::ObservedAfterCommit,
+        _ => return Err(Error::CorruptJournalRecord),
+    };
+    if offset != bytes.len() {
+        return Err(Error::CorruptJournalRecord);
+    }
+    OperationRecord::from_parts(
+        instance_id,
+        operation_id,
+        idempotency_key,
+        input_digest,
+        prepared_at_unix_ms,
+        revision,
+        state,
+        cancellation,
+    )
+    .map_err(|_| Error::CorruptJournalRecord)
+}
+
+fn snapshot_put_string(bytes: &mut Vec<u8>, value: &str) -> Result<(), Error> {
+    snapshot_put_blob(bytes, value.as_bytes())
+}
+
+fn snapshot_put_blob(bytes: &mut Vec<u8>, value: &[u8]) -> Result<(), Error> {
+    let length = u16::try_from(value.len()).map_err(|_| Error::CorruptJournalRecord)?;
+    bytes.extend_from_slice(&length.to_be_bytes());
+    bytes.extend_from_slice(value);
+    Ok(())
+}
+
+fn snapshot_take_string<'a>(bytes: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
+    core::str::from_utf8(snapshot_take_blob(bytes, offset)?)
+        .map_err(|_| Error::CorruptJournalRecord)
+}
+
+fn snapshot_take_blob<'a>(bytes: &'a [u8], offset: &mut usize) -> Result<&'a [u8], Error> {
+    let length = usize::from(u16::from_be_bytes(take_array(bytes, offset)?));
+    let end = offset
+        .checked_add(length)
+        .ok_or(Error::CorruptJournalRecord)?;
+    let value = bytes.get(*offset..end).ok_or(Error::CorruptJournalRecord)?;
+    *offset = end;
+    Ok(value)
 }
 
 type EncodedState = (&'static str, Option<Vec<u8>>, Option<Vec<u8>>, Option<u64>);

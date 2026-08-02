@@ -23,44 +23,9 @@ impl Outbox for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            if let Some(record) = load_record(&mut transaction, item.item_id()).await? {
-                if record.operation_instance_id() != item.operation_instance_id()
-                    || record.plan_digest() != item.plan_digest()
-                    || record.request() != item.request()
-                    || record.created_at_unix_ms() != item.created_at_unix_ms()
-                {
-                    return Err(Error::OutboxPlanConflict);
-                }
-                transaction.commit().await.map_err(map_backend)?;
-                return Ok(EnqueueReceipt::new(EnqueueDisposition::Replay, record));
-            }
-            if sqlx::query_scalar::<_, i64>(
-                "SELECT 1 FROM radroots_runtime_outbox_items WHERE operation_instance_id = ?",
-            )
-            .bind(item.operation_instance_id().as_bytes().as_slice())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            .is_some()
-            {
-                return Err(Error::OutboxPlanConflict);
-            }
-            if sqlx::query_scalar::<_, i64>(
-                "SELECT 1 FROM radroots_runtime_journal_operations WHERE instance_id = ?",
-            )
-            .bind(item.operation_instance_id().as_bytes().as_slice())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            .is_none()
-            {
-                return Err(Error::OperationNotFound);
-            }
-
-            let record = item.into_record();
-            insert_record(&mut transaction, &record).await?;
+            let receipt = enqueue_transaction(&mut transaction, item).await?;
             transaction.commit().await.map_err(map_backend)?;
-            Ok(EnqueueReceipt::new(EnqueueDisposition::Created, record))
+            Ok(receipt)
         })
     }
 
@@ -137,34 +102,7 @@ impl Outbox for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            let mut record = load_record(&mut transaction, evidence.item_id())
-                .await?
-                .ok_or(Error::OutboxItemNotFound)?;
-            let prior_revision = record.revision();
-            let receipt = evidence.receipt().clone();
-            let attempt = evidence.attempt();
-            let recorded_at = evidence.recorded_at_unix_ms();
-            record.record_attempt(evidence)?;
-            update_record(&mut transaction, &record, prior_revision).await?;
-            for target_receipt in receipt.target_receipts() {
-                let outcome = encode_outcome(target_receipt.outcome())?;
-                sqlx::query(
-                    "INSERT INTO radroots_runtime_delivery_evidence (
-                       item_id, target_fingerprint, attempt, attempted, outcome,
-                       retryability, recorded_at_unix_ms
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(record.item_id().as_bytes().as_slice())
-                .bind(target_receipt.target().fingerprint().as_str().as_bytes())
-                .bind(i64::from(attempt.get()))
-                .bind(i64::from(target_receipt.was_attempted()))
-                .bind(outcome)
-                .bind(retryability_name(target_receipt.outcome().retryability()))
-                .bind(i64_from_u64(recorded_at)?)
-                .execute(&mut *transaction)
-                .await
-                .map_err(map_backend)?;
-            }
+            let record = record_attempt_transaction(&mut transaction, evidence).await?;
             transaction.commit().await.map_err(map_backend)?;
             Ok(record)
         })
@@ -224,6 +162,83 @@ impl Outbox for SqliteStorage {
             })
         })
     }
+}
+
+pub(crate) async fn enqueue_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    item: EnqueueOutboxItem,
+) -> Result<EnqueueReceipt, Error> {
+    if let Some(record) = load_record(transaction, item.item_id()).await? {
+        if record.operation_instance_id() != item.operation_instance_id()
+            || record.plan_digest() != item.plan_digest()
+            || record.request() != item.request()
+            || record.created_at_unix_ms() != item.created_at_unix_ms()
+        {
+            return Err(Error::OutboxPlanConflict);
+        }
+        return Ok(EnqueueReceipt::new(EnqueueDisposition::Replay, record));
+    }
+    if sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM radroots_runtime_outbox_items WHERE operation_instance_id = ?",
+    )
+    .bind(item.operation_instance_id().as_bytes().as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_backend)?
+    .is_some()
+    {
+        return Err(Error::OutboxPlanConflict);
+    }
+    if sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM radroots_runtime_journal_operations WHERE instance_id = ?",
+    )
+    .bind(item.operation_instance_id().as_bytes().as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_backend)?
+    .is_none()
+    {
+        return Err(Error::OperationNotFound);
+    }
+
+    let record = item.into_record();
+    insert_record(transaction, &record).await?;
+    Ok(EnqueueReceipt::new(EnqueueDisposition::Created, record))
+}
+
+pub(crate) async fn record_attempt_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    evidence: DeliveryAttemptEvidence,
+) -> Result<OutboxRecord, Error> {
+    let mut record = load_record(transaction, evidence.item_id())
+        .await?
+        .ok_or(Error::OutboxItemNotFound)?;
+    let prior_revision = record.revision();
+    let receipt = evidence.receipt().clone();
+    let attempt = evidence.attempt();
+    let recorded_at = evidence.recorded_at_unix_ms();
+    record.record_attempt(evidence)?;
+    update_record(transaction, &record, prior_revision).await?;
+    for target_receipt in receipt.target_receipts() {
+        let outcome = encode_outcome(target_receipt.outcome())?;
+        sqlx::query(
+            "INSERT INTO radroots_runtime_delivery_evidence (
+               item_id, target_fingerprint, attempt, attempted, outcome,
+               retryability, recorded_at_unix_ms
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(record.item_id().as_bytes().as_slice())
+        .bind(target_receipt.target().fingerprint().as_str().as_bytes())
+        .bind(i64::from(attempt.get()))
+        .bind(i64::from(target_receipt.was_attempted()))
+        .bind(outcome)
+        .bind(retryability_name(target_receipt.outcome().retryability()))
+        .bind(i64_from_u64(recorded_at)?)
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_backend)?;
+    }
+    Ok(record)
 }
 
 impl SqliteStorage {
@@ -519,6 +534,161 @@ fn decode_lease(row: &sqlx::sqlite::SqliteRow) -> Result<Option<OutboxLease>, Er
         .map_err(|_| Error::CorruptOutboxRecord),
         _ => Err(Error::CorruptOutboxRecord),
     }
+}
+
+pub(crate) fn encode_record_snapshot(record: &OutboxRecord) -> Result<Vec<u8>, Error> {
+    let mut bytes = Vec::with_capacity(256);
+    bytes.push(1);
+    bytes.extend_from_slice(record.item_id().as_bytes());
+    bytes.extend_from_slice(record.operation_instance_id().as_bytes());
+    bytes.extend_from_slice(record.plan_digest().as_bytes());
+    put_blob(&mut bytes, encode_request(record.request())?.as_slice())?;
+    bytes.extend_from_slice(&record.revision().get().to_be_bytes());
+    bytes.push(match record.stage() {
+        OutboxStage::Pending => 0,
+        OutboxStage::Leased => 1,
+        OutboxStage::Retryable => 2,
+        OutboxStage::Satisfied => 3,
+        OutboxStage::Exhausted => 4,
+    });
+    match record.lease() {
+        Some(lease) => {
+            bytes.push(1);
+            bytes.extend_from_slice(lease.id().as_bytes());
+            put_str(&mut bytes, lease.owner().as_str())?;
+            bytes.extend_from_slice(&lease.acquired_at_unix_ms().to_be_bytes());
+            bytes.extend_from_slice(&lease.expires_at_unix_ms().to_be_bytes());
+        }
+        None => bytes.push(0),
+    }
+    match record.last_attempt() {
+        Some(attempt) => {
+            bytes.push(1);
+            bytes.extend_from_slice(&attempt.get().to_be_bytes());
+        }
+        None => bytes.push(0),
+    }
+    let evidence_count =
+        u32::try_from(record.evidence().len()).map_err(|_| Error::CorruptOutboxRecord)?;
+    bytes.extend_from_slice(&evidence_count.to_be_bytes());
+    for evidence in record.evidence() {
+        put_str(&mut bytes, evidence.target().as_str())?;
+        bytes.extend_from_slice(&evidence.attempt().get().to_be_bytes());
+        bytes.push(u8::from(evidence.was_attempted()));
+        put_blob(&mut bytes, encode_outcome(evidence.outcome())?.as_slice())?;
+        bytes.extend_from_slice(&evidence.recorded_at_unix_ms().to_be_bytes());
+    }
+    bytes.push(match record.satisfaction() {
+        SatisfactionResult::Pending => 0,
+        SatisfactionResult::Satisfied => 1,
+        SatisfactionResult::Exhausted => 2,
+    });
+    match record.retry_not_before_unix_ms() {
+        Some(value) => {
+            bytes.push(1);
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        None => bytes.push(0),
+    }
+    bytes.extend_from_slice(&record.created_at_unix_ms().to_be_bytes());
+    bytes.extend_from_slice(&record.updated_at_unix_ms().to_be_bytes());
+    Ok(bytes)
+}
+
+pub(crate) fn decode_record_snapshot(bytes: &[u8]) -> Result<OutboxRecord, Error> {
+    let mut cursor = Cursor::new(bytes);
+    if cursor.byte()? != 1 {
+        return Err(Error::CorruptOutboxRecord);
+    }
+    let item_id = OutboxItemId::new(cursor.array()?).map_err(|_| Error::CorruptOutboxRecord)?;
+    let operation_instance_id =
+        radroots_storage::journal::OperationInstanceId::new(cursor.array()?)
+            .map_err(|_| Error::CorruptOutboxRecord)?;
+    let plan_digest = DeliveryPlanDigest::new(cursor.array()?);
+    let request = decode_request(cursor.blob()?)?;
+    let revision = OutboxRevision::new(cursor.u64()?).map_err(|_| Error::CorruptOutboxRecord)?;
+    let stage = match cursor.byte()? {
+        0 => OutboxStage::Pending,
+        1 => OutboxStage::Leased,
+        2 => OutboxStage::Retryable,
+        3 => OutboxStage::Satisfied,
+        4 => OutboxStage::Exhausted,
+        _ => return Err(Error::CorruptOutboxRecord),
+    };
+    let lease = match cursor.byte()? {
+        0 => None,
+        1 => Some(
+            OutboxLease::new(
+                LeaseId::new(cursor.array()?).map_err(|_| Error::CorruptOutboxRecord)?,
+                LeaseOwner::parse(cursor.string()?).map_err(|_| Error::CorruptOutboxRecord)?,
+                cursor.u64()?,
+                cursor.u64()?,
+            )
+            .map_err(|_| Error::CorruptOutboxRecord)?,
+        ),
+        _ => return Err(Error::CorruptOutboxRecord),
+    };
+    let last_attempt = match cursor.byte()? {
+        0 => None,
+        1 => Some(DeliveryAttempt::new(cursor.u32()?).map_err(|_| Error::CorruptOutboxRecord)?),
+        _ => return Err(Error::CorruptOutboxRecord),
+    };
+    let evidence_count = usize::try_from(cursor.u32()?).map_err(|_| Error::CorruptOutboxRecord)?;
+    if evidence_count > bytes.len() / 20 {
+        return Err(Error::CorruptOutboxRecord);
+    }
+    let mut evidence = Vec::with_capacity(evidence_count);
+    for _ in 0..evidence_count {
+        let target =
+            TargetFingerprint::parse(cursor.string()?).map_err(|_| Error::CorruptOutboxRecord)?;
+        let attempt =
+            DeliveryAttempt::new(cursor.u32()?).map_err(|_| Error::CorruptOutboxRecord)?;
+        let attempted = match cursor.byte()? {
+            0 => false,
+            1 => true,
+            _ => return Err(Error::CorruptOutboxRecord),
+        };
+        let outcome = decode_outcome(cursor.blob()?)?;
+        let recorded_at_unix_ms = cursor.u64()?;
+        evidence.push(
+            TargetDeliveryEvidence::new(target, attempt, attempted, outcome, recorded_at_unix_ms)
+                .map_err(|_| Error::CorruptOutboxRecord)?,
+        );
+    }
+    let satisfaction = match cursor.byte()? {
+        0 => SatisfactionResult::Pending,
+        1 => SatisfactionResult::Satisfied,
+        2 => SatisfactionResult::Exhausted,
+        _ => return Err(Error::CorruptOutboxRecord),
+    };
+    let retry_not_before_unix_ms = match cursor.byte()? {
+        0 => None,
+        1 => Some(cursor.u64()?),
+        _ => return Err(Error::CorruptOutboxRecord),
+    };
+    let created_at_unix_ms = cursor.u64()?;
+    let updated_at_unix_ms = cursor.u64()?;
+    cursor.finish()?;
+    let enqueue = EnqueueOutboxItem::new(
+        item_id,
+        operation_instance_id,
+        plan_digest,
+        request,
+        created_at_unix_ms,
+    )
+    .map_err(|_| Error::CorruptOutboxRecord)?;
+    OutboxRecord::from_durable_parts(
+        enqueue,
+        revision,
+        stage,
+        lease,
+        last_attempt,
+        evidence,
+        satisfaction,
+        retry_not_before_unix_ms,
+        updated_at_unix_ms,
+    )
+    .map_err(|_| Error::CorruptOutboxRecord)
 }
 
 fn encode_request(value: &DeliveryRequest) -> Result<Vec<u8>, Error> {

@@ -292,6 +292,31 @@ impl AtomicCommitReceipt {
             outcome,
         })
     }
+
+    /// Reconstructs and validates a receipt at a durable backend boundary.
+    pub fn from_durable_parts(
+        commit_id: AtomicCommitId,
+        digest: AtomicCommitDigest,
+        disposition: AtomicCommitDisposition,
+        requested_at_unix_ms: u64,
+        committed_at_unix_ms: u64,
+        workflow_kind: AtomicWorkflowKind,
+        outcome: AtomicCommitOutcome,
+    ) -> Result<Self, Error> {
+        if requested_at_unix_ms == 0
+            || committed_at_unix_ms < requested_at_unix_ms
+            || outcome.kind() != workflow_kind
+        {
+            return Err(Error::AtomicWorkflowMismatch);
+        }
+        Ok(Self {
+            commit_id,
+            digest,
+            disposition,
+            committed_at_unix_ms,
+            outcome,
+        })
+    }
     pub const fn commit_id(&self) -> AtomicCommitId {
         self.commit_id
     }

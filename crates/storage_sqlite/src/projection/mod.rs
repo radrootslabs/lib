@@ -42,35 +42,7 @@ impl ProjectionStore for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            let prior = sqlx::query(
-                "SELECT * FROM radroots_runtime_projection_checkpoints WHERE projection_id = ?",
-            )
-            .bind(checkpoint.projection_id().as_str())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            .as_ref()
-            .map(decode_status)
-            .transpose()?;
-            if let Some(prior) = prior.as_ref() {
-                if prior.generation() != checkpoint.generation() {
-                    return Err(Error::ProjectionCheckpointMismatch);
-                }
-                if prior
-                    .checkpoint()
-                    .is_some_and(|value| !checkpoint.advances(value))
-                {
-                    return Err(Error::ProjectionCheckpointRegression);
-                }
-            }
-            let status = ProjectionStatus::new(
-                checkpoint.projection_id().clone(),
-                checkpoint.generation(),
-                ProjectionHealth::Ready,
-                Some(checkpoint),
-                None,
-            )?;
-            put_status_transaction(&mut transaction, &status).await?;
+            let status = checkpoint_transaction(&mut transaction, checkpoint).await?;
             transaction.commit().await.map_err(map_backend)?;
             Ok(status)
         })
@@ -378,6 +350,42 @@ impl ProjectionStore for SqliteStorage {
             Ok(())
         })
     }
+}
+
+pub(crate) async fn checkpoint_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    checkpoint: ProjectionCheckpoint,
+) -> Result<ProjectionStatus, Error> {
+    let prior = sqlx::query(
+        "SELECT * FROM radroots_runtime_projection_checkpoints WHERE projection_id = ?",
+    )
+    .bind(checkpoint.projection_id().as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_backend)?
+    .as_ref()
+    .map(decode_status)
+    .transpose()?;
+    if let Some(prior) = prior.as_ref() {
+        if prior.generation() != checkpoint.generation() {
+            return Err(Error::ProjectionCheckpointMismatch);
+        }
+        if prior
+            .checkpoint()
+            .is_some_and(|value| !checkpoint.advances(value))
+        {
+            return Err(Error::ProjectionCheckpointRegression);
+        }
+    }
+    let status = ProjectionStatus::new(
+        checkpoint.projection_id().clone(),
+        checkpoint.generation(),
+        ProjectionHealth::Ready,
+        Some(checkpoint),
+        None,
+    )?;
+    put_status_transaction(transaction, &status).await?;
+    Ok(status)
 }
 
 impl SqliteStorage {
@@ -829,6 +837,103 @@ fn decode_index_checkpoint(
         generation,
         u64_from_i64(row.try_get("generated_at_unix_ms").map_err(map_corrupt)?)?,
         shards,
+    )
+    .map_err(|_| Error::CorruptProjectionRecord)
+}
+
+pub(crate) fn encode_status_snapshot(status: &ProjectionStatus) -> Result<Vec<u8>, Error> {
+    let mut bytes = Vec::with_capacity(128);
+    bytes.push(1);
+    put_string(&mut bytes, status.projection_id().as_str())?;
+    bytes.extend_from_slice(status.generation().as_bytes());
+    bytes.push(match status.health() {
+        ProjectionHealth::Ready => 0,
+        ProjectionHealth::Invalidated => 1,
+        ProjectionHealth::Rebuilding => 2,
+        ProjectionHealth::Failed => 3,
+    });
+    match status.checkpoint() {
+        Some(checkpoint) => {
+            bytes.push(1);
+            match checkpoint.source_position() {
+                Some(position) => {
+                    bytes.push(1);
+                    bytes.extend_from_slice(position.generation().as_bytes());
+                    bytes.extend_from_slice(&position.sequence().get().to_be_bytes());
+                }
+                None => bytes.push(0),
+            }
+            bytes.extend_from_slice(&checkpoint.projected_rows().to_be_bytes());
+            bytes.extend_from_slice(&checkpoint.updated_at_unix_ms().to_be_bytes());
+        }
+        None => bytes.push(0),
+    }
+    match status.active_rebuild() {
+        Some(ticket) => {
+            bytes.push(1);
+            bytes.extend_from_slice(ticket.as_bytes());
+        }
+        None => bytes.push(0),
+    }
+    Ok(bytes)
+}
+
+pub(crate) fn decode_status_snapshot(bytes: &[u8]) -> Result<ProjectionStatus, Error> {
+    let mut cursor = Cursor::new(bytes);
+    if cursor.byte()? != 1 {
+        return Err(Error::CorruptProjectionRecord);
+    }
+    let projection_id =
+        ProjectionId::parse(cursor.string()?).map_err(|_| Error::CorruptProjectionRecord)?;
+    let generation =
+        ProjectionGeneration::new(cursor.array()?).map_err(|_| Error::CorruptProjectionRecord)?;
+    let health = match cursor.byte()? {
+        0 => ProjectionHealth::Ready,
+        1 => ProjectionHealth::Invalidated,
+        2 => ProjectionHealth::Rebuilding,
+        3 => ProjectionHealth::Failed,
+        _ => return Err(Error::CorruptProjectionRecord),
+    };
+    let checkpoint = match cursor.byte()? {
+        0 => None,
+        1 => {
+            let source_position = match cursor.byte()? {
+                0 => None,
+                1 => Some(EventPosition::new(
+                    SourceGeneration::new(cursor.array()?)
+                        .map_err(|_| Error::CorruptProjectionRecord)?,
+                    radroots_storage::event::EventSequence::new(cursor.u64()?)
+                        .map_err(|_| Error::CorruptProjectionRecord)?,
+                )),
+                _ => return Err(Error::CorruptProjectionRecord),
+            };
+            Some(
+                ProjectionCheckpoint::new(
+                    projection_id.clone(),
+                    generation,
+                    source_position,
+                    cursor.u64()?,
+                    cursor.u64()?,
+                )
+                .map_err(|_| Error::CorruptProjectionRecord)?,
+            )
+        }
+        _ => return Err(Error::CorruptProjectionRecord),
+    };
+    let active_rebuild = match cursor.byte()? {
+        0 => None,
+        1 => Some(
+            RebuildTicketId::new(cursor.array()?).map_err(|_| Error::CorruptProjectionRecord)?,
+        ),
+        _ => return Err(Error::CorruptProjectionRecord),
+    };
+    cursor.finish()?;
+    ProjectionStatus::new(
+        projection_id,
+        generation,
+        health,
+        checkpoint,
+        active_rebuild,
     )
     .map_err(|_| Error::CorruptProjectionRecord)
 }

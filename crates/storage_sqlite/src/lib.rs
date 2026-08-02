@@ -8,6 +8,7 @@ pub mod migration;
 pub mod open;
 pub mod status;
 
+mod atomic;
 mod event;
 mod journal;
 mod outbox;

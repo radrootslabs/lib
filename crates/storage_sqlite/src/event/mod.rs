@@ -145,6 +145,89 @@ impl SqliteStorage {
         .map_err(map_backend)?;
         Ok(())
     }
+
+    pub(crate) async fn admit_transaction(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+        admission: EventAdmission,
+    ) -> Result<AdmissionReceipt, Error> {
+        let existing = sqlx::query(
+            "SELECT source_generation, source_sequence, signed_event, admission_stage
+             FROM radroots_runtime_events WHERE event_id = ?",
+        )
+        .bind(admission.event_id().as_bytes().as_slice())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(map_backend)?;
+
+        let (position, disposition) = if let Some(row) = existing {
+            let stored = self.decode_event_row(&row)?;
+            if stored.raw_json.as_bytes() != admission.event().raw_json().as_bytes() {
+                return Err(Error::EventConflict);
+            }
+            if admission.stage() < stored.stage {
+                return Err(Error::AdmissionRegression);
+            }
+            let disposition = if admission.stage() == stored.stage {
+                AdmissionDisposition::Duplicate
+            } else {
+                sqlx::query(
+                    "UPDATE radroots_runtime_events
+                     SET admission_stage = ?, updated_at_unix_ms = MAX(updated_at_unix_ms, ?)
+                     WHERE event_id = ?",
+                )
+                .bind(stage_name(admission.stage()))
+                .bind(i64_from_u64(admission.provenance().observed_at_unix_ms())?)
+                .bind(admission.event_id().as_bytes().as_slice())
+                .execute(&mut **transaction)
+                .await
+                .map_err(map_backend)?;
+                AdmissionDisposition::Advanced
+            };
+            (stored.position, disposition)
+        } else {
+            let next = sqlx::query_scalar::<_, i64>(
+                "UPDATE radroots_runtime_source_generations
+                 SET sequence_head = sequence_head + 1
+                 WHERE generation = ? AND state = 'active'
+                 RETURNING sequence_head",
+            )
+            .bind(self.generation.as_bytes().as_slice())
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(map_backend)?
+            .ok_or(Error::SourceGenerationChanged)?;
+            let sequence = event_sequence(next)?;
+            let observed_at = i64_from_u64(admission.provenance().observed_at_unix_ms())?;
+            sqlx::query(
+                "INSERT INTO radroots_runtime_events (
+                   source_generation, source_sequence, event_id, admission_stage,
+                   signed_event, admitted_at_unix_ms, updated_at_unix_ms
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(self.generation.as_bytes().as_slice())
+            .bind(next)
+            .bind(admission.event_id().as_bytes().as_slice())
+            .bind(stage_name(admission.stage()))
+            .bind(admission.event().raw_json().as_bytes())
+            .bind(observed_at)
+            .bind(observed_at)
+            .execute(&mut **transaction)
+            .await
+            .map_err(map_backend)?;
+            (
+                EventPosition::new(self.generation, sequence),
+                AdmissionDisposition::Inserted,
+            )
+        };
+        Self::store_provenance(transaction, &admission).await?;
+        Ok(AdmissionReceipt::new(
+            *admission.event_id(),
+            position,
+            admission.stage(),
+            disposition,
+        ))
+    }
 }
 
 impl EventStore for SqliteStorage {
@@ -184,83 +267,9 @@ impl EventStore for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            let existing = sqlx::query(
-                "SELECT source_generation, source_sequence, signed_event, admission_stage
-                 FROM radroots_runtime_events WHERE event_id = ?",
-            )
-            .bind(admission.event_id().as_bytes().as_slice())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?;
-
-            let (position, disposition) = if let Some(row) = existing {
-                let stored = self.decode_event_row(&row)?;
-                if stored.raw_json.as_bytes() != admission.event().raw_json().as_bytes() {
-                    return Err(Error::EventConflict);
-                }
-                if admission.stage() < stored.stage {
-                    return Err(Error::AdmissionRegression);
-                }
-                let disposition = if admission.stage() == stored.stage {
-                    AdmissionDisposition::Duplicate
-                } else {
-                    sqlx::query(
-                        "UPDATE radroots_runtime_events
-                         SET admission_stage = ?, updated_at_unix_ms = MAX(updated_at_unix_ms, ?)
-                         WHERE event_id = ?",
-                    )
-                    .bind(stage_name(admission.stage()))
-                    .bind(i64_from_u64(admission.provenance().observed_at_unix_ms())?)
-                    .bind(admission.event_id().as_bytes().as_slice())
-                    .execute(&mut *transaction)
-                    .await
-                    .map_err(map_backend)?;
-                    AdmissionDisposition::Advanced
-                };
-                (stored.position, disposition)
-            } else {
-                let next = sqlx::query_scalar::<_, i64>(
-                    "UPDATE radroots_runtime_source_generations
-                     SET sequence_head = sequence_head + 1
-                     WHERE generation = ? AND state = 'active'
-                     RETURNING sequence_head",
-                )
-                .bind(self.generation.as_bytes().as_slice())
-                .fetch_optional(&mut *transaction)
-                .await
-                .map_err(map_backend)?
-                .ok_or(Error::SourceGenerationChanged)?;
-                let sequence = event_sequence(next)?;
-                let observed_at = i64_from_u64(admission.provenance().observed_at_unix_ms())?;
-                sqlx::query(
-                    "INSERT INTO radroots_runtime_events (
-                       source_generation, source_sequence, event_id, admission_stage,
-                       signed_event, admitted_at_unix_ms, updated_at_unix_ms
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(self.generation.as_bytes().as_slice())
-                .bind(next)
-                .bind(admission.event_id().as_bytes().as_slice())
-                .bind(stage_name(admission.stage()))
-                .bind(admission.event().raw_json().as_bytes())
-                .bind(observed_at)
-                .bind(observed_at)
-                .execute(&mut *transaction)
-                .await
-                .map_err(map_backend)?;
-                (
-                    EventPosition::new(self.generation, sequence),
-                    AdmissionDisposition::Inserted,
-                )
-            };
-            Self::store_provenance(&mut transaction, &admission).await?;
+            let receipt = self.admit_transaction(&mut transaction, admission).await?;
             transaction.commit().await.map_err(map_backend)?;
-            Ok(AdmissionReceipt::new(
-                *admission.event_id(),
-                position,
-                admission.stage(),
-                disposition,
-            ))
+            Ok(receipt)
         })
     }
 
