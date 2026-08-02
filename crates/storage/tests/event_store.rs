@@ -274,7 +274,16 @@ fn signed_event_with_signature(signature_byte: &str) -> SignedEvent {
         .computed_event_id()
         .expect("canonical event id")
         .to_hex();
-    let raw_json = serde_json::to_string(&wire).expect("event JSON");
+    let raw_json = serde_json::json!({
+        "id": &wire.id,
+        "pubkey": &wire.pubkey,
+        "created_at": wire.created_at,
+        "kind": wire.kind,
+        "tags": &wire.tags,
+        "content": &wire.content,
+        "sig": &wire.sig,
+    })
+    .to_string();
     SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 

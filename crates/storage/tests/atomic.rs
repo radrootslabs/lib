@@ -1,10 +1,10 @@
 use futures_executor::block_on;
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
-    AtomicStorage, Error,
+    Error,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId,
-        AtomicCommitOutcome, AtomicCommitReceipt, AtomicWorkflow,
+        AtomicCommitOutcome, AtomicCommitReceipt, AtomicStorage, AtomicWorkflow,
     },
     journal::{IdempotencyDigest, IdempotencyKey, OperationInstanceId, PrepareOperation},
 };

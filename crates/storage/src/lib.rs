@@ -14,11 +14,33 @@ pub mod private_artifact;
 pub mod projection;
 pub mod status;
 
-pub use atomic::AtomicStorage;
-pub use backup::StorageReliability;
+pub use backup::StorageReliability as BackupSource;
 pub use error::Error;
 pub use event::EventStore;
 pub use journal::Journal;
 pub use outbox::Outbox;
-pub use private_artifact::PrivateArtifactStore;
 pub use projection::ProjectionStore;
+pub use status::StorageStatus;
+
+/// Complete backend-neutral storage capability implemented by concrete stores.
+pub trait Storage:
+    EventStore
+    + Journal
+    + Outbox
+    + ProjectionStore
+    + private_artifact::PrivateArtifactStore
+    + backup::StorageReliability
+    + atomic::AtomicStorage
+{
+}
+
+impl<T> Storage for T where
+    T: EventStore
+        + Journal
+        + Outbox
+        + ProjectionStore
+        + private_artifact::PrivateArtifactStore
+        + backup::StorageReliability
+        + atomic::AtomicStorage
+{
+}

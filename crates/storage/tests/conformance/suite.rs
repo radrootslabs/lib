@@ -2,16 +2,15 @@ use futures_executor::block_on;
 use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
-    AtomicStorage, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
-    StorageReliability,
+    EventStore, Journal, Outbox, ProjectionStore,
     atomic::{
-        AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicWorkflow,
-        CommitEnqueued, CommitIngested, CommitSigned,
+        AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicStorage,
+        AtomicWorkflow, CommitEnqueued, CommitIngested, CommitSigned,
     },
     backup::{
         BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
         BackupSecretPolicy, BackupStage, BackupTransition, MemberDigest, MemberVerification,
-        RestoreMemberStatus, RestorePlan, RestoreStage, RestoreTransition,
+        RestoreMemberStatus, RestorePlan, RestoreStage, RestoreTransition, StorageReliability,
     },
     event::{EventAdmission, EventQuery, EventQueryBounds},
     journal::{
@@ -24,7 +23,7 @@ use radroots_storage::{
     },
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DurableSecretReference,
-        PrivateArtifactId, PrivateArtifactMetadata, RetentionPolicy,
+        PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactStore, RetentionPolicy,
     },
     projection::{ProjectionCheckpoint, ProjectionGeneration, ProjectionId},
     status::{ShutdownState, StorageBackend},
@@ -435,7 +434,16 @@ fn signed_event(content: &str) -> SignedEvent {
         extra: Default::default(),
     };
     wire.id = wire.computed_event_id().expect("event id").to_hex();
-    let raw = serde_json::to_string(&wire).expect("event JSON");
+    let raw = serde_json::json!({
+        "id": &wire.id,
+        "pubkey": &wire.pubkey,
+        "created_at": wire.created_at,
+        "kind": wire.kind,
+        "tags": &wire.tags,
+        "content": &wire.content,
+        "sig": &wire.sig,
+    })
+    .to_string();
     SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
 }
 

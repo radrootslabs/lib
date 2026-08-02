@@ -1,9 +1,9 @@
 use radroots_storage::{
-    Error, PrivateArtifactStore,
+    Error,
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DeletionReason, DurableSecretReference,
         PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactRevision, PrivateArtifactStage,
-        RetentionPolicy,
+        PrivateArtifactStore, RetentionPolicy,
     },
 };
 
@@ -77,6 +77,7 @@ fn tombstones_preserve_commitment_and_enforce_retention() {
 }
 
 #[test]
+#[cfg(feature = "serde")]
 fn secret_references_are_bounded_redacted_and_round_trip() {
     let reference =
         DurableSecretReference::new("keyring", "opaque-key-token", 3).expect("secret reference");

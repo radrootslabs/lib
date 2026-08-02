@@ -6,15 +6,14 @@ use radroots_transport::{BoxFuture, source::EventProvenance};
 use std::sync::{Mutex, MutexGuard};
 
 use crate::{
-    AtomicStorage, Error, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
-    StorageReliability,
+    Error, EventStore, Journal, Outbox, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDisposition, AtomicCommitId, AtomicCommitOutcome,
-        AtomicCommitReceipt, AtomicWorkflow,
+        AtomicCommitReceipt, AtomicStorage, AtomicWorkflow,
     },
     backup::{
         BackupId, BackupOperation, BackupPlan, BackupTransition, ReliabilityRevision,
-        RestoreOperation, RestorePlan, RestoreTransition,
+        RestoreOperation, RestorePlan, RestoreTransition, StorageReliability,
     },
     event::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPage,
@@ -33,7 +32,7 @@ use crate::{
     private_artifact::{
         DeletionReason, EXPIRED_ARTIFACT_QUERY_LIMIT_MAX, PrivateArtifactId,
         PrivateArtifactMetadata, PrivateArtifactRevision, PrivateArtifactStage,
-        PrivateArtifactStatus,
+        PrivateArtifactStatus, PrivateArtifactStore,
     },
     projection::{
         EventIndexCheckpoint, EventIndexManifest, ProjectionCheckpoint, ProjectionGeneration,

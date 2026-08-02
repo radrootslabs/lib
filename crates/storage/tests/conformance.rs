@@ -1,9 +1,11 @@
+#![cfg(feature = "memory")]
+
 #[path = "conformance/suite.rs"]
 mod suite;
 
 use radroots_storage::{
-    AtomicStorage, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
-    StorageReliability, memory::MemoryStorage,
+    EventStore, Journal, Outbox, ProjectionStore, atomic::AtomicStorage,
+    backup::StorageReliability, memory::MemoryStorage, private_artifact::PrivateArtifactStore,
 };
 
 use suite::StorageConformanceHarness;
