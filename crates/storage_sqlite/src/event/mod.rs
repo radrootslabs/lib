@@ -14,6 +14,7 @@ use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 #[derive(Clone)]
 pub struct SqliteStorage {
     pool: SqlitePool,
+    private_pool: SqlitePool,
     generation: SourceGeneration,
     mode: EventStoreMode,
 }
@@ -26,13 +27,29 @@ struct StoredEventRow {
 
 impl SqliteStorage {
     #[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
-    pub(crate) const fn new(
+    pub(crate) fn new(
         pool: SqlitePool,
         generation: SourceGeneration,
         mode: EventStoreMode,
     ) -> Self {
         Self {
+            private_pool: pool.clone(),
             pool,
+            generation,
+            mode,
+        }
+    }
+
+    #[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
+    pub(crate) fn with_private_pool(
+        pool: SqlitePool,
+        private_pool: SqlitePool,
+        generation: SourceGeneration,
+        mode: EventStoreMode,
+    ) -> Self {
+        Self {
+            pool,
+            private_pool,
             generation,
             mode,
         }
@@ -40,6 +57,10 @@ impl SqliteStorage {
 
     pub(crate) const fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    pub(crate) const fn private_pool(&self) -> &SqlitePool {
+        &self.private_pool
     }
 
     pub(crate) const fn event_mode(&self) -> EventStoreMode {

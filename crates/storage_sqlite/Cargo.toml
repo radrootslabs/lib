@@ -18,6 +18,7 @@ name = "radroots_storage_sqlite"
 radroots_event_codec = { workspace = true, default-features = false, features = ["json", "std"] }
 radroots_secrets = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false }
+sha2 = { workspace = true, features = ["std"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
 
 [dev-dependencies]
@@ -25,7 +26,6 @@ radroots_event = { workspace = true, default-features = false, features = ["std"
 radroots_transport = { workspace = true, default-features = false }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
-sha2 = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 toml = { workspace = true }

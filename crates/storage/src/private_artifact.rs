@@ -322,6 +322,67 @@ impl PrivateArtifactMetadata {
             tombstone: None,
         })
     }
+
+    /// Reconstructs and validates metadata at a durable backend boundary.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_durable_parts(
+        artifact_id: PrivateArtifactId,
+        kind: ArtifactKind,
+        schema_id: ArtifactSchemaId,
+        commitment: ArtifactCommitment,
+        protected_size_bytes: u64,
+        secret_reference: DurableSecretReference,
+        retention: RetentionPolicy,
+        revision: PrivateArtifactRevision,
+        stage: PrivateArtifactStage,
+        created_at_unix_ms: u64,
+        updated_at_unix_ms: u64,
+        tombstone: Option<(u64, DeletionReason, ArtifactCommitment)>,
+    ) -> Result<Self, Error> {
+        let initial = Self::new(
+            artifact_id,
+            kind,
+            schema_id,
+            commitment,
+            protected_size_bytes,
+            secret_reference,
+            retention,
+            created_at_unix_ms,
+        )?;
+        if updated_at_unix_ms < created_at_unix_ms {
+            return Err(Error::CorruptPrivateArtifactMetadata);
+        }
+        let tombstone =
+            tombstone.map(
+                |(deleted_at_unix_ms, reason, tombstone_commitment)| ArtifactTombstone {
+                    deleted_at_unix_ms,
+                    reason,
+                    commitment: tombstone_commitment,
+                },
+            );
+        let valid = match (stage, revision.get(), tombstone) {
+            (PrivateArtifactStage::Active, 1, None) => updated_at_unix_ms == created_at_unix_ms,
+            (PrivateArtifactStage::Expired, 2, None) => retention.is_expired_at(updated_at_unix_ms),
+            (PrivateArtifactStage::Tombstoned, 2 | 3, Some(tombstone)) => {
+                tombstone.deleted_at_unix_ms == updated_at_unix_ms
+                    && tombstone.commitment == commitment
+                    && retention.permits_deletion_at(updated_at_unix_ms)
+                    && (tombstone.reason != DeletionReason::RetentionExpired
+                        || retention.is_expired_at(updated_at_unix_ms))
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err(Error::CorruptPrivateArtifactMetadata);
+        }
+        Ok(Self {
+            revision,
+            stage,
+            updated_at_unix_ms,
+            tombstone,
+            ..initial
+        })
+    }
     pub const fn artifact_id(&self) -> PrivateArtifactId {
         self.artifact_id
     }

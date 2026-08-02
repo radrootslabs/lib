@@ -23,6 +23,7 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "radroots_event_codec",
             "radroots_secrets",
             "radroots_storage",
+            "sha2",
             "sqlx",
         ])
     );

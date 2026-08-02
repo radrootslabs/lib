@@ -12,6 +12,7 @@ mod atomic;
 mod event;
 mod journal;
 mod outbox;
+mod private_artifact;
 mod projection;
 
 pub use config::OpenOptions;

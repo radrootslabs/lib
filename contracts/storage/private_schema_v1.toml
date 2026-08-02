@@ -1,0 +1,35 @@
+schema_version = 1
+database = "private.sqlite"
+minimum_version = 1
+current_version = 1
+migration_name = "private_artifacts"
+migration_sha256 = "07050386292ff8ce9ec0e756c9ac88e458a249d53e8654e1102caa2e361f11ab"
+forward_only = true
+raw_sql_public = false
+encrypted_envelopes = true
+
+authorities = [
+  "signing_references",
+  "private_farm_locations",
+  "private_trade_artifacts",
+  "permitted_nip46_sessions",
+]
+
+forbidden_tables = [
+  "studio",
+  "ui_state",
+]
+
+[[migrations]]
+version = 1
+name = "private_artifacts"
+sha256 = "07050386292ff8ce9ec0e756c9ac88e458a249d53e8654e1102caa2e361f11ab"
+owned_objects = [
+  "radroots_private_artifacts",
+  "radroots_private_artifacts_delete_guard",
+  "radroots_private_artifacts_envelope_guard",
+  "radroots_private_artifacts_expiry_idx",
+  "radroots_private_artifacts_identity_guard",
+  "radroots_private_artifacts_key_version_idx",
+  "radroots_private_artifacts_kind_idx",
+]
