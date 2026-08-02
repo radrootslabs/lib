@@ -13,6 +13,13 @@ Backend status and the last integrity result are passive. Hosts invoke
 full SQLite and foreign-key validation across both owned files. `close` drains
 both pools and releases writable authority explicitly and idempotently.
 
+Backup capture requires an explicit existing host-owned root configured with
+`OpenOptions::with_backup_root`. V1 capture creates a deterministic staging
+bundle, uses SQLite's online snapshot mechanism for each policy-selected
+member, synchronizes captured files and directories, and returns exact lengths
+and SHA-256 digests in the backend-neutral manifest. Protected storage is
+included only when the plan requests it explicitly.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

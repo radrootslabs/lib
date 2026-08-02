@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use crate::{OpenOptions, event::SqliteStorage, lock::WriterLock, migration};
-use radroots_storage::{event::SourceGeneration, status::EventStoreMode};
+use radroots_storage::event::SourceGeneration;
 use sqlx::{
     ConnectOptions, Connection, Row, SqliteConnection, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
@@ -150,7 +150,7 @@ fn validate_parent(path: &Path) -> Result<(), Error> {
     }
 }
 
-/// Configuration or filesystem failure detected before SQLite is opened.
+/// Stable, secret-safe SQLite lifecycle or filesystem failure.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
@@ -239,6 +239,18 @@ pub enum Error {
     SourceGenerationUnavailable,
     SourceGenerationMismatch,
     CorruptSourceGeneration,
+    InvalidBackupRoot(PathBuf),
+    BackupRootRequired,
+    BackupBundleAlreadyExists(PathBuf),
+    BackupBackendUnavailable,
+    UnsupportedBackupVersion,
+    BackupCaptureFailed {
+        member: &'static str,
+    },
+    BackupFilesystem {
+        operation: &'static str,
+        source: std::io::Error,
+    },
 }
 
 impl fmt::Display for Error {
@@ -394,6 +406,32 @@ impl fmt::Display for Error {
             Self::CorruptSourceGeneration => {
                 formatter.write_str("SQLite storage source generation is corrupt")
             }
+            Self::InvalidBackupRoot(path) => {
+                write!(formatter, "invalid SQLite backup root: {}", path.display())
+            }
+            Self::BackupRootRequired => {
+                formatter.write_str("SQLite backup requires a configured host-owned root")
+            }
+            Self::BackupBundleAlreadyExists(path) => write!(
+                formatter,
+                "SQLite backup bundle path already exists: {}",
+                path.display()
+            ),
+            Self::BackupBackendUnavailable => {
+                formatter.write_str("SQLite backup backend is unavailable")
+            }
+            Self::UnsupportedBackupVersion => {
+                formatter.write_str("SQLite backup format version is unsupported")
+            }
+            Self::BackupCaptureFailed { member } => {
+                write!(formatter, "failed to capture SQLite backup member {member}")
+            }
+            Self::BackupFilesystem { operation, .. } => {
+                write!(
+                    formatter,
+                    "SQLite backup filesystem operation failed: {operation}"
+                )
+            }
         }
     }
 }
@@ -475,13 +513,7 @@ impl SqliteStorage {
             runtime_pool,
             private_pool,
             generation,
-            if options.mode().is_writable() {
-                EventStoreMode::ReadWrite
-            } else {
-                EventStoreMode::ReadOnly
-            },
-            options.mode(),
-            options.busy_timeout(),
+            &options,
             writer_lock,
         ))
     }
@@ -658,7 +690,8 @@ impl StdError for Error {
             Self::Inspect { source, .. }
             | Self::WriterLockOpen { source, .. }
             | Self::WriterLockFailed { source, .. }
-            | Self::WriterUnlockFailed { source, .. } => Some(source),
+            | Self::WriterUnlockFailed { source, .. }
+            | Self::BackupFilesystem { source, .. } => Some(source),
             _ => None,
         }
     }

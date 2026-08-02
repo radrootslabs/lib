@@ -1,6 +1,9 @@
 //! Validated SQLite connection configuration.
 
-use std::time::Duration;
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use crate::{Error, OpenMode, Paths};
 use radroots_storage::{event::SourceGeneration, status::WriterPolicy};
@@ -19,6 +22,7 @@ pub struct OpenOptions {
     mode: OpenMode,
     busy_timeout: Duration,
     source_generation: Option<(SourceGeneration, u64)>,
+    backup_root: Option<PathBuf>,
 }
 
 impl OpenOptions {
@@ -29,6 +33,7 @@ impl OpenOptions {
             mode,
             busy_timeout: DEFAULT_BUSY_TIMEOUT,
             source_generation: None,
+            backup_root: None,
         }
     }
 
@@ -58,6 +63,15 @@ impl OpenOptions {
             });
         }
         self.source_generation = Some((generation, created_at_unix_ms));
+        Ok(self)
+    }
+
+    /// Configures the existing host-owned directory where versioned backup
+    /// bundle directories will be staged and finalized.
+    pub fn with_backup_root(mut self, backup_root: impl Into<PathBuf>) -> Result<Self, Error> {
+        let backup_root = backup_root.into();
+        crate::backup::validate_backup_root(&backup_root)?;
+        self.backup_root = Some(backup_root);
         Ok(self)
     }
 
@@ -105,12 +119,21 @@ impl OpenOptions {
         self.source_generation.map(|(_, created_at)| created_at)
     }
 
+    /// Returns the optional host-owned backup root.
+    pub fn backup_root(&self) -> Option<&Path> {
+        self.backup_root.as_deref()
+    }
+
     pub(crate) const fn source_generation_bootstrap(&self) -> Option<(SourceGeneration, u64)> {
         self.source_generation
     }
 
     /// Validates current filesystem state without creating or modifying files.
     pub fn validate_filesystem(&self) -> Result<(), Error> {
-        self.paths.validate_filesystem(self.mode)
+        self.paths.validate_filesystem(self.mode)?;
+        if let Some(backup_root) = &self.backup_root {
+            crate::backup::validate_backup_root(backup_root)?;
+        }
+        Ok(())
     }
 }

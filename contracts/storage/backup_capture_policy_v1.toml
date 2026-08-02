@@ -1,0 +1,17 @@
+schema_version = 1
+format_version = 1
+backup_root = "explicit_existing_host_owned_absolute_utf8_directory"
+staging_name = ".radroots-backup-{backup_id_hex}.staging"
+final_name = "radroots-backup-{backup_id_hex}"
+capture = "sqlite_vacuum_into"
+runtime_member = "runtime/runtime.sqlite"
+protected_member = "private/private.sqlite"
+exclude_protected_members = ["runtime/runtime.sqlite"]
+include_protected_members = ["runtime/runtime.sqlite", "private/private.sqlite"]
+created_at = "plan_requested_at_unix_ms"
+member_digest = "sha256"
+member_length = "exact_bytes"
+filesystem_sync = ["member_file", "member_directory", "staging_directory", "backup_root"]
+existing_staging_or_final = "reject"
+hidden_clock = false
+unsafe_ffi = false

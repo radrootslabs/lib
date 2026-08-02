@@ -10,7 +10,7 @@ use radroots_storage::{
     status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
 };
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::lock::WriterLock;
 use crate::status::StorageLifecycle;
@@ -22,6 +22,7 @@ pub struct SqliteStorage {
     pub(crate) generation: SourceGeneration,
     pub(crate) mode: EventStoreMode,
     pub(crate) lifecycle: Arc<StorageLifecycle>,
+    pub(crate) backup_root: Option<Arc<PathBuf>>,
 }
 
 struct StoredEventRow {
@@ -43,6 +44,7 @@ impl SqliteStorage {
             generation,
             mode,
             lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
+            backup_root: None,
         }
     }
 
@@ -59,6 +61,7 @@ impl SqliteStorage {
             generation,
             mode,
             lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
+            backup_root: None,
         }
     }
 
@@ -66,17 +69,27 @@ impl SqliteStorage {
         pool: SqlitePool,
         private_pool: SqlitePool,
         generation: SourceGeneration,
-        mode: EventStoreMode,
-        open_mode: crate::OpenMode,
-        busy_timeout: std::time::Duration,
+        options: &crate::OpenOptions,
         writer_lock: Option<WriterLock>,
     ) -> Self {
+        let mode = if options.mode().is_writable() {
+            EventStoreMode::ReadWrite
+        } else {
+            EventStoreMode::ReadOnly
+        };
         Self {
             pool,
             private_pool,
             generation,
             mode,
-            lifecycle: Arc::new(StorageLifecycle::new(open_mode, busy_timeout, writer_lock)),
+            lifecycle: Arc::new(StorageLifecycle::new(
+                options.mode(),
+                options.busy_timeout(),
+                writer_lock,
+            )),
+            backup_root: options
+                .backup_root()
+                .map(|path| Arc::new(path.to_path_buf())),
         }
     }
 
