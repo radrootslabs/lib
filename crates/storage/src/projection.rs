@@ -3,8 +3,8 @@
 //! Storage owns durable coordination metadata. Domain reducers and projected
 //! row representations remain in their domain packages.
 
-use radroots_event::EventId;
-use radroots_transport::BoxFuture;
+pub use radroots_event::EventId;
+pub use radroots_transport::BoxFuture;
 use std::collections::BTreeSet;
 
 use crate::{Error, event::EventPosition};
@@ -248,6 +248,44 @@ impl RebuildTicket {
             requested_at_unix_ms: at,
             updated_at_unix_ms: at,
         }
+    }
+
+    /// Reconstructs and validates one durable rebuild ticket.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_durable_parts(
+        ticket_id: RebuildTicketId,
+        invalidation: ProjectionInvalidation,
+        revision: ProjectionRevision,
+        stage: RebuildStage,
+        checkpoint: Option<ProjectionCheckpoint>,
+        requested_at_unix_ms: u64,
+        updated_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        if requested_at_unix_ms != invalidation.invalidated_at_unix_ms()
+            || updated_at_unix_ms < requested_at_unix_ms
+            || matches!(stage, RebuildStage::Requested)
+                && (revision != ProjectionRevision::INITIAL
+                    || updated_at_unix_ms != requested_at_unix_ms)
+            || !matches!(stage, RebuildStage::Requested) && revision == ProjectionRevision::INITIAL
+            || matches!(stage, RebuildStage::Requested) && checkpoint.is_some()
+            || matches!(stage, RebuildStage::Completed) && checkpoint.is_none()
+            || checkpoint.as_ref().is_some_and(|checkpoint| {
+                checkpoint.projection_id() != invalidation.projection_id()
+                    || checkpoint.generation() != invalidation.replacement_generation()
+                    || checkpoint.updated_at_unix_ms() > updated_at_unix_ms
+            })
+        {
+            return Err(Error::CorruptProjectionRecord);
+        }
+        Ok(Self {
+            ticket_id,
+            invalidation,
+            revision,
+            stage,
+            checkpoint,
+            requested_at_unix_ms,
+            updated_at_unix_ms,
+        })
     }
     pub const fn ticket_id(&self) -> RebuildTicketId {
         self.ticket_id

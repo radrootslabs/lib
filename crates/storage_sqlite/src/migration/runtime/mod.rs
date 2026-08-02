@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 4;
+pub const CURRENT_VERSION: u32 = 5;
 
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
@@ -16,6 +16,8 @@ const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_
 const OPERATION_JOURNAL_V3_SQL: &str = include_str!("0003_operation_journal.up.sql");
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const OUTBOX_DELIVERY_EVIDENCE_V4_SQL: &str = include_str!("0004_outbox_delivery_evidence.up.sql");
+#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
+const PROJECTION_METADATA_V5_SQL: &str = include_str!("0005_projection_metadata.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166,6 +168,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "435ad7590be7cd9d5b5ee3c9eb2d53419eba3ba12b0f0fc623f1787517524842",
         owned_objects: RUNTIME_V4_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 5,
+        name: "projection_metadata",
+        up_sha256: "ef162e3591057414b5704ff07fc93e57127ad7996ab3d431541418fd9c285e51",
+        owned_objects: RUNTIME_V4_OBJECTS,
+    },
 ];
 
 #[allow(dead_code)] // Keeps raw SQL crate-private until the migration executor is installed.
@@ -175,6 +183,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         2 => Some(CANONICAL_EVENT_STORAGE_V2_SQL),
         3 => Some(OPERATION_JOURNAL_V3_SQL),
         4 => Some(OUTBOX_DELIVERY_EVIDENCE_V4_SQL),
+        5 => Some(PROJECTION_METADATA_V5_SQL),
         _ => None,
     }
 }
@@ -216,9 +225,9 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 4);
-        assert_eq!(MIGRATIONS.len(), 4);
-        let migration = MIGRATIONS[3];
+        assert_eq!(CURRENT_VERSION, 5);
+        assert_eq!(MIGRATIONS.len(), 5);
+        let migration = MIGRATIONS[4];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
@@ -244,7 +253,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(5), None);
+        assert_eq!(migration_sql(6), None);
     }
 
     #[tokio::test]

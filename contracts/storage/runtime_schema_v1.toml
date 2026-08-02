@@ -1,9 +1,9 @@
 schema_version = 1
 database = "runtime.sqlite"
 minimum_version = 1
-current_version = 4
-migration_name = "outbox_delivery_evidence"
-migration_sha256 = "435ad7590be7cd9d5b5ee3c9eb2d53419eba3ba12b0f0fc623f1787517524842"
+current_version = 5
+migration_name = "projection_metadata"
+migration_sha256 = "ef162e3591057414b5704ff07fc93e57127ad7996ab3d431541418fd9c285e51"
 forward_only = true
 raw_sql_public = false
 
@@ -136,6 +136,43 @@ owned_objects = [
 version = 4
 name = "outbox_delivery_evidence"
 sha256 = "435ad7590be7cd9d5b5ee3c9eb2d53419eba3ba12b0f0fc623f1787517524842"
+
+owned_objects = [
+  "radroots_runtime_atomic_commits",
+  "radroots_runtime_delivery_evidence",
+  "radroots_runtime_delivery_evidence_item_idx",
+  "radroots_runtime_event_index_checkpoints",
+  "radroots_runtime_event_index_manifests",
+  "radroots_runtime_event_index_shards",
+  "radroots_runtime_event_provenance",
+  "radroots_runtime_event_provenance_observed_idx",
+  "radroots_runtime_events",
+  "radroots_runtime_events_admission_idx",
+  "radroots_runtime_events_delete_guard",
+  "radroots_runtime_events_event_id_idx",
+  "radroots_runtime_events_raw_update_guard",
+  "radroots_runtime_journal_idempotency_idx",
+  "radroots_runtime_journal_operations",
+  "radroots_runtime_journal_recovery_idx",
+  "radroots_runtime_outbox_items",
+  "radroots_runtime_outbox_operation_idx",
+  "radroots_runtime_outbox_ready_idx",
+  "radroots_runtime_outbox_targets",
+  "radroots_runtime_projection_checkpoints",
+  "radroots_runtime_projection_invalidations",
+  "radroots_runtime_projection_rebuilds",
+  "radroots_runtime_projection_rebuilds_stage_idx",
+  "radroots_runtime_source_generations",
+  "radroots_runtime_source_generations_active_idx",
+  "radroots_runtime_source_generations_delete_guard",
+  "radroots_runtime_source_generations_identity_guard",
+  "radroots_runtime_source_generations_sequence_guard",
+]
+
+[[migrations]]
+version = 5
+name = "projection_metadata"
+sha256 = "ef162e3591057414b5704ff07fc93e57127ad7996ab3d431541418fd9c285e51"
 
 owned_objects = [
   "radroots_runtime_atomic_commits",

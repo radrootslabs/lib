@@ -11,6 +11,7 @@ pub mod status;
 mod event;
 mod journal;
 mod outbox;
+mod projection;
 
 pub use config::OpenOptions;
 pub use event::SqliteStorage;
