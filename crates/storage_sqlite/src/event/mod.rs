@@ -10,6 +10,9 @@ use radroots_storage::{
     status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
 };
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
+use std::sync::Arc;
+
+use crate::lock::WriterLock;
 
 #[derive(Clone)]
 pub struct SqliteStorage {
@@ -17,6 +20,7 @@ pub struct SqliteStorage {
     private_pool: SqlitePool,
     generation: SourceGeneration,
     mode: EventStoreMode,
+    _writer_lock: Option<Arc<WriterLock>>,
 }
 
 struct StoredEventRow {
@@ -26,7 +30,7 @@ struct StoredEventRow {
 }
 
 impl SqliteStorage {
-    #[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
+    #[allow(dead_code)] // Single-pool in-memory scaffold retained for focused backend tests.
     pub(crate) fn new(
         pool: SqlitePool,
         generation: SourceGeneration,
@@ -37,10 +41,11 @@ impl SqliteStorage {
             pool,
             generation,
             mode,
+            _writer_lock: None,
         }
     }
 
-    #[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
+    #[allow(dead_code)] // Two-pool in-memory scaffold retained for focused backend tests.
     pub(crate) fn with_private_pool(
         pool: SqlitePool,
         private_pool: SqlitePool,
@@ -52,6 +57,23 @@ impl SqliteStorage {
             private_pool,
             generation,
             mode,
+            _writer_lock: None,
+        }
+    }
+
+    pub(crate) fn from_opened(
+        pool: SqlitePool,
+        private_pool: SqlitePool,
+        generation: SourceGeneration,
+        mode: EventStoreMode,
+        writer_lock: Option<WriterLock>,
+    ) -> Self {
+        Self {
+            pool,
+            private_pool,
+            generation,
+            mode,
+            _writer_lock: writer_lock.map(Arc::new),
         }
     }
 

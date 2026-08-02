@@ -1,6 +1,7 @@
 use std::fs;
 use std::time::Duration;
 
+use radroots_storage::event::SourceGeneration;
 use radroots_storage::status::WriterPolicy;
 use radroots_storage_sqlite::{Error, OpenMode, OpenOptions, Paths};
 
@@ -98,4 +99,19 @@ fn options_fix_connection_invariants_and_bound_busy_timeout() {
             Err(Error::InvalidBusyTimeout { .. })
         ));
     }
+
+    let generation = SourceGeneration::new([9; 32]).expect("source generation");
+    let bootstrapped = OpenOptions::new(create.paths().clone(), OpenMode::Create)
+        .with_source_generation(generation, 42)
+        .expect("source generation bootstrap");
+    assert_eq!(bootstrapped.source_generation(), Some(generation));
+    assert_eq!(
+        bootstrapped.source_generation_created_at_unix_ms(),
+        Some(42)
+    );
+    assert!(matches!(
+        OpenOptions::new(create.paths().clone(), OpenMode::Create)
+            .with_source_generation(generation, 0),
+        Err(Error::InvalidSourceGenerationTimestamp { actual: 0 })
+    ));
 }

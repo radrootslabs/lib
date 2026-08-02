@@ -5,8 +5,16 @@ use std::fmt;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
+use crate::{OpenOptions, event::SqliteStorage, lock::WriterLock, migration};
+use radroots_storage::{event::SourceGeneration, status::EventStoreMode};
+use sqlx::{
+    ConnectOptions, Connection, Row, SqliteConnection, SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
+};
+
 const RUNTIME_DATABASE_NAME: &str = "runtime.sqlite";
 const PRIVATE_DATABASE_NAME: &str = "private.sqlite";
+const MAX_CONNECTIONS_PER_DATABASE: u32 = 4;
 
 /// Explicit behavior for opening owned SQLite files.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166,6 +174,9 @@ pub enum Error {
         maximum: Duration,
         actual: Duration,
     },
+    InvalidSourceGenerationTimestamp {
+        actual: u64,
+    },
     WriterLockOpen {
         path: PathBuf,
         source: std::io::Error,
@@ -215,6 +226,19 @@ pub enum Error {
         database: &'static str,
         target_version: u32,
     },
+    DatabaseOpenFailed {
+        database: &'static str,
+    },
+    DatabaseCloseFailed {
+        database: &'static str,
+    },
+    ConnectionPolicyMismatch {
+        database: &'static str,
+    },
+    SourceGenerationRequired,
+    SourceGenerationUnavailable,
+    SourceGenerationMismatch,
+    CorruptSourceGeneration,
 }
 
 impl fmt::Display for Error {
@@ -268,6 +292,10 @@ impl fmt::Display for Error {
             } => write!(
                 formatter,
                 "SQLite busy timeout {actual:?} must be within {minimum:?}..={maximum:?}"
+            ),
+            Self::InvalidSourceGenerationTimestamp { actual } => write!(
+                formatter,
+                "source generation creation time {actual} must fit a positive SQLite integer"
             ),
             Self::WriterLockOpen { path, .. } => write!(
                 formatter,
@@ -341,7 +369,284 @@ impl fmt::Display for Error {
                 formatter,
                 "{database} migration to schema version {target_version} failed"
             ),
+            Self::DatabaseOpenFailed { database } => {
+                write!(
+                    formatter,
+                    "failed to open governed SQLite database {database}"
+                )
+            }
+            Self::DatabaseCloseFailed { database } => write!(
+                formatter,
+                "failed to close migration connection for {database}"
+            ),
+            Self::ConnectionPolicyMismatch { database } => write!(
+                formatter,
+                "{database} does not satisfy the governed SQLite connection policy"
+            ),
+            Self::SourceGenerationRequired => formatter.write_str(
+                "a fresh writable SQLite store requires a host-supplied source generation",
+            ),
+            Self::SourceGenerationUnavailable => {
+                formatter.write_str("SQLite storage has no active source generation")
+            }
+            Self::SourceGenerationMismatch => formatter
+                .write_str("host-supplied source generation does not match durable storage"),
+            Self::CorruptSourceGeneration => {
+                formatter.write_str("SQLite storage source generation is corrupt")
+            }
         }
+    }
+}
+
+impl SqliteStorage {
+    /// Opens both governed databases, applying only authorized forward
+    /// migrations and retaining the writer guard for the backend lifetime.
+    pub async fn open(options: OpenOptions) -> Result<Self, Error> {
+        options.validate_filesystem()?;
+        let runtime_exists =
+            options
+                .paths()
+                .runtime()
+                .try_exists()
+                .map_err(|source| Error::Inspect {
+                    path: options.paths().runtime().to_path_buf(),
+                    source,
+                })?;
+        if options.mode().may_create() && !runtime_exists && options.source_generation().is_none() {
+            return Err(Error::SourceGenerationRequired);
+        }
+        let writer_lock = WriterLock::acquire(options.paths(), options.mode())?;
+        options.validate_filesystem()?;
+
+        let runtime_options = connect_options(
+            options.paths().runtime(),
+            options.mode(),
+            options.busy_timeout(),
+        );
+        let private_options = connect_options(
+            options.paths().private(),
+            options.mode(),
+            options.busy_timeout(),
+        );
+        let mut runtime_connection =
+            connect(runtime_options.clone(), RUNTIME_DATABASE_NAME).await?;
+        let mut private_connection =
+            connect(private_options.clone(), PRIVATE_DATABASE_NAME).await?;
+
+        migration::migrate_runtime(&mut runtime_connection, options.mode()).await?;
+        migration::migrate_private(&mut private_connection, options.mode()).await?;
+        let generation = active_source_generation(
+            &mut runtime_connection,
+            options.mode(),
+            options.source_generation_bootstrap(),
+        )
+        .await?;
+        verify_connection(
+            &mut runtime_connection,
+            RUNTIME_DATABASE_NAME,
+            options.busy_timeout(),
+        )
+        .await?;
+        verify_connection(
+            &mut private_connection,
+            PRIVATE_DATABASE_NAME,
+            options.busy_timeout(),
+        )
+        .await?;
+        runtime_connection
+            .close()
+            .await
+            .map_err(|_| Error::DatabaseCloseFailed {
+                database: RUNTIME_DATABASE_NAME,
+            })?;
+        private_connection
+            .close()
+            .await
+            .map_err(|_| Error::DatabaseCloseFailed {
+                database: PRIVATE_DATABASE_NAME,
+            })?;
+
+        let runtime_pool = pool(runtime_options, RUNTIME_DATABASE_NAME).await?;
+        let private_pool = pool(private_options, PRIVATE_DATABASE_NAME).await?;
+        verify_pool(&runtime_pool, RUNTIME_DATABASE_NAME, options.busy_timeout()).await?;
+        verify_pool(&private_pool, PRIVATE_DATABASE_NAME, options.busy_timeout()).await?;
+
+        Ok(Self::from_opened(
+            runtime_pool,
+            private_pool,
+            generation,
+            if options.mode().is_writable() {
+                EventStoreMode::ReadWrite
+            } else {
+                EventStoreMode::ReadOnly
+            },
+            writer_lock,
+        ))
+    }
+}
+
+fn connect_options(path: &Path, mode: OpenMode, busy_timeout: Duration) -> SqliteConnectOptions {
+    let mut options = SqliteConnectOptions::new()
+        .filename(path)
+        .read_only(!mode.is_writable())
+        .create_if_missing(mode.may_create())
+        .foreign_keys(true)
+        .busy_timeout(busy_timeout)
+        .synchronous(SqliteSynchronous::Full)
+        .disable_statement_logging();
+    if mode.is_writable() {
+        options = options.journal_mode(SqliteJournalMode::Wal);
+    }
+    options
+}
+
+async fn connect(
+    options: SqliteConnectOptions,
+    database: &'static str,
+) -> Result<SqliteConnection, Error> {
+    SqliteConnection::connect_with(&options)
+        .await
+        .map_err(|_| Error::DatabaseOpenFailed { database })
+}
+
+async fn pool(options: SqliteConnectOptions, database: &'static str) -> Result<SqlitePool, Error> {
+    SqlitePoolOptions::new()
+        .max_connections(MAX_CONNECTIONS_PER_DATABASE)
+        .min_connections(1)
+        .connect_with(options)
+        .await
+        .map_err(|_| Error::DatabaseOpenFailed { database })
+}
+
+async fn active_source_generation(
+    connection: &mut SqliteConnection,
+    mode: OpenMode,
+    expected: Option<(SourceGeneration, u64)>,
+) -> Result<SourceGeneration, Error> {
+    if !mode.is_writable() {
+        let rows = active_generation_rows(connection).await?;
+        return existing_source_generation(rows.as_slice(), expected);
+    }
+    let mut transaction = connection
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|_| Error::SourceGenerationUnavailable)?;
+    let rows = active_generation_rows(&mut transaction).await?;
+    let generation = match rows.as_slice() {
+        [] => {
+            let (generation, created_at) = expected.ok_or(Error::SourceGenerationRequired)?;
+            sqlx::query(
+                "INSERT INTO radroots_runtime_source_generations (
+                   generation, sequence_head, state, created_at_unix_ms
+                 ) VALUES (?, 0, 'active', ?)",
+            )
+            .bind(generation.as_bytes().as_slice())
+            .bind(i64::try_from(created_at).map_err(|_| Error::CorruptSourceGeneration)?)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::SourceGenerationUnavailable)?;
+            generation
+        }
+        [_] => existing_source_generation(rows.as_slice(), expected)?,
+        _ => return Err(Error::CorruptSourceGeneration),
+    };
+    transaction
+        .commit()
+        .await
+        .map_err(|_| Error::SourceGenerationUnavailable)?;
+    Ok(generation)
+}
+
+async fn active_generation_rows(
+    connection: &mut SqliteConnection,
+) -> Result<Vec<sqlx::sqlite::SqliteRow>, Error> {
+    sqlx::query(
+        "SELECT generation, created_at_unix_ms
+         FROM radroots_runtime_source_generations
+         WHERE state = 'active' ORDER BY generation",
+    )
+    .fetch_all(connection)
+    .await
+    .map_err(|_| Error::SourceGenerationUnavailable)
+}
+
+fn existing_source_generation(
+    rows: &[sqlx::sqlite::SqliteRow],
+    expected: Option<(SourceGeneration, u64)>,
+) -> Result<SourceGeneration, Error> {
+    let [row] = rows else {
+        return if rows.is_empty() {
+            Err(Error::SourceGenerationUnavailable)
+        } else {
+            Err(Error::CorruptSourceGeneration)
+        };
+    };
+    let durable = decode_source_generation(row)?;
+    let created_at = u64::try_from(
+        row.try_get::<i64, _>("created_at_unix_ms")
+            .map_err(|_| Error::CorruptSourceGeneration)?,
+    )
+    .map_err(|_| Error::CorruptSourceGeneration)?;
+    if expected.is_some_and(|candidate| candidate != (durable, created_at)) {
+        Err(Error::SourceGenerationMismatch)
+    } else {
+        Ok(durable)
+    }
+}
+
+fn decode_source_generation(row: &sqlx::sqlite::SqliteRow) -> Result<SourceGeneration, Error> {
+    SourceGeneration::new(
+        row.try_get::<Vec<u8>, _>("generation")
+            .map_err(|_| Error::CorruptSourceGeneration)?
+            .try_into()
+            .map_err(|_| Error::CorruptSourceGeneration)?,
+    )
+    .map_err(|_| Error::CorruptSourceGeneration)
+}
+
+async fn verify_pool(
+    pool: &SqlitePool,
+    database: &'static str,
+    busy_timeout: Duration,
+) -> Result<(), Error> {
+    let mut connection = pool
+        .acquire()
+        .await
+        .map_err(|_| Error::DatabaseOpenFailed { database })?;
+    verify_connection(&mut connection, database, busy_timeout).await
+}
+
+async fn verify_connection(
+    connection: &mut SqliteConnection,
+    database: &'static str,
+    busy_timeout: Duration,
+) -> Result<(), Error> {
+    let foreign_keys = sqlx::query_scalar::<_, i64>("PRAGMA foreign_keys")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+    let journal_mode = sqlx::query_scalar::<_, String>("PRAGMA journal_mode")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+    let configured_busy_timeout = sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+    let synchronous = sqlx::query_scalar::<_, i64>("PRAGMA synchronous")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+    let expected_busy_timeout = i64::try_from(busy_timeout.as_millis())
+        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+    if foreign_keys == 1
+        && journal_mode.eq_ignore_ascii_case("wal")
+        && configured_busy_timeout == expected_busy_timeout
+        && synchronous == 2
+    {
+        Ok(())
+    } else {
+        Err(Error::ConnectionPolicyMismatch { database })
     }
 }
 
@@ -354,5 +659,55 @@ impl StdError for Error {
             | Self::WriterUnlockFailed { source, .. } => Some(source),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+    use serde::Deserialize;
+
+    const POLICY: &str = include_str!("../../../contracts/storage/connection_policy_v1.toml");
+
+    #[derive(Deserialize)]
+    struct Policy {
+        schema_version: u32,
+        databases: Vec<String>,
+        max_connections_per_database: u32,
+        foreign_keys: bool,
+        journal_mode: String,
+        synchronous: String,
+        busy_timeout_min_ms: u64,
+        busy_timeout_default_ms: u64,
+        busy_timeout_max_ms: u64,
+        fresh_source_generation: String,
+        read_only_migrations: bool,
+        raw_handles_public: bool,
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_connection_policy() {
+        let policy = toml::from_str::<Policy>(POLICY).expect("connection policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.databases,
+            [RUNTIME_DATABASE_NAME, PRIVATE_DATABASE_NAME]
+        );
+        assert_eq!(
+            policy.max_connections_per_database,
+            MAX_CONNECTIONS_PER_DATABASE
+        );
+        assert!(policy.foreign_keys);
+        assert_eq!(policy.journal_mode, "wal");
+        assert_eq!(policy.synchronous, "full");
+        assert_eq!(policy.busy_timeout_min_ms, 1);
+        assert_eq!(policy.busy_timeout_default_ms, 5_000);
+        assert_eq!(policy.busy_timeout_max_ms, 60_000);
+        assert_eq!(
+            policy.fresh_source_generation,
+            "host_supplied_entropy_and_timestamp"
+        );
+        assert!(!policy.read_only_migrations);
+        assert!(!policy.raw_handles_public);
     }
 }

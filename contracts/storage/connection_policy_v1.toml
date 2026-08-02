@@ -1,0 +1,12 @@
+schema_version = 1
+databases = ["runtime.sqlite", "private.sqlite"]
+max_connections_per_database = 4
+foreign_keys = true
+journal_mode = "wal"
+synchronous = "full"
+busy_timeout_min_ms = 1
+busy_timeout_default_ms = 5000
+busy_timeout_max_ms = 60000
+fresh_source_generation = "host_supplied_entropy_and_timestamp"
+read_only_migrations = false
+raw_handles_public = false

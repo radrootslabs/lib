@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use crate::{Error, OpenMode, Paths};
-use radroots_storage::status::WriterPolicy;
+use radroots_storage::{event::SourceGeneration, status::WriterPolicy};
 
 const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const MIN_BUSY_TIMEOUT: Duration = Duration::from_millis(1);
@@ -18,6 +18,7 @@ pub struct OpenOptions {
     paths: Paths,
     mode: OpenMode,
     busy_timeout: Duration,
+    source_generation: Option<(SourceGeneration, u64)>,
 }
 
 impl OpenOptions {
@@ -27,6 +28,7 @@ impl OpenOptions {
             paths,
             mode,
             busy_timeout: DEFAULT_BUSY_TIMEOUT,
+            source_generation: None,
         }
     }
 
@@ -40,6 +42,22 @@ impl OpenOptions {
             });
         }
         self.busy_timeout = busy_timeout;
+        Ok(self)
+    }
+
+    /// Supplies the expected active source generation, or bootstraps it for a
+    /// fresh writable store, without reading hidden entropy or a wall clock.
+    pub fn with_source_generation(
+        mut self,
+        generation: SourceGeneration,
+        created_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        if created_at_unix_ms == 0 || i64::try_from(created_at_unix_ms).is_err() {
+            return Err(Error::InvalidSourceGenerationTimestamp {
+                actual: created_at_unix_ms,
+            });
+        }
+        self.source_generation = Some((generation, created_at_unix_ms));
         Ok(self)
     }
 
@@ -75,6 +93,20 @@ impl OpenOptions {
         } else {
             WriterPolicy::NoWriter
         }
+    }
+
+    /// Returns the optional host-supplied source generation expectation.
+    pub fn source_generation(&self) -> Option<SourceGeneration> {
+        self.source_generation.map(|(generation, _)| generation)
+    }
+
+    /// Returns the host-supplied creation time paired with the generation.
+    pub fn source_generation_created_at_unix_ms(&self) -> Option<u64> {
+        self.source_generation.map(|(_, created_at)| created_at)
+    }
+
+    pub(crate) const fn source_generation_bootstrap(&self) -> Option<(SourceGeneration, u64)> {
+        self.source_generation
     }
 
     /// Validates current filesystem state without creating or modifying files.
