@@ -1,5 +1,6 @@
 schema_version = 1
 database = "runtime.sqlite"
+application_id = 1380209236 # ASCII "RDRT"
 minimum_version = 1
 current_version = 5
 migration_name = "projection_metadata"

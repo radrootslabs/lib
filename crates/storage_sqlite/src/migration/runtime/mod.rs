@@ -8,15 +8,10 @@ pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
 pub const CURRENT_VERSION: u32 = 5;
 
-#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
-#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
-#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const OPERATION_JOURNAL_V3_SQL: &str = include_str!("0003_operation_journal.up.sql");
-#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const OUTBOX_DELIVERY_EVIDENCE_V4_SQL: &str = include_str!("0004_outbox_delivery_evidence.up.sql");
-#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const PROJECTION_METADATA_V5_SQL: &str = include_str!("0005_projection_metadata.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
@@ -176,7 +171,6 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
     },
 ];
 
-#[allow(dead_code)] // Keeps raw SQL crate-private until the migration executor is installed.
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(RUNTIME_V1_SQL),
@@ -202,6 +196,7 @@ mod tests {
     struct PlanSnapshot {
         schema_version: u32,
         database: String,
+        application_id: u32,
         minimum_version: u32,
         current_version: u32,
         migration_name: String,
@@ -230,6 +225,7 @@ mod tests {
         let migration = MIGRATIONS[4];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
+        assert_eq!(snapshot.application_id, 1_380_209_236);
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
         assert_eq!(snapshot.current_version, CURRENT_VERSION);
         assert_eq!(snapshot.migration_name, migration.name());

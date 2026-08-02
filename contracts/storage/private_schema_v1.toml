@@ -1,5 +1,6 @@
 schema_version = 1
 database = "private.sqlite"
+application_id = 1380208722 # ASCII "RDPR"
 minimum_version = 1
 current_version = 1
 migration_name = "private_artifacts"

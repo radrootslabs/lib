@@ -181,6 +181,40 @@ pub enum Error {
         path: PathBuf,
         source: std::io::Error,
     },
+    SchemaMetadataUnavailable {
+        database: &'static str,
+    },
+    SchemaIdentityMismatch {
+        database: &'static str,
+        expected: u32,
+        actual: u32,
+    },
+    SchemaTooOld {
+        database: &'static str,
+        minimum: u32,
+        actual: u32,
+    },
+    SchemaTooNew {
+        database: &'static str,
+        supported: u32,
+        actual: u32,
+    },
+    SchemaMigrationRequired {
+        database: &'static str,
+        current: u32,
+        actual: u32,
+    },
+    UnrecognizedSchema {
+        database: &'static str,
+    },
+    SchemaCatalogMismatch {
+        database: &'static str,
+        version: u32,
+    },
+    SchemaMigrationFailed {
+        database: &'static str,
+        target_version: u32,
+    },
 }
 
 impl fmt::Display for Error {
@@ -254,6 +288,58 @@ impl fmt::Display for Error {
                 formatter,
                 "failed to release SQLite writer lock: {}",
                 path.display()
+            ),
+            Self::SchemaMetadataUnavailable { database } => {
+                write!(formatter, "failed to inspect {database} schema metadata")
+            }
+            Self::SchemaIdentityMismatch {
+                database,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "{database} application id {actual} does not match required id {expected}"
+            ),
+            Self::SchemaTooOld {
+                database,
+                minimum,
+                actual,
+            } => write!(
+                formatter,
+                "{database} schema version {actual} is older than supported version {minimum}"
+            ),
+            Self::SchemaTooNew {
+                database,
+                supported,
+                actual,
+            } => write!(
+                formatter,
+                "{database} schema version {actual} is newer than supported version {supported}"
+            ),
+            Self::SchemaMigrationRequired {
+                database,
+                current,
+                actual,
+            } => write!(
+                formatter,
+                "{database} schema version {actual} requires writable migration to {current}"
+            ),
+            Self::UnrecognizedSchema { database } => {
+                write!(
+                    formatter,
+                    "{database} has an unrecognized unversioned schema"
+                )
+            }
+            Self::SchemaCatalogMismatch { database, version } => write!(
+                formatter,
+                "{database} object catalog does not match schema version {version}"
+            ),
+            Self::SchemaMigrationFailed {
+                database,
+                target_version,
+            } => write!(
+                formatter,
+                "{database} migration to schema version {target_version} failed"
             ),
         }
     }

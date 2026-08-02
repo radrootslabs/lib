@@ -8,7 +8,6 @@ pub const MINIMUM_VERSION: u32 = 1;
 /// Current private schema version created by this package.
 pub const CURRENT_VERSION: u32 = 1;
 
-#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const PRIVATE_V1_SQL: &str = include_str!("0001_private.up.sql");
 
 /// Stable, non-SQL description of one forward private migration.
@@ -56,7 +55,6 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[MigrationDescriptor {
     owned_objects: PRIVATE_V1_OBJECTS,
 }];
 
-#[allow(dead_code)] // Keeps raw SQL crate-private until the migration executor is installed.
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(PRIVATE_V1_SQL),
@@ -78,6 +76,7 @@ mod tests {
     struct PlanSnapshot {
         schema_version: u32,
         database: String,
+        application_id: u32,
         minimum_version: u32,
         current_version: u32,
         migration_name: String,
@@ -104,6 +103,7 @@ mod tests {
         let migration = MIGRATIONS[0];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "private.sqlite");
+        assert_eq!(snapshot.application_id, 1_380_208_722);
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
         assert_eq!(snapshot.current_version, CURRENT_VERSION);
         assert_eq!(snapshot.migration_name, migration.name());
