@@ -1,6 +1,7 @@
 //! Consistent SQLite backup capture and bundle layout.
 
 use std::{
+    collections::BTreeSet,
     fs::{self, File},
     io::Read,
     path::{Component, Path, PathBuf},
@@ -12,8 +13,9 @@ use radroots_storage::backup::{
 };
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
+use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 
-use crate::{Error, SqliteStorage};
+use crate::{Error, OpenMode, SqliteStorage, integrity, migration};
 
 const RUNTIME_DATABASE: &str = "runtime.sqlite";
 const PRIVATE_DATABASE: &str = "private.sqlite";
@@ -80,6 +82,67 @@ impl SqliteStorage {
         )
         .map_err(|_| Error::BackupCaptureFailed { member: "manifest" })
     }
+
+    /// Verifies the complete staged bundle without mutating or finalizing it.
+    pub async fn verify_backup(
+        &self,
+        plan: &BackupPlan,
+        manifest: &BackupManifest,
+    ) -> Result<(), Error> {
+        self.lifecycle
+            .require_open()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        let backup_root = self
+            .backup_root
+            .as_deref()
+            .ok_or(Error::BackupRootRequired)?;
+        validate_backup_root(backup_root)?;
+        let layout = BackupLayout::new(backup_root, plan);
+        verify_bundle(&layout.staging, plan, manifest).await
+    }
+
+    /// Verifies and atomically renames a complete staging bundle. A retry
+    /// against an already finalized valid bundle succeeds idempotently.
+    pub async fn finalize_backup(
+        &self,
+        plan: &BackupPlan,
+        manifest: &BackupManifest,
+    ) -> Result<PathBuf, Error> {
+        self.lifecycle
+            .require_open()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        let backup_root = self
+            .backup_root
+            .as_deref()
+            .ok_or(Error::BackupRootRequired)?;
+        validate_backup_root(backup_root)?;
+        let layout = BackupLayout::new(backup_root, plan);
+        let staging = entry_kind(&layout.staging)?;
+        let finalized = entry_kind(&layout.finalized)?;
+        match (staging, finalized) {
+            (EntryKind::Missing, EntryKind::Directory) => {
+                verify_bundle(&layout.finalized, plan, manifest).await?;
+                Ok(layout.finalized)
+            }
+            (EntryKind::Directory, EntryKind::Missing) => {
+                verify_bundle(&layout.staging, plan, manifest).await?;
+                fs::rename(&layout.staging, &layout.finalized).map_err(|source| {
+                    Error::BackupFilesystem {
+                        operation: "atomically finalize backup bundle",
+                        source,
+                    }
+                })?;
+                sync_directory(backup_root, "sync finalized backup root")?;
+                Ok(layout.finalized)
+            }
+            (EntryKind::Missing, EntryKind::Missing) => {
+                Err(Error::BackupBundleMissing(layout.staging))
+            }
+            (_, EntryKind::Directory) => Err(Error::BackupBundleAlreadyExists(layout.finalized)),
+            (EntryKind::Other, _) => Err(Error::BackupUnexpectedEntry(layout.staging)),
+            (_, EntryKind::Other) => Err(Error::BackupUnexpectedEntry(layout.finalized)),
+        }
+    }
 }
 
 pub(crate) fn validate_backup_root(path: &Path) -> Result<(), Error> {
@@ -113,6 +176,27 @@ struct BackupLayout {
     private_directory: PathBuf,
     runtime_file: PathBuf,
     private_file: PathBuf,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum EntryKind {
+    Missing,
+    Directory,
+    Other,
+}
+
+fn entry_kind(path: &Path) -> Result<EntryKind, Error> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            Ok(EntryKind::Directory)
+        }
+        Ok(_) => Ok(EntryKind::Other),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(EntryKind::Missing),
+        Err(source) => Err(Error::BackupFilesystem {
+            operation: "inspect backup bundle",
+            source,
+        }),
+    }
 }
 
 impl BackupLayout {
@@ -252,6 +336,202 @@ fn sync_directory(path: &Path, operation: &'static str) -> Result<(), Error> {
         .map_err(|source| Error::BackupFilesystem { operation, source })
 }
 
+async fn verify_bundle(
+    bundle: &Path,
+    plan: &BackupPlan,
+    manifest: &BackupManifest,
+) -> Result<(), Error> {
+    if entry_kind(bundle)? != EntryKind::Directory {
+        return Err(Error::BackupBundleMissing(bundle.to_path_buf()));
+    }
+    validate_manifest(plan, manifest)?;
+    let expected_root = if plan.secret_policy() == BackupSecretPolicy::IncludeProtectedStorage {
+        BTreeSet::from(["private", "runtime"])
+    } else {
+        BTreeSet::from(["runtime"])
+    };
+    validate_entries(bundle, &expected_root)?;
+    let runtime_directory = bundle.join("runtime");
+    validate_entries(&runtime_directory, &BTreeSet::from([RUNTIME_DATABASE]))?;
+    verify_member(
+        &runtime_directory.join(RUNTIME_DATABASE),
+        manifest
+            .member(RUNTIME_MEMBER)
+            .ok_or(Error::BackupVerificationFailed {
+                member: RUNTIME_MEMBER,
+            })?,
+        BackupMemberKind::Runtime,
+        RUNTIME_MEMBER,
+        true,
+    )
+    .await?;
+    if plan.secret_policy() == BackupSecretPolicy::IncludeProtectedStorage {
+        let private_directory = bundle.join("private");
+        validate_entries(&private_directory, &BTreeSet::from([PRIVATE_DATABASE]))?;
+        verify_member(
+            &private_directory.join(PRIVATE_DATABASE),
+            manifest
+                .member(PRIVATE_MEMBER)
+                .ok_or(Error::BackupVerificationFailed {
+                    member: PRIVATE_MEMBER,
+                })?,
+            BackupMemberKind::Protected,
+            PRIVATE_MEMBER,
+            false,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+fn validate_manifest(plan: &BackupPlan, manifest: &BackupManifest) -> Result<(), Error> {
+    if plan.format_version() != BackupFormatVersion::V1
+        || manifest.format_version() != plan.format_version()
+        || manifest.backup_id() != plan.backup_id()
+        || manifest.secret_policy() != plan.secret_policy()
+        || manifest.created_at_unix_ms() != plan.requested_at_unix_ms()
+    {
+        return Err(Error::BackupVerificationFailed { member: "manifest" });
+    }
+    let expected = if plan.secret_policy() == BackupSecretPolicy::IncludeProtectedStorage {
+        BTreeSet::from([PRIVATE_MEMBER, RUNTIME_MEMBER])
+    } else {
+        BTreeSet::from([RUNTIME_MEMBER])
+    };
+    let actual = manifest
+        .members()
+        .iter()
+        .map(BackupMember::relative_path)
+        .collect::<BTreeSet<_>>();
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(Error::BackupVerificationFailed { member: "manifest" })
+    }
+}
+
+fn validate_entries(directory: &Path, expected: &BTreeSet<&str>) -> Result<(), Error> {
+    let mut actual = BTreeSet::new();
+    let entries = fs::read_dir(directory).map_err(|source| Error::BackupFilesystem {
+        operation: "read backup bundle directory",
+        source,
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|source| Error::BackupFilesystem {
+            operation: "read backup bundle entry",
+            source,
+        })?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| Error::BackupUnexpectedEntry(entry.path()))?;
+        let metadata =
+            fs::symlink_metadata(entry.path()).map_err(|source| Error::BackupFilesystem {
+                operation: "inspect backup bundle entry",
+                source,
+            })?;
+        if metadata.file_type().is_symlink() || !expected.contains(name.as_str()) {
+            return Err(Error::BackupUnexpectedEntry(entry.path()));
+        }
+        actual.insert(name);
+    }
+    if actual.iter().map(String::as_str).collect::<BTreeSet<_>>() == *expected {
+        Ok(())
+    } else {
+        Err(Error::BackupVerificationFailed {
+            member: "inventory",
+        })
+    }
+}
+
+async fn verify_member(
+    path: &Path,
+    expected: &BackupMember,
+    expected_kind: BackupMemberKind,
+    member_name: &'static str,
+    runtime: bool,
+) -> Result<(), Error> {
+    if expected.kind() != expected_kind || !entry_kind_file(path)? {
+        return Err(Error::BackupVerificationFailed {
+            member: member_name,
+        });
+    }
+    let (byte_length, sha256) = fingerprint(path)?;
+    if byte_length != expected.byte_length() || sha256 != expected.sha256() {
+        return Err(Error::BackupVerificationFailed {
+            member: member_name,
+        });
+    }
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .foreign_keys(true),
+    )
+    .await
+    .map_err(|_| Error::BackupVerificationFailed {
+        member: member_name,
+    })?;
+    let schema = if runtime {
+        migration::migrate_runtime(&mut connection, OpenMode::ReadOnly).await
+    } else {
+        migration::migrate_private(&mut connection, OpenMode::ReadOnly).await
+    };
+    if schema.is_err()
+        || integrity::check_connection(&mut connection).await != integrity::MemberOutcome::Verified
+    {
+        return Err(Error::BackupVerificationFailed {
+            member: member_name,
+        });
+    }
+    connection
+        .close()
+        .await
+        .map_err(|_| Error::BackupVerificationFailed {
+            member: member_name,
+        })
+}
+
+fn entry_kind_file(path: &Path) -> Result<bool, Error> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file() && !metadata.file_type().is_symlink()),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(source) => Err(Error::BackupFilesystem {
+            operation: "inspect backup member",
+            source,
+        }),
+    }
+}
+
+fn fingerprint(path: &Path) -> Result<(u64, MemberDigest), Error> {
+    let mut file = File::open(path).map_err(|source| Error::BackupFilesystem {
+        operation: "open backup member for verification",
+        source,
+    })?;
+    let byte_length = file
+        .metadata()
+        .map_err(|source| Error::BackupFilesystem {
+            operation: "inspect backup member for verification",
+            source,
+        })?
+        .len();
+    let mut sha256 = Sha256::new();
+    let mut buffer = [0_u8; 16 * 1_024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|source| Error::BackupFilesystem {
+                operation: "hash backup member for verification",
+                source,
+            })?;
+        if read == 0 {
+            break;
+        }
+        sha256.update(&buffer[..read]);
+    }
+    Ok((byte_length, MemberDigest::new(sha256.finalize().into())))
+}
+
 #[cfg(test)]
 mod tests {
     use radroots_storage::{
@@ -266,6 +546,8 @@ mod tests {
     use super::*;
 
     const POLICY: &str = include_str!("../../../contracts/storage/backup_capture_policy_v1.toml");
+    const FINALIZE_POLICY: &str =
+        include_str!("../../../contracts/storage/backup_finalize_policy_v1.toml");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -286,6 +568,19 @@ mod tests {
         existing_staging_or_final: String,
         hidden_clock: bool,
         unsafe_ffi: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct FinalizePolicy {
+        schema_version: u32,
+        verification: Vec<String>,
+        finalization: String,
+        root_sync_after_rename: bool,
+        finalized_retry: String,
+        missing_bundle: String,
+        staging_and_final_present: String,
+        unexpected_entry: String,
+        mutation_before_complete_verification: bool,
     }
 
     fn generation(byte: u8) -> SourceGeneration {
@@ -367,6 +662,32 @@ mod tests {
         assert_eq!(policy.existing_staging_or_final, "reject");
         assert!(!policy.hidden_clock);
         assert!(!policy.unsafe_ffi);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_backup_finalize_policy() {
+        let policy = toml::from_str::<FinalizePolicy>(FINALIZE_POLICY).expect("finalize policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.verification,
+            [
+                "exact_plan_manifest",
+                "exact_inventory",
+                "no_symlinks",
+                "exact_length",
+                "sha256",
+                "current_schema_catalog",
+                "sqlite_integrity_check",
+                "foreign_key_check"
+            ]
+        );
+        assert_eq!(policy.finalization, "same_root_atomic_directory_rename");
+        assert!(policy.root_sync_after_rename);
+        assert_eq!(policy.finalized_retry, "verify_and_succeed");
+        assert_eq!(policy.missing_bundle, "reject");
+        assert_eq!(policy.staging_and_final_present, "reject");
+        assert_eq!(policy.unexpected_entry, "reject");
+        assert!(!policy.mutation_before_complete_verification);
     }
 
     #[tokio::test]
@@ -536,5 +857,125 @@ mod tests {
                 Err(Error::InvalidBackupRoot(_))
             ));
         }
+    }
+
+    #[tokio::test]
+    async fn complete_bundle_verifies_finalizes_atomically_and_retries_idempotently() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let backup_parent = tempfile::tempdir().expect("backup parent");
+        let backup_root = backup_parent.path().join("backups");
+        fs::create_dir(&backup_root).expect("backup root");
+        let (_, store) = create(database_root.path(), Some(&backup_root)).await;
+        let plan = plan(97, BackupSecretPolicy::IncludeProtectedStorage, 9_700);
+        let manifest = store.capture_backup(&plan).await.expect("capture backup");
+        let layout = BackupLayout::new(&backup_root, &plan);
+
+        store
+            .verify_backup(&plan, &manifest)
+            .await
+            .expect("verify staging bundle");
+        let finalized = store
+            .finalize_backup(&plan, &manifest)
+            .await
+            .expect("finalize backup");
+        assert_eq!(finalized, layout.finalized);
+        assert!(!layout.staging.exists());
+        assert!(layout.finalized.is_dir());
+        assert_eq!(
+            store
+                .finalize_backup(&plan, &manifest)
+                .await
+                .expect("idempotent finalization"),
+            layout.finalized
+        );
+    }
+
+    #[tokio::test]
+    async fn verification_rejects_tampering_unexpected_entries_and_missing_bundles() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let backup_parent = tempfile::tempdir().expect("backup parent");
+        let backup_root = backup_parent.path().join("backups");
+        fs::create_dir(&backup_root).expect("backup root");
+        let (_, store) = create(database_root.path(), Some(&backup_root)).await;
+
+        let tampered_plan = plan(98, BackupSecretPolicy::ExcludeProtectedStorage, 9_800);
+        let tampered_manifest = store
+            .capture_backup(&tampered_plan)
+            .await
+            .expect("capture tamper target");
+        let tampered_layout = BackupLayout::new(&backup_root, &tampered_plan);
+        use std::io::Write;
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&tampered_layout.runtime_file)
+            .expect("open tamper target")
+            .write_all(b"tamper")
+            .expect("tamper member");
+        assert!(matches!(
+            store
+                .verify_backup(&tampered_plan, &tampered_manifest)
+                .await,
+            Err(Error::BackupVerificationFailed {
+                member: RUNTIME_MEMBER
+            })
+        ));
+        assert!(!tampered_layout.finalized.exists());
+
+        let unexpected_plan = plan(99, BackupSecretPolicy::ExcludeProtectedStorage, 9_900);
+        let unexpected_manifest = store
+            .capture_backup(&unexpected_plan)
+            .await
+            .expect("capture unexpected target");
+        let unexpected_layout = BackupLayout::new(&backup_root, &unexpected_plan);
+        fs::write(unexpected_layout.staging.join("unexpected"), b"data").expect("unexpected entry");
+        assert!(matches!(
+            store
+                .verify_backup(&unexpected_plan, &unexpected_manifest)
+                .await,
+            Err(Error::BackupUnexpectedEntry(_))
+        ));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            fs::remove_file(unexpected_layout.staging.join("unexpected"))
+                .expect("remove unexpected entry");
+            fs::remove_file(&unexpected_layout.runtime_file).expect("remove captured member");
+            symlink(
+                database_root.path().join(RUNTIME_DATABASE),
+                &unexpected_layout.runtime_file,
+            )
+            .expect("symlink captured member");
+            assert!(matches!(
+                store
+                    .verify_backup(&unexpected_plan, &unexpected_manifest)
+                    .await,
+                Err(Error::BackupUnexpectedEntry(_))
+            ));
+        }
+
+        let missing_plan = plan(100, BackupSecretPolicy::ExcludeProtectedStorage, 10_000);
+        let missing_manifest = BackupManifest::new(
+            missing_plan.format_version(),
+            missing_plan.backup_id(),
+            missing_plan.requested_at_unix_ms(),
+            missing_plan.secret_policy(),
+            vec![
+                BackupMember::new(
+                    RUNTIME_MEMBER,
+                    BackupMemberKind::Runtime,
+                    1,
+                    MemberDigest::new([1; 32]),
+                )
+                .expect("member"),
+            ],
+        )
+        .expect("manifest");
+        assert!(matches!(
+            store
+                .finalize_backup(&missing_plan, &missing_manifest)
+                .await,
+            Err(Error::BackupBundleMissing(_))
+        ));
     }
 }

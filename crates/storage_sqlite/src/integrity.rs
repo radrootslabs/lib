@@ -54,7 +54,7 @@ pub(crate) fn unknown() -> Result<IntegrityStatus, Error> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MemberOutcome {
+pub(crate) enum MemberOutcome {
     Verified,
     Corrupt,
     Unavailable,
@@ -65,6 +65,10 @@ async fn check_member(pool: &SqlitePool) -> MemberOutcome {
         Ok(connection) => connection,
         Err(_) => return MemberOutcome::Unavailable,
     };
+    check_connection(&mut connection).await
+}
+
+pub(crate) async fn check_connection(connection: &mut sqlx::SqliteConnection) -> MemberOutcome {
     let integrity = match sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
         .fetch_all(&mut *connection)
         .await

@@ -247,6 +247,11 @@ pub enum Error {
     BackupCaptureFailed {
         member: &'static str,
     },
+    BackupBundleMissing(PathBuf),
+    BackupVerificationFailed {
+        member: &'static str,
+    },
+    BackupUnexpectedEntry(PathBuf),
     BackupFilesystem {
         operation: &'static str,
         source: std::io::Error,
@@ -426,6 +431,24 @@ impl fmt::Display for Error {
             Self::BackupCaptureFailed { member } => {
                 write!(formatter, "failed to capture SQLite backup member {member}")
             }
+            Self::BackupBundleMissing(path) => {
+                write!(
+                    formatter,
+                    "SQLite backup bundle is missing: {}",
+                    path.display()
+                )
+            }
+            Self::BackupVerificationFailed { member } => {
+                write!(
+                    formatter,
+                    "SQLite backup member failed verification: {member}"
+                )
+            }
+            Self::BackupUnexpectedEntry(path) => write!(
+                formatter,
+                "SQLite backup bundle contains an unexpected entry: {}",
+                path.display()
+            ),
             Self::BackupFilesystem { operation, .. } => {
                 write!(
                     formatter,

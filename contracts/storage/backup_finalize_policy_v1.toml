@@ -1,0 +1,9 @@
+schema_version = 1
+verification = ["exact_plan_manifest", "exact_inventory", "no_symlinks", "exact_length", "sha256", "current_schema_catalog", "sqlite_integrity_check", "foreign_key_check"]
+finalization = "same_root_atomic_directory_rename"
+root_sync_after_rename = true
+finalized_retry = "verify_and_succeed"
+missing_bundle = "reject"
+staging_and_final_present = "reject"
+unexpected_entry = "reject"
+mutation_before_complete_verification = false
