@@ -1,0 +1,1 @@
+//! SQLite integrity validation boundary.
