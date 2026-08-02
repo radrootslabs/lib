@@ -1,0 +1,10 @@
+schema_version = 1
+lock_file_name = ".radroots-storage-writer.lock"
+lock_scope = "canonical_runtime_parent"
+acquisition = "non_blocking_exclusive_advisory"
+sidecar_lifecycle = "persistent_empty_file"
+writable_modes = ["read_write_existing", "create"]
+read_only_lock = "none"
+concurrent_readers = true
+reader_with_writer = true
+concurrent_writers = false

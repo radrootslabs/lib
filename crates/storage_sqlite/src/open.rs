@@ -166,6 +166,21 @@ pub enum Error {
         maximum: Duration,
         actual: Duration,
     },
+    WriterLockOpen {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    WriterAlreadyActive {
+        path: PathBuf,
+    },
+    WriterLockFailed {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    WriterUnlockFailed {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 impl fmt::Display for Error {
@@ -220,6 +235,26 @@ impl fmt::Display for Error {
                 formatter,
                 "SQLite busy timeout {actual:?} must be within {minimum:?}..={maximum:?}"
             ),
+            Self::WriterLockOpen { path, .. } => write!(
+                formatter,
+                "failed to open SQLite writer lock: {}",
+                path.display()
+            ),
+            Self::WriterAlreadyActive { path } => write!(
+                formatter,
+                "another writable SQLite storage client holds: {}",
+                path.display()
+            ),
+            Self::WriterLockFailed { path, .. } => write!(
+                formatter,
+                "failed to acquire SQLite writer lock: {}",
+                path.display()
+            ),
+            Self::WriterUnlockFailed { path, .. } => write!(
+                formatter,
+                "failed to release SQLite writer lock: {}",
+                path.display()
+            ),
         }
     }
 }
@@ -227,7 +262,10 @@ impl fmt::Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            Self::Inspect { source, .. } => Some(source),
+            Self::Inspect { source, .. }
+            | Self::WriterLockOpen { source, .. }
+            | Self::WriterLockFailed { source, .. }
+            | Self::WriterUnlockFailed { source, .. } => Some(source),
             _ => None,
         }
     }

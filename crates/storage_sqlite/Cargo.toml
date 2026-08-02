@@ -15,6 +15,7 @@ publish = false
 name = "radroots_storage_sqlite"
 
 [dependencies]
+fs2 = { workspace = true }
 radroots_event_codec = { workspace = true, default-features = false, features = ["json", "std"] }
 radroots_secrets = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false }

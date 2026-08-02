@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use crate::{Error, OpenMode, Paths};
+use radroots_storage::status::WriterPolicy;
 
 const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const MIN_BUSY_TIMEOUT: Duration = Duration::from_millis(1);
@@ -65,6 +66,15 @@ impl OpenOptions {
     /// Reports whether the mode requires WAL for writable connections.
     pub fn wal_enabled(&self) -> bool {
         self.mode.is_writable()
+    }
+
+    /// Reports the mandatory writer coordination policy for this mode.
+    pub fn writer_policy(&self) -> WriterPolicy {
+        if self.mode.is_writable() {
+            WriterPolicy::AdvisoryProcessLock
+        } else {
+            WriterPolicy::NoWriter
+        }
     }
 
     /// Validates current filesystem state without creating or modifying files.

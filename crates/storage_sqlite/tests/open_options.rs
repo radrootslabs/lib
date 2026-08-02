@@ -1,6 +1,7 @@
 use std::fs;
 use std::time::Duration;
 
+use radroots_storage::status::WriterPolicy;
 use radroots_storage_sqlite::{Error, OpenMode, OpenOptions, Paths};
 
 #[test]
@@ -77,6 +78,7 @@ fn options_fix_connection_invariants_and_bound_busy_timeout() {
     assert_eq!(read_only.busy_timeout(), Duration::from_secs(5));
     assert!(read_only.foreign_keys_enabled());
     assert!(!read_only.wal_enabled());
+    assert_eq!(read_only.writer_policy(), WriterPolicy::NoWriter);
     assert!(!read_only.mode().is_writable());
     assert!(!read_only.mode().may_create());
 
@@ -86,6 +88,7 @@ fn options_fix_connection_invariants_and_bound_busy_timeout() {
     assert_eq!(create.busy_timeout(), Duration::from_secs(30));
     assert!(create.foreign_keys_enabled());
     assert!(create.wal_enabled());
+    assert_eq!(create.writer_policy(), WriterPolicy::AdvisoryProcessLock);
     assert!(create.mode().is_writable());
     assert!(create.mode().may_create());
 
