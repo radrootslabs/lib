@@ -7,9 +7,14 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::{
     AtomicStorage, Error, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
+    StorageReliability,
     atomic::{
         AtomicCommit, AtomicCommitDisposition, AtomicCommitId, AtomicCommitOutcome,
         AtomicCommitReceipt, AtomicWorkflow,
+    },
+    backup::{
+        BackupId, BackupOperation, BackupPlan, BackupTransition, ReliabilityRevision,
+        RestoreOperation, RestorePlan, RestoreTransition,
     },
     event::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPage,
@@ -35,7 +40,10 @@ use crate::{
         ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionStatus, RebuildStage,
         RebuildTicket, RebuildTransition,
     },
-    status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
+    status::{
+        EventStoreHealth, EventStoreMode, EventStoreStatus, IntegrityHealth, IntegrityStatus,
+        ShutdownState, StorageBackend, StorageOpenMode, StorageStatus, WriterPolicy,
+    },
 };
 
 #[derive(Clone)]
@@ -55,7 +63,10 @@ struct State {
     event_index_manifests: Vec<EventIndexManifest>,
     event_index_checkpoints: Vec<EventIndexCheckpoint>,
     private_artifacts: Vec<PrivateArtifactMetadata>,
+    backups: Vec<BackupOperation>,
+    restores: Vec<RestoreOperation>,
     atomic_receipts: Vec<AtomicCommitReceipt>,
+    closed: bool,
 }
 
 /// Bounded deterministic reference backend with no hidden tasks or globals.
@@ -77,7 +88,10 @@ impl MemoryStorage {
                 event_index_manifests: Vec::new(),
                 event_index_checkpoints: Vec::new(),
                 private_artifacts: Vec::new(),
+                backups: Vec::new(),
+                restores: Vec::new(),
                 atomic_receipts: Vec::new(),
+                closed: false,
             }),
         }
     }
@@ -87,6 +101,14 @@ impl MemoryStorage {
     }
 
     fn state(&self) -> Result<MutexGuard<'_, State>, Error> {
+        let state = self.state_any()?;
+        if state.closed {
+            return Err(Error::BackendUnavailable);
+        }
+        Ok(state)
+    }
+
+    fn state_any(&self) -> Result<MutexGuard<'_, State>, Error> {
         self.state.lock().map_err(|_| Error::BackendUnavailable)
     }
 
@@ -278,6 +300,39 @@ impl MemoryStorage {
         )?;
         state.projections.push(status.clone());
         Ok(status)
+    }
+
+    fn integrity_locked(state: &State) -> Result<IntegrityStatus, Error> {
+        let members = state
+            .events
+            .len()
+            .checked_add(state.journal.len())
+            .and_then(|count| count.checked_add(state.outbox.len()))
+            .and_then(|count| count.checked_add(state.projections.len()))
+            .and_then(|count| count.checked_add(state.private_artifacts.len()))
+            .ok_or(Error::InvalidIntegrityStatus)?;
+        IntegrityStatus::new(
+            IntegrityHealth::Healthy,
+            None,
+            u32::try_from(members).map_err(|_| Error::InvalidIntegrityStatus)?,
+            0,
+        )
+    }
+
+    fn status_locked(state: &State) -> Result<StorageStatus, Error> {
+        StorageStatus::new(
+            StorageBackend::Memory,
+            StorageOpenMode::Create,
+            WriterPolicy::NoWriter,
+            if state.closed {
+                ShutdownState::Closed
+            } else {
+                ShutdownState::Open
+            },
+            Self::integrity_locked(state)?,
+            false,
+            0,
+        )
     }
 }
 
@@ -928,6 +983,111 @@ impl PrivateArtifactStore for MemoryStorage {
                     .ok_or(Error::CorruptPrivateArtifactMetadata)?;
             }
             Ok(status)
+        })
+    }
+}
+
+impl StorageReliability for MemoryStorage {
+    fn begin_backup(&self, plan: BackupPlan) -> BoxFuture<'_, Result<BackupOperation, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state
+                .backups
+                .iter()
+                .find(|operation| operation.plan().backup_id() == plan.backup_id())
+            {
+                return if existing.plan() == &plan {
+                    Ok(existing.clone())
+                } else {
+                    Err(Error::ReliabilityRevisionConflict)
+                };
+            }
+            let operation = BackupOperation::planned(plan);
+            state.backups.push(operation.clone());
+            Ok(operation)
+        })
+    }
+
+    fn transition_backup(
+        &self,
+        backup_id: BackupId,
+        expected_revision: ReliabilityRevision,
+        transition: BackupTransition,
+        at_unix_ms: u64,
+    ) -> BoxFuture<'_, Result<BackupOperation, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let operation = state
+                .backups
+                .iter_mut()
+                .find(|operation| operation.plan().backup_id() == backup_id)
+                .ok_or(Error::CorruptReliabilityOperation)?;
+            let next = operation.transition(expected_revision, transition, at_unix_ms)?;
+            *operation = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn begin_restore(&self, plan: RestorePlan) -> BoxFuture<'_, Result<RestoreOperation, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let backup_id = plan.manifest().backup_id();
+            if let Some(existing) = state
+                .restores
+                .iter()
+                .find(|operation| operation.plan().manifest().backup_id() == backup_id)
+            {
+                return if existing.plan() == &plan {
+                    Ok(existing.clone())
+                } else {
+                    Err(Error::ReliabilityRevisionConflict)
+                };
+            }
+            let operation = RestoreOperation::staging(plan);
+            state.restores.push(operation.clone());
+            Ok(operation)
+        })
+    }
+
+    fn transition_restore(
+        &self,
+        backup_id: BackupId,
+        expected_revision: ReliabilityRevision,
+        transition: RestoreTransition,
+        at_unix_ms: u64,
+    ) -> BoxFuture<'_, Result<RestoreOperation, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let operation = state
+                .restores
+                .iter_mut()
+                .find(|operation| operation.plan().manifest().backup_id() == backup_id)
+                .ok_or(Error::CorruptReliabilityOperation)?;
+            let next = operation.transition(expected_revision, transition, at_unix_ms)?;
+            *operation = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn integrity(&self) -> BoxFuture<'_, Result<IntegrityStatus, Error>> {
+        Box::pin(async move {
+            let state = self.state_any()?;
+            Self::integrity_locked(&state)
+        })
+    }
+
+    fn status(&self) -> BoxFuture<'_, Result<StorageStatus, Error>> {
+        Box::pin(async move {
+            let state = self.state_any()?;
+            Self::status_locked(&state)
+        })
+    }
+
+    fn close(&self) -> BoxFuture<'_, Result<StorageStatus, Error>> {
+        Box::pin(async move {
+            let mut state = self.state_any()?;
+            state.closed = true;
+            Self::status_locked(&state)
         })
     }
 }

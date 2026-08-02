@@ -3,7 +3,7 @@ mod suite;
 
 use radroots_storage::{
     AtomicStorage, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
-    memory::MemoryStorage,
+    StorageReliability, memory::MemoryStorage,
 };
 
 use suite::StorageConformanceHarness;
@@ -37,6 +37,10 @@ impl StorageConformanceHarness for MemoryHarness {
     fn atomic_storage(&self) -> &dyn AtomicStorage {
         &self.storage
     }
+
+    fn reliability(&self) -> &dyn StorageReliability {
+        &self.storage
+    }
 }
 
 #[test]
@@ -52,4 +56,14 @@ fn memory_backend_atomic_failure_is_all_or_nothing() {
 #[test]
 fn memory_backend_rejects_identity_and_digest_conflicts() {
     suite::assert_conflict_conformance(&MemoryHarness::default());
+}
+
+#[test]
+fn memory_backend_supports_every_atomic_workflow() {
+    suite::assert_atomic_workflow_conformance(&MemoryHarness::default());
+}
+
+#[test]
+fn memory_backend_supports_reliability_and_explicit_close() {
+    suite::assert_reliability_and_close_conformance(&MemoryHarness::default());
 }

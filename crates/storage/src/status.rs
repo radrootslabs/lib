@@ -2,6 +2,15 @@
 
 use crate::{Error, event::SourceGeneration};
 
+/// Storage-engine family needed to interpret durability-specific status.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StorageBackend {
+    Memory,
+    Sqlite,
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -85,6 +94,7 @@ impl IntegrityStatus {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StorageStatus {
+    backend: StorageBackend,
     open_mode: StorageOpenMode,
     writer_policy: WriterPolicy,
     shutdown: ShutdownState,
@@ -95,6 +105,7 @@ pub struct StorageStatus {
 
 impl StorageStatus {
     pub fn new(
+        backend: StorageBackend,
         open_mode: StorageOpenMode,
         writer_policy: WriterPolicy,
         shutdown: ShutdownState,
@@ -102,14 +113,23 @@ impl StorageStatus {
         wal_enabled: bool,
         busy_timeout_ms: u32,
     ) -> Result<Self, Error> {
-        if (open_mode == StorageOpenMode::ReadOnly && writer_policy != WriterPolicy::NoWriter)
-            || (open_mode != StorageOpenMode::ReadOnly
-                && writer_policy != WriterPolicy::AdvisoryProcessLock)
-            || (open_mode != StorageOpenMode::ReadOnly && (!wal_enabled || busy_timeout_ms == 0))
-        {
+        let valid_engine_status = match backend {
+            StorageBackend::Memory => {
+                writer_policy == WriterPolicy::NoWriter && !wal_enabled && busy_timeout_ms == 0
+            }
+            StorageBackend::Sqlite => {
+                (open_mode == StorageOpenMode::ReadOnly && writer_policy == WriterPolicy::NoWriter)
+                    || (open_mode != StorageOpenMode::ReadOnly
+                        && writer_policy == WriterPolicy::AdvisoryProcessLock
+                        && wal_enabled
+                        && busy_timeout_ms != 0)
+            }
+        };
+        if !valid_engine_status {
             return Err(Error::InvalidStorageStatus);
         }
         Ok(Self {
+            backend,
             open_mode,
             writer_policy,
             shutdown,
@@ -117,6 +137,9 @@ impl StorageStatus {
             wal_enabled,
             busy_timeout_ms,
         })
+    }
+    pub const fn backend(self) -> StorageBackend {
+        self.backend
     }
     pub const fn open_mode(self) -> StorageOpenMode {
         self.open_mode

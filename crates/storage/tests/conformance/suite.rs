@@ -3,20 +3,37 @@ use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
     AtomicStorage, EventStore, Journal, Outbox, PrivateArtifactStore, ProjectionStore,
-    atomic::{AtomicCommit, AtomicCommitDigest, AtomicCommitId, AtomicWorkflow, CommitIngested},
+    StorageReliability,
+    atomic::{
+        AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicWorkflow,
+        CommitEnqueued, CommitIngested, CommitSigned,
+    },
+    backup::{
+        BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
+        BackupSecretPolicy, BackupStage, BackupTransition, MemberDigest, MemberVerification,
+        RestoreMemberStatus, RestorePlan, RestoreStage, RestoreTransition,
+    },
     event::{EventAdmission, EventQuery, EventQueryBounds},
-    journal::{IdempotencyDigest, IdempotencyKey, OperationInstanceId, PrepareOperation},
-    outbox::{DeliveryPlanDigest, EnqueueDisposition, EnqueueOutboxItem, OutboxItemId},
+    journal::{
+        IdempotencyDigest, IdempotencyKey, JournalRevision, JournalStage, OperationInstanceId,
+        PrepareOperation,
+    },
+    outbox::{
+        ClaimOutboxItems, DeliveryAttempt, DeliveryAttemptEvidence, DeliveryPlanDigest,
+        EnqueueDisposition, EnqueueOutboxItem, LeaseId, LeaseOwner, OutboxItemId, OutboxStage,
+    },
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DurableSecretReference,
         PrivateArtifactId, PrivateArtifactMetadata, RetentionPolicy,
     },
     projection::{ProjectionCheckpoint, ProjectionGeneration, ProjectionId},
+    status::{ShutdownState, StorageBackend},
 };
 use radroots_transport::{
-    DeliveryRequest, Target, TargetSet, TransportId,
+    DeliveryReceipt, DeliveryRequest, Target, TargetSet, TransportId,
+    outcome::DeliveryOutcome,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
-    sink::DeliveryPayload,
+    sink::{DeliveryPayload, DeliveryTargetReceipt},
     source::{EventProvenance, ObservedEvent},
 };
 
@@ -28,6 +45,7 @@ pub(crate) trait StorageConformanceHarness {
     fn projection_store(&self) -> &dyn ProjectionStore;
     fn private_artifact_store(&self) -> &dyn PrivateArtifactStore;
     fn atomic_storage(&self) -> &dyn AtomicStorage;
+    fn reliability(&self) -> &dyn StorageReliability;
 }
 
 pub(crate) fn assert_shared_state_conformance(harness: &impl StorageConformanceHarness) {
@@ -169,6 +187,242 @@ pub(crate) fn assert_conflict_conformance(harness: &impl StorageConformanceHarne
     );
 }
 
+pub(crate) fn assert_atomic_workflow_conformance(harness: &impl StorageConformanceHarness) {
+    let instance = OperationInstanceId::new([10; 16]).expect("operation instance");
+    let prepared_request = atomic_commit(
+        10,
+        10,
+        100,
+        AtomicWorkflow::Prepared(prepare(instance, "atomic", 10)),
+    );
+    let prepared = block_on(harness.atomic_storage().commit(prepared_request.clone()))
+        .expect("atomic prepare");
+    assert_eq!(prepared.disposition(), AtomicCommitDisposition::Committed);
+    assert_eq!(
+        block_on(harness.atomic_storage().commit(prepared_request))
+            .expect("prepare replay")
+            .disposition(),
+        AtomicCommitDisposition::Replay
+    );
+
+    let event = signed_event("conformance-atomic");
+    let signed = block_on(harness.atomic_storage().commit(atomic_commit(
+        11,
+        11,
+        110,
+        AtomicWorkflow::Signed(Box::new(CommitSigned::new(
+            instance,
+            JournalRevision::INITIAL,
+            event.clone(),
+        ))),
+    )))
+    .expect("atomic sign");
+    assert_eq!(
+        signed.outcome().kind(),
+        radroots_storage::atomic::AtomicWorkflowKind::Signed
+    );
+
+    let enqueue = enqueue([11; 16], instance, event.clone());
+    let enqueued = block_on(
+        harness.atomic_storage().commit(atomic_commit(
+            12,
+            12,
+            120,
+            AtomicWorkflow::Enqueued(Box::new(
+                CommitEnqueued::new(
+                    instance,
+                    JournalRevision::new(2).expect("journal revision"),
+                    admission(event, 120),
+                    enqueue,
+                    120,
+                )
+                .expect("enqueue workflow"),
+            )),
+        )),
+    )
+    .expect("atomic enqueue");
+    assert_eq!(
+        block_on(harness.journal().operation(instance))
+            .expect("journal lookup")
+            .expect("journal record")
+            .state()
+            .stage(),
+        JournalStage::Committed
+    );
+    assert_eq!(
+        enqueued.outcome().kind(),
+        radroots_storage::atomic::AtomicWorkflowKind::Enqueued
+    );
+
+    let claimed = block_on(
+        harness.outbox().claim(
+            ClaimOutboxItems::new(
+                LeaseOwner::parse("conformance-worker").expect("lease owner"),
+                LeaseId::new([12; 16]).expect("lease id"),
+                130,
+                150,
+                1,
+            )
+            .expect("claim request"),
+        ),
+    )
+    .expect("claim outbox")
+    .pop()
+    .expect("claimed item");
+    let receipt = DeliveryReceipt::for_request(
+        claimed.record().request(),
+        claimed
+            .record()
+            .request()
+            .target_set()
+            .targets()
+            .iter()
+            .cloned()
+            .map(|target| DeliveryTargetReceipt::attempted(target, DeliveryOutcome::delivered()))
+            .collect(),
+    )
+    .expect("delivery receipt");
+    let evidence = DeliveryAttemptEvidence::new(
+        claimed.record().item_id(),
+        claimed.lease().id(),
+        claimed.record().revision(),
+        DeliveryAttempt::FIRST,
+        receipt,
+        140,
+    )
+    .expect("delivery evidence");
+    let delivered = block_on(harness.atomic_storage().commit(atomic_commit(
+        13,
+        13,
+        140,
+        AtomicWorkflow::Delivered(Box::new(evidence)),
+    )))
+    .expect("atomic deliver");
+    assert_eq!(
+        delivered.outcome().kind(),
+        radroots_storage::atomic::AtomicWorkflowKind::Delivered
+    );
+    assert_eq!(
+        block_on(harness.outbox().item(claimed.record().item_id()))
+            .expect("outbox lookup")
+            .expect("outbox item")
+            .stage(),
+        OutboxStage::Satisfied
+    );
+
+    let ingest_event = signed_event("conformance-ingest");
+    let ingested = block_on(
+        harness.atomic_storage().commit(atomic_commit(
+            14,
+            14,
+            150,
+            AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
+                admission(ingest_event, 150),
+                Some(
+                    ProjectionCheckpoint::new(
+                        ProjectionId::parse("conformance.ingest").expect("projection id"),
+                        ProjectionGeneration::new([14; 32]).expect("projection generation"),
+                        None,
+                        1,
+                        150,
+                    )
+                    .expect("projection checkpoint"),
+                ),
+            ))),
+        )),
+    )
+    .expect("atomic ingest");
+    assert_eq!(
+        ingested.outcome().kind(),
+        radroots_storage::atomic::AtomicWorkflowKind::Ingested
+    );
+}
+
+pub(crate) fn assert_reliability_and_close_conformance(harness: &impl StorageConformanceHarness) {
+    let backup_id = BackupId::new([15; 16]).expect("backup id");
+    let plan = BackupPlan::new(
+        backup_id,
+        BackupFormatVersion::V1,
+        BackupSecretPolicy::ExcludeProtectedStorage,
+        100,
+    )
+    .expect("backup plan");
+    let planned = block_on(harness.reliability().begin_backup(plan)).expect("begin backup");
+    assert_eq!(planned.stage(), BackupStage::Planned);
+    let manifest = backup_manifest(backup_id);
+    let captured = block_on(harness.reliability().transition_backup(
+        backup_id,
+        planned.revision(),
+        BackupTransition::Captured(manifest.clone()),
+        110,
+    ))
+    .expect("capture backup");
+    let verified = block_on(harness.reliability().transition_backup(
+        backup_id,
+        captured.revision(),
+        BackupTransition::Verified,
+        120,
+    ))
+    .expect("verify backup");
+    let finalized = block_on(harness.reliability().transition_backup(
+        backup_id,
+        verified.revision(),
+        BackupTransition::Finalize,
+        130,
+    ))
+    .expect("finalize backup");
+    assert_eq!(finalized.stage(), BackupStage::Finalized);
+
+    let restore = block_on(
+        harness.reliability().begin_restore(
+            RestorePlan::new(manifest, BackupSecretPolicy::ExcludeProtectedStorage, 140)
+                .expect("restore plan"),
+        ),
+    )
+    .expect("begin restore");
+    let verifying = block_on(harness.reliability().transition_restore(
+        backup_id,
+        restore.revision(),
+        RestoreTransition::Staged,
+        150,
+    ))
+    .expect("stage restore");
+    let finalizing = block_on(harness.reliability().transition_restore(
+        backup_id,
+        verifying.revision(),
+        RestoreTransition::Verified(vec![
+            RestoreMemberStatus::new("memory/state", MemberVerification::Verified)
+                .expect("member status"),
+        ]),
+        160,
+    ))
+    .expect("verify restore");
+    let restored = block_on(harness.reliability().transition_restore(
+        backup_id,
+        finalizing.revision(),
+        RestoreTransition::Finalize,
+        170,
+    ))
+    .expect("finalize restore");
+    assert_eq!(restored.stage(), RestoreStage::Finalized);
+    assert_eq!(
+        block_on(harness.reliability().status())
+            .expect("storage status")
+            .backend(),
+        StorageBackend::Memory
+    );
+    assert_eq!(
+        block_on(harness.reliability().close())
+            .expect("close storage")
+            .shutdown(),
+        ShutdownState::Closed
+    );
+    assert_eq!(
+        block_on(harness.event_store().status()),
+        Err(radroots_storage::Error::BackendUnavailable)
+    );
+}
+
 fn signed_event(content: &str) -> SignedEvent {
     let mut wire = Nip01EventWire {
         id: "0".repeat(64),
@@ -249,4 +503,33 @@ fn private_metadata(id: [u8; 16]) -> PrivateArtifactMetadata {
         100,
     )
     .expect("private metadata")
+}
+
+fn atomic_commit(id: u8, digest: u8, at: u64, workflow: AtomicWorkflow) -> AtomicCommit {
+    AtomicCommit::new(
+        AtomicCommitId::new([id; 16]).expect("commit id"),
+        AtomicCommitDigest::new([digest; 32]),
+        at,
+        workflow,
+    )
+    .expect("atomic commit")
+}
+
+fn backup_manifest(backup_id: BackupId) -> BackupManifest {
+    BackupManifest::new(
+        BackupFormatVersion::V1,
+        backup_id,
+        105,
+        BackupSecretPolicy::ExcludeProtectedStorage,
+        vec![
+            BackupMember::new(
+                "memory/state",
+                BackupMemberKind::Runtime,
+                1,
+                MemberDigest::new([15; 32]),
+            )
+            .expect("backup member"),
+        ],
+    )
+    .expect("backup manifest")
 }

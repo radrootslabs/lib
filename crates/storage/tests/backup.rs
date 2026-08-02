@@ -7,8 +7,8 @@ use radroots_storage::{
         RestoreOperation, RestorePlan, RestoreStage, RestoreTransition,
     },
     status::{
-        IntegrityHealth, IntegrityStatus, ShutdownState, StorageOpenMode, StorageStatus,
-        WriterPolicy,
+        IntegrityHealth, IntegrityStatus, ShutdownState, StorageBackend, StorageOpenMode,
+        StorageStatus, WriterPolicy,
     },
 };
 
@@ -173,6 +173,7 @@ fn integrity_and_storage_status_reject_inconsistent_runtime_claims() {
     let integrity =
         IntegrityStatus::new(IntegrityHealth::Healthy, Some(100), 2, 0).expect("integrity status");
     let status = StorageStatus::new(
+        StorageBackend::Sqlite,
         StorageOpenMode::ReadWriteExisting,
         WriterPolicy::AdvisoryProcessLock,
         ShutdownState::Open,
@@ -189,6 +190,7 @@ fn integrity_and_storage_status_reject_inconsistent_runtime_claims() {
     );
     assert_eq!(
         StorageStatus::new(
+            StorageBackend::Sqlite,
             StorageOpenMode::ReadWriteExisting,
             WriterPolicy::NoWriter,
             ShutdownState::Open,
