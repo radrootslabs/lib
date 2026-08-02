@@ -5139,6 +5139,7 @@ dependencies = [
  "radroots_event_codec",
  "radroots_secrets",
  "radroots_storage",
+ "tempfile",
 ]
 
 [[package]]

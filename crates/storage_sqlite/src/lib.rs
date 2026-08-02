@@ -7,3 +7,6 @@ pub mod lock;
 pub mod migration;
 pub mod open;
 pub mod status;
+
+pub use config::OpenOptions;
+pub use open::{Error, OpenMode, Paths};

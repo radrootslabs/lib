@@ -19,5 +19,8 @@ radroots_event_codec = { workspace = true, default-features = false }
 radroots_secrets = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [lints]
 workspace = true
