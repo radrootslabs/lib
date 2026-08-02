@@ -10,6 +10,7 @@ pub mod status;
 
 mod event;
 mod journal;
+mod outbox;
 
 pub use config::OpenOptions;
 pub use event::SqliteStorage;

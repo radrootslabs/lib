@@ -4,10 +4,14 @@
 //! owns no transport adapter and performs no transport I/O.
 
 use core::fmt;
-use radroots_transport::{
-    BoxFuture, DeliveryReceipt, DeliveryRequest,
-    outcome::{DeliveryOutcome, Retryability},
-    target::TargetFingerprint,
+pub use radroots_transport::{
+    BoxFuture, DeliveryReceipt, DeliveryRequest, TransportId,
+    outcome::{DeliveryOutcome, DeliveryOutcomeKind, Retryability},
+    policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    sink::{DeliveryPayload, DeliveryTargetReceipt},
+    target::{
+        TARGET_SET_MAX_ITEMS, Target, TargetFingerprint, TargetLabel, TargetScope, TargetSet,
+    },
 };
 
 use crate::{Error, journal::OperationInstanceId};
@@ -254,6 +258,25 @@ pub struct TargetDeliveryEvidence {
 }
 
 impl TargetDeliveryEvidence {
+    pub fn new(
+        target: TargetFingerprint,
+        attempt: DeliveryAttempt,
+        attempted: bool,
+        outcome: DeliveryOutcome,
+        recorded_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        if recorded_at_unix_ms == 0 {
+            return Err(Error::InvalidDeliveryEvidence);
+        }
+        Ok(Self {
+            target,
+            attempt,
+            attempted,
+            outcome,
+            recorded_at_unix_ms,
+        })
+    }
+
     pub const fn target(&self) -> &TargetFingerprint {
         &self.target
     }
@@ -323,6 +346,60 @@ impl OutboxRecord {
         }
     }
 
+    /// Reconstructs and validates one record at a durable backend boundary.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_durable_parts(
+        enqueue: EnqueueOutboxItem,
+        revision: OutboxRevision,
+        stage: OutboxStage,
+        lease: Option<OutboxLease>,
+        last_attempt: Option<DeliveryAttempt>,
+        evidence: Vec<TargetDeliveryEvidence>,
+        satisfaction: SatisfactionResult,
+        retry_not_before_unix_ms: Option<u64>,
+        updated_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        if updated_at_unix_ms < enqueue.created_at_unix_ms
+            || matches!(stage, OutboxStage::Leased) != lease.is_some()
+            || matches!(stage, OutboxStage::Retryable) && last_attempt.is_none()
+            || matches!(stage, OutboxStage::Satisfied)
+                != matches!(satisfaction, SatisfactionResult::Satisfied)
+            || matches!(stage, OutboxStage::Exhausted)
+                != matches!(satisfaction, SatisfactionResult::Exhausted)
+            || matches!(
+                stage,
+                OutboxStage::Pending | OutboxStage::Leased | OutboxStage::Retryable
+            ) && !matches!(satisfaction, SatisfactionResult::Pending)
+            || stage.is_terminal() && retry_not_before_unix_ms.is_some()
+        {
+            return Err(Error::CorruptOutboxRecord);
+        }
+
+        validate_evidence(
+            enqueue.request(),
+            last_attempt,
+            evidence.as_slice(),
+            satisfaction,
+            enqueue.created_at_unix_ms,
+            updated_at_unix_ms,
+        )?;
+        Ok(Self {
+            item_id: enqueue.item_id,
+            operation_instance_id: enqueue.operation_instance_id,
+            plan_digest: enqueue.plan_digest,
+            request: enqueue.request,
+            revision,
+            stage,
+            lease,
+            last_attempt,
+            evidence,
+            satisfaction,
+            retry_not_before_unix_ms,
+            created_at_unix_ms: enqueue.created_at_unix_ms,
+            updated_at_unix_ms,
+        })
+    }
+
     pub const fn item_id(&self) -> OutboxItemId {
         self.item_id
     }
@@ -377,6 +454,9 @@ impl OutboxRecord {
     pub fn claim(&mut self, lease: OutboxLease) -> Result<(), Error> {
         if self.stage.is_terminal() {
             return Err(Error::OutboxItemTerminal);
+        }
+        if lease.acquired_at_unix_ms() < self.updated_at_unix_ms {
+            return Err(Error::InvalidOutboxTimestamp);
         }
         if matches!(self.retry_not_before_unix_ms, Some(not_before) if lease.acquired_at_unix_ms() < not_before)
         {
@@ -690,6 +770,21 @@ impl DeliveryAttemptEvidence {
     pub const fn item_id(&self) -> OutboxItemId {
         self.item_id
     }
+    pub const fn lease_id(&self) -> LeaseId {
+        self.lease_id
+    }
+    pub const fn expected_revision(&self) -> OutboxRevision {
+        self.expected_revision
+    }
+    pub const fn attempt(&self) -> DeliveryAttempt {
+        self.attempt
+    }
+    pub const fn receipt(&self) -> &DeliveryReceipt {
+        &self.receipt
+    }
+    pub const fn recorded_at_unix_ms(&self) -> u64 {
+        self.recorded_at_unix_ms
+    }
 }
 
 /// Passive outbox state summary.
@@ -745,4 +840,100 @@ const fn bytes_are_zero(bytes: &[u8; 16]) -> bool {
         index += 1;
     }
     true
+}
+
+fn validate_evidence(
+    request: &DeliveryRequest,
+    last_attempt: Option<DeliveryAttempt>,
+    evidence: &[TargetDeliveryEvidence],
+    satisfaction: SatisfactionResult,
+    created_at_unix_ms: u64,
+    updated_at_unix_ms: u64,
+) -> Result<(), Error> {
+    let Some(last_attempt) = last_attempt else {
+        return if evidence.is_empty() && matches!(satisfaction, SatisfactionResult::Pending) {
+            Ok(())
+        } else {
+            Err(Error::CorruptOutboxRecord)
+        };
+    };
+    let target_count = request.target_set().len();
+    if evidence.len() != target_count.saturating_mul(last_attempt.get() as usize) {
+        return Err(Error::CorruptOutboxRecord);
+    }
+    if evidence.iter().any(|entry| {
+        entry.recorded_at_unix_ms() < created_at_unix_ms
+            || entry.recorded_at_unix_ms() > updated_at_unix_ms
+            || !request
+                .target_set()
+                .targets()
+                .iter()
+                .any(|target| target.fingerprint() == entry.target())
+    }) {
+        return Err(Error::CorruptOutboxRecord);
+    }
+
+    let mut previous_recorded_at = created_at_unix_ms;
+    let mut latest_receipt = None;
+    for attempt in 1..=last_attempt.get() {
+        let mut recorded_at = None;
+        let receipts = request
+            .target_set()
+            .targets()
+            .iter()
+            .map(|target| {
+                let mut matches = evidence.iter().filter(|entry| {
+                    entry.attempt().get() == attempt && entry.target() == target.fingerprint()
+                });
+                let entry = matches.next().ok_or(Error::CorruptOutboxRecord)?;
+                if matches.next().is_some() {
+                    return Err(Error::CorruptOutboxRecord);
+                }
+                if recorded_at
+                    .replace(entry.recorded_at_unix_ms())
+                    .is_some_and(|prior| prior != entry.recorded_at_unix_ms())
+                {
+                    return Err(Error::CorruptOutboxRecord);
+                }
+                if entry.was_attempted() {
+                    Ok(DeliveryTargetReceipt::attempted(
+                        target.clone(),
+                        entry.outcome().clone(),
+                    ))
+                } else {
+                    DeliveryTargetReceipt::skipped(target.clone(), entry.outcome().clone())
+                        .map_err(|_| Error::CorruptOutboxRecord)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let recorded_at = recorded_at.ok_or(Error::CorruptOutboxRecord)?;
+        if recorded_at < previous_recorded_at {
+            return Err(Error::CorruptOutboxRecord);
+        }
+        previous_recorded_at = recorded_at;
+        latest_receipt = Some(
+            DeliveryReceipt::for_request(request, receipts)
+                .map_err(|_| Error::CorruptOutboxRecord)?,
+        );
+    }
+    let receipt = latest_receipt.ok_or(Error::CorruptOutboxRecord)?;
+    let expected = if receipt
+        .is_satisfied(request)
+        .map_err(|_| Error::CorruptOutboxRecord)?
+    {
+        SatisfactionResult::Satisfied
+    } else if receipt
+        .target_receipts()
+        .iter()
+        .any(|receipt| receipt.outcome().is_retryable())
+    {
+        SatisfactionResult::Pending
+    } else {
+        SatisfactionResult::Exhausted
+    };
+    if expected == satisfaction {
+        Ok(())
+    } else {
+        Err(Error::CorruptOutboxRecord)
+    }
 }

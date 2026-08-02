@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 3;
+pub const CURRENT_VERSION: u32 = 4;
 
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
@@ -14,6 +14,8 @@ const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
 #[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
 const OPERATION_JOURNAL_V3_SQL: &str = include_str!("0003_operation_journal.up.sql");
+#[allow(dead_code)] // Consumed by the migration executor introduced in its ordered RCL step.
+const OUTBOX_DELIVERY_EVIDENCE_V4_SQL: &str = include_str!("0004_outbox_delivery_evidence.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -106,6 +108,38 @@ const RUNTIME_V2_OBJECTS: &[&str] = &[
     "radroots_runtime_source_generations_sequence_guard",
 ];
 
+const RUNTIME_V4_OBJECTS: &[&str] = &[
+    "radroots_runtime_atomic_commits",
+    "radroots_runtime_delivery_evidence",
+    "radroots_runtime_delivery_evidence_item_idx",
+    "radroots_runtime_event_index_checkpoints",
+    "radroots_runtime_event_index_manifests",
+    "radroots_runtime_event_index_shards",
+    "radroots_runtime_event_provenance",
+    "radroots_runtime_event_provenance_observed_idx",
+    "radroots_runtime_events",
+    "radroots_runtime_events_admission_idx",
+    "radroots_runtime_events_delete_guard",
+    "radroots_runtime_events_event_id_idx",
+    "radroots_runtime_events_raw_update_guard",
+    "radroots_runtime_journal_idempotency_idx",
+    "radroots_runtime_journal_operations",
+    "radroots_runtime_journal_recovery_idx",
+    "radroots_runtime_outbox_items",
+    "radroots_runtime_outbox_operation_idx",
+    "radroots_runtime_outbox_ready_idx",
+    "radroots_runtime_outbox_targets",
+    "radroots_runtime_projection_checkpoints",
+    "radroots_runtime_projection_invalidations",
+    "radroots_runtime_projection_rebuilds",
+    "radroots_runtime_projection_rebuilds_stage_idx",
+    "radroots_runtime_source_generations",
+    "radroots_runtime_source_generations_active_idx",
+    "radroots_runtime_source_generations_delete_guard",
+    "radroots_runtime_source_generations_identity_guard",
+    "radroots_runtime_source_generations_sequence_guard",
+];
+
 /// Ordered, immutable runtime migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -126,6 +160,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "4caa69a316777cabfc647e6d022007c1433a5793b2a55679629e8fac4d50a0f0",
         owned_objects: RUNTIME_V2_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 4,
+        name: "outbox_delivery_evidence",
+        up_sha256: "435ad7590be7cd9d5b5ee3c9eb2d53419eba3ba12b0f0fc623f1787517524842",
+        owned_objects: RUNTIME_V4_OBJECTS,
+    },
 ];
 
 #[allow(dead_code)] // Keeps raw SQL crate-private until the migration executor is installed.
@@ -134,6 +174,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         1 => Some(RUNTIME_V1_SQL),
         2 => Some(CANONICAL_EVENT_STORAGE_V2_SQL),
         3 => Some(OPERATION_JOURNAL_V3_SQL),
+        4 => Some(OUTBOX_DELIVERY_EVIDENCE_V4_SQL),
         _ => None,
     }
 }
@@ -175,9 +216,9 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 3);
-        assert_eq!(MIGRATIONS.len(), 3);
-        let migration = MIGRATIONS[2];
+        assert_eq!(CURRENT_VERSION, 4);
+        assert_eq!(MIGRATIONS.len(), 4);
+        let migration = MIGRATIONS[3];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
@@ -203,7 +244,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(4), None);
+        assert_eq!(migration_sql(5), None);
     }
 
     #[tokio::test]

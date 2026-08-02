@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX radroots_runtime_outbox_operation_idx
+ON radroots_runtime_outbox_items(operation_instance_id);

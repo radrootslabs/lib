@@ -82,6 +82,24 @@ impl TargetPolicy {
         }
     }
 
+    /// Returns whether any requested target may satisfy this policy.
+    pub const fn is_any(&self) -> bool {
+        matches!(self.kind, TargetPolicyKind::Any)
+    }
+
+    /// Returns whether every requested target must satisfy this policy.
+    pub const fn is_all(&self) -> bool {
+        matches!(self.kind, TargetPolicyKind::All)
+    }
+
+    /// Returns the threshold for a quorum policy.
+    pub const fn quorum_threshold(&self) -> Option<u16> {
+        match self.kind {
+            TargetPolicyKind::Quorum(threshold) => Some(threshold),
+            TargetPolicyKind::Any | TargetPolicyKind::All | TargetPolicyKind::Required(_) => None,
+        }
+    }
+
     pub(crate) fn validate_for(&self, targets: &TargetSet) -> Result<(), Error> {
         match &self.kind {
             TargetPolicyKind::Any | TargetPolicyKind::All => Ok(()),
