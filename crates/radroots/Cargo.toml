@@ -10,6 +10,7 @@ homepage.workspace = true
 authors.workspace = true
 readme = "README.md"
 publish = false
+autoexamples = false
 
 [lints]
 workspace = true
@@ -36,3 +37,7 @@ radrootsd = ["client", "radroots_sdk/radrootsd"]
 geonames = ["client", "radroots_sdk/geonames"]
 knowledge = ["client", "radroots_sdk/knowledge"]
 full = ["radroots_sdk/full"]
+
+[[example]]
+name = "ordinary_memory"
+path = "examples/ordinary_memory.rs"
