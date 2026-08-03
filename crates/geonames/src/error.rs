@@ -41,6 +41,17 @@ pub enum Error {
     },
     /// The acquired or inspected asset had the wrong digest.
     AssetHashMismatch,
+    /// The verified bytes were not a healthy SQLite database.
+    InvalidDatabase,
+    /// The database did not contain the governed GeoNames schema.
+    InvalidDatabaseSchema,
+    /// Exclusive access to the private database connection was unavailable.
+    DatabaseConnectionUnavailable,
+    /// A read-only database operation failed.
+    DatabaseOperationFailed {
+        /// Stable operation label without SQL or host paths.
+        operation: &'static str,
+    },
     /// A coordinate was non-finite or outside its geographic bounds.
     InvalidPoint,
     /// A query string was empty or contained surrounding whitespace.
@@ -81,6 +92,16 @@ impl fmt::Display for Error {
             ),
             Self::AssetHashMismatch => {
                 formatter.write_str("asset SHA-256 does not match its specification")
+            }
+            Self::InvalidDatabase => formatter.write_str("asset is not a healthy SQLite database"),
+            Self::InvalidDatabaseSchema => {
+                formatter.write_str("asset does not contain the governed GeoNames schema")
+            }
+            Self::DatabaseConnectionUnavailable => {
+                formatter.write_str("GeoNames database connection is unavailable")
+            }
+            Self::DatabaseOperationFailed { operation } => {
+                write!(formatter, "GeoNames database {operation} failed")
             }
             Self::InvalidPoint => {
                 formatter.write_str("point must contain finite, in-range coordinates")
