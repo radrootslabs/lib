@@ -10,6 +10,13 @@ homepage.workspace = true
 authors.workspace = true
 readme = "README.md"
 publish = false
+documentation = "https://docs.rs/radroots_storage_sqlite"
+keywords = ["radroots", "sqlite", "storage", "database"]
+categories = ["database"]
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = []
 
 [lib]
 name = "radroots_storage_sqlite"

@@ -376,8 +376,8 @@
     {
       "role": "event_comment_authority",
       "path": "crates/event/src/comment.rs",
-      "byte_length": 34745,
-      "sha256": "24b7fda13229f21cee5cef2a9941e3aaafdbc486b19ed42731b0b6ee37c28703",
+      "byte_length": 34896,
+      "sha256": "a35b17418884c4c620e19b96d36a418db9d0065a5582f6b869a6bc6111f65bf6",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -873,8 +873,8 @@
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 507854,
-      "sha256": "92b1fd2cea9f3015285000550a75ca123ffe21f46556e8a4d81b4e3c180f0586",
+      "byte_length": 515338,
+      "sha256": "ebce4adbe84d7304a09f156612ef7f734e713a4dfe81e2f7aaa0cb1952c4206e",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

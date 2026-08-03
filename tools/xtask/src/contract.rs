@@ -3193,6 +3193,11 @@ impl ReleaseContractFile {
     }
 
     fn public_crates(&self) -> Vec<String> {
+        if let Some(publication) = &self.publication {
+            if !publication.local_packages.is_empty() {
+                return publication.local_packages.clone();
+            }
+        }
         if self.uses_classification() {
             return self.classification.public.clone();
         }
@@ -7818,6 +7823,7 @@ fn package_field_configured(table: &toml::value::Table, field: &str) -> bool {
     };
     match value {
         toml::Value::String(raw) => !raw.trim().is_empty(),
+        toml::Value::Array(values) => !values.is_empty(),
         toml::Value::Table(inner) => inner
             .get("workspace")
             .and_then(toml::Value::as_bool)
@@ -7826,22 +7832,77 @@ fn package_field_configured(table: &toml::value::Table, field: &str) -> bool {
     }
 }
 
+fn package_string_array<'a>(
+    package: &'a toml::value::Table,
+    crate_name: &str,
+    field: &str,
+) -> Result<Vec<&'a str>, String> {
+    let values = package
+        .get(field)
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| format!("publish crate {crate_name} must define package.{field}"))?;
+    if values.is_empty() {
+        return Err(format!(
+            "publish crate {crate_name} package.{field} must not be empty"
+        ));
+    }
+    let mut resolved = Vec::with_capacity(values.len());
+    let mut unique = BTreeSet::new();
+    for value in values {
+        let value = value.as_str().ok_or_else(|| {
+            format!("publish crate {crate_name} package.{field} entries must be strings")
+        })?;
+        if value.trim().is_empty() {
+            return Err(format!(
+                "publish crate {crate_name} package.{field} entries must not be empty"
+            ));
+        }
+        if !unique.insert(value) {
+            return Err(format!(
+                "publish crate {crate_name} package.{field} contains duplicate {value}"
+            ));
+        }
+        resolved.push(value);
+    }
+    Ok(resolved)
+}
+
+fn validate_package_file_matches(
+    workspace_root: &Path,
+    package_root: &Path,
+    crate_name: &str,
+    relative: &str,
+) -> Result<(), String> {
+    let package_path = package_root.join(relative);
+    let root_path = workspace_root.join(relative);
+    let package_bytes = fs::read(&package_path)
+        .map_err(|error| format!("publish crate {crate_name} must include {relative}: {error}"))?;
+    let root_bytes =
+        fs::read(&root_path).map_err(|error| format!("read {}: {error}", root_path.display()))?;
+    if package_bytes != root_bytes {
+        return Err(format!(
+            "publish crate {crate_name} {relative} must match the workspace license"
+        ));
+    }
+    Ok(())
+}
+
 fn validate_publish_package_metadata(
     workspace_root: &Path,
     publish_crates: &BTreeSet<String>,
 ) -> Result<(), String> {
-    let mut package_tables = BTreeMap::new();
+    let mut package_records = BTreeMap::new();
     for record in workspace_package_records(workspace_root)? {
-        if package_tables
-            .insert(record.name, record.manifest_value)
+        if package_records
+            .insert(record.name.clone(), record)
             .is_some()
         {
             return Err("duplicate workspace package name in package metadata map".to_string());
         }
     }
     for crate_name in publish_crates {
-        let parsed = match package_tables.get(crate_name) {
-            Some(parsed) => parsed,
+        let record = match package_records.get(crate_name) {
+            Some(record) => record,
             None => {
                 return Err(format!(
                     "publish crate {} has no workspace manifest",
@@ -7849,7 +7910,8 @@ fn validate_publish_package_metadata(
                 ));
             }
         };
-        let package = parsed
+        let package = record
+            .manifest_value
             .get("package")
             .and_then(toml::Value::as_table)
             .expect("workspace package records include [package] table");
@@ -7860,11 +7922,107 @@ fn validate_publish_package_metadata(
                 crate_name
             ));
         }
-        for field in ["repository", "homepage", "documentation", "readme"] {
+        for field in [
+            "authors",
+            "version",
+            "edition",
+            "rust-version",
+            "license",
+            "repository",
+            "homepage",
+            "documentation",
+            "readme",
+        ] {
             if !package_field_configured(package, field) {
                 return Err(format!(
                     "publish crate {} must configure package.{}",
                     crate_name, field
+                ));
+            }
+        }
+
+        let expected_documentation = format!("https://docs.rs/{crate_name}");
+        if package.get("documentation").and_then(toml::Value::as_str)
+            != Some(expected_documentation.as_str())
+        {
+            return Err(format!(
+                "publish crate {crate_name} package.documentation must be {expected_documentation}"
+            ));
+        }
+        if package.get("license-file").is_some() {
+            return Err(format!(
+                "publish crate {crate_name} must use the workspace SPDX license expression"
+            ));
+        }
+
+        let keywords = package_string_array(package, crate_name, "keywords")?;
+        if keywords.len() > 5 {
+            return Err(format!(
+                "publish crate {crate_name} package.keywords exceeds the crates.io limit of 5"
+            ));
+        }
+        let categories = package_string_array(package, crate_name, "categories")?;
+        if categories.len() > 5 {
+            return Err(format!(
+                "publish crate {crate_name} package.categories exceeds the crates.io limit of 5"
+            ));
+        }
+
+        let include = package_string_array(package, crate_name, "include")?;
+        for required in ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"] {
+            if !include.contains(&required) {
+                return Err(format!(
+                    "publish crate {crate_name} package.include must contain {required}"
+                ));
+            }
+        }
+
+        let package_root = record
+            .manifest_path
+            .parent()
+            .expect("workspace member manifest has a parent");
+        if !package_root.join("README.md").is_file() {
+            return Err(format!(
+                "publish crate {crate_name} must include a package-local README.md"
+            ));
+        }
+        validate_package_file_matches(workspace_root, package_root, crate_name, "LICENSE-APACHE")?;
+        validate_package_file_matches(workspace_root, package_root, crate_name, "LICENSE-MIT")?;
+
+        let docs_rs = package
+            .get("metadata")
+            .and_then(toml::Value::as_table)
+            .and_then(|metadata| metadata.get("docs"))
+            .and_then(toml::Value::as_table)
+            .and_then(|docs| docs.get("rs"))
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| {
+                format!("publish crate {crate_name} must define [package.metadata.docs.rs]")
+            })?;
+        if docs_rs
+            .get("all-features")
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Err(format!(
+                "publish crate {crate_name} docs.rs must use an intentional feature set"
+            ));
+        }
+        let docs_features = docs_rs
+            .get("features")
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("publish crate {crate_name} docs.rs must define features"))?;
+        let declared_features = record
+            .manifest_value
+            .get("features")
+            .and_then(toml::Value::as_table);
+        for feature in docs_features {
+            let feature = feature.as_str().ok_or_else(|| {
+                format!("publish crate {crate_name} docs.rs features must be strings")
+            })?;
+            if !declared_features.is_some_and(|features| features.contains_key(feature)) {
+                return Err(format!(
+                    "publish crate {crate_name} docs.rs selects unknown feature {feature}"
                 ));
             }
         }
@@ -9487,13 +9645,32 @@ name = "radroots_a"
 publish = ["crates-io"]
 version = "1.0.0"
 edition = "2024"
+authors = ["Radroots Test"]
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
 description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
-documentation = "https://docs.example.com/a"
-readme = "README"
+documentation = "https://docs.rs/radroots_a"
+readme = "README.md"
+keywords = ["radroots"]
+categories = ["data-structures"]
+include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = []
 "#,
         );
+        write_file(&root.join("LICENSE-APACHE"), "Apache license\n");
+        write_file(&root.join("LICENSE-MIT"), "MIT license\n");
+        for relative in ["README.md", "LICENSE-APACHE", "LICENSE-MIT"] {
+            let contents = if relative == "README.md" {
+                "# radroots_a\n".to_owned()
+            } else {
+                fs::read_to_string(root.join(relative)).expect("read synthetic package metadata")
+            };
+            write_file(&root.join("crates").join("a").join(relative), &contents);
+        }
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
@@ -12473,11 +12650,20 @@ name = "radroots_a"
 publish = ["crates-io"]
 version = "1.0.0"
 edition = "2024"
+authors = ["Radroots Test"]
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
 description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
-documentation = "https://docs.example.com/a"
-readme = "README"
+documentation = "https://docs.rs/radroots_a"
+readme = "README.md"
+keywords = ["radroots"]
+categories = ["data-structures"]
+include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = []
 
 [dependencies]
 radroots_b = { path = "../b" }
@@ -12795,11 +12981,20 @@ name = "radroots_a"
 publish = ["crates-io"]
 version = "1.0.0"
 edition = "2024"
+authors = ["Radroots Test"]
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
 description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
-documentation = "https://docs.example.com/a"
-readme = "README"
+documentation = "https://docs.rs/radroots_a"
+readme = "README.md"
+keywords = ["radroots"]
+categories = ["data-structures"]
+include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = []
 
 [dependencies]
 dto_bindgen_core = { path = "../../dto_bindgen_core", version = "0.1.0", optional = true }
@@ -12854,11 +13049,20 @@ name = "radroots_a"
 publish = ["crates-io"]
 version = "1.0.0"
 edition = "2024"
+authors = ["Radroots Test"]
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
 description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
-documentation = "https://docs.example.com/a"
-readme = "README"
+documentation = "https://docs.rs/radroots_a"
+readme = "README.md"
+keywords = ["radroots"]
+categories = ["data-structures"]
+include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = []
 "#,
         );
         write_file(
@@ -14028,6 +14232,9 @@ members = ["crates/a"]
 name = "radroots_a"
 version = "1.0.0"
 edition = "2024"
+authors = ["Radroots Test"]
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
 description = "crate a"
 repository = { workspace = true }
 homepage = { workspace = true }

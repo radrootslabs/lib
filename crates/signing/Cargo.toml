@@ -9,7 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 readme = "README.md"
+documentation = "https://docs.rs/radroots_signing"
 publish = false
+keywords = ["radroots", "signing", "nostr", "authorization"]
+categories = ["cryptography", "no-std"]
+include = ["src/**", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = ["std", "serde"]
 
 [lib]
 name = "radroots_signing"

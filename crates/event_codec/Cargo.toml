@@ -11,6 +11,12 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots_event_codec"
 readme = "README.md"
+keywords = ["radroots", "nostr", "codec", "events"]
+categories = ["encoding", "no-std"]
+include = ["src/**", "examples/**", "Cargo.toml", "README.md", "COMPATIBILITY.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = ["std", "json", "knowledge", "manifests"]
 
 [lib]
 name = "radroots_event_codec"
