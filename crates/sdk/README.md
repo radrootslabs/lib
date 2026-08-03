@@ -5,11 +5,20 @@ Curated Radroots Rust SDK for local-first Radroots product workflows.
 The SDK v1 product runtime is centered on `RadrootsClient::builder()`,
 `sdk.farms()`, `sdk.listings()`, `sdk.trades()`, `sdk.market()`, and `sdk.sync()`.
 
-`RadrootsClient::builder()` defaults to memory storage, the system clock, the `LocalOnly` transport
-profile, and no production network publishing. Directory storage is opt-in and creates
-`runtime.sqlite`, `private.sqlite`, and `studio.sqlite` in the selected directory. Configured Nostr
-relay URLs live inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::MultiTarget`,
-and product enqueue requests choose the active profile through `TargetPolicy::default_profile()`.
+The current refactor exposes explicit memory or SQLite storage composition and
+never creates files until the host invokes an I/O constructor. Canonical SQLite
+storage owns only `runtime.sqlite` and `private.sqlite`; application presentation
+state belongs to the host.
+
+## Studio state migration
+
+The predecessor SDK-owned `studio.sqlite` database is not opened, copied,
+backed up, restored, or deleted by this release. Before upgrading, a Studio host
+that needs values from that file must use the predecessor version to export the
+application state, validate the export, and import it into a host-owned schema.
+The host must retain its original file until it has independently verified the
+new state. This SDK intentionally provides no dual read, dual write, implicit
+migration, or fallback path.
 
 When `signer-adapters` is enabled, `RadrootsClient::builder()` accepts a configured
 `RadrootsSdkSignerProvider`. The production signing modes are `local_key` and `myc_nip46`. Product

@@ -108,6 +108,35 @@ fn lifecycle_source_owns_no_hidden_worker_runtime_or_blocking_drop() {
     assert!(CLIENT.contains("impl Drop for CloseAttempt"));
 }
 
+#[test]
+fn sdk_source_contains_no_studio_storage_surface() {
+    let source_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut pending = vec![source_root];
+    while let Some(path) = pending.pop() {
+        for entry in std::fs::read_dir(path).expect("read SDK source") {
+            let entry = entry.expect("source entry");
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().and_then(|value| value.to_str()) == Some("rs") {
+                let source = std::fs::read_to_string(&path).expect("read source file");
+                for forbidden in [
+                    "studio.sqlite",
+                    "SdkStudioStore",
+                    "sdk_studio_state",
+                    "studio_store",
+                ] {
+                    assert!(
+                        !source.contains(forbidden),
+                        "{} contains retired Studio storage marker {forbidden}",
+                        path.display()
+                    );
+                }
+            }
+        }
+    }
+}
+
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
     let dependencies = manifest
         .split_once("[dependencies]")
