@@ -19,6 +19,7 @@ radroots_event_codec = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, default-features = false }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
+url = { workspace = true }
 
 [lints]
 workspace = true
