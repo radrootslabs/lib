@@ -232,11 +232,11 @@ impl Client {
         Ok(self.inner.sink.as_deref())
     }
 
-    /// Returns the explicit synchronization engine, when configured.
+    /// Returns client-scoped canonical synchronization operations, when configured.
     #[cfg(feature = "sync")]
-    pub fn sync_engine(&self) -> Result<Option<&radroots_sync::Engine>> {
+    pub fn sync(&self) -> Result<Option<crate::sync::Operations<'_>>> {
         self.require_open()?;
-        Ok(self.inner.sync.as_ref())
+        Ok(self.inner.sync.as_ref().map(crate::sync::Operations::new))
     }
 
     /// Returns whether explicit close completed successfully or reached the

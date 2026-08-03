@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const CLIENT: &str = include_str!("../src/client.rs");
+const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
 
 #[test]
@@ -156,6 +157,42 @@ fn transport_profiles_reuse_canonical_types_and_forbid_fallback() {
             "SDK transport source contains forbidden duplicate or fallback `{duplicate}`"
         );
     }
+}
+
+#[test]
+fn sync_operations_only_delegate_to_the_canonical_engine() {
+    for delegation in [
+        "self.engine.pull(request, admission).await",
+        "self.engine.ingest(observed, admission).await",
+        "self.engine.ingest_batch(observed, admission).await",
+        "self.engine.refresh_projection(request, reducer).await",
+        "self.engine.sign_and_enqueue(request).await",
+        "self.engine.deliver_pending(request).await",
+        "self.engine.status(projections).await",
+        "self.engine.retry_decision(record, now_unix_ms)",
+    ] {
+        assert!(
+            SYNC.contains(delegation),
+            "missing sync delegation `{delegation}`"
+        );
+    }
+    for duplicate in [
+        "pub struct SyncTransport",
+        "pub struct SyncOutbox",
+        "pub struct SyncProjection",
+        "pub struct SyncStatus",
+        "pub struct PushOutbox",
+    ] {
+        assert!(
+            !SYNC.contains(duplicate),
+            "SDK sync source contains duplicate lower model `{duplicate}`"
+        );
+    }
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/sync_runtime.rs")
+            .exists()
+    );
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
