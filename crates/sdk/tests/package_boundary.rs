@@ -40,6 +40,20 @@ fn manifest_has_final_identity_and_dependency_boundary() {
         "radroots_transport_nostr",
     ]);
     assert_eq!(dependencies, expected);
+    for forbidden in [
+        "radroots_event_store",
+        "radroots_nostr_signer",
+        "radroots_outbox",
+        "radroots_protected_store",
+        "radroots_runtime_paths",
+        "radroots_secret_vault",
+        "radroots_transport_reticulum",
+    ] {
+        assert!(
+            !dependencies.contains(forbidden),
+            "SDK depends on private or superseded package `{forbidden}`"
+        );
+    }
 }
 
 #[test]

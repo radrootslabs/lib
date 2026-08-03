@@ -552,27 +552,75 @@ fn check_sdk_feature_matrix(root: &Path) -> Result<(), String> {
         .get("features")
         .and_then(toml::Value::as_table)
         .ok_or_else(|| format!("{} must define [features]", path.display()))?;
-    let runtime = feature_entries(features, "runtime")?;
-    for entry in [
-        "dep:radroots_transport_reticulum",
-        "dep:radroots_transport",
-        "dep:radroots_outbox",
-    ] {
-        require_feature_entry(&runtime, "runtime", entry)?;
+    let expected = BTreeSet::from([
+        "default",
+        "full",
+        "geonames",
+        "knowledge",
+        "local-signing",
+        "memory",
+        "native",
+        "nip46",
+        "nostr",
+        "radrootsd",
+        "sqlite",
+        "sync",
+    ]);
+    let actual = features.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    if actual != expected {
+        return Err(format!(
+            "crates/sdk/Cargo.toml feature vocabulary mismatch: expected {expected:?}, found {actual:?}"
+        ));
     }
-    let nostr_runtime = feature_entries(features, "transport-nostr-runtime")?;
-    for entry in [
-        "runtime",
-        "dep:radroots_nostr",
-        "radroots_transport_nostr/client",
+    for (feature, expected_entries) in [
+        ("default", &["memory"][..]),
+        ("memory", &["radroots_storage/memory"]),
+        ("sqlite", &["dep:radroots_storage_sqlite"]),
+        ("sync", &["dep:radroots_sync"]),
+        (
+            "nostr",
+            &["sync", "dep:radroots_nostr", "dep:radroots_transport_nostr"],
+        ),
+        ("nip46", &["nostr", "dep:radroots_nostr_connect"]),
+        (
+            "local-signing",
+            &[
+                "dep:radroots_nostr",
+                "dep:radroots_secrets",
+                "radroots_nostr/signing",
+            ],
+        ),
+        (
+            "radrootsd",
+            &["sync", "dep:reqwest", "dep:serde", "dep:serde_json"],
+        ),
+        ("geonames", &["dep:radroots_geonames"]),
+        (
+            "knowledge",
+            &["radroots_event/knowledge", "radroots_event_codec/knowledge"],
+        ),
+        ("native", &["sqlite", "sync", "local-signing"]),
+        (
+            "full",
+            &[
+                "native",
+                "nostr",
+                "nip46",
+                "radrootsd",
+                "geonames",
+                "knowledge",
+            ],
+        ),
     ] {
-        require_feature_entry(&nostr_runtime, "transport-nostr-runtime", entry)?;
-    }
-    if features.contains_key("transport-reticulum-preview") {
-        return Err(
-            "crates/sdk/Cargo.toml must not introduce transport-reticulum-preview as a runtime-owned Reticulum preview feature alias"
-                .to_owned(),
-        );
+        let actual_entries = feature_entries(features, feature)?
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let expected_entries = expected_entries.iter().copied().collect::<BTreeSet<_>>();
+        if actual_entries != expected_entries {
+            return Err(format!(
+                "crates/sdk/Cargo.toml feature `{feature}` mismatch: expected {expected_entries:?}, found {actual_entries:?}"
+            ));
+        }
     }
     check_sdk_workspace_reticulum_dependency_boundaries(root)?;
     Ok(())
@@ -828,16 +876,6 @@ fn feature_entries<'features>(
                 .ok_or_else(|| format!("feature `{feature}` must contain only string entries"))
         })
         .collect()
-}
-
-fn require_feature_entry(entries: &[&str], feature: &str, entry: &str) -> Result<(), String> {
-    if entries.contains(&entry) {
-        Ok(())
-    } else {
-        Err(format!(
-            "crates/sdk/Cargo.toml feature `{feature}` must include `{entry}`"
-        ))
-    }
 }
 
 fn check_package_source_metadata(root: &Path) -> Result<(), String> {

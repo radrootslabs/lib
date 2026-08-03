@@ -82,10 +82,14 @@ fn public_native_type_snapshot_uses_contextual_names() {
 }
 
 #[test]
-fn active_native_structs_are_field_layout_independent() {
+fn active_native_api_has_no_sdk_owned_traits_or_public_field_layout() {
     for (module, source) in ACTIVE_MODULES {
         for line in source.lines() {
             let line = line.trim_start();
+            assert!(
+                !line.starts_with("pub trait "),
+                "{module} must reuse lower host SPIs instead of exposing an SDK-owned trait"
+            );
             for declaration in ["pub struct ", "pub enum ", "pub trait ", "pub type "] {
                 if let Some(item) = line.strip_prefix(declaration) {
                     let item = item

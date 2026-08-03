@@ -90,7 +90,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke sdk-rust-local | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -181,10 +181,10 @@ mod tests {
 
     #[test]
     fn accepts_smoke() {
-        let args = ["smoke".to_owned(), "knowledge-rust-local".to_owned()];
+        let args = ["smoke".to_owned(), "sdk-rust-local".to_owned()];
         assert!(matches!(
             command_action(&args).expect("action"),
-            CommandAction::Smoke(rest) if rest == ["knowledge-rust-local"]
+            CommandAction::Smoke(rest) if rest == ["sdk-rust-local"]
         ));
     }
 
