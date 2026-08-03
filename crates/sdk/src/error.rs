@@ -2,18 +2,23 @@
 
 use std::{error, fmt};
 
-/// Narrow SDK error boundary.
-///
-/// Concrete variants are introduced with the owning operation contracts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
-pub struct Error {
-    _private: (),
+pub enum Error {
+    /// No storage capability was supplied.
+    MissingStorage,
+    /// A signer cannot be selected without an outbound event sink.
+    SignerWithoutSink,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Radroots SDK operation failed")
+        match self {
+            Self::MissingStorage => formatter.write_str("SDK storage capability is missing"),
+            Self::SignerWithoutSink => {
+                formatter.write_str("SDK signer requires an outbound event sink")
+            }
+        }
     }
 }
 

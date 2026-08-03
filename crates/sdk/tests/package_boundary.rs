@@ -73,6 +73,22 @@ fn root_types_have_the_required_std_contracts() {
     assert!(result.is_ok());
 }
 
+#[cfg(feature = "sqlite")]
+#[test]
+fn sqlite_backend_implements_the_canonical_storage_capability() {
+    fn assert_storage<T: radroots_storage::Storage>() {}
+    assert_storage::<radroots_storage_sqlite::SqliteStorage>();
+}
+
+#[cfg(feature = "nostr")]
+#[test]
+fn nostr_adapter_implements_independent_source_and_sink_capabilities() {
+    fn assert_source<T: radroots_transport::EventSource>() {}
+    fn assert_sink<T: radroots_transport::EventSink>() {}
+    assert_source::<radroots_transport_nostr::NostrTransport>();
+    assert_sink::<radroots_transport_nostr::NostrTransport>();
+}
+
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
     let dependencies = manifest
         .split_once("[dependencies]")
