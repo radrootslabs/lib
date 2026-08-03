@@ -134,7 +134,11 @@ pub struct NostrTransport {
 impl NostrTransport {
     /// Creates an inert transport from validated explicit configuration.
     pub fn new(config: Config) -> Self {
-        let client = nostr_sdk::Client::default();
+        let client = nostr_sdk::Client::builder()
+            .websocket_transport(crate::relay::HardenedWebsocketTransport::new(
+                config.relay_url_policy(),
+            ))
+            .build();
         client.automatic_authentication(false);
         Self {
             config,

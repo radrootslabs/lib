@@ -22,6 +22,7 @@ pub(crate) trait RelayClient: Send + Sync {
         relays: Vec<RelayUrl>,
         event: Event,
         connect_timeout: Duration,
+        operation_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>>;
 }
 
@@ -49,37 +50,34 @@ impl RelayClient for LiveRelayClient {
         relays: Vec<RelayUrl>,
         event: Event,
         connect_timeout: Duration,
+        operation_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
         Box::pin(async move {
             let mut results = Vec::with_capacity(relays.len());
             for relay in relays {
                 let url = relay.as_str().to_owned();
-                let outcome = match self.client.add_relay(url.as_str()).await {
-                    Err(_) => status::connection_failure(),
-                    Ok(_) => match self
-                        .client
+                let attempt = async {
+                    self.client.add_relay(url.as_str()).await?;
+                    self.client
                         .try_connect_relay(url.as_str(), connect_timeout)
-                        .await
-                    {
-                        Err(_) => status::connection_failure(),
-                        Ok(()) => match self.client.send_event_to([url.as_str()], &event).await {
-                            Err(error) => status::delivery_failure(error.to_string().as_str()),
-                            Ok(output) => output
-                                .success
-                                .iter()
-                                .any(|accepted| accepted.to_string().trim_end_matches('/') == url)
-                                .then(DeliveryOutcome::accepted)
-                                .or_else(|| {
-                                    output.failed.iter().find_map(|(failed, message)| {
-                                        (failed.to_string().trim_end_matches('/') == url)
-                                            .then(|| status::delivery_failure(message.as_str()))
-                                    })
-                                })
-                                .unwrap_or_else(|| {
-                                    status::delivery_failure("relay omitted result")
-                                }),
-                        },
-                    },
+                        .await?;
+                    self.client.send_event_to([url.as_str()], &event).await
+                };
+                let outcome = match tokio::time::timeout(operation_timeout, attempt).await {
+                    Err(_) => status::delivery_failure("timeout"),
+                    Ok(Err(error)) => status::delivery_failure(error.to_string().as_str()),
+                    Ok(Ok(output)) => output
+                        .success
+                        .iter()
+                        .any(|accepted| accepted.to_string().trim_end_matches('/') == url)
+                        .then(DeliveryOutcome::accepted)
+                        .or_else(|| {
+                            output.failed.iter().find_map(|(failed, message)| {
+                                (failed.to_string().trim_end_matches('/') == url)
+                                    .then(|| status::delivery_failure(message.as_str()))
+                            })
+                        })
+                        .unwrap_or_else(|| status::delivery_failure("relay omitted result")),
                 };
                 results.push(RelayPublishResult { relay, outcome });
             }
@@ -121,6 +119,17 @@ impl EventSink for NostrTransport {
                 Ok(event) => event,
                 Err(_) => return Err(radroots_transport::Error::InvalidDeliveryOutcome),
             };
+            let remaining_ms = request.deadline_unix_ms().saturating_sub(unix_time_ms());
+            let operation_timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
+            if operation_timeout_ms == 0 {
+                let timeout = status::delivery_failure("timeout");
+                skipped.extend(requested.into_iter().map(|(_, target)| {
+                    DeliveryTargetReceipt::skipped(target, timeout.clone())
+                        .expect("normalized timeout cannot satisfy delivery")
+                }));
+                self.status.record_sink(0, skipped.len(), Some("timeout"));
+                return DeliveryReceipt::for_request(&request, skipped);
+            }
             let expected: BTreeSet<_> = requested.iter().map(|(relay, _)| relay.clone()).collect();
             let results = self
                 .client
@@ -128,6 +137,7 @@ impl EventSink for NostrTransport {
                     requested.iter().map(|(relay, _)| relay.clone()).collect(),
                     event,
                     Duration::from_millis(self.config().connect_timeout_ms()),
+                    Duration::from_millis(operation_timeout_ms),
                 )
                 .await;
             let mut by_relay = BTreeMap::new();
@@ -163,6 +173,13 @@ impl EventSink for NostrTransport {
     }
 }
 
+fn unix_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,7 +190,10 @@ mod tests {
         policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
         sink::DeliveryPayload,
     };
-    use std::sync::Arc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     #[derive(Debug)]
     struct MockRelayClient {
@@ -186,6 +206,7 @@ mod tests {
             relays: Vec<RelayUrl>,
             _event: Event,
             _connect_timeout: Duration,
+            _operation_timeout: Duration,
         ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
             Box::pin(async move {
                 relays
@@ -209,6 +230,10 @@ mod tests {
     }
 
     fn request() -> DeliveryRequest {
+        request_with_deadline(1_800_000_000_000)
+    }
+
+    fn request_with_deadline(deadline_unix_ms: u64) -> DeliveryRequest {
         DeliveryRequest::new(
             "nostr-delivery",
             payload(),
@@ -218,7 +243,7 @@ mod tests {
             ])
             .expect("targets"),
             SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
-            1_800_000_000_000,
+            deadline_unix_ms,
         )
         .expect("request")
     }
@@ -264,5 +289,73 @@ mod tests {
         for (message, expected) in cases {
             assert_eq!(status::delivery_failure(message).kind(), expected);
         }
+    }
+
+    #[test]
+    fn dropping_an_unpolled_delivery_performs_no_relay_work() {
+        #[derive(Debug)]
+        struct CountingRelayClient(Arc<AtomicUsize>);
+
+        impl RelayClient for CountingRelayClient {
+            fn publish<'a>(
+                &'a self,
+                _relays: Vec<RelayUrl>,
+                _event: Event,
+                _connect_timeout: Duration,
+                _operation_timeout: Duration,
+            ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Vec::new() })
+            }
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let config = Config::new(
+            RelayUrlPolicy::Public,
+            ["wss://one.example", "wss://two.example"],
+        )
+        .expect("config");
+        let transport =
+            NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
+        let delivery = transport.deliver(request());
+        drop(delivery);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn expired_delivery_deadline_performs_no_relay_work() {
+        #[derive(Debug)]
+        struct CountingRelayClient(Arc<AtomicUsize>);
+
+        impl RelayClient for CountingRelayClient {
+            fn publish<'a>(
+                &'a self,
+                _relays: Vec<RelayUrl>,
+                _event: Event,
+                _connect_timeout: Duration,
+                _operation_timeout: Duration,
+            ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Vec::new() })
+            }
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let config = Config::new(
+            RelayUrlPolicy::Public,
+            ["wss://one.example", "wss://two.example"],
+        )
+        .expect("config");
+        let transport =
+            NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
+        let receipt = futures::executor::block_on(transport.deliver(request_with_deadline(1)))
+            .expect("bounded timeout receipt");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(
+            receipt
+                .target_receipts()
+                .iter()
+                .all(|target| !target.was_attempted())
+        );
     }
 }

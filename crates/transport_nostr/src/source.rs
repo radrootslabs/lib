@@ -19,6 +19,7 @@ const CURSOR_PREFIX: &str = "nostr-v1";
 pub(crate) struct SourceQuery {
     relays: Vec<RelayUrl>,
     until_unix_seconds: Option<u64>,
+    connect_timeout: Duration,
     timeout: Duration,
 }
 
@@ -59,7 +60,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                 let result = async {
                     self.client.add_relay(url.as_str()).await?;
                     self.client
-                        .try_connect_relay(url.as_str(), query.timeout)
+                        .try_connect_relay(url.as_str(), query.connect_timeout)
                         .await?;
                     let mut filter = Filter::new().limit(UPSTREAM_FETCH_LIMIT);
                     if let Some(until) = query.until_unix_seconds {
@@ -137,6 +138,9 @@ impl EventSource for NostrTransport {
                 .fetch(SourceQuery {
                     relays: targets.keys().cloned().collect(),
                     until_unix_seconds: cursor.as_ref().map(|cursor| cursor.created_at),
+                    connect_timeout: Duration::from_millis(
+                        timeout_ms.min(self.config().connect_timeout_ms()),
+                    ),
                     timeout: Duration::from_millis(timeout_ms),
                 })
                 .await;
@@ -424,5 +428,15 @@ mod tests {
         );
         drop(fetch);
         assert_eq!(calls.load(AtomicOrdering::SeqCst), 0);
+    }
+
+    #[test]
+    fn adapter_and_generic_page_limits_are_identical() {
+        assert_eq!(UPSTREAM_FETCH_LIMIT, 1_000);
+        assert_eq!(
+            UPSTREAM_FETCH_LIMIT,
+            usize::from(radroots_transport::source::FETCH_PAGE_MAX_EVENTS)
+        );
+        assert!(FetchBounds::new(1_001, u64::MAX).is_err());
     }
 }

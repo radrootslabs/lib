@@ -172,15 +172,6 @@ pub(crate) fn delivery_failure(upstream: &str) -> DeliveryOutcome {
         .expect("static normalized relay outcome")
 }
 
-pub(crate) fn connection_failure() -> DeliveryOutcome {
-    DeliveryOutcome::unavailable()
-        .with_detail(
-            FailureClass::Connection.code(),
-            FailureClass::Connection.message(),
-        )
-        .expect("static normalized connection outcome")
-}
-
 pub(crate) fn fetch_failure(upstream: &str) -> (FetchTargetState, &'static str) {
     let class = classify(upstream).class;
     let state = match class {

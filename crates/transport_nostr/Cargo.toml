@@ -19,8 +19,12 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
 radroots_nostr = { workspace = true, default-features = false, features = ["events"] }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
+async-wsocket = { workspace = true }
 nostr-sdk = { workspace = true }
+nostr-relay-pool = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["net", "time"] }
+tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]

@@ -5238,13 +5238,17 @@ dependencies = [
 name = "radroots_transport_nostr"
 version = "0.1.0-alpha"
 dependencies = [
+ "async-wsocket",
  "futures",
+ "nostr-relay-pool",
  "nostr-sdk",
  "radroots_event_codec",
  "radroots_nostr",
  "radroots_protocol",
  "radroots_transport",
  "serde_json",
+ "tokio",
+ "tokio-tungstenite",
  "url",
 ]
 

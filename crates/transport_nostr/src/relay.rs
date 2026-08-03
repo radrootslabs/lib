@@ -1,10 +1,22 @@
 //! Nostr relay identifiers and network policy.
 
 use crate::Error;
+use async_wsocket::futures_util::stream::SplitSink;
+use async_wsocket::futures_util::{Sink, SinkExt, StreamExt, TryStreamExt};
+use async_wsocket::{Message, WebSocket};
 use core::fmt;
-use radroots_transport::{Target, TransportId};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use core::pin::Pin;
+use nostr_relay_pool::ConnectionMode;
+use nostr_relay_pool::transport::error::TransportError;
+use nostr_relay_pool::transport::websocket::{WebSocketSink, WebSocketStream, WebSocketTransport};
+use radroots_transport::{BoxFuture, Target, TransportId};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::task::{Context, Poll};
+use std::time::Duration;
+use tokio::net::TcpStream;
 use url::Url;
+
+const MAX_RESOLVED_ADDRESSES: usize = 32;
 
 /// Validated canonical Nostr relay URL.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -80,6 +92,153 @@ impl RelayUrl {
 impl fmt::Display for RelayUrl {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
+    }
+}
+
+/// WebSocket connector that validates and pins DNS results before opening a
+/// socket while retaining the original host name for TLS verification.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HardenedWebsocketTransport {
+    policy: RelayUrlPolicy,
+}
+
+impl HardenedWebsocketTransport {
+    pub(crate) const fn new(policy: RelayUrlPolicy) -> Self {
+        Self { policy }
+    }
+}
+
+impl WebSocketTransport for HardenedWebsocketTransport {
+    fn support_ping(&self) -> bool {
+        true
+    }
+
+    fn connect<'a>(
+        &'a self,
+        url: &'a Url,
+        mode: &'a ConnectionMode,
+        timeout: Duration,
+    ) -> BoxFuture<'a, Result<(WebSocketSink, WebSocketStream), TransportError>> {
+        Box::pin(async move {
+            if !matches!(mode, ConnectionMode::Direct) {
+                return Err(policy_error(
+                    "proxy and Tor connection modes are not configured",
+                ));
+            }
+            let relay = RelayUrl::parse(url.as_str(), self.policy)
+                .map_err(|_| policy_error("relay URL is denied by network policy"))?;
+            let parsed =
+                Url::parse(relay.as_str()).map_err(|_| policy_error("relay URL is invalid"))?;
+            let host = parsed
+                .host_str()
+                .ok_or_else(|| policy_error("relay URL host is missing"))?;
+            let port = parsed
+                .port_or_known_default()
+                .ok_or_else(|| policy_error("relay URL port is missing"))?;
+
+            let connect = async {
+                let addresses = resolve_bounded(host, port).await?;
+                relay
+                    .validate_resolved_addresses(self.policy, addresses.iter().map(SocketAddr::ip))
+                    .map_err(|_| policy_error("relay DNS result is denied by network policy"))?;
+                let tcp = connect_pinned(addresses.as_slice()).await?;
+                let (stream, _) = tokio_tungstenite::client_async_tls(relay.as_str(), tcp)
+                    .await
+                    .map_err(TransportError::backend)?;
+                let socket = WebSocket::Tokio(stream);
+                let (tx, rx) = socket.split();
+                let sink: WebSocketSink = Box::new(HardenedTransportSink(tx));
+                let stream: WebSocketStream =
+                    Box::pin(rx.map_err(TransportError::backend)) as WebSocketStream;
+                Ok((sink, stream))
+            };
+
+            tokio::time::timeout(timeout, connect)
+                .await
+                .map_err(|_| policy_error("relay connection deadline elapsed"))?
+        })
+    }
+}
+
+async fn resolve_bounded(host: &str, port: u16) -> Result<Vec<SocketAddr>, TransportError> {
+    let mut addresses = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|_| policy_error("relay DNS resolution failed"))?;
+    let mut bounded = Vec::new();
+    for address in addresses.by_ref().take(MAX_RESOLVED_ADDRESSES + 1) {
+        bounded.push(address);
+    }
+    if bounded.is_empty() {
+        return Err(policy_error("relay DNS resolution returned no addresses"));
+    }
+    if bounded.len() > MAX_RESOLVED_ADDRESSES {
+        return Err(policy_error(
+            "relay DNS resolution exceeded its address limit",
+        ));
+    }
+    Ok(bounded)
+}
+
+async fn connect_pinned(addresses: &[SocketAddr]) -> Result<TcpStream, TransportError> {
+    for address in addresses {
+        if let Ok(stream) = TcpStream::connect(address).await {
+            return Ok(stream);
+        }
+    }
+    Err(policy_error("relay connection failed"))
+}
+
+#[derive(Debug)]
+struct NetworkPolicyError(&'static str);
+
+impl fmt::Display for NetworkPolicyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+
+impl std::error::Error for NetworkPolicyError {}
+
+fn policy_error(message: &'static str) -> TransportError {
+    TransportError::backend(NetworkPolicyError(message))
+}
+
+struct HardenedTransportSink(SplitSink<WebSocket, Message>);
+
+impl Sink<Message> for HardenedTransportSink {
+    type Error = TransportError;
+
+    fn poll_ready(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.0)
+            .poll_ready_unpin(context)
+            .map_err(TransportError::backend)
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
+        Pin::new(&mut self.0)
+            .start_send_unpin(item)
+            .map_err(TransportError::backend)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.0)
+            .poll_flush_unpin(context)
+            .map_err(TransportError::backend)
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.0)
+            .poll_close_unpin(context)
+            .map_err(TransportError::backend)
     }
 }
 
@@ -228,5 +387,43 @@ mod tests {
                 )
                 .is_err()
         );
+        assert!(
+            relay
+                .validate_resolved_addresses(
+                    RelayUrlPolicy::Public,
+                    [
+                        IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)),
+                        IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+                    ],
+                )
+                .is_err()
+        );
+        assert!(
+            relay
+                .validate_resolved_addresses(RelayUrlPolicy::Public, [])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn address_policies_fail_closed_for_special_use_ranges() {
+        for denied in [
+            Ipv4Addr::new(0, 0, 0, 0),
+            Ipv4Addr::new(10, 0, 0, 1),
+            Ipv4Addr::new(100, 64, 0, 1),
+            Ipv4Addr::new(127, 0, 0, 1),
+            Ipv4Addr::new(169, 254, 1, 1),
+            Ipv4Addr::new(192, 0, 2, 1),
+            Ipv4Addr::new(198, 18, 0, 1),
+            Ipv4Addr::new(224, 0, 0, 1),
+            Ipv4Addr::new(240, 0, 0, 1),
+        ] {
+            assert!(!RelayUrlPolicy::Public.accepts_address(denied.into()));
+        }
+        for denied in [Ipv6Addr::UNSPECIFIED, Ipv6Addr::LOCALHOST] {
+            assert!(!RelayUrlPolicy::Public.accepts_address(denied.into()));
+        }
+        assert!(RelayUrlPolicy::Local.accepts_address(Ipv4Addr::LOCALHOST.into()));
+        assert!(!RelayUrlPolicy::Local.accepts_address(Ipv4Addr::new(10, 0, 0, 1).into()));
     }
 }
