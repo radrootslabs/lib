@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::download::FetchFailurePhase;
+
 /// Failure returned by GeoNames configuration and lookup operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -8,10 +10,37 @@ pub enum Error {
     InvalidAssetVersion,
     /// An asset file name was not one safe, relative path component.
     InvalidAssetFileName,
-    /// An asset source was empty or contained surrounding whitespace.
+    /// An asset source or authority was empty or contained whitespace.
     InvalidAssetSource,
+    /// An asset source did not use HTTPS with the declared authority.
+    UntrustedAssetSource,
     /// An asset declared a zero byte size.
     InvalidAssetByteSize,
+    /// The host-selected destination could not be used safely.
+    UnsafeAssetDestination,
+    /// Another acquisition currently owns the destination lock.
+    AssetDestinationBusy,
+    /// A filesystem operation failed.
+    Io {
+        /// Stable operation label without a host path.
+        operation: &'static str,
+        /// Portable I/O failure category.
+        kind: std::io::ErrorKind,
+    },
+    /// The injected fetcher failed before producing a complete stream.
+    Fetch {
+        /// Stable acquisition phase.
+        phase: FetchFailurePhase,
+    },
+    /// The acquired or inspected asset had the wrong length.
+    AssetSizeMismatch {
+        /// Declared asset length.
+        expected: u64,
+        /// Observed length, capped at `expected + 1` during acquisition.
+        actual: u64,
+    },
+    /// The acquired or inspected asset had the wrong digest.
+    AssetHashMismatch,
     /// A coordinate was non-finite or outside its geographic bounds.
     InvalidPoint,
     /// A query string was empty or contained surrounding whitespace.
@@ -24,18 +53,46 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::InvalidAssetVersion => "asset version must be non-empty and normalized",
-            Self::InvalidAssetFileName => {
-                "asset file name must be one safe relative path component"
+        match self {
+            Self::InvalidAssetVersion => {
+                formatter.write_str("asset version must be non-empty and normalized")
             }
-            Self::InvalidAssetSource => "asset source must be non-empty and normalized",
-            Self::InvalidAssetByteSize => "asset byte size must be greater than zero",
-            Self::InvalidPoint => "point must contain finite, in-range coordinates",
-            Self::InvalidQueryText => "query text must be non-empty and normalized",
-            Self::InvalidQueryLimit => "query limit must be between 1 and 100",
-            Self::QueryOptionNotApplicable => "query option is not applicable to this query kind",
-        })
+            Self::InvalidAssetFileName => {
+                formatter.write_str("asset file name must be one safe relative path component")
+            }
+            Self::InvalidAssetSource => {
+                formatter.write_str("asset source and authority must be non-empty and normalized")
+            }
+            Self::UntrustedAssetSource => {
+                formatter.write_str("asset source must use HTTPS and the declared authority")
+            }
+            Self::InvalidAssetByteSize => {
+                formatter.write_str("asset byte size must be greater than zero")
+            }
+            Self::UnsafeAssetDestination => formatter.write_str("asset destination is unsafe"),
+            Self::AssetDestinationBusy => {
+                formatter.write_str("asset destination is already being acquired")
+            }
+            Self::Io { operation, kind } => write!(formatter, "{operation} failed: {kind}"),
+            Self::Fetch { phase } => write!(formatter, "asset fetch failed during {phase}"),
+            Self::AssetSizeMismatch { expected, actual } => write!(
+                formatter,
+                "asset size mismatch: expected {expected} bytes, observed {actual}"
+            ),
+            Self::AssetHashMismatch => {
+                formatter.write_str("asset SHA-256 does not match its specification")
+            }
+            Self::InvalidPoint => {
+                formatter.write_str("point must contain finite, in-range coordinates")
+            }
+            Self::InvalidQueryText => {
+                formatter.write_str("query text must be non-empty and normalized")
+            }
+            Self::InvalidQueryLimit => formatter.write_str("query limit must be between 1 and 100"),
+            Self::QueryOptionNotApplicable => {
+                formatter.write_str("query option is not applicable to this query kind")
+            }
+        }
     }
 }
 
