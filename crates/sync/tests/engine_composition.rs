@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
+use futures_executor::block_on;
+use radroots_protocol::runtime::v1::{OPERATION_SCHEMA_VERSION, SyncCapabilityState, SyncHealth};
 use radroots_signing::{Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus};
-use radroots_storage::{Storage, event::SourceGeneration, memory::MemoryStorage};
+use radroots_storage::{
+    Storage, event::SourceGeneration, memory::MemoryStorage, projection::ProjectionId,
+};
 use radroots_sync::{
     Engine,
     policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
@@ -9,11 +13,13 @@ use radroots_sync::{
 use radroots_transport::{
     DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, EventSource, FetchPage,
     FetchRequest, SinkStatus, SourceStatus,
+    capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
 };
 
 struct MockSource;
 struct MockSink;
 struct MockSigner;
+struct UnconfiguredSource;
 struct FixedClock;
 struct FixedIds;
 
@@ -26,7 +32,16 @@ type TestDependencies = (
 
 impl EventSource for MockSource {
     fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SourceStatus, TransportError>> {
-        Box::pin(async { unreachable!("composition does not poll source") })
+        Box::pin(async {
+            Ok(SourceStatus::new(
+                radroots_transport::TransportId::NOSTR,
+                true,
+                Maturity::Stable,
+                Availability::Available,
+                SourceCapabilities::FETCH,
+                "ready",
+            ))
+        })
     }
 
     fn fetch(
@@ -37,9 +52,40 @@ impl EventSource for MockSource {
     }
 }
 
+impl EventSource for UnconfiguredSource {
+    fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SourceStatus, TransportError>> {
+        Box::pin(async {
+            Ok(SourceStatus::new(
+                radroots_transport::TransportId::NOSTR,
+                false,
+                Maturity::Preview,
+                Availability::Available,
+                SourceCapabilities::FETCH,
+                "not configured",
+            ))
+        })
+    }
+
+    fn fetch(
+        &self,
+        _request: FetchRequest,
+    ) -> radroots_transport::BoxFuture<'_, Result<FetchPage, TransportError>> {
+        Box::pin(async { unreachable!("status does not fetch") })
+    }
+}
+
 impl EventSink for MockSink {
     fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SinkStatus, TransportError>> {
-        Box::pin(async { unreachable!("composition does not poll sink") })
+        Box::pin(async {
+            Ok(SinkStatus::new(
+                radroots_transport::TransportId::NOSTR,
+                true,
+                Maturity::Preview,
+                Availability::Degraded,
+                SinkCapabilities::DELIVER,
+                "degraded",
+            ))
+        })
     }
 
     fn deliver(
@@ -54,7 +100,7 @@ impl Signer for MockSigner {
     fn status(
         &self,
     ) -> radroots_signing::signer::BoxFuture<'_, Result<SignerStatus, SigningError>> {
-        Box::pin(async { unreachable!("composition does not poll signer") })
+        Box::pin(async { Ok(SignerStatus::unavailable()) })
     }
 
     fn sign(
@@ -158,4 +204,54 @@ fn invalid_compositions_and_ambient_policy_inputs_fail_closed() {
         Err(Error::InvalidDeadlinePolicy)
     );
     assert_eq!(SyncId::new([0; 16]), Err(Error::InvalidSyncId));
+}
+
+#[test]
+fn status_aggregates_typed_capability_and_protocol_reports() {
+    let (storage, clock, ids, deadlines) = dependencies();
+    let full = Engine::builder(storage, clock, ids, deadlines)
+        .source(Arc::new(MockSource))
+        .sink(Arc::new(MockSink))
+        .signer(Arc::new(MockSigner))
+        .build()
+        .expect("full engine");
+    let projection = ProjectionId::parse("market-listings").expect("projection id");
+    let status = block_on(full.status(std::slice::from_ref(&projection))).expect("sync status");
+    assert_eq!(status.health(), SyncHealth::Degraded);
+    assert_eq!(status.source().state(), SyncCapabilityState::Available);
+    assert_eq!(status.sink().state(), SyncCapabilityState::Degraded);
+    assert_eq!(status.signer().state(), SyncCapabilityState::Configured);
+    assert_eq!(status.projections()[0].projection_id(), &projection);
+    assert!(status.projections()[0].status().is_none());
+    let protocol = status.to_protocol();
+    assert_eq!(protocol.schema_version, OPERATION_SCHEMA_VERSION);
+    assert_eq!(protocol.health, SyncHealth::Degraded);
+    assert_eq!(protocol.source, SyncCapabilityState::Available);
+    assert_eq!(protocol.sink, SyncCapabilityState::Degraded);
+    assert_eq!(protocol.signer, SyncCapabilityState::Configured);
+    assert_eq!(protocol.projections.untracked, 1);
+
+    let (storage, clock, ids, deadlines) = dependencies();
+    let sink_only = Engine::builder(storage, clock, ids, deadlines)
+        .sink(Arc::new(MockSink))
+        .build()
+        .expect("sink engine");
+    let status = block_on(sink_only.status(&[])).expect("sink-only status");
+    assert_eq!(status.source().state(), SyncCapabilityState::Unsupported);
+    assert_eq!(status.signer().state(), SyncCapabilityState::Unsupported);
+
+    let (storage, clock, ids, deadlines) = dependencies();
+    let compiled = Engine::builder(storage, clock, ids, deadlines)
+        .source(Arc::new(UnconfiguredSource))
+        .build()
+        .expect("unconfigured source engine");
+    let status = block_on(compiled.status(&[])).expect("compiled status");
+    assert_eq!(status.source().state(), SyncCapabilityState::Compiled);
+    assert!(status.source().status().is_some());
+    assert_eq!(status.sink().state(), SyncCapabilityState::Unsupported);
+
+    assert_eq!(
+        block_on(full.status(&[projection.clone(), projection])),
+        Err(Error::InvalidStatusRequest)
+    );
 }

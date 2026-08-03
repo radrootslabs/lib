@@ -203,7 +203,7 @@
     {
       "module": "runtime::v1",
       "path": "crates/protocol/src/runtime/v1.rs",
-      "sha256": "3ef493bd3d2e18f52f2efa0c508fe1bcdaced26d7f53674f130ccf38dd1b1e36",
+      "sha256": "15b0d104b7f1c01dffd69892fc842eee6de214fe11495b3b1267bfe2aed66a82",
       "types": [
         {
           "rust_path": "radroots_protocol::runtime::v1::ApprovalRequirement",
@@ -248,6 +248,30 @@
         {
           "rust_path": "radroots_protocol::runtime::v1::SignerRequirement",
           "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncCapabilityState",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncHealth",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncOutboxStatus",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncProjectionStatus",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncRetryDecision",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncStatusReceipt",
+          "kind": "struct"
         },
         {
           "rust_path": "radroots_protocol::runtime::v1::TransportRoute",

@@ -9,6 +9,7 @@ use std::{
 use futures::{FutureExt, task::noop_waker_ref};
 use futures_executor::block_on;
 use radroots_event::{EventDraft, SignedEvent, contract::AuthorRole, draft::SignedEventParts};
+use radroots_protocol::runtime::v1::SyncRetryDecision;
 use radroots_signing::{
     Actor, Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus,
     actor::ActorSource, error::Kind as SigningErrorKind, request::CancellationPolicy,
@@ -18,7 +19,7 @@ use radroots_storage::{
     event::{EventQuery, EventQueryBounds, SourceGeneration},
     journal::{IdempotencyKey, JournalStage, OperationInstanceId},
     memory::MemoryStorage,
-    outbox::{LeaseOwner, OutboxStage, SatisfactionResult},
+    outbox::{ClaimOutboxItems, LeaseId, LeaseOwner, OutboxStage, SatisfactionResult},
 };
 use radroots_sync::{
     Engine, PushRequest,
@@ -657,5 +658,85 @@ fn delivery_run_rejects_unbounded_claims() {
     assert_eq!(
         DeliveryRunRequest::new(owner, seed, 1_000, 0),
         Err(Error::InvalidDeliveryRequest)
+    );
+}
+
+#[test]
+fn retry_decisions_are_passive_typed_and_deadline_aware() {
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let (engine, storage) = setup_engine(signer);
+    let enqueued = block_on(engine.sign_and_enqueue(request(61, "wss://one.example")))
+        .expect("enqueue retry decision plan");
+    let now = enqueued.outbox().created_at_unix_ms() + 1;
+    assert_eq!(
+        engine.retry_decision(enqueued.outbox(), now),
+        Ok(SyncRetryDecision::Ready)
+    );
+    let claimed = block_on(Outbox::claim(
+        &*storage,
+        ClaimOutboxItems::new(
+            LeaseOwner::parse("retry-decision-test").expect("owner"),
+            LeaseId::new([81; 16]).expect("lease seed"),
+            now,
+            now + 100,
+            1,
+        )
+        .expect("claim request"),
+    ))
+    .expect("claim")
+    .pop()
+    .expect("claimed plan");
+    assert_eq!(
+        engine.retry_decision(claimed.record(), now + 1),
+        Ok(SyncRetryDecision::InFlightUntil { unix_ms: now + 100 })
+    );
+    let deferred = block_on(Outbox::release(
+        &*storage,
+        claimed.record().item_id(),
+        claimed.lease().id(),
+        claimed.record().revision(),
+        now + 2,
+        Some(now + 50),
+    ))
+    .expect("release with deferral");
+    assert_eq!(
+        engine.retry_decision(&deferred, now + 3),
+        Ok(SyncRetryDecision::DeferredUntil { unix_ms: now + 50 })
+    );
+    assert_eq!(
+        engine.retry_decision(&deferred, now + 50),
+        Ok(SyncRetryDecision::Ready)
+    );
+    assert_eq!(
+        engine.retry_decision(&deferred, deferred.request().deadline_unix_ms()),
+        Ok(SyncRetryDecision::Expired)
+    );
+    assert_eq!(
+        engine.retry_decision(&deferred, 0),
+        Err(Error::ClockUnavailable)
+    );
+
+    let sink = Arc::new(ScriptedSink::new([
+        DeliveryBehavior::Outcomes(vec![DeliveryOutcome::accepted()]),
+        DeliveryBehavior::Outcomes(vec![DeliveryOutcome::rejected()]),
+    ]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let ((engine, _), _) = setup_engine_with_sink(signer, sink);
+    block_on(engine.sign_and_enqueue(request(62, "wss://one.example")))
+        .expect("enqueue satisfied plan");
+    block_on(engine.sign_and_enqueue(request(63, "wss://two.example")))
+        .expect("enqueue exhausted plan");
+    let delivered = block_on(engine.deliver_pending(delivery_run(82, 2))).expect("deliver plans");
+    assert_eq!(
+        engine.retry_decision(delivered.outcomes()[0].as_ref().expect("satisfied"), now),
+        Ok(SyncRetryDecision::Satisfied)
+    );
+    assert_eq!(
+        engine.retry_decision(delivered.outcomes()[1].as_ref().expect("exhausted"), now),
+        Ok(SyncRetryDecision::Exhausted)
     );
 }

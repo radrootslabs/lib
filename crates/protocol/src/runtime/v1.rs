@@ -20,6 +20,127 @@ use crate::{
 /// Schema generation shared by every runtime operation request and receipt.
 pub const OPERATION_SCHEMA_VERSION: u16 = 1;
 
+/// Typed readiness of one optional synchronization capability.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SyncCapabilityState {
+    Unsupported,
+    Compiled,
+    Configured,
+    Available,
+    Degraded,
+}
+
+/// Aggregate synchronization health for the passive status operation.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SyncHealth {
+    Healthy,
+    Degraded,
+    Unavailable,
+}
+
+/// Host-action classification for one durable outbox record.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SyncRetryDecision {
+    Ready,
+    DeferredUntil { unix_ms: u64 },
+    InFlightUntil { unix_ms: u64 },
+    Satisfied,
+    Exhausted,
+    Expired,
+}
+
+/// Passive durable outbox cardinalities for `sync.status` generation 1.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SyncOutboxStatus {
+    pub pending: u64,
+    pub leased: u64,
+    pub retryable: u64,
+    pub satisfied: u64,
+    pub exhausted: u64,
+}
+
+/// Passive projection cardinalities for `sync.status` generation 1.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SyncProjectionStatus {
+    pub ready: u32,
+    pub invalidated: u32,
+    pub rebuilding: u32,
+    pub failed: u32,
+    pub untracked: u32,
+}
+
+/// Versioned passive receipt for the `sync.status` operation.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SyncStatusReceipt {
+    pub schema_version: u16,
+    pub health: SyncHealth,
+    pub storage: SyncCapabilityState,
+    pub source: SyncCapabilityState,
+    pub sink: SyncCapabilityState,
+    pub signer: SyncCapabilityState,
+    pub outbox: SyncOutboxStatus,
+    pub projections: SyncProjectionStatus,
+}
+
+impl SyncStatusReceipt {
+    /// Rejects status receipts from an unsupported operation generation.
+    pub const fn validate(&self) -> Result<(), Error> {
+        if self.schema_version != OPERATION_SCHEMA_VERSION {
+            return Err(Error::UnsupportedOperationSchemaVersion {
+                operation_id: OperationId::SyncStatus,
+                version: self.schema_version,
+            });
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for SyncStatusReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            schema_version: u16,
+            health: SyncHealth,
+            storage: SyncCapabilityState,
+            source: SyncCapabilityState,
+            sink: SyncCapabilityState,
+            signer: SyncCapabilityState,
+            outbox: SyncOutboxStatus,
+            projections: SyncProjectionStatus,
+        }
+        let wire = Wire::deserialize(deserializer)?;
+        let receipt = Self {
+            schema_version: wire.schema_version,
+            health: wire.health,
+            storage: wire.storage,
+            source: wire.source,
+            sink: wire.sink,
+            signer: wire.signer,
+            outbox: wire.outbox,
+            projections: wire.projections,
+        };
+        receipt.validate().map_err(serde::de::Error::custom)?;
+        Ok(receipt)
+    }
+}
+
 macro_rules! operation_ids {
     ($( $variant:ident => $value:literal ),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1177,5 +1298,47 @@ mod tests {
             serde_json::to_string(&OperationId::ProfileInspect).expect("operation JSON"),
             "\"profile.inspect\""
         );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn sync_status_receipt_is_typed_and_rejects_wire_drift() {
+        let receipt = SyncStatusReceipt {
+            schema_version: OPERATION_SCHEMA_VERSION,
+            health: SyncHealth::Degraded,
+            storage: SyncCapabilityState::Available,
+            source: SyncCapabilityState::Available,
+            sink: SyncCapabilityState::Degraded,
+            signer: SyncCapabilityState::Configured,
+            outbox: SyncOutboxStatus {
+                pending: 1,
+                leased: 2,
+                retryable: 3,
+                satisfied: 4,
+                exhausted: 5,
+            },
+            projections: SyncProjectionStatus {
+                ready: 6,
+                invalidated: 7,
+                rebuilding: 8,
+                failed: 9,
+                untracked: 10,
+            },
+        };
+        receipt.validate().expect("status receipt");
+        let value = serde_json::to_value(receipt).expect("status JSON");
+        assert_eq!(value["source"], "available");
+        assert_eq!(value["outbox"]["retryable"], 3);
+        assert_eq!(value["projections"]["untracked"], 10);
+        assert_eq!(
+            serde_json::from_value::<SyncStatusReceipt>(value.clone()).expect("status decode"),
+            receipt
+        );
+        let mut invalid_version = value.clone();
+        invalid_version["schema_version"] = 2.into();
+        assert!(serde_json::from_value::<SyncStatusReceipt>(invalid_version).is_err());
+        let mut unknown = value;
+        unknown["unknown"] = true.into();
+        assert!(serde_json::from_value::<SyncStatusReceipt>(unknown).is_err());
     }
 }
