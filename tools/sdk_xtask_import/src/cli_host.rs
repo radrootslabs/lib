@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use radroots_runtime_contract_v1::{RUNTIME_OPERATION_DESCRIPTORS_V1, RuntimeOperationIdV1};
+use radroots_protocol::runtime::v1::{CATALOG, OperationId};
 
 use crate::fs::{workspace_root, write_if_changed};
 
@@ -540,7 +540,7 @@ fn render_registry() -> Result<String, String> {
     validate_metadata()?;
     let mut out = generated_header();
     out.push_str("pub const OPERATION_REGISTRY: &[OperationSpec] = &[\n");
-    for (index, descriptor) in RUNTIME_OPERATION_DESCRIPTORS_V1.iter().enumerate() {
+    for (index, descriptor) in CATALOG.iter().enumerate() {
         let metadata = metadata_for(descriptor.operation_id)?;
         out.push_str("    OperationSpec {\n");
         out.push_str(&format!(
@@ -598,7 +598,7 @@ fn render_target() -> Result<String, String> {
     validate_metadata()?;
     let mut out = generated_header();
     out.push_str("target_operation_contracts! {\n");
-    for descriptor in RUNTIME_OPERATION_DESCRIPTORS_V1 {
+    for descriptor in CATALOG {
         let metadata = metadata_for(descriptor.operation_id)?;
         let type_name = metadata.variant;
         out.push_str(&format!(
@@ -615,26 +615,24 @@ fn generated_header() -> String {
 }
 
 fn validate_metadata() -> Result<(), String> {
-    if CLI_OPERATION_METADATA.len() != RUNTIME_OPERATION_DESCRIPTORS_V1.len() {
+    if CLI_OPERATION_METADATA.len() != CATALOG.len() {
         return Err(format!(
             "CLI metadata count {} does not match runtime descriptor count {}",
             CLI_OPERATION_METADATA.len(),
-            RUNTIME_OPERATION_DESCRIPTORS_V1.len()
+            CATALOG.len()
         ));
     }
-    for descriptor in RUNTIME_OPERATION_DESCRIPTORS_V1 {
+    for descriptor in CATALOG {
         metadata_for(descriptor.operation_id)?;
     }
     for metadata in CLI_OPERATION_METADATA {
-        RuntimeOperationIdV1::parse(metadata.operation_id)
+        OperationId::parse(metadata.operation_id)
             .map_err(|error| format!("invalid CLI metadata operation id: {error}"))?;
     }
     Ok(())
 }
 
-fn metadata_for(
-    operation_id: RuntimeOperationIdV1,
-) -> Result<&'static CliOperationMetadata, String> {
+fn metadata_for(operation_id: OperationId) -> Result<&'static CliOperationMetadata, String> {
     let operation_id = operation_id.as_str();
     CLI_OPERATION_METADATA
         .iter()
