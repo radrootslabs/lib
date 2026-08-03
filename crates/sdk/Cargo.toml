@@ -77,6 +77,10 @@ reqwest = { workspace = true, optional = true, default-features = false, feature
   "rustls-tls",
 ] }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 [[test]]
 name = "package_boundary"
 path = "tests/package_boundary.rs"

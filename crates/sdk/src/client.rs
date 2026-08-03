@@ -70,6 +70,18 @@ impl ClientBuilder {
         Self::new().storage(Arc::new(MemoryStorage::new(generation)))
     }
 
+    /// Explicitly opens canonical SQLite storage from validated host-owned
+    /// configuration and returns a builder containing only the storage SPI.
+    #[cfg(feature = "sqlite")]
+    pub async fn sqlite(options: crate::storage::SqliteOptions) -> Result<Self> {
+        let storage = radroots_storage_sqlite::SqliteStorage::open(options)
+            .await
+            .map_err(Error::storage_open_failed)?;
+        Ok(Self::new()
+            .storage(Arc::new(storage))
+            .capability_availability(CapabilityId::PERSISTENT_STORAGE, Availability::Available))
+    }
+
     /// Injects the canonical storage capability.
     #[must_use]
     pub fn storage(mut self, storage: Arc<dyn Storage>) -> Self {
@@ -160,6 +172,22 @@ impl Client {
             explicitly_configured: &self.inner.explicitly_configured_capabilities,
             overrides: &self.inner.capability_availability,
         })
+    }
+
+    /// Returns canonical backend status without exposing a backend handle.
+    pub async fn storage_status(&self) -> Result<crate::storage::Status> {
+        let storage = self.storage()?;
+        radroots_storage::BackupSource::status(storage)
+            .await
+            .map_err(Error::storage_inspection_failed)
+    }
+
+    /// Runs canonical integrity inspection without exposing backend internals.
+    pub async fn storage_integrity(&self) -> Result<crate::storage::IntegrityStatus> {
+        let storage = self.storage()?;
+        radroots_storage::BackupSource::integrity(storage)
+            .await
+            .map_err(Error::storage_inspection_failed)
     }
 
     /// Returns the injected canonical storage capability.
@@ -512,6 +540,70 @@ mod tests {
                 .availability(),
             Availability::Unavailable
         );
+    }
+
+    #[test]
+    fn memory_storage_status_integrity_and_lifecycle_use_native_contracts() {
+        use radroots_storage::status::{
+            IntegrityHealth, ShutdownState, StorageBackend, StorageOpenMode, WriterPolicy,
+        };
+
+        let client = ClientBuilder::memory(generation()).build().expect("client");
+        let status = block_on(client.storage_status()).expect("status");
+        assert_eq!(status.backend(), StorageBackend::Memory);
+        assert_eq!(status.open_mode(), StorageOpenMode::Create);
+        assert_eq!(status.writer_policy(), WriterPolicy::NoWriter);
+        assert_eq!(status.shutdown(), ShutdownState::Open);
+        assert_eq!(
+            block_on(client.storage_integrity())
+                .expect("integrity")
+                .health(),
+            IntegrityHealth::Healthy
+        );
+        block_on(client.close()).expect("close");
+        assert_eq!(
+            block_on(client.storage_status())
+                .expect_err("closed")
+                .kind(),
+            crate::error::ErrorKind::ClientClosed
+        );
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn sqlite_builder_exposes_native_status_integrity_and_lifecycle() {
+        use radroots_storage::status::{
+            IntegrityHealth, ShutdownState, StorageBackend, StorageOpenMode, WriterPolicy,
+        };
+
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let paths = crate::storage::SqlitePaths::from_directory(directory.path()).expect("paths");
+        let options =
+            crate::storage::SqliteOptions::new(paths, crate::storage::SqliteOpenMode::Create)
+                .with_source_generation(generation(), 1)
+                .expect("source generation");
+        let client = ClientBuilder::sqlite(options)
+            .await
+            .expect("open builder")
+            .build()
+            .expect("client");
+        let status = client.storage_status().await.expect("status");
+        assert_eq!(status.backend(), StorageBackend::Sqlite);
+        assert_eq!(status.open_mode(), StorageOpenMode::Create);
+        assert_eq!(status.writer_policy(), WriterPolicy::AdvisoryProcessLock);
+        assert_eq!(status.shutdown(), ShutdownState::Open);
+        assert!(status.wal_enabled());
+        assert_ne!(status.busy_timeout_ms(), 0);
+        assert_eq!(
+            client
+                .storage_integrity()
+                .await
+                .expect("integrity")
+                .health(),
+            IntegrityHealth::Unknown
+        );
+        client.close().await.expect("close");
+        assert!(client.is_closed());
     }
 
     struct ThreadWaker;

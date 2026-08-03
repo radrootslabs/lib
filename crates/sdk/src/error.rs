@@ -106,6 +106,20 @@ error_catalog! {
         message: "SDK storage close failed",
         safe_detail_keys: []
     },
+    StorageOpenFailed => {
+        code: InternalError,
+        operation: None,
+        capability: Some(CapabilityId::PERSISTENT_STORAGE),
+        message: "SDK persistent storage open failed",
+        safe_detail_keys: []
+    },
+    StorageInspectionFailed => {
+        code: StorageIntegrityFailed,
+        operation: None,
+        capability: Some(CapabilityId::CANONICAL_STORAGE),
+        message: "SDK storage inspection failed",
+        safe_detail_keys: []
+    },
 }
 
 /// Stable metadata for one native SDK failure.
@@ -205,6 +219,21 @@ impl Error {
     pub(crate) fn storage_close_failed(source: radroots_storage::Error) -> Self {
         Self {
             kind: ErrorKind::StorageCloseFailed,
+            source: Some(Box::new(source)),
+        }
+    }
+
+    #[cfg(feature = "sqlite")]
+    pub(crate) fn storage_open_failed(source: radroots_storage_sqlite::Error) -> Self {
+        Self {
+            kind: ErrorKind::StorageOpenFailed,
+            source: Some(Box::new(source)),
+        }
+    }
+
+    pub(crate) fn storage_inspection_failed(source: radroots_storage::Error) -> Self {
+        Self {
+            kind: ErrorKind::StorageInspectionFailed,
             source: Some(Box::new(source)),
         }
     }
