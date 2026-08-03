@@ -178,6 +178,8 @@ impl EngineBuilder {
 }
 
 /// Sync composition and host-policy error.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Error {
@@ -192,6 +194,9 @@ pub enum Error {
     StorageConflict,
     StorageFailed,
     InvalidIngestReceipt,
+    InvalidPullRequest,
+    MissingSource,
+    InvalidSourcePage,
 }
 
 impl core::fmt::Display for Error {
@@ -208,6 +213,9 @@ impl core::fmt::Display for Error {
             Self::StorageConflict => "sync input conflicts with durable storage state",
             Self::StorageFailed => "sync storage operation failed",
             Self::InvalidIngestReceipt => "sync storage returned an invalid ingest receipt",
+            Self::InvalidPullRequest => "sync pull request is outside its bounds",
+            Self::MissingSource => "sync engine has no event source",
+            Self::InvalidSourcePage => "sync source returned an invalid page",
         })
     }
 }

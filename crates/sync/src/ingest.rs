@@ -107,6 +107,7 @@ impl IngestReceipt {
 }
 
 /// Ordered independent outcomes for one bounded caller-supplied batch.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IngestBatchReceipt {
     outcomes: Vec<Result<IngestReceipt, Error>>,
