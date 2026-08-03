@@ -16,7 +16,7 @@ use crate::{Error, SqliteStorage};
 
 const LEGACY_SOURCE_MAX: usize = 4;
 /// Maximum predecessor event rows converted by one staging transaction.
-pub const LEGACY_EVENT_STAGE_PAGE_LIMIT_MAX: u16 = 256;
+pub const LEGACY_STAGE_PAGE_LIMIT_MAX: u16 = 256;
 const LEGACY_MANIFEST: &str = "manifest.v1";
 const EVENT_STORE_LEDGER: &str = "radroots_event_store_schema_migrations";
 const EVENT_STORE_LEDGER_DDL: &str = "CREATE TABLE radroots_event_store_schema_migrations (
@@ -347,6 +347,87 @@ pub struct LegacyEventStagePage {
     staged_row_count: u64,
     resume_cursor: Option<[u8; 8]>,
     complete: bool,
+}
+
+/// Stable predecessor table order for bounded legacy outbox graph staging.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum LegacyOutboxTable {
+    Operations,
+    Events,
+    DeliveryPlans,
+    DeliveryTargets,
+    DeliveryAttempts,
+}
+
+impl LegacyOutboxTable {
+    /// Returns the stable staging table-kind value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Operations => "operations",
+            Self::Events => "events",
+            Self::DeliveryPlans => "delivery_plans",
+            Self::DeliveryTargets => "delivery_targets",
+            Self::DeliveryAttempts => "delivery_attempts",
+        }
+    }
+
+    const fn code(self) -> u8 {
+        match self {
+            Self::Operations => 1,
+            Self::Events => 2,
+            Self::DeliveryPlans => 3,
+            Self::DeliveryTargets => 4,
+            Self::DeliveryAttempts => 5,
+        }
+    }
+
+    const fn next(self) -> Option<Self> {
+        match self {
+            Self::Operations => Some(Self::Events),
+            Self::Events => Some(Self::DeliveryPlans),
+            Self::DeliveryPlans => Some(Self::DeliveryTargets),
+            Self::DeliveryTargets => Some(Self::DeliveryAttempts),
+            Self::DeliveryAttempts => None,
+        }
+    }
+}
+
+/// Result of one bounded legacy outbox table staging transaction.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyOutboxStagePage {
+    table: LegacyOutboxTable,
+    staged_rows: u16,
+    staged_row_count: u64,
+    resume_cursor: [u8; 9],
+    complete: bool,
+}
+
+impl LegacyOutboxStagePage {
+    /// Returns the predecessor table processed by this page.
+    pub const fn table(&self) -> LegacyOutboxTable {
+        self.table
+    }
+
+    /// Returns rows newly staged by this transaction.
+    pub const fn staged_rows(&self) -> u16 {
+        self.staged_rows
+    }
+
+    /// Returns the cumulative durable outbox graph row count.
+    pub const fn staged_row_count(&self) -> u64 {
+        self.staged_row_count
+    }
+
+    /// Returns the exact table-discriminated predecessor cursor.
+    pub const fn resume_cursor(&self) -> &[u8; 9] {
+        &self.resume_cursor
+    }
+
+    /// Reports whether all five predecessor tables reached their exact end.
+    pub const fn is_complete(&self) -> bool {
+        self.complete
+    }
 }
 
 impl LegacyEventStagePage {
@@ -915,7 +996,7 @@ impl SqliteStorage {
         updated_at_unix_ms: u64,
     ) -> Result<LegacyEventStagePage, Error> {
         self.require_legacy_import_writer(classified.target_generation())?;
-        if limit == 0 || limit > LEGACY_EVENT_STAGE_PAGE_LIMIT_MAX || updated_at_unix_ms == 0 {
+        if limit == 0 || limit > LEGACY_STAGE_PAGE_LIMIT_MAX || updated_at_unix_ms == 0 {
             return Err(Error::InvalidLegacyImportStageRequest);
         }
         verify_prepared_evidence(&classified.prepared).await?;
@@ -1165,6 +1246,273 @@ impl SqliteStorage {
             staged_rows: newly_staged,
             staged_row_count: total,
             resume_cursor: cursor,
+            complete,
+        })
+    }
+
+    /// Converts one bounded table page from an exact legacy outbox graph.
+    pub async fn stage_legacy_outbox(
+        &self,
+        classified: &ClassifiedLegacyImport,
+        limit: u16,
+        updated_at_unix_ms: u64,
+    ) -> Result<LegacyOutboxStagePage, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        if limit == 0 || limit > LEGACY_STAGE_PAGE_LIMIT_MAX || updated_at_unix_ms == 0 {
+            return Err(Error::InvalidLegacyImportStageRequest);
+        }
+        verify_prepared_evidence(&classified.prepared).await?;
+        let classification_sha256 = classification_digest(classified);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if !journal_matches_classified(&journal, classified, classification_sha256)
+            || !classified.sources().iter().any(|source| {
+                source.kind() == LegacySourceKind::Outbox
+                    && source.schema() == LegacySchema::OutboxV1
+            })
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let snapshot = classified
+            .prepared
+            .snapshots()
+            .iter()
+            .find(|snapshot| snapshot.kind() == LegacySourceKind::Outbox)
+            .ok_or(Error::LegacyImportConflict)?;
+        let source_path = classified.bundle_path().join(snapshot.relative_path());
+        let updated_at = i64::try_from(updated_at_unix_ms)
+            .map_err(|_| Error::InvalidLegacyImportStageRequest)?;
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let import_row = sqlx::query(
+            "SELECT state, updated_at_ms FROM radroots_runtime_legacy_imports
+             WHERE import_id = ? AND target_generation = ?
+               AND manifest_sha256 = ? AND classification_sha256 = ?",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .bind(classified.target_generation().as_bytes().as_slice())
+        .bind(classified.prepared.manifest_sha256().as_bytes().as_slice())
+        .bind(classification_sha256.as_bytes().as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?
+        .ok_or(Error::LegacyImportConflict)?;
+        let import_state = parse_import_state(
+            import_row
+                .try_get::<String, _>("state")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?
+                .as_str(),
+        )?;
+        let import_updated_at = import_row
+            .try_get::<i64, _>("updated_at_ms")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        if updated_at < import_updated_at
+            || !matches!(
+                import_state,
+                LegacyImportState::Classified
+                    | LegacyImportState::Staging
+                    | LegacyImportState::Ready
+            )
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let member_row = sqlx::query(
+            "SELECT state, resume_cursor, staged_row_count, updated_at_ms
+             FROM radroots_runtime_legacy_import_members
+             WHERE import_id = ? AND source_kind = 'outbox'",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?
+        .ok_or(Error::LegacyImportConflict)?;
+        let member_state = parse_member_state(
+            member_row
+                .try_get::<String, _>("state")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?
+                .as_str(),
+        )?;
+        let durable_cursor = member_row
+            .try_get::<Option<Vec<u8>>, _>("resume_cursor")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        let (table, after) = decode_outbox_stage_cursor(durable_cursor.as_deref())?;
+        let staged_row_count = u64::try_from(
+            member_row
+                .try_get::<i64, _>("staged_row_count")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )
+        .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        let member_updated_at = member_row
+            .try_get::<i64, _>("updated_at_ms")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        if updated_at < member_updated_at {
+            return Err(Error::LegacyImportConflict);
+        }
+        if member_state == LegacyImportMemberState::Ready {
+            let cursor = durable_cursor
+                .as_deref()
+                .map(decode_exact_outbox_stage_cursor)
+                .transpose()?
+                .ok_or(Error::InvalidLegacyImportJournal)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            return Ok(LegacyOutboxStagePage {
+                table: LegacyOutboxTable::DeliveryAttempts,
+                staged_rows: 0,
+                staged_row_count,
+                resume_cursor: cursor,
+                complete: true,
+            });
+        }
+        if !matches!(
+            member_state,
+            LegacyImportMemberState::Pending | LegacyImportMemberState::Staging
+        ) {
+            return Err(Error::LegacyImportConflict);
+        }
+        if import_state == LegacyImportState::Classified {
+            sqlx::query(
+                "UPDATE radroots_runtime_legacy_imports
+                 SET state = 'staging', updated_at_ms = ? WHERE import_id = ?",
+            )
+            .bind(updated_at)
+            .bind(classified.import_id().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        }
+        if member_state == LegacyImportMemberState::Pending {
+            sqlx::query(
+                "UPDATE radroots_runtime_legacy_import_members
+                 SET state = 'staging', updated_at_ms = ?
+                 WHERE import_id = ? AND source_kind = 'outbox'",
+            )
+            .bind(updated_at)
+            .bind(classified.import_id().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        }
+        let mut source = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&source_path)
+                .read_only(true),
+        )
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let rows = sqlx::query(outbox_stage_query(table))
+            .bind(after)
+            .bind(i64::from(limit) + 1)
+            .fetch_all(&mut source)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        source
+            .close()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let table_complete = rows.len() <= usize::from(limit);
+        let mut last_id = after;
+        let mut newly_staged = 0_u16;
+        for row in rows.into_iter().take(usize::from(limit)) {
+            let legacy_id = row
+                .try_get::<i64, _>("legacy_id")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            let parent_legacy_id = row
+                .try_get::<Option<i64>, _>("parent_legacy_id")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            let related_legacy_id = row
+                .try_get::<Option<i64>, _>("related_legacy_id")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            let record_json = row
+                .try_get::<Vec<u8>, _>("record_json")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            if legacy_id <= last_id || record_json.is_empty() {
+                return Err(Error::LegacyImportRowInvalid {
+                    source_kind: "outbox",
+                    legacy_sequence: legacy_id,
+                });
+            }
+            sqlx::query(
+                "INSERT INTO radroots_runtime_legacy_outbox_staging(
+                    import_id, source_kind, table_kind, legacy_id,
+                    parent_legacy_id, related_legacy_id, record_json
+                 ) VALUES (?, 'outbox', ?, ?, ?, ?, ?)",
+            )
+            .bind(classified.import_id().as_bytes().as_slice())
+            .bind(table.as_str())
+            .bind(legacy_id)
+            .bind(parent_legacy_id)
+            .bind(related_legacy_id)
+            .bind(record_json)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+            last_id = legacy_id;
+            newly_staged += 1;
+        }
+        let complete = table_complete && table.next().is_none();
+        let next_cursor = if table_complete {
+            encode_outbox_stage_cursor(
+                table.next().unwrap_or(table),
+                if complete { last_id } else { 0 },
+            )
+        } else {
+            encode_outbox_stage_cursor(table, last_id)
+        };
+        let total = staged_row_count
+            .checked_add(u64::from(newly_staged))
+            .ok_or(Error::LegacyImportStagingFailed)?;
+        sqlx::query(
+            "UPDATE radroots_runtime_legacy_import_members
+             SET state = ?, resume_cursor = ?, staged_row_count = ?, updated_at_ms = ?
+             WHERE import_id = ? AND source_kind = 'outbox'",
+        )
+        .bind(if complete { "ready" } else { "staging" })
+        .bind(next_cursor.as_slice())
+        .bind(i64::try_from(total).map_err(|_| Error::LegacyImportStagingFailed)?)
+        .bind(updated_at)
+        .bind(classified.import_id().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let pending_members = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM radroots_runtime_legacy_import_members
+             WHERE import_id = ? AND state != 'ready'",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        sqlx::query(
+            "UPDATE radroots_runtime_legacy_imports SET state = ?, updated_at_ms = ?
+             WHERE import_id = ?",
+        )
+        .bind(if pending_members == 0 {
+            "ready"
+        } else {
+            "staging"
+        })
+        .bind(updated_at)
+        .bind(classified.import_id().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        Ok(LegacyOutboxStagePage {
+            table,
+            staged_rows: newly_staged,
+            staged_row_count: total,
+            resume_cursor: next_cursor,
             complete,
         })
     }
@@ -1699,6 +2047,98 @@ fn classification_digest(classified: &ClassifiedLegacyImport) -> MemberDigest {
     MemberDigest::new(digest.finalize().into())
 }
 
+fn outbox_stage_query(table: LegacyOutboxTable) -> &'static str {
+    match table {
+        LegacyOutboxTable::Operations => {
+            "SELECT operation_id AS legacy_id, NULL AS parent_legacy_id,
+                    NULL AS related_legacy_id,
+                    CAST(json_array(operation_kind, expected_pubkey, semantic_scope,
+                      trade_id, mutation_id, canonical_payload_sha256, idempotency_key,
+                      operation_idempotency_digest, status, created_at_ms, updated_at_ms)
+                      AS BLOB) AS record_json
+             FROM outbox_operations WHERE operation_id > ?
+             ORDER BY operation_id LIMIT ?"
+        }
+        LegacyOutboxTable::Events => {
+            "SELECT outbox_event_id AS legacy_id, operation_id AS parent_legacy_id,
+                    NULL AS related_legacy_id,
+                    CAST(json_array(event_id, expected_pubkey, draft_json,
+                      signed_event_json, raw_event_json, state, attempt_count,
+                      claim_token, claim_owner, claim_expires_at_ms,
+                      active_delivery_plan_id, next_attempt_after_ms, last_error,
+                      event_store_ingested, event_store_inserted,
+                      event_store_ingested_at_ms, created_at_ms, updated_at_ms)
+                      AS BLOB) AS record_json
+             FROM outbox_event WHERE outbox_event_id > ?
+             ORDER BY outbox_event_id LIMIT ?"
+        }
+        LegacyOutboxTable::DeliveryPlans => {
+            "SELECT delivery_plan_id AS legacy_id, outbox_event_id AS parent_legacy_id,
+                    NULL AS related_legacy_id,
+                    CAST(json_array(transport_profile_id, target_policy_fingerprint,
+                      target_policy_version, satisfaction_policy, required_success_count,
+                      delivery_plan_idempotency_digest, status, satisfied_at_ms,
+                      created_at_ms, updated_at_ms) AS BLOB) AS record_json
+             FROM outbox_delivery_plan WHERE delivery_plan_id > ?
+             ORDER BY delivery_plan_id LIMIT ?"
+        }
+        LegacyOutboxTable::DeliveryTargets => {
+            "SELECT delivery_target_id AS legacy_id, delivery_plan_id AS parent_legacy_id,
+                    NULL AS related_legacy_id,
+                    CAST(json_array(transport_kind, endpoint_uri, target_scope,
+                      target_label, endpoint_fingerprint, status, last_outcome_kind,
+                      attempt_count, last_attempt_at_ms, completed_at_ms, last_error)
+                      AS BLOB) AS record_json
+             FROM outbox_delivery_target WHERE delivery_target_id > ?
+             ORDER BY delivery_target_id LIMIT ?"
+        }
+        LegacyOutboxTable::DeliveryAttempts => {
+            "SELECT delivery_attempt_id AS legacy_id,
+                    delivery_target_id AS parent_legacy_id,
+                    delivery_plan_id AS related_legacy_id,
+                    CAST(json_array(status, outcome_kind, attempted_at_ms, message)
+                      AS BLOB) AS record_json
+             FROM outbox_delivery_attempt WHERE delivery_attempt_id > ?
+             ORDER BY delivery_attempt_id LIMIT ?"
+        }
+    }
+}
+
+fn encode_outbox_stage_cursor(table: LegacyOutboxTable, legacy_id: i64) -> [u8; 9] {
+    let mut cursor = [0_u8; 9];
+    cursor[0] = table.code();
+    cursor[1..].copy_from_slice(&legacy_id.to_be_bytes());
+    cursor
+}
+
+fn decode_outbox_stage_cursor(cursor: Option<&[u8]>) -> Result<(LegacyOutboxTable, i64), Error> {
+    let Some(cursor) = cursor else {
+        return Ok((LegacyOutboxTable::Operations, 0));
+    };
+    let exact = decode_exact_outbox_stage_cursor(cursor)?;
+    let table = match exact[0] {
+        1 => LegacyOutboxTable::Operations,
+        2 => LegacyOutboxTable::Events,
+        3 => LegacyOutboxTable::DeliveryPlans,
+        4 => LegacyOutboxTable::DeliveryTargets,
+        5 => LegacyOutboxTable::DeliveryAttempts,
+        _ => return Err(Error::InvalidLegacyImportJournal),
+    };
+    let legacy_id = i64::from_be_bytes(
+        exact[1..]
+            .try_into()
+            .map_err(|_| Error::InvalidLegacyImportJournal)?,
+    );
+    if legacy_id < 0 {
+        return Err(Error::InvalidLegacyImportJournal);
+    }
+    Ok((table, legacy_id))
+}
+
+fn decode_exact_outbox_stage_cursor(cursor: &[u8]) -> Result<[u8; 9], Error> {
+    <[u8; 9]>::try_from(cursor).map_err(|_| Error::InvalidLegacyImportJournal)
+}
+
 struct ConvertedLegacyEvent {
     sequence: i64,
     event_id: [u8; 32],
@@ -2066,8 +2506,11 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_import_journal_policy_v1.toml");
     const EVENT_STAGING_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_event_staging_policy_v1.toml");
+    const OUTBOX_STAGING_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_outbox_staging_policy_v1.toml");
     const EVENT_STORE_V1_SQL: &str =
         include_str!("../../event_store/migrations/0001_event_store.up.sql");
+    const OUTBOX_V1_SQL: &str = include_str!("../../outbox/migrations/0001_outbox.up.sql");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -2164,6 +2607,25 @@ mod tests {
         cursor: String,
         page_limit_max: u16,
         conversion: Vec<String>,
+        transaction: String,
+        idempotency: String,
+        staging_rows: String,
+        evidence_revalidation: String,
+        live_product_row_mutation: bool,
+        hidden_clock_or_entropy: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct OutboxStagingPolicy {
+        schema_version: u32,
+        authority: String,
+        source_kind: String,
+        supported_schema: String,
+        table_order: Vec<String>,
+        cursor: String,
+        page_limit_max: u16,
+        record: String,
+        references: Vec<String>,
         transaction: String,
         idempotency: String,
         staging_rows: String,
@@ -2312,6 +2774,77 @@ mod tests {
             .await
             .expect("legacy event");
         }
+        connection
+    }
+
+    async fn supported_outbox_database(path: &Path) -> SqliteConnection {
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("supported outbox database");
+        sqlx::raw_sql(OUTBOX_V1_SQL)
+            .execute(&mut connection)
+            .await
+            .expect("outbox v1 schema");
+        sqlx::query(
+            "INSERT INTO outbox_operations(
+              operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id,
+              canonical_payload_sha256, idempotency_key, operation_idempotency_digest,
+              status, created_at_ms, updated_at_ms
+             ) VALUES ('publish', 'author', 'generic_event', NULL, NULL, NULL,
+                       'key', 'operation-digest', 'queued', 1, 1)",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("outbox operation");
+        sqlx::query(
+            "INSERT INTO outbox_event(
+              operation_id, event_id, expected_pubkey, draft_json, signed_event_json,
+              raw_event_json, state, attempt_count, claim_token, claim_owner,
+              claim_expires_at_ms, active_delivery_plan_id, next_attempt_after_ms,
+              last_error, event_store_ingested, event_store_inserted,
+              event_store_ingested_at_ms, created_at_ms, updated_at_ms
+             ) VALUES (1, 'event', 'author', '{}', NULL, NULL, 'draft_queued', 0,
+                       NULL, NULL, NULL, NULL, 1, NULL, 0, 0, NULL, 1, 1)",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("outbox event");
+        sqlx::query(
+            "INSERT INTO outbox_delivery_plan(
+              outbox_event_id, transport_profile_id, target_policy_fingerprint,
+              target_policy_version, satisfaction_policy, required_success_count,
+              delivery_plan_idempotency_digest, status, satisfied_at_ms,
+              created_at_ms, updated_at_ms
+             ) VALUES (1, 'nostr', 'policy', 1, 'all', 1, 'plan-digest',
+                       'queued', NULL, 1, 1)",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("outbox plan");
+        sqlx::query(
+            "INSERT INTO outbox_delivery_target(
+              delivery_plan_id, transport_kind, endpoint_uri, target_scope,
+              target_label, endpoint_fingerprint, status, last_outcome_kind,
+              attempt_count, last_attempt_at_ms, completed_at_ms, last_error
+             ) VALUES (1, 'nostr', 'wss://relay.example', NULL, NULL, 'endpoint',
+                       'pending', NULL, 0, NULL, NULL, NULL)",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("outbox target");
+        sqlx::query(
+            "INSERT INTO outbox_delivery_attempt(
+              delivery_plan_id, delivery_target_id, status, outcome_kind,
+              attempted_at_ms, message
+             ) VALUES (1, 1, 'complete', 'accepted', 2, 'accepted')",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("outbox attempt");
         connection
     }
 
@@ -2498,7 +3031,7 @@ mod tests {
         assert_eq!(policy.source_table, "event_envelopes");
         assert_eq!(policy.ordering, "strict_legacy_sequence_ascending");
         assert_eq!(policy.cursor, "positive_i64_big_endian_8_bytes");
-        assert_eq!(policy.page_limit_max, LEGACY_EVENT_STAGE_PAGE_LIMIT_MAX);
+        assert_eq!(policy.page_limit_max, LEGACY_STAGE_PAGE_LIMIT_MAX);
         assert_eq!(
             policy.conversion,
             [
@@ -2516,6 +3049,59 @@ mod tests {
         assert_eq!(
             policy.idempotency,
             "durable_cursor_exact_resume_completed_retry_noop"
+        );
+        assert_eq!(policy.staging_rows, "append_only_immutable");
+        assert_eq!(policy.evidence_revalidation, "before_every_page");
+        assert!(!policy.live_product_row_mutation);
+        assert!(!policy.hidden_clock_or_entropy);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_outbox_staging_policy() {
+        let policy = toml::from_str::<OutboxStagingPolicy>(OUTBOX_STAGING_POLICY)
+            .expect("legacy outbox staging policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.authority,
+            "runtime_sqlite_owned_forward_migration_v8"
+        );
+        assert_eq!(policy.source_kind, "outbox");
+        assert_eq!(policy.supported_schema, "outbox_v1");
+        assert_eq!(
+            policy.table_order,
+            [
+                "operations",
+                "events",
+                "delivery_plans",
+                "delivery_targets",
+                "delivery_attempts"
+            ]
+        );
+        assert_eq!(
+            policy.cursor,
+            "table_discriminator_u8_plus_non_negative_i64_big_endian"
+        );
+        assert_eq!(policy.page_limit_max, LEGACY_STAGE_PAGE_LIMIT_MAX);
+        assert_eq!(
+            policy.record,
+            "sqlite_json_array_exact_governed_column_order_blob"
+        );
+        assert_eq!(
+            policy.references,
+            [
+                "event_to_operation",
+                "delivery_plan_to_event",
+                "delivery_target_to_plan",
+                "delivery_attempt_to_target_and_same_plan"
+            ]
+        );
+        assert_eq!(
+            policy.transaction,
+            "target_begin_immediate_rows_cursor_count_and_state_atomic"
+        );
+        assert_eq!(
+            policy.idempotency,
+            "durable_table_cursor_exact_resume_completed_retry_noop"
         );
         assert_eq!(policy.staging_rows, "append_only_immutable");
         assert_eq!(policy.evidence_revalidation, "before_every_page");
@@ -3024,6 +3610,123 @@ mod tests {
         assert_eq!(journal.members()[0].staged_row_count(), 0);
         event_connection.close().await.expect("close event source");
         store.close().await.expect("close target");
+    }
+
+    #[tokio::test]
+    async fn outbox_staging_resumes_across_the_exact_ordered_graph_without_live_mutation() {
+        let target_root = tempfile::tempdir().expect("target root");
+        let legacy_root = tempfile::tempdir().expect("legacy root");
+        let backup_root = tempfile::tempdir().expect("backup root");
+        let outbox_path = legacy_root.path().join("outbox.sqlite");
+        let outbox_connection = supported_outbox_database(&outbox_path).await;
+        let plan = LegacyImportPlan::new(
+            LegacyImportId::new([130; 16]).expect("import id"),
+            vec![LegacySource::new(LegacySourceKind::Outbox, &outbox_path).expect("outbox source")],
+            backup_root.path(),
+            13_000,
+        )
+        .expect("outbox import plan");
+        let (target_paths, store) = target(target_root.path()).await;
+        let prepared = store
+            .prepare_legacy_import(&plan)
+            .await
+            .expect("prepared outbox import");
+        let classified = store
+            .classify_legacy_import(&prepared)
+            .await
+            .expect("classified outbox import");
+        assert_eq!(classified.sources()[0].schema(), LegacySchema::OutboxV1);
+        store
+            .begin_legacy_import(&classified, 13_001)
+            .await
+            .expect("begin outbox import");
+        let expected = [
+            LegacyOutboxTable::Operations,
+            LegacyOutboxTable::Events,
+            LegacyOutboxTable::DeliveryPlans,
+            LegacyOutboxTable::DeliveryTargets,
+        ];
+        for (index, table) in expected.into_iter().enumerate() {
+            let page = store
+                .stage_legacy_outbox(
+                    &classified,
+                    1,
+                    13_002 + u64::try_from(index).expect("page index"),
+                )
+                .await
+                .expect("outbox graph page");
+            assert_eq!(page.table(), table);
+            assert_eq!(page.staged_rows(), 1);
+            assert!(!page.is_complete());
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_outbox_items")
+                .fetch_one(&store.pool)
+                .await
+                .expect("live outbox count"),
+            0
+        );
+        store
+            .close()
+            .await
+            .expect("close target before attempt page");
+        let reopened =
+            SqliteStorage::open(OpenOptions::new(target_paths, OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen target before attempt page");
+        let final_page = reopened
+            .stage_legacy_outbox(&classified, 1, 13_006)
+            .await
+            .expect("attempt page");
+        assert_eq!(final_page.table(), LegacyOutboxTable::DeliveryAttempts);
+        assert_eq!(final_page.staged_rows(), 1);
+        assert_eq!(final_page.staged_row_count(), 5);
+        assert_eq!(
+            final_page.resume_cursor(),
+            &encode_outbox_stage_cursor(LegacyOutboxTable::DeliveryAttempts, 1)
+        );
+        assert!(final_page.is_complete());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_runtime_legacy_outbox_staging",
+            )
+            .fetch_one(&reopened.pool)
+            .await
+            .expect("staged graph count"),
+            5
+        );
+        let journal = reopened
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("outbox journal")
+            .expect("durable outbox journal");
+        assert_eq!(journal.state(), LegacyImportState::Ready);
+        assert_eq!(journal.members()[0].state(), LegacyImportMemberState::Ready);
+        assert_eq!(journal.members()[0].staged_row_count(), 5);
+        let retry = reopened
+            .stage_legacy_outbox(&classified, 1, 13_006)
+            .await
+            .expect("completed outbox retry");
+        assert_eq!(retry.staged_rows(), 0);
+        assert_eq!(retry.staged_row_count(), 5);
+        assert!(retry.is_complete());
+        for statement in [
+            "UPDATE radroots_runtime_legacy_outbox_staging SET legacy_id = 2 WHERE legacy_id = 1",
+            "DELETE FROM radroots_runtime_legacy_outbox_staging WHERE legacy_id = 1",
+        ] {
+            assert!(
+                sqlx::query(statement)
+                    .execute(&reopened.pool)
+                    .await
+                    .is_err(),
+                "outbox staging guard accepted `{statement}`"
+            );
+        }
+        outbox_connection
+            .close()
+            .await
+            .expect("close outbox source");
+        reopened.close().await.expect("close reopened target");
     }
 
     #[test]

@@ -64,6 +64,13 @@ cursor with its durable row count. Restart resumes after that exact cursor and
 a completed retry is a no-op. Staging never mutates the live canonical event
 table or upgrades predecessor verification claims.
 
+Runtime schema v8 stages the predecessor outbox as an ordered five-table
+graph. A table-discriminated cursor advances through operations, events,
+delivery plans, targets, and attempts; every child is accepted only after its
+exact parent, and attempts must bind a target from the same plan. Governed
+column-order JSON-array records preserve nullable and scalar predecessor data
+without writing the live operation journal, outbox, or delivery evidence.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

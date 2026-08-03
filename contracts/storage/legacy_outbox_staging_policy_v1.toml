@@ -1,0 +1,26 @@
+schema_version = 1
+authority = "runtime_sqlite_owned_forward_migration_v8"
+source_kind = "outbox"
+supported_schema = "outbox_v1"
+table_order = [
+  "operations",
+  "events",
+  "delivery_plans",
+  "delivery_targets",
+  "delivery_attempts",
+]
+cursor = "table_discriminator_u8_plus_non_negative_i64_big_endian"
+page_limit_max = 256
+record = "sqlite_json_array_exact_governed_column_order_blob"
+references = [
+  "event_to_operation",
+  "delivery_plan_to_event",
+  "delivery_target_to_plan",
+  "delivery_attempt_to_target_and_same_plan",
+]
+transaction = "target_begin_immediate_rows_cursor_count_and_state_atomic"
+idempotency = "durable_table_cursor_exact_resume_completed_retry_noop"
+staging_rows = "append_only_immutable"
+evidence_revalidation = "before_every_page"
+live_product_row_mutation = false
+hidden_clock_or_entropy = false
