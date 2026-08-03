@@ -82,5 +82,11 @@ implementations, coordinate FFI/mobile lifecycle, or inspect advanced
 capability and diagnostics contracts. There is intentionally no
 `radroots::sdk` namespace or wildcard SDK reexport.
 
+The namespace separation is a compiled contract:
+
+```compile_fail
+use radroots::sdk;
+```
+
 The normative package charter is the [`radroots` release-v1
 specification](../../docs/specs/radroots_crates_release_v1.md#19-radroots).
