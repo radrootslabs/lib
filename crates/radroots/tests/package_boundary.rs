@@ -25,6 +25,29 @@ fn package_has_final_identity_and_exact_dependencies() {
 }
 
 #[test]
+fn features_forward_the_exact_user_oriented_graph() {
+    for forwarding in [
+        "default = [\"client\"]",
+        "client = [\"radroots_sdk/default\"]",
+        "native = [\"client\", \"radroots_sdk/native\"]",
+        "nostr = [\"client\", \"radroots_sdk/nostr\"]",
+        "nip46 = [\"nostr\", \"radroots_sdk/nip46\"]",
+        "radrootsd = [\"client\", \"radroots_sdk/radrootsd\"]",
+        "geonames = [\"client\", \"radroots_sdk/geonames\"]",
+        "knowledge = [\"client\", \"radroots_sdk/knowledge\"]",
+        "full = [\"radroots_sdk/full\"]",
+    ] {
+        assert!(MANIFEST.contains(forwarding), "missing `{forwarding}`");
+    }
+    for forbidden in ["reticulum", "mesh", "simplex", "nostrdb", "replica", "sp1"] {
+        assert!(
+            !MANIFEST.to_ascii_lowercase().contains(forbidden),
+            "forbidden feature vocabulary `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn root_has_exact_exports_and_no_sdk_namespace() {
     assert!(ROOT.contains("pub use radroots_sdk::{Client, ClientBuilder, Error, Result};"));
     assert!(!ROOT.contains("pub mod sdk"));

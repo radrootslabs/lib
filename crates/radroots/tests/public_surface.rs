@@ -42,7 +42,7 @@ fn ordinary_memory_and_local_only_construction_is_inert() {
     assert!(radroots::client::local_only().is_local_only());
 }
 
-#[cfg(feature = "knowledge")]
+#[cfg(any(feature = "knowledge", feature = "full"))]
 #[test]
 fn canonical_knowledge_paths_compile() {
     #[allow(unused_imports)]

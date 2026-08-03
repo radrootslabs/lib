@@ -6,5 +6,5 @@ pub use radroots_transport::{
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
 };
 
-#[cfg(feature = "radrootsd")]
+#[cfg(any(feature = "radrootsd", feature = "full"))]
 pub use radroots_sdk::transport::{DaemonAuth, DaemonConfig, DaemonDelivery, DaemonError};
