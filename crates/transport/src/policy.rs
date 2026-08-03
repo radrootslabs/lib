@@ -165,7 +165,12 @@ impl SatisfactionPolicy {
         &self.targets
     }
 
-    pub(crate) fn validate_for(&self, targets: &TargetSet) -> Result<(), Error> {
+    /// Validates this policy against an exact bounded target set.
+    ///
+    /// This permits higher-level composition layers to reject impossible
+    /// quorum and required-target profiles before constructing a delivery
+    /// request, without reproducing transport policy law.
+    pub fn validate_for(&self, targets: &TargetSet) -> Result<(), Error> {
         self.targets.validate_for(targets)
     }
 }
