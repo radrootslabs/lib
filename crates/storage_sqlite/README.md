@@ -99,6 +99,11 @@ response reconstructs the exact receipt from both commit markers. Immutable
 legacy staging remains retained as owned migration evidence, while live product
 tables are not dual-written and predecessor evidence is not deleted.
 
+The qualification matrix includes every supported predecessor family, mixed
+four-source operation, bounded page interruption and reopen, invalid-row
+rollback, unsupported-schema and identity conflicts, private-first recovery,
+lost-success retry, source retention, and live-table isolation.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

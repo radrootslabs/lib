@@ -3521,6 +3521,8 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_import_validation_policy_v1.toml");
     const IMPORT_FINALIZE_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_import_finalize_policy_v1.toml");
+    const IMPORT_QUALIFICATION_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_import_qualification_v1.toml");
     const SDK_PRIVATE_STORE_SOURCE: &str =
         include_str!("../../../../sdk/crates/sdk/src/private_store.rs");
 
@@ -3722,6 +3724,17 @@ mod tests {
         source_deletion: bool,
         studio_row_import: bool,
         host_timestamp: String,
+        hidden_clock_or_entropy: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct ImportQualificationPolicy {
+        schema_version: u32,
+        source_matrix: Vec<String>,
+        required_cases: Vec<String>,
+        mixed_imported_row_count: u64,
+        mixed_host_handoff_row_count: u64,
+        exact_retry: bool,
         hidden_clock_or_entropy: bool,
     }
 
@@ -4433,6 +4446,42 @@ mod tests {
         assert!(!policy.source_deletion);
         assert!(!policy.studio_row_import);
         assert_eq!(policy.host_timestamp, "positive_monotonic_completion_time");
+        assert!(!policy.hidden_clock_or_entropy);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_import_qualification_policy() {
+        let policy = toml::from_str::<ImportQualificationPolicy>(IMPORT_QUALIFICATION_POLICY)
+            .expect("import qualification policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.source_matrix,
+            [
+                "event_store_v1_to_v4",
+                "outbox_v1",
+                "private_v1",
+                "studio_v1_host_handoff"
+            ]
+        );
+        assert_eq!(
+            policy.required_cases,
+            [
+                "mandatory_backup",
+                "unsupported_schema_rejection",
+                "mixed_source_golden",
+                "bounded_resume",
+                "close_reopen",
+                "invalid_row_rollback",
+                "private_commit_recovery",
+                "lost_success_retry",
+                "conflicting_identity_rejection",
+                "source_retention",
+                "no_live_dual_write"
+            ]
+        );
+        assert_eq!(policy.mixed_imported_row_count, 14);
+        assert_eq!(policy.mixed_host_handoff_row_count, 0);
+        assert!(policy.exact_retry);
         assert!(!policy.hidden_clock_or_entropy);
     }
 
@@ -5413,6 +5462,149 @@ mod tests {
             .await
             .expect("close Studio source");
         store.close().await.expect("close target");
+    }
+
+    #[tokio::test]
+    async fn mixed_source_import_qualifies_backup_resume_validation_and_completion() {
+        let target_root = tempfile::tempdir().expect("target root");
+        let legacy_root = tempfile::tempdir().expect("legacy root");
+        let backup_root = tempfile::tempdir().expect("backup root");
+        let event_path = legacy_root.path().join("event_store.sqlite");
+        let outbox_path = legacy_root.path().join("outbox.sqlite");
+        let private_path = legacy_root.path().join("private.sqlite");
+        let studio_path = legacy_root.path().join("studio.sqlite");
+        let event_connection =
+            supported_event_database(&event_path, &[signed_event("mixed")]).await;
+        let outbox_connection = supported_outbox_database(&outbox_path).await;
+        let private_connection = supported_private_database(&private_path).await;
+        let studio_connection = supported_studio_database(&studio_path).await;
+        let plan = LegacyImportPlan::new(
+            LegacyImportId::new([133; 16]).expect("import id"),
+            vec![
+                LegacySource::new(LegacySourceKind::Studio, &studio_path).expect("Studio source"),
+                LegacySource::new(LegacySourceKind::Private, &private_path)
+                    .expect("private source"),
+                LegacySource::new(LegacySourceKind::Outbox, &outbox_path).expect("outbox source"),
+                LegacySource::new(LegacySourceKind::EventStore, &event_path).expect("event source"),
+            ],
+            backup_root.path(),
+            14_000,
+        )
+        .expect("mixed import plan");
+        let (target_paths, store) = target(target_root.path()).await;
+        let prepared = store
+            .prepare_legacy_import(&plan)
+            .await
+            .expect("prepare mixed import");
+        assert_eq!(prepared.snapshots().len(), 4);
+        let classified = store
+            .classify_legacy_import(&prepared)
+            .await
+            .expect("classify mixed import");
+        store
+            .begin_legacy_import(&classified, 14_001)
+            .await
+            .expect("begin mixed import");
+
+        assert!(
+            store
+                .stage_legacy_events(&classified, 1, 14_002)
+                .await
+                .expect("stage mixed event")
+                .is_complete()
+        );
+        for page in 0_u64..5 {
+            let result = store
+                .stage_legacy_outbox(&classified, 1, 14_003 + page)
+                .await
+                .expect("stage mixed outbox");
+            assert_eq!(result.is_complete(), page == 4);
+        }
+        for page in 0_u64..8 {
+            let result = store
+                .stage_legacy_private(&classified, 1, 14_008 + page)
+                .await
+                .expect("stage mixed private");
+            assert_eq!(result.is_complete(), page == 7);
+        }
+        let handoff = store
+            .prepare_legacy_studio_handoff(&classified)
+            .await
+            .expect("prepare mixed Studio handoff");
+        let host_receipt =
+            LegacyStudioHandoffReceipt::new(handoff.handoff_sha256(), MemberDigest::new([88; 32]))
+                .expect("mixed Studio host receipt");
+        store
+            .acknowledge_legacy_studio_handoff(&classified, host_receipt, 14_016)
+            .await
+            .expect("acknowledge mixed Studio handoff");
+        let validation = store
+            .validate_legacy_import(&classified)
+            .await
+            .expect("validate mixed import");
+        assert_eq!(validation.imported_row_count(), 14);
+        store.close().await.expect("close before mixed finalize");
+
+        let reopened =
+            SqliteStorage::open(OpenOptions::new(target_paths, OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen mixed import");
+        let receipt = reopened
+            .finalize_legacy_import(&classified, validation, 14_017)
+            .await
+            .expect("finalize mixed import");
+        assert_eq!(receipt.imported_row_count(), 14);
+        assert_eq!(receipt.validation_sha256(), validation.validation_sha256());
+        assert_eq!(
+            reopened
+                .finalize_legacy_import(&classified, validation, 14_999)
+                .await
+                .expect("retry mixed completion"),
+            receipt
+        );
+        let journal = reopened
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("mixed journal")
+            .expect("durable mixed journal");
+        assert_eq!(journal.state(), LegacyImportState::Complete);
+        assert!(
+            journal
+                .members()
+                .iter()
+                .all(|member| member.state() == LegacyImportMemberState::Complete)
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_events")
+                .fetch_one(reopened.pool())
+                .await
+                .expect("mixed live event isolation"),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_private_artifacts")
+                .fetch_one(reopened.private_pool())
+                .await
+                .expect("mixed live private isolation"),
+            0
+        );
+        for source in plan.sources() {
+            assert!(source.path().is_file(), "predecessor source was removed");
+        }
+        event_connection.close().await.expect("close event source");
+        outbox_connection
+            .close()
+            .await
+            .expect("close outbox source");
+        private_connection
+            .close()
+            .await
+            .expect("close private source");
+        studio_connection
+            .close()
+            .await
+            .expect("close Studio source");
+        reopened.close().await.expect("close mixed target");
     }
 
     #[test]
