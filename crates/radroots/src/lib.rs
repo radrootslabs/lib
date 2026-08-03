@@ -1,10 +1,6 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-
-//! Curated ordinary-user entry point for Radroots.
-//!
-//! The root exposes only the ordinary client boundary. Deliberately selected
-//! domain types live in the named modules below.
+#![doc = include_str!("../README.md")]
 
 pub mod client;
 pub mod event;
