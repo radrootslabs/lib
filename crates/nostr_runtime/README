@@ -2,9 +2,21 @@
 
 `radroots_nostr_runtime` is a private, publication-frozen predecessor package.
 Its former client/runtime integration is no longer active by default and must
-not receive new consumers. Final source/sink orchestration belongs to
-`radroots_sync`; the remaining opt-in predecessor surface is governed by
-`RCRV1-DEV-007` and must be removed at its sync-orchestration gate.
+not receive new consumers. Final relay I/O belongs to
+`radroots_transport_nostr`; final source/sink orchestration belongs to
+`radroots_sync`.
+
+## Compatibility quarantine
+
+The private `radroots_nostrdb` runtime adapter still resolves the predecessor
+sink types behind an opt-in, non-default feature. `RCRV1-DEV-010` therefore
+retains this documentation-hidden, `publish = false` package only until the
+sync-orchestration cutover. Step 215 removes the package and the adapter after
+their behavior is owned by `radroots_sync`.
+
+Do not add consumers, features, public contracts, or runtime behavior here.
+The remaining opt-in source is also governed by `RCRV1-DEV-007` and cannot
+enter a release feature closure.
 
 ## Overview
 

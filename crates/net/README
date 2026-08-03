@@ -1,20 +1,26 @@
 # radroots_net
 
-This is the README for `radroots_net`, which provides network orchestration and
-runtime interfaces for the `radroots` core libraries.
+`radroots_net` is a private, publication-frozen compatibility package for the
+superseded broad network/runtime layer. New consumers and new behavior are
+forbidden. Final transport contracts belong to `radroots_transport`, shared
+orchestration belongs to `radroots_sync`, and application composition belongs
+to `radroots_sdk` or the host.
 
-## Overview
+## Compatibility quarantine
 
- * networking configuration and builders;
- * runtime-aware network handle and lifecycle support;
- * optional Nostr client integration and key management helpers;
- * optional logging and runtime-path persistence integration.
+The existing `app_rt` consumer still resolves this package as
+`radroots_net_core` while its downstream cutover is pending. Removing the
+package now would break that standalone consumer, so `RCRV1-DEV-010` retains
+only this documentation-hidden, `publish = false` bridge. Step 313 removes the
+package after the first-party consumer matrix proves the cutover complete.
+
+Do not add consumers, features, public contracts, transport implementations,
+or runtime behavior here. In particular, the optional legacy Nostr-client
+surface is not the public `radroots_transport_nostr` API and cannot enter a
+release feature closure.
 
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_net` distribution are
-
- Copyright (c) 2025 Tyson Lupul
-
-For information on usage and redistribution, and for a DISCLAIMER OF ALL
-WARRANTIES, see LICENSE included in the `radroots_net` distribution.
+copyright (c) 2025 Tyson Lupul. See `LICENSE` for usage, redistribution, and
+warranty terms.

@@ -11,6 +11,13 @@ repository.workspace = true
 homepage.workspace = true
 readme = "README"
 
+[package.metadata.radroots.compatibility]
+status = "publish_frozen"
+replacement = "radroots_transport + radroots_sync + radroots_sdk"
+deviation = "RCRV1-DEV-010"
+removal_step = 313
+new_consumers_forbidden = true
+
 [features]
 default = ["std"]
 std = ["serde/std"]
