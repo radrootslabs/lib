@@ -1,0 +1,1 @@
+//! Explicit relay authentication state.

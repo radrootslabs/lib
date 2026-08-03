@@ -20,9 +20,7 @@ nostrdb = ["nostr-client"]
 
 [dependencies]
 radroots_nostr = { workspace = true, optional = true, default-features = true }
-radroots_transport_nostr = { workspace = true, optional = true, default-features = false, features = [
-  "client",
-] }
+radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
 nostr = { workspace = true, optional = true, features = ["std"] }
 futures = { workspace = true, optional = true }
 thiserror = { workspace = true }

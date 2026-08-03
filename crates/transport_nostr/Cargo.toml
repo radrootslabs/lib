@@ -14,58 +14,11 @@ readme = "README.md"
 [lib]
 name = "radroots_transport_nostr"
 
-[features]
-default = ["std", "client", "storage", "runtime-tokio"]
-std = []
-client = [
-  "dep:radroots_nostr",
-  "dep:nostr-sdk",
-  "dep:tokio",
-  "radroots_nostr/std",
-  "radroots_nostr/events",
-]
-nip11 = ["client", "dep:reqwest"]
-storage = ["dep:radroots_event_store", "dep:radroots_outbox", "client"]
-runtime-tokio = [
-  "dep:tokio",
-  "storage",
-  "radroots_event_store/runtime-tokio",
-  "radroots_outbox/runtime-tokio",
-]
-
 [dependencies]
-radroots_event = { workspace = true, default-features = false, features = [
-  "std",
-  "serde",
-] }
-radroots_event_store = { workspace = true, optional = true, default-features = false, features = [
-  "sqlite",
-  "runtime-tokio",
-] }
-radroots_nostr = { workspace = true, optional = true, default-features = false, features = [
-  "std",
-  "events",
-] }
-radroots_outbox = { workspace = true, optional = true, default-features = false, features = [
-  "sqlite",
-  "runtime-tokio",
-] }
+radroots_event_codec = { workspace = true, default-features = false }
+radroots_nostr = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
-futures = { workspace = true }
-nostr = { workspace = true, features = ["std"] }
-nostr-sdk = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true, default-features = false, features = [
-  "json",
-  "rustls-tls",
-] }
-serde = { workspace = true, features = ["derive", "std"] }
-serde_json = { workspace = true, features = ["std"] }
-thiserror = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["rt", "sync"] }
-url = { workspace = true }
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

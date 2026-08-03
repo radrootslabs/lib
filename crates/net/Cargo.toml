@@ -48,9 +48,7 @@ radroots_nostr = { workspace = true, optional = true, default-features = true, f
   "events",
 ] }
 nostr = { workspace = true, optional = true, features = ["std"] }
-radroots_transport_nostr = { workspace = true, optional = true, default-features = false, features = [
-  "client",
-] }
+radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 radroots_runtime_paths = { workspace = true, optional = true }
