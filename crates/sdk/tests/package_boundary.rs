@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const CLIENT: &str = include_str!("../src/client.rs");
+const TRANSPORT: &str = include_str!("../src/transport.rs");
 
 #[test]
 fn manifest_has_final_identity_and_dependency_boundary() {
@@ -134,6 +135,26 @@ fn sdk_source_contains_no_studio_storage_surface() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn transport_profiles_reuse_canonical_types_and_forbid_fallback() {
+    assert!(TRANSPORT.contains("use radroots_transport::{"));
+    assert!(TRANSPORT.contains("satisfaction.validate_for(&targets)?"));
+    assert!(TRANSPORT.contains("Selection::UnavailablePreview"));
+    for duplicate in [
+        "pub struct TargetSet",
+        "pub enum TargetPolicy",
+        "pub enum SatisfactionPolicy",
+        "pub struct SourceStatus",
+        "pub struct SinkStatus",
+        "DefaultProfile",
+    ] {
+        assert!(
+            !TRANSPORT.contains(duplicate),
+            "SDK transport source contains forbidden duplicate or fallback `{duplicate}`"
+        );
     }
 }
 
