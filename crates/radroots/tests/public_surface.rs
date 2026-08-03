@@ -18,3 +18,25 @@ fn root_exports_only_the_client_boundary() {
     let result: radroots::Result<()> = Ok(());
     assert!(result.is_ok());
 }
+
+#[test]
+fn canonical_domain_paths_compile() {
+    #[allow(unused_imports)]
+    use radroots::{
+        event::{Event, EventDraft, EventId},
+        farm::{Farm, FarmPublicLocation, Plan as FarmPlan, PrepareRequest as FarmRequest},
+        identity::{AccountId, PublicKey, Username},
+        listing::{EditV1, OperationalListing, Plan as ListingPlan},
+        signing::{Mode, Provider},
+        storage::{IntegrityStatus, Operations as StorageOperations, Status},
+        trade::{Money, MutationV1, Plan as TradePlan, Projection},
+        transport::{Profile, SatisfactionPolicy, Target, TargetSet, TransportId},
+    };
+}
+
+#[cfg(feature = "knowledge")]
+#[test]
+fn canonical_knowledge_paths_compile() {
+    #[allow(unused_imports)]
+    use radroots::knowledge::{KnowledgeClaim, WikiArticle, normalize_wiki_d_tag};
+}

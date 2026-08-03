@@ -32,6 +32,28 @@ fn root_has_exact_exports_and_no_sdk_namespace() {
     assert_eq!(ROOT.matches("pub use ").count(), 1);
 }
 
+#[test]
+fn modules_use_deliberate_reexports_without_wildcards() {
+    let source_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    for entry in std::fs::read_dir(source_root).expect("read facade source") {
+        let path = entry.expect("read facade source entry").path();
+        if path.extension().and_then(|value| value.to_str()) != Some("rs") {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).expect("read facade module");
+        assert!(
+            !source.contains("::*"),
+            "{} contains a wildcard reexport",
+            path.display()
+        );
+        assert!(
+            !source.contains("pub mod sdk"),
+            "{} exposes the forbidden SDK namespace",
+            path.display()
+        );
+    }
+}
+
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
     manifest
         .split_once("[dependencies]")
