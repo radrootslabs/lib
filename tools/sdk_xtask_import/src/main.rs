@@ -13,6 +13,7 @@ mod manifest;
 mod output;
 mod package_matrix;
 mod package_metadata;
+mod release_qualification;
 mod smoke;
 mod ts;
 mod wasm;
@@ -29,6 +30,7 @@ enum CommandAction<'a> {
     GenerateWasm(&'a [String]),
     GeneratePackageMetadata,
     Coverage(&'a [String]),
+    QualifyFeatures,
     Check,
     Smoke(&'a [String]),
 }
@@ -61,6 +63,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
         CommandAction::GenerateWasm(rest) => wasm::generate(rest),
         CommandAction::GeneratePackageMetadata => generate::generate_package_metadata(),
         CommandAction::Coverage(rest) => coverage::run(rest),
+        CommandAction::QualifyFeatures => {
+            release_qualification::run_feature_matrix(&fs::workspace_root()?)
+        }
         CommandAction::Check => check::check(),
         CommandAction::Smoke(rest) => smoke::run(rest),
     }
@@ -88,6 +93,9 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
             Ok(CommandAction::GeneratePackageMetadata)
         }
         [command, rest @ ..] if command == "coverage" => Ok(CommandAction::Coverage(rest)),
+        [command, target] if command == "release" && target == "qualify-features" => {
+            Ok(CommandAction::QualifyFeatures)
+        }
         [command] if command == "check" => Ok(CommandAction::Check),
         [command, rest @ ..] if command == "smoke" => Ok(CommandAction::Smoke(rest)),
         [] => Err(usage()),
@@ -96,7 +104,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run | cargo xtask release qualify-features"
         .to_owned()
 }
 

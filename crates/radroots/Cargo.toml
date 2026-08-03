@@ -48,3 +48,4 @@ full = ["radroots_sdk/full"]
 [[example]]
 name = "ordinary_memory"
 path = "examples/ordinary_memory.rs"
+required-features = ["client"]
