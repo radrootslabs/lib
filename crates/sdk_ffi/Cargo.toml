@@ -1,0 +1,26 @@
+[package]
+name = "radroots_sdk_ffi"
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Private UniFFI wrapper over the shared Radroots SDK engine"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+radroots_sdk = { workspace = true, features = ["memory"] }
+thiserror = { workspace = true }
+uniffi = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true
