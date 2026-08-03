@@ -214,6 +214,11 @@ impl Client {
         Ok(self.inner.storage.as_ref())
     }
 
+    /// Returns backend-neutral backup, restore, status, and integrity operations.
+    pub fn storage_operations(&self) -> Result<crate::storage::Operations<'_>> {
+        Ok(crate::storage::Operations::new(self.storage()?))
+    }
+
     /// Returns the injected signer, when outbound authoring is enabled.
     pub fn signer(&self) -> Result<Option<&dyn Signer>> {
         self.require_open()?;

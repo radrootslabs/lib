@@ -6,6 +6,8 @@ const CLIENT: &str = include_str!("../src/client.rs");
 const FARM: &str = include_str!("../src/farm.rs");
 const LISTING: &str = include_str!("../src/listing.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
+const STORAGE: &str = include_str!("../src/storage.rs");
+const DIAGNOSTICS: &str = include_str!("../src/diagnostics.rs");
 const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
 
@@ -306,6 +308,41 @@ fn trade_operations_use_canonical_workflow_storage_sync_and_projection_types() {
             .join("src/trade_runtime.rs")
             .exists()
     );
+}
+
+#[test]
+fn reliability_and_diagnostics_return_canonical_storage_contracts() {
+    for required in [
+        "StorageReliability::begin_backup",
+        "StorageReliability::transition_backup",
+        "StorageReliability::begin_restore",
+        "StorageReliability::transition_restore",
+        "StorageReliability::integrity",
+        "StorageReliability::status",
+    ] {
+        assert!(
+            STORAGE.contains(required),
+            "missing storage delegation `{required}`"
+        );
+    }
+    for forbidden in [
+        "struct BackupManifest",
+        "struct IntegrityStatus",
+        "Studio",
+        "sqlx::",
+    ] {
+        assert!(
+            !STORAGE.contains(forbidden),
+            "storage source duplicates `{forbidden}`"
+        );
+    }
+    assert!(DIAGNOSTICS.contains("radroots_storage::StorageStatus"));
+    for forbidden in ["path:", "SqlitePool", "private_artifact"] {
+        assert!(
+            !DIAGNOSTICS.contains(forbidden),
+            "diagnostics leaks `{forbidden}`"
+        );
+    }
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
