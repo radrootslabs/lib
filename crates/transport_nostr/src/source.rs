@@ -1,12 +1,11 @@
 //! Nostr implementation of the transport event source.
 
-use crate::{NostrTransport, RelayUrl};
+use crate::{NostrTransport, RelayUrl, status};
 use core::cmp::Ordering;
 use core::time::Duration;
 use nostr_sdk::prelude::{Filter, JsonUtil, Timestamp};
 use radroots_transport::{
     BoxFuture, EventSource, FetchPage, FetchRequest,
-    capability::{Availability, Maturity, SourceCapabilities},
     outcome::{FetchTargetOutcome, FetchTargetState},
     source::{EventProvenance, FetchCursor, NextPage, ObservedEvent, SourceStatus},
 };
@@ -91,16 +90,7 @@ struct Candidate {
 impl EventSource for NostrTransport {
     fn status(&self) -> BoxFuture<'_, Result<SourceStatus, radroots_transport::Error>> {
         let configured = !self.config().relays().is_empty();
-        Box::pin(async move {
-            Ok(SourceStatus::new(
-                radroots_transport::TransportId::NOSTR,
-                configured,
-                Maturity::Preview,
-                Availability::Available,
-                SourceCapabilities::FETCH,
-                "bounded Nostr event source configured",
-            ))
-        })
+        Box::pin(async move { Ok(status::source_status(&self.status, configured)) })
     }
 
     fn fetch(
@@ -138,6 +128,7 @@ impl EventSource for NostrTransport {
                     )
                     .with_message("fetch deadline elapsed before relay access")
                 }));
+                self.status.record_source(0, targets.len(), Some("timeout"));
                 return FetchPage::for_request(&request, Vec::new(), outcomes, NextPage::Complete);
             }
 
@@ -152,6 +143,9 @@ impl EventSource for NostrTransport {
             let mut candidates = Vec::new();
             let mut malformed_by_relay = BTreeMap::<RelayUrl, usize>::new();
             let mut reported = BTreeSet::new();
+            let mut succeeded = 0usize;
+            let mut failed = 0usize;
+            let mut diagnostic = None;
             for batch in batches {
                 let Some(target) = targets.get(&batch.relay) else {
                     return Err(radroots_transport::Error::UnexpectedFetchTargetOutcome);
@@ -161,6 +155,7 @@ impl EventSource for NostrTransport {
                 }
                 match batch.result {
                     Ok(raw_events) => {
+                        succeeded += 1;
                         for raw in raw_events {
                             match radroots_event_codec::decode::signed_event(raw.as_str()) {
                                 Ok(event) => candidates.push(Candidate {
@@ -193,17 +188,21 @@ impl EventSource for NostrTransport {
                         };
                         outcomes.push(outcome);
                     }
-                    Err(message) => outcomes.push(
-                        FetchTargetOutcome::new(
-                            target.fingerprint().clone(),
-                            FetchTargetState::FailedRetryable,
-                        )
-                        .with_message(safe_message(message)),
-                    ),
+                    Err(message) => {
+                        failed += 1;
+                        let (state, safe) = status::fetch_failure(message.as_str());
+                        diagnostic.get_or_insert(safe);
+                        outcomes.push(
+                            FetchTargetOutcome::new(target.fingerprint().clone(), state)
+                                .with_message(safe),
+                        );
+                    }
                 }
             }
             for (relay, target) in &targets {
                 if !reported.contains(relay) {
+                    failed += 1;
+                    diagnostic.get_or_insert("relay returned no fetch result");
                     outcomes.push(
                         FetchTargetOutcome::new(
                             target.fingerprint().clone(),
@@ -213,6 +212,7 @@ impl EventSource for NostrTransport {
                     );
                 }
             }
+            self.status.record_source(succeeded, failed, diagnostic);
 
             candidates.sort_by(compare_candidate);
             if let Some(cursor) = &cursor {
@@ -299,19 +299,6 @@ fn unix_time_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
         .unwrap_or_default()
-}
-
-fn safe_message(message: String) -> String {
-    let message = message
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(1_024)
-        .collect::<String>();
-    if message.trim().is_empty() {
-        "relay fetch failed".to_owned()
-    } else {
-        message.trim().to_owned()
-    }
 }
 
 #[cfg(test)]

@@ -1,12 +1,11 @@
 //! Nostr implementation of the transport event sink.
 
-use crate::{NostrTransport, RelayUrl};
+use crate::{NostrTransport, RelayUrl, status};
 use core::time::Duration;
 use radroots_nostr::event::Event;
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink,
-    capability::{Availability, Maturity, SinkCapabilities},
-    outcome::{DeliveryOutcome, Retryability},
+    outcome::DeliveryOutcome,
     sink::{DeliveryTargetReceipt, SinkStatus},
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -56,15 +55,15 @@ impl RelayClient for LiveRelayClient {
             for relay in relays {
                 let url = relay.as_str().to_owned();
                 let outcome = match self.client.add_relay(url.as_str()).await {
-                    Err(error) => connection_failure(error.to_string()),
+                    Err(_) => status::connection_failure(),
                     Ok(_) => match self
                         .client
                         .try_connect_relay(url.as_str(), connect_timeout)
                         .await
                     {
-                        Err(error) => connection_failure(error.to_string()),
+                        Err(_) => status::connection_failure(),
                         Ok(()) => match self.client.send_event_to([url.as_str()], &event).await {
-                            Err(error) => classify_failure(error.to_string()),
+                            Err(error) => status::delivery_failure(error.to_string().as_str()),
                             Ok(output) => output
                                 .success
                                 .iter()
@@ -73,10 +72,12 @@ impl RelayClient for LiveRelayClient {
                                 .or_else(|| {
                                     output.failed.iter().find_map(|(failed, message)| {
                                         (failed.to_string().trim_end_matches('/') == url)
-                                            .then(|| classify_failure(message.clone()))
+                                            .then(|| status::delivery_failure(message.as_str()))
                                     })
                                 })
-                                .unwrap_or_else(|| classify_failure("relay omitted result".into())),
+                                .unwrap_or_else(|| {
+                                    status::delivery_failure("relay omitted result")
+                                }),
                         },
                     },
                 };
@@ -90,16 +91,7 @@ impl RelayClient for LiveRelayClient {
 impl EventSink for NostrTransport {
     fn status(&self) -> BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
         let configured = !self.config().relays().is_empty();
-        Box::pin(async move {
-            Ok(SinkStatus::new(
-                radroots_transport::TransportId::NOSTR,
-                configured,
-                Maturity::Preview,
-                Availability::Available,
-                SinkCapabilities::DELIVER,
-                "bounded Nostr event delivery configured",
-            ))
-        })
+        Box::pin(async move { Ok(status::sink_status(&self.status, configured)) })
     }
 
     fn deliver(
@@ -157,54 +149,18 @@ impl EventSink for NostrTransport {
                 });
                 receipts.push(DeliveryTargetReceipt::attempted(target, outcome));
             }
+            let accepted = receipts
+                .iter()
+                .filter(|receipt| status::delivery_succeeded(receipt.outcome()))
+                .count();
+            let failed = receipts.len().saturating_sub(accepted);
+            let diagnostic = receipts
+                .iter()
+                .find_map(|receipt| receipt.outcome().message());
+            self.status.record_sink(accepted, failed, diagnostic);
             DeliveryReceipt::for_request(&request, receipts)
         })
     }
-}
-
-fn connection_failure(message: String) -> DeliveryOutcome {
-    normalized(DeliveryOutcome::unavailable(), "connection_failed", message)
-}
-
-fn classify_failure(message: String) -> DeliveryOutcome {
-    let normalized_message = message.to_ascii_lowercase();
-    if normalized_message.contains("duplicate") || normalized_message.contains("already have") {
-        normalized(DeliveryOutcome::accepted(), "duplicate", message)
-    } else if normalized_message.contains("auth") {
-        normalized(
-            DeliveryOutcome::failed(Retryability::Retryable)
-                .expect("retryable failure classification"),
-            "auth_required",
-            message,
-        )
-    } else if normalized_message.contains("blocked")
-        || normalized_message.contains("restricted")
-        || normalized_message.contains("invalid")
-    {
-        normalized(DeliveryOutcome::rejected(), "rejected", message)
-    } else if normalized_message.contains("rate") {
-        normalized(DeliveryOutcome::unavailable(), "rate_limited", message)
-    } else if normalized_message.contains("timeout") {
-        normalized(DeliveryOutcome::unavailable(), "timeout", message)
-    } else {
-        normalized(DeliveryOutcome::unavailable(), "relay_failure", message)
-    }
-}
-
-fn normalized(outcome: DeliveryOutcome, code: &'static str, message: String) -> DeliveryOutcome {
-    let clean = message
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(1_024)
-        .collect::<String>();
-    let clean = if clean.trim().is_empty() {
-        "relay operation failed".to_owned()
-    } else {
-        clean.trim().to_owned()
-    };
-    outcome
-        .with_detail(code, clean)
-        .expect("normalized static relay outcome")
 }
 
 #[cfg(test)]
@@ -276,7 +232,7 @@ mod tests {
         .expect("config");
         let two = RelayUrl::parse("wss://two.example", RelayUrlPolicy::Public).expect("two");
         let client = MockRelayClient {
-            outcomes: BTreeMap::from([(two, classify_failure("rate limited".to_owned()))]),
+            outcomes: BTreeMap::from([(two, status::delivery_failure("rate limited"))]),
         };
         let transport = NostrTransport::with_client(config, Arc::new(client));
         let request = request();
@@ -306,7 +262,7 @@ mod tests {
             ("connection failed", DeliveryOutcomeKind::Unavailable),
         ];
         for (message, expected) in cases {
-            assert_eq!(classify_failure(message.to_owned()).kind(), expected);
+            assert_eq!(status::delivery_failure(message).kind(), expected);
         }
     }
 }

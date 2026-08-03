@@ -128,6 +128,7 @@ pub struct NostrTransport {
     pub(crate) client: Arc<dyn crate::sink::RelayClient>,
     pub(crate) source_client: Arc<dyn crate::source::RelaySourceClient>,
     pub(crate) auth: Arc<crate::auth::AuthFlow>,
+    pub(crate) status: Arc<crate::status::StatusTracker>,
 }
 
 impl NostrTransport {
@@ -142,6 +143,7 @@ impl NostrTransport {
             auth: Arc::new(crate::auth::AuthFlow::new(Arc::new(
                 crate::auth::LiveAuthClient::new(client),
             ))),
+            status: Arc::new(crate::status::StatusTracker::default()),
         }
     }
 
@@ -157,6 +159,7 @@ impl NostrTransport {
             client,
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
             auth: Arc::new(crate::auth::AuthFlow::isolated()),
+            status: Arc::new(crate::status::StatusTracker::default()),
         }
     }
 
@@ -170,6 +173,7 @@ impl NostrTransport {
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client,
             auth: Arc::new(crate::auth::AuthFlow::isolated()),
+            status: Arc::new(crate::status::StatusTracker::default()),
         }
     }
 }
