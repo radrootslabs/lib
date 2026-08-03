@@ -12,7 +12,7 @@ homepage.workspace = true
 readme = "README"
 
 [features]
-default = ["std", "nostr-client", "rt"]
+default = ["std"]
 std = []
 rt = ["std", "dep:futures", "dep:tokio"]
 nostr-client = ["std", "dep:nostr", "dep:radroots_nostr", "dep:radroots_transport_nostr"]

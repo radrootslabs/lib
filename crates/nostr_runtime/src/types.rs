@@ -1,9 +1,13 @@
 use alloc::string::String;
+#[cfg(feature = "nostr-client")]
 use nostr::PublicKey as RadrootsNostrPublicKey;
+#[cfg(feature = "nostr-client")]
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
+#[cfg(feature = "nostr-client")]
 use radroots_nostr::event::post_filter;
 #[cfg(feature = "nostr-client")]
 use radroots_nostr::filter::Filter as RadrootsNostrFilter;
+#[cfg(feature = "nostr-client")]
 use radroots_nostr::filter::kind as nostr_kind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
