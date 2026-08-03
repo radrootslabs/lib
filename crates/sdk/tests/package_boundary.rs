@@ -5,6 +5,7 @@ const ROOT: &str = include_str!("../src/lib.rs");
 const CLIENT: &str = include_str!("../src/client.rs");
 const FARM: &str = include_str!("../src/farm.rs");
 const LISTING: &str = include_str!("../src/listing.rs");
+const TRADE: &str = include_str!("../src/trade.rs");
 const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
 
@@ -263,6 +264,46 @@ fn listing_operations_reuse_trade_event_sync_and_privacy_boundaries() {
     assert!(
         !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/listings_runtime.rs")
+            .exists()
+    );
+}
+
+#[test]
+fn trade_operations_use_canonical_workflow_storage_sync_and_projection_types() {
+    for required in [
+        "WorkflowPlan",
+        "TradeMutationEnvelopeV1",
+        "ReductionInput",
+        "Projection",
+        "reduce_trade_records",
+        "EventQuery",
+        "EventPage<StoredVisibleEvent>",
+        "PrivateArtifactMetadata",
+        "radroots_sync::PushRequest::new",
+    ] {
+        assert!(
+            TRADE.contains(required),
+            "missing trade boundary `{required}`"
+        );
+    }
+    for forbidden in [
+        "sqlx::",
+        "QueryBuilder",
+        "TradeStatusView",
+        "SdkPrivateTradeArtifact",
+        "SdkMutationState",
+        "TradeCommandReceipt",
+        "struct Page",
+        "struct TradeId",
+    ] {
+        assert!(
+            !TRADE.contains(forbidden),
+            "trade source contains retired duplicate `{forbidden}`"
+        );
+    }
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/trade_runtime.rs")
             .exists()
     );
 }

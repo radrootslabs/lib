@@ -251,6 +251,15 @@ impl Client {
         Ok(self.sync()?.map(crate::listing::Operations::new))
     }
 
+    /// Returns trade operations when canonical synchronization is configured.
+    #[cfg(feature = "sync")]
+    pub fn trade(&self) -> Result<Option<crate::trade::Operations<'_>>> {
+        let storage = self.storage()?;
+        Ok(self
+            .sync()?
+            .map(|sync| crate::trade::Operations::new(storage, sync)))
+    }
+
     /// Returns whether explicit close completed successfully or reached the
     /// lower storage commit point.
     #[must_use]
