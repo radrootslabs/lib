@@ -9,8 +9,9 @@ use std::{
 
 use radroots_storage::backup::{
     BackupFormatVersion, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
-    BackupSecretPolicy, MemberDigest,
+    BackupSecretPolicy, MemberDigest, MemberVerification, RestoreMemberStatus, RestorePlan,
 };
+use radroots_storage::status::EventStoreMode;
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -143,6 +144,88 @@ impl SqliteStorage {
             (_, EntryKind::Other) => Err(Error::BackupUnexpectedEntry(layout.finalized)),
         }
     }
+
+    /// Copies a verified finalized bundle into create-new files adjacent to
+    /// the live databases and verifies every staged copy before replacement.
+    pub async fn stage_restore(
+        &self,
+        plan: &RestorePlan,
+    ) -> Result<Vec<RestoreMemberStatus>, Error> {
+        self.lifecycle
+            .require_open()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        if self.mode != EventStoreMode::ReadWrite {
+            return Err(Error::RestoreRequiresWritableStorage);
+        }
+        let backup_root = self
+            .backup_root
+            .as_deref()
+            .ok_or(Error::BackupRootRequired)?;
+        let live_paths = self
+            .paths
+            .as_deref()
+            .ok_or(Error::BackupBackendUnavailable)?;
+        validate_backup_root(backup_root)?;
+        let manifest = plan.manifest();
+        let backup_plan = BackupPlan::new(
+            manifest.backup_id(),
+            manifest.format_version(),
+            manifest.secret_policy(),
+            manifest.created_at_unix_ms(),
+        )
+        .map_err(|_| Error::RestoreStagingFailed { member: "manifest" })?;
+        let bundle = BackupLayout::new(backup_root, &backup_plan).finalized;
+        verify_bundle(&bundle, &backup_plan, manifest).await?;
+        let staging = RestoreStaging::new(live_paths, manifest)?;
+        staging.require_absent(manifest.secret_policy())?;
+
+        copy_staged_member(
+            &bundle.join(RUNTIME_MEMBER),
+            &staging.runtime,
+            manifest
+                .member(RUNTIME_MEMBER)
+                .ok_or(Error::RestoreStagingFailed {
+                    member: RUNTIME_MEMBER,
+                })?,
+            BackupMemberKind::Runtime,
+            RUNTIME_MEMBER,
+            true,
+        )
+        .await?;
+        sync_parent(&staging.runtime, "sync runtime restore parent")?;
+        let mut statuses = vec![
+            RestoreMemberStatus::new(RUNTIME_MEMBER, MemberVerification::Verified).map_err(
+                |_| Error::RestoreStagingFailed {
+                    member: RUNTIME_MEMBER,
+                },
+            )?,
+        ];
+
+        if manifest.secret_policy() == BackupSecretPolicy::IncludeProtectedStorage {
+            copy_staged_member(
+                &bundle.join(PRIVATE_MEMBER),
+                &staging.private,
+                manifest
+                    .member(PRIVATE_MEMBER)
+                    .ok_or(Error::RestoreStagingFailed {
+                        member: PRIVATE_MEMBER,
+                    })?,
+                BackupMemberKind::Protected,
+                PRIVATE_MEMBER,
+                false,
+            )
+            .await?;
+            sync_parent(&staging.private, "sync private restore parent")?;
+            statuses.push(
+                RestoreMemberStatus::new(PRIVATE_MEMBER, MemberVerification::Verified).map_err(
+                    |_| Error::RestoreStagingFailed {
+                        member: PRIVATE_MEMBER,
+                    },
+                )?,
+            );
+        }
+        Ok(statuses)
+    }
 }
 
 pub(crate) fn validate_backup_root(path: &Path) -> Result<(), Error> {
@@ -240,13 +323,104 @@ impl BackupLayout {
 }
 
 fn encode_backup_id(plan: &BackupPlan) -> String {
+    encode_id(plan.backup_id().as_bytes())
+}
+
+fn encode_id(bytes: &[u8; 16]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut encoded = String::with_capacity(32);
-    for byte in plan.backup_id().as_bytes() {
+    for byte in bytes {
         encoded.push(char::from(HEX[usize::from(byte >> 4)]));
         encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
     }
     encoded
+}
+
+struct RestoreStaging {
+    runtime: PathBuf,
+    private: PathBuf,
+}
+
+impl RestoreStaging {
+    fn new(paths: &crate::Paths, manifest: &BackupManifest) -> Result<Self, Error> {
+        let id = encode_id(manifest.backup_id().as_bytes());
+        Ok(Self {
+            runtime: staged_restore_path(paths.runtime(), &id)?,
+            private: staged_restore_path(paths.private(), &id)?,
+        })
+    }
+
+    fn require_absent(&self, policy: BackupSecretPolicy) -> Result<(), Error> {
+        let paths = if policy == BackupSecretPolicy::IncludeProtectedStorage {
+            vec![&self.runtime, &self.private]
+        } else {
+            vec![&self.runtime]
+        };
+        for path in paths {
+            if entry_kind(path)? != EntryKind::Missing {
+                return Err(Error::RestoreStagingAlreadyExists(path.clone()));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn staged_restore_path(live: &Path, id: &str) -> Result<PathBuf, Error> {
+    let name = live
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| Error::InvalidPath(live.to_path_buf()))?;
+    Ok(live.with_file_name(format!(".{name}.restore-{id}.staging")))
+}
+
+async fn copy_staged_member(
+    source: &Path,
+    destination: &Path,
+    expected: &BackupMember,
+    kind: BackupMemberKind,
+    member_name: &'static str,
+    runtime: bool,
+) -> Result<(), Error> {
+    let mut source_file = File::open(source).map_err(|_| Error::RestoreStagingFailed {
+        member: member_name,
+    })?;
+    let mut options = fs::OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut destination_file = options.open(destination).map_err(|source| {
+        if source.kind() == std::io::ErrorKind::AlreadyExists {
+            Error::RestoreStagingAlreadyExists(destination.to_path_buf())
+        } else {
+            Error::BackupFilesystem {
+                operation: "create restore staging member",
+                source,
+            }
+        }
+    })?;
+    std::io::copy(&mut source_file, &mut destination_file).map_err(|_| {
+        Error::RestoreStagingFailed {
+            member: member_name,
+        }
+    })?;
+    destination_file
+        .sync_all()
+        .map_err(|source| Error::BackupFilesystem {
+            operation: "sync restore staging member",
+            source,
+        })?;
+    drop(destination_file);
+    verify_member(destination, expected, kind, member_name, runtime).await
+}
+
+fn sync_parent(path: &Path, operation: &'static str) -> Result<(), Error> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| Error::InvalidPath(path.to_path_buf()))?;
+    sync_directory(parent, operation)
 }
 
 fn create_private_directory(path: &Path, operation: &'static str) -> Result<(), Error> {
@@ -535,7 +709,10 @@ fn fingerprint(path: &Path) -> Result<(u64, MemberDigest), Error> {
 #[cfg(test)]
 mod tests {
     use radroots_storage::{
-        backup::{BackupFormatVersion, BackupId, BackupMemberKind, BackupPlan, BackupSecretPolicy},
+        backup::{
+            BackupFormatVersion, BackupId, BackupMemberKind, BackupPlan, BackupSecretPolicy,
+            MemberVerification, RestorePlan,
+        },
         event::SourceGeneration,
     };
     use serde::Deserialize;
@@ -548,6 +725,8 @@ mod tests {
     const POLICY: &str = include_str!("../../../contracts/storage/backup_capture_policy_v1.toml");
     const FINALIZE_POLICY: &str =
         include_str!("../../../contracts/storage/backup_finalize_policy_v1.toml");
+    const RESTORE_POLICY: &str =
+        include_str!("../../../contracts/storage/restore_staging_policy_v1.toml");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -581,6 +760,21 @@ mod tests {
         staging_and_final_present: String,
         unexpected_entry: String,
         mutation_before_complete_verification: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct RestorePolicy {
+        schema_version: u32,
+        source: String,
+        authority: String,
+        runtime_staging: String,
+        protected_staging: String,
+        creation: String,
+        verification: Vec<String>,
+        live_mutation: bool,
+        existing_staging: String,
+        protected_member: String,
+        filesystem_sync: Vec<String>,
     }
 
     fn generation(byte: u8) -> SourceGeneration {
@@ -688,6 +882,40 @@ mod tests {
         assert_eq!(policy.staging_and_final_present, "reject");
         assert_eq!(policy.unexpected_entry, "reject");
         assert!(!policy.mutation_before_complete_verification);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_restore_staging_policy() {
+        let policy = toml::from_str::<RestorePolicy>(RESTORE_POLICY).expect("restore policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(policy.source, "verified_finalized_backup_bundle");
+        assert_eq!(policy.authority, "writable_storage_only");
+        assert_eq!(
+            policy.runtime_staging,
+            ".runtime.sqlite.restore-{backup_id_hex}.staging"
+        );
+        assert_eq!(
+            policy.protected_staging,
+            ".private.sqlite.restore-{backup_id_hex}.staging"
+        );
+        assert_eq!(policy.creation, "create_new_mode_0600");
+        assert_eq!(
+            policy.verification,
+            [
+                "exact_length",
+                "sha256",
+                "current_schema_catalog",
+                "sqlite_integrity_check",
+                "foreign_key_check"
+            ]
+        );
+        assert!(!policy.live_mutation);
+        assert_eq!(policy.existing_staging, "reject");
+        assert_eq!(policy.protected_member, "manifest_policy_controlled");
+        assert_eq!(
+            policy.filesystem_sync,
+            ["staged_member_file", "destination_parent"]
+        );
     }
 
     #[tokio::test]
@@ -976,6 +1204,98 @@ mod tests {
                 .finalize_backup(&missing_plan, &missing_manifest)
                 .await,
             Err(Error::BackupBundleMissing(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn restore_staging_is_verified_isolated_and_leaves_live_state_untouched() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let backup_parent = tempfile::tempdir().expect("backup parent");
+        let backup_root = backup_parent.path().join("backups");
+        fs::create_dir(&backup_root).expect("backup root");
+        let (paths, store) = create(database_root.path(), Some(&backup_root)).await;
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 51 WHERE state = 'active'",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("initial live state");
+        let backup_plan = plan(101, BackupSecretPolicy::IncludeProtectedStorage, 10_100);
+        let manifest = store
+            .capture_backup(&backup_plan)
+            .await
+            .expect("capture restore source");
+        store
+            .finalize_backup(&backup_plan, &manifest)
+            .await
+            .expect("finalize restore source");
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 52 WHERE state = 'active'",
+        )
+            .execute(&store.pool)
+            .await
+            .expect("advance live state");
+
+        let restore = RestorePlan::new(
+            manifest.clone(),
+            BackupSecretPolicy::IncludeProtectedStorage,
+            10_200,
+        )
+        .expect("restore plan");
+        let statuses = store.stage_restore(&restore).await.expect("stage restore");
+        assert_eq!(statuses.len(), 2);
+        assert!(
+            statuses
+                .iter()
+                .all(|status| status.verification() == MemberVerification::Verified)
+        );
+        let staging = RestoreStaging::new(&paths, &manifest).expect("restore staging paths");
+        assert_eq!(
+            scalar(
+                paths.runtime(),
+                "SELECT sequence_head FROM radroots_runtime_source_generations WHERE state = 'active'"
+            )
+            .await,
+            52
+        );
+        assert_eq!(
+            scalar(
+                &staging.runtime,
+                "SELECT sequence_head FROM radroots_runtime_source_generations WHERE state = 'active'"
+            )
+            .await,
+            51
+        );
+        assert!(staging.private.is_file());
+        assert!(matches!(
+            store.stage_restore(&restore).await,
+            Err(Error::RestoreStagingAlreadyExists(_))
+        ));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&staging.runtime)
+                    .expect("staged runtime metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+
+        store.close().await.expect("close writer");
+        let reader = SqliteStorage::open(
+            OpenOptions::new(paths, OpenMode::ReadOnly)
+                .with_backup_root(&backup_root)
+                .expect("backup root"),
+        )
+        .await
+        .expect("read-only store");
+        assert!(matches!(
+            reader.stage_restore(&restore).await,
+            Err(Error::RestoreRequiresWritableStorage)
         ));
     }
 }

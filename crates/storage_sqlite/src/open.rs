@@ -252,6 +252,11 @@ pub enum Error {
         member: &'static str,
     },
     BackupUnexpectedEntry(PathBuf),
+    RestoreRequiresWritableStorage,
+    RestoreStagingAlreadyExists(PathBuf),
+    RestoreStagingFailed {
+        member: &'static str,
+    },
     BackupFilesystem {
         operation: &'static str,
         source: std::io::Error,
@@ -449,6 +454,17 @@ impl fmt::Display for Error {
                 "SQLite backup bundle contains an unexpected entry: {}",
                 path.display()
             ),
+            Self::RestoreRequiresWritableStorage => {
+                formatter.write_str("SQLite restore requires writable storage authority")
+            }
+            Self::RestoreStagingAlreadyExists(path) => write!(
+                formatter,
+                "SQLite restore staging path already exists: {}",
+                path.display()
+            ),
+            Self::RestoreStagingFailed { member } => {
+                write!(formatter, "failed to stage SQLite restore member {member}")
+            }
             Self::BackupFilesystem { operation, .. } => {
                 write!(
                     formatter,

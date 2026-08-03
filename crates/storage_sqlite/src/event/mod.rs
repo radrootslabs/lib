@@ -23,6 +23,7 @@ pub struct SqliteStorage {
     pub(crate) mode: EventStoreMode,
     pub(crate) lifecycle: Arc<StorageLifecycle>,
     pub(crate) backup_root: Option<Arc<PathBuf>>,
+    pub(crate) paths: Option<Arc<crate::Paths>>,
 }
 
 struct StoredEventRow {
@@ -45,6 +46,7 @@ impl SqliteStorage {
             mode,
             lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
             backup_root: None,
+            paths: None,
         }
     }
 
@@ -62,6 +64,7 @@ impl SqliteStorage {
             mode,
             lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
             backup_root: None,
+            paths: None,
         }
     }
 
@@ -90,6 +93,7 @@ impl SqliteStorage {
             backup_root: options
                 .backup_root()
                 .map(|path| Arc::new(path.to_path_buf())),
+            paths: Some(Arc::new(options.paths().clone())),
         }
     }
 
