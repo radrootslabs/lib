@@ -104,24 +104,17 @@ fn install_outputs(root: &Path, language: &'static str, temporary: &Path) -> Res
     let output_dir = root.join("generated").join(language);
     fs::create_dir_all(&output_dir)
         .map_err(|error| format!("failed to create {}: {error}", output_dir.display()))?;
-    let mut generated = fs::read_dir(temporary)
-        .map_err(|error| format!("failed to read {}: {error}", temporary.display()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("failed to enumerate {}: {error}", temporary.display()))?;
-    generated.sort_by_key(std::fs::DirEntry::file_name);
+    let mut generated = Vec::new();
+    collect_files(temporary, &mut generated)?;
+    generated.sort();
     let mut outputs = BTreeMap::new();
-    for entry in generated {
-        let path = entry.path();
-        if !path.is_file() {
-            return Err(format!(
-                "unexpected generated binding entry: {}",
-                path.display()
-            ));
-        }
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| format!("non-UTF-8 generated binding path: {}", path.display()))?;
+    for path in generated {
+        let name = path
+            .strip_prefix(temporary)
+            .map_err(|error| format!("failed to relativize {}: {error}", path.display()))?
+            .to_str()
+            .ok_or_else(|| format!("non-UTF-8 generated binding path: {}", path.display()))?
+            .replace('\\', "/");
         let contents = fs::read(&path)
             .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
         let destination = output_dir.join(&name);
@@ -132,6 +125,10 @@ fn install_outputs(root: &Path, language: &'static str, temporary: &Path) -> Res
             name.clone(),
             format!("{:x}", Sha256::digest(text.as_bytes())),
         );
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+        }
         write_if_changed(&destination, &text)?;
     }
     if outputs.is_empty() {
@@ -175,7 +172,38 @@ pub fn check(root: &Path) -> Result<(), String> {
             "radroots_sdkFFI.h",
             "radroots_sdkFFI.modulemap",
         ],
-    )
+    )?;
+    check_language(root, "kotlin", &["uniffi/radroots_sdk/radroots_sdk.kt"])?;
+    check_kotlin_schema_inventory(root)
+}
+
+fn check_kotlin_schema_inventory(root: &Path) -> Result<(), String> {
+    let path = root.join("generated/kotlin/uniffi/radroots_sdk/radroots_sdk.kt");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for required in [
+        "class MobileClient",
+        "data class CapabilityStatus",
+        "enum class CapabilityAvailability",
+        "enum class CapabilityMaturity",
+        "sealed class Exception",
+    ] {
+        if !source.contains(required) {
+            return Err(format!(
+                "generated Kotlin schema inventory is missing {required}: {}",
+                path.display()
+            ));
+        }
+    }
+    for forbidden in ["Keychain", "BackgroundTask", "Presentation"] {
+        if source.contains(forbidden) {
+            return Err(format!(
+                "generated Kotlin bindings contain host-owned {forbidden} API: {}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn check_language(root: &Path, language: &'static str, expected: &[&str]) -> Result<(), String> {
