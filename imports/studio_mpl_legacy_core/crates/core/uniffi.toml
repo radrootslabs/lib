@@ -1,0 +1,10 @@
+[bindings.kotlin]
+package_name = "com.radroots.studio.coreffi"
+cdylib_name = "studio_app_core"
+generate_immutable_records = true
+kotlin_target_version = "2.4.10"
+
+[bindings.swift]
+module_name = "StudioAppCore"
+cdylib_name = "studio_app_core"
+generate_immutable_records = true
