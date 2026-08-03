@@ -224,3 +224,28 @@ verification = [
 unresolved_risk = "A 90% development gate admits untested paths that a later 100% gate would reject; the final restoration remains intentionally unscheduled pending explicit authority."
 normative_architecture_change = false
 adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-011"
+date = "2026-08-03"
+status = "active"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["225", "226", "248"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#17-radroots_geonames",
+  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+]
+source_evidence = [
+  "The standalone SDK manifest and GeoNames module still resolve radroots_geocoder and its test-fixture feature while the final provider package is implemented in this independently versioned repository.",
+  "The legacy package has no in-repository consumer, is publish disabled, and is already excluded from the exact release-v1 public package inventory.",
+  "Deleting the package at Step 225 would make the independently buildable SDK repository unresolvable before its ordered manifest and API cutover begins at Step 226.",
+]
+replacement_action = "Keep radroots_geocoder as a documentation-marked, machine-classified publish-frozen bridge with no new consumers, features, contracts, or behavior; migrate the standalone SDK to radroots_geonames beginning at Step 226 and delete the bridge at the SDK retirement gate in Step 248."
+verification = [
+  "The predecessor manifest names radroots_geonames as its replacement, RCRV1-DEV-011 as authority, and Step 248 as the exact removal gate.",
+  "GeoNames package quarantine tests require the predecessor to remain private and absent from the approved publication inventory while the SDK source census remains non-empty.",
+  "Step 248 must reject every remaining package, dependency, feature, import, and error-adapter reference to radroots_geocoder before deletion.",
+]
+unresolved_risk = "The standalone SDK remains coupled to the predecessor API until its ordered cutover; package-realistic publication is blocked until Step 248 removes the bridge."
+normative_architecture_change = false
+adr_required = false

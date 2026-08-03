@@ -192,13 +192,14 @@ impl Write for BoundedWriter<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::fs::{self, OpenOptions};
     use std::io::Write;
 
+    use fs2::FileExt;
     use sha2::{Digest, Sha256};
     use tempfile::tempdir;
 
-    use super::{FetchFailurePhase, Fetcher, acquire};
+    use super::{BoundedWriter, FetchFailurePhase, Fetcher, acquire};
     use crate::asset::inspect;
     use crate::{AssetSpec, AssetStatus, Error};
 
@@ -224,6 +225,14 @@ mod tests {
             Err(Error::Fetch {
                 phase: FetchFailurePhase::Cancelled,
             })
+        }
+    }
+
+    struct PanicFetcher;
+
+    impl Fetcher for PanicFetcher {
+        fn fetch(&self, _source: &str, _destination: &mut dyn Write) -> Result<(), Error> {
+            panic!("available assets must not invoke the fetcher")
         }
     }
 
@@ -330,5 +339,74 @@ mod tests {
             acquire(&real, &spec, &BytesFetcher(b"asset".to_vec())),
             Err(Error::UnsafeAssetDestination)
         );
+    }
+
+    #[test]
+    fn available_short_busy_and_invalid_directory_paths_are_explicit() {
+        let directory = tempdir().expect("tempdir");
+        let bytes = b"asset";
+        let spec = spec(bytes);
+        fs::write(directory.path().join(spec.file_name()), bytes).expect("available asset");
+        let owned_directory = directory.path().to_path_buf();
+        assert_eq!(
+            acquire(&owned_directory, &spec, &PanicFetcher),
+            Ok(AssetStatus::Available)
+        );
+
+        fs::write(directory.path().join(spec.file_name()), b"old").expect("invalid asset");
+        assert!(matches!(
+            acquire(directory.path(), &spec, &BytesFetcher(b"a".to_vec())),
+            Err(Error::AssetSizeMismatch {
+                expected: 5,
+                actual: 1
+            })
+        ));
+
+        let lock_path = directory.path().join(format!(".{}.lock", spec.file_name()));
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(lock_path)
+            .expect("lock file");
+        lock.lock_exclusive().expect("exclusive lock");
+        assert_eq!(
+            acquire(directory.path(), &spec, &BytesFetcher(bytes.to_vec())),
+            Err(Error::AssetDestinationBusy)
+        );
+
+        let not_directory = directory.path().join("plain-file");
+        fs::write(&not_directory, b"file").expect("plain file");
+        assert_eq!(
+            acquire(&not_directory, &spec, &BytesFetcher(bytes.to_vec())),
+            Err(Error::UnsafeAssetDestination)
+        );
+        assert!(matches!(
+            acquire(
+                directory.path().join("missing"),
+                &spec,
+                &BytesFetcher(bytes.to_vec())
+            ),
+            Err(Error::Io {
+                operation: "inspect asset directory",
+                kind: std::io::ErrorKind::NotFound,
+            })
+        ));
+    }
+
+    #[test]
+    fn fetch_phases_and_bounded_writer_flush_are_covered() {
+        assert_eq!(FetchFailurePhase::Connect.to_string(), "connect");
+        assert_eq!(FetchFailurePhase::Response.to_string(), "response");
+        assert_eq!(FetchFailurePhase::Read.to_string(), "read");
+        assert_eq!(FetchFailurePhase::Cancelled.to_string(), "cancellation");
+
+        let mut file = tempfile::tempfile().expect("temporary file");
+        let mut writer = BoundedWriter::new(&mut file, 4);
+        writer.write_all(b"data").expect("bounded write");
+        writer.flush().expect("flush");
+        assert_eq!(writer.observed, 4);
+        assert!(!writer.overflowed);
     }
 }

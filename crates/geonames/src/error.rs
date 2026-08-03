@@ -130,3 +130,51 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+    use crate::download::FetchFailurePhase;
+
+    #[test]
+    fn every_public_error_has_a_secret_safe_stable_message() {
+        let cases = [
+            Error::InvalidAssetVersion,
+            Error::InvalidAssetFileName,
+            Error::InvalidAssetSource,
+            Error::UntrustedAssetSource,
+            Error::InvalidAssetByteSize,
+            Error::UnsafeAssetDestination,
+            Error::AssetDestinationBusy,
+            Error::Io {
+                operation: "read asset",
+                kind: std::io::ErrorKind::PermissionDenied,
+            },
+            Error::Fetch {
+                phase: FetchFailurePhase::Connect,
+            },
+            Error::AssetSizeMismatch {
+                expected: 10,
+                actual: 9,
+            },
+            Error::AssetHashMismatch,
+            Error::InvalidDatabase,
+            Error::InvalidDatabaseSchema,
+            Error::DatabaseConnectionUnavailable,
+            Error::DatabaseOperationFailed { operation: "query" },
+            Error::InvalidPoint,
+            Error::InvalidQueryText,
+            Error::InvalidQueryLimit,
+            Error::InvalidQueryRadius,
+            Error::InvalidFeatureId,
+            Error::QueryOptionNotApplicable,
+        ];
+        for error in cases {
+            let message = error.to_string();
+            assert!(!message.is_empty());
+            for forbidden in ["https://", "/tmp/", "SELECT ", "token="] {
+                assert!(!message.contains(forbidden));
+            }
+        }
+    }
+}

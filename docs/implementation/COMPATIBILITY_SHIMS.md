@@ -12,6 +12,7 @@ identity or a second contract authority.
 | hidden `radroots_nostr_connect::prelude` and prefixed client bridge | final `radroots_nostr_connect` modules and client state machine | `oss/cli`, `oss/myc`, enterprise NIP-46 adapters, integration harnesses | CLI Step 271; Myc Step 288; residual consumers Step 293; matrix Step 294 | Step 313 |
 | `radroots_nostr_runtime` | `radroots_transport_nostr`, `radroots_sync` | private `radroots_nostrdb` runtime adapter | sync Steps 202-214 | Step 215 |
 | `radroots_net` | `radroots_transport`, `radroots_sync`, `radroots_sdk` | `app_rt` as `radroots_net_core` | downstream Steps 269-293; matrix Step 294 | Step 313 |
+| `radroots_geocoder` | `radroots_geonames` | standalone `radroots_sdk` GeoNames feature and error adapter | SDK manifest cutover Step 226 | SDK quarantine removal Step 248 |
 
 Both compatibility package manifests and `radroots_nostr_connect` keep
 `publish = false`. Release policy classifies the shims as private and excludes

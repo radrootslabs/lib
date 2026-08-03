@@ -243,8 +243,9 @@ fn normalized_query_text(value: impl Into<String>) -> Result<String, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Query, QueryKind};
-    use crate::{Error, Point};
+    use super::{Query, QueryKind, QueryResult};
+    use crate::model::Country;
+    use crate::{Candidate, Error, Point};
 
     #[test]
     fn structured_queries_keep_normalized_filters_private() {
@@ -302,5 +303,58 @@ mod tests {
                 .with_radius_degrees(1.0),
             Err(Error::QueryOptionNotApplicable)
         );
+        assert_eq!(
+            Query::reverse(point).with_radius_degrees(f64::NAN),
+            Err(Error::InvalidQueryRadius)
+        );
+        assert_eq!(
+            Query::reverse(point).with_radius_degrees(10.1),
+            Err(Error::InvalidQueryRadius)
+        );
+    }
+
+    #[test]
+    fn query_and_result_accessors_distinguish_every_kind() {
+        let point = Point::new(48.4284, -123.3656).expect("point");
+        let locality = Query::locality("Victoria").expect("locality");
+        assert_eq!(locality.locality_fields(), Some(("Victoria", None, None)));
+        assert_eq!(locality.freeform_text(), None);
+        assert_eq!(locality.exact_feature_id(), None);
+        assert_eq!(locality.reverse_point(), None);
+        assert!(!locality.is_country_list());
+
+        let freeform = Query::freeform("Victoria, BC, CA").expect("freeform");
+        assert_eq!(freeform.locality_fields(), None);
+        assert_eq!(freeform.freeform_text(), Some("Victoria, BC, CA"));
+
+        let feature = Query::feature_id(42).expect("feature");
+        assert_eq!(feature.exact_feature_id(), Some(42));
+        assert_eq!(feature.freeform_text(), None);
+
+        let reverse = Query::reverse(point);
+        assert_eq!(reverse.reverse_point(), Some(point));
+        assert_eq!(reverse.exact_feature_id(), None);
+
+        let countries = Query::countries();
+        assert!(countries.is_country_list());
+        assert_eq!(countries.reverse_point(), None);
+
+        let candidate = Candidate::from_provider_row(
+            1,
+            "Victoria".to_owned(),
+            None,
+            None,
+            "CA".to_owned(),
+            None,
+            point,
+        );
+        let candidate_result = QueryResult::candidates(vec![candidate]);
+        assert_eq!(candidate_result.as_candidates().map(<[_]>::len), Some(1));
+        assert_eq!(candidate_result.as_countries(), None);
+
+        let country = Country::from_provider_row("CA".to_owned(), None, point);
+        let country_result = QueryResult::countries(vec![country]);
+        assert_eq!(country_result.as_candidates(), None);
+        assert_eq!(country_result.as_countries().map(<[_]>::len), Some(1));
     }
 }

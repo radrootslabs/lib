@@ -2,6 +2,22 @@
 //!
 //! This crate never chooses runtime paths or performs work during
 //! construction. Hosts explicitly provide every asset source and destination.
+//!
+//! # Inert query construction
+//!
+//! ```
+//! use radroots_geonames::{Point, Query};
+//!
+//! let locality = Query::locality("Victoria")?
+//!     .with_region("BC")?
+//!     .with_country("CA")?;
+//! assert_eq!(locality.limit(), 10);
+//!
+//! let reverse = Query::reverse(Point::new(48.4284, -123.3656)?)
+//!     .with_radius_degrees(0.25)?;
+//! assert_eq!(reverse.limit(), 1);
+//! # Ok::<(), radroots_geonames::Error>(())
+//! ```
 
 #![forbid(unsafe_code)]
 

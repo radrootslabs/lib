@@ -225,7 +225,14 @@ fn validate_source(source: &str, allowed_host: &str) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssetSpec, AssetStatus, OFFICIAL_ASSET_SHA256, official_asset_spec};
+    use std::fs;
+
+    use sha2::{Digest, Sha256};
+    use tempfile::tempdir;
+
+    use super::{
+        AssetSpec, AssetStatus, OFFICIAL_ASSET_SHA256, inspect, io_error, official_asset_spec,
+    };
     use crate::Error;
 
     fn spec() -> AssetSpec {
@@ -315,5 +322,70 @@ mod tests {
     fn asset_status_is_passive_and_exhaustive_for_v1() {
         assert_ne!(AssetStatus::Missing, AssetStatus::Available);
         assert_ne!(AssetStatus::Available, AssetStatus::Invalid);
+    }
+
+    #[test]
+    fn asset_validation_rejects_every_unsafe_name_and_url_shape() {
+        let source = "https://assets.example/a";
+        for file_name in ["", ".", "..", "a/b", "a\\b", "a:b", "a\0b"] {
+            assert_eq!(
+                AssetSpec::new("v1", file_name, source, "assets.example", 1, [0; 32]),
+                Err(Error::InvalidAssetFileName)
+            );
+        }
+        for untrusted in [
+            "not a url",
+            "https://user@assets.example/a",
+            "https://user:pass@assets.example/a",
+            "https://:pass@assets.example/a",
+            "https://assets.example:444/a",
+            "https://assets.example/a?token=secret",
+            "https://assets.example/a#fragment",
+        ] {
+            assert_eq!(
+                AssetSpec::new("v1", "asset.db", untrusted, "assets.example", 1, [0; 32]),
+                Err(Error::UntrustedAssetSource)
+            );
+        }
+        assert_eq!(
+            AssetSpec::new("v1", "asset.db", source, " ", 1, [0; 32]),
+            Err(Error::InvalidAssetSource)
+        );
+    }
+
+    #[test]
+    fn passive_inspection_distinguishes_regular_invalid_and_unsafe_entries() {
+        let directory = tempdir().expect("tempdir");
+        let bytes = b"asset bytes";
+        let spec = AssetSpec::new(
+            "v1",
+            "asset.db",
+            "https://assets.example/a",
+            "assets.example",
+            u64::try_from(bytes.len()).expect("length"),
+            Sha256::digest(bytes).into(),
+        )
+        .expect("spec");
+        let path = directory.path().join("asset.db");
+        fs::write(&path, b"short").expect("short asset");
+        assert_eq!(inspect(&path, &spec), Ok(AssetStatus::Invalid));
+        fs::write(&path, b"wrong bytes").expect("wrong hash asset");
+        assert_eq!(inspect(&path, &spec), Ok(AssetStatus::Invalid));
+        fs::write(&path, bytes).expect("valid asset");
+        assert_eq!(inspect(&path, &spec), Ok(AssetStatus::Available));
+        assert_eq!(
+            inspect(directory.path(), &spec),
+            Err(Error::UnsafeAssetDestination)
+        );
+        assert_eq!(
+            io_error(
+                "read asset",
+                std::io::Error::from(std::io::ErrorKind::BrokenPipe)
+            ),
+            Error::Io {
+                operation: "read asset",
+                kind: std::io::ErrorKind::BrokenPipe,
+            }
+        );
     }
 }

@@ -12,6 +12,13 @@ homepage.workspace = true
 documentation = "https://docs.rs/radroots_geocoder"
 readme = "README"
 
+[package.metadata.radroots.compatibility]
+status = "publish_frozen"
+replacement = "radroots_geonames"
+deviation = "RCRV1-DEV-011"
+removal_step = 248
+new_consumers_forbidden = true
+
 [features]
 test-fixture-geonames-asset = []
 

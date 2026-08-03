@@ -468,16 +468,13 @@ fn validate_table(
     required_columns: &[&str],
     column_pragma: &str,
 ) -> Result<(), Error> {
-    let object_type = connection
+    connection
         .query_row(
-            "SELECT type FROM sqlite_schema WHERE name = ?1 AND type = 'table'",
+            "SELECT 1 FROM sqlite_schema WHERE name = ?1 AND type = 'table'",
             [table],
-            |row| row.get::<_, String>(0),
+            |_| Ok(()),
         )
         .map_err(|_| Error::InvalidDatabaseSchema)?;
-    if object_type != "table" {
-        return Err(Error::InvalidDatabaseSchema);
-    }
 
     let mut statement = connection
         .prepare(column_pragma)
@@ -504,8 +501,11 @@ mod tests {
     use sha2::{Digest, Sha256};
     use tempfile::{TempDir, tempdir};
 
-    use super::Geocoder;
-    use crate::{AssetSpec, Error};
+    use super::{
+        Geocoder, country_matches, normalize_name, normalize_region_code, parse_freeform_query,
+        region_aliases, region_matches,
+    };
+    use crate::{AssetSpec, Candidate, Error, Point};
 
     fn database_fixture(schema: &str) -> (TempDir, std::path::PathBuf, AssetSpec) {
         let directory = tempdir().expect("tempdir");
@@ -756,6 +756,94 @@ mod tests {
         assert!(matches!(
             Geocoder::open(link, &spec),
             Err(Error::UnsafeAssetDestination)
+        ));
+    }
+
+    #[test]
+    fn parsing_and_filter_helpers_cover_direct_alias_and_no_match_paths() {
+        let point = Point::new(1.0, 2.0).expect("point");
+        let washington = Candidate::from_provider_row(
+            1,
+            "Victoria".to_owned(),
+            Some("WA".to_owned()),
+            Some("Washington".to_owned()),
+            "US".to_owned(),
+            Some("United States".to_owned()),
+            point,
+        );
+        assert!(country_matches(&washington, "us"));
+        assert!(country_matches(&washington, "united states"));
+        assert!(!country_matches(&washington, "canada"));
+        assert!(region_matches(&washington, "wa"));
+        assert!(region_matches(&washington, "washington"));
+
+        let legacy_washington = Candidate::from_provider_row(
+            2,
+            "Legacy".to_owned(),
+            Some("53".to_owned()),
+            Some("Washington".to_owned()),
+            "US".to_owned(),
+            None,
+            point,
+        );
+        assert!(region_matches(&legacy_washington, "wa"));
+        assert!(!country_matches(&legacy_washington, "canada"));
+
+        let unclassified = Candidate::from_provider_row(
+            3,
+            "Island".to_owned(),
+            None,
+            None,
+            "FJ".to_owned(),
+            None,
+            point,
+        );
+        assert!(!region_matches(&unclassified, "unknown"));
+        assert!(region_aliases("FJ").is_empty());
+        assert!(!region_aliases("CA").is_empty());
+        assert!(!region_aliases("us").is_empty());
+        assert_eq!(normalize_name("  New   York  "), "new york");
+        assert_eq!(normalize_region_code("b.c."), "BC");
+
+        let empty = parse_freeform_query(", ,");
+        assert!(empty.locality.is_empty());
+        let one = parse_freeform_query("Victoria");
+        assert_eq!(one.locality, "Victoria");
+        let two = parse_freeform_query("Victoria, BC");
+        assert_eq!(two.region.as_deref(), Some("BC"));
+        assert_eq!(two.country, None);
+        let many = parse_freeform_query("Greater, Victoria, BC, CA");
+        assert_eq!(many.locality, "Greater, Victoria");
+        assert_eq!(many.country.as_deref(), Some("CA"));
+    }
+
+    #[test]
+    fn database_open_and_row_mapping_fail_closed_for_invalid_shapes() {
+        let directory = tempdir().expect("tempdir");
+        let placeholder = AssetSpec::new(
+            "v1",
+            "asset.db",
+            "https://assets.example/a",
+            "assets.example",
+            1,
+            [0; 32],
+        )
+        .expect("placeholder spec");
+        assert!(matches!(
+            Geocoder::open(directory.path(), &placeholder),
+            Err(Error::UnsafeAssetDestination)
+        ));
+
+        let invalid_row_schema = governed_schema().replace(
+            "(6174041, 'Victoria', 2, 'British Columbia', 'CA', 'Canada', 48.4284, -123.3656)",
+            "(-1, 'Victoria', 2, 'British Columbia', 'CA', 'Canada', 48.4284, -123.3656)",
+        );
+        let (_directory, path, spec) = database_fixture(&invalid_row_schema);
+        let geocoder = Geocoder::open(path, &spec).expect("open negative-id fixture");
+        let query = crate::Query::locality("Victoria").expect("query");
+        assert!(matches!(
+            geocoder.query(&query),
+            Err(Error::DatabaseOperationFailed { operation: "query" })
         ));
     }
 }

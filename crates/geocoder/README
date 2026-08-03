@@ -3,6 +3,14 @@
 This is the README for `radroots_geocoder`, which provides offline geocoder
 queries for the `radroots` core libraries.
 
+## Compatibility quarantine
+
+This package is a publish-frozen private bridge for the standalone SDK's
+existing GeoNames feature. `radroots_geonames` is the only approved public
+provider identity. New consumers, features, contracts, and behavior are
+forbidden under `RCRV1-DEV-011`; SDK manifest cutover begins at Step 226 and
+this package is removed at the SDK quarantine gate in Step 248.
+
 ## Overview
 
  * a `Geocoder` type that opens prepared datasets from a filesystem path or
