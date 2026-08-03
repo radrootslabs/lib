@@ -21,6 +21,7 @@ use crate::{OpenMode, SqliteStorage, integrity, lock::WriterLock};
 const OPEN: u8 = 0;
 const CLOSING: u8 = 1;
 const CLOSED: u8 = 2;
+const RESTORING: u8 = 3;
 
 pub(crate) struct StorageLifecycle {
     open_mode: StorageOpenMode,
@@ -104,18 +105,39 @@ impl StorageLifecycle {
     fn shutdown(&self) -> ShutdownState {
         match self.shutdown.load(Ordering::Acquire) {
             OPEN => ShutdownState::Open,
-            CLOSING => ShutdownState::Closing,
+            CLOSING | RESTORING => ShutdownState::Closing,
             _ => ShutdownState::Closed,
         }
     }
 
-    fn begin_close(&self) {
+    pub(crate) fn begin_close(&self) {
         let _ = self
             .shutdown
             .compare_exchange(OPEN, CLOSING, Ordering::AcqRel, Ordering::Acquire);
     }
 
-    fn finish_close(&self) -> Result<(), Error> {
+    pub(crate) fn begin_restore_close(&self) -> Result<(), Error> {
+        self.shutdown
+            .compare_exchange(OPEN, RESTORING, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| Error::BackendUnavailable)
+    }
+
+    pub(crate) fn finish_close(&self) -> Result<(), Error> {
+        if self.shutdown.load(Ordering::Acquire) == RESTORING {
+            return Ok(());
+        }
+        self.release_writer_and_close()
+    }
+
+    pub(crate) fn finish_restore_close(&self) -> Result<(), Error> {
+        if self.shutdown.load(Ordering::Acquire) != RESTORING {
+            return Err(Error::BackendUnavailable);
+        }
+        self.release_writer_and_close()
+    }
+
+    fn release_writer_and_close(&self) -> Result<(), Error> {
         let mut writer_lock = self
             .writer_lock
             .lock()

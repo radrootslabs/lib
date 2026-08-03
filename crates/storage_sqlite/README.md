@@ -20,6 +20,15 @@ member, synchronizes captured files and directories, and returns exact lengths
 and SHA-256 digests in the backend-neutral manifest. Protected storage is
 included only when the plan requests it explicitly.
 
+Restore first copies a finalized bundle into create-new files adjacent to the
+live databases and verifies their exact digests, schema catalogs, SQLite
+integrity, and foreign keys without changing live state. Finalization closes
+the owned pools while retaining writer authority, persists a versioned recovery
+marker, atomically replaces each policy-selected member, and requires callers
+to reopen the closed backend. Writable open completes an interrupted marked
+replacement before opening connections; read-only open fails closed until that
+recovery is complete.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

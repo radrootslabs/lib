@@ -257,6 +257,15 @@ pub enum Error {
     RestoreStagingFailed {
         member: &'static str,
     },
+    RestoreMarkerCorrupt(PathBuf),
+    RestoreRecoveryConflict(PathBuf),
+    RestoreReplacementFailed {
+        member: &'static str,
+    },
+    RestoreFilesystem {
+        operation: &'static str,
+        source: std::io::Error,
+    },
     BackupFilesystem {
         operation: &'static str,
         source: std::io::Error,
@@ -465,6 +474,28 @@ impl fmt::Display for Error {
             Self::RestoreStagingFailed { member } => {
                 write!(formatter, "failed to stage SQLite restore member {member}")
             }
+            Self::RestoreMarkerCorrupt(path) => write!(
+                formatter,
+                "SQLite restore interruption marker is corrupt: {}",
+                path.display()
+            ),
+            Self::RestoreRecoveryConflict(path) => write!(
+                formatter,
+                "SQLite restore recovery state conflicts at: {}",
+                path.display()
+            ),
+            Self::RestoreReplacementFailed { member } => {
+                write!(
+                    formatter,
+                    "failed to replace SQLite restore member {member}"
+                )
+            }
+            Self::RestoreFilesystem { operation, .. } => {
+                write!(
+                    formatter,
+                    "SQLite restore filesystem operation failed: {operation}"
+                )
+            }
             Self::BackupFilesystem { operation, .. } => {
                 write!(
                     formatter,
@@ -479,6 +510,8 @@ impl SqliteStorage {
     /// Opens both governed databases, applying only authorized forward
     /// migrations and retaining the writer guard for the backend lifetime.
     pub async fn open(options: OpenOptions) -> Result<Self, Error> {
+        let writer_lock = WriterLock::acquire(options.paths(), options.mode())?;
+        crate::backup::recover_interrupted_restore(options.paths(), options.mode()).await?;
         options.validate_filesystem()?;
         let runtime_exists =
             options
@@ -492,7 +525,6 @@ impl SqliteStorage {
         if options.mode().may_create() && !runtime_exists && options.source_generation().is_none() {
             return Err(Error::SourceGenerationRequired);
         }
-        let writer_lock = WriterLock::acquire(options.paths(), options.mode())?;
         options.validate_filesystem()?;
 
         let runtime_options = connect_options(
@@ -730,6 +762,7 @@ impl StdError for Error {
             | Self::WriterLockOpen { source, .. }
             | Self::WriterLockFailed { source, .. }
             | Self::WriterUnlockFailed { source, .. }
+            | Self::RestoreFilesystem { source, .. }
             | Self::BackupFilesystem { source, .. } => Some(source),
             _ => None,
         }

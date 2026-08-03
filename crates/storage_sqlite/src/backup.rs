@@ -3,12 +3,12 @@
 use std::{
     collections::BTreeSet,
     fs::{self, File},
-    io::Read,
+    io::{Read, Write},
     path::{Component, Path, PathBuf},
 };
 
 use radroots_storage::backup::{
-    BackupFormatVersion, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
+    BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
     BackupSecretPolicy, MemberDigest, MemberVerification, RestoreMemberStatus, RestorePlan,
 };
 use radroots_storage::status::EventStoreMode;
@@ -22,6 +22,8 @@ const RUNTIME_DATABASE: &str = "runtime.sqlite";
 const PRIVATE_DATABASE: &str = "private.sqlite";
 const RUNTIME_MEMBER: &str = "runtime/runtime.sqlite";
 const PRIVATE_MEMBER: &str = "private/private.sqlite";
+const RESTORE_MARKER_MAGIC: &[u8; 8] = b"RDRSTR01";
+const RESTORE_MARKER_BYTES: usize = 105;
 
 impl SqliteStorage {
     /// Captures consistent SQLite snapshots into a new deterministic staging
@@ -226,6 +228,41 @@ impl SqliteStorage {
         }
         Ok(statuses)
     }
+
+    /// Quiesces this writable backend, records a durable interruption marker,
+    /// and installs every completely verified staged member. The backend is
+    /// closed after the attempt and must be reopened to observe restored state.
+    pub async fn finalize_restore(&self, plan: &RestorePlan) -> Result<(), Error> {
+        self.lifecycle
+            .require_open()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        if self.mode != EventStoreMode::ReadWrite {
+            return Err(Error::RestoreRequiresWritableStorage);
+        }
+        let paths = self
+            .paths
+            .as_deref()
+            .ok_or(Error::BackupBackendUnavailable)?;
+        let marker = RestoreMarker::from_manifest(plan.manifest())?;
+        let layout = RestoreLayout::new(paths, marker.backup_id())?;
+        verify_staged_restore(&layout, &marker).await?;
+        layout.require_previous_absent(marker.secret_policy())?;
+
+        self.lifecycle
+            .begin_restore_close()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        self.pool.close().await;
+        self.private_pool.close().await;
+        let installation = async {
+            verify_staged_restore(&layout, &marker).await?;
+            write_restore_marker(&layout.marker, &marker)?;
+            recover_interrupted_restore(paths, OpenMode::ReadWriteExisting).await
+        }
+        .await;
+        let close = self.lifecycle.finish_restore_close();
+        installation?;
+        close.map_err(|_| Error::BackupBackendUnavailable)
+    }
 }
 
 pub(crate) fn validate_backup_root(path: &Path) -> Result<(), Error> {
@@ -365,12 +402,521 @@ impl RestoreStaging {
     }
 }
 
+struct RestoreLayout {
+    runtime_live: PathBuf,
+    private_live: PathBuf,
+    runtime_staging: PathBuf,
+    private_staging: PathBuf,
+    runtime_previous: PathBuf,
+    private_previous: PathBuf,
+    marker: PathBuf,
+}
+
+impl RestoreLayout {
+    fn new(paths: &crate::Paths, backup_id: BackupId) -> Result<Self, Error> {
+        let id = encode_id(backup_id.as_bytes());
+        let runtime_parent = paths
+            .runtime()
+            .parent()
+            .ok_or_else(|| Error::InvalidPath(paths.runtime().to_path_buf()))?;
+        Ok(Self {
+            runtime_live: paths.runtime().to_path_buf(),
+            private_live: paths.private().to_path_buf(),
+            runtime_staging: restore_sidecar_path(paths.runtime(), &id, "staging")?,
+            private_staging: restore_sidecar_path(paths.private(), &id, "staging")?,
+            runtime_previous: restore_sidecar_path(paths.runtime(), &id, "previous")?,
+            private_previous: restore_sidecar_path(paths.private(), &id, "previous")?,
+            marker: runtime_parent.join(format!(".radroots-storage-restore-{id}.marker")),
+        })
+    }
+
+    fn require_previous_absent(&self, policy: BackupSecretPolicy) -> Result<(), Error> {
+        let paths = if policy == BackupSecretPolicy::IncludeProtectedStorage {
+            vec![&self.runtime_previous, &self.private_previous]
+        } else {
+            vec![&self.runtime_previous]
+        };
+        for path in paths {
+            if restore_entry_kind(path)? != RestoreEntryKind::Missing {
+                return Err(Error::RestoreRecoveryConflict(path.clone()));
+            }
+        }
+        if restore_entry_kind(&self.marker)? != RestoreEntryKind::Missing {
+            return Err(Error::RestoreRecoveryConflict(self.marker.clone()));
+        }
+        Ok(())
+    }
+}
+
 fn staged_restore_path(live: &Path, id: &str) -> Result<PathBuf, Error> {
+    restore_sidecar_path(live, id, "staging")
+}
+
+fn restore_sidecar_path(live: &Path, id: &str, role: &str) -> Result<PathBuf, Error> {
     let name = live
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| Error::InvalidPath(live.to_path_buf()))?;
-    Ok(live.with_file_name(format!(".{name}.restore-{id}.staging")))
+    Ok(live.with_file_name(format!(".{name}.restore-{id}.{role}")))
+}
+
+#[derive(Clone, Copy)]
+struct RestoreMemberExpectation {
+    byte_length: u64,
+    sha256: MemberDigest,
+}
+
+impl RestoreMemberExpectation {
+    fn from_member(member: &BackupMember, expected_kind: BackupMemberKind) -> Result<Self, Error> {
+        if member.kind() != expected_kind {
+            return Err(Error::RestoreReplacementFailed { member: "manifest" });
+        }
+        Ok(Self {
+            byte_length: member.byte_length(),
+            sha256: member.sha256(),
+        })
+    }
+
+    fn member(
+        self,
+        relative_path: &'static str,
+        kind: BackupMemberKind,
+    ) -> Result<BackupMember, Error> {
+        BackupMember::new(relative_path, kind, self.byte_length, self.sha256).map_err(|_| {
+            Error::RestoreReplacementFailed {
+                member: relative_path,
+            }
+        })
+    }
+}
+
+struct RestoreMarker {
+    backup_id: BackupId,
+    secret_policy: BackupSecretPolicy,
+    runtime: RestoreMemberExpectation,
+    private: Option<RestoreMemberExpectation>,
+}
+
+impl RestoreMarker {
+    fn from_manifest(manifest: &BackupManifest) -> Result<Self, Error> {
+        if manifest.format_version() != BackupFormatVersion::V1 {
+            return Err(Error::UnsupportedBackupVersion);
+        }
+        let expected = if manifest.secret_policy() == BackupSecretPolicy::IncludeProtectedStorage {
+            BTreeSet::from([PRIVATE_MEMBER, RUNTIME_MEMBER])
+        } else {
+            BTreeSet::from([RUNTIME_MEMBER])
+        };
+        let actual = manifest
+            .members()
+            .iter()
+            .map(BackupMember::relative_path)
+            .collect::<BTreeSet<_>>();
+        if actual != expected {
+            return Err(Error::RestoreReplacementFailed { member: "manifest" });
+        }
+        let runtime = RestoreMemberExpectation::from_member(
+            manifest
+                .member(RUNTIME_MEMBER)
+                .ok_or(Error::RestoreReplacementFailed { member: "manifest" })?,
+            BackupMemberKind::Runtime,
+        )?;
+        let private = manifest
+            .member(PRIVATE_MEMBER)
+            .map(|member| {
+                RestoreMemberExpectation::from_member(member, BackupMemberKind::Protected)
+            })
+            .transpose()?;
+        Ok(Self {
+            backup_id: manifest.backup_id(),
+            secret_policy: manifest.secret_policy(),
+            runtime,
+            private,
+        })
+    }
+
+    const fn backup_id(&self) -> BackupId {
+        self.backup_id
+    }
+
+    const fn secret_policy(&self) -> BackupSecretPolicy {
+        self.secret_policy
+    }
+
+    fn encode(&self) -> [u8; RESTORE_MARKER_BYTES] {
+        let mut encoded = [0_u8; RESTORE_MARKER_BYTES];
+        encoded[..8].copy_from_slice(RESTORE_MARKER_MAGIC);
+        encoded[8] = u8::from(self.private.is_some());
+        encoded[9..25].copy_from_slice(self.backup_id.as_bytes());
+        encoded[25..33].copy_from_slice(&self.runtime.byte_length.to_be_bytes());
+        encoded[33..65].copy_from_slice(self.runtime.sha256.as_bytes());
+        if let Some(private) = self.private {
+            encoded[65..73].copy_from_slice(&private.byte_length.to_be_bytes());
+            encoded[73..105].copy_from_slice(private.sha256.as_bytes());
+        }
+        encoded
+    }
+
+    fn decode(path: &Path, encoded: &[u8]) -> Result<Self, Error> {
+        if encoded.len() != RESTORE_MARKER_BYTES || &encoded[..8] != RESTORE_MARKER_MAGIC {
+            return Err(Error::RestoreMarkerCorrupt(path.to_path_buf()));
+        }
+        let secret_policy = match encoded[8] {
+            0 => BackupSecretPolicy::ExcludeProtectedStorage,
+            1 => BackupSecretPolicy::IncludeProtectedStorage,
+            _ => return Err(Error::RestoreMarkerCorrupt(path.to_path_buf())),
+        };
+        let backup_id = BackupId::new(
+            encoded[9..25]
+                .try_into()
+                .map_err(|_| Error::RestoreMarkerCorrupt(path.to_path_buf()))?,
+        )
+        .map_err(|_| Error::RestoreMarkerCorrupt(path.to_path_buf()))?;
+        let runtime = RestoreMemberExpectation {
+            byte_length: u64::from_be_bytes(
+                encoded[25..33]
+                    .try_into()
+                    .map_err(|_| Error::RestoreMarkerCorrupt(path.to_path_buf()))?,
+            ),
+            sha256: MemberDigest::new(
+                encoded[33..65]
+                    .try_into()
+                    .map_err(|_| Error::RestoreMarkerCorrupt(path.to_path_buf()))?,
+            ),
+        };
+        if runtime.byte_length == 0 {
+            return Err(Error::RestoreMarkerCorrupt(path.to_path_buf()));
+        }
+        let private_length = u64::from_be_bytes(
+            encoded[65..73]
+                .try_into()
+                .map_err(|_| Error::RestoreMarkerCorrupt(path.to_path_buf()))?,
+        );
+        let private_digest: [u8; 32] = encoded[73..105]
+            .try_into()
+            .map_err(|_| Error::RestoreMarkerCorrupt(path.to_path_buf()))?;
+        let private = match secret_policy {
+            BackupSecretPolicy::ExcludeProtectedStorage
+                if private_length == 0 && private_digest == [0; 32] =>
+            {
+                None
+            }
+            BackupSecretPolicy::IncludeProtectedStorage if private_length > 0 => {
+                Some(RestoreMemberExpectation {
+                    byte_length: private_length,
+                    sha256: MemberDigest::new(private_digest),
+                })
+            }
+            _ => return Err(Error::RestoreMarkerCorrupt(path.to_path_buf())),
+        };
+        Ok(Self {
+            backup_id,
+            secret_policy,
+            runtime,
+            private,
+        })
+    }
+}
+
+fn write_restore_marker(path: &Path, marker: &RestoreMarker) -> Result<(), Error> {
+    let mut options = fs::OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(path)
+        .map_err(|source| Error::RestoreFilesystem {
+            operation: "create restore interruption marker",
+            source,
+        })?;
+    file.write_all(&marker.encode())
+        .and_then(|()| file.sync_all())
+        .map_err(|source| Error::RestoreFilesystem {
+            operation: "persist restore interruption marker",
+            source,
+        })?;
+    sync_parent(path, "sync restore marker parent")
+}
+
+fn read_restore_marker(path: &Path) -> Result<RestoreMarker, Error> {
+    let metadata = fs::symlink_metadata(path).map_err(|source| Error::RestoreFilesystem {
+        operation: "inspect restore interruption marker",
+        source,
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() != RESTORE_MARKER_BYTES as u64
+    {
+        return Err(Error::RestoreMarkerCorrupt(path.to_path_buf()));
+    }
+    let encoded = fs::read(path).map_err(|source| Error::RestoreFilesystem {
+        operation: "read restore interruption marker",
+        source,
+    })?;
+    RestoreMarker::decode(path, &encoded)
+}
+
+pub(crate) async fn recover_interrupted_restore(
+    paths: &crate::Paths,
+    mode: OpenMode,
+) -> Result<(), Error> {
+    let Some(marker_path) = discover_restore_marker(paths)? else {
+        return Ok(());
+    };
+    if !mode.is_writable() {
+        return Err(Error::RestoreRequiresWritableStorage);
+    }
+    let marker = read_restore_marker(&marker_path)?;
+    let layout = RestoreLayout::new(paths, marker.backup_id())?;
+    if layout.marker != marker_path {
+        return Err(Error::RestoreMarkerCorrupt(marker_path));
+    }
+    require_sqlite_sidecars_absent(paths)?;
+    install_restore_member(
+        &layout.runtime_live,
+        &layout.runtime_staging,
+        &layout.runtime_previous,
+        marker.runtime,
+        BackupMemberKind::Runtime,
+        RUNTIME_MEMBER,
+        true,
+    )
+    .await?;
+    if let Some(private) = marker.private {
+        install_restore_member(
+            &layout.private_live,
+            &layout.private_staging,
+            &layout.private_previous,
+            private,
+            BackupMemberKind::Protected,
+            PRIVATE_MEMBER,
+            false,
+        )
+        .await?;
+    }
+    verify_installed_restore(&layout, &marker).await?;
+    remove_restore_file(&layout.runtime_previous, "remove previous runtime database")?;
+    if marker.private.is_some() {
+        remove_restore_file(&layout.private_previous, "remove previous private database")?;
+    }
+    remove_restore_file(&layout.marker, "remove restore interruption marker")?;
+    Ok(())
+}
+
+fn discover_restore_marker(paths: &crate::Paths) -> Result<Option<PathBuf>, Error> {
+    let parent = paths
+        .runtime()
+        .parent()
+        .ok_or_else(|| Error::InvalidPath(paths.runtime().to_path_buf()))?;
+    let parent_metadata = match fs::symlink_metadata(parent) {
+        Ok(metadata) => metadata,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => {
+            return Err(Error::RestoreFilesystem {
+                operation: "inspect restore marker parent",
+                source,
+            });
+        }
+    };
+    if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
+        return Ok(None);
+    }
+    let mut marker = None;
+    for entry in fs::read_dir(parent).map_err(|source| Error::RestoreFilesystem {
+        operation: "scan restore interruption markers",
+        source,
+    })? {
+        let entry = entry.map_err(|source| Error::RestoreFilesystem {
+            operation: "read restore interruption marker entry",
+            source,
+        })?;
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if !name.starts_with(".radroots-storage-restore-") || !name.ends_with(".marker") {
+            continue;
+        }
+        if marker.replace(entry.path()).is_some() {
+            return Err(Error::RestoreRecoveryConflict(parent.to_path_buf()));
+        }
+    }
+    Ok(marker)
+}
+
+async fn verify_staged_restore(
+    layout: &RestoreLayout,
+    marker: &RestoreMarker,
+) -> Result<(), Error> {
+    verify_restore_path(
+        &layout.runtime_staging,
+        marker.runtime,
+        BackupMemberKind::Runtime,
+        RUNTIME_MEMBER,
+        true,
+    )
+    .await?;
+    if let Some(private) = marker.private {
+        verify_restore_path(
+            &layout.private_staging,
+            private,
+            BackupMemberKind::Protected,
+            PRIVATE_MEMBER,
+            false,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn verify_installed_restore(
+    layout: &RestoreLayout,
+    marker: &RestoreMarker,
+) -> Result<(), Error> {
+    verify_restore_path(
+        &layout.runtime_live,
+        marker.runtime,
+        BackupMemberKind::Runtime,
+        RUNTIME_MEMBER,
+        true,
+    )
+    .await?;
+    if let Some(private) = marker.private {
+        verify_restore_path(
+            &layout.private_live,
+            private,
+            BackupMemberKind::Protected,
+            PRIVATE_MEMBER,
+            false,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn verify_restore_path(
+    path: &Path,
+    expected: RestoreMemberExpectation,
+    kind: BackupMemberKind,
+    member_name: &'static str,
+    runtime: bool,
+) -> Result<(), Error> {
+    let member = expected.member(member_name, kind)?;
+    verify_member(path, &member, kind, member_name, runtime)
+        .await
+        .map_err(|_| Error::RestoreReplacementFailed {
+            member: member_name,
+        })
+}
+
+async fn install_restore_member(
+    live: &Path,
+    staging: &Path,
+    previous: &Path,
+    expected: RestoreMemberExpectation,
+    kind: BackupMemberKind,
+    member_name: &'static str,
+    runtime: bool,
+) -> Result<(), Error> {
+    let live_kind = restore_entry_kind(live)?;
+    let staging_kind = restore_entry_kind(staging)?;
+    let previous_kind = restore_entry_kind(previous)?;
+    if [live_kind, staging_kind, previous_kind]
+        .into_iter()
+        .any(|entry| entry == RestoreEntryKind::Other)
+    {
+        return Err(Error::RestoreRecoveryConflict(live.to_path_buf()));
+    }
+
+    if live_kind == RestoreEntryKind::File && restore_member_matches(live, expected)? {
+        verify_restore_path(live, expected, kind, member_name, runtime).await?;
+        if staging_kind == RestoreEntryKind::File {
+            verify_restore_path(staging, expected, kind, member_name, runtime).await?;
+            remove_restore_file(staging, "remove redundant restore staging member")?;
+        }
+        return Ok(());
+    }
+    if staging_kind != RestoreEntryKind::File {
+        return Err(Error::RestoreReplacementFailed {
+            member: member_name,
+        });
+    }
+    verify_restore_path(staging, expected, kind, member_name, runtime).await?;
+    match (live_kind, previous_kind) {
+        (RestoreEntryKind::File, RestoreEntryKind::Missing) => {
+            fs::rename(live, previous).map_err(|source| Error::RestoreFilesystem {
+                operation: "rename live database to previous restore sidecar",
+                source,
+            })?;
+            sync_parent(live, "sync previous database rename")?;
+        }
+        (RestoreEntryKind::Missing, RestoreEntryKind::File) => {}
+        _ => return Err(Error::RestoreRecoveryConflict(live.to_path_buf())),
+    }
+    fs::rename(staging, live).map_err(|source| Error::RestoreFilesystem {
+        operation: "rename staged restore member into live path",
+        source,
+    })?;
+    sync_parent(live, "sync live restore replacement")?;
+    verify_restore_path(live, expected, kind, member_name, runtime).await
+}
+
+fn restore_member_matches(path: &Path, expected: RestoreMemberExpectation) -> Result<bool, Error> {
+    let (length, digest) = fingerprint(path)?;
+    Ok(length == expected.byte_length && digest == expected.sha256)
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum RestoreEntryKind {
+    Missing,
+    File,
+    Other,
+}
+
+fn restore_entry_kind(path: &Path) -> Result<RestoreEntryKind, Error> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
+            Ok(RestoreEntryKind::File)
+        }
+        Ok(_) => Ok(RestoreEntryKind::Other),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            Ok(RestoreEntryKind::Missing)
+        }
+        Err(source) => Err(Error::RestoreFilesystem {
+            operation: "inspect restore path",
+            source,
+        }),
+    }
+}
+
+fn remove_restore_file(path: &Path, operation: &'static str) -> Result<(), Error> {
+    match restore_entry_kind(path)? {
+        RestoreEntryKind::Missing => Ok(()),
+        RestoreEntryKind::File => {
+            fs::remove_file(path)
+                .map_err(|source| Error::RestoreFilesystem { operation, source })?;
+            sync_parent(path, "sync restore cleanup")
+        }
+        RestoreEntryKind::Other => Err(Error::RestoreRecoveryConflict(path.to_path_buf())),
+    }
+}
+
+fn require_sqlite_sidecars_absent(paths: &crate::Paths) -> Result<(), Error> {
+    for live in [paths.runtime(), paths.private()] {
+        let name = live
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| Error::InvalidPath(live.to_path_buf()))?;
+        for suffix in ["wal", "shm"] {
+            let sidecar = live.with_file_name(format!("{name}-{suffix}"));
+            if restore_entry_kind(&sidecar)? != RestoreEntryKind::Missing {
+                return Err(Error::RestoreRecoveryConflict(sidecar));
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn copy_staged_member(
@@ -714,6 +1260,7 @@ mod tests {
             MemberVerification, RestorePlan,
         },
         event::SourceGeneration,
+        status::ShutdownState,
     };
     use serde::Deserialize;
     use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -727,6 +1274,8 @@ mod tests {
         include_str!("../../../contracts/storage/backup_finalize_policy_v1.toml");
     const RESTORE_POLICY: &str =
         include_str!("../../../contracts/storage/restore_staging_policy_v1.toml");
+    const RESTORE_FINALIZE_POLICY: &str =
+        include_str!("../../../contracts/storage/restore_finalize_policy_v1.toml");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -777,6 +1326,24 @@ mod tests {
         filesystem_sync: Vec<String>,
     }
 
+    #[derive(Deserialize)]
+    struct RestoreFinalizePolicy {
+        schema_version: u32,
+        authority: String,
+        quiescence: String,
+        wal_sidecars: String,
+        marker: String,
+        marker_encoding: String,
+        marker_durability: Vec<String>,
+        previous_runtime: String,
+        previous_protected: String,
+        replacement: Vec<String>,
+        recovery: String,
+        read_only_recovery: String,
+        cleanup_order: Vec<String>,
+        backend_after_attempt: String,
+    }
+
     fn generation(byte: u8) -> SourceGeneration {
         SourceGeneration::new([byte; 32]).expect("source generation")
     }
@@ -817,6 +1384,25 @@ mod tests {
             .expect("decode captured member");
         connection.close().await.expect("close captured member");
         value
+    }
+
+    async fn insert_private_artifact(store: &SqliteStorage, byte: u8) {
+        sqlx::query(
+            "INSERT INTO radroots_private_artifacts (
+               artifact_id, artifact_kind, schema_id, commitment,
+               protected_size_bytes, secret_provider, secret_reference,
+               key_version, envelope_version, encrypted_envelope,
+               delete_not_before_unix_ms, expires_at_unix_ms, revision, stage,
+               created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms,
+               deletion_reason, tombstone_commitment
+             ) VALUES (?, 'test', 'test.v1', ?, 1, 'test', 'ref', 1,
+                       NULL, NULL, NULL, NULL, 1, 'active', 1, 1, NULL, NULL, NULL)",
+        )
+        .bind(vec![byte; 16])
+        .bind(vec![byte; 32])
+        .execute(&store.private_pool)
+        .await
+        .expect("insert private artifact");
     }
 
     #[test]
@@ -916,6 +1502,66 @@ mod tests {
             policy.filesystem_sync,
             ["staged_member_file", "destination_parent"]
         );
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_restore_finalize_policy() {
+        let policy = toml::from_str::<RestoreFinalizePolicy>(RESTORE_FINALIZE_POLICY)
+            .expect("restore finalize policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.authority,
+            "open_writable_backend_with_exclusive_writer_lock"
+        );
+        assert_eq!(
+            policy.quiescence,
+            "close_all_owned_pools_before_live_rename"
+        );
+        assert_eq!(
+            policy.wal_sidecars,
+            "marker_precedes_and_fences_absence_before_live_rename"
+        );
+        assert_eq!(
+            policy.marker,
+            ".radroots-storage-restore-{backup_id_hex}.marker"
+        );
+        assert_eq!(
+            policy.marker_encoding,
+            "fixed_binary_v1_exact_member_lengths_and_sha256"
+        );
+        assert_eq!(
+            policy.marker_durability,
+            ["marker_file_fsync", "runtime_parent_fsync"]
+        );
+        assert_eq!(
+            policy.previous_runtime,
+            ".runtime.sqlite.restore-{backup_id_hex}.previous"
+        );
+        assert_eq!(
+            policy.previous_protected,
+            ".private.sqlite.restore-{backup_id_hex}.previous"
+        );
+        assert_eq!(
+            policy.replacement,
+            [
+                "live_to_previous_atomic_rename",
+                "staging_to_live_atomic_rename"
+            ]
+        );
+        assert_eq!(
+            policy.recovery,
+            "marker_driven_idempotent_forward_completion_before_open"
+        );
+        assert_eq!(policy.read_only_recovery, "reject");
+        assert_eq!(
+            policy.cleanup_order,
+            [
+                "verify_all_live_members",
+                "remove_previous_members",
+                "remove_marker"
+            ]
+        );
+        assert_eq!(policy.backend_after_attempt, "closed_reopen_required");
     }
 
     #[tokio::test]
@@ -1296,6 +1942,261 @@ mod tests {
         assert!(matches!(
             reader.stage_restore(&restore).await,
             Err(Error::RestoreRequiresWritableStorage)
+        ));
+    }
+
+    #[tokio::test]
+    async fn restore_finalization_atomically_replaces_every_selected_member_and_closes() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let backup_parent = tempfile::tempdir().expect("backup parent");
+        let backup_root = backup_parent.path().join("backups");
+        fs::create_dir(&backup_root).expect("backup root");
+        let (paths, store) = create(database_root.path(), Some(&backup_root)).await;
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 61 WHERE state = 'active'",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("initial runtime state");
+        insert_private_artifact(&store, 1).await;
+        let backup_plan = plan(102, BackupSecretPolicy::IncludeProtectedStorage, 10_300);
+        let manifest = store
+            .capture_backup(&backup_plan)
+            .await
+            .expect("capture restore source");
+        store
+            .finalize_backup(&backup_plan, &manifest)
+            .await
+            .expect("finalize restore source");
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 62 WHERE state = 'active'",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("advance runtime state");
+        insert_private_artifact(&store, 2).await;
+        let restore = RestorePlan::new(
+            manifest.clone(),
+            BackupSecretPolicy::IncludeProtectedStorage,
+            10_400,
+        )
+        .expect("restore plan");
+        store.stage_restore(&restore).await.expect("stage restore");
+        let layout = RestoreLayout::new(&paths, manifest.backup_id()).expect("restore layout");
+        let held_connection = store.pool.acquire().await.expect("held connection");
+        let restoring = store.clone();
+        let restore_plan = restore.clone();
+        let finalization = tokio::spawn(async move {
+            restoring
+                .finalize_restore(&restore_plan)
+                .await
+                .expect("finalize restore")
+        });
+        for _ in 0..10_000 {
+            if store
+                .storage_status()
+                .await
+                .expect("restoring status")
+                .shutdown()
+                == ShutdownState::Closing
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(!finalization.is_finished());
+        assert_eq!(
+            store
+                .storage_status()
+                .await
+                .expect("restoring status")
+                .shutdown(),
+            ShutdownState::Closing
+        );
+        let concurrent_close_store = store.clone();
+        let concurrent_close = tokio::spawn(async move {
+            concurrent_close_store
+                .close()
+                .await
+                .expect("concurrent close")
+        });
+        tokio::task::yield_now().await;
+        assert!(!concurrent_close.is_finished());
+        assert!(matches!(
+            SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting)).await,
+            Err(Error::WriterAlreadyActive { .. })
+        ));
+        drop(held_connection);
+        let (finalization, concurrent_close) = tokio::join!(finalization, concurrent_close);
+        finalization.expect("restore finalization task");
+        let close_status = concurrent_close.expect("concurrent close task");
+        assert!(matches!(
+            close_status.shutdown(),
+            ShutdownState::Closing | ShutdownState::Closed
+        ));
+        assert_eq!(
+            store
+                .storage_status()
+                .await
+                .expect("closed restore status")
+                .shutdown(),
+            ShutdownState::Closed
+        );
+
+        let reopened = SqliteStorage::open(
+            OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting)
+                .with_backup_root(&backup_root)
+                .expect("backup root"),
+        )
+        .await
+        .expect("reopen restored storage");
+        assert_eq!(
+            scalar(
+                paths.runtime(),
+                "SELECT sequence_head FROM radroots_runtime_source_generations WHERE state = 'active'"
+            )
+            .await,
+            61
+        );
+        assert_eq!(
+            scalar(
+                paths.private(),
+                "SELECT COUNT(*) FROM radroots_private_artifacts"
+            )
+            .await,
+            1
+        );
+        for path in [
+            layout.runtime_staging,
+            layout.private_staging,
+            layout.runtime_previous,
+            layout.private_previous,
+            layout.marker,
+        ] {
+            assert!(
+                !path.exists(),
+                "restore artifact remained: {}",
+                path.display()
+            );
+        }
+        reopened.close().await.expect("close restored storage");
+    }
+
+    #[tokio::test]
+    async fn writable_open_completes_an_interrupted_restore_before_connections_open() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let backup_parent = tempfile::tempdir().expect("backup parent");
+        let backup_root = backup_parent.path().join("backups");
+        fs::create_dir(&backup_root).expect("backup root");
+        let (paths, store) = create(database_root.path(), Some(&backup_root)).await;
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 71 WHERE state = 'active'",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("initial runtime state");
+        insert_private_artifact(&store, 3).await;
+        let backup_plan = plan(103, BackupSecretPolicy::IncludeProtectedStorage, 10_500);
+        let manifest = store
+            .capture_backup(&backup_plan)
+            .await
+            .expect("capture restore source");
+        store
+            .finalize_backup(&backup_plan, &manifest)
+            .await
+            .expect("finalize restore source");
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 72 WHERE state = 'active'",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("advance runtime state");
+        insert_private_artifact(&store, 4).await;
+        let restore = RestorePlan::new(
+            manifest.clone(),
+            BackupSecretPolicy::IncludeProtectedStorage,
+            10_600,
+        )
+        .expect("restore plan");
+        store.stage_restore(&restore).await.expect("stage restore");
+        store.close().await.expect("close before simulated crash");
+        require_sqlite_sidecars_absent(&paths).expect("quiesced SQLite sidecars");
+        let marker = RestoreMarker::from_manifest(&manifest).expect("restore marker");
+        let layout = RestoreLayout::new(&paths, manifest.backup_id()).expect("restore layout");
+        write_restore_marker(&layout.marker, &marker).expect("persist restore marker");
+        fs::rename(&layout.runtime_live, &layout.runtime_previous)
+            .expect("simulate interrupted previous rename");
+        fs::rename(&layout.runtime_staging, &layout.runtime_live)
+            .expect("simulate installed runtime member");
+        sync_parent(&layout.runtime_live, "sync simulated interruption")
+            .expect("sync simulated interruption");
+
+        assert!(matches!(
+            SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadOnly)).await,
+            Err(Error::RestoreRequiresWritableStorage)
+        ));
+        let runtime_wal = paths.runtime().with_file_name("runtime.sqlite-wal");
+        fs::write(&runtime_wal, b"simulated reader sidecar").expect("simulated WAL sidecar");
+        assert!(matches!(
+            SqliteStorage::open(OpenOptions::new(
+                paths.clone(),
+                OpenMode::ReadWriteExisting
+            ))
+            .await,
+            Err(Error::RestoreRecoveryConflict(path)) if path == runtime_wal
+        ));
+        assert!(layout.marker.is_file());
+        fs::remove_file(&runtime_wal).expect("remove simulated WAL sidecar");
+        sync_parent(&runtime_wal, "sync simulated WAL cleanup")
+            .expect("sync simulated WAL cleanup");
+        let recovered =
+            SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting))
+                .await
+                .expect("recover interrupted restore");
+        assert_eq!(
+            scalar(
+                paths.runtime(),
+                "SELECT sequence_head FROM radroots_runtime_source_generations WHERE state = 'active'"
+            )
+            .await,
+            71
+        );
+        assert_eq!(
+            scalar(
+                paths.private(),
+                "SELECT COUNT(*) FROM radroots_private_artifacts"
+            )
+            .await,
+            1
+        );
+        for path in [
+            layout.runtime_staging,
+            layout.private_staging,
+            layout.runtime_previous,
+            layout.private_previous,
+            layout.marker,
+        ] {
+            assert!(
+                !path.exists(),
+                "recovery artifact remained: {}",
+                path.display()
+            );
+        }
+        recovered.close().await.expect("close recovered storage");
+    }
+
+    #[tokio::test]
+    async fn corrupt_restore_markers_fail_closed_without_opening_live_state() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let (paths, store) = create(database_root.path(), None).await;
+        store.close().await.expect("close storage");
+        let backup_id = BackupId::new([104; 16]).expect("backup id");
+        let layout = RestoreLayout::new(&paths, backup_id).expect("restore layout");
+        fs::write(&layout.marker, [0_u8; RESTORE_MARKER_BYTES]).expect("corrupt marker");
+        sync_parent(&layout.marker, "sync corrupt marker").expect("sync corrupt marker");
+        assert!(matches!(
+            SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadWriteExisting)).await,
+            Err(Error::RestoreMarkerCorrupt(_))
         ));
     }
 }
