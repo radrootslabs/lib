@@ -94,6 +94,10 @@ name = "package_boundary"
 path = "tests/package_boundary.rs"
 
 [[test]]
+name = "lifecycle"
+path = "tests/lifecycle.rs"
+
+[[test]]
 name = "public_api"
 path = "tests/public_api.rs"
 
