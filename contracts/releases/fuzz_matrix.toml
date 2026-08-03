@@ -1,0 +1,15 @@
+schema_version = 1
+harness = "fuzz/event_codec"
+engine = "libfuzzer"
+toolchain = "nightly-2026-07-16"
+smoke_runs = 1000
+max_input_bytes = 16384
+targets = [
+  "backup_manifest",
+  "blossom_url",
+  "event_codec_decode_verify",
+  "knowledge_manifest",
+  "nip46_messages_and_uris",
+  "protocol_identifiers",
+  "restore_plan",
+]

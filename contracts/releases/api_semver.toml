@@ -1,0 +1,25 @@
+schema_version = 1
+baseline_revision = "88208a1f"
+tool = "cargo-semver-checks"
+minimum_tool_version = "0.50.0"
+release_type = "minor"
+feature_policy = "all"
+packages = [
+  "radroots_blossom",
+  "radroots_core",
+  "radroots_event",
+  "radroots_event_codec",
+  "radroots_geonames",
+  "radroots_identity",
+  "radroots_nostr",
+  "radroots_nostr_connect",
+  "radroots_protocol",
+  "radroots_secrets",
+  "radroots_signing",
+  "radroots_storage",
+  "radroots_storage_sqlite",
+  "radroots_sync",
+  "radroots_trade",
+  "radroots_transport",
+  "radroots_transport_nostr",
+]

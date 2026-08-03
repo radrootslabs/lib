@@ -213,3 +213,52 @@ fn reliability_spi_is_dyn_compatible_and_versions_are_independent() {
     );
     assert_eq!(BackupId::new([0; 16]), Err(Error::InvalidBackupId));
 }
+
+#[test]
+fn backup_json_cannot_bypass_constructor_invariants() {
+    let valid = serde_json::to_value(manifest(BackupSecretPolicy::ExcludeProtectedStorage))
+        .expect("serialize manifest");
+
+    let mut unsafe_path = valid.clone();
+    unsafe_path["members"][0]["relative_path"] = serde_json::json!("../runtime.sqlite");
+    assert!(serde_json::from_value::<BackupManifest>(unsafe_path).is_err());
+
+    let mut forged_total = valid.clone();
+    forged_total["total_bytes"] = serde_json::json!(101);
+    assert!(serde_json::from_value::<BackupManifest>(forged_total).is_err());
+
+    let mut duplicate = valid.clone();
+    duplicate["members"] =
+        serde_json::json!([valid["members"][0].clone(), valid["members"][0].clone()]);
+    duplicate["total_bytes"] = serde_json::json!(200);
+    assert!(serde_json::from_value::<BackupManifest>(duplicate).is_err());
+
+    assert!(serde_json::from_str::<BackupId>("[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]").is_err());
+    assert!(serde_json::from_str::<BackupFormatVersion>("0").is_err());
+    assert!(serde_json::from_str::<ReliabilityRevision>("0").is_err());
+}
+
+#[test]
+fn restore_json_cannot_bypass_policy_or_timestamp_invariants() {
+    let restore = RestorePlan::new(
+        manifest(BackupSecretPolicy::IncludeProtectedStorage),
+        BackupSecretPolicy::IncludeProtectedStorage,
+        200,
+    )
+    .expect("restore plan");
+    let valid = serde_json::to_value(restore).expect("serialize restore plan");
+
+    let mut rejected_policy = valid.clone();
+    rejected_policy["accepted_secret_policy"] = serde_json::json!("exclude_protected_storage");
+    assert!(serde_json::from_value::<RestorePlan>(rejected_policy).is_err());
+
+    let mut zero_timestamp = valid;
+    zero_timestamp["requested_at_unix_ms"] = serde_json::json!(0);
+    assert!(serde_json::from_value::<RestorePlan>(zero_timestamp).is_err());
+
+    let unsafe_status = serde_json::json!({
+        "relative_path": "runtime/../private.sqlite",
+        "verification": "verified"
+    });
+    assert!(serde_json::from_value::<RestoreMemberStatus>(unsafe_status).is_err());
+}

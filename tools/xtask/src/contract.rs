@@ -3193,10 +3193,10 @@ impl ReleaseContractFile {
     }
 
     fn public_crates(&self) -> Vec<String> {
-        if let Some(publication) = &self.publication {
-            if !publication.local_packages.is_empty() {
-                return publication.local_packages.clone();
-            }
+        if let Some(publication) = &self.publication
+            && !publication.local_packages.is_empty()
+        {
+            return publication.local_packages.clone();
         }
         if self.uses_classification() {
             return self.classification.public.clone();

@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "256"]
 
+mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -9,6 +10,7 @@ mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod dto_roots;
+mod fuzz_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod generate;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -37,6 +39,8 @@ fn usage() {
     eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask release qualify-features");
+    eprintln!("  cargo xtask release qualify-api");
+    eprintln!("  cargo xtask release qualify-fuzz");
     eprintln!("  cargo xtask release qualify-portable");
     eprintln!("  cargo xtask release qualify-targets");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
@@ -113,6 +117,8 @@ fn run_release(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("preflight") => release_preflight(),
         Some("qualify-features") => release_qualification::run_feature_matrix(&workspace_root()),
+        Some("qualify-api") => api_qualification::run(&workspace_root()),
+        Some("qualify-fuzz") => fuzz_qualification::run(&workspace_root()),
         Some("qualify-portable") => portable_qualification::run(&workspace_root()),
         Some("qualify-targets") => target_qualification::run(&workspace_root()),
         _ => Err("unknown release subcommand".to_string()),

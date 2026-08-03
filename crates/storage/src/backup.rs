@@ -11,9 +11,20 @@ use crate::{
 pub const BACKUP_MEMBER_PATH_MAX_BYTES: usize = 512;
 pub const BACKUP_MEMBER_MAX: usize = 1_024;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BackupId([u8; 16]);
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for BackupId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = <[u8; 16] as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(bytes).map_err(serde::de::Error::custom)
+    }
+}
 
 impl BackupId {
     pub const fn new(bytes: [u8; 16]) -> Result<Self, Error> {
@@ -27,9 +38,20 @@ impl BackupId {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct BackupFormatVersion(u16);
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for BackupFormatVersion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Self::new(<u16 as serde::Deserialize>::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)
+    }
+}
 
 impl BackupFormatVersion {
     pub const V1: Self = Self(1);
@@ -75,13 +97,33 @@ impl MemberDigest {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BackupMember {
     relative_path: String,
     kind: BackupMemberKind,
     byte_length: u64,
     sha256: MemberDigest,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for BackupMember {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            relative_path: String,
+            kind: BackupMemberKind,
+            byte_length: u64,
+            sha256: MemberDigest,
+        }
+
+        let wire = <Wire as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(wire.relative_path, wire.kind, wire.byte_length, wire.sha256)
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl BackupMember {
@@ -120,7 +162,7 @@ impl BackupMember {
 }
 
 /// Self-contained immutable inventory of one backup bundle.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BackupManifest {
     format_version: BackupFormatVersion,
@@ -129,6 +171,39 @@ pub struct BackupManifest {
     secret_policy: BackupSecretPolicy,
     total_bytes: u64,
     members: Vec<BackupMember>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for BackupManifest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            format_version: BackupFormatVersion,
+            backup_id: BackupId,
+            created_at_unix_ms: u64,
+            secret_policy: BackupSecretPolicy,
+            total_bytes: u64,
+            members: Vec<BackupMember>,
+        }
+
+        let wire = <Wire as serde::Deserialize>::deserialize(deserializer)?;
+        let expected_total_bytes = wire.total_bytes;
+        let manifest = Self::new(
+            wire.format_version,
+            wire.backup_id,
+            wire.created_at_unix_ms,
+            wire.secret_policy,
+            wire.members,
+        )
+        .map_err(serde::de::Error::custom)?;
+        if manifest.total_bytes() != expected_total_bytes {
+            return Err(serde::de::Error::custom(Error::InvalidBackupManifest));
+        }
+        Ok(manifest)
+    }
 }
 
 impl BackupManifest {
@@ -191,13 +266,38 @@ impl BackupManifest {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BackupPlan {
     backup_id: BackupId,
     format_version: BackupFormatVersion,
     secret_policy: BackupSecretPolicy,
     requested_at_unix_ms: u64,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for BackupPlan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            backup_id: BackupId,
+            format_version: BackupFormatVersion,
+            secret_policy: BackupSecretPolicy,
+            requested_at_unix_ms: u64,
+        }
+
+        let wire = <Wire as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(
+            wire.backup_id,
+            wire.format_version,
+            wire.secret_policy,
+            wire.requested_at_unix_ms,
+        )
+        .map_err(serde::de::Error::custom)
+    }
 }
 
 impl BackupPlan {
@@ -231,9 +331,20 @@ impl BackupPlan {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ReliabilityRevision(u64);
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ReliabilityRevision {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Self::new(<u64 as serde::Deserialize>::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)
+    }
+}
 
 impl ReliabilityRevision {
     pub const INITIAL: Self = Self(1);
@@ -357,12 +468,35 @@ pub enum BackupTransition {
     Fail,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RestorePlan {
     manifest: BackupManifest,
     accepted_secret_policy: BackupSecretPolicy,
     requested_at_unix_ms: u64,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RestorePlan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            manifest: BackupManifest,
+            accepted_secret_policy: BackupSecretPolicy,
+            requested_at_unix_ms: u64,
+        }
+
+        let wire = <Wire as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(
+            wire.manifest,
+            wire.accepted_secret_policy,
+            wire.requested_at_unix_ms,
+        )
+        .map_err(serde::de::Error::custom)
+    }
 }
 
 impl RestorePlan {
@@ -408,11 +542,28 @@ pub enum MemberVerification {
     Unexpected,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RestoreMemberStatus {
     relative_path: String,
     verification: MemberVerification,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RestoreMemberStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            relative_path: String,
+            verification: MemberVerification,
+        }
+
+        let wire = <Wire as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(wire.relative_path, wire.verification).map_err(serde::de::Error::custom)
+    }
 }
 
 impl RestoreMemberStatus {
