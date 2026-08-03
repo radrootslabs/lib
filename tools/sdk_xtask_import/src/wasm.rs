@@ -1,11 +1,14 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     env,
     ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::{
     check::check_wasm_package_surface,
@@ -76,10 +79,157 @@ pub fn generate(args: &[String]) -> Result<(), String> {
         }
         remove_wasm_pack_gitignore(&dist_dir, spec)?;
         write_declaration_files(&root, spec)?;
+        write_provenance_manifest(&root, spec)?;
         check_wasm_package_surface(&root, spec)?;
         println!("generated wasm package {}", spec.package_name);
     }
     Ok(())
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct WasmProvenanceManifest {
+    schema_version: u16,
+    package: String,
+    package_version: String,
+    rust_crate: String,
+    rust_crate_version: String,
+    target: String,
+    deterministic_codec: bool,
+    networking: bool,
+    signing: bool,
+    source_sha256: String,
+    outputs: BTreeMap<String, String>,
+}
+
+fn write_provenance_manifest(root: &Path, spec: WasmPackageSpec) -> Result<(), String> {
+    let manifest = provenance_manifest(root, spec)?;
+    let dist_dir = root.join(spec.package_dir).join("dist");
+    let path = provenance_manifest_path(&dist_dir, spec);
+    let mut rendered = serde_json::to_string_pretty(&manifest)
+        .map_err(|error| format!("failed to render {}: {error}", path.display()))?;
+    rendered.push('\n');
+    fs::write(&path, rendered)
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))
+}
+
+fn provenance_manifest(
+    root: &Path,
+    spec: WasmPackageSpec,
+) -> Result<WasmProvenanceManifest, String> {
+    let package_version = manifest_version(&root.join(spec.package_dir).join("package.json"))?;
+    let rust_crate_version = manifest_version(&root.join(spec.crate_dir).join("Cargo.toml"))?;
+    let source_sha256 = source_tree_sha256(root, spec)?;
+    let dist_dir = root.join(spec.package_dir).join("dist");
+    let mut outputs = BTreeMap::new();
+    for relative in wasm_output_files(spec) {
+        let path = dist_dir.join(&relative);
+        let bytes = fs::read(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        outputs.insert(relative, format!("{:x}", Sha256::digest(bytes)));
+    }
+    Ok(WasmProvenanceManifest {
+        schema_version: 1,
+        package: spec.package_name.to_owned(),
+        package_version,
+        rust_crate: spec.crate_name.to_owned(),
+        rust_crate_version,
+        target: WASM_TARGET.to_owned(),
+        deterministic_codec: spec.key == "event_codec",
+        networking: false,
+        signing: false,
+        source_sha256,
+        outputs,
+    })
+}
+
+pub(crate) fn validate_provenance_manifest(
+    root: &Path,
+    spec: WasmPackageSpec,
+) -> Result<(), String> {
+    let path = provenance_manifest_path(&root.join(spec.package_dir).join("dist"), spec);
+    let raw = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let actual: WasmProvenanceManifest = serde_json::from_str(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+    let expected = provenance_manifest(root, spec)?;
+    if actual != expected {
+        return Err(format!(
+            "stale or invalid WASM provenance manifest: {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn manifest_version(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    if path.extension() == Some(OsStr::new("json")) {
+        let value: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        return value["version"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| format!("{} must define string version", path.display()));
+    }
+    let value: toml::Value = raw
+        .parse()
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+    value["package"]["version"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{} must define explicit package.version", path.display()))
+}
+
+fn source_tree_sha256(root: &Path, spec: WasmPackageSpec) -> Result<String, String> {
+    let crate_dir = root.join(spec.crate_dir);
+    let mut files = vec![crate_dir.join("Cargo.toml")];
+    collect_source_files(&crate_dir.join("src"), &mut files)?;
+    files.sort();
+    let mut hasher = Sha256::new();
+    for path in files {
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|error| format!("failed to relativize {}: {error}", path.display()))?;
+        hasher.update(relative.to_string_lossy().as_bytes());
+        hasher.update([0]);
+        hasher.update(
+            fs::read(&path)
+                .map_err(|error| format!("failed to read {}: {error}", path.display()))?,
+        );
+        hasher.update([0]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn collect_source_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    let mut entries = fs::read_dir(dir)
+        .map_err(|error| format!("failed to read {}: {error}", dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to enumerate {}: {error}", dir.display()))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_source_files(&path, files)?;
+        } else if path.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn wasm_output_files(spec: WasmPackageSpec) -> [String; 4] {
+    [
+        format!("{}.js", spec.out_name),
+        format!("{}.d.ts", spec.out_name),
+        format!("{}_bg.wasm", spec.out_name),
+        format!("{}_bg.wasm.d.ts", spec.out_name),
+    ]
+}
+
+fn provenance_manifest_path(dist_dir: &Path, spec: WasmPackageSpec) -> PathBuf {
+    dist_dir.join(format!("{}.provenance.json", spec.out_name))
 }
 
 struct WasmToolchain {

@@ -21,6 +21,7 @@ use crate::{
     },
     package_metadata::{PACKAGE_FILES, check_package_distribution_metadata, package_description},
     ts::generated_header,
+    wasm::validate_provenance_manifest,
     wasm_declarations::declaration_files,
 };
 
@@ -1230,6 +1231,7 @@ pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> 
     check_package_surface_artifacts(&package_dir, spec.package_name, &surface_paths)?;
     check_wasm_runtime_files(&package_dir, spec)?;
     check_wasm_declaration_files(&package_dir, spec)?;
+    validate_provenance_manifest(root, spec)?;
     Ok(())
 }
 
@@ -1543,6 +1545,7 @@ fn expected_packed_dist_files(
         for path in wasm_runtime_files(spec) {
             expected.insert(path);
         }
+        expected.insert(format!("dist/{}.provenance.json", spec.out_name));
     } else {
         expected.extend(expected_binding_generated_dist_files(package_dir)?);
     }
