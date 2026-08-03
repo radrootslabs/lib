@@ -1,8 +1,11 @@
 //! Client construction and lifecycle.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicU8, Ordering},
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    },
 };
 
 use radroots_signing::Signer;
@@ -11,7 +14,10 @@ use radroots_storage::Storage;
 use radroots_storage::{event::SourceGeneration, memory::MemoryStorage};
 use radroots_transport::{EventSink, EventSource};
 
-use crate::{Error, Result};
+use crate::{
+    Error, Result,
+    capability::{Availability, CapabilityId, CapabilityReport},
+};
 
 /// Cloneable handle to a composed Radroots client.
 #[derive(Clone)]
@@ -28,6 +34,8 @@ pub struct ClientBuilder {
     sink: Option<Arc<dyn EventSink>>,
     #[cfg(feature = "sync")]
     sync: Option<radroots_sync::Engine>,
+    capability_availability: BTreeMap<CapabilityId, Availability>,
+    explicitly_configured_capabilities: BTreeSet<CapabilityId>,
 }
 
 struct ClientInner {
@@ -37,6 +45,8 @@ struct ClientInner {
     sink: Option<Arc<dyn EventSink>>,
     #[cfg(feature = "sync")]
     sync: Option<radroots_sync::Engine>,
+    capability_availability: BTreeMap<CapabilityId, Availability>,
+    explicitly_configured_capabilities: BTreeSet<CapabilityId>,
     lifecycle: AtomicU8,
 }
 
@@ -96,6 +106,18 @@ impl ClientBuilder {
         self
     }
 
+    /// Marks a specialized capability as configured and records its
+    /// host-observed initial availability without probing resources.
+    ///
+    /// Reports ignore this observation for capabilities that are not compiled
+    /// or configured. Runtime IDs are independent from Cargo feature names.
+    #[must_use]
+    pub fn capability_availability(mut self, id: CapabilityId, availability: Availability) -> Self {
+        self.explicitly_configured_capabilities.insert(id);
+        self.capability_availability.insert(id, availability);
+        self
+    }
+
     /// Validates the selected capabilities and creates a client handle.
     pub fn build(self) -> Result<Client> {
         let storage = self.storage.ok_or(Error::MissingStorage)?;
@@ -110,6 +132,8 @@ impl ClientBuilder {
                 sink: self.sink,
                 #[cfg(feature = "sync")]
                 sync: self.sync,
+                capability_availability: self.capability_availability,
+                explicitly_configured_capabilities: self.explicitly_configured_capabilities,
                 lifecycle: AtomicU8::new(OPEN),
             }),
         })
@@ -117,6 +141,27 @@ impl ClientBuilder {
 }
 
 impl Client {
+    /// Returns a deterministic capability report without probing resources or
+    /// performing filesystem, network, signing, or storage operations.
+    #[must_use]
+    pub fn capabilities(&self) -> CapabilityReport {
+        let lifecycle_availability = match self.inner.lifecycle.load(Ordering::Acquire) {
+            OPEN => Availability::Available,
+            CLOSING | CLOSE_RETRY_REQUIRED => Availability::Degraded,
+            _ => Availability::Unavailable,
+        };
+        crate::capability::report(crate::capability::Context {
+            storage: true,
+            signer: self.inner.signer.is_some(),
+            source: self.inner.source.is_some(),
+            sink: self.inner.sink.is_some(),
+            sync: self.sync_is_configured(),
+            lifecycle_availability,
+            explicitly_configured: &self.inner.explicitly_configured_capabilities,
+            overrides: &self.inner.capability_availability,
+        })
+    }
+
     /// Returns the injected canonical storage capability.
     pub fn storage(&self) -> Result<&dyn Storage> {
         self.require_open()?;
@@ -194,6 +239,16 @@ impl Client {
             CLOSING | CLOSE_RETRY_REQUIRED => Err(Error::ClientClosing),
             _ => Err(Error::ClientClosed),
         }
+    }
+
+    #[cfg(feature = "sync")]
+    fn sync_is_configured(&self) -> bool {
+        self.inner.sync.is_some()
+    }
+
+    #[cfg(not(feature = "sync"))]
+    fn sync_is_configured(&self) -> bool {
+        false
     }
 }
 
@@ -413,6 +468,38 @@ mod tests {
             block_on(client.close()).expect("finish close");
         }
         assert!(client.is_closed());
+    }
+
+    #[test]
+    fn capability_reports_separate_configuration_degradation_and_lifecycle() {
+        let local = ClientBuilder::memory(generation())
+            .capability_availability(CapabilityId::CANONICAL_STORAGE, Availability::Degraded)
+            .build()
+            .expect("client");
+        let report = local.capabilities();
+        let storage = report
+            .get(CapabilityId::CANONICAL_STORAGE)
+            .expect("storage");
+        assert!(storage.is_compiled());
+        assert!(storage.is_configured());
+        assert_eq!(storage.availability(), Availability::Degraded);
+
+        let signing = report.get(CapabilityId::LOCAL_SIGNING).expect("signing");
+        assert!(!signing.is_configured());
+        assert!(matches!(
+            signing.availability(),
+            Availability::Unavailable | Availability::Unsupported
+        ));
+
+        block_on(local.close()).expect("close");
+        assert_eq!(
+            local
+                .capabilities()
+                .get(CapabilityId::BACKUP_RESTORE)
+                .expect("backup")
+                .availability(),
+            Availability::Unavailable
+        );
     }
 
     struct ThreadWaker;
