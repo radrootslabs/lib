@@ -6,6 +6,8 @@
 
 #![forbid(unsafe_code)]
 
+mod adapters;
+
 pub mod capability;
 pub mod client;
 pub mod diagnostics;

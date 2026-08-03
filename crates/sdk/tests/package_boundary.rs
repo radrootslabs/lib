@@ -8,6 +8,8 @@ const LISTING: &str = include_str!("../src/listing.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
 const STORAGE: &str = include_str!("../src/storage.rs");
 const DIAGNOSTICS: &str = include_str!("../src/diagnostics.rs");
+const ADAPTERS: &str = include_str!("../src/adapters/mod.rs");
+const RADROOTSD: &str = include_str!("../src/adapters/radrootsd.rs");
 const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
 
@@ -343,6 +345,18 @@ fn reliability_and_diagnostics_return_canonical_storage_contracts() {
             "diagnostics leaks `{forbidden}`"
         );
     }
+}
+
+#[test]
+fn radrootsd_adapter_is_private_explicit_versioned_and_redacted() {
+    assert!(ROOT.contains("mod adapters;"));
+    assert!(!ROOT.contains("pub mod adapters"));
+    assert!(ADAPTERS.contains("cfg(feature = \"radrootsd\")"));
+    assert!(ADAPTERS.contains("pub(crate) mod radrootsd"));
+    assert!(RADROOTSD.contains("transport_publish::v5"));
+    assert!(RADROOTSD.contains("reqwest::Client::builder"));
+    assert!(RADROOTSD.contains("BearerToken(<redacted>)"));
+    assert!(!RADROOTSD.contains("tokio::spawn"));
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {

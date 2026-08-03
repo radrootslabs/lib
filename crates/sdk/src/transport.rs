@@ -132,6 +132,190 @@ impl Default for Profile {
     }
 }
 
+/// Explicit daemon adapter authentication configuration.
+#[cfg(feature = "radrootsd")]
+#[derive(Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DaemonAuth {
+    /// Sends no authorization header.
+    None,
+    /// Sends the supplied bearer credential only when delivery is invoked.
+    BearerToken(String),
+}
+
+#[cfg(feature = "radrootsd")]
+impl std::fmt::Debug for DaemonAuth {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => formatter.write_str("None"),
+            Self::BearerToken(_) => formatter.write_str("BearerToken(<redacted>)"),
+        }
+    }
+}
+
+/// Explicit daemon endpoint and request deadline configuration.
+#[cfg(feature = "radrootsd")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DaemonConfig {
+    endpoint: String,
+    auth: DaemonAuth,
+    timeout: core::time::Duration,
+}
+
+#[cfg(feature = "radrootsd")]
+impl DaemonConfig {
+    /// Creates inert configuration; no client is built and no request is sent.
+    #[must_use]
+    pub fn new(endpoint: impl Into<String>) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            auth: DaemonAuth::None,
+            timeout: core::time::Duration::from_secs(10),
+        }
+    }
+
+    /// Selects explicit authentication for later invocation.
+    #[must_use]
+    pub fn with_auth(mut self, auth: DaemonAuth) -> Self {
+        self.auth = auth;
+        self
+    }
+
+    /// Selects the complete HTTP/RPC request deadline.
+    #[must_use]
+    pub const fn with_timeout(mut self, timeout: core::time::Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+}
+
+/// Stable secret-safe daemon execution failure class.
+#[cfg(feature = "radrootsd")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DaemonErrorKind {
+    /// The explicit authentication value cannot be represented safely.
+    Authentication,
+    /// The versioned protocol rejected the request.
+    InvalidRequest,
+    /// HTTP transport or timeout failed.
+    Transport,
+    /// The daemon returned a JSON-RPC error.
+    Rpc,
+    /// The response was malformed or did not match the request.
+    InvalidResponse,
+}
+
+/// One redacted daemon failure retaining a private source chain.
+#[cfg(feature = "radrootsd")]
+pub struct DaemonError {
+    kind: DaemonErrorKind,
+    source: crate::adapters::radrootsd::RadrootsdError,
+}
+
+#[cfg(feature = "radrootsd")]
+impl DaemonError {
+    /// Returns the stable failure class.
+    #[must_use]
+    pub const fn kind(&self) -> DaemonErrorKind {
+        self.kind
+    }
+
+    fn from_private(source: crate::adapters::radrootsd::RadrootsdError) -> Self {
+        use crate::adapters::radrootsd::RadrootsdError;
+        let kind = match &source {
+            RadrootsdError::InvalidAuthHeader(_) => DaemonErrorKind::Authentication,
+            RadrootsdError::InvalidRequest(_) => DaemonErrorKind::InvalidRequest,
+            RadrootsdError::Http(_) => DaemonErrorKind::Transport,
+            RadrootsdError::JsonRpc { .. } => DaemonErrorKind::Rpc,
+            RadrootsdError::MalformedResponse(_) => DaemonErrorKind::InvalidResponse,
+        };
+        Self { kind, source }
+    }
+}
+
+#[cfg(feature = "radrootsd")]
+impl std::fmt::Display for DaemonError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self.kind {
+            DaemonErrorKind::Authentication => "daemon authentication configuration is invalid",
+            DaemonErrorKind::InvalidRequest => "daemon delivery request is invalid",
+            DaemonErrorKind::Transport => "daemon transport failed",
+            DaemonErrorKind::Rpc => "daemon RPC failed",
+            DaemonErrorKind::InvalidResponse => "daemon response is invalid",
+        })
+    }
+}
+
+#[cfg(feature = "radrootsd")]
+impl std::fmt::Debug for DaemonError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DaemonError")
+            .field("kind", &self.kind)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "radrootsd")]
+impl std::error::Error for DaemonError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+/// Explicitly configured daemon execution adapter.
+///
+/// Construction is inert. Network contact occurs only in [`Self::deliver`].
+#[cfg(feature = "radrootsd")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DaemonDelivery {
+    adapter: crate::adapters::radrootsd::RadrootsdPublishAdapter,
+}
+
+#[cfg(feature = "radrootsd")]
+impl DaemonDelivery {
+    /// Creates an inert adapter from explicit host configuration.
+    #[must_use]
+    pub fn new(config: DaemonConfig) -> Self {
+        let auth = match config.auth {
+            DaemonAuth::None => crate::adapters::radrootsd::RadrootsdAuth::None,
+            DaemonAuth::BearerToken(token) => {
+                crate::adapters::radrootsd::RadrootsdAuth::BearerToken(token)
+            }
+        };
+        Self {
+            adapter: crate::adapters::radrootsd::RadrootsdPublishAdapter::new(
+                crate::adapters::radrootsd::RadrootsdPublishConfig::new(config.endpoint)
+                    .with_auth(auth)
+                    .with_timeout(config.timeout),
+            ),
+        }
+    }
+
+    /// Invokes the generation-5 daemon transport-publish contract.
+    pub async fn deliver(
+        &self,
+        signed_event: radroots_event::SignedEvent,
+        target_policy: radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy,
+        delivery_policy: radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy,
+        idempotency_key: Option<String>,
+        timeout_ms: Option<u64>,
+    ) -> Result<radroots_protocol::radrootsd::transport_publish::v5::EventResponse, DaemonError>
+    {
+        self.adapter
+            .publish_signed_event(crate::adapters::radrootsd::RadrootsdPublishRequest {
+                signed_event,
+                target_policy,
+                delivery_policy,
+                idempotency_key,
+                timeout_ms,
+            })
+            .await
+            .map_err(DaemonError::from_private)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use radroots_transport::{
@@ -233,5 +417,18 @@ mod tests {
                 .iter()
                 .all(|target| *target.kind() == TransportId::NOSTR)
         );
+    }
+
+    #[cfg(feature = "radrootsd")]
+    #[test]
+    fn daemon_configuration_is_inert_explicit_and_redacted() {
+        let config = DaemonConfig::new("http://127.0.0.1:1/rpc")
+            .with_auth(DaemonAuth::BearerToken("secret-token".to_owned()))
+            .with_timeout(core::time::Duration::from_millis(5));
+        let adapter = DaemonDelivery::new(config);
+
+        let debug = format!("{adapter:?}");
+        assert!(!debug.contains("secret-token"));
+        assert!(!debug.contains("reqwest"));
     }
 }

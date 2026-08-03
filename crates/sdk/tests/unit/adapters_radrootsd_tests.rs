@@ -10,7 +10,7 @@ use radroots_protocol::radrootsd::transport_publish::v5::{
     TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
     TargetSource as TransportPublishTargetSource,
 };
-use radroots_transport_reticulum::RADROOTS_RETICULUM_ENDPOINT_URI;
+const RADROOTS_RETICULUM_ENDPOINT_URI: &str = "reticulum:local";
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread::JoinHandle;
@@ -348,8 +348,7 @@ fn auth_headers_omit_or_redact_bearer_authorization() {
 fn radrootsd_publish_config_builders_preserve_typed_runtime_options() {
     let config = RadrootsdPublishConfig::new("http://127.0.0.1:8080/rpc")
         .with_auth(RadrootsdAuth::BearerToken("sdk-token".to_owned()))
-        .with_timeout(Duration::from_millis(250))
-        .with_request_timeout_ms(1_500);
+        .with_timeout(Duration::from_millis(250));
     let adapter = RadrootsdPublishAdapter::new(config.clone());
 
     assert_eq!(adapter.config(), &config);
@@ -359,7 +358,6 @@ fn radrootsd_publish_config_builders_preserve_typed_runtime_options() {
         RadrootsdAuth::BearerToken("sdk-token".to_owned())
     );
     assert_eq!(adapter.config().timeout, Duration::from_millis(250));
-    assert_eq!(adapter.config().request_timeout_ms, Some(1_500));
 }
 
 #[test]
@@ -501,8 +499,7 @@ async fn publish_signed_event_posts_typed_radrootsd_request() {
     let (endpoint, handle) = spawn_http_server("200 OK", response_json.as_str());
     let adapter = RadrootsdPublishAdapter::new(
         RadrootsdPublishConfig::new(endpoint)
-            .with_auth(RadrootsdAuth::BearerToken("sdk-token".into()))
-            .with_request_timeout_ms(7_000),
+            .with_auth(RadrootsdAuth::BearerToken("sdk-token".into())),
     );
 
     let receipt = adapter
@@ -515,7 +512,7 @@ async fn publish_signed_event_posts_typed_radrootsd_request() {
             ]),
             delivery_policy: TransportPublishDeliveryPolicy::All,
             idempotency_key: Some("idem-typed".to_owned()),
-            timeout_ms: adapter.config().request_timeout_ms,
+            timeout_ms: Some(7_000),
         })
         .await
         .expect("typed publish");

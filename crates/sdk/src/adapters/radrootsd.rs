@@ -35,7 +35,6 @@ pub struct RadrootsdPublishConfig {
     pub endpoint: String,
     pub auth: RadrootsdAuth,
     pub timeout: Duration,
-    pub request_timeout_ms: Option<u64>,
 }
 
 impl RadrootsdPublishConfig {
@@ -44,7 +43,6 @@ impl RadrootsdPublishConfig {
             endpoint: endpoint.into(),
             auth: RadrootsdAuth::None,
             timeout: Duration::from_secs(10),
-            request_timeout_ms: None,
         }
     }
 
@@ -55,11 +53,6 @@ impl RadrootsdPublishConfig {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
-        self
-    }
-
-    pub fn with_request_timeout_ms(mut self, timeout_ms: u64) -> Self {
-        self.request_timeout_ms = Some(timeout_ms);
         self
     }
 }
@@ -74,6 +67,7 @@ impl RadrootsdPublishAdapter {
         Self { config }
     }
 
+    #[cfg(test)]
     pub fn config(&self) -> &RadrootsdPublishConfig {
         &self.config
     }
@@ -216,6 +210,7 @@ fn auth_headers(auth: &RadrootsdAuth) -> Result<HeaderMap, RadrootsdError> {
     }
 }
 
+#[cfg(test)]
 pub fn publish_event_request_json(
     request: &TransportPublishEventRequest,
 ) -> Result<Value, RadrootsdError> {

@@ -37,6 +37,8 @@ local-signing = [
 radrootsd = [
   "sync",
   "dep:reqwest",
+  "dep:serde",
+  "dep:serde_json",
 ]
 geonames = ["dep:radroots_geonames"]
 knowledge = [
@@ -79,6 +81,8 @@ reqwest = { workspace = true, optional = true, default-features = false, feature
   "json",
   "rustls-tls",
 ] }
+serde = { workspace = true, optional = true, features = ["derive"] }
+serde_json = { workspace = true, optional = true, features = ["std"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
