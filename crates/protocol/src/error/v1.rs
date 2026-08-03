@@ -59,6 +59,7 @@ pub enum Class {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum RecoveryAction {
     InspectLocalStores,
+    ConfigureStorage,
     InspectGeoNamesAsset,
     RetryOperationWithSameIdempotencyKey,
     ConfigureTransportTargets,
@@ -70,6 +71,7 @@ pub enum RecoveryAction {
     RetryAfterTransportFailure,
     RetryGeoNamesDownload,
     EnableRequiredFeature,
+    RecreateClient,
 }
 
 /// One generated catalog descriptor.
@@ -190,6 +192,12 @@ error_catalog! {
     BackupAuthenticationFailed => ("backup_authentication_failed", Maintenance, false, [InspectLocalStores]),
     RestoreFailed => ("restore_failed", Maintenance, true, [InspectLocalStores]),
     Backpressure => ("backpressure", Runtime, true, [RetryAfterTransportFailure]),
+    MissingStorage => ("missing_storage", Capability, false, [ConfigureStorage]),
+    SignerWithoutSink => ("signer_without_sink", Validation, false, [ConfigureTransportTargets]),
+    ClientCloseInProgress => ("client_close_in_progress", Operation, true, [RetryOperationWithSameIdempotencyKey]),
+    ClientClosing => ("client_closing", Operation, true, [RetryOperationWithSameIdempotencyKey]),
+    ClientClosed => ("client_closed", Runtime, false, [RecreateClient]),
+    StorageCloseFailed => ("storage_close_failed", Storage, false, [InspectLocalStores]),
     InternalError => ("internal_error", Internal, false, [InspectLocalStores]),
 }
 
@@ -763,7 +771,7 @@ mod tests {
 
     #[test]
     fn generated_catalog_is_complete_unique_and_self_consistent() {
-        assert_eq!(CATALOG.len(), 57);
+        assert_eq!(CATALOG.len(), 63);
         assert_eq!(KnownCode::ALL.len(), CATALOG.len());
         let mut codes = BTreeSet::new();
         for (index, descriptor) in CATALOG.iter().enumerate() {
