@@ -28,7 +28,7 @@ radroots_transport = { workspace = true }
 
 [features]
 default = ["client"]
-client = []
+client = ["radroots_sdk/memory"]
 native = ["client"]
 nostr = ["client"]
 nip46 = ["nostr"]

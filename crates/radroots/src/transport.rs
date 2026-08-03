@@ -2,6 +2,9 @@
 
 pub use radroots_sdk::transport::Profile;
 pub use radroots_transport::{
-    Error, Target, TargetSet, TransportId,
+    Error, EventSink, EventSource, Target, TargetSet, TransportId,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
 };
+
+#[cfg(feature = "radrootsd")]
+pub use radroots_sdk::transport::{DaemonAuth, DaemonConfig, DaemonDelivery, DaemonError};

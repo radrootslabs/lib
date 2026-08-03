@@ -34,6 +34,14 @@ fn canonical_domain_paths_compile() {
     };
 }
 
+#[cfg(feature = "client")]
+#[test]
+fn ordinary_memory_and_local_only_construction_is_inert() {
+    let client = radroots::client::memory().build().expect("memory client");
+    assert!(!client.is_closed());
+    assert!(radroots::client::local_only().is_local_only());
+}
+
 #[cfg(feature = "knowledge")]
 #[test]
 fn canonical_knowledge_paths_compile() {

@@ -70,6 +70,18 @@ impl ClientBuilder {
         Self::new().storage(Arc::new(MemoryStorage::new(generation)))
     }
 
+    /// Creates the ordinary deterministic in-process memory configuration.
+    ///
+    /// This performs no I/O and is intended for ephemeral local clients whose
+    /// source-generation identity does not need to survive the process. Hosts
+    /// that persist cursors should call [`Self::memory`] with their own
+    /// generation instead.
+    #[cfg(feature = "memory")]
+    #[must_use]
+    pub fn memory_default() -> Self {
+        Self::new().storage(Arc::new(MemoryStorage::default()))
+    }
+
     /// Explicitly opens canonical SQLite storage from validated host-owned
     /// configuration and returns a builder containing only the storage SPI.
     #[cfg(feature = "sqlite")]
