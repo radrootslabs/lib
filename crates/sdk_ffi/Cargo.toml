@@ -14,10 +14,14 @@ readme = "README.md"
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
 
+[[bin]]
+name = "radroots-sdk-bindgen"
+path = "src/bin/bindgen.rs"
+
 [dependencies]
 radroots_sdk = { workspace = true, features = ["memory"] }
 thiserror = { workspace = true }
-uniffi = { workspace = true }
+uniffi = { workspace = true, features = ["cli"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

@@ -154,6 +154,7 @@ pub fn check() -> Result<(), String> {
     cli_host::check_cli_host()?;
     check_package_build_artifacts(&root)?;
     check_npm_pack_payloads(&root)?;
+    crate::bindings::check(&root)?;
     Ok(())
 }
 
@@ -166,7 +167,8 @@ pub fn architecture_ci(root: &Path) -> Result<(), String> {
     check_forbidden_packages(root)?;
     check_binding_crate_sources(root)?;
     check_package_source_metadata(root)?;
-    check_generated_outputs(root)
+    check_generated_outputs(root)?;
+    crate::bindings::check(root)
 }
 
 fn check_radroots_facade_conformance(root: &Path) -> Result<(), String> {

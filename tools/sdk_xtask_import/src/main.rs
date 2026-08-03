@@ -1,4 +1,5 @@
 mod architecture;
+mod bindings;
 mod check;
 mod cli_host;
 mod contracts;
@@ -23,6 +24,7 @@ enum CommandAction<'a> {
     CheckApiBoundaries,
     CheckDependencyBoundaries,
     GenerateAll,
+    GenerateBindings(&'a [String]),
     GenerateTs,
     GenerateWasm(&'a [String]),
     GeneratePackageMetadata,
@@ -54,6 +56,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
             architecture::validate_dependency_boundaries(&fs::workspace_root()?)
         }
         CommandAction::GenerateAll => generate::generate_all(),
+        CommandAction::GenerateBindings(rest) => bindings::generate(rest),
         CommandAction::GenerateTs => generate::generate_ts(),
         CommandAction::GenerateWasm(rest) => wasm::generate(rest),
         CommandAction::GeneratePackageMetadata => generate::generate_package_metadata(),
@@ -78,6 +81,9 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
         [command, target, rest @ ..] if command == "generate" && target == "wasm" => {
             Ok(CommandAction::GenerateWasm(rest))
         }
+        [command, target, rest @ ..] if command == "generate" && target == "bindings" => {
+            Ok(CommandAction::GenerateBindings(rest))
+        }
         [command, target] if command == "generate" && target == "package-metadata" => {
             Ok(CommandAction::GeneratePackageMetadata)
         }
@@ -90,7 +96,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -158,6 +164,19 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::GenerateWasm(rest) if rest.is_empty()
+        ));
+    }
+
+    #[test]
+    fn accepts_generate_bindings() {
+        let args = [
+            "generate".to_owned(),
+            "bindings".to_owned(),
+            "swift".to_owned(),
+        ];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::GenerateBindings(rest) if rest == ["swift"]
         ));
     }
 
