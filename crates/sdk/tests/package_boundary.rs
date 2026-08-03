@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const CLIENT: &str = include_str!("../src/client.rs");
 
 #[test]
 fn manifest_has_final_identity_and_dependency_boundary() {
@@ -87,6 +88,24 @@ fn nostr_adapter_implements_independent_source_and_sink_capabilities() {
     fn assert_sink<T: radroots_transport::EventSink>() {}
     assert_source::<radroots_transport_nostr::NostrTransport>();
     assert_sink::<radroots_transport_nostr::NostrTransport>();
+}
+
+#[test]
+fn lifecycle_source_owns_no_hidden_worker_runtime_or_blocking_drop() {
+    for forbidden in [
+        "tokio::spawn",
+        "std::thread::spawn",
+        "Runtime::new",
+        "block_on(self.close",
+        "impl Drop for Client",
+    ] {
+        assert!(
+            !CLIENT.contains(forbidden),
+            "forbidden lifecycle source `{forbidden}`"
+        );
+    }
+    assert!(CLIENT.contains("pub async fn close(&self)"));
+    assert!(CLIENT.contains("impl Drop for CloseAttempt"));
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
