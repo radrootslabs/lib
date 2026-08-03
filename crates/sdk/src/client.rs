@@ -120,9 +120,9 @@ impl ClientBuilder {
 
     /// Validates the selected capabilities and creates a client handle.
     pub fn build(self) -> Result<Client> {
-        let storage = self.storage.ok_or(Error::MissingStorage)?;
+        let storage = self.storage.ok_or_else(Error::missing_storage)?;
         if self.signer.is_some() && self.sink.is_none() {
-            return Err(Error::SignerWithoutSink);
+            return Err(Error::signer_without_sink());
         }
         Ok(Client {
             inner: Arc::new(ClientInner {
@@ -210,7 +210,7 @@ impl Client {
         loop {
             match self.inner.lifecycle.load(Ordering::Acquire) {
                 CLOSED => return Ok(()),
-                CLOSING => return Err(Error::CloseInProgress),
+                CLOSING => return Err(Error::close_in_progress()),
                 state @ (OPEN | CLOSE_RETRY_REQUIRED) => {
                     if self
                         .inner
@@ -221,7 +221,7 @@ impl Client {
                         break;
                     }
                 }
-                _ => return Err(Error::ClientClosed),
+                _ => return Err(Error::client_closed()),
             }
         }
 
@@ -230,14 +230,14 @@ impl Client {
         attempt.complete();
         close_result
             .map(|_| ())
-            .map_err(|_| Error::StorageCloseFailed)
+            .map_err(Error::storage_close_failed)
     }
 
     fn require_open(&self) -> Result<()> {
         match self.inner.lifecycle.load(Ordering::Acquire) {
             OPEN => Ok(()),
-            CLOSING | CLOSE_RETRY_REQUIRED => Err(Error::ClientClosing),
-            _ => Err(Error::ClientClosed),
+            CLOSING | CLOSE_RETRY_REQUIRED => Err(Error::client_closing()),
+            _ => Err(Error::client_closed()),
         }
     }
 
@@ -373,13 +373,13 @@ mod tests {
     fn missing_storage_and_signer_without_sink_fail_closed() {
         assert!(matches!(
             ClientBuilder::new().build(),
-            Err(Error::MissingStorage)
+            Err(error) if error.kind() == crate::error::ErrorKind::MissingStorage
         ));
         assert!(matches!(
             ClientBuilder::memory(generation())
                 .signer(Arc::new(TestSigner))
                 .build(),
-            Err(Error::SignerWithoutSink)
+            Err(error) if error.kind() == crate::error::ErrorKind::SignerWithoutSink
         ));
     }
 
@@ -427,8 +427,14 @@ mod tests {
         block_on(client.close()).expect("first close");
         assert!(clone.is_closed());
         block_on(clone.close()).expect("repeated close");
-        assert!(matches!(clone.storage(), Err(Error::ClientClosed)));
-        assert!(matches!(client.source(), Err(Error::ClientClosed)));
+        assert!(matches!(
+            clone.storage(),
+            Err(error) if error.kind() == crate::error::ErrorKind::ClientClosed
+        ));
+        assert!(matches!(
+            client.source(),
+            Err(error) if error.kind() == crate::error::ErrorKind::ClientClosed
+        ));
     }
 
     #[test]
@@ -441,7 +447,10 @@ mod tests {
         client.inner.lifecycle.store(CLOSING, Ordering::Release);
         let attempt = CloseAttempt::new(Arc::clone(&client.inner));
         drop(attempt);
-        assert!(matches!(client.storage(), Err(Error::ClientClosing)));
+        assert!(matches!(
+            client.storage(),
+            Err(error) if error.kind() == crate::error::ErrorKind::ClientClosing
+        ));
         block_on(client.close()).expect("retry close");
         assert!(client.is_closed());
     }
@@ -459,11 +468,14 @@ mod tests {
                 second_close.join().expect("second thread"),
             ]
         });
-        assert!(
-            outcomes.iter().all(|outcome| {
-                outcome.is_ok() || matches!(outcome, Err(Error::CloseInProgress))
-            })
-        );
+        assert!(outcomes.iter().all(|outcome| {
+            outcome.is_ok()
+                || matches!(
+                    outcome,
+                    Err(error)
+                        if error.kind() == crate::error::ErrorKind::CloseInProgress
+                )
+        }));
         if !client.is_closed() {
             block_on(client.close()).expect("finish close");
         }
