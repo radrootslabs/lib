@@ -280,7 +280,7 @@ async fn metadata(
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
     let valid = plan.minimum_version > 0
         && plan.minimum_version <= plan.current_version
-        && plan.current_version <= 5
+        && plan.current_version <= 6
         && plan.steps.len() == usize::try_from(plan.current_version).unwrap_or(usize::MAX)
         && plan
             .steps
@@ -388,6 +388,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
         3 => Some("PRAGMA user_version = 3"),
         4 => Some("PRAGMA user_version = 4"),
         5 => Some("PRAGMA user_version = 5"),
+        6 => Some("PRAGMA user_version = 6"),
         _ => None,
     }
 }
@@ -501,8 +502,8 @@ mod tests {
             .await
             .expect("forward migration");
         assert_eq!(report.initial_version(), 1);
-        assert_eq!(report.final_version(), 5);
-        assert_eq!(report.applied(), 4);
+        assert_eq!(report.final_version(), runtime::CURRENT_VERSION);
+        assert_eq!(report.applied(), runtime::CURRENT_VERSION - 1);
         assert_eq!(
             sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM radroots_runtime_source_generations",
@@ -566,7 +567,7 @@ mod tests {
             migrate_runtime(&mut connection, OpenMode::ReadOnly).await,
             Err(Error::SchemaMigrationRequired {
                 database: RUNTIME_DATABASE,
-                current: 5,
+                current: runtime::CURRENT_VERSION,
                 actual: 1,
             })
         ));
@@ -580,7 +581,7 @@ mod tests {
             .execute(&mut newer)
             .await
             .expect("application id");
-        sqlx::raw_sql("PRAGMA user_version = 6")
+        sqlx::raw_sql("PRAGMA user_version = 7")
             .execute(&mut newer)
             .await
             .expect("newer version");
@@ -588,11 +589,11 @@ mod tests {
             migrate_runtime(&mut newer, OpenMode::ReadWriteExisting).await,
             Err(Error::SchemaTooNew {
                 database: RUNTIME_DATABASE,
-                supported: 5,
-                actual: 6,
+                supported: runtime::CURRENT_VERSION,
+                actual: 7,
             })
         ));
-        assert_eq!(pragma(&mut newer, "user_version").await, 6);
+        assert_eq!(pragma(&mut newer, "user_version").await, 7);
 
         let mut wrong_identity = connection().await;
         establish_runtime_version(&mut wrong_identity, 1).await;

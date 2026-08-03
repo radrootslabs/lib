@@ -170,6 +170,16 @@ pub enum LegacyImportDisposition {
     HostHandoff,
 }
 
+impl LegacyImportDisposition {
+    /// Returns the stable durable-journal value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Import => "import",
+            Self::HostHandoff => "host_handoff",
+        }
+    }
+}
+
 /// Exact schema evidence for one classified predecessor snapshot.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LegacySourceClassification {
@@ -204,14 +214,131 @@ impl LegacySourceClassification {
 /// Fully reverified classification of a prepared import evidence bundle.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClassifiedLegacyImport {
-    import_id: LegacyImportId,
-    target_generation: SourceGeneration,
-    bundle_path: PathBuf,
+    prepared: PreparedLegacyImport,
     sources: Vec<LegacySourceClassification>,
 }
 
 impl ClassifiedLegacyImport {
     /// Returns the stable import-attempt identity.
+    pub const fn import_id(&self) -> LegacyImportId {
+        self.prepared.import_id()
+    }
+
+    /// Returns the exact destination storage generation.
+    pub const fn target_generation(&self) -> SourceGeneration {
+        self.prepared.target_generation()
+    }
+
+    /// Returns the reverified finalized evidence bundle.
+    pub fn bundle_path(&self) -> &Path {
+        self.prepared.bundle_path()
+    }
+
+    /// Returns exact classifications in stable source-family order.
+    pub fn sources(&self) -> &[LegacySourceClassification] {
+        &self.sources
+    }
+}
+
+/// Durable whole-import lifecycle state.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum LegacyImportState {
+    Classified,
+    Staging,
+    Ready,
+    Committing,
+    Complete,
+}
+
+impl LegacyImportState {
+    /// Returns the stable SQLite journal value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Classified => "classified",
+            Self::Staging => "staging",
+            Self::Ready => "ready",
+            Self::Committing => "committing",
+            Self::Complete => "complete",
+        }
+    }
+}
+
+/// Durable per-source staging lifecycle state.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum LegacyImportMemberState {
+    Pending,
+    Staging,
+    Ready,
+    Complete,
+}
+
+impl LegacyImportMemberState {
+    /// Returns the stable SQLite journal value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Staging => "staging",
+            Self::Ready => "ready",
+            Self::Complete => "complete",
+        }
+    }
+}
+
+/// Durable recovery state for one classified predecessor source.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyImportMemberJournal {
+    classification: LegacySourceClassification,
+    state: LegacyImportMemberState,
+    resume_cursor: Option<Vec<u8>>,
+    staged_row_count: u64,
+    updated_at_unix_ms: u64,
+}
+
+impl LegacyImportMemberJournal {
+    /// Returns the exact source classification bound to this member.
+    pub const fn classification(&self) -> &LegacySourceClassification {
+        &self.classification
+    }
+
+    /// Returns the durable staging state.
+    pub const fn state(&self) -> LegacyImportMemberState {
+        self.state
+    }
+
+    /// Returns the opaque source-specific resume cursor.
+    pub fn resume_cursor(&self) -> Option<&[u8]> {
+        self.resume_cursor.as_deref()
+    }
+
+    /// Returns the number of rows durably staged so far.
+    pub const fn staged_row_count(&self) -> u64 {
+        self.staged_row_count
+    }
+
+    /// Returns the positive last-update timestamp supplied by the host.
+    pub const fn updated_at_unix_ms(&self) -> u64 {
+        self.updated_at_unix_ms
+    }
+}
+
+/// Exact durable recovery journal for one target-bound import.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyImportJournal {
+    import_id: LegacyImportId,
+    target_generation: SourceGeneration,
+    manifest_sha256: MemberDigest,
+    classification_sha256: MemberDigest,
+    state: LegacyImportState,
+    started_at_unix_ms: u64,
+    updated_at_unix_ms: u64,
+    completed_at_unix_ms: Option<u64>,
+    members: Vec<LegacyImportMemberJournal>,
+}
+
+impl LegacyImportJournal {
+    /// Returns the stable import identity.
     pub const fn import_id(&self) -> LegacyImportId {
         self.import_id
     }
@@ -221,14 +348,39 @@ impl ClassifiedLegacyImport {
         self.target_generation
     }
 
-    /// Returns the reverified finalized evidence bundle.
-    pub fn bundle_path(&self) -> &Path {
-        &self.bundle_path
+    /// Returns the exact finalized evidence-manifest digest.
+    pub const fn manifest_sha256(&self) -> MemberDigest {
+        self.manifest_sha256
     }
 
-    /// Returns exact classifications in stable source-family order.
-    pub fn sources(&self) -> &[LegacySourceClassification] {
-        &self.sources
+    /// Returns the exact ordered-classification digest.
+    pub const fn classification_sha256(&self) -> MemberDigest {
+        self.classification_sha256
+    }
+
+    /// Returns the durable whole-import state.
+    pub const fn state(&self) -> LegacyImportState {
+        self.state
+    }
+
+    /// Returns the positive host-supplied start timestamp.
+    pub const fn started_at_unix_ms(&self) -> u64 {
+        self.started_at_unix_ms
+    }
+
+    /// Returns the last positive host-supplied update timestamp.
+    pub const fn updated_at_unix_ms(&self) -> u64 {
+        self.updated_at_unix_ms
+    }
+
+    /// Returns the host-supplied completion timestamp once terminal.
+    pub const fn completed_at_unix_ms(&self) -> Option<u64> {
+        self.completed_at_unix_ms
+    }
+
+    /// Returns one exact durable row per classified source.
+    pub fn members(&self) -> &[LegacyImportMemberJournal] {
+        &self.members
     }
 }
 
@@ -470,11 +622,271 @@ impl SqliteStorage {
             );
         }
         Ok(ClassifiedLegacyImport {
-            import_id: prepared.import_id(),
-            target_generation: prepared.target_generation(),
-            bundle_path: prepared.bundle_path().to_path_buf(),
+            prepared: prepared.clone(),
             sources,
         })
+    }
+
+    /// Atomically creates or resumes the exact durable journal for a classification.
+    pub async fn begin_legacy_import(
+        &self,
+        classified: &ClassifiedLegacyImport,
+        started_at_unix_ms: u64,
+    ) -> Result<LegacyImportJournal, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        if started_at_unix_ms == 0 || classified.sources().is_empty() {
+            return Err(Error::InvalidLegacyImportJournal);
+        }
+        verify_prepared_evidence(&classified.prepared).await?;
+        let started_at =
+            i64::try_from(started_at_unix_ms).map_err(|_| Error::InvalidLegacyImportJournal)?;
+        let classification_sha256 = classification_digest(classified);
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportJournalFailed)?;
+        let existing = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM radroots_runtime_legacy_imports WHERE import_id = ?",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportJournalFailed)?;
+        if existing == 0 {
+            let active = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_runtime_legacy_imports WHERE target_generation = ?",
+            )
+            .bind(classified.target_generation().as_bytes().as_slice())
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportJournalFailed)?;
+            if active != 0 {
+                transaction
+                    .rollback()
+                    .await
+                    .map_err(|_| Error::LegacyImportJournalFailed)?;
+                return Err(Error::LegacyImportConflict);
+            }
+            sqlx::query(
+                "INSERT INTO radroots_runtime_legacy_imports(
+                    import_id, target_generation, manifest_sha256,
+                    classification_sha256, state, started_at_ms,
+                    updated_at_ms, completed_at_ms
+                 ) VALUES (?, ?, ?, ?, 'classified', ?, ?, NULL)",
+            )
+            .bind(classified.import_id().as_bytes().as_slice())
+            .bind(classified.target_generation().as_bytes().as_slice())
+            .bind(classified.prepared.manifest_sha256().as_bytes().as_slice())
+            .bind(classification_sha256.as_bytes().as_slice())
+            .bind(started_at)
+            .bind(started_at)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportJournalFailed)?;
+            for source in classified.sources() {
+                sqlx::query(
+                    "INSERT INTO radroots_runtime_legacy_import_members(
+                        import_id, source_kind, legacy_schema, disposition,
+                        catalog_sha256, state, resume_cursor, staged_row_count,
+                        updated_at_ms
+                     ) VALUES (?, ?, ?, ?, ?, 'pending', NULL, 0, ?)",
+                )
+                .bind(classified.import_id().as_bytes().as_slice())
+                .bind(source.kind().as_str())
+                .bind(source.schema().as_str())
+                .bind(source.schema().disposition().as_str())
+                .bind(source.catalog_sha256().as_bytes().as_slice())
+                .bind(started_at)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| Error::LegacyImportJournalFailed)?;
+            }
+        }
+        transaction
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportJournalFailed)?;
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if journal_matches_classified(&journal, classified, classification_sha256) {
+            Ok(journal)
+        } else {
+            Err(Error::LegacyImportConflict)
+        }
+    }
+
+    /// Reads exact durable recovery state without advancing the importer.
+    pub async fn legacy_import_journal(
+        &self,
+        import_id: LegacyImportId,
+    ) -> Result<Option<LegacyImportJournal>, Error> {
+        self.lifecycle
+            .require_open()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN")
+            .await
+            .map_err(|_| Error::LegacyImportJournalFailed)?;
+        let row = sqlx::query(
+            "SELECT import_id, target_generation, manifest_sha256,
+                    classification_sha256, state, started_at_ms, updated_at_ms,
+                    completed_at_ms
+             FROM radroots_runtime_legacy_imports WHERE import_id = ?",
+        )
+        .bind(import_id.as_bytes().as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportJournalFailed)?;
+        let Some(row) = row else {
+            transaction
+                .commit()
+                .await
+                .map_err(|_| Error::LegacyImportJournalFailed)?;
+            return Ok(None);
+        };
+        let durable_import_id = decode_import_id(
+            row.try_get("import_id")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )?;
+        if durable_import_id != import_id {
+            return Err(Error::InvalidLegacyImportJournal);
+        }
+        let target_generation = decode_generation(
+            row.try_get("target_generation")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )?;
+        if target_generation != self.generation {
+            return Err(Error::InvalidLegacyImportJournal);
+        }
+        let manifest_sha256 = decode_digest(
+            row.try_get("manifest_sha256")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )?;
+        let classification_sha256 = decode_digest(
+            row.try_get("classification_sha256")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )?;
+        let state = parse_import_state(
+            row.try_get::<String, _>("state")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?
+                .as_str(),
+        )?;
+        let started_at_unix_ms = decode_positive_time(
+            row.try_get("started_at_ms")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )?;
+        let updated_at_unix_ms = decode_positive_time(
+            row.try_get("updated_at_ms")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )?;
+        let completed_at_unix_ms = row
+            .try_get::<Option<i64>, _>("completed_at_ms")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?
+            .map(decode_positive_time)
+            .transpose()?;
+        let member_rows = sqlx::query(
+            "SELECT source_kind, legacy_schema, disposition, catalog_sha256,
+                    state, resume_cursor, staged_row_count, updated_at_ms
+             FROM radroots_runtime_legacy_import_members
+             WHERE import_id = ? ORDER BY source_kind",
+        )
+        .bind(import_id.as_bytes().as_slice())
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportJournalFailed)?;
+        if member_rows.is_empty() || member_rows.len() > LEGACY_SOURCE_MAX {
+            return Err(Error::InvalidLegacyImportJournal);
+        }
+        let mut members = Vec::with_capacity(member_rows.len());
+        for row in member_rows {
+            let kind = parse_source_kind(
+                row.try_get::<String, _>("source_kind")
+                    .map_err(|_| Error::InvalidLegacyImportJournal)?
+                    .as_str(),
+            )?;
+            let schema = parse_legacy_schema(
+                row.try_get::<String, _>("legacy_schema")
+                    .map_err(|_| Error::InvalidLegacyImportJournal)?
+                    .as_str(),
+            )?;
+            let disposition = row
+                .try_get::<String, _>("disposition")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?;
+            if disposition != schema.disposition().as_str() || schema_source_kind(schema) != kind {
+                return Err(Error::InvalidLegacyImportJournal);
+            }
+            members.push(LegacyImportMemberJournal {
+                classification: LegacySourceClassification {
+                    kind,
+                    schema,
+                    user_version: expected_user_version(schema),
+                    catalog_sha256: decode_digest(
+                        row.try_get("catalog_sha256")
+                            .map_err(|_| Error::InvalidLegacyImportJournal)?,
+                    )?,
+                },
+                state: parse_member_state(
+                    row.try_get::<String, _>("state")
+                        .map_err(|_| Error::InvalidLegacyImportJournal)?
+                        .as_str(),
+                )?,
+                resume_cursor: row
+                    .try_get("resume_cursor")
+                    .map_err(|_| Error::InvalidLegacyImportJournal)?,
+                staged_row_count: u64::try_from(
+                    row.try_get::<i64, _>("staged_row_count")
+                        .map_err(|_| Error::InvalidLegacyImportJournal)?,
+                )
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+                updated_at_unix_ms: decode_positive_time(
+                    row.try_get("updated_at_ms")
+                        .map_err(|_| Error::InvalidLegacyImportJournal)?,
+                )?,
+            });
+        }
+        if updated_at_unix_ms < started_at_unix_ms
+            || members
+                .iter()
+                .any(|member| member.updated_at_unix_ms() < started_at_unix_ms)
+            || !journal_member_states_are_consistent(state, &members)
+        {
+            return Err(Error::InvalidLegacyImportJournal);
+        }
+        transaction
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportJournalFailed)?;
+        Ok(Some(LegacyImportJournal {
+            import_id,
+            target_generation,
+            manifest_sha256,
+            classification_sha256,
+            state,
+            started_at_unix_ms,
+            updated_at_unix_ms,
+            completed_at_unix_ms,
+            members,
+        }))
+    }
+
+    fn require_legacy_import_writer(
+        &self,
+        target_generation: SourceGeneration,
+    ) -> Result<(), Error> {
+        self.lifecycle
+            .require_open()
+            .map_err(|_| Error::BackupBackendUnavailable)?;
+        if self.mode != EventStoreMode::ReadWrite {
+            return Err(Error::RestoreRequiresWritableStorage);
+        }
+        if target_generation != self.generation {
+            return Err(Error::LegacyImportTargetMismatch);
+        }
+        Ok(())
     }
 }
 
@@ -965,6 +1377,163 @@ fn unsupported_schema(
     }
 }
 
+fn classification_digest(classified: &ClassifiedLegacyImport) -> MemberDigest {
+    let mut digest = Sha256::new();
+    for field in [
+        classified.import_id().as_bytes().as_slice(),
+        classified.target_generation().as_bytes().as_slice(),
+        classified.prepared.manifest_sha256().as_bytes().as_slice(),
+    ] {
+        digest.update(field);
+        digest.update([0]);
+    }
+    for source in classified.sources() {
+        for field in [
+            source.kind().as_str().as_bytes(),
+            source.schema().as_str().as_bytes(),
+            source.schema().disposition().as_str().as_bytes(),
+            source.catalog_sha256().as_bytes().as_slice(),
+        ] {
+            digest.update(field);
+            digest.update([0]);
+        }
+        digest.update(source.user_version().to_be_bytes());
+        digest.update([0]);
+    }
+    MemberDigest::new(digest.finalize().into())
+}
+
+fn journal_matches_classified(
+    journal: &LegacyImportJournal,
+    classified: &ClassifiedLegacyImport,
+    classification_sha256: MemberDigest,
+) -> bool {
+    journal.import_id() == classified.import_id()
+        && journal.target_generation() == classified.target_generation()
+        && journal.manifest_sha256() == classified.prepared.manifest_sha256()
+        && journal.classification_sha256() == classification_sha256
+        && journal.members().len() == classified.sources().len()
+        && journal
+            .members()
+            .iter()
+            .zip(classified.sources())
+            .all(|(durable, expected)| durable.classification() == expected)
+}
+
+fn decode_import_id(bytes: Vec<u8>) -> Result<LegacyImportId, Error> {
+    LegacyImportId::new(decode_array(bytes)?)
+}
+
+fn decode_generation(bytes: Vec<u8>) -> Result<SourceGeneration, Error> {
+    SourceGeneration::new(decode_array(bytes)?).map_err(|_| Error::InvalidLegacyImportJournal)
+}
+
+fn decode_digest(bytes: Vec<u8>) -> Result<MemberDigest, Error> {
+    Ok(MemberDigest::new(decode_array(bytes)?))
+}
+
+fn decode_array<const N: usize>(bytes: Vec<u8>) -> Result<[u8; N], Error> {
+    bytes
+        .try_into()
+        .map_err(|_| Error::InvalidLegacyImportJournal)
+}
+
+fn decode_positive_time(value: i64) -> Result<u64, Error> {
+    let value = u64::try_from(value).map_err(|_| Error::InvalidLegacyImportJournal)?;
+    if value == 0 {
+        Err(Error::InvalidLegacyImportJournal)
+    } else {
+        Ok(value)
+    }
+}
+
+fn parse_source_kind(value: &str) -> Result<LegacySourceKind, Error> {
+    match value {
+        "event_store" => Ok(LegacySourceKind::EventStore),
+        "outbox" => Ok(LegacySourceKind::Outbox),
+        "private" => Ok(LegacySourceKind::Private),
+        "studio" => Ok(LegacySourceKind::Studio),
+        _ => Err(Error::InvalidLegacyImportJournal),
+    }
+}
+
+fn parse_legacy_schema(value: &str) -> Result<LegacySchema, Error> {
+    match value {
+        "event_store_v1" => Ok(LegacySchema::EventStoreV1),
+        "event_store_v2" => Ok(LegacySchema::EventStoreV2),
+        "event_store_v3" => Ok(LegacySchema::EventStoreV3),
+        "event_store_v4" => Ok(LegacySchema::EventStoreV4),
+        "outbox_v1" => Ok(LegacySchema::OutboxV1),
+        "private_v1" => Ok(LegacySchema::PrivateV1),
+        "studio_v1_host_handoff" => Ok(LegacySchema::StudioV1HostHandoff),
+        _ => Err(Error::InvalidLegacyImportJournal),
+    }
+}
+
+const fn expected_user_version(schema: LegacySchema) -> u32 {
+    match schema {
+        LegacySchema::PrivateV1 => 1,
+        LegacySchema::EventStoreV1
+        | LegacySchema::EventStoreV2
+        | LegacySchema::EventStoreV3
+        | LegacySchema::EventStoreV4
+        | LegacySchema::OutboxV1
+        | LegacySchema::StudioV1HostHandoff => 0,
+    }
+}
+
+const fn schema_source_kind(schema: LegacySchema) -> LegacySourceKind {
+    match schema {
+        LegacySchema::EventStoreV1
+        | LegacySchema::EventStoreV2
+        | LegacySchema::EventStoreV3
+        | LegacySchema::EventStoreV4 => LegacySourceKind::EventStore,
+        LegacySchema::OutboxV1 => LegacySourceKind::Outbox,
+        LegacySchema::PrivateV1 => LegacySourceKind::Private,
+        LegacySchema::StudioV1HostHandoff => LegacySourceKind::Studio,
+    }
+}
+
+fn journal_member_states_are_consistent(
+    state: LegacyImportState,
+    members: &[LegacyImportMemberJournal],
+) -> bool {
+    members.iter().all(|member| match state {
+        LegacyImportState::Classified => member.state() == LegacyImportMemberState::Pending,
+        LegacyImportState::Staging => true,
+        LegacyImportState::Ready => matches!(
+            member.state(),
+            LegacyImportMemberState::Ready | LegacyImportMemberState::Complete
+        ),
+        LegacyImportState::Committing => matches!(
+            member.state(),
+            LegacyImportMemberState::Ready | LegacyImportMemberState::Complete
+        ),
+        LegacyImportState::Complete => member.state() == LegacyImportMemberState::Complete,
+    })
+}
+
+fn parse_import_state(value: &str) -> Result<LegacyImportState, Error> {
+    match value {
+        "classified" => Ok(LegacyImportState::Classified),
+        "staging" => Ok(LegacyImportState::Staging),
+        "ready" => Ok(LegacyImportState::Ready),
+        "committing" => Ok(LegacyImportState::Committing),
+        "complete" => Ok(LegacyImportState::Complete),
+        _ => Err(Error::InvalidLegacyImportJournal),
+    }
+}
+
+fn parse_member_state(value: &str) -> Result<LegacyImportMemberState, Error> {
+    match value {
+        "pending" => Ok(LegacyImportMemberState::Pending),
+        "staging" => Ok(LegacyImportMemberState::Staging),
+        "ready" => Ok(LegacyImportMemberState::Ready),
+        "complete" => Ok(LegacyImportMemberState::Complete),
+        _ => Err(Error::InvalidLegacyImportJournal),
+    }
+}
+
 fn write_manifest(
     plan: &LegacyImportPlan,
     target_generation: SourceGeneration,
@@ -1109,6 +1678,8 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_import_backup_policy_v1.toml");
     const CLASSIFICATION_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_schema_classification_v1.toml");
+    const JOURNAL_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_import_journal_policy_v1.toml");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -1173,6 +1744,25 @@ mod tests {
         source: String,
         schema_sql_sha256: String,
         disposition: String,
+    }
+
+    #[derive(Deserialize)]
+    struct JournalPolicy {
+        schema_version: u32,
+        authority: String,
+        identity: Vec<String>,
+        import_states: Vec<String>,
+        member_states: Vec<String>,
+        imports_per_target_generation: u32,
+        begin: String,
+        resume: String,
+        source_members: String,
+        resume_cursor: String,
+        staged_row_count: String,
+        host_timestamp: String,
+        hidden_clock_or_entropy: bool,
+        legacy_row_conversion: bool,
+        live_product_row_mutation: bool,
     }
 
     fn generation(byte: u8) -> SourceGeneration {
@@ -1375,6 +1965,44 @@ mod tests {
         assert_eq!(policy.studio.disposition, "host_handoff_not_sdk_import");
     }
 
+    #[test]
+    fn implementation_matches_the_governed_import_journal_policy() {
+        let policy =
+            toml::from_str::<JournalPolicy>(JOURNAL_POLICY).expect("legacy journal policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.authority,
+            "runtime_sqlite_owned_forward_migration_v6"
+        );
+        assert_eq!(
+            policy.identity,
+            [
+                "import_id",
+                "target_generation",
+                "manifest_sha256",
+                "classification_sha256"
+            ]
+        );
+        assert_eq!(
+            policy.import_states,
+            ["classified", "staging", "ready", "committing", "complete"]
+        );
+        assert_eq!(
+            policy.member_states,
+            ["pending", "staging", "ready", "complete"]
+        );
+        assert_eq!(policy.imports_per_target_generation, 1);
+        assert_eq!(policy.begin, "atomic_exact_idempotent_or_conflict");
+        assert_eq!(policy.resume, "read_exact_durable_state");
+        assert_eq!(policy.source_members, "one_exact_row_per_classified_source");
+        assert_eq!(policy.resume_cursor, "opaque_nullable_bytes");
+        assert_eq!(policy.staged_row_count, "non_negative");
+        assert_eq!(policy.host_timestamp, "positive_monotonic_per_import");
+        assert!(!policy.hidden_clock_or_entropy);
+        assert!(!policy.legacy_row_conversion);
+        assert!(!policy.live_product_row_mutation);
+    }
+
     fn assert_fixed_schema_policy(
         policy: &FixedSchemaPolicy,
         user_version: i64,
@@ -1528,12 +2156,12 @@ mod tests {
         let studio_connection = supported_studio_database(&studio_path).await;
         let plan = LegacyImportPlan::new(
             LegacyImportId::new([125; 16]).expect("import id"),
-            vec![LegacySource::new(LegacySourceKind::Studio, studio_path).expect("Studio source")],
+            vec![LegacySource::new(LegacySourceKind::Studio, &studio_path).expect("Studio source")],
             backup_root.path(),
             12_500,
         )
         .expect("Studio import plan");
-        let (_, store) = target(target_root.path()).await;
+        let (target_paths, store) = target(target_root.path()).await;
         let prepared = store
             .prepare_legacy_import(&plan)
             .await
@@ -1558,6 +2186,86 @@ mod tests {
             encode_digest(source.catalog_sha256().as_bytes()),
             STUDIO_CATALOG_SHA256
         );
+        let journal = store
+            .begin_legacy_import(&classified, 12_501)
+            .await
+            .expect("begin durable import");
+        assert_eq!(journal.import_id(), plan.import_id());
+        assert_eq!(journal.target_generation(), generation(121));
+        assert_eq!(journal.manifest_sha256(), prepared.manifest_sha256());
+        assert_eq!(
+            journal.classification_sha256(),
+            classification_digest(&classified)
+        );
+        assert_eq!(journal.state(), LegacyImportState::Classified);
+        assert_eq!(journal.started_at_unix_ms(), 12_501);
+        assert_eq!(journal.updated_at_unix_ms(), 12_501);
+        assert_eq!(journal.completed_at_unix_ms(), None);
+        assert_eq!(journal.members().len(), 1);
+        assert_eq!(
+            journal.members()[0].classification(),
+            &classified.sources()[0]
+        );
+        assert_eq!(
+            journal.members()[0].state(),
+            LegacyImportMemberState::Pending
+        );
+        assert_eq!(journal.members()[0].resume_cursor(), None);
+        assert_eq!(journal.members()[0].staged_row_count(), 0);
+        assert_eq!(journal.members()[0].updated_at_unix_ms(), 12_501);
+        assert_eq!(
+            store
+                .begin_legacy_import(&classified, 12_599)
+                .await
+                .expect("idempotent begin"),
+            journal
+        );
+        assert_eq!(
+            store
+                .legacy_import_journal(plan.import_id())
+                .await
+                .expect("read journal"),
+            Some(journal.clone())
+        );
+        for statement in [
+            "UPDATE radroots_runtime_legacy_imports SET state = 'ready'",
+            "UPDATE radroots_runtime_legacy_imports SET import_id = zeroblob(16)",
+            "DELETE FROM radroots_runtime_legacy_imports",
+            "UPDATE radroots_runtime_legacy_import_members SET state = 'ready'",
+            "UPDATE radroots_runtime_legacy_import_members SET source_kind = 'outbox'",
+            "DELETE FROM radroots_runtime_legacy_import_members",
+        ] {
+            assert!(
+                sqlx::query(statement).execute(&store.pool).await.is_err(),
+                "journal guard accepted `{statement}`"
+            );
+        }
+
+        let conflicting_backup_root = tempfile::tempdir().expect("conflicting backup root");
+        let conflicting_plan = LegacyImportPlan::new(
+            LegacyImportId::new([127; 16]).expect("conflicting import id"),
+            vec![
+                LegacySource::new(LegacySourceKind::Studio, &studio_path)
+                    .expect("conflicting Studio source"),
+            ],
+            conflicting_backup_root.path(),
+            12_700,
+        )
+        .expect("conflicting import plan");
+        let conflicting_prepared = store
+            .prepare_legacy_import(&conflicting_plan)
+            .await
+            .expect("conflicting prepared import");
+        let conflicting_classified = store
+            .classify_legacy_import(&conflicting_prepared)
+            .await
+            .expect("conflicting classified import");
+        assert!(matches!(
+            store
+                .begin_legacy_import(&conflicting_classified, 12_701)
+                .await,
+            Err(Error::LegacyImportConflict)
+        ));
 
         let other_root = tempfile::tempdir().expect("other target root");
         let other_paths = Paths::from_directory(other_root.path()).expect("other target paths");
@@ -1570,6 +2278,10 @@ mod tests {
         .expect("other target storage");
         assert!(matches!(
             other_store.classify_legacy_import(&prepared).await,
+            Err(Error::LegacyImportTargetMismatch)
+        ));
+        assert!(matches!(
+            other_store.begin_legacy_import(&classified, 12_601).await,
             Err(Error::LegacyImportTargetMismatch)
         ));
         other_store.close().await.expect("close other target");
@@ -1585,6 +2297,18 @@ mod tests {
             .await
             .expect("close Studio source");
         store.close().await.expect("close target");
+        let reopened =
+            SqliteStorage::open(OpenOptions::new(target_paths, OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen target");
+        assert_eq!(
+            reopened
+                .legacy_import_journal(plan.import_id())
+                .await
+                .expect("read journal after reopen"),
+            Some(journal)
+        );
+        reopened.close().await.expect("close reopened target");
     }
 
     #[test]

@@ -1,0 +1,15 @@
+schema_version = 1
+authority = "runtime_sqlite_owned_forward_migration_v6"
+identity = ["import_id", "target_generation", "manifest_sha256", "classification_sha256"]
+import_states = ["classified", "staging", "ready", "committing", "complete"]
+member_states = ["pending", "staging", "ready", "complete"]
+imports_per_target_generation = 1
+begin = "atomic_exact_idempotent_or_conflict"
+resume = "read_exact_durable_state"
+source_members = "one_exact_row_per_classified_source"
+resume_cursor = "opaque_nullable_bytes"
+staged_row_count = "non_negative"
+host_timestamp = "positive_monotonic_per_import"
+hidden_clock_or_entropy = false
+legacy_row_conversion = false
+live_product_row_mutation = false

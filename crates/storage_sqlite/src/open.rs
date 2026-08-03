@@ -278,6 +278,9 @@ pub enum Error {
     LegacyImportEvidenceInvalid,
     LegacyImportTargetMismatch,
     LegacyImportMigrationHistoryInvalid,
+    InvalidLegacyImportJournal,
+    LegacyImportConflict,
+    LegacyImportJournalFailed,
     UnsupportedLegacySchema {
         source_kind: &'static str,
         user_version: i64,
@@ -546,6 +549,15 @@ impl fmt::Display for Error {
             }
             Self::LegacyImportMigrationHistoryInvalid => {
                 formatter.write_str("SQLite legacy event-store migration history is invalid")
+            }
+            Self::InvalidLegacyImportJournal => {
+                formatter.write_str("SQLite legacy import journal is invalid")
+            }
+            Self::LegacyImportConflict => {
+                formatter.write_str("SQLite legacy import conflicts with durable state")
+            }
+            Self::LegacyImportJournalFailed => {
+                formatter.write_str("SQLite legacy import journal operation failed")
             }
             Self::UnsupportedLegacySchema {
                 source_kind,

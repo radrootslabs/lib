@@ -48,6 +48,14 @@ source families, checksum drift, and newer schemas fail closed. Studio records
 are explicitly classified for host handoff and are never imported into SDK
 storage.
 
+Beginning an import writes only governed recovery metadata. Runtime schema v6
+binds one retained import journal to the target generation, finalized manifest,
+and ordered classification digest, plus one exact member row per predecessor
+source. SQLite guards immutable identity, one-shot conflicts, legal monotonic
+state transitions, timestamps, staged counts, and retained audit history.
+Repeated begin calls resume the exact journal; conflicting attempts fail
+closed. No legacy or live product row is converted by this checkpoint.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};
