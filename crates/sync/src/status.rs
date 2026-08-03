@@ -1,0 +1,1 @@
+//! Passive synchronization status aggregation.

@@ -14,6 +14,19 @@ publish = false
 [lib]
 name = "radroots_sync"
 
+[features]
+default = ["serde"]
+serde = [
+  "dep:serde",
+  "radroots_event/serde",
+  "radroots_event_codec/serde",
+  "radroots_protocol/serde",
+  "radroots_signing/serde",
+  "radroots_storage/serde",
+  "radroots_trade/serde",
+  "radroots_transport/serde",
+]
+
 [dependencies]
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
@@ -22,6 +35,7 @@ radroots_signing = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
+serde = { workspace = true, optional = true }
 
 [lints]
 workspace = true

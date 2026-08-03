@@ -5162,6 +5162,7 @@ dependencies = [
  "radroots_storage",
  "radroots_trade",
  "radroots_transport",
+ "serde",
 ]
 
 [[package]]
