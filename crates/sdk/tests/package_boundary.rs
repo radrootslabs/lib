@@ -54,6 +54,23 @@ fn root_declares_exact_final_module_skeleton() {
     ]);
     assert_eq!(actual, expected);
     assert!(!ROOT.contains("no_std"));
+    assert_eq!(ROOT.matches("pub use crate::").count(), 2);
+    assert!(ROOT.contains("pub use crate::client::{Client, ClientBuilder};"));
+    assert!(ROOT.contains("pub use crate::error::{Error, Result};"));
+    assert!(!ROOT.contains("pub use radroots_"));
+}
+
+#[test]
+fn root_types_have_the_required_std_contracts() {
+    fn assert_client<T: Clone + Send + Sync>() {}
+    fn assert_builder<T: Send + Sync>() {}
+    fn assert_error<T: std::error::Error + Send + Sync + 'static>() {}
+
+    assert_client::<radroots_sdk::Client>();
+    assert_builder::<radroots_sdk::ClientBuilder>();
+    assert_error::<radroots_sdk::Error>();
+    let result: radroots_sdk::Result<()> = Ok(());
+    assert!(result.is_ok());
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {

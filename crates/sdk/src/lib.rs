@@ -1,7 +1,8 @@
 //! Host-neutral asynchronous client engine for Radroots.
 //!
-//! This checkpoint establishes the final package and module ownership
-//! boundary. Client behavior is introduced through the ordered SDK refactor.
+//! Advanced hosts compose capabilities through [`ClientBuilder`] and operate
+//! through a cloneable [`Client`]. All fallible root operations use [`Result`]
+//! and the SDK-owned [`Error`] boundary.
 
 #![forbid(unsafe_code)]
 
@@ -16,3 +17,6 @@ pub mod storage;
 pub mod sync;
 pub mod trade;
 pub mod transport;
+
+pub use crate::client::{Client, ClientBuilder};
+pub use crate::error::{Error, Result};
