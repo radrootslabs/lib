@@ -10,6 +10,10 @@ pub fn package_manifest(spec: PackageSpec) -> serde_json::Value {
     json!({
         "package": spec.package_name,
         "crate": spec.crate_name,
+        "version": "0.1.0",
+        "license": "MIT OR Apache-2.0",
+        "repository": "https://github.com/radrootslabs/sdk",
+        "repository_directory": spec.package_dir,
         "generator": "radroots_sdk_xtask",
         "generated": false
     })
@@ -35,5 +39,15 @@ mod tests {
         let manifest = package_manifest(package_specs()[0]);
         assert_eq!(manifest["package"], package_specs()[0].package_name);
         assert_eq!(manifest["crate"], package_specs()[0].crate_name);
+        assert_eq!(manifest["version"], "0.1.0");
+        assert_eq!(manifest["license"], "MIT OR Apache-2.0");
+        assert_eq!(
+            manifest["repository"],
+            "https://github.com/radrootslabs/sdk"
+        );
+        assert_eq!(
+            manifest["repository_directory"],
+            package_specs()[0].package_dir
+        );
     }
 }

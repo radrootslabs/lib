@@ -102,7 +102,7 @@ impl PackageOutput {
     pub fn provenance_file(&self) -> GeneratedFile {
         GeneratedFile {
             relative_path: manifest_relative_path(self.spec),
-            contents: render_manifest(self.spec),
+            contents: render_manifest(self),
         }
     }
 }
@@ -211,9 +211,25 @@ fn structured_imports_ts(imports: &[TypeScriptImport]) -> Option<String> {
     )
 }
 
-fn render_manifest(spec: PackageSpec) -> String {
+fn render_manifest(output: &PackageOutput) -> String {
+    let spec = output.spec;
     let mut value = package_manifest(spec);
     value["generated"] = serde_json::Value::Bool(true);
+    value["outputs"] = serde_json::Value::Object(
+        output
+            .files()
+            .into_iter()
+            .map(|file| {
+                (
+                    file.relative_path,
+                    serde_json::Value::String(format!(
+                        "{:x}",
+                        Sha256::digest(file.contents.as_bytes())
+                    )),
+                )
+            })
+            .collect(),
+    );
     if matches!(spec.key, "event" | "trade") {
         let (sha256, source_packages) = match spec.key {
             "event" => (EVENT_BINDINGS_TYPES_SHA256, EVENT_NATIVE_SOURCES),
