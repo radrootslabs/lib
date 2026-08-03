@@ -58,6 +58,10 @@ pub enum Error {
     InvalidQueryText,
     /// A query limit was outside the supported range.
     InvalidQueryLimit,
+    /// A reverse-query radius was non-finite or out of bounds.
+    InvalidQueryRadius,
+    /// A feature identifier could not be represented by the provider database.
+    InvalidFeatureId,
     /// A locality-only option was applied to another query kind.
     QueryOptionNotApplicable,
 }
@@ -109,7 +113,15 @@ impl fmt::Display for Error {
             Self::InvalidQueryText => {
                 formatter.write_str("query text must be non-empty and normalized")
             }
-            Self::InvalidQueryLimit => formatter.write_str("query limit must be between 1 and 100"),
+            Self::InvalidQueryLimit => {
+                formatter.write_str("query limit must be between 1 and 1000")
+            }
+            Self::InvalidQueryRadius => {
+                formatter.write_str("reverse-query radius must be greater than 0 and at most 10")
+            }
+            Self::InvalidFeatureId => {
+                formatter.write_str("feature identifier exceeds the provider database range")
+            }
             Self::QueryOptionNotApplicable => {
                 formatter.write_str("query option is not applicable to this query kind")
             }

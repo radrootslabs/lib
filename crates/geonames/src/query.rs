@@ -1,9 +1,13 @@
 //! Validated forward and reverse locality queries.
 
-use crate::{Error, Point};
+use crate::model::Country;
+use crate::{Candidate, Error, Point};
 
 const DEFAULT_LIMIT: usize = 10;
-const MAX_LIMIT: usize = 100;
+const DEFAULT_COUNTRY_LIMIT: usize = 300;
+const DEFAULT_REVERSE_RADIUS_DEGREES: f64 = 0.5;
+const MAX_LIMIT: usize = 1_000;
+const MAX_REVERSE_RADIUS_DEGREES: f64 = 10.0;
 
 /// A validated GeoNames lookup request.
 #[derive(Clone, Debug, PartialEq)]
@@ -20,9 +24,56 @@ pub(crate) enum QueryKind {
         country: Option<String>,
     },
     Freeform(String),
-    FeatureId(u64),
-    Reverse(Point),
+    FeatureId(i64),
+    Reverse {
+        point: Point,
+        radius_degrees: f64,
+    },
     Countries,
+}
+
+/// Results from one [`Query`], with provider-owned storage kept private.
+#[derive(Clone, Debug, PartialEq)]
+pub struct QueryResult {
+    kind: QueryResultKind,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum QueryResultKind {
+    Candidates(Vec<Candidate>),
+    Countries(Vec<Country>),
+}
+
+impl QueryResult {
+    pub(crate) fn candidates(candidates: Vec<Candidate>) -> Self {
+        Self {
+            kind: QueryResultKind::Candidates(candidates),
+        }
+    }
+
+    pub(crate) fn countries(countries: Vec<Country>) -> Self {
+        Self {
+            kind: QueryResultKind::Countries(countries),
+        }
+    }
+
+    /// Returns locality candidates, or `None` for a country-list result.
+    #[must_use]
+    pub fn as_candidates(&self) -> Option<&[Candidate]> {
+        match &self.kind {
+            QueryResultKind::Candidates(candidates) => Some(candidates),
+            QueryResultKind::Countries(_) => None,
+        }
+    }
+
+    /// Returns countries, or `None` for a locality result.
+    #[must_use]
+    pub fn as_countries(&self) -> Option<&[Country]> {
+        match &self.kind {
+            QueryResultKind::Candidates(_) => None,
+            QueryResultKind::Countries(countries) => Some(countries),
+        }
+    }
 }
 
 impl Query {
@@ -47,19 +98,23 @@ impl Query {
     }
 
     /// Creates an exact GeoNames feature query.
-    #[must_use]
-    pub const fn feature_id(feature_id: u64) -> Self {
-        Self {
-            kind: QueryKind::FeatureId(feature_id),
+    pub fn feature_id(feature_id: u64) -> Result<Self, Error> {
+        Ok(Self {
+            kind: QueryKind::FeatureId(
+                i64::try_from(feature_id).map_err(|_| Error::InvalidFeatureId)?,
+            ),
             limit: 1,
-        }
+        })
     }
 
     /// Creates a nearest-locality query around an explicit point.
     #[must_use]
     pub const fn reverse(point: Point) -> Self {
         Self {
-            kind: QueryKind::Reverse(point),
+            kind: QueryKind::Reverse {
+                point,
+                radius_degrees: DEFAULT_REVERSE_RADIUS_DEGREES,
+            },
             limit: 1,
         }
     }
@@ -69,7 +124,7 @@ impl Query {
     pub const fn countries() -> Self {
         Self {
             kind: QueryKind::Countries,
-            limit: DEFAULT_LIMIT,
+            limit: DEFAULT_COUNTRY_LIMIT,
         }
     }
 
@@ -106,6 +161,25 @@ impl Query {
         Ok(self)
     }
 
+    /// Sets the square prefilter radius for a reverse query.
+    pub fn with_radius_degrees(mut self, radius_degrees: f64) -> Result<Self, Error> {
+        if !radius_degrees.is_finite()
+            || !(0.0..=MAX_REVERSE_RADIUS_DEGREES).contains(&radius_degrees)
+            || radius_degrees == 0.0
+        {
+            return Err(Error::InvalidQueryRadius);
+        }
+        let QueryKind::Reverse {
+            radius_degrees: current,
+            ..
+        } = &mut self.kind
+        else {
+            return Err(Error::QueryOptionNotApplicable);
+        };
+        *current = radius_degrees;
+        Ok(self)
+    }
+
     /// Returns the maximum result count.
     #[must_use]
     pub const fn limit(&self) -> usize {
@@ -138,7 +212,7 @@ impl Query {
     #[must_use]
     pub fn exact_feature_id(&self) -> Option<u64> {
         match &self.kind {
-            QueryKind::FeatureId(value) => Some(*value),
+            QueryKind::FeatureId(value) => u64::try_from(*value).ok(),
             _ => None,
         }
     }
@@ -147,7 +221,7 @@ impl Query {
     #[must_use]
     pub fn reverse_point(&self) -> Option<Point> {
         match &self.kind {
-            QueryKind::Reverse(value) => Some(*value),
+            QueryKind::Reverse { point, .. } => Some(*point),
             _ => None,
         }
     }
@@ -198,7 +272,7 @@ mod tests {
         assert_eq!(Query::locality(""), Err(Error::InvalidQueryText));
         assert_eq!(Query::freeform(" Victoria "), Err(Error::InvalidQueryText));
         assert_eq!(
-            Query::feature_id(1).with_country("CA"),
+            Query::feature_id(1).and_then(|query| query.with_country("CA")),
             Err(Error::QueryOptionNotApplicable)
         );
         assert_eq!(
@@ -206,16 +280,27 @@ mod tests {
             Err(Error::InvalidQueryLimit)
         );
         assert_eq!(
-            Query::countries().with_limit(101),
+            Query::countries().with_limit(1_001),
             Err(Error::InvalidQueryLimit)
         );
+        assert_eq!(Query::feature_id(u64::MAX), Err(Error::InvalidFeatureId));
     }
 
     #[test]
     fn exact_reverse_and_country_queries_have_bounded_defaults() {
         let point = Point::new(48.4284, -123.3656).expect("point");
-        assert_eq!(Query::feature_id(617_4041).limit(), 1);
+        assert_eq!(Query::feature_id(6_174_041).expect("feature").limit(), 1);
         assert_eq!(Query::reverse(point).limit(), 1);
-        assert_eq!(Query::countries().limit(), 10);
+        assert_eq!(Query::countries().limit(), 300);
+        assert_eq!(
+            Query::reverse(point).with_radius_degrees(0.0),
+            Err(Error::InvalidQueryRadius)
+        );
+        assert_eq!(
+            Query::locality("Victoria")
+                .expect("locality")
+                .with_radius_degrees(1.0),
+            Err(Error::QueryOptionNotApplicable)
+        );
     }
 }
