@@ -6,10 +6,11 @@
 /// Lowest private schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current private schema version created by this package.
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 
 const PRIVATE_V1_SQL: &str = include_str!("0001_private.up.sql");
 const LEGACY_PRIVATE_STAGING_V2_SQL: &str = include_str!("0002_legacy_private_staging.up.sql");
+const LEGACY_IMPORT_COMMITS_V3_SQL: &str = include_str!("0003_legacy_import_commits.up.sql");
 
 /// Stable, non-SQL description of one forward private migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,6 +64,24 @@ const PRIVATE_V2_OBJECTS: &[&str] = &[
     "radroots_private_legacy_import_staging_update_guard",
 ];
 
+const PRIVATE_V3_OBJECTS: &[&str] = &[
+    "radroots_private_artifacts",
+    "radroots_private_artifacts_delete_guard",
+    "radroots_private_artifacts_envelope_guard",
+    "radroots_private_artifacts_expiry_idx",
+    "radroots_private_artifacts_identity_guard",
+    "radroots_private_artifacts_key_version_idx",
+    "radroots_private_artifacts_kind_idx",
+    "radroots_private_legacy_import_commit_delete_guard",
+    "radroots_private_legacy_import_commit_update_guard",
+    "radroots_private_legacy_import_commits",
+    "radroots_private_legacy_import_staging",
+    "radroots_private_legacy_import_staging_delete_guard",
+    "radroots_private_legacy_import_staging_insert_guard",
+    "radroots_private_legacy_import_staging_parent_idx",
+    "radroots_private_legacy_import_staging_update_guard",
+];
+
 /// Ordered, immutable private migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -77,12 +96,19 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "299ec0c476b2f5ab995f245d36603969af345827c9ecdf9490cfe0b0dbe4b9f9",
         owned_objects: PRIVATE_V2_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 3,
+        name: "legacy_import_commits",
+        up_sha256: "9377f0af8f070d977a5237e2a1294e6977f5b704e7a8434d97a3dc5f4ae75e86",
+        owned_objects: PRIVATE_V3_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(PRIVATE_V1_SQL),
         2 => Some(LEGACY_PRIVATE_STAGING_V2_SQL),
+        3 => Some(LEGACY_IMPORT_COMMITS_V3_SQL),
         _ => None,
     }
 }
@@ -125,7 +151,7 @@ mod tests {
     #[test]
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
-        let migration = MIGRATIONS[1];
+        let migration = MIGRATIONS[2];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "private.sqlite");
         assert_eq!(snapshot.application_id, 1_380_208_722);
@@ -136,7 +162,7 @@ mod tests {
         assert!(snapshot.forward_only);
         assert!(!snapshot.raw_sql_public);
         assert!(snapshot.encrypted_envelopes);
-        assert_eq!(snapshot.authorities.len(), 5);
+        assert_eq!(snapshot.authorities.len(), 6);
         assert_eq!(snapshot.forbidden_tables, ["studio", "ui_state"]);
         assert_eq!(snapshot.migrations.len(), MIGRATIONS.len());
         for (expected, actual) in snapshot.migrations.iter().zip(MIGRATIONS) {
@@ -153,7 +179,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(3), None);
+        assert_eq!(migration_sql(4), None);
     }
 
     #[tokio::test]
@@ -179,7 +205,7 @@ mod tests {
             .iter()
             .map(|row| row.get::<String, _>("name"))
             .collect::<Vec<_>>();
-        assert_eq!(actual, MIGRATIONS[1].owned_objects());
+        assert_eq!(actual, MIGRATIONS[2].owned_objects());
         let forbidden = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_schema
              WHERE lower(name) LIKE '%studio%' OR lower(name) LIKE '%ui_state%'",

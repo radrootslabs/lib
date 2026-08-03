@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 8;
+pub const CURRENT_VERSION: u32 = 9;
 
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
@@ -16,6 +16,7 @@ const PROJECTION_METADATA_V5_SQL: &str = include_str!("0005_projection_metadata.
 const LEGACY_IMPORT_JOURNAL_V6_SQL: &str = include_str!("0006_legacy_import_journal.up.sql");
 const LEGACY_EVENT_STAGING_V7_SQL: &str = include_str!("0007_legacy_event_staging.up.sql");
 const LEGACY_OUTBOX_STAGING_V8_SQL: &str = include_str!("0008_legacy_outbox_staging.up.sql");
+const LEGACY_IMPORT_COMMITS_V9_SQL: &str = include_str!("0009_legacy_import_commits.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -276,6 +277,59 @@ const RUNTIME_V8_OBJECTS: &[&str] = &[
     "radroots_runtime_source_generations_sequence_guard",
 ];
 
+const RUNTIME_V9_OBJECTS: &[&str] = &[
+    "radroots_runtime_atomic_commits",
+    "radroots_runtime_delivery_evidence",
+    "radroots_runtime_delivery_evidence_item_idx",
+    "radroots_runtime_event_index_checkpoints",
+    "radroots_runtime_event_index_manifests",
+    "radroots_runtime_event_index_shards",
+    "radroots_runtime_event_provenance",
+    "radroots_runtime_event_provenance_observed_idx",
+    "radroots_runtime_events",
+    "radroots_runtime_events_admission_idx",
+    "radroots_runtime_events_delete_guard",
+    "radroots_runtime_events_event_id_idx",
+    "radroots_runtime_events_raw_update_guard",
+    "radroots_runtime_journal_idempotency_idx",
+    "radroots_runtime_journal_operations",
+    "radroots_runtime_journal_recovery_idx",
+    "radroots_runtime_legacy_event_staging",
+    "radroots_runtime_legacy_event_staging_delete_guard",
+    "radroots_runtime_legacy_event_staging_insert_guard",
+    "radroots_runtime_legacy_event_staging_update_guard",
+    "radroots_runtime_legacy_import_commit_delete_guard",
+    "radroots_runtime_legacy_import_commit_update_guard",
+    "radroots_runtime_legacy_import_commits",
+    "radroots_runtime_legacy_import_delete_guard",
+    "radroots_runtime_legacy_import_identity_guard",
+    "radroots_runtime_legacy_import_member_delete_guard",
+    "radroots_runtime_legacy_import_member_identity_guard",
+    "radroots_runtime_legacy_import_member_state_guard",
+    "radroots_runtime_legacy_import_members",
+    "radroots_runtime_legacy_import_state_guard",
+    "radroots_runtime_legacy_import_state_idx",
+    "radroots_runtime_legacy_imports",
+    "radroots_runtime_legacy_outbox_staging",
+    "radroots_runtime_legacy_outbox_staging_delete_guard",
+    "radroots_runtime_legacy_outbox_staging_insert_guard",
+    "radroots_runtime_legacy_outbox_staging_parent_idx",
+    "radroots_runtime_legacy_outbox_staging_update_guard",
+    "radroots_runtime_outbox_items",
+    "radroots_runtime_outbox_operation_idx",
+    "radroots_runtime_outbox_ready_idx",
+    "radroots_runtime_outbox_targets",
+    "radroots_runtime_projection_checkpoints",
+    "radroots_runtime_projection_invalidations",
+    "radroots_runtime_projection_rebuilds",
+    "radroots_runtime_projection_rebuilds_stage_idx",
+    "radroots_runtime_source_generations",
+    "radroots_runtime_source_generations_active_idx",
+    "radroots_runtime_source_generations_delete_guard",
+    "radroots_runtime_source_generations_identity_guard",
+    "radroots_runtime_source_generations_sequence_guard",
+];
+
 /// Ordered, immutable runtime migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -326,6 +380,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "b2ad0ee5bf7ac9e56584623c641e5208f5446dd0ff5ced9f235cd1756781be34",
         owned_objects: RUNTIME_V8_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 9,
+        name: "legacy_import_commits",
+        up_sha256: "f0807eecd652a26844c3502d81386a9d54480cb178abe1b71035e0601916afb7",
+        owned_objects: RUNTIME_V9_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
@@ -338,6 +398,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         6 => Some(LEGACY_IMPORT_JOURNAL_V6_SQL),
         7 => Some(LEGACY_EVENT_STAGING_V7_SQL),
         8 => Some(LEGACY_OUTBOX_STAGING_V8_SQL),
+        9 => Some(LEGACY_IMPORT_COMMITS_V9_SQL),
         _ => None,
     }
 }
@@ -380,9 +441,9 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 8);
-        assert_eq!(MIGRATIONS.len(), 8);
-        let migration = MIGRATIONS[7];
+        assert_eq!(CURRENT_VERSION, 9);
+        assert_eq!(MIGRATIONS.len(), 9);
+        let migration = MIGRATIONS[8];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
         assert_eq!(snapshot.application_id, 1_380_209_236);
@@ -392,7 +453,7 @@ mod tests {
         assert_eq!(snapshot.migration_sha256, migration.up_sha256());
         assert!(snapshot.forward_only);
         assert!(!snapshot.raw_sql_public);
-        assert_eq!(snapshot.authorities.len(), 11);
+        assert_eq!(snapshot.authorities.len(), 12);
         assert_eq!(snapshot.source_invariants.len(), 5);
         assert_eq!(snapshot.migrations.len(), MIGRATIONS.len());
         for (expected, actual) in snapshot.migrations.iter().zip(MIGRATIONS) {
@@ -409,7 +470,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(9), None);
+        assert_eq!(migration_sql(10), None);
     }
 
     #[tokio::test]

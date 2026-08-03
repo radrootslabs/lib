@@ -92,6 +92,13 @@ count, and hashes framed member cursors plus every runtime/private staging row
 under write-stable snapshots. The returned digest is the deterministic commit
 identity; validation itself mutates nothing.
 
+Finalization seals that identity private-first, then completes the runtime
+journal and all members in one transaction. A crash after the private marker
+replays and verifies it while the runtime journal remains ready; a lost success
+response reconstructs the exact receipt from both commit markers. Immutable
+legacy staging remains retained as owned migration evidence, while live product
+tables are not dual-written and predecessor evidence is not deleted.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

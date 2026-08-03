@@ -280,7 +280,7 @@ async fn metadata(
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
     let valid = plan.minimum_version > 0
         && plan.minimum_version <= plan.current_version
-        && plan.current_version <= 8
+        && plan.current_version <= 9
         && plan.steps.len() == usize::try_from(plan.current_version).unwrap_or(usize::MAX)
         && plan
             .steps
@@ -391,6 +391,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
         6 => Some("PRAGMA user_version = 6"),
         7 => Some("PRAGMA user_version = 7"),
         8 => Some("PRAGMA user_version = 8"),
+        9 => Some("PRAGMA user_version = 9"),
         _ => None,
     }
 }
@@ -583,7 +584,7 @@ mod tests {
             .execute(&mut newer)
             .await
             .expect("application id");
-        sqlx::raw_sql("PRAGMA user_version = 9")
+        sqlx::raw_sql("PRAGMA user_version = 10")
             .execute(&mut newer)
             .await
             .expect("newer version");
@@ -592,10 +593,10 @@ mod tests {
             Err(Error::SchemaTooNew {
                 database: RUNTIME_DATABASE,
                 supported: runtime::CURRENT_VERSION,
-                actual: 9,
+                actual: 10,
             })
         ));
-        assert_eq!(pragma(&mut newer, "user_version").await, 9);
+        assert_eq!(pragma(&mut newer, "user_version").await, 10);
 
         let mut wrong_identity = connection().await;
         establish_runtime_version(&mut wrong_identity, 1).await;

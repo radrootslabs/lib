@@ -1,0 +1,15 @@
+schema_version = 1
+input = "exact_legacy_import_validation"
+commit_order = ["private_commit_marker", "runtime_atomic_completion"]
+private_replay = "insert_or_ignore_then_exact_verify"
+runtime_replay = "completed_receipt_exact_verify"
+crash_before_private_commit = "journal_ready_no_private_marker"
+crash_after_private_commit = "journal_ready_exact_private_marker_replay"
+crash_during_runtime_completion = "runtime_transaction_rolls_back"
+lost_success_response = "exact_completed_receipt_reconstructed"
+retained_representation = "immutable_owned_legacy_staging"
+live_product_dual_write = false
+source_deletion = false
+studio_row_import = false
+host_timestamp = "positive_monotonic_completion_time"
+hidden_clock_or_entropy = false

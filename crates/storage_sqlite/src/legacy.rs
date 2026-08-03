@@ -525,6 +525,31 @@ pub struct LegacyImportValidation {
     validation_sha256: MemberDigest,
 }
 
+/// Durable receipt for one fully sealed, forward-only legacy import.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LegacyImportCommitReceipt {
+    validation_sha256: MemberDigest,
+    imported_row_count: u64,
+    completed_at_unix_ms: u64,
+}
+
+impl LegacyImportCommitReceipt {
+    /// Returns the exact validation identity sealed by both databases.
+    pub const fn validation_sha256(&self) -> MemberDigest {
+        self.validation_sha256
+    }
+
+    /// Returns the exact retained SDK-owned predecessor row count.
+    pub const fn imported_row_count(&self) -> u64 {
+        self.imported_row_count
+    }
+
+    /// Returns the positive host-supplied completion timestamp.
+    pub const fn completed_at_unix_ms(&self) -> u64 {
+        self.completed_at_unix_ms
+    }
+}
+
 impl LegacyImportValidation {
     /// Returns the exact number of predecessor rows staged for SDK-owned storage.
     pub const fn imported_row_count(&self) -> u64 {
@@ -2140,6 +2165,151 @@ impl SqliteStorage {
         })
     }
 
+    /// Seals validated legacy staging through a private-first recovery protocol.
+    pub async fn finalize_legacy_import(
+        &self,
+        classified: &ClassifiedLegacyImport,
+        expected: LegacyImportValidation,
+        completed_at_unix_ms: u64,
+    ) -> Result<LegacyImportCommitReceipt, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        if completed_at_unix_ms == 0 {
+            return Err(Error::InvalidLegacyImportStageRequest);
+        }
+        let classification_sha256 = classification_digest(classified);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if !journal_matches_classified(&journal, classified, classification_sha256) {
+            return Err(Error::LegacyImportConflict);
+        }
+        if journal.state() == LegacyImportState::Complete {
+            return self
+                .completed_legacy_import_receipt(classified.import_id(), expected)
+                .await;
+        }
+        if journal.state() != LegacyImportState::Ready
+            || completed_at_unix_ms < journal.updated_at_unix_ms()
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let actual = self.validate_legacy_import(classified).await?;
+        if actual != expected {
+            return Err(Error::LegacyImportConflict);
+        }
+        let completed_at = i64::try_from(completed_at_unix_ms)
+            .map_err(|_| Error::InvalidLegacyImportStageRequest)?;
+        let imported_row_count = i64::try_from(expected.imported_row_count())
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+
+        let mut private_tx = self
+            .private_pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        sqlx::query("INSERT OR IGNORE INTO radroots_private_legacy_import_commits(import_id, validation_sha256, imported_row_count, committed_at_ms) VALUES (?, ?, ?, ?)")
+            .bind(classified.import_id().as_bytes().as_slice()).bind(expected.validation_sha256().as_bytes().as_slice()).bind(imported_row_count).bind(completed_at).execute(&mut *private_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        let private_record = sqlx::query("SELECT validation_sha256, imported_row_count, committed_at_ms FROM radroots_private_legacy_import_commits WHERE import_id = ?")
+            .bind(classified.import_id().as_bytes().as_slice()).fetch_one(&mut *private_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        let private_committed_at = private_record
+            .try_get::<i64, _>("committed_at_ms")
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        if decode_digest(
+            private_record
+                .try_get("validation_sha256")
+                .map_err(|_| Error::LegacyImportStagingFailed)?,
+        )? != expected.validation_sha256()
+            || private_record
+                .try_get::<i64, _>("imported_row_count")
+                .map_err(|_| Error::LegacyImportStagingFailed)?
+                != imported_row_count
+            || private_committed_at
+                < i64::try_from(journal.updated_at_unix_ms())
+                    .map_err(|_| Error::LegacyImportStagingFailed)?
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        private_tx
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let completed_at = private_committed_at;
+        let completed_at_unix_ms =
+            u64::try_from(completed_at).map_err(|_| Error::LegacyImportStagingFailed)?;
+
+        let mut runtime_tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        sqlx::query("INSERT INTO radroots_runtime_legacy_import_commits(import_id, validation_sha256, imported_row_count, completed_at_ms) VALUES (?, ?, ?, ?)")
+            .bind(classified.import_id().as_bytes().as_slice()).bind(expected.validation_sha256().as_bytes().as_slice()).bind(imported_row_count).bind(completed_at).execute(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        let changed = sqlx::query("UPDATE radroots_runtime_legacy_imports SET state = 'committing', updated_at_ms = ? WHERE import_id = ? AND state = 'ready'")
+            .bind(completed_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if changed.rows_affected() != 1 {
+            return Err(Error::LegacyImportConflict);
+        }
+        let changed = sqlx::query("UPDATE radroots_runtime_legacy_import_members SET state = 'complete', updated_at_ms = ? WHERE import_id = ? AND state = 'ready'")
+            .bind(completed_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if usize::try_from(changed.rows_affected()).map_err(|_| Error::LegacyImportStagingFailed)?
+            != classified.sources().len()
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let changed = sqlx::query("UPDATE radroots_runtime_legacy_imports SET state = 'complete', updated_at_ms = ?, completed_at_ms = ? WHERE import_id = ? AND state = 'committing'")
+            .bind(completed_at).bind(completed_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if changed.rows_affected() != 1 {
+            return Err(Error::LegacyImportConflict);
+        }
+        runtime_tx
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        Ok(LegacyImportCommitReceipt {
+            validation_sha256: expected.validation_sha256(),
+            imported_row_count: expected.imported_row_count(),
+            completed_at_unix_ms,
+        })
+    }
+
+    async fn completed_legacy_import_receipt(
+        &self,
+        import_id: LegacyImportId,
+        expected: LegacyImportValidation,
+    ) -> Result<LegacyImportCommitReceipt, Error> {
+        let row = sqlx::query("SELECT validation_sha256, imported_row_count, completed_at_ms FROM radroots_runtime_legacy_import_commits WHERE import_id = ?")
+            .bind(import_id.as_bytes().as_slice()).fetch_one(&self.pool).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        let validation_sha256 = decode_digest(
+            row.try_get("validation_sha256")
+                .map_err(|_| Error::LegacyImportStagingFailed)?,
+        )?;
+        let imported_row_count = u64::try_from(
+            row.try_get::<i64, _>("imported_row_count")
+                .map_err(|_| Error::LegacyImportStagingFailed)?,
+        )
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let completed_at_unix_ms = decode_positive_time(
+            row.try_get("completed_at_ms")
+                .map_err(|_| Error::LegacyImportStagingFailed)?,
+        )?;
+        if validation_sha256 != expected.validation_sha256()
+            || imported_row_count != expected.imported_row_count()
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let private_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_private_legacy_import_commits WHERE import_id = ? AND validation_sha256 = ? AND imported_row_count = ? AND committed_at_ms = ?")
+            .bind(import_id.as_bytes().as_slice()).bind(validation_sha256.as_bytes().as_slice()).bind(i64::try_from(imported_row_count).map_err(|_| Error::LegacyImportStagingFailed)?).bind(i64::try_from(completed_at_unix_ms).map_err(|_| Error::LegacyImportStagingFailed)?).fetch_one(&self.private_pool).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if private_count != 1 {
+            return Err(Error::LegacyImportConflict);
+        }
+        Ok(LegacyImportCommitReceipt {
+            validation_sha256,
+            imported_row_count,
+            completed_at_unix_ms,
+        })
+    }
+
     fn require_legacy_import_writer(
         &self,
         target_generation: SourceGeneration,
@@ -3349,6 +3519,8 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_studio_handoff_policy_v1.toml");
     const IMPORT_VALIDATION_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_import_validation_policy_v1.toml");
+    const IMPORT_FINALIZE_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_import_finalize_policy_v1.toml");
     const SDK_PRIVATE_STORE_SOURCE: &str =
         include_str!("../../../../sdk/crates/sdk/src/private_store.rs");
 
@@ -3531,6 +3703,25 @@ mod tests {
         validation_mutation: bool,
         source_deletion: bool,
         dual_write: bool,
+        hidden_clock_or_entropy: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct ImportFinalizePolicy {
+        schema_version: u32,
+        input: String,
+        commit_order: Vec<String>,
+        private_replay: String,
+        runtime_replay: String,
+        crash_before_private_commit: String,
+        crash_after_private_commit: String,
+        crash_during_runtime_completion: String,
+        lost_success_response: String,
+        retained_representation: String,
+        live_product_dual_write: bool,
+        source_deletion: bool,
+        studio_row_import: bool,
+        host_timestamp: String,
         hidden_clock_or_entropy: bool,
     }
 
@@ -4203,6 +4394,45 @@ mod tests {
         assert!(!policy.validation_mutation);
         assert!(!policy.source_deletion);
         assert!(!policy.dual_write);
+        assert!(!policy.hidden_clock_or_entropy);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_import_finalize_policy() {
+        let policy = toml::from_str::<ImportFinalizePolicy>(IMPORT_FINALIZE_POLICY)
+            .expect("import finalize policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(policy.input, "exact_legacy_import_validation");
+        assert_eq!(
+            policy.commit_order,
+            ["private_commit_marker", "runtime_atomic_completion"]
+        );
+        assert_eq!(policy.private_replay, "insert_or_ignore_then_exact_verify");
+        assert_eq!(policy.runtime_replay, "completed_receipt_exact_verify");
+        assert_eq!(
+            policy.crash_before_private_commit,
+            "journal_ready_no_private_marker"
+        );
+        assert_eq!(
+            policy.crash_after_private_commit,
+            "journal_ready_exact_private_marker_replay"
+        );
+        assert_eq!(
+            policy.crash_during_runtime_completion,
+            "runtime_transaction_rolls_back"
+        );
+        assert_eq!(
+            policy.lost_success_response,
+            "exact_completed_receipt_reconstructed"
+        );
+        assert_eq!(
+            policy.retained_representation,
+            "immutable_owned_legacy_staging"
+        );
+        assert!(!policy.live_product_dual_write);
+        assert!(!policy.source_deletion);
+        assert!(!policy.studio_row_import);
+        assert_eq!(policy.host_timestamp, "positive_monotonic_completion_time");
         assert!(!policy.hidden_clock_or_entropy);
     }
 
@@ -4972,6 +5202,75 @@ mod tests {
                 .expect("repeat private validation"),
             validation
         );
+        sqlx::query("INSERT INTO radroots_private_legacy_import_commits(import_id, validation_sha256, imported_row_count, committed_at_ms) VALUES (?, ?, 8, 13110)")
+            .bind(plan.import_id().as_bytes().as_slice()).bind(validation.validation_sha256().as_bytes().as_slice()).execute(reopened.private_pool()).await.expect("simulate private commit before runtime completion");
+        let receipt = reopened
+            .finalize_legacy_import(&classified, validation, 13_999)
+            .await
+            .expect("recover and finalize private import");
+        assert_eq!(receipt.validation_sha256(), validation.validation_sha256());
+        assert_eq!(receipt.imported_row_count(), 8);
+        assert_eq!(receipt.completed_at_unix_ms(), 13_110);
+        let completed = reopened
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("completed journal")
+            .expect("durable completed journal");
+        assert_eq!(completed.state(), LegacyImportState::Complete);
+        assert_eq!(completed.completed_at_unix_ms(), Some(13_110));
+        assert_eq!(
+            completed.members()[0].state(),
+            LegacyImportMemberState::Complete
+        );
+        assert_eq!(
+            reopened
+                .finalize_legacy_import(&classified, validation, 13_999)
+                .await
+                .expect("lost success response retry"),
+            receipt
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_runtime_legacy_import_commits"
+            )
+            .fetch_one(reopened.pool())
+            .await
+            .expect("runtime commit count"),
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_private_legacy_import_commits"
+            )
+            .fetch_one(reopened.private_pool())
+            .await
+            .expect("private commit count"),
+            1
+        );
+        for statement in [
+            "UPDATE radroots_runtime_legacy_import_commits SET imported_row_count = 9",
+            "DELETE FROM radroots_runtime_legacy_import_commits",
+        ] {
+            assert!(
+                sqlx::query(statement)
+                    .execute(reopened.pool())
+                    .await
+                    .is_err(),
+                "runtime commit guard accepted `{statement}`"
+            );
+        }
+        for statement in [
+            "UPDATE radroots_private_legacy_import_commits SET imported_row_count = 9",
+            "DELETE FROM radroots_private_legacy_import_commits",
+        ] {
+            assert!(
+                sqlx::query(statement)
+                    .execute(reopened.private_pool())
+                    .await
+                    .is_err(),
+                "private commit guard accepted `{statement}`"
+            );
+        }
         private_connection
             .close()
             .await
