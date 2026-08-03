@@ -16,6 +16,7 @@ const MAX_OPERATION_TIMEOUT_MS: u64 = 86_400_000;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum OperationKind {
+    Ingest,
     Pull,
     Sign,
     Deliver,
@@ -83,6 +84,9 @@ impl DeadlinePolicy {
 
     pub const fn timeout_ms(self, operation: OperationKind) -> u64 {
         match operation {
+            // Ingest performs local verification and one atomic commit. It
+            // shares the inbound operation budget with pull orchestration.
+            OperationKind::Ingest => self.pull_timeout_ms,
             OperationKind::Pull => self.pull_timeout_ms,
             OperationKind::Sign => self.sign_timeout_ms,
             OperationKind::Deliver => self.delivery_timeout_ms,
@@ -183,6 +187,11 @@ pub enum Error {
     DeadlineOverflow,
     MissingTransportCapability,
     SignerWithoutSink,
+    VerificationFailed,
+    PolicyRejected,
+    StorageConflict,
+    StorageFailed,
+    InvalidIngestReceipt,
 }
 
 impl core::fmt::Display for Error {
@@ -194,6 +203,11 @@ impl core::fmt::Display for Error {
             Self::DeadlineOverflow => "sync deadline overflowed",
             Self::MissingTransportCapability => "sync engine requires a source or sink",
             Self::SignerWithoutSink => "sync signer requires a sink",
+            Self::VerificationFailed => "sync event verification failed",
+            Self::PolicyRejected => "sync admission policy rejected the event",
+            Self::StorageConflict => "sync input conflicts with durable storage state",
+            Self::StorageFailed => "sync storage operation failed",
+            Self::InvalidIngestReceipt => "sync storage returned an invalid ingest receipt",
         })
     }
 }

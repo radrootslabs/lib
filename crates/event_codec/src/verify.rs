@@ -12,6 +12,29 @@ pub use radroots_event::admission::{
 // namespace while consumers move away from the superseded crate-root exports.
 pub use crate::verification::*;
 
+/// Deterministic BIP-340 verifier for canonical NIP-01 event envelopes.
+///
+/// This capability performs cryptographic verification only. Contract
+/// validation, host admission, and visibility remain later explicit stages.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Nip01SignatureVerifier;
+
+impl SignatureVerifier for Nip01SignatureVerifier {
+    fn verify_signature(
+        &self,
+        event: &radroots_event::envelope::EventEnvelope,
+    ) -> Result<(), VerificationError> {
+        let public_key = secp256k1::XOnlyPublicKey::from_slice(event.author().as_bytes())
+            .map_err(|_| VerificationError::MalformedEnvelope)?;
+        let signature = secp256k1::schnorr::Signature::from_slice(event.sig().as_bytes())
+            .map_err(|_| VerificationError::MalformedEnvelope)?;
+        let message = secp256k1::Message::from_digest(*event.id().as_bytes());
+        secp256k1::Secp256k1::verification_only()
+            .verify_schnorr(&signature, &message, &public_key)
+            .map_err(|_| VerificationError::SignatureInvalid)
+    }
+}
+
 /// Verifies that an event's declared identifier matches its canonical bytes.
 pub fn id(event: RawEvent) -> Result<IdVerifiedEvent, VerificationError> {
     event.verify_id()

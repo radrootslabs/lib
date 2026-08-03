@@ -36,8 +36,10 @@ radroots_storage = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true }
+sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
+futures-executor = { workspace = true }
 radroots_storage = { workspace = true, features = ["memory"] }
 
 [lints]
