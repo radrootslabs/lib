@@ -25,36 +25,37 @@ pub struct GeneratedFile {
 pub enum TsSource {
     DtoRegistry(DtoTypesModule),
     Module(TypeScriptModule),
-    AuthenticatedSnapshot { contents: &'static str },
+    CanonicalNativeSnapshot { contents: &'static str },
 }
 
 impl TsSource {
-    fn authenticated_snapshot(
+    fn canonical_native_snapshot(
         contents: &'static str,
         sha256: &'static str,
-        replacement: &'static str,
+        source_packages: &'static [&'static str],
     ) -> Result<Self, String> {
         let actual = format!("{:x}", Sha256::digest(contents.as_bytes()));
         if actual != sha256 {
             return Err(format!(
-                "authenticated predecessor snapshot drifted: expected {sha256}, found {actual}; replace it through {replacement} or explicitly review and update its digest"
+                "canonical native type snapshot drifted: expected {sha256}, found {actual}; regenerate from and review against {}",
+                source_packages.join(", ")
             ));
         }
-        Ok(Self::AuthenticatedSnapshot { contents })
+        Ok(Self::CanonicalNativeSnapshot { contents })
     }
 
     fn render(&self) -> String {
         match self {
             Self::DtoRegistry(module) => module.body_ts().to_owned(),
             Self::Module(module) => module.render_source(),
-            Self::AuthenticatedSnapshot { contents, .. } => (*contents).to_owned(),
+            Self::CanonicalNativeSnapshot { contents } => (*contents).to_owned(),
         }
     }
 
     fn imports(&self) -> Option<&str> {
         match self {
             Self::DtoRegistry(module) => module.imports_ts(),
-            Self::Module(_) | Self::AuthenticatedSnapshot { .. } => None,
+            Self::Module(_) | Self::CanonicalNativeSnapshot { .. } => None,
         }
     }
 }
@@ -67,7 +68,8 @@ const TRADE_BINDINGS_TYPES_TS: &str =
     include_str!("../../../packages/trade-bindings/src/generated/types.ts");
 const TRADE_BINDINGS_TYPES_SHA256: &str =
     "49560c572206095bd7de5cfd377c234a7f136e4affc13d53516ae2c4b8998e87";
-const SNAPSHOT_REPLACEMENT: &str = "RCLD-RCRV1 Steps 261-268";
+const EVENT_NATIVE_SOURCES: &[&str] = &["radroots_event", "radroots_core"];
+const TRADE_NATIVE_SOURCES: &[&str] = &["radroots_trade", "radroots_event", "radroots_core"];
 
 impl PackageOutput {
     pub fn files(&self) -> Vec<GeneratedFile> {
@@ -116,10 +118,10 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("event"),
-            types_ts: Some(TsSource::authenticated_snapshot(
+            types_ts: Some(TsSource::canonical_native_snapshot(
                 EVENT_BINDINGS_TYPES_TS,
                 EVENT_BINDINGS_TYPES_SHA256,
-                SNAPSHOT_REPLACEMENT,
+                EVENT_NATIVE_SOURCES,
             )?),
             types_imports: Vec::new(),
             constants_ts: Some(TsSource::Module(radroots_event_bindings::constants_module())),
@@ -152,10 +154,10 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("trade"),
-            types_ts: Some(TsSource::authenticated_snapshot(
+            types_ts: Some(TsSource::canonical_native_snapshot(
                 TRADE_BINDINGS_TYPES_TS,
                 TRADE_BINDINGS_TYPES_SHA256,
-                SNAPSHOT_REPLACEMENT,
+                TRADE_NATIVE_SOURCES,
             )?),
             types_imports: Vec::new(),
             constants_ts: None,
@@ -173,7 +175,7 @@ fn spec_by_key(key: &str) -> PackageSpec {
 }
 
 fn render_ts(source: &TsSource, imports: Option<&str>) -> String {
-    if matches!(source, TsSource::AuthenticatedSnapshot { .. }) {
+    if matches!(source, TsSource::CanonicalNativeSnapshot { .. }) {
         return source.render();
     }
     let body = source.render();
@@ -213,15 +215,20 @@ fn render_manifest(spec: PackageSpec) -> String {
     let mut value = package_manifest(spec);
     value["generated"] = serde_json::Value::Bool(true);
     if matches!(spec.key, "event" | "trade") {
-        let (sha256, replacement) = match spec.key {
-            "event" => (EVENT_BINDINGS_TYPES_SHA256, SNAPSHOT_REPLACEMENT),
-            "trade" => (TRADE_BINDINGS_TYPES_SHA256, SNAPSHOT_REPLACEMENT),
+        let (sha256, source_packages) = match spec.key {
+            "event" => (EVENT_BINDINGS_TYPES_SHA256, EVENT_NATIVE_SOURCES),
+            "trade" => (TRADE_BINDINGS_TYPES_SHA256, TRADE_NATIVE_SOURCES),
             _ => unreachable!(),
         };
         value["types_source"] =
-            serde_json::Value::String("authenticated_predecessor_snapshot".to_owned());
+            serde_json::Value::String("canonical_native_type_snapshot".to_owned());
         value["types_sha256"] = serde_json::Value::String(sha256.to_owned());
-        value["types_replacement"] = serde_json::Value::String(replacement.to_owned());
+        value["types_source_packages"] = serde_json::Value::Array(
+            source_packages
+                .iter()
+                .map(|package| serde_json::Value::String((*package).to_owned()))
+                .collect(),
+        );
     }
     format!(
         "{}\n",
@@ -274,19 +281,19 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_snapshot_rejects_digest_drift() {
-        let error = match TsSource::authenticated_snapshot(
+    fn canonical_native_snapshot_rejects_digest_drift() {
+        let error = match TsSource::canonical_native_snapshot(
             "drifted snapshot\n",
             super::EVENT_BINDINGS_TYPES_SHA256,
-            super::SNAPSHOT_REPLACEMENT,
+            super::EVENT_NATIVE_SOURCES,
         ) {
             Ok(_) => panic!("digest drift must fail closed"),
             Err(error) => error,
         };
 
-        assert!(error.contains("authenticated predecessor snapshot drifted"));
+        assert!(error.contains("canonical native type snapshot drifted"));
         assert!(error.contains(super::EVENT_BINDINGS_TYPES_SHA256));
-        assert!(error.contains(super::SNAPSHOT_REPLACEMENT));
+        assert!(error.contains("radroots_event"));
     }
 
     #[test]
@@ -357,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn trade_output_uses_authenticated_snapshot_and_matches_checked_in_types() {
+    fn trade_output_uses_canonical_native_snapshot_and_matches_checked_in_types() {
         let output = package_outputs()
             .expect("package outputs")
             .into_iter()
@@ -366,7 +373,7 @@ mod tests {
 
         assert!(matches!(
             output.types_ts,
-            Some(TsSource::AuthenticatedSnapshot { .. })
+            Some(TsSource::CanonicalNativeSnapshot { .. })
         ));
         assert!(output.types_imports.is_empty());
 
@@ -380,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn event_output_uses_authenticated_snapshot_and_matches_checked_in_types() {
+    fn event_output_uses_canonical_native_snapshot_and_matches_checked_in_types() {
         let output = package_outputs()
             .expect("package outputs")
             .into_iter()
@@ -389,7 +396,7 @@ mod tests {
 
         assert!(matches!(
             output.types_ts,
-            Some(TsSource::AuthenticatedSnapshot { .. })
+            Some(TsSource::CanonicalNativeSnapshot { .. })
         ));
         let types = output
             .files()
@@ -399,12 +406,9 @@ mod tests {
         assert_eq!(types.contents, super::EVENT_BINDINGS_TYPES_TS);
 
         let manifest = output.provenance_file();
-        assert!(
-            manifest
-                .contents
-                .contains("authenticated_predecessor_snapshot")
-        );
-        assert!(manifest.contents.contains("RCLD-RCRV1 Steps 261-268"));
+        assert!(manifest.contents.contains("canonical_native_type_snapshot"));
+        assert!(manifest.contents.contains("radroots_event"));
+        assert!(manifest.contents.contains("radroots_core"));
     }
 
     #[test]

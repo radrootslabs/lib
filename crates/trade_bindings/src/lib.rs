@@ -1,9 +1,8 @@
-//! Private inventory for the quarantined predecessor trade bindings.
+//! Private inventory for canonical native trade bindings.
 //!
-//! The authenticated TypeScript snapshot remains owned by the SDK generator
-//! until Steps 261-268 replace it from protocol and codec contracts. This
-//! crate intentionally does not activate code generation in a public runtime
-//! crate.
+//! The SDK generator authenticates the reviewed mapping against final
+//! `radroots_trade`, `radroots_event`, and `radroots_core` owners. This crate
+//! intentionally does not activate code generation in a public runtime crate.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TradeTypeDisposition {
