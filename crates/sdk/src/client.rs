@@ -96,6 +96,24 @@ impl ClientBuilder {
         self
     }
 
+    /// Installs a module-scoped signer provider over the canonical SPI and
+    /// records its presentation-independent runtime capability.
+    #[must_use]
+    pub fn signing(mut self, provider: crate::signing::Provider) -> Self {
+        let capability = match provider.mode() {
+            crate::signing::Mode::Local => Some(CapabilityId::LOCAL_SIGNING),
+            crate::signing::Mode::Nip46 => Some(CapabilityId::NIP46_SIGNING),
+            crate::signing::Mode::Host => None,
+        };
+        self.signer = Some(provider.into_signer());
+        if let Some(capability) = capability {
+            self.explicitly_configured_capabilities.insert(capability);
+            self.capability_availability
+                .insert(capability, Availability::Available);
+        }
+        self
+    }
+
     /// Injects an optional inbound event source.
     #[must_use]
     pub fn source(mut self, source: Arc<dyn EventSource>) -> Self {
@@ -445,6 +463,24 @@ mod tests {
             format!("{client:?}"),
             "Client { signer: true, source: false, sink: true, closed: false, .. }"
         );
+    }
+
+    #[cfg(feature = "local-signing")]
+    #[test]
+    fn module_scoped_signing_provider_configures_the_matching_capability() {
+        let signer = radroots_nostr::signing::LocalSigner::generate().expect("local signer");
+        let client = ClientBuilder::memory(generation())
+            .sink(Arc::new(TestSink))
+            .signing(crate::signing::Provider::local(signer))
+            .build()
+            .expect("client");
+        let status = client
+            .capabilities()
+            .get(CapabilityId::LOCAL_SIGNING)
+            .expect("local signing");
+        assert!(status.is_compiled());
+        assert!(status.is_configured());
+        assert_eq!(status.availability(), Availability::Available);
     }
 
     #[test]
