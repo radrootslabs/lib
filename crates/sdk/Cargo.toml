@@ -101,5 +101,14 @@ path = "tests/lifecycle.rs"
 name = "public_api"
 path = "tests/public_api.rs"
 
+[[example]]
+name = "safe_memory_client"
+path = "examples/safe_memory_client.rs"
+required-features = ["memory"]
+
+[[example]]
+name = "transport_profile"
+path = "examples/transport_profile.rs"
+
 [lints]
 workspace = true
