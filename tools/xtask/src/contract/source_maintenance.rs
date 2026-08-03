@@ -79,7 +79,7 @@ const NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_ID: &str =
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "d0d63d48cb12cf733adf7b8e6f102133458b084950a7f5aec2cdeeae2a97d369";
+    "5651254346fd48eecf52cbe1efaec93f67d19fb11e6892cc8e4f402b919e171a";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",

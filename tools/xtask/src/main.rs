@@ -14,6 +14,7 @@ mod generate;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod hygiene;
 mod release_qualification;
+mod target_qualification;
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -35,6 +36,7 @@ fn usage() {
     eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask release qualify-features");
+    eprintln!("  cargo xtask release qualify-targets");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask coverage required-crates");
     eprintln!("  cargo xtask coverage workspace-crates");
@@ -109,6 +111,7 @@ fn run_release(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("preflight") => release_preflight(),
         Some("qualify-features") => release_qualification::run_feature_matrix(&workspace_root()),
+        Some("qualify-targets") => target_qualification::run(&workspace_root()),
         _ => Err("unknown release subcommand".to_string()),
     }
 }

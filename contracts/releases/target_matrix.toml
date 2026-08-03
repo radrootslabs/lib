@@ -1,0 +1,18 @@
+schema_version = 1
+msrv_toolchain = "1.97.1"
+current_toolchain = "stable"
+
+[[operating_system]]
+name = "linux"
+target = "x86_64-unknown-linux-gnu"
+cross_compiler = "zig cc"
+cross_cflags = "-target x86_64-linux-gnu"
+
+[[operating_system]]
+name = "macos"
+target = "aarch64-apple-darwin"
+
+[[operating_system]]
+name = "windows"
+target = "x86_64-pc-windows-gnu"
+cross_compiler = "x86_64-w64-mingw32-gcc"
