@@ -81,10 +81,12 @@ check before handing control to another network boundary.
 
 ## Fetch, delivery, and outcome behavior
 
-Fetch accepts only configured Nostr targets, applies the request page bound,
-deduplicates events by event ID, preserves per-relay provenance, and emits an
-opaque versioned cursor when more results remain. Malformed relay events are
-ignored and reported as a partial target outcome rather than admitted.
+Fetch accepts only configured Nostr targets, translates transport-neutral kind,
+author, and event-time selectors into Nostr filters, reapplies those selectors
+defensively, applies the request page bound, deduplicates events by event ID,
+preserves per-relay provenance, and emits an opaque versioned cursor when more
+results remain. Malformed relay events are ignored and reported as a partial
+target outcome rather than admitted.
 
 Delivery converts an already validated signed Radroots event to Nostr, attempts
 each configured target once, and returns one normalized receipt entry per

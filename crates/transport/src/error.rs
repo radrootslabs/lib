@@ -24,9 +24,14 @@ pub enum RadrootsTransportError {
     InvalidFetchRequestId,
     InvalidFetchLimit,
     InvalidFetchDeadline,
+    FetchSelectorTooLarge,
+    DuplicateFetchKind,
+    DuplicateFetchAuthor,
+    InvalidFetchTimeRange,
     EmptyFetchCursor,
     InvalidFetchCursor,
     InvalidObservedAt,
+    UnexpectedFetchEvent,
     UnexpectedFetchProvenance,
     UnexpectedFetchTargetOutcome,
     DuplicateFetchTargetOutcome,
@@ -83,9 +88,24 @@ impl fmt::Display for RadrootsTransportError {
             Self::InvalidFetchRequestId => f.write_str("transport fetch request id is invalid"),
             Self::InvalidFetchLimit => f.write_str("transport fetch limit is invalid"),
             Self::InvalidFetchDeadline => f.write_str("transport fetch deadline is invalid"),
+            Self::FetchSelectorTooLarge => {
+                f.write_str("transport fetch selector exceeds its item limit")
+            }
+            Self::DuplicateFetchKind => {
+                f.write_str("transport fetch selector contains a duplicate event kind")
+            }
+            Self::DuplicateFetchAuthor => {
+                f.write_str("transport fetch selector contains a duplicate author")
+            }
+            Self::InvalidFetchTimeRange => {
+                f.write_str("transport fetch selector time range is invalid")
+            }
             Self::EmptyFetchCursor => f.write_str("transport fetch cursor is empty"),
             Self::InvalidFetchCursor => f.write_str("transport fetch cursor is invalid"),
             Self::InvalidObservedAt => f.write_str("transport event observation time is invalid"),
+            Self::UnexpectedFetchEvent => {
+                f.write_str("transport fetch page contains an event outside its selector")
+            }
             Self::UnexpectedFetchProvenance => {
                 f.write_str("transport fetch page contains unexpected event provenance")
             }

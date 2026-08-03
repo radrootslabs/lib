@@ -95,6 +95,8 @@ pub radroots_transport::error::RadrootsTransportError::DeliveryReceiptTargetSetM
 pub radroots_transport::error::RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
 pub radroots_transport::error::RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
 pub radroots_transport::error::RadrootsTransportError::DuplicateDeliveryTargetReceipt
+pub radroots_transport::error::RadrootsTransportError::DuplicateFetchAuthor
+pub radroots_transport::error::RadrootsTransportError::DuplicateFetchKind
 pub radroots_transport::error::RadrootsTransportError::DuplicateFetchTargetOutcome
 pub radroots_transport::error::RadrootsTransportError::DuplicateRequiredTargetFingerprint
 pub radroots_transport::error::RadrootsTransportError::DuplicateTargetFingerprint
@@ -112,6 +114,7 @@ pub radroots_transport::error::RadrootsTransportError::EmptyTargetUri
 pub radroots_transport::error::RadrootsTransportError::EmptyTransportKind
 pub radroots_transport::error::RadrootsTransportError::FetchPageLimitExceeded
 pub radroots_transport::error::RadrootsTransportError::FetchPageRequestMismatch
+pub radroots_transport::error::RadrootsTransportError::FetchSelectorTooLarge
 pub radroots_transport::error::RadrootsTransportError::InvalidDeliveryDeadline
 pub radroots_transport::error::RadrootsTransportError::InvalidDeliveryOutcome
 pub radroots_transport::error::RadrootsTransportError::InvalidDeliveryRequestId
@@ -120,6 +123,7 @@ pub radroots_transport::error::RadrootsTransportError::InvalidFetchCursor
 pub radroots_transport::error::RadrootsTransportError::InvalidFetchDeadline
 pub radroots_transport::error::RadrootsTransportError::InvalidFetchLimit
 pub radroots_transport::error::RadrootsTransportError::InvalidFetchRequestId
+pub radroots_transport::error::RadrootsTransportError::InvalidFetchTimeRange
 pub radroots_transport::error::RadrootsTransportError::InvalidObservedAt
 pub radroots_transport::error::RadrootsTransportError::InvalidPayloadBytes
 pub radroots_transport::error::RadrootsTransportError::InvalidPayloadDigest
@@ -137,6 +141,7 @@ pub radroots_transport::error::RadrootsTransportError::RequiredTargetNotRequeste
 pub radroots_transport::error::RadrootsTransportError::TargetSetTooLarge
 pub radroots_transport::error::RadrootsTransportError::TransportOutcomeStatusMismatch
 pub radroots_transport::error::RadrootsTransportError::UnexpectedDeliveryTargetReceipt
+pub radroots_transport::error::RadrootsTransportError::UnexpectedFetchEvent
 pub radroots_transport::error::RadrootsTransportError::UnexpectedFetchProvenance
 pub radroots_transport::error::RadrootsTransportError::UnexpectedFetchTargetOutcome
 pub radroots_transport::error::RadrootsTransportError::UnsupportedOperation
@@ -199,11 +204,15 @@ impl radroots_transport::policy::SatisfactionPolicy
 pub const fn radroots_transport::policy::SatisfactionPolicy::class(&self) -> radroots_transport::policy::SatisfactionClass
 pub const fn radroots_transport::policy::SatisfactionPolicy::new(radroots_transport::policy::SatisfactionClass, radroots_transport::policy::TargetPolicy) -> Self
 pub const fn radroots_transport::policy::SatisfactionPolicy::targets(&self) -> &radroots_transport::policy::TargetPolicy
+pub fn radroots_transport::policy::SatisfactionPolicy::validate_for(&self, &radroots_transport::target::TargetSet) -> core::result::Result<(), radroots_transport::error::Error>
 pub struct radroots_transport::policy::TargetPolicy
 impl radroots_transport::policy::TargetPolicy
 pub const fn radroots_transport::policy::TargetPolicy::all() -> Self
 pub const fn radroots_transport::policy::TargetPolicy::any() -> Self
+pub const fn radroots_transport::policy::TargetPolicy::is_all(&self) -> bool
+pub const fn radroots_transport::policy::TargetPolicy::is_any(&self) -> bool
 pub const fn radroots_transport::policy::TargetPolicy::quorum(u16) -> core::result::Result<Self, radroots_transport::error::Error>
+pub const fn radroots_transport::policy::TargetPolicy::quorum_threshold(&self) -> core::option::Option<u16>
 pub fn radroots_transport::policy::TargetPolicy::required(alloc::vec::Vec<radroots_transport::target::TargetFingerprint>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::policy::TargetPolicy::required_targets(&self) -> core::option::Option<&[radroots_transport::target::TargetFingerprint]>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::policy::TargetPolicy
@@ -313,8 +322,10 @@ pub const fn radroots_transport::source::FetchRequest::bounds(&self) -> radroots
 pub fn radroots_transport::source::FetchRequest::cursor(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
 pub fn radroots_transport::source::FetchRequest::new(impl core::convert::Into<alloc::string::String>, radroots_transport::target::TargetSet, radroots_transport::source::FetchBounds) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::source::FetchRequest::request_id(&self) -> &radroots_transport::source::FetchRequestId
+pub const fn radroots_transport::source::FetchRequest::selector(&self) -> &radroots_transport::source::FetchSelector
 pub fn radroots_transport::source::FetchRequest::target_set(&self) -> &radroots_transport::target::TargetSet
 pub fn radroots_transport::source::FetchRequest::with_cursor(self, radroots_transport::source::FetchCursor) -> Self
+pub fn radroots_transport::source::FetchRequest::with_selector(self, radroots_transport::source::FetchSelector) -> Self
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::FetchRequest
 pub fn radroots_transport::source::FetchRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::source::FetchRequestId(_)
@@ -327,6 +338,20 @@ impl serde_core::ser::Serialize for radroots_transport::source::FetchRequestId
 pub fn radroots_transport::source::FetchRequestId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::FetchRequestId
 pub fn radroots_transport::source::FetchRequestId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::source::FetchSelector
+impl radroots_transport::source::FetchSelector
+pub const fn radroots_transport::source::FetchSelector::all() -> Self
+pub fn radroots_transport::source::FetchSelector::authors(&self) -> &[radroots_identity::key::PublicKey]
+pub fn radroots_transport::source::FetchSelector::kinds(&self) -> &[u32]
+pub fn radroots_transport::source::FetchSelector::matches(&self, &radroots_event::draft::SignedEvent) -> bool
+pub const fn radroots_transport::source::FetchSelector::since_unix_seconds(&self) -> core::option::Option<u64>
+pub const fn radroots_transport::source::FetchSelector::until_unix_seconds(&self) -> core::option::Option<u64>
+pub fn radroots_transport::source::FetchSelector::with_authors(self, alloc::vec::Vec<radroots_identity::key::PublicKey>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::source::FetchSelector::with_kinds(self, alloc::vec::Vec<u32>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::source::FetchSelector::with_since_unix_seconds(self, u64) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::source::FetchSelector::with_until_unix_seconds(self, u64) -> core::result::Result<Self, radroots_transport::error::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::FetchSelector
+pub fn radroots_transport::source::FetchSelector::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::source::ObservedEvent
 impl radroots_transport::source::ObservedEvent
 pub const fn radroots_transport::source::ObservedEvent::event(&self) -> &radroots_event::draft::SignedEvent
@@ -345,6 +370,8 @@ pub const fn radroots_transport::SourceStatus::transport_id(&self) -> radroots_t
 pub const radroots_transport::source::FETCH_CURSOR_MAX_BYTES: usize
 pub const radroots_transport::source::FETCH_PAGE_MAX_EVENTS: u16
 pub const radroots_transport::source::FETCH_REQUEST_ID_MAX_BYTES: usize
+pub const radroots_transport::source::FETCH_SELECTOR_MAX_AUTHORS: usize
+pub const radroots_transport::source::FETCH_SELECTOR_MAX_KINDS: usize
 pub trait radroots_transport::source::EventSource: core::marker::Send + core::marker::Sync
 pub fn radroots_transport::source::EventSource::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
 pub fn radroots_transport::source::EventSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SourceStatus, radroots_transport::error::Error>>
@@ -464,6 +491,8 @@ pub radroots_transport::RadrootsTransportError::DeliveryReceiptTargetSetMismatch
 pub radroots_transport::RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
 pub radroots_transport::RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
 pub radroots_transport::RadrootsTransportError::DuplicateDeliveryTargetReceipt
+pub radroots_transport::RadrootsTransportError::DuplicateFetchAuthor
+pub radroots_transport::RadrootsTransportError::DuplicateFetchKind
 pub radroots_transport::RadrootsTransportError::DuplicateFetchTargetOutcome
 pub radroots_transport::RadrootsTransportError::DuplicateRequiredTargetFingerprint
 pub radroots_transport::RadrootsTransportError::DuplicateTargetFingerprint
@@ -481,6 +510,7 @@ pub radroots_transport::RadrootsTransportError::EmptyTargetUri
 pub radroots_transport::RadrootsTransportError::EmptyTransportKind
 pub radroots_transport::RadrootsTransportError::FetchPageLimitExceeded
 pub radroots_transport::RadrootsTransportError::FetchPageRequestMismatch
+pub radroots_transport::RadrootsTransportError::FetchSelectorTooLarge
 pub radroots_transport::RadrootsTransportError::InvalidDeliveryDeadline
 pub radroots_transport::RadrootsTransportError::InvalidDeliveryOutcome
 pub radroots_transport::RadrootsTransportError::InvalidDeliveryRequestId
@@ -489,6 +519,7 @@ pub radroots_transport::RadrootsTransportError::InvalidFetchCursor
 pub radroots_transport::RadrootsTransportError::InvalidFetchDeadline
 pub radroots_transport::RadrootsTransportError::InvalidFetchLimit
 pub radroots_transport::RadrootsTransportError::InvalidFetchRequestId
+pub radroots_transport::RadrootsTransportError::InvalidFetchTimeRange
 pub radroots_transport::RadrootsTransportError::InvalidObservedAt
 pub radroots_transport::RadrootsTransportError::InvalidPayloadBytes
 pub radroots_transport::RadrootsTransportError::InvalidPayloadDigest
@@ -506,6 +537,7 @@ pub radroots_transport::RadrootsTransportError::RequiredTargetNotRequested
 pub radroots_transport::RadrootsTransportError::TargetSetTooLarge
 pub radroots_transport::RadrootsTransportError::TransportOutcomeStatusMismatch
 pub radroots_transport::RadrootsTransportError::UnexpectedDeliveryTargetReceipt
+pub radroots_transport::RadrootsTransportError::UnexpectedFetchEvent
 pub radroots_transport::RadrootsTransportError::UnexpectedFetchProvenance
 pub radroots_transport::RadrootsTransportError::UnexpectedFetchTargetOutcome
 pub radroots_transport::RadrootsTransportError::UnsupportedOperation
@@ -641,8 +673,10 @@ pub const fn radroots_transport::source::FetchRequest::bounds(&self) -> radroots
 pub fn radroots_transport::source::FetchRequest::cursor(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
 pub fn radroots_transport::source::FetchRequest::new(impl core::convert::Into<alloc::string::String>, radroots_transport::target::TargetSet, radroots_transport::source::FetchBounds) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::source::FetchRequest::request_id(&self) -> &radroots_transport::source::FetchRequestId
+pub const fn radroots_transport::source::FetchRequest::selector(&self) -> &radroots_transport::source::FetchSelector
 pub fn radroots_transport::source::FetchRequest::target_set(&self) -> &radroots_transport::target::TargetSet
 pub fn radroots_transport::source::FetchRequest::with_cursor(self, radroots_transport::source::FetchCursor) -> Self
+pub fn radroots_transport::source::FetchRequest::with_selector(self, radroots_transport::source::FetchSelector) -> Self
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::FetchRequest
 pub fn radroots_transport::source::FetchRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::RadrootsTransportCapabilities

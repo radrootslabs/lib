@@ -13,12 +13,73 @@ use radroots_transport::{
     outcome::{FetchTargetOutcome, FetchTargetState},
     source::{
         EventProvenance, FETCH_CURSOR_MAX_BYTES, FETCH_PAGE_MAX_EVENTS, FETCH_REQUEST_ID_MAX_BYTES,
-        FetchBounds, FetchCursor, NextPage, ObservedEvent,
+        FETCH_SELECTOR_MAX_AUTHORS, FETCH_SELECTOR_MAX_KINDS, FetchBounds, FetchCursor,
+        FetchSelector, NextPage, ObservedEvent,
     },
 };
 
 fn target(uri: &str) -> Target {
     Target::nostr_relay(uri).expect("nostr target")
+}
+
+#[test]
+fn fetch_selector_is_bounded_canonical_and_request_bound() {
+    let event = signed_event();
+    let author = *event.pubkey();
+    let selector = FetchSelector::all()
+        .with_kinds(vec![1, 0])
+        .expect("kind selector")
+        .with_authors(vec![author])
+        .expect("author selector")
+        .with_since_unix_seconds(1_700_000_000)
+        .expect("since")
+        .with_until_unix_seconds(1_700_000_100)
+        .expect("until");
+
+    assert_eq!(selector.kinds(), &[0, 1]);
+    assert_eq!(selector.authors(), &[author]);
+    assert!(selector.matches(&event));
+    assert_eq!(
+        FetchSelector::all()
+            .with_kinds(vec![1, 1])
+            .expect_err("duplicate kind"),
+        Error::DuplicateFetchKind
+    );
+    assert_eq!(
+        FetchSelector::all()
+            .with_authors(vec![author, author])
+            .expect_err("duplicate author"),
+        Error::DuplicateFetchAuthor
+    );
+    assert_eq!(
+        FetchSelector::all()
+            .with_kinds(vec![0; FETCH_SELECTOR_MAX_KINDS + 1])
+            .expect_err("too many kinds"),
+        Error::FetchSelectorTooLarge
+    );
+    assert_eq!(
+        FetchSelector::all()
+            .with_authors(vec![author; FETCH_SELECTOR_MAX_AUTHORS + 1])
+            .expect_err("too many authors"),
+        Error::FetchSelectorTooLarge
+    );
+    assert_eq!(
+        FetchSelector::all()
+            .with_since_unix_seconds(2)
+            .and_then(|selector| selector.with_until_unix_seconds(1))
+            .expect_err("reversed range"),
+        Error::InvalidFetchTimeRange
+    );
+
+    let targets = TargetSet::new(vec![target("wss://one.example")]).expect("targets");
+    let selected = request(targets.clone(), 1).with_selector(selector);
+    let page = FetchPage::for_request(&selected, Vec::new(), Vec::new(), NextPage::Complete)
+        .expect("selected page");
+    assert_eq!(
+        page.validate_for_request(&request(targets, 1))
+            .expect_err("selector mismatch"),
+        Error::FetchPageRequestMismatch
+    );
 }
 
 fn signed_event() -> SignedEvent {

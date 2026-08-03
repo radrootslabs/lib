@@ -3,7 +3,7 @@
 use crate::{NostrTransport, RelayUrl, status};
 use core::cmp::Ordering;
 use core::time::Duration;
-use nostr_sdk::prelude::{Filter, JsonUtil, Timestamp};
+use nostr_sdk::prelude::{Filter, JsonUtil, Kind, Timestamp};
 use radroots_transport::{
     BoxFuture, EventSource, FetchPage, FetchRequest,
     outcome::{FetchTargetOutcome, FetchTargetState},
@@ -18,6 +18,7 @@ const CURSOR_PREFIX: &str = "nostr-v1";
 #[derive(Clone, Debug)]
 pub(crate) struct SourceQuery {
     relays: Vec<RelayUrl>,
+    selector: radroots_transport::source::FetchSelector,
     until_unix_seconds: Option<u64>,
     connect_timeout: Duration,
     timeout: Duration,
@@ -58,11 +59,39 @@ impl RelaySourceClient for LiveRelaySourceClient {
             for relay in query.relays {
                 let url = relay.as_str().to_owned();
                 let result = async {
+                    let kinds = query
+                        .selector
+                        .kinds()
+                        .iter()
+                        .filter_map(|kind| u16::try_from(*kind).ok())
+                        .map(Kind::from)
+                        .collect::<Vec<_>>();
+                    if !query.selector.kinds().is_empty() && kinds.is_empty() {
+                        return Ok(Vec::new());
+                    }
+                    let authors = query
+                        .selector
+                        .authors()
+                        .iter()
+                        .filter_map(|author| radroots_nostr::key::public_key_to_nostr(*author).ok())
+                        .collect::<Vec<_>>();
+                    if authors.len() != query.selector.authors().len() {
+                        return Ok(Vec::new());
+                    }
                     self.client.add_relay(url.as_str()).await?;
                     self.client
                         .try_connect_relay(url.as_str(), query.connect_timeout)
                         .await?;
                     let mut filter = Filter::new().limit(UPSTREAM_FETCH_LIMIT);
+                    if !kinds.is_empty() {
+                        filter = filter.kinds(kinds);
+                    }
+                    if !authors.is_empty() {
+                        filter = filter.authors(authors);
+                    }
+                    if let Some(since) = query.selector.since_unix_seconds() {
+                        filter = filter.since(Timestamp::from_secs(since));
+                    }
                     if let Some(until) = query.until_unix_seconds {
                         filter = filter.until(Timestamp::from_secs(until));
                     }
@@ -100,6 +129,7 @@ impl EventSource for NostrTransport {
     ) -> BoxFuture<'_, Result<FetchPage, radroots_transport::Error>> {
         Box::pin(async move {
             let cursor = request.cursor().map(parse_cursor).transpose()?.flatten();
+            let selector_until = request.selector().until_unix_seconds();
             let now_ms = unix_time_ms();
             let remaining_ms = request.bounds().deadline_unix_ms().saturating_sub(now_ms);
             let timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
@@ -137,7 +167,13 @@ impl EventSource for NostrTransport {
                 .source_client
                 .fetch(SourceQuery {
                     relays: targets.keys().cloned().collect(),
-                    until_unix_seconds: cursor.as_ref().map(|cursor| cursor.created_at),
+                    selector: request.selector().clone(),
+                    until_unix_seconds: match (selector_until, cursor.as_ref()) {
+                        (Some(until), Some(cursor)) => Some(until.min(cursor.created_at)),
+                        (Some(until), None) => Some(until),
+                        (None, Some(cursor)) => Some(cursor.created_at),
+                        (None, None) => None,
+                    },
                     connect_timeout: Duration::from_millis(
                         timeout_ms.min(self.config().connect_timeout_ms()),
                     ),
@@ -162,12 +198,15 @@ impl EventSource for NostrTransport {
                         succeeded += 1;
                         for raw in raw_events {
                             match radroots_event_codec::decode::signed_event(raw.as_str()) {
-                                Ok(event) => candidates.push(Candidate {
-                                    relay: batch.relay.clone(),
-                                    created_at: event.created_at(),
-                                    event_id: event.id_str().to_owned(),
-                                    raw,
-                                }),
+                                Ok(event) if request.selector().matches(&event) => {
+                                    candidates.push(Candidate {
+                                        relay: batch.relay.clone(),
+                                        created_at: event.created_at(),
+                                        event_id: event.id_str().to_owned(),
+                                        raw,
+                                    })
+                                }
+                                Ok(_) => {}
                                 Err(_) => {
                                     *malformed_by_relay.entry(batch.relay.clone()).or_default() +=
                                         1;
@@ -311,7 +350,7 @@ mod tests {
     use crate::{Config, RelayUrlPolicy};
     use radroots_transport::{
         FetchRequest, Target, TargetSet,
-        source::{FetchBounds, NextPage},
+        source::{FetchBounds, FetchSelector, NextPage},
     };
     use std::sync::{
         Arc,
@@ -387,6 +426,31 @@ mod tests {
             first.events()[0].event().id(),
             second.events()[0].event().id()
         );
+    }
+
+    #[test]
+    fn source_applies_kind_author_and_time_selectors_before_page_bounds() {
+        let event = radroots_event_codec::decode::signed_event(FIRST).expect("fixture event");
+        let selector = FetchSelector::all()
+            .with_kinds(vec![0])
+            .expect("kind")
+            .with_authors(vec![*event.pubkey()])
+            .expect("author")
+            .with_since_unix_seconds(1_750_000_000)
+            .expect("since");
+        let selected =
+            futures::executor::block_on(transport().fetch(request(10).with_selector(selector)))
+                .expect("selected page");
+        assert_eq!(selected.events().len(), 1);
+        assert_eq!(selected.events()[0].event().id_str(), event.id_str());
+
+        let excluded = FetchSelector::all()
+            .with_kinds(vec![1])
+            .expect("excluded kind");
+        let selected =
+            futures::executor::block_on(transport().fetch(request(10).with_selector(excluded)))
+                .expect("empty selected page");
+        assert!(selected.events().is_empty());
     }
 
     #[test]

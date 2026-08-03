@@ -8,6 +8,7 @@ use crate::{
 use alloc::{boxed::Box, collections::BTreeSet, string::String, vec::Vec};
 use core::{fmt, future::Future, pin::Pin};
 use radroots_event::SignedEvent;
+use radroots_identity::PublicKey;
 
 pub use crate::status::SourceStatus;
 
@@ -17,6 +18,10 @@ pub const FETCH_REQUEST_ID_MAX_BYTES: usize = 256;
 pub const FETCH_CURSOR_MAX_BYTES: usize = 2_048;
 /// Maximum number of events one page may request.
 pub const FETCH_PAGE_MAX_EVENTS: u16 = 1_000;
+/// Maximum distinct event kinds in one source selector.
+pub const FETCH_SELECTOR_MAX_KINDS: usize = 64;
+/// Maximum distinct event authors in one source selector.
+pub const FETCH_SELECTOR_MAX_AUTHORS: usize = 256;
 
 /// Heap-backed future returned by transport SPIs.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -119,6 +124,111 @@ impl FetchBounds {
     }
 }
 
+/// Transport-neutral constraints applied before a source page is bounded.
+///
+/// An empty kind or author collection means "any" for that dimension. Time
+/// bounds are inclusive Unix seconds. Adapters must apply every configured
+/// dimension remotely when their protocol supports it and must defensively
+/// exclude non-matching events before returning a page.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct FetchSelector {
+    kinds: Vec<u32>,
+    authors: Vec<PublicKey>,
+    since_unix_seconds: Option<u64>,
+    until_unix_seconds: Option<u64>,
+}
+
+impl FetchSelector {
+    /// Creates a selector that accepts every event within request bounds.
+    #[must_use]
+    pub const fn all() -> Self {
+        Self {
+            kinds: Vec::new(),
+            authors: Vec::new(),
+            since_unix_seconds: None,
+            until_unix_seconds: None,
+        }
+    }
+
+    /// Restricts the selector to exact, unique event kinds.
+    pub fn with_kinds(mut self, mut kinds: Vec<u32>) -> Result<Self, Error> {
+        if kinds.len() > FETCH_SELECTOR_MAX_KINDS {
+            return Err(Error::FetchSelectorTooLarge);
+        }
+        kinds.sort_unstable();
+        if kinds.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(Error::DuplicateFetchKind);
+        }
+        self.kinds = kinds;
+        Ok(self)
+    }
+
+    /// Restricts the selector to exact, unique canonical authors.
+    pub fn with_authors(mut self, mut authors: Vec<PublicKey>) -> Result<Self, Error> {
+        if authors.len() > FETCH_SELECTOR_MAX_AUTHORS {
+            return Err(Error::FetchSelectorTooLarge);
+        }
+        authors.sort();
+        if authors.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(Error::DuplicateFetchAuthor);
+        }
+        self.authors = authors;
+        Ok(self)
+    }
+
+    /// Sets an inclusive lower event-time bound.
+    pub fn with_since_unix_seconds(mut self, since: u64) -> Result<Self, Error> {
+        if self.until_unix_seconds.is_some_and(|until| since > until) {
+            return Err(Error::InvalidFetchTimeRange);
+        }
+        self.since_unix_seconds = Some(since);
+        Ok(self)
+    }
+
+    /// Sets an inclusive upper event-time bound.
+    pub fn with_until_unix_seconds(mut self, until: u64) -> Result<Self, Error> {
+        if self.since_unix_seconds.is_some_and(|since| since > until) {
+            return Err(Error::InvalidFetchTimeRange);
+        }
+        self.until_unix_seconds = Some(until);
+        Ok(self)
+    }
+
+    /// Returns sorted exact event kinds, or an empty slice for any kind.
+    pub fn kinds(&self) -> &[u32] {
+        self.kinds.as_slice()
+    }
+
+    /// Returns sorted exact authors, or an empty slice for any author.
+    pub fn authors(&self) -> &[PublicKey] {
+        self.authors.as_slice()
+    }
+
+    /// Returns the inclusive lower event-time bound.
+    pub const fn since_unix_seconds(&self) -> Option<u64> {
+        self.since_unix_seconds
+    }
+
+    /// Returns the inclusive upper event-time bound.
+    pub const fn until_unix_seconds(&self) -> Option<u64> {
+        self.until_unix_seconds
+    }
+
+    /// Returns whether one canonical signed event satisfies every dimension.
+    #[must_use]
+    pub fn matches(&self, event: &SignedEvent) -> bool {
+        (self.kinds.is_empty() || self.kinds.binary_search(&event.kind()).is_ok())
+            && (self.authors.is_empty() || self.authors.binary_search(event.pubkey()).is_ok())
+            && self
+                .since_unix_seconds
+                .is_none_or(|since| event.created_at() >= since)
+            && self
+                .until_unix_seconds
+                .is_none_or(|until| event.created_at() <= until)
+    }
+}
+
 /// Bounded request for one page from one or more transport targets.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -127,6 +237,7 @@ pub struct FetchRequest {
     target_set: TargetSet,
     bounds: FetchBounds,
     cursor: Option<FetchCursor>,
+    selector: FetchSelector,
 }
 
 impl FetchRequest {
@@ -141,6 +252,7 @@ impl FetchRequest {
             target_set,
             bounds,
             cursor: None,
+            selector: FetchSelector::all(),
         })
     }
 
@@ -148,6 +260,13 @@ impl FetchRequest {
     #[must_use]
     pub fn with_cursor(mut self, cursor: FetchCursor) -> Self {
         self.cursor = Some(cursor);
+        self
+    }
+
+    /// Applies explicit transport-neutral event constraints.
+    #[must_use]
+    pub fn with_selector(mut self, selector: FetchSelector) -> Self {
+        self.selector = selector;
         self
     }
 
@@ -169,6 +288,11 @@ impl FetchRequest {
     /// Returns the continuation cursor, when this is not a first-page request.
     pub fn cursor(&self) -> Option<&FetchCursor> {
         self.cursor.as_ref()
+    }
+
+    /// Returns the exact event constraints for this request.
+    pub const fn selector(&self) -> &FetchSelector {
+        &self.selector
     }
 }
 
@@ -278,6 +402,7 @@ pub struct FetchPage {
     request_id: FetchRequestId,
     target_set: TargetSet,
     limit: u16,
+    selector: FetchSelector,
     events: Vec<ObservedEvent>,
     target_outcomes: Vec<FetchTargetOutcome>,
     next_page: NextPage,
@@ -295,6 +420,7 @@ impl FetchPage {
             request_id: request.request_id.clone(),
             target_set: request.target_set.clone(),
             limit: request.bounds.limit,
+            selector: request.selector.clone(),
             events,
             target_outcomes,
             next_page,
@@ -313,6 +439,9 @@ impl FetchPage {
         }
 
         for observed in &self.events {
+            if !self.selector.matches(observed.event()) {
+                return Err(Error::UnexpectedFetchEvent);
+            }
             let provenance = observed.provenance();
             let Some(target) = self
                 .target_set
@@ -351,6 +480,7 @@ impl FetchPage {
         if &self.request_id != request.request_id()
             || self.target_set != *request.target_set()
             || self.limit != request.bounds().limit()
+            || self.selector != *request.selector()
         {
             return Err(Error::FetchPageRequestMismatch);
         }
@@ -465,6 +595,8 @@ mod serde_impl {
         target_set: TargetSet,
         bounds: FetchBounds,
         cursor: Option<FetchCursor>,
+        #[serde(default)]
+        selector: FetchSelector,
     }
 
     impl<'de> serde::Deserialize<'de> for FetchRequest {
@@ -474,11 +606,44 @@ mod serde_impl {
         {
             let wire = FetchRequestWire::deserialize(deserializer)?;
             Self::new(wire.request_id, wire.target_set, wire.bounds)
+                .map(|request| request.with_selector(wire.selector))
                 .map(|request| match wire.cursor {
                     Some(cursor) => request.with_cursor(cursor),
                     None => request,
                 })
                 .map_err(serde::de::Error::custom)
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for FetchSelector {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            #[derive(serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Wire {
+                #[serde(default)]
+                kinds: Vec<u32>,
+                #[serde(default)]
+                authors: Vec<PublicKey>,
+                since_unix_seconds: Option<u64>,
+                until_unix_seconds: Option<u64>,
+            }
+
+            let wire = Wire::deserialize(deserializer)?;
+            let selector = FetchSelector::all()
+                .with_kinds(wire.kinds)
+                .and_then(|selector| selector.with_authors(wire.authors))
+                .and_then(|selector| match wire.since_unix_seconds {
+                    Some(since) => selector.with_since_unix_seconds(since),
+                    None => Ok(selector),
+                })
+                .and_then(|selector| match wire.until_unix_seconds {
+                    Some(until) => selector.with_until_unix_seconds(until),
+                    None => Ok(selector),
+                });
+            selector.map_err(serde::de::Error::custom)
         }
     }
 
@@ -512,6 +677,8 @@ mod serde_impl {
         request_id: FetchRequestId,
         target_set: TargetSet,
         limit: u16,
+        #[serde(default)]
+        selector: FetchSelector,
         events: Vec<ObservedEvent>,
         target_outcomes: Vec<FetchTargetOutcome>,
         next_page: NextPage,
@@ -527,6 +694,7 @@ mod serde_impl {
                 request_id: wire.request_id,
                 target_set: wire.target_set,
                 limit: wire.limit,
+                selector: wire.selector,
                 events: wire.events,
                 target_outcomes: wire.target_outcomes,
                 next_page: wire.next_page,

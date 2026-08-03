@@ -249,3 +249,29 @@ verification = [
 unresolved_risk = "The standalone SDK remains coupled to the predecessor API until its ordered cutover; package-realistic publication is blocked until Step 248 removes the bridge."
 normative_architecture_change = false
 adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-012"
+date = "2026-08-03"
+status = "active"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["279", "282", "283"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#9-radroots_transport",
+  "docs/specs/radroots_crates_release_v1.md#15-radroots_transport_nostr",
+  "docs/specs/radroots_crates_release_v1.md#18-radroots_sdk",
+]
+source_evidence = [
+  "The first-party mobile compile gate proved that its real relay-backed identity, profile, and post operations had no equivalent after the initial shared-engine bridge cutover.",
+  "The generic source request could bound pages and targets but could not express event kind, author, or event-time constraints required for correct profile and feed queries.",
+  "Restoring the retired parallel runtime or accepting client-side filtering after page truncation would violate the final SDK and transport ownership model.",
+]
+replacement_action = "Before qualifying the mobile artifact, add bounded transport-neutral fetch selectors, translate them in the concrete Nostr adapter, complete SDK-owned explicit local-signing and Nostr composition, and map the mobile presentation contract over those SDK operations without restoring direct lower-package dependencies."
+verification = [
+  "Transport selector construction rejects oversized, duplicate, and reversed-range inputs and binds selectors into page validation.",
+  "The Nostr adapter applies kind, author, and time constraints remotely and defensively filters returned events before page bounds.",
+  "The shared-engine SDK and mobile integration gates must pass before Steps 282 and 283 are marked complete.",
+]
+unresolved_risk = "Steps 282 and 283 remain blocked until the SDK and mobile bridge checkpoints implement and verify the complete operation surface."
+normative_architecture_change = false
+adr_required = false

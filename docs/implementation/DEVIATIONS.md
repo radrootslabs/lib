@@ -17,6 +17,7 @@ silently change `radroots.crates.release.v1`.
 | `RCRV1-DEV-008` | 153, 155, 171, 179, 226, 288, 293, 313 | Activate final secrets dependency edges now; quarantine legacy vault/store consumers until their ordered storage, SDK, downstream, and final-removal gates. |
 | `RCRV1-DEV-009` | 170, 179, 189, 196, 201, 213, 226, 235, 263, 269, 288, 292, 313 | Quarantine the four superseded storage packages until their independently buildable first-party consumers migrate, then remove them at Step 313. |
 | `RCRV1-DEV-011` | 225, 226, 248 | Quarantine the superseded geocoder package until the standalone SDK adopts `radroots_geonames`, then remove it at the SDK retirement gate. |
+| `RCRV1-DEV-012` | 279, 282-283 | Complete the mobile shared-engine cutover with bounded transport selectors and SDK-owned signing/Nostr composition before qualifying generated host artifacts. |
 
 ## Record template
 

@@ -19,7 +19,8 @@ The authoritative package charter is the
    canonical [`Target`] values.
 2. [`TargetSet`] rejects an empty, oversized, or duplicate-fingerprint set.
 3. The caller creates a bounded [`FetchRequest`] or [`DeliveryRequest`] with a
-   request identity and absolute deadline.
+   request identity and absolute deadline. A fetch may carry a validated
+   [`FetchSelector`] for exact kinds, authors, and inclusive event-time bounds.
 4. A dyn-compatible [`EventSource`] or [`EventSink`] implementation performs
    only the requested operation.
 5. The caller validates [`FetchPage`] or [`DeliveryReceipt`] against the
@@ -30,6 +31,7 @@ The authoritative package charter is the
 [`Target`]: crate::Target
 [`TargetSet`]: crate::TargetSet
 [`FetchRequest`]: crate::FetchRequest
+[`FetchSelector`]: crate::source::FetchSelector
 [`DeliveryRequest`]: crate::DeliveryRequest
 [`EventSource`]: crate::EventSource
 [`EventSink`]: crate::EventSink
@@ -59,7 +61,8 @@ select an async runtime or require an async-trait macro.
 
 - `status` is observational and must not begin fetch or delivery work.
 - `fetch` returns one bounded page plus per-target outcomes and explicit
-  continuation state.
+  continuation state. Returned events must satisfy the request selector;
+  request-bound page validation rejects adapter drift.
 - `deliver` returns one receipt for the exact request and every requested
   target; it never performs an implicit retry.
 - Implementations must not install an executor or spawn hidden workers. The
