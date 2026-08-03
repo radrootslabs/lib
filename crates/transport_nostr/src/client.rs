@@ -126,6 +126,7 @@ fn validate_timeout(field: &'static str, value_ms: u64) -> Result<(), Error> {
 pub struct NostrTransport {
     config: Config,
     pub(crate) client: Arc<dyn crate::sink::RelayClient>,
+    pub(crate) source_client: Arc<dyn crate::source::RelaySourceClient>,
 }
 
 impl NostrTransport {
@@ -134,6 +135,7 @@ impl NostrTransport {
         Self {
             config,
             client: Arc::new(crate::sink::LiveRelayClient),
+            source_client: Arc::new(crate::source::LiveRelaySourceClient),
         }
     }
 
@@ -144,7 +146,23 @@ impl NostrTransport {
 
     #[cfg(test)]
     pub(crate) fn with_client(config: Config, client: Arc<dyn crate::sink::RelayClient>) -> Self {
-        Self { config, client }
+        Self {
+            config,
+            client,
+            source_client: Arc::new(crate::source::LiveRelaySourceClient),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_source_client(
+        config: Config,
+        source_client: Arc<dyn crate::source::RelaySourceClient>,
+    ) -> Self {
+        Self {
+            config,
+            client: Arc::new(crate::sink::LiveRelayClient),
+            source_client,
+        }
     }
 }
 
