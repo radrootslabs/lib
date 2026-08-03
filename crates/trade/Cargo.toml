@@ -16,17 +16,17 @@ categories = ["algorithms", "data-structures", "no-std"]
 include = ["src/**", "examples/**", "Cargo.toml", "README.md", "COMPATIBILITY.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
-features = ["std", "serde", "serde_json"]
+features = ["std", "serde", "json"]
 
 [lib]
 name = "radroots_trade"
 
 [features]
-default = ["std", "serde", "serde_json"]
+default = ["std", "serde", "json"]
 # TEMPORARY COMPATIBILITY QUARANTINE (publish = false): see COMPATIBILITY.md.
 dto-bindgen = [
   "std",
-  "serde_json",
+  "json",
   "dep:dto_bindgen",
   "dep:dto_bindgen_core",
 ]
@@ -43,7 +43,7 @@ serde = [
   "radroots_event_codec/serde",
   "radroots_identity/serde",
 ]
-serde_json = [
+json = [
   "serde",
   "dep:base64",
   "dep:hex",

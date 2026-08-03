@@ -3523,8 +3523,7 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_import_finalize_policy_v1.toml");
     const IMPORT_QUALIFICATION_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_import_qualification_v1.toml");
-    const SDK_PRIVATE_STORE_SOURCE: &str =
-        include_str!("../../../../sdk/crates/sdk/src/private_store.rs");
+    const PRIVATE_STORE_V1_SQL: &str = include_str!("fixtures/private_store_v1.sql");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -3953,13 +3952,6 @@ mod tests {
     }
 
     async fn supported_private_database(path: &Path) -> SqliteConnection {
-        let schema = SDK_PRIVATE_STORE_SOURCE
-            .split_once("const PRIVATE_STORE_MIGRATION_UP: &str = r#\"")
-            .expect("private schema prefix")
-            .1
-            .split_once("\"#;")
-            .expect("private schema suffix")
-            .0;
         let mut connection = SqliteConnection::connect_with(
             &SqliteConnectOptions::new()
                 .filename(path)
@@ -3967,7 +3959,7 @@ mod tests {
         )
         .await
         .expect("supported private database");
-        sqlx::raw_sql(schema)
+        sqlx::raw_sql(PRIVATE_STORE_V1_SQL)
             .execute(&mut connection)
             .await
             .expect("private v1 schema");

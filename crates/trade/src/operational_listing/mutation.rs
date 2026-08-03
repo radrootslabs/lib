@@ -4,19 +4,19 @@
 
 use core::fmt;
 
-#[cfg(all(feature = "serde_json", not(feature = "std")))]
+#[cfg(all(feature = "json", not(feature = "std")))]
 use alloc::string::{String, ToString};
 
-#[cfg(all(feature = "serde_json", feature = "std"))]
+#[cfg(all(feature = "json", feature = "std"))]
 use std::string::{String, ToString};
 
 use radroots_event::id::ClassifiedListingAddress;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::{
     draft::{DraftError, EventDraft},
     envelope::kind::KIND_CLASSIFIED_LISTING,
 };
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event_codec::operational_listing::encode::to_wire_parts_with_kind;
 
 use crate::operational_listing::draft::RadrootsOperationalListingCanonicalEdit;
@@ -50,9 +50,9 @@ pub enum RadrootsOperationalListingLifecycleState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOperationalListingMutationError {
     UnsupportedMutation,
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     EncodeListing(String),
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     FrozenDraft(DraftError),
 }
 
@@ -60,11 +60,11 @@ impl fmt::Display for RadrootsOperationalListingMutationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnsupportedMutation => f.write_str("listing mutation is not supported"),
-            #[cfg(feature = "serde_json")]
+            #[cfg(feature = "json")]
             Self::EncodeListing(error) => {
                 write!(f, "failed to encode listing mutation: {error}")
             }
-            #[cfg(feature = "serde_json")]
+            #[cfg(feature = "json")]
             Self::FrozenDraft(error) => {
                 write!(f, "failed to build listing mutation draft: {error}")
             }
@@ -74,7 +74,7 @@ impl fmt::Display for RadrootsOperationalListingMutationError {
 
 impl core::error::Error for RadrootsOperationalListingMutationError {}
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 const OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID: &str = "radroots.operational_listing.published.v1";
 
 impl RadrootsOperationalListingMutation {
@@ -136,7 +136,7 @@ impl RadrootsOperationalListingMutation {
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn build_operational_listing_mutation_draft(
     mutation: &RadrootsOperationalListingMutation,
     created_at: u64,

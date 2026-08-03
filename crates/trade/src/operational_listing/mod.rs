@@ -16,7 +16,7 @@ pub use self::draft::{
     RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditDocumentV1,
     RadrootsOperationalListingEditError, canonicalize_operational_listing_edit,
 };
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub use self::mutation::build_operational_listing_mutation_draft;
 pub use self::mutation::{
     RadrootsOperationalListingLifecycleState, RadrootsOperationalListingMutation,

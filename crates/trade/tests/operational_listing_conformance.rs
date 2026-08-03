@@ -1,4 +1,4 @@
-#![cfg(all(feature = "std", feature = "serde", feature = "serde_json"))]
+#![cfg(all(feature = "std", feature = "serde", feature = "json"))]
 
 use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};

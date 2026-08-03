@@ -20,7 +20,7 @@ pub mod reducer;
 #[path = "reducer_impl.rs"]
 mod trade_contract_v1;
 pub mod validation;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[doc(hidden)]
 pub mod validation_receipt;
 pub mod workflow;

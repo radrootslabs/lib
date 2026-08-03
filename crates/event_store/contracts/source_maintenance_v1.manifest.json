@@ -867,7 +867,7 @@
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
       "byte_length": 199270,
-      "sha256": "65b83a3ee1a700527d15c7403ca042cf2aaa4cd8935a2f8d2ab190c491a815bd",
+      "sha256": "00e9971ca24c447450455a41fe53fb45ca6adc43a19f8c33ed2287c0bb06cfe5",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -887,8 +887,8 @@
     {
       "role": "xtask_dispatch_and_release_preflight",
       "path": "tools/xtask/src/main.rs",
-      "byte_length": 16426,
-      "sha256": "abc24896c6c740c10811a3e003ec4be8ebdb376a7b6b01445bfa7a5889f094a7",
+      "byte_length": 16608,
+      "sha256": "3421025b8bc1d6adda6e939fe26d4717d761dfdce467968a342ce6600c83388d",
       "hash_algorithm": "sha256_bytes_v1"
     }
   ],

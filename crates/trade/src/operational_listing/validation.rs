@@ -504,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     fn model_and_verified_event_validation_return_the_same_projection() {
         let listing = listing_with_secondary_bin();
         let event_projection =

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Versioned reducer contract implementation behind the curated public modules.
 
-#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), feature = "json"))]
 use alloc::format;
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -24,12 +24,12 @@ use radroots_event::{
     },
 };
 use radroots_identity::PublicKey;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use sha2::{Digest, Sha256};
 
 pub const RADROOTS_TRADE_REDUCER_CONTRACT_ID: &str = "radroots.trade.reducer.v1";
 pub const RADROOTS_TRADE_REDUCER_VERSION: u16 = 1;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 const RADROOTS_TRADE_PROJECTION_DIGEST_DOMAIN: &[u8] = b"radroots:trade-projection:v1\0";
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -1359,7 +1359,7 @@ fn set_conflict(
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn projection_digest(projection: &RadrootsTradeProjectionV1) -> Result<String, String> {
     let mut digest_input = projection.clone();
     digest_input.projection_digest.clear();
@@ -1373,7 +1373,7 @@ fn projection_digest(projection: &RadrootsTradeProjectionV1) -> Result<String, S
     Ok(hex::encode(hasher.finalize()))
 }
 
-#[cfg(not(feature = "serde_json"))]
+#[cfg(not(feature = "json"))]
 fn projection_digest(_projection: &RadrootsTradeProjectionV1) -> Result<String, String> {
     Err("projection digest requires the serde_json feature".to_string())
 }

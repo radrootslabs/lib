@@ -192,7 +192,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     #[test]
     fn order_id_serde_round_trip_preserves_validation() {
         let order_id = OrderId::parse("order-1").expect("business order id");

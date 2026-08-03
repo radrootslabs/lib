@@ -274,10 +274,10 @@ mod tests {
     use radroots_identity::PublicKey;
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const CANONICAL_WORKFLOW_VECTORS: &str =
         include_str!("../../../contracts/conformance/vectors/trade/prepare_workflow.v1.json");
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const PACKAGED_WORKFLOW_VECTORS: &str =
         include_str!("../tests/fixtures/prepare_workflow.v1.json");
 
@@ -509,7 +509,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     #[test]
     fn workflow_conformance_vectors_execute_every_mutation_and_error_case() {
         assert_eq!(PACKAGED_WORKFLOW_VECTORS, CANONICAL_WORKFLOW_VECTORS);
@@ -581,7 +581,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const fn mutation_kind_label(kind: TradeMutationKindV1) -> &'static str {
         match kind {
             TradeMutationKindV1::Proposal => "proposal",
@@ -592,7 +592,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const fn workflow_action_label(action: WorkflowAction) -> &'static str {
         match action {
             WorkflowAction::Sign => "sign",
@@ -602,7 +602,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const fn error_kind_label(kind: ErrorKind) -> &'static str {
         match kind {
             ErrorKind::UnsupportedSchema => "unsupported_schema",

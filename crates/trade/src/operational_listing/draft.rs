@@ -272,7 +272,7 @@ mod tests {
         assert_eq!(document.listing.product.title, "Coffee");
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     #[test]
     fn draft_document_deserializes_as_untrusted_input() {
         let json = serde_json::to_string(&RadrootsOperationalListingEditDocumentV1::new(listing()))
