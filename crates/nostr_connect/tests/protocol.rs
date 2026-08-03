@@ -8,7 +8,7 @@ use radroots_nostr_connect::message::{
 };
 use radroots_nostr_connect::permission::Permissions;
 use radroots_nostr_connect::uri::{
-    CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES, ClientMetadata,
+    CLIENT_METADATA_JSON_MAX_BYTES, CLIENT_NAME_MAX_BYTES, ClientMetadata, ClientUri,
     RelayUrl as ConnectRelayUrl, Uri,
 };
 use radroots_nostr_connect::{Error, Method, Permission, Request, Response};
@@ -20,6 +20,34 @@ use test_fixtures::{
 
 fn test_public_key() -> PublicKey {
     PublicKey::parse(FIXTURE_ALICE.public_key_hex).expect("public key")
+}
+
+#[test]
+fn constructs_client_uri_from_validated_values() {
+    let relay = ConnectRelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay");
+    let metadata = ClientMetadata::new()
+        .with_name("Radroots")
+        .expect("metadata");
+    let client = ClientUri::try_new(
+        test_identity_public_key(),
+        [relay.clone(), relay],
+        "shared-secret",
+        metadata,
+    )
+    .expect("client URI");
+
+    assert_eq!(client.relays().len(), 1);
+    assert_eq!(client.secret(), "shared-secret");
+    assert_eq!(client.metadata().name(), Some("Radroots"));
+    assert!(
+        ClientUri::try_new(
+            test_identity_public_key(),
+            Vec::<ConnectRelayUrl>::new(),
+            "shared-secret",
+            ClientMetadata::new(),
+        )
+        .is_err()
+    );
 }
 
 fn test_identity_public_key() -> radroots_identity::PublicKey {

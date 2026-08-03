@@ -291,6 +291,39 @@ pub struct ClientUri {
 }
 
 impl ClientUri {
+    /// Constructs a validated client-origin URI from canonical protocol values.
+    pub fn try_new(
+        client_public_key: PublicKey,
+        relays: impl IntoIterator<Item = RelayUrl>,
+        secret: impl Into<String>,
+        metadata: ClientMetadata,
+    ) -> Result<Self, RadrootsNostrConnectError> {
+        let mut normalized_relays = Vec::new();
+        for relay in relays {
+            if normalized_relays.contains(&relay) {
+                continue;
+            }
+            if normalized_relays.len() == RELAY_COUNT_MAX {
+                return Err(RadrootsNostrConnectError::InvalidUri);
+            }
+            normalized_relays.push(relay);
+        }
+        if normalized_relays.is_empty() {
+            return Err(RadrootsNostrConnectError::MissingRelay);
+        }
+        let secret = secret.into();
+        if secret.is_empty() {
+            return Err(RadrootsNostrConnectError::MissingSecret);
+        }
+        validate_secret(&secret)?;
+        Ok(Self {
+            client_public_key,
+            relays: normalized_relays,
+            secret,
+            metadata: metadata.normalized()?,
+        })
+    }
+
     #[must_use]
     pub const fn client_public_key(&self) -> PublicKey {
         self.client_public_key
