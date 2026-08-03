@@ -1,0 +1,49 @@
+schema_version = 1
+no_std_target = "thumbv7em-none-eabihf"
+no_std_cross_compiler = "zig cc"
+no_std_cross_cflags = "-target thumb-freestanding-eabihf -mcpu=cortex_m4"
+wasm_target = "wasm32-unknown-unknown"
+
+[[package]]
+name = "radroots_core"
+wasm = true
+
+[[package]]
+name = "radroots_identity"
+wasm = true
+
+[[package]]
+name = "radroots_blossom"
+wasm = true
+
+[[package]]
+name = "radroots_protocol"
+wasm = true
+
+[[package]]
+name = "radroots_event"
+wasm = true
+
+[[package]]
+name = "radroots_event_codec"
+wasm = true
+
+[[package]]
+name = "radroots_trade"
+wasm = true
+
+[[package]]
+name = "radroots_signing"
+wasm = true
+
+[[package]]
+name = "radroots_transport"
+wasm = true
+
+[[package]]
+name = "radroots_nostr"
+wasm = true
+
+[[package]]
+name = "radroots_secrets"
+wasm = true

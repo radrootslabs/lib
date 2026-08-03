@@ -35,6 +35,7 @@ std = [
 blossom = ["events", "dep:base64", "dep:radroots_blossom"]
 events = [
   "std",
+  "nostr/nip04",
   "radroots_event/serde",
   "radroots_event_codec/json",
 ]
@@ -55,11 +56,10 @@ radroots_identity = { workspace = true, default-features = false }
 radroots_signing = { workspace = true, optional = true, default-features = false }
 nostr = { workspace = true, default-features = false, features = [
   "alloc",
-  "nip04",
 ] }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+thiserror = { version = "2", default-features = false }
 
 [dev-dependencies]
 radroots_blossom = { workspace = true, default-features = false, features = [

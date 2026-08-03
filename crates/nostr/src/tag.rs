@@ -14,13 +14,15 @@ pub type TagKind<'a> = nostr::TagKind<'a>;
 /// Upstream standardized Nostr tag used only at the explicit protocol boundary.
 pub type TagStandard = nostr::TagStandard;
 
+#[cfg(feature = "events")]
 pub use crate::error::ResolveError;
+#[cfg(feature = "events")]
+pub use crate::tags::tags_resolve as resolve;
 pub use crate::tags::{
     tag_at_value as value_at, tag_first_value as first_value, tag_match_geohash as match_geohash,
     tag_match_l as match_location_coordinate, tag_match_location as match_location,
     tag_match_summary as match_summary, tag_match_title as match_title,
     tag_relays_parse as relay_urls, tag_slice as values_from, tags_match as match_parts,
-    tags_resolve as resolve,
 };
 
 /// Parses canonical tag parts into the explicit Nostr tag boundary value.

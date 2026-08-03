@@ -3,7 +3,9 @@
 //! Errors describe stable failure categories without retaining secret keys,
 //! passwords, plaintext messages, or caller-supplied credential strings.
 
-use alloc::{boxed::Box, string::String};
+#[cfg(feature = "events")]
+use alloc::boxed::Box;
+use alloc::string::String;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -132,6 +134,7 @@ impl From<nostr::key::Error> for Error {
     }
 }
 
+#[cfg(feature = "events")]
 #[derive(Debug, Error)]
 pub enum ResolveError {
     #[error("Missing public key 'p' tag in encrypted event: {0:?}")]

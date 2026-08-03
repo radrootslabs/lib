@@ -1,16 +1,20 @@
 extern crate alloc;
+#[cfg(feature = "events")]
+use alloc::boxed::Box;
 use alloc::{
-    boxed::Box,
     string::{String, ToString},
     vec::Vec,
 };
 
+#[cfg(feature = "events")]
 use nostr::nips::nip04;
 
+#[cfg(feature = "events")]
 use crate::error::ResolveError;
+#[cfg(feature = "events")]
+use crate::types::{RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey};
 use crate::types::{
-    RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
-    RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard,
+    RadrootsNostrRelayUrl, RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard,
 };
 
 pub fn tag_first_value(tag: &RadrootsNostrTag, key: &str) -> Option<String> {
@@ -84,6 +88,7 @@ pub fn tag_match_summary(tag: &RadrootsNostrTag) -> Option<String> {
     }
 }
 
+#[cfg(feature = "events")]
 pub fn tags_resolve(
     event: &RadrootsNostrEvent,
     keys: &RadrootsNostrKeys,

@@ -13,6 +13,7 @@ use radroots_event::listing::classified::{
     ClassifiedListingPartition, classify_classified_listing_marker_names,
 };
 
+#[cfg(feature = "events")]
 pub(crate) use crate::event::Event as RadrootsNostrEvent;
 #[cfg(feature = "events")]
 pub(crate) use crate::event::Metadata as RadrootsNostrMetadata;
@@ -28,7 +29,9 @@ pub(crate) use crate::tag::{
 };
 #[cfg(feature = "events")]
 pub(crate) type RadrootsNostrEventBuilderUnchecked = nostr::EventBuilder;
+#[cfg(feature = "events")]
 pub(crate) type RadrootsNostrKeys = nostr::Keys;
+#[cfg(feature = "events")]
 pub(crate) type RadrootsNostrPublicKey = nostr::PublicKey;
 pub(crate) type RadrootsNostrRelayUrl = nostr::RelayUrl;
 
