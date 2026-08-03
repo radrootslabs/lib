@@ -143,7 +143,7 @@ pub fn check() -> Result<(), String> {
     let root = workspace_root()?;
     crate::architecture::validate(&root)?;
     check_publication_policy(&root)?;
-    check_radroots_facade_scaffold(&root)?;
+    check_radroots_facade_conformance(&root)?;
     validate_sdk_contracts(&root)?;
     check_sdk_feature_matrix(&root)?;
     check_forbidden_packages(&root)?;
@@ -159,7 +159,7 @@ pub fn check() -> Result<(), String> {
 pub fn architecture_ci(root: &Path) -> Result<(), String> {
     validate_package_matrix()?;
     check_publication_policy(root)?;
-    check_radroots_facade_scaffold(root)?;
+    check_radroots_facade_conformance(root)?;
     validate_sdk_contracts(root)?;
     check_sdk_feature_matrix(root)?;
     check_forbidden_packages(root)?;
@@ -168,7 +168,7 @@ pub fn architecture_ci(root: &Path) -> Result<(), String> {
     check_generated_outputs(root)
 }
 
-fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
+fn check_radroots_facade_conformance(root: &Path) -> Result<(), String> {
     let manifest_path = root.join("crates/radroots/Cargo.toml");
     let manifest_raw = fs::read_to_string(&manifest_path)
         .map_err(|error| format!("failed to read {}: {error}", manifest_path.display()))?;
@@ -301,6 +301,45 @@ fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
     if defaults.len() != 1 || defaults[0].as_str() != Some("client") {
         return Err("radroots facade default feature must be exactly client".to_owned());
     }
+    for (name, expected) in [
+        ("client", &["radroots_sdk/default"][..]),
+        ("native", &["client", "radroots_sdk/native"]),
+        ("nostr", &["client", "radroots_sdk/nostr"]),
+        ("nip46", &["nostr", "radroots_sdk/nip46"]),
+        ("radrootsd", &["client", "radroots_sdk/radrootsd"]),
+        ("geonames", &["client", "radroots_sdk/geonames"]),
+        ("knowledge", &["client", "radroots_sdk/knowledge"]),
+        ("full", &["radroots_sdk/full"]),
+    ] {
+        let actual = features
+            .get(name)
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("radroots facade feature {name} must be an array"))?
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .collect::<Vec<_>>();
+        if actual != expected {
+            return Err(format!(
+                "radroots facade feature {name} must forward exactly {}",
+                expected.join(", ")
+            ));
+        }
+    }
+
+    if package.get("autoexamples").and_then(toml::Value::as_bool) != Some(false) {
+        return Err("radroots facade must disable implicit example discovery".to_owned());
+    }
+    let examples = manifest
+        .get("example")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "radroots facade must declare its ordinary example".to_owned())?;
+    if examples.len() != 1
+        || examples[0].get("name").and_then(toml::Value::as_str) != Some("ordinary_memory")
+        || examples[0].get("path").and_then(toml::Value::as_str)
+            != Some("examples/ordinary_memory.rs")
+    {
+        return Err("radroots facade must declare only the ordinary_memory example".to_owned());
+    }
 
     let source_path = root.join("crates/radroots/src/lib.rs");
     let source = fs::read_to_string(&source_path)
@@ -333,18 +372,27 @@ fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
         );
     }
     for module in RADROOTS_FACADE_MODULES {
-        if !root
+        let module_path = root
             .join("crates/radroots/src")
-            .join(format!("{module}.rs"))
-            .is_file()
-        {
+            .join(format!("{module}.rs"));
+        if !module_path.is_file() {
             return Err(format!(
                 "radroots facade module file {module}.rs is missing"
             ));
         }
+        let module_source = fs::read_to_string(&module_path)
+            .map_err(|error| format!("failed to read {}: {error}", module_path.display()))?;
+        if module_source.contains("pub trait ") || module_source.contains("::*") {
+            return Err(format!(
+                "radroots facade module {module} must not define traits or wildcard reexports"
+            ));
+        }
     }
-    if !root.join("crates/radroots/README.md").is_file() {
-        return Err("radroots facade README.md is missing".to_owned());
+    let readme_path = root.join("crates/radroots/README.md");
+    let readme = fs::read_to_string(&readme_path)
+        .map_err(|error| format!("failed to read {}: {error}", readme_path.display()))?;
+    if !readme.contains("```compile_fail\nuse radroots::sdk;\n```") {
+        return Err("radroots facade README must compile-fail the SDK namespace".to_owned());
     }
     Ok(())
 }
