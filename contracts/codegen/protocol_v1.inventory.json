@@ -42,7 +42,7 @@
     {
       "module": "error::v1",
       "path": "crates/protocol/src/error/v1.rs",
-      "sha256": "f6f8578988a7a3cf57e0a3081fa592a5e16998e666696e24c41368ea93226b80",
+      "sha256": "58ac6c1f9a4ee3e0b3937df970ad3793706322e4feaf5005bc4968cfcde82ad4",
       "types": [
         {
           "rust_path": "radroots_protocol::error::v1::CapabilityId",

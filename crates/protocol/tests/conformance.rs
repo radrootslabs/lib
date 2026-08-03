@@ -86,10 +86,10 @@ fn generated_inventory_is_complete_unique_and_matches_the_schema_registry() {
         .flat_map(|source| source["types"].as_array().expect("source types"))
         .map(|item| item["rust_path"].as_str().expect("Rust path"))
         .collect::<Vec<_>>();
-    assert_eq!(type_paths.len(), 54);
+    assert_eq!(type_paths.len(), 60);
     assert_eq!(
         type_paths.iter().copied().collect::<BTreeSet<_>>().len(),
-        54
+        60
     );
     assert!(type_paths.contains(&"radroots_protocol::runtime::v1::OperationId"));
 
