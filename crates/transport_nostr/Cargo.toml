@@ -20,6 +20,7 @@ radroots_nostr = { workspace = true, default-features = false, features = ["even
 radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
 nostr-sdk = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 url = { workspace = true }
 
 [dev-dependencies]

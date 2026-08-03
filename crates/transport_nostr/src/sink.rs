@@ -26,8 +26,23 @@ pub(crate) trait RelayClient: Send + Sync {
     ) -> BoxFuture<'a, Vec<RelayPublishResult>>;
 }
 
-#[derive(Debug)]
-pub(crate) struct LiveRelayClient;
+#[derive(Clone, Debug)]
+pub(crate) struct LiveRelayClient {
+    client: nostr_sdk::Client,
+}
+
+impl LiveRelayClient {
+    pub(crate) const fn new(client: nostr_sdk::Client) -> Self {
+        Self { client }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn isolated() -> Self {
+        let client = nostr_sdk::Client::default();
+        client.automatic_authentication(false);
+        Self::new(client)
+    }
+}
 
 impl RelayClient for LiveRelayClient {
     fn publish<'a>(
@@ -37,18 +52,18 @@ impl RelayClient for LiveRelayClient {
         connect_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
         Box::pin(async move {
-            let client = nostr_sdk::Client::default();
             let mut results = Vec::with_capacity(relays.len());
             for relay in relays {
                 let url = relay.as_str().to_owned();
-                let outcome = match client.add_relay(url.as_str()).await {
+                let outcome = match self.client.add_relay(url.as_str()).await {
                     Err(error) => connection_failure(error.to_string()),
-                    Ok(_) => match client
+                    Ok(_) => match self
+                        .client
                         .try_connect_relay(url.as_str(), connect_timeout)
                         .await
                     {
                         Err(error) => connection_failure(error.to_string()),
-                        Ok(()) => match client.send_event_to([url.as_str()], &event).await {
+                        Ok(()) => match self.client.send_event_to([url.as_str()], &event).await {
                             Err(error) => classify_failure(error.to_string()),
                             Ok(output) => output
                                 .success

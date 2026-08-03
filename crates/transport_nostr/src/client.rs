@@ -127,15 +127,21 @@ pub struct NostrTransport {
     config: Config,
     pub(crate) client: Arc<dyn crate::sink::RelayClient>,
     pub(crate) source_client: Arc<dyn crate::source::RelaySourceClient>,
+    pub(crate) auth: Arc<crate::auth::AuthFlow>,
 }
 
 impl NostrTransport {
     /// Creates an inert transport from validated explicit configuration.
     pub fn new(config: Config) -> Self {
+        let client = nostr_sdk::Client::default();
+        client.automatic_authentication(false);
         Self {
             config,
-            client: Arc::new(crate::sink::LiveRelayClient),
-            source_client: Arc::new(crate::source::LiveRelaySourceClient),
+            client: Arc::new(crate::sink::LiveRelayClient::new(client.clone())),
+            source_client: Arc::new(crate::source::LiveRelaySourceClient::new(client.clone())),
+            auth: Arc::new(crate::auth::AuthFlow::new(Arc::new(
+                crate::auth::LiveAuthClient::new(client),
+            ))),
         }
     }
 
@@ -149,7 +155,8 @@ impl NostrTransport {
         Self {
             config,
             client,
-            source_client: Arc::new(crate::source::LiveRelaySourceClient),
+            source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
+            auth: Arc::new(crate::auth::AuthFlow::isolated()),
         }
     }
 
@@ -160,8 +167,9 @@ impl NostrTransport {
     ) -> Self {
         Self {
             config,
-            client: Arc::new(crate::sink::LiveRelayClient),
+            client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client,
+            auth: Arc::new(crate::auth::AuthFlow::isolated()),
         }
     }
 }

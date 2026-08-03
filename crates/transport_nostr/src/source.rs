@@ -33,26 +33,40 @@ pub(crate) trait RelaySourceClient: Send + Sync {
     fn fetch<'a>(&'a self, query: SourceQuery) -> BoxFuture<'a, Vec<RelayFetchBatch>>;
 }
 
-#[derive(Debug)]
-pub(crate) struct LiveRelaySourceClient;
+#[derive(Clone, Debug)]
+pub(crate) struct LiveRelaySourceClient {
+    client: nostr_sdk::Client,
+}
+
+impl LiveRelaySourceClient {
+    pub(crate) const fn new(client: nostr_sdk::Client) -> Self {
+        Self { client }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn isolated() -> Self {
+        let client = nostr_sdk::Client::default();
+        client.automatic_authentication(false);
+        Self::new(client)
+    }
+}
 
 impl RelaySourceClient for LiveRelaySourceClient {
     fn fetch<'a>(&'a self, query: SourceQuery) -> BoxFuture<'a, Vec<RelayFetchBatch>> {
         Box::pin(async move {
-            let client = nostr_sdk::Client::default();
             let mut batches = Vec::with_capacity(query.relays.len());
             for relay in query.relays {
                 let url = relay.as_str().to_owned();
                 let result = async {
-                    client.add_relay(url.as_str()).await?;
-                    client
+                    self.client.add_relay(url.as_str()).await?;
+                    self.client
                         .try_connect_relay(url.as_str(), query.timeout)
                         .await?;
                     let mut filter = Filter::new().limit(UPSTREAM_FETCH_LIMIT);
                     if let Some(until) = query.until_unix_seconds {
                         filter = filter.until(Timestamp::from_secs(until));
                     }
-                    client
+                    self.client
                         .fetch_events_from([url.as_str()], filter, query.timeout)
                         .await
                         .map(|events| events.iter().map(JsonUtil::as_json).collect())
