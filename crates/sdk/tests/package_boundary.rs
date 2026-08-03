@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const CLIENT: &str = include_str!("../src/client.rs");
+const FARM: &str = include_str!("../src/farm.rs");
 const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
 
@@ -193,6 +194,40 @@ fn sync_operations_only_delegate_to_the_canonical_engine() {
             .join("src/sync_runtime.rs")
             .exists()
     );
+}
+
+#[test]
+fn farm_operations_preserve_pure_planning_commit_and_privacy_boundaries() {
+    for required in [
+        "encode::farm::to_wire_parts",
+        "AddressableCoordinate",
+        "EventDraft",
+        "radroots_sync::PushRequest::new",
+        "self.sync",
+        ".sign_and_enqueue(",
+        "PrivateArtifactStore",
+    ] {
+        assert!(
+            FARM.contains(required),
+            "missing farm boundary `{required}`"
+        );
+    }
+    for forbidden in [
+        "SdkExactLocation",
+        "SdkPublicLocality",
+        "latitude:",
+        "longitude:",
+        "enqueue_signed_workflow",
+        "local_event_seq",
+        "outbox_event_id",
+    ] {
+        assert!(
+            !FARM.contains(forbidden),
+            "farm source contains retired SDK or private representation `{forbidden}`"
+        );
+    }
+    let source_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    assert!(!source_root.join("farms_runtime.rs").exists());
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {

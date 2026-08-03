@@ -56,7 +56,10 @@ full = [
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
-radroots_event_codec = { workspace = true, default-features = false }
+radroots_event_codec = { workspace = true, default-features = false, features = [
+  "json",
+  "std",
+] }
 radroots_identity = { workspace = true, default-features = false }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_signing = { workspace = true, default-features = false }

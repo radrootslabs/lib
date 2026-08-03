@@ -239,6 +239,12 @@ impl Client {
         Ok(self.inner.sync.as_ref().map(crate::sync::Operations::new))
     }
 
+    /// Returns farm commit operations when canonical synchronization is configured.
+    #[cfg(feature = "sync")]
+    pub fn farm(&self) -> Result<Option<crate::farm::Operations<'_>>> {
+        Ok(self.sync()?.map(crate::farm::Operations::new))
+    }
+
     /// Returns whether explicit close completed successfully or reached the
     /// lower storage commit point.
     #[must_use]
