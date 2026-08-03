@@ -55,9 +55,35 @@ fn public_native_type_snapshot_uses_contextual_names() {
             type_name::<radroots_sdk::listing::EnqueueRequest>(),
             type_name::<radroots_sdk::listing::Operations<'static>>(),
             type_name::<radroots_sdk::sync::Operations<'static>>(),
+            type_name::<radroots_sdk::sync::HostPolicy>(),
             type_name::<radroots_sdk::trade::EnqueueRequest>(),
             type_name::<radroots_sdk::trade::Operations<'static>>(),
             type_name::<radroots_sdk::trade::PrivateTermsError>(),
+        ])
+        .collect::<BTreeSet<_>>();
+    #[cfg(feature = "local-signing")]
+    let actual = actual
+        .into_iter()
+        .chain([
+            type_name::<radroots_sdk::signing::LocalIdentity>(),
+            type_name::<radroots_sdk::signing::Slot>(),
+        ])
+        .collect::<BTreeSet<_>>();
+    #[cfg(feature = "nostr")]
+    let actual = actual
+        .into_iter()
+        .chain([type_name::<radroots_sdk::transport::NostrSlot>()])
+        .collect::<BTreeSet<_>>();
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+    let actual = actual
+        .into_iter()
+        .chain([
+            type_name::<radroots_sdk::client::PostEvent>(),
+            type_name::<radroots_sdk::client::ProfileDraft>(),
+            type_name::<radroots_sdk::client::ProfileEvent>(),
+            type_name::<radroots_sdk::client::PublishReceipt>(),
+            type_name::<radroots_sdk::client::SocialOperations<'static>>(),
+            type_name::<radroots_sdk::client::TransportHealth>(),
         ])
         .collect::<BTreeSet<_>>();
     #[cfg(feature = "radrootsd")]
@@ -133,7 +159,13 @@ fn active_native_api_has_no_sdk_owned_traits_or_public_field_layout() {
 const fn expected_public_type_count() -> usize {
     let count = 28;
     #[cfg(feature = "sync")]
-    let count = count + 8;
+    let count = count + 9;
+    #[cfg(feature = "local-signing")]
+    let count = count + 2;
+    #[cfg(feature = "nostr")]
+    let count = count + 1;
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+    let count = count + 6;
     #[cfg(feature = "radrootsd")]
     let count = count + 5;
     count

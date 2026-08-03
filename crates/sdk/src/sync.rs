@@ -1,6 +1,9 @@
 //! Client-scoped access to the canonical synchronization engine.
 
 #[cfg(feature = "sync")]
+use std::sync::Arc;
+
+#[cfg(feature = "sync")]
 use radroots_storage::{outbox::OutboxRecord, projection::ProjectionId};
 #[cfg(feature = "sync")]
 use radroots_sync::{
@@ -12,6 +15,85 @@ use radroots_sync::{
 };
 #[cfg(feature = "sync")]
 use radroots_transport::source::ObservedEvent;
+
+/// Explicit host policy for SDK-composed synchronization.
+///
+/// Selecting this policy opts into the system clock and operating-system
+/// randomness for operation IDs. It creates no executor, timer, or worker.
+#[cfg(feature = "sync")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HostPolicy {
+    deadlines: radroots_sync::policy::DeadlinePolicy,
+}
+
+#[cfg(feature = "sync")]
+impl HostPolicy {
+    /// Creates a bounded policy for pull, signing, and delivery calls.
+    pub fn new(
+        pull_timeout_ms: u64,
+        sign_timeout_ms: u64,
+        delivery_timeout_ms: u64,
+    ) -> Result<Self, radroots_sync::policy::Error> {
+        Ok(Self {
+            deadlines: radroots_sync::policy::DeadlinePolicy::new(
+                pull_timeout_ms,
+                sign_timeout_ms,
+                delivery_timeout_ms,
+            )?,
+        })
+    }
+
+    /// Returns the ordinary bounded native-host policy.
+    #[must_use]
+    pub fn standard() -> Self {
+        Self::new(30_000, 30_000, 30_000).expect("static host deadlines are valid")
+    }
+
+    pub(crate) fn composition(
+        self,
+    ) -> (
+        Arc<dyn radroots_sync::policy::Clock>,
+        Arc<dyn radroots_sync::policy::IdSource>,
+        radroots_sync::policy::DeadlinePolicy,
+    ) {
+        (Arc::new(SystemClock), Arc::new(RandomIds), self.deadlines)
+    }
+}
+
+#[cfg(feature = "sync")]
+impl Default for HostPolicy {
+    fn default() -> Self {
+        Self::standard()
+    }
+}
+
+#[cfg(feature = "sync")]
+struct SystemClock;
+
+#[cfg(feature = "sync")]
+impl radroots_sync::policy::Clock for SystemClock {
+    fn now_unix_ms(&self) -> Result<u64, radroots_sync::policy::Error> {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+            .filter(|value| *value != 0)
+            .ok_or(radroots_sync::policy::Error::ClockUnavailable)
+    }
+}
+
+#[cfg(feature = "sync")]
+struct RandomIds;
+
+#[cfg(feature = "sync")]
+impl radroots_sync::policy::IdSource for RandomIds {
+    fn next_id(
+        &self,
+        _operation: radroots_sync::policy::OperationKind,
+    ) -> Result<radroots_sync::policy::SyncId, radroots_sync::policy::Error> {
+        radroots_sync::policy::SyncId::new(*uuid::Uuid::new_v4().as_bytes())
+    }
+}
 
 /// Borrowed client operations over one explicitly composed sync engine.
 ///

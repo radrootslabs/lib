@@ -9,6 +9,11 @@ use radroots_transport::{
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
     policy::SatisfactionPolicy,
 };
+#[cfg(feature = "nostr")]
+use std::sync::{Arc, RwLock};
+
+#[cfg(feature = "nostr")]
+pub use radroots_transport_nostr::RelayUrlPolicy;
 
 const PREVIEW_UNAVAILABLE_MESSAGE: &str = "preview transport is unavailable in this SDK release";
 
@@ -129,6 +134,170 @@ impl Profile {
 impl Default for Profile {
     fn default() -> Self {
         Self::local_only()
+    }
+}
+
+/// Host-configured, client-shareable Nostr transport slot.
+///
+/// Reconfiguration validates the complete relay set before atomically
+/// replacing the active adapter. Construction, clearing, and target
+/// inspection perform no network I/O.
+#[cfg(feature = "nostr")]
+#[derive(Clone)]
+pub struct NostrSlot {
+    policy: RelayUrlPolicy,
+    state: Arc<RwLock<Option<NostrState>>>,
+}
+
+#[cfg(feature = "nostr")]
+#[derive(Clone)]
+struct NostrState {
+    transport: Arc<radroots_transport_nostr::NostrTransport>,
+    targets: TargetSet,
+}
+
+#[cfg(feature = "nostr")]
+impl NostrSlot {
+    /// Creates an inert slot with an explicit destination policy.
+    #[must_use]
+    pub fn new(policy: RelayUrlPolicy) -> Self {
+        Self {
+            policy,
+            state: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Validates and atomically installs the complete relay selection.
+    pub fn configure<I, S>(&self, relays: I) -> crate::Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let config = radroots_transport_nostr::Config::new(self.policy, relays)
+            .map_err(crate::Error::invalid_host_configuration)?;
+        let targets = TargetSet::new(
+            config
+                .relays()
+                .iter()
+                .map(radroots_transport_nostr::RelayUrl::to_target)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(crate::Error::invalid_host_configuration)?,
+        )
+        .map_err(|_| crate::Error::invalid_host_configuration_without_source())?;
+        let state = NostrState {
+            transport: Arc::new(radroots_transport_nostr::NostrTransport::new(config)),
+            targets,
+        };
+        let mut current = self
+            .state
+            .write()
+            .map_err(|_| crate::Error::shared_operation_unavailable())?;
+        *current = Some(state);
+        Ok(())
+    }
+
+    /// Removes the active adapter without starting or stopping background work.
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.write() {
+            *state = None;
+        }
+    }
+
+    /// Returns the currently selected canonical targets.
+    #[must_use]
+    pub fn targets(&self) -> Option<TargetSet> {
+        self.snapshot().map(|state| state.targets)
+    }
+
+    fn snapshot(&self) -> Option<NostrState> {
+        self.state.read().ok().and_then(|state| state.clone())
+    }
+}
+
+#[cfg(feature = "nostr")]
+impl radroots_transport::EventSource for NostrSlot {
+    fn status(
+        &self,
+    ) -> radroots_transport::BoxFuture<'_, Result<SourceStatus, radroots_transport::Error>> {
+        Box::pin(async move {
+            match self.snapshot() {
+                Some(state) => {
+                    radroots_transport::EventSource::status(state.transport.as_ref()).await
+                }
+                None => Ok(SourceStatus::new(
+                    TransportId::NOSTR,
+                    false,
+                    Maturity::Stable,
+                    Availability::Unavailable,
+                    SourceCapabilities::FETCH,
+                    "Nostr transport is not configured",
+                )),
+            }
+        })
+    }
+
+    fn fetch(
+        &self,
+        request: radroots_transport::FetchRequest,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_transport::FetchPage, radroots_transport::Error>,
+    > {
+        Box::pin(async move {
+            let state = self
+                .snapshot()
+                .ok_or(radroots_transport::Error::UnsupportedOperation)?;
+            radroots_transport::EventSource::fetch(state.transport.as_ref(), request).await
+        })
+    }
+}
+
+#[cfg(feature = "nostr")]
+impl radroots_transport::EventSink for NostrSlot {
+    fn status(
+        &self,
+    ) -> radroots_transport::BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
+        Box::pin(async move {
+            match self.snapshot() {
+                Some(state) => {
+                    radroots_transport::EventSink::status(state.transport.as_ref()).await
+                }
+                None => Ok(SinkStatus::new(
+                    TransportId::NOSTR,
+                    false,
+                    Maturity::Stable,
+                    Availability::Unavailable,
+                    SinkCapabilities::DELIVER,
+                    "Nostr transport is not configured",
+                )),
+            }
+        })
+    }
+
+    fn deliver(
+        &self,
+        request: radroots_transport::DeliveryRequest,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_transport::DeliveryReceipt, radroots_transport::Error>,
+    > {
+        Box::pin(async move {
+            let state = self
+                .snapshot()
+                .ok_or(radroots_transport::Error::UnsupportedOperation)?;
+            radroots_transport::EventSink::deliver(state.transport.as_ref(), request).await
+        })
+    }
+}
+
+#[cfg(feature = "nostr")]
+impl std::fmt::Debug for NostrSlot {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("NostrSlot")
+            .field("policy", &self.policy)
+            .field("configured", &self.targets().is_some())
+            .finish()
     }
 }
 
@@ -430,5 +599,18 @@ mod tests {
         let debug = format!("{adapter:?}");
         assert!(!debug.contains("secret-token"));
         assert!(!debug.contains("reqwest"));
+    }
+
+    #[cfg(feature = "nostr")]
+    #[test]
+    fn nostr_slot_reconfiguration_is_validated_atomic_and_inert() {
+        let slot = NostrSlot::new(RelayUrlPolicy::Local);
+        assert!(slot.targets().is_none());
+        assert!(slot.configure(["ws://127.0.0.1:7447"]).is_ok());
+        let original = slot.targets().expect("configured targets");
+        assert!(slot.configure(Vec::<String>::new()).is_err());
+        assert_eq!(slot.targets(), Some(original));
+        slot.clear();
+        assert!(slot.targets().is_none());
     }
 }

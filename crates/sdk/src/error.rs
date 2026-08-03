@@ -120,6 +120,27 @@ error_catalog! {
         message: "SDK storage inspection failed",
         safe_detail_keys: []
     },
+    InvalidHostConfiguration => {
+        code: InvalidArgument,
+        operation: None,
+        capability: None,
+        message: "SDK host configuration is invalid",
+        safe_detail_keys: []
+    },
+    SharedOperationUnavailable => {
+        code: TransportOperationUnavailable,
+        operation: None,
+        capability: None,
+        message: "SDK shared network operation is unavailable",
+        safe_detail_keys: []
+    },
+    SharedOperationFailed => {
+        code: SyncPartial,
+        operation: None,
+        capability: None,
+        message: "SDK shared network operation failed",
+        safe_detail_keys: []
+    },
 }
 
 /// Stable metadata for one native SDK failure.
@@ -236,6 +257,41 @@ impl Error {
             kind: ErrorKind::StorageInspectionFailed,
             source: Some(Box::new(source)),
         }
+    }
+
+    #[cfg(any(feature = "sync", feature = "nostr"))]
+    pub(crate) fn invalid_host_configuration(
+        source: impl error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            kind: ErrorKind::InvalidHostConfiguration,
+            source: Some(Box::new(source)),
+        }
+    }
+
+    #[cfg(feature = "nostr")]
+    pub(crate) fn invalid_host_configuration_without_source() -> Self {
+        Self::without_source(ErrorKind::InvalidHostConfiguration)
+    }
+
+    #[cfg(any(feature = "sync", feature = "nostr"))]
+    pub(crate) fn shared_operation_unavailable() -> Self {
+        Self::without_source(ErrorKind::SharedOperationUnavailable)
+    }
+
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+    pub(crate) fn shared_operation_failed(
+        source: impl error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            kind: ErrorKind::SharedOperationFailed,
+            source: Some(Box::new(source)),
+        }
+    }
+
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+    pub(crate) fn shared_operation_failed_without_source() -> Self {
+        Self::without_source(ErrorKind::SharedOperationFailed)
     }
 
     fn without_source(kind: ErrorKind) -> Self {

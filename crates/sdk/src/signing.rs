@@ -1,6 +1,8 @@
 //! Generic signer composition without protocol or relay ownership.
 
 use std::sync::Arc;
+#[cfg(feature = "local-signing")]
+use std::sync::RwLock;
 
 use radroots_signing::{SignReceipt, SignRequest, Signer, SignerStatus};
 
@@ -21,6 +23,8 @@ pub enum Mode {
 pub struct Provider {
     mode: Mode,
     signer: Arc<dyn Signer>,
+    #[cfg(feature = "local-signing")]
+    slot: Option<Slot>,
 }
 
 impl Provider {
@@ -30,6 +34,8 @@ impl Provider {
         Self {
             mode: Mode::Host,
             signer,
+            #[cfg(feature = "local-signing")]
+            slot: None,
         }
     }
 
@@ -40,6 +46,21 @@ impl Provider {
         Self {
             mode: Mode::Local,
             signer: Arc::new(signer),
+            slot: None,
+        }
+    }
+
+    /// Wraps a host-controlled local signer slot.
+    ///
+    /// The slot starts inert and can be populated or cleared without rebuilding
+    /// the client. Secret persistence remains entirely host-owned.
+    #[cfg(feature = "local-signing")]
+    #[must_use]
+    pub fn slot(slot: Slot) -> Self {
+        Self {
+            mode: Mode::Local,
+            signer: Arc::new(slot.clone()),
+            slot: Some(slot),
         }
     }
 
@@ -54,6 +75,8 @@ impl Provider {
         Self {
             mode: Mode::Nip46,
             signer,
+            #[cfg(feature = "local-signing")]
+            slot: None,
         }
     }
 
@@ -79,10 +102,191 @@ impl Provider {
         self.signer.sign(request).await
     }
 
+    #[cfg(feature = "local-signing")]
+    pub(crate) fn into_parts(self) -> (Arc<dyn Signer>, Option<Slot>) {
+        (self.signer, self.slot)
+    }
+
+    #[cfg(not(feature = "local-signing"))]
     pub(crate) fn into_signer(self) -> Arc<dyn Signer> {
         self.signer
     }
 }
+
+/// Public identity controlled by an installed local signer.
+#[cfg(feature = "local-signing")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalIdentity {
+    public_key: radroots_identity::PublicKey,
+    npub: String,
+}
+
+#[cfg(feature = "local-signing")]
+impl LocalIdentity {
+    fn from_public_key(
+        public_key: radroots_identity::PublicKey,
+    ) -> Result<Self, radroots_nostr::Error> {
+        Ok(Self {
+            public_key,
+            npub: radroots_nostr::key::public_key_to_npub(public_key)?,
+        })
+    }
+
+    /// Returns the canonical lowercase public-key hexadecimal form.
+    #[must_use]
+    pub fn public_key_hex(&self) -> String {
+        self.public_key.to_hex()
+    }
+
+    /// Returns the canonical NIP-19 public identity.
+    #[must_use]
+    pub fn npub(&self) -> &str {
+        self.npub.as_str()
+    }
+
+    pub(crate) const fn public_key(&self) -> radroots_identity::PublicKey {
+        self.public_key
+    }
+}
+
+/// Mutable, client-shareable local signer selected by the host.
+///
+/// The slot never persists key material and its debug output never observes
+/// the installed signer. Installing and clearing are explicit host actions.
+#[cfg(feature = "local-signing")]
+#[derive(Clone, Default)]
+pub struct Slot {
+    state: Arc<RwLock<Option<SlotState>>>,
+}
+
+#[cfg(feature = "local-signing")]
+struct SlotState {
+    signer: Arc<dyn Signer>,
+    identity: LocalIdentity,
+}
+
+#[cfg(feature = "local-signing")]
+impl Slot {
+    /// Creates an empty signer slot.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Validates and installs one host-supplied hexadecimal or `nsec` secret.
+    pub fn install(&self, encoded: &str) -> Result<LocalIdentity, radroots_nostr::Error> {
+        let secret = radroots_nostr::key::SecretKey::parse(encoded)?;
+        self.install_secret(secret)
+    }
+
+    /// Generates, installs, and returns one secret for immediate host custody.
+    ///
+    /// The SDK retains only the opaque signer. The returned `nsec` is the sole
+    /// persistence handoff and must be moved into host secure storage.
+    pub fn generate(&self) -> Result<(String, LocalIdentity), radroots_nostr::Error> {
+        let secret = radroots_nostr::key::SecretKey::generate();
+        let encoded = radroots_nostr::key::secret_key_to_nsec(&secret);
+        let identity = self.install_secret(secret)?;
+        Ok((encoded, identity))
+    }
+
+    /// Removes the active signer from this process.
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.write() {
+            *state = None;
+        }
+    }
+
+    /// Returns the currently installed public identity.
+    #[must_use]
+    pub fn identity(&self) -> Option<LocalIdentity> {
+        self.state
+            .read()
+            .ok()
+            .and_then(|state| state.as_ref().map(|state| state.identity.clone()))
+    }
+
+    fn install_secret(
+        &self,
+        secret: radroots_nostr::key::SecretKey,
+    ) -> Result<LocalIdentity, radroots_nostr::Error> {
+        let public_key = secret.public_key()?;
+        let identity = LocalIdentity::from_public_key(public_key)?;
+        let signer: Arc<dyn Signer> = Arc::new(radroots_nostr::signing::LocalSigner::new(secret)?);
+        if let Ok(mut state) = self.state.write() {
+            *state = Some(SlotState {
+                signer,
+                identity: identity.clone(),
+            });
+        }
+        Ok(identity)
+    }
+
+    fn signer(&self) -> Result<Arc<dyn Signer>, radroots_signing::Error> {
+        self.state
+            .read()
+            .map_err(|source| {
+                radroots_signing::Error::with_source(
+                    radroots_signing::error::Kind::InternalError,
+                    LockFailure(source.to_string()),
+                )
+            })?
+            .as_ref()
+            .map(|state| Arc::clone(&state.signer))
+            .ok_or_else(|| {
+                radroots_signing::Error::new(radroots_signing::error::Kind::SignerUnavailable)
+            })
+    }
+}
+
+#[cfg(feature = "local-signing")]
+impl Signer for Slot {
+    fn status(
+        &self,
+    ) -> radroots_signing::signer::BoxFuture<'_, Result<SignerStatus, radroots_signing::Error>>
+    {
+        Box::pin(async move {
+            match self.signer() {
+                Ok(signer) => signer.status().await,
+                Err(error) if error.kind() == radroots_signing::error::Kind::SignerUnavailable => {
+                    Ok(SignerStatus::unavailable())
+                }
+                Err(error) => Err(error),
+            }
+        })
+    }
+
+    fn sign(
+        &self,
+        request: SignRequest,
+    ) -> radroots_signing::signer::BoxFuture<'_, Result<SignReceipt, radroots_signing::Error>> {
+        Box::pin(async move { self.signer()?.sign(request).await })
+    }
+}
+
+#[cfg(feature = "local-signing")]
+impl std::fmt::Debug for Slot {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Slot")
+            .field("installed", &self.identity().is_some())
+            .finish()
+    }
+}
+
+#[cfg(feature = "local-signing")]
+#[derive(Debug)]
+struct LockFailure(String);
+
+#[cfg(feature = "local-signing")]
+impl std::fmt::Display for LockFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.0.as_str())
+    }
+}
+
+#[cfg(feature = "local-signing")]
+impl std::error::Error for LockFailure {}
 
 impl std::fmt::Debug for Provider {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -194,6 +398,27 @@ mod tests {
         assert_eq!(provider.mode(), Mode::Local);
         assert_eq!(status.availability(), SignerAvailability::Ready);
         assert_eq!(status.capabilities()[0].kind(), SignerKind::Local);
+    }
+
+    #[cfg(feature = "local-signing")]
+    #[tokio::test]
+    async fn local_slot_hands_secret_to_host_and_supports_lock_restore() {
+        let slot = Slot::new();
+        assert!(slot.identity().is_none());
+        assert_eq!(
+            slot.status().await.expect("empty status").availability(),
+            SignerAvailability::Unavailable
+        );
+
+        let (secret, generated) = slot.generate().expect("generated identity");
+        assert!(secret.starts_with("nsec1"));
+        assert_eq!(slot.identity().expect("installed"), generated);
+        assert!(!format!("{slot:?}").contains(secret.as_str()));
+
+        slot.clear();
+        assert!(slot.identity().is_none());
+        let restored = slot.install(secret.as_str()).expect("restored identity");
+        assert_eq!(restored, generated);
     }
 
     #[cfg(feature = "nip46")]

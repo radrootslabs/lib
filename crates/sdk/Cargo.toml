@@ -20,7 +20,7 @@ name = "radroots_sdk"
 default = ["memory"]
 memory = ["radroots_storage/memory"]
 sqlite = ["dep:radroots_storage_sqlite"]
-sync = ["dep:radroots_sync"]
+sync = ["dep:radroots_sync", "dep:uuid"]
 nostr = [
   "sync",
   "dep:radroots_nostr",
@@ -84,6 +84,7 @@ reqwest = { workspace = true, optional = true, default-features = false, feature
 ] }
 serde = { workspace = true, optional = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true, features = ["std"] }
+uuid = { workspace = true, optional = true, features = ["v4"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

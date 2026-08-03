@@ -676,7 +676,7 @@ fn check_sdk_feature_matrix(root: &Path) -> Result<(), String> {
         ("default", &["memory"][..]),
         ("memory", &["radroots_storage/memory"]),
         ("sqlite", &["dep:radroots_storage_sqlite"]),
-        ("sync", &["dep:radroots_sync"]),
+        ("sync", &["dep:radroots_sync", "dep:uuid"]),
         (
             "nostr",
             &["sync", "dep:radroots_nostr", "dep:radroots_transport_nostr"],

@@ -91,6 +91,22 @@ and `ClientBuilder::sqlite(...)` are explicit constructors; merely enabling a
 feature or constructing an empty builder creates no resource. Signers, event
 sources, event sinks, and the sync engine are injected separately.
 
+Native mobile hosts can retain one client while changing host-owned identity
+and relay selection. `signing::Slot` accepts a key restored from secure host
+storage or generates a one-time `nsec` handoff; it never persists that secret.
+`transport::NostrSlot` validates a complete relay set before atomically
+installing it. `ClientBuilder::host_sync(sync::HostPolicy)` explicitly opts
+SDK-created memory or SQLite storage into system-clock and random operation-ID
+policy without creating a runtime, timer, retry loop, or worker.
+
+With `sync`, `nostr`, and `local-signing`, `Client::social()` exposes bounded
+profile/post fetch and publish operations. Fetch verifies and durably ingests
+each accepted event. Publish durably commits a signed event, then performs one
+explicit delivery pass and reports whether delivery remains pending. Host UI
+lifecycle code owns polling, background policy, keychain access, and any later
+retry. Profile authoring is deliberately media-free until the host can supply
+the canonical byte-verified media descriptor required by the event contract.
+
 Transport profiles are explicit. `Profile::local_only()` contains no target.
 `Profile::delivery(...)` retains the exact canonical target set and
 satisfaction policy. Preview transports report unavailable and never
@@ -130,10 +146,12 @@ errors and daemon failures use stable, redacted classifications while retaining
 private source chains for local diagnostics.
 
 Signer material and bearer credentials are caller-owned capabilities. The SDK
-does not generate keys, read a keyring, persist secrets, or include credentials
+does not read a keyring, persist secrets, or include credentials
 in `Debug`, `Display`, diagnostics, receipts, or public error text. Hosts remain
 responsible for protecting source chains and any lower-level logs they choose
-to expose.
+to expose. When explicitly requested, `signing::Slot::generate` creates one
+ephemeral key and immediately hands its only persistence representation to the
+host for secure custody.
 
 ## Daemon execution
 
