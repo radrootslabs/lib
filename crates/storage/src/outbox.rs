@@ -492,15 +492,6 @@ impl OutboxRecord {
             .receipt
             .validate_for_request(&self.request)
             .map_err(|_| Error::InvalidDeliveryEvidence)?;
-        let satisfied = value
-            .receipt
-            .is_satisfied(&self.request)
-            .map_err(|_| Error::InvalidDeliveryEvidence)?;
-        let retryable = value
-            .receipt
-            .target_receipts()
-            .iter()
-            .any(|receipt| matches!(receipt.outcome().retryability(), Retryability::Retryable));
         self.evidence
             .extend(
                 value
@@ -516,13 +507,7 @@ impl OutboxRecord {
                     }),
             );
         self.last_attempt = Some(value.attempt);
-        self.satisfaction = if satisfied {
-            SatisfactionResult::Satisfied
-        } else if retryable {
-            SatisfactionResult::Pending
-        } else {
-            SatisfactionResult::Exhausted
-        };
+        self.satisfaction = evaluate_satisfaction(&self.request, &self.evidence);
         self.stage = match self.satisfaction {
             SatisfactionResult::Pending => OutboxStage::Retryable,
             SatisfactionResult::Satisfied => OutboxStage::Satisfied,
@@ -874,7 +859,6 @@ fn validate_evidence(
     }
 
     let mut previous_recorded_at = created_at_unix_ms;
-    let mut latest_receipt = None;
     for attempt in 1..=last_attempt.get() {
         let mut recorded_at = None;
         let receipts = request
@@ -911,29 +895,68 @@ fn validate_evidence(
             return Err(Error::CorruptOutboxRecord);
         }
         previous_recorded_at = recorded_at;
-        latest_receipt = Some(
-            DeliveryReceipt::for_request(request, receipts)
-                .map_err(|_| Error::CorruptOutboxRecord)?,
-        );
+        DeliveryReceipt::for_request(request, receipts).map_err(|_| Error::CorruptOutboxRecord)?;
     }
-    let receipt = latest_receipt.ok_or(Error::CorruptOutboxRecord)?;
-    let expected = if receipt
-        .is_satisfied(request)
-        .map_err(|_| Error::CorruptOutboxRecord)?
-    {
-        SatisfactionResult::Satisfied
-    } else if receipt
-        .target_receipts()
-        .iter()
-        .any(|receipt| receipt.outcome().is_retryable())
-    {
-        SatisfactionResult::Pending
-    } else {
-        SatisfactionResult::Exhausted
-    };
+    let expected = evaluate_satisfaction(request, evidence);
     if expected == satisfaction {
         Ok(())
     } else {
         Err(Error::CorruptOutboxRecord)
+    }
+}
+
+fn evaluate_satisfaction(
+    request: &DeliveryRequest,
+    evidence: &[TargetDeliveryEvidence],
+) -> SatisfactionResult {
+    let class = request.satisfaction().class();
+    let targets = request.target_set().targets();
+    let is_successful = |target: &TargetFingerprint| {
+        evidence
+            .iter()
+            .any(|entry| entry.target() == target && entry.outcome().satisfies(class))
+    };
+    let is_retryable = |target: &TargetFingerprint| {
+        evidence
+            .iter()
+            .rev()
+            .find(|entry| entry.target() == target)
+            .is_some_and(|entry| entry.outcome().is_retryable())
+    };
+    let successful = targets
+        .iter()
+        .filter(|target| is_successful(target.fingerprint()))
+        .count();
+    let retryable = targets
+        .iter()
+        .filter(|target| !is_successful(target.fingerprint()) && is_retryable(target.fingerprint()))
+        .count();
+    let policy = request.satisfaction().targets();
+    let (satisfied, possible) = if policy.is_any() {
+        (successful != 0, successful + retryable != 0)
+    } else if policy.is_all() {
+        (
+            successful == targets.len(),
+            successful + retryable == targets.len(),
+        )
+    } else if let Some(threshold) = policy.quorum_threshold() {
+        let threshold = usize::from(threshold);
+        (successful >= threshold, successful + retryable >= threshold)
+    } else if let Some(required) = policy.required_targets() {
+        (
+            required.iter().all(&is_successful),
+            required
+                .iter()
+                .all(|target| is_successful(target) || is_retryable(target)),
+        )
+    } else {
+        (false, false)
+    };
+    if satisfied {
+        SatisfactionResult::Satisfied
+    } else if possible {
+        SatisfactionResult::Pending
+    } else {
+        SatisfactionResult::Exhausted
     }
 }

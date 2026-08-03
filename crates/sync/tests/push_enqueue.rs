@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, AtomicUsize, Ordering},
+use std::{
+    collections::VecDeque,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
 };
 
 use futures::{FutureExt, task::noop_waker_ref};
@@ -15,16 +18,19 @@ use radroots_storage::{
     event::{EventQuery, EventQueryBounds, SourceGeneration},
     journal::{IdempotencyKey, JournalStage, OperationInstanceId},
     memory::MemoryStorage,
-    outbox::OutboxStage,
+    outbox::{LeaseOwner, OutboxStage, SatisfactionResult},
 };
 use radroots_sync::{
     Engine, PushRequest,
     policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
+    push::DeliveryRunRequest,
 };
 use radroots_transport::{
     DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkStatus, Target,
     TargetSet, TransportId,
+    outcome::DeliveryOutcome,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    sink::DeliveryTargetReceipt,
 };
 use secp256k1::{Keypair, Message, Secp256k1, SecretKey};
 
@@ -41,6 +47,67 @@ impl EventSink for MockSink {
         _request: DeliveryRequest,
     ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>> {
         Box::pin(async { unreachable!("enqueue does not deliver") })
+    }
+}
+
+enum DeliveryBehavior {
+    Outcomes(Vec<DeliveryOutcome>),
+    AdapterError,
+    MismatchedRequest,
+}
+
+struct ScriptedSink {
+    behaviors: Mutex<VecDeque<DeliveryBehavior>>,
+    requests: Mutex<Vec<DeliveryRequest>>,
+}
+
+impl ScriptedSink {
+    fn new(behaviors: impl IntoIterator<Item = DeliveryBehavior>) -> Self {
+        Self {
+            behaviors: Mutex::new(behaviors.into_iter().collect()),
+            requests: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl EventSink for ScriptedSink {
+    fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SinkStatus, TransportError>> {
+        Box::pin(async { unreachable!("delivery does not inspect sink status") })
+    }
+
+    fn deliver(
+        &self,
+        request: DeliveryRequest,
+    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>> {
+        self.requests
+            .lock()
+            .expect("scripted request lock")
+            .push(request.clone());
+        let behavior = self
+            .behaviors
+            .lock()
+            .expect("scripted behavior lock")
+            .pop_front()
+            .expect("scripted delivery behavior");
+        Box::pin(async move {
+            match behavior {
+                DeliveryBehavior::Outcomes(outcomes) => receipt(&request, outcomes),
+                DeliveryBehavior::AdapterError => Err(TransportError::UnsupportedOperation),
+                DeliveryBehavior::MismatchedRequest => {
+                    let mismatched = DeliveryRequest::new(
+                        "mismatched-request",
+                        request.payload().clone(),
+                        request.target_set().clone(),
+                        request.satisfaction().clone(),
+                        request.deadline_unix_ms(),
+                    )?;
+                    receipt(
+                        &mismatched,
+                        vec![DeliveryOutcome::accepted(); mismatched.target_set().len()],
+                    )
+                }
+            }
+        })
     }
 }
 
@@ -149,6 +216,20 @@ fn signed_event(request: &SignRequest) -> SignedEvent {
 }
 
 fn request(operation_byte: u8, relay: &str) -> PushRequest {
+    request_with_policy(
+        operation_byte,
+        &[relay],
+        SatisfactionClass::Accepted,
+        TargetPolicy::any(),
+    )
+}
+
+fn request_with_policy(
+    operation_byte: u8,
+    relays: &[&str],
+    class: SatisfactionClass,
+    target_policy: TargetPolicy,
+) -> PushRequest {
     let pubkey = public_key_hex();
     let draft = EventDraft::new(
         "radroots.social.geochat.v1",
@@ -170,32 +251,68 @@ fn request(operation_byte: u8, relay: &str) -> PushRequest {
         IdempotencyKey::parse(format!("push-{operation_byte}")).expect("idempotency key"),
         actor,
         draft,
-        TargetSet::new(vec![
-            Target::new(TransportId::NOSTR, relay).expect("target"),
-        ])
+        TargetSet::new(
+            relays
+                .iter()
+                .map(|relay| Target::new(TransportId::NOSTR, *relay).expect("target"))
+                .collect(),
+        )
         .expect("targets"),
-        SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::any()),
+        SatisfactionPolicy::new(class, target_policy),
         CancellationPolicy::PreservePublishedRequest,
     )
     .expect("push request")
 }
 
+fn receipt(
+    request: &DeliveryRequest,
+    outcomes: Vec<DeliveryOutcome>,
+) -> Result<DeliveryReceipt, TransportError> {
+    let targets = request
+        .target_set()
+        .targets()
+        .iter()
+        .cloned()
+        .zip(outcomes)
+        .map(|(target, outcome)| DeliveryTargetReceipt::attempted(target, outcome))
+        .collect();
+    DeliveryReceipt::for_request(request, targets)
+}
+
 fn setup_engine(signer: Arc<MockSigner>) -> (Engine, Arc<MemoryStorage>) {
+    setup_engine_with_sink(signer, Arc::new(MockSink)).0
+}
+
+fn setup_engine_with_sink(
+    signer: Arc<MockSigner>,
+    sink: Arc<dyn EventSink>,
+) -> ((Engine, Arc<MemoryStorage>), Arc<TestClock>) {
     let storage = Arc::new(MemoryStorage::new(
         SourceGeneration::new([6; 32]).expect("generation"),
     ));
     let capability: Arc<dyn Storage> = storage.clone();
+    let clock = Arc::new(TestClock(AtomicU64::new(1_800_000_200_000)));
     let engine = Engine::builder(
         capability,
-        Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+        clock.clone(),
         Arc::new(TestIds(AtomicU64::new(10))),
         DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
     )
-    .sink(Arc::new(MockSink))
+    .sink(sink)
     .signer(signer)
     .build()
     .expect("engine");
-    (engine, storage)
+    ((engine, storage), clock)
+}
+
+fn delivery_run(seed: u8, limit: u16) -> DeliveryRunRequest {
+    DeliveryRunRequest::new(
+        LeaseOwner::parse("sync-delivery-test").expect("lease owner"),
+        SyncId::new([seed; 16]).expect("lease seed"),
+        1_000,
+        limit,
+    )
+    .expect("delivery run")
 }
 
 #[test]
@@ -296,5 +413,249 @@ fn idempotency_conflict_and_cancellation_before_commit_fail_closed() {
         ))
         .expect("outbox lookup")
         .is_none()
+    );
+}
+
+#[test]
+fn delivery_evaluates_any_all_quorum_required_and_partial_outcomes() {
+    let sink = Arc::new(ScriptedSink::new([
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::rejected(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::delivered(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::delivered(),
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::rejected(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::rejected(),
+            DeliveryOutcome::accepted(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::unavailable(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::rejected(),
+            DeliveryOutcome::unavailable(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::rejected(),
+            DeliveryOutcome::unavailable(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::unavailable(),
+            DeliveryOutcome::rejected(),
+        ]),
+    ]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let ((engine, _), _) = setup_engine_with_sink(signer, sink.clone());
+    let two = ["wss://one.example", "wss://two.example"];
+    let three = [
+        "wss://one.example",
+        "wss://two.example",
+        "wss://three.example",
+    ];
+    let required = Target::new(TransportId::NOSTR, two[1])
+        .expect("required target")
+        .fingerprint()
+        .clone();
+    let plans = [
+        request_with_policy(11, &two, SatisfactionClass::Accepted, TargetPolicy::any()),
+        request_with_policy(12, &two, SatisfactionClass::Accepted, TargetPolicy::all()),
+        request_with_policy(
+            13,
+            &three,
+            SatisfactionClass::Accepted,
+            TargetPolicy::quorum(2).expect("quorum"),
+        ),
+        request_with_policy(
+            14,
+            &two,
+            SatisfactionClass::Accepted,
+            TargetPolicy::required(vec![required]).expect("required policy"),
+        ),
+        request_with_policy(15, &two, SatisfactionClass::Accepted, TargetPolicy::all()),
+        request_with_policy(16, &two, SatisfactionClass::Accepted, TargetPolicy::all()),
+        request_with_policy(17, &two, SatisfactionClass::Accepted, TargetPolicy::any()),
+        request_with_policy(
+            18,
+            &two,
+            SatisfactionClass::Accepted,
+            TargetPolicy::required(vec![
+                Target::new(TransportId::NOSTR, two[1])
+                    .expect("terminal required target")
+                    .fingerprint()
+                    .clone(),
+            ])
+            .expect("terminal required policy"),
+        ),
+    ];
+    for plan in plans {
+        block_on(engine.sign_and_enqueue(plan)).expect("enqueue delivery plan");
+    }
+
+    let delivered = block_on(engine.deliver_pending(delivery_run(31, 8))).expect("deliver batch");
+    assert_eq!(delivered.succeeded(), 8);
+    assert_eq!(delivered.failed(), 0);
+    let records: Vec<_> = delivered
+        .outcomes()
+        .iter()
+        .map(|outcome| outcome.as_ref().expect("durable outcome"))
+        .collect();
+    assert_eq!(records[0].stage(), OutboxStage::Satisfied);
+    assert_eq!(records[1].stage(), OutboxStage::Satisfied);
+    assert_eq!(records[2].stage(), OutboxStage::Satisfied);
+    assert_eq!(records[3].stage(), OutboxStage::Satisfied);
+    assert_eq!(records[4].stage(), OutboxStage::Retryable);
+    assert_eq!(records[4].satisfaction(), SatisfactionResult::Pending);
+    assert_eq!(records[5].stage(), OutboxStage::Exhausted);
+    assert_eq!(records[6].stage(), OutboxStage::Retryable);
+    assert_eq!(records[7].stage(), OutboxStage::Exhausted);
+    for record in records {
+        assert_eq!(record.evidence().len(), record.request().target_set().len());
+        let expected: Vec<_> = record
+            .request()
+            .target_set()
+            .targets()
+            .iter()
+            .map(|target| target.fingerprint())
+            .collect();
+        let actual: Vec<_> = record
+            .evidence()
+            .iter()
+            .map(|evidence| evidence.target())
+            .collect();
+        assert_eq!(actual, expected);
+    }
+    assert_eq!(sink.requests.lock().expect("request log").len(), 8);
+}
+
+#[test]
+fn transport_failure_is_durable_and_retry_preserves_the_exact_plan() {
+    let sink = Arc::new(ScriptedSink::new([
+        DeliveryBehavior::AdapterError,
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::unavailable(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::unavailable(),
+            DeliveryOutcome::accepted(),
+        ]),
+    ]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let ((engine, _), _) = setup_engine_with_sink(signer, sink.clone());
+    block_on(engine.sign_and_enqueue(request_with_policy(
+        21,
+        &["wss://one.example", "wss://two.example"],
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    )))
+    .expect("enqueue retry plan");
+
+    let first = block_on(engine.deliver_pending(delivery_run(41, 1))).expect("first delivery");
+    let first = first.outcomes()[0].as_ref().expect("durable failure");
+    assert_eq!(first.stage(), OutboxStage::Retryable);
+    assert_eq!(first.evidence().len(), 2);
+    assert!(first.evidence().iter().all(|evidence| {
+        !evidence.was_attempted() && evidence.outcome() == &DeliveryOutcome::unavailable()
+    }));
+
+    let second = block_on(engine.deliver_pending(delivery_run(42, 1))).expect("partial retry");
+    let second = second.outcomes()[0].as_ref().expect("durable retry");
+    assert_eq!(second.stage(), OutboxStage::Retryable);
+    assert_eq!(second.last_attempt().expect("attempt").get(), 2);
+
+    let third = block_on(engine.deliver_pending(delivery_run(43, 1))).expect("completed retry");
+    let third = third.outcomes()[0].as_ref().expect("durable retry");
+    assert_eq!(third.stage(), OutboxStage::Satisfied);
+    assert_eq!(third.last_attempt().expect("attempt").get(), 3);
+    assert_eq!(third.evidence().len(), 6);
+    assert_eq!(
+        third
+            .latest_target_evidence(third.request().target_set().targets()[0].fingerprint())
+            .expect("latest first target evidence")
+            .outcome(),
+        &DeliveryOutcome::unavailable()
+    );
+    assert!(
+        third.evidence()[2]
+            .outcome()
+            .satisfies(SatisfactionClass::Accepted)
+    );
+    let requests = sink.requests.lock().expect("request log");
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0], requests[1]);
+    assert_eq!(requests[1], requests[2]);
+}
+
+#[test]
+fn malformed_receipts_release_work_and_expired_plans_terminalize() {
+    let malformed_sink = Arc::new(ScriptedSink::new([DeliveryBehavior::MismatchedRequest]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let ((engine, storage), _) = setup_engine_with_sink(signer, malformed_sink);
+    let enqueued = block_on(engine.sign_and_enqueue(request(31, "wss://one.example")))
+        .expect("enqueue malformed receipt plan");
+    let malformed =
+        block_on(engine.deliver_pending(delivery_run(51, 1))).expect("malformed delivery pass");
+    assert_eq!(malformed.outcomes(), &[Err(Error::InvalidDeliveryRequest)]);
+    let released = block_on(Outbox::item(&*storage, enqueued.outbox().item_id()))
+        .expect("released lookup")
+        .expect("released record");
+    assert_eq!(released.stage(), OutboxStage::Pending);
+    assert!(released.lease().is_none());
+    assert!(released.evidence().is_empty());
+
+    let expired_sink = Arc::new(ScriptedSink::new([]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let ((engine, _), clock) = setup_engine_with_sink(signer, expired_sink.clone());
+    let enqueued = block_on(engine.sign_and_enqueue(request(32, "wss://one.example")))
+        .expect("enqueue expiring plan");
+    clock.0.store(
+        enqueued.outbox().request().deadline_unix_ms() + 1,
+        Ordering::Relaxed,
+    );
+    let expired =
+        block_on(engine.deliver_pending(delivery_run(52, 1))).expect("expired delivery pass");
+    let expired = expired.outcomes()[0]
+        .as_ref()
+        .expect("durable terminal state");
+    assert_eq!(expired.stage(), OutboxStage::Exhausted);
+    assert_eq!(expired.satisfaction(), SatisfactionResult::Exhausted);
+    assert!(expired.evidence()[0].outcome().is_terminal());
+    assert!(
+        expired_sink
+            .requests
+            .lock()
+            .expect("request log")
+            .is_empty()
+    );
+}
+
+#[test]
+fn delivery_run_rejects_unbounded_claims() {
+    let owner = LeaseOwner::parse("sync-delivery-test").expect("lease owner");
+    let seed = SyncId::new([71; 16]).expect("lease seed");
+    assert_eq!(
+        DeliveryRunRequest::new(owner.clone(), seed, 0, 1),
+        Err(Error::InvalidDeliveryRequest)
+    );
+    assert_eq!(
+        DeliveryRunRequest::new(owner, seed, 1_000, 0),
+        Err(Error::InvalidDeliveryRequest)
     );
 }

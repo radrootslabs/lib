@@ -207,6 +207,8 @@ pub enum Error {
     SignerFailed,
     SignerDeadlineExceeded,
     InvalidSignerOutput,
+    InvalidDeliveryRequest,
+    MissingSink,
 }
 
 impl core::fmt::Display for Error {
@@ -234,6 +236,8 @@ impl core::fmt::Display for Error {
             Self::SignerFailed => "sync signer did not produce an event",
             Self::SignerDeadlineExceeded => "sync signer exceeded its deadline",
             Self::InvalidSignerOutput => "sync signer output failed canonical verification",
+            Self::InvalidDeliveryRequest => "sync delivery request is invalid",
+            Self::MissingSink => "sync engine has no event sink",
         })
     }
 }

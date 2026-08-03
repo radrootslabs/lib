@@ -18,12 +18,16 @@ use radroots_storage::{
         IdempotencyDigest, IdempotencyKey, JournalStage, JournalState, OperationInstanceId,
         PrepareOperation,
     },
-    outbox::{DeliveryPlanDigest, EnqueueOutboxItem, OutboxItemId, OutboxRecord},
+    outbox::{
+        ClaimOutboxItems, DeliveryAttempt, DeliveryAttemptEvidence, DeliveryPlanDigest,
+        EnqueueOutboxItem, LeaseId, LeaseOwner, OUTBOX_CLAIM_LIMIT_MAX, OutboxItemId, OutboxRecord,
+    },
 };
 use radroots_transport::{
-    DeliveryRequest, Target, TransportId,
+    DeliveryReceipt, DeliveryRequest, Target, TransportId,
+    outcome::{DeliveryOutcome, DeliveryOutcomeKind, Retryability},
     policy::SatisfactionPolicy,
-    sink::DeliveryPayload,
+    sink::{DeliveryPayload, DeliveryTargetReceipt},
     source::{EventProvenance, ObservedEvent},
     target::TargetSet,
 };
@@ -34,6 +38,8 @@ use crate::{
     ingest::{AdmissionDecision, AdmissionPolicy, RegistryPolicy},
     policy::{Error, OperationKind, SyncId},
 };
+
+const MAX_DELIVERY_LEASE_MS: u64 = 86_400_000;
 
 /// Caller-owned, replay-stable inputs for one outbound operation.
 #[derive(Clone)]
@@ -128,6 +134,59 @@ impl PushReceipt {
     }
     pub const fn is_replay(&self) -> bool {
         self.replay
+    }
+}
+
+/// Bounds and lease authority for one explicit outbox delivery pass.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeliveryRunRequest {
+    owner: LeaseOwner,
+    lease_seed: SyncId,
+    lease_duration_ms: u64,
+    limit: u16,
+}
+
+impl DeliveryRunRequest {
+    pub fn new(
+        owner: LeaseOwner,
+        lease_seed: SyncId,
+        lease_duration_ms: u64,
+        limit: u16,
+    ) -> Result<Self, Error> {
+        if lease_duration_ms == 0
+            || lease_duration_ms > MAX_DELIVERY_LEASE_MS
+            || limit == 0
+            || limit > OUTBOX_CLAIM_LIMIT_MAX
+        {
+            return Err(Error::InvalidDeliveryRequest);
+        }
+        Ok(Self {
+            owner,
+            lease_seed,
+            lease_duration_ms,
+            limit,
+        })
+    }
+}
+
+/// Independent durable outcomes from one bounded delivery pass.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeliveryRunReceipt {
+    outcomes: Vec<Result<OutboxRecord, Error>>,
+}
+
+impl DeliveryRunReceipt {
+    pub fn outcomes(&self) -> &[Result<OutboxRecord, Error>] {
+        self.outcomes.as_slice()
+    }
+    pub fn succeeded(&self) -> usize {
+        self.outcomes
+            .iter()
+            .filter(|outcome| outcome.is_ok())
+            .count()
+    }
+    pub fn failed(&self) -> usize {
+        self.outcomes.len() - self.succeeded()
     }
 }
 
@@ -295,6 +354,157 @@ impl Engine {
             replay: false,
         })
     }
+
+    /// Claims and delivers at most the caller-bounded number of outbox items.
+    pub async fn deliver_pending(
+        &self,
+        request: DeliveryRunRequest,
+    ) -> Result<DeliveryRunReceipt, Error> {
+        if request.lease_duration_ms > self.deadlines.timeout_ms(OperationKind::Deliver) {
+            return Err(Error::InvalidDeliveryRequest);
+        }
+        let sink = self.sink.as_deref().ok_or(Error::MissingSink)?;
+        let now = self.clock.now_unix_ms()?;
+        let expires = now
+            .checked_add(request.lease_duration_ms)
+            .ok_or(Error::DeadlineOverflow)?;
+        let claimed = Outbox::claim(
+            self.storage.as_ref(),
+            ClaimOutboxItems::new(
+                request.owner,
+                LeaseId::new(*request.lease_seed.as_bytes()).map_err(map_storage_error)?,
+                now,
+                expires,
+                request.limit,
+            )
+            .map_err(map_storage_error)?,
+        )
+        .await
+        .map_err(map_storage_error)?;
+        let mut outcomes = Vec::with_capacity(claimed.len());
+        for item in claimed {
+            let delivery_request = item.record().request().clone();
+            let attempted_at = self.clock.now_unix_ms()?;
+            let receipt = if attempted_at >= delivery_request.deadline_unix_ms() {
+                synthetic_receipt(&delivery_request, false)?
+            } else {
+                match sink.deliver(delivery_request.clone()).await {
+                    Ok(receipt) => receipt,
+                    Err(_) => synthetic_receipt(&delivery_request, true)?,
+                }
+            };
+            if receipt.validate_for_request(&delivery_request).is_err() {
+                let released_at = self.clock.now_unix_ms()?;
+                let released = Outbox::release(
+                    self.storage.as_ref(),
+                    item.record().item_id(),
+                    item.lease().id(),
+                    item.record().revision(),
+                    released_at,
+                    None,
+                )
+                .await
+                .map_err(map_storage_error);
+                outcomes.push(match released {
+                    Ok(_) => Err(Error::InvalidDeliveryRequest),
+                    Err(error) => Err(error),
+                });
+                continue;
+            }
+            let attempt = DeliveryAttempt::new(
+                item.record()
+                    .last_attempt()
+                    .map_or(1, |attempt| attempt.get().saturating_add(1)),
+            )
+            .map_err(map_storage_error)?;
+            let evidence = DeliveryAttemptEvidence::new(
+                item.record().item_id(),
+                item.lease().id(),
+                item.record().revision(),
+                attempt,
+                receipt,
+                attempted_at,
+            )
+            .map_err(map_storage_error)?;
+            let digest = delivery_evidence_digest(&evidence);
+            let commit = AtomicCommit::new(
+                next_commit_id(self, OperationKind::Deliver)?,
+                digest,
+                attempted_at,
+                AtomicWorkflow::Delivered(Box::new(evidence)),
+            )
+            .map_err(map_storage_error)?;
+            let outcome = match self.storage.commit(commit).await {
+                Ok(receipt) => match receipt.outcome() {
+                    AtomicCommitOutcome::Delivered { outbox } => Ok((**outbox).clone()),
+                    _ => Err(Error::StorageFailed),
+                },
+                Err(error) => Err(map_storage_error(error)),
+            };
+            outcomes.push(outcome);
+        }
+        Ok(DeliveryRunReceipt { outcomes })
+    }
+}
+
+fn synthetic_receipt(request: &DeliveryRequest, retryable: bool) -> Result<DeliveryReceipt, Error> {
+    let outcome = if retryable {
+        DeliveryOutcome::unavailable()
+    } else {
+        DeliveryOutcome::failed(Retryability::Terminal)
+            .map_err(|_| Error::InvalidDeliveryRequest)?
+    };
+    let targets = request
+        .target_set()
+        .targets()
+        .iter()
+        .cloned()
+        .map(|target| DeliveryTargetReceipt::skipped(target, outcome.clone()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| Error::InvalidDeliveryRequest)?;
+    DeliveryReceipt::for_request(request, targets).map_err(|_| Error::InvalidDeliveryRequest)
+}
+
+fn delivery_evidence_digest(evidence: &DeliveryAttemptEvidence) -> AtomicCommitDigest {
+    let mut hasher = Sha256::new();
+    hash_field(&mut hasher, b"radroots.sync.delivery-evidence.v1");
+    hash_field(&mut hasher, evidence.item_id().as_bytes());
+    hash_field(&mut hasher, evidence.lease_id().as_bytes());
+    hasher.update(evidence.expected_revision().get().to_be_bytes());
+    hasher.update(evidence.attempt().get().to_be_bytes());
+    hasher.update(evidence.recorded_at_unix_ms().to_be_bytes());
+    hash_field(
+        &mut hasher,
+        evidence.receipt().request_id().as_str().as_bytes(),
+    );
+    for target in evidence.receipt().target_receipts() {
+        hash_field(
+            &mut hasher,
+            target.target().fingerprint().as_str().as_bytes(),
+        );
+        hasher.update([u8::from(target.was_attempted())]);
+        hasher.update([match target.outcome().kind() {
+            DeliveryOutcomeKind::Accepted => 0,
+            DeliveryOutcomeKind::Delivered => 1,
+            DeliveryOutcomeKind::Rejected => 2,
+            DeliveryOutcomeKind::Unavailable => 3,
+            DeliveryOutcomeKind::Failed => 4,
+        }]);
+        hasher.update([match target.outcome().retryability() {
+            Retryability::NotApplicable => 0,
+            Retryability::Retryable => 1,
+            Retryability::Terminal => 2,
+        }]);
+        hash_field(
+            &mut hasher,
+            target.outcome().code().unwrap_or_default().as_bytes(),
+        );
+        hash_field(
+            &mut hasher,
+            target.outcome().message().unwrap_or_default().as_bytes(),
+        );
+    }
+    AtomicCommitDigest::new(hasher.finalize().into())
 }
 
 fn outbound_admission(
