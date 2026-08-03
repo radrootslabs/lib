@@ -7,6 +7,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use radroots_event_codec::Codec;
 use radroots_storage::{backup::MemberDigest, event::SourceGeneration, status::EventStoreMode};
 use sha2::{Digest, Sha256};
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -14,6 +15,8 @@ use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use crate::{Error, SqliteStorage};
 
 const LEGACY_SOURCE_MAX: usize = 4;
+/// Maximum predecessor event rows converted by one staging transaction.
+pub const LEGACY_EVENT_STAGE_PAGE_LIMIT_MAX: u16 = 256;
 const LEGACY_MANIFEST: &str = "manifest.v1";
 const EVENT_STORE_LEDGER: &str = "radroots_event_store_schema_migrations";
 const EVENT_STORE_LEDGER_DDL: &str = "CREATE TABLE radroots_event_store_schema_migrations (
@@ -335,6 +338,37 @@ pub struct LegacyImportJournal {
     updated_at_unix_ms: u64,
     completed_at_unix_ms: Option<u64>,
     members: Vec<LegacyImportMemberJournal>,
+}
+
+/// Result of one bounded, durable legacy event-store staging transaction.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyEventStagePage {
+    staged_rows: u16,
+    staged_row_count: u64,
+    resume_cursor: Option<[u8; 8]>,
+    complete: bool,
+}
+
+impl LegacyEventStagePage {
+    /// Returns rows newly converted by this transaction.
+    pub const fn staged_rows(&self) -> u16 {
+        self.staged_rows
+    }
+
+    /// Returns the total durable event staging row count for this import.
+    pub const fn staged_row_count(&self) -> u64 {
+        self.staged_row_count
+    }
+
+    /// Returns the exact big-endian predecessor `event_envelopes.seq` cursor.
+    pub const fn resume_cursor(&self) -> Option<&[u8; 8]> {
+        self.resume_cursor.as_ref()
+    }
+
+    /// Reports whether the source member has reached its exact end.
+    pub const fn is_complete(&self) -> bool {
+        self.complete
+    }
 }
 
 impl LegacyImportJournal {
@@ -873,6 +907,268 @@ impl SqliteStorage {
         }))
     }
 
+    /// Converts one bounded page of an exact legacy event store into isolated staging.
+    pub async fn stage_legacy_events(
+        &self,
+        classified: &ClassifiedLegacyImport,
+        limit: u16,
+        updated_at_unix_ms: u64,
+    ) -> Result<LegacyEventStagePage, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        if limit == 0 || limit > LEGACY_EVENT_STAGE_PAGE_LIMIT_MAX || updated_at_unix_ms == 0 {
+            return Err(Error::InvalidLegacyImportStageRequest);
+        }
+        verify_prepared_evidence(&classified.prepared).await?;
+        let classification_sha256 = classification_digest(classified);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if !journal_matches_classified(&journal, classified, classification_sha256) {
+            return Err(Error::LegacyImportConflict);
+        }
+        let classification = classified
+            .sources()
+            .iter()
+            .find(|source| source.kind() == LegacySourceKind::EventStore)
+            .ok_or(Error::LegacyImportConflict)?;
+        if !matches!(
+            classification.schema(),
+            LegacySchema::EventStoreV1
+                | LegacySchema::EventStoreV2
+                | LegacySchema::EventStoreV3
+                | LegacySchema::EventStoreV4
+        ) {
+            return Err(Error::LegacyImportConflict);
+        }
+        let snapshot = classified
+            .prepared
+            .snapshots()
+            .iter()
+            .find(|snapshot| snapshot.kind() == LegacySourceKind::EventStore)
+            .ok_or(Error::LegacyImportConflict)?;
+        let source_path = classified.bundle_path().join(snapshot.relative_path());
+        let updated_at = i64::try_from(updated_at_unix_ms)
+            .map_err(|_| Error::InvalidLegacyImportStageRequest)?;
+
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let import_row = sqlx::query(
+            "SELECT state, updated_at_ms FROM radroots_runtime_legacy_imports
+             WHERE import_id = ? AND target_generation = ?
+               AND manifest_sha256 = ? AND classification_sha256 = ?",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .bind(classified.target_generation().as_bytes().as_slice())
+        .bind(classified.prepared.manifest_sha256().as_bytes().as_slice())
+        .bind(classification_sha256.as_bytes().as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?
+        .ok_or(Error::LegacyImportConflict)?;
+        let import_state = parse_import_state(
+            import_row
+                .try_get::<String, _>("state")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?
+                .as_str(),
+        )?;
+        let import_updated_at = import_row
+            .try_get::<i64, _>("updated_at_ms")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        if updated_at < import_updated_at
+            || !matches!(
+                import_state,
+                LegacyImportState::Classified
+                    | LegacyImportState::Staging
+                    | LegacyImportState::Ready
+            )
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let member_row = sqlx::query(
+            "SELECT state, resume_cursor, staged_row_count, updated_at_ms
+             FROM radroots_runtime_legacy_import_members
+             WHERE import_id = ? AND source_kind = 'event_store'",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?
+        .ok_or(Error::LegacyImportConflict)?;
+        let member_state = parse_member_state(
+            member_row
+                .try_get::<String, _>("state")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?
+                .as_str(),
+        )?;
+        let durable_cursor = member_row
+            .try_get::<Option<Vec<u8>>, _>("resume_cursor")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        let staged_row_count = u64::try_from(
+            member_row
+                .try_get::<i64, _>("staged_row_count")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?,
+        )
+        .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        let member_updated_at = member_row
+            .try_get::<i64, _>("updated_at_ms")
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+        let resume_sequence = decode_event_stage_cursor(durable_cursor.as_deref())?;
+        if updated_at < member_updated_at {
+            return Err(Error::LegacyImportConflict);
+        }
+        if member_state == LegacyImportMemberState::Ready {
+            transaction
+                .commit()
+                .await
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            return Ok(LegacyEventStagePage {
+                staged_rows: 0,
+                staged_row_count,
+                resume_cursor: durable_cursor
+                    .as_deref()
+                    .map(decode_exact_event_stage_cursor)
+                    .transpose()?,
+                complete: true,
+            });
+        }
+        if !matches!(
+            member_state,
+            LegacyImportMemberState::Pending | LegacyImportMemberState::Staging
+        ) {
+            return Err(Error::LegacyImportConflict);
+        }
+
+        if import_state == LegacyImportState::Classified {
+            sqlx::query(
+                "UPDATE radroots_runtime_legacy_imports
+                 SET state = 'staging', updated_at_ms = ? WHERE import_id = ?",
+            )
+            .bind(updated_at)
+            .bind(classified.import_id().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        }
+        if member_state == LegacyImportMemberState::Pending {
+            sqlx::query(
+                "UPDATE radroots_runtime_legacy_import_members
+                 SET state = 'staging', updated_at_ms = ?
+                 WHERE import_id = ? AND source_kind = 'event_store'",
+            )
+            .bind(updated_at)
+            .bind(classified.import_id().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        }
+
+        let mut source = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&source_path)
+                .read_only(true),
+        )
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let rows = sqlx::query(
+            "SELECT seq, event_id, raw_json, verification_status, contract_status,
+                    projection_eligible, inserted_at_ms, updated_at_ms
+             FROM event_envelopes WHERE seq > ? ORDER BY seq LIMIT ?",
+        )
+        .bind(resume_sequence)
+        .bind(i64::from(limit) + 1)
+        .fetch_all(&mut source)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        source
+            .close()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let complete = rows.len() <= usize::from(limit);
+        let rows = rows.into_iter().take(usize::from(limit));
+        let mut last_sequence = resume_sequence;
+        let mut newly_staged = 0_u16;
+        for row in rows {
+            let converted = convert_legacy_event_row(&row)?;
+            sqlx::query(
+                "INSERT INTO radroots_runtime_legacy_event_staging(
+                    import_id, source_kind, legacy_sequence, event_id, signed_event,
+                    legacy_verification_status, legacy_contract_status,
+                    legacy_projection_eligible, legacy_inserted_at_ms,
+                    legacy_updated_at_ms
+                 ) VALUES (?, 'event_store', ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(classified.import_id().as_bytes().as_slice())
+            .bind(converted.sequence)
+            .bind(converted.event_id.as_slice())
+            .bind(converted.signed_event.as_slice())
+            .bind(converted.verification_status)
+            .bind(converted.contract_status)
+            .bind(converted.projection_eligible)
+            .bind(converted.inserted_at_ms)
+            .bind(converted.updated_at_ms)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+            last_sequence = converted.sequence;
+            newly_staged = newly_staged
+                .checked_add(1)
+                .ok_or(Error::LegacyImportStagingFailed)?;
+        }
+        let total = staged_row_count
+            .checked_add(u64::from(newly_staged))
+            .ok_or(Error::LegacyImportStagingFailed)?;
+        let cursor = (last_sequence > 0).then(|| encode_event_stage_cursor(last_sequence));
+        sqlx::query(
+            "UPDATE radroots_runtime_legacy_import_members
+             SET state = ?, resume_cursor = ?, staged_row_count = ?, updated_at_ms = ?
+             WHERE import_id = ? AND source_kind = 'event_store'",
+        )
+        .bind(if complete { "ready" } else { "staging" })
+        .bind(cursor.as_ref().map(<[u8; 8]>::as_slice))
+        .bind(i64::try_from(total).map_err(|_| Error::LegacyImportStagingFailed)?)
+        .bind(updated_at)
+        .bind(classified.import_id().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let pending_members = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM radroots_runtime_legacy_import_members
+             WHERE import_id = ? AND state != 'ready'",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        sqlx::query(
+            "UPDATE radroots_runtime_legacy_imports SET state = ?, updated_at_ms = ?
+             WHERE import_id = ?",
+        )
+        .bind(if pending_members == 0 {
+            "ready"
+        } else {
+            "staging"
+        })
+        .bind(updated_at)
+        .bind(classified.import_id().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        Ok(LegacyEventStagePage {
+            staged_rows: newly_staged,
+            staged_row_count: total,
+            resume_cursor: cursor,
+            complete,
+        })
+    }
+
     fn require_legacy_import_writer(
         &self,
         target_generation: SourceGeneration,
@@ -1403,6 +1699,93 @@ fn classification_digest(classified: &ClassifiedLegacyImport) -> MemberDigest {
     MemberDigest::new(digest.finalize().into())
 }
 
+struct ConvertedLegacyEvent {
+    sequence: i64,
+    event_id: [u8; 32],
+    signed_event: Vec<u8>,
+    verification_status: String,
+    contract_status: String,
+    projection_eligible: i64,
+    inserted_at_ms: i64,
+    updated_at_ms: i64,
+}
+
+fn convert_legacy_event_row(row: &sqlx::sqlite::SqliteRow) -> Result<ConvertedLegacyEvent, Error> {
+    let sequence = row
+        .try_get::<i64, _>("seq")
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+    let invalid = || Error::LegacyImportRowInvalid {
+        source_kind: LegacySourceKind::EventStore.as_str(),
+        legacy_sequence: sequence,
+    };
+    if sequence <= 0 {
+        return Err(invalid());
+    }
+    let event_id = row
+        .try_get::<String, _>("event_id")
+        .map_err(|_| invalid())?;
+    let raw_json = row
+        .try_get::<String, _>("raw_json")
+        .map_err(|_| invalid())?;
+    let signed = Codec::decode_signed_event(raw_json.as_str()).map_err(|_| invalid())?;
+    if signed.id().to_hex() != event_id {
+        return Err(invalid());
+    }
+    let verification_status = row
+        .try_get::<String, _>("verification_status")
+        .map_err(|_| invalid())?;
+    let contract_status = row
+        .try_get::<String, _>("contract_status")
+        .map_err(|_| invalid())?;
+    let projection_eligible = row
+        .try_get::<i64, _>("projection_eligible")
+        .map_err(|_| invalid())?;
+    let inserted_at_ms = row
+        .try_get::<i64, _>("inserted_at_ms")
+        .map_err(|_| invalid())?;
+    let updated_at_ms = row
+        .try_get::<i64, _>("updated_at_ms")
+        .map_err(|_| invalid())?;
+    if verification_status.is_empty()
+        || verification_status.len() > 64
+        || contract_status.is_empty()
+        || contract_status.len() > 64
+        || !matches!(projection_eligible, 0 | 1)
+        || inserted_at_ms <= 0
+        || updated_at_ms < inserted_at_ms
+    {
+        return Err(invalid());
+    }
+    Ok(ConvertedLegacyEvent {
+        sequence,
+        event_id: *signed.id().as_bytes(),
+        signed_event: raw_json.into_bytes(),
+        verification_status,
+        contract_status,
+        projection_eligible,
+        inserted_at_ms,
+        updated_at_ms,
+    })
+}
+
+fn encode_event_stage_cursor(sequence: i64) -> [u8; 8] {
+    sequence.to_be_bytes()
+}
+
+fn decode_event_stage_cursor(cursor: Option<&[u8]>) -> Result<i64, Error> {
+    cursor.map_or(Ok(0), |bytes| {
+        decode_exact_event_stage_cursor(bytes).map(i64::from_be_bytes)
+    })
+}
+
+fn decode_exact_event_stage_cursor(cursor: &[u8]) -> Result<[u8; 8], Error> {
+    let exact = <[u8; 8]>::try_from(cursor).map_err(|_| Error::InvalidLegacyImportJournal)?;
+    if i64::from_be_bytes(exact) <= 0 {
+        return Err(Error::InvalidLegacyImportJournal);
+    }
+    Ok(exact)
+}
+
 fn journal_matches_classified(
     journal: &LegacyImportJournal,
     classified: &ClassifiedLegacyImport,
@@ -1667,6 +2050,7 @@ const fn bytes_are_zero<const N: usize>(bytes: &[u8; N]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use radroots_event::{SignedEvent, wire::Nip01EventWire};
     use radroots_storage::event::SourceGeneration;
     use serde::Deserialize;
 
@@ -1680,6 +2064,10 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_schema_classification_v1.toml");
     const JOURNAL_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_import_journal_policy_v1.toml");
+    const EVENT_STAGING_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_event_staging_policy_v1.toml");
+    const EVENT_STORE_V1_SQL: &str =
+        include_str!("../../event_store/migrations/0001_event_store.up.sql");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -1765,6 +2153,25 @@ mod tests {
         live_product_row_mutation: bool,
     }
 
+    #[derive(Deserialize)]
+    struct EventStagingPolicy {
+        schema_version: u32,
+        authority: String,
+        source_kind: String,
+        supported_schemas: Vec<String>,
+        source_table: String,
+        ordering: String,
+        cursor: String,
+        page_limit_max: u16,
+        conversion: Vec<String>,
+        transaction: String,
+        idempotency: String,
+        staging_rows: String,
+        evidence_revalidation: String,
+        live_product_row_mutation: bool,
+        hidden_clock_or_entropy: bool,
+    }
+
     fn generation(byte: u8) -> SourceGeneration {
         SourceGeneration::new([byte; 32]).expect("source generation")
     }
@@ -1839,6 +2246,72 @@ mod tests {
         .execute(&mut connection)
         .await
         .expect("supported Studio row");
+        connection
+    }
+
+    fn signed_event(content: &str) -> SignedEvent {
+        let mut wire = Nip01EventWire {
+            id: "0".repeat(64),
+            pubkey: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_owned(),
+            created_at: 1_800_000_100,
+            kind: 1,
+            tags: vec![],
+            content: content.to_owned(),
+            sig: "42".repeat(64),
+            extra: Default::default(),
+        };
+        wire.id = wire
+            .computed_event_id()
+            .expect("canonical event id")
+            .to_hex();
+        let raw_json = serde_json::json!({
+            "id": &wire.id,
+            "pubkey": &wire.pubkey,
+            "created_at": wire.created_at,
+            "kind": wire.kind,
+            "tags": &wire.tags,
+            "content": &wire.content,
+            "sig": &wire.sig,
+        })
+        .to_string();
+        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    }
+
+    async fn supported_event_database(path: &Path, events: &[SignedEvent]) -> SqliteConnection {
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("supported event database");
+        sqlx::raw_sql(EVENT_STORE_V1_SQL)
+            .execute(&mut connection)
+            .await
+            .expect("event-store v1 schema");
+        for (index, event) in events.iter().enumerate() {
+            let timestamp = 13_000_i64 + i64::try_from(index).expect("event index");
+            sqlx::query(
+                "INSERT INTO event_envelopes(
+                    event_id, pubkey, created_at, kind, tags_json, content, sig,
+                    raw_json, verification_status, contract_status, contract_id,
+                    event_class, projection_eligible, inserted_at_ms, updated_at_ms
+                 ) VALUES (?, ?, ?, ?, '[]', ?, ?, ?, 'verified', 'admitted',
+                           NULL, NULL, 1, ?, ?)",
+            )
+            .bind(event.id().to_hex())
+            .bind(event.envelope().author().to_hex())
+            .bind(i64::try_from(event.created_at()).expect("created at"))
+            .bind(i64::from(event.kind()))
+            .bind(event.content())
+            .bind(event.signature_hex())
+            .bind(event.raw_json())
+            .bind(timestamp)
+            .bind(timestamp)
+            .execute(&mut connection)
+            .await
+            .expect("legacy event");
+        }
         connection
     }
 
@@ -2001,6 +2474,53 @@ mod tests {
         assert!(!policy.hidden_clock_or_entropy);
         assert!(!policy.legacy_row_conversion);
         assert!(!policy.live_product_row_mutation);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_event_staging_policy() {
+        let policy = toml::from_str::<EventStagingPolicy>(EVENT_STAGING_POLICY)
+            .expect("legacy event staging policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.authority,
+            "runtime_sqlite_owned_forward_migration_v7"
+        );
+        assert_eq!(policy.source_kind, "event_store");
+        assert_eq!(
+            policy.supported_schemas,
+            [
+                "event_store_v1",
+                "event_store_v2",
+                "event_store_v3",
+                "event_store_v4"
+            ]
+        );
+        assert_eq!(policy.source_table, "event_envelopes");
+        assert_eq!(policy.ordering, "strict_legacy_sequence_ascending");
+        assert_eq!(policy.cursor, "positive_i64_big_endian_8_bytes");
+        assert_eq!(policy.page_limit_max, LEGACY_EVENT_STAGE_PAGE_LIMIT_MAX);
+        assert_eq!(
+            policy.conversion,
+            [
+                "decode_id_verified_nip01_signed_event",
+                "require_legacy_event_id_match",
+                "event_id_hex_to_32_bytes",
+                "preserve_exact_signed_event_json_bytes",
+                "preserve_legacy_admission_evidence_without_trust_upgrade"
+            ]
+        );
+        assert_eq!(
+            policy.transaction,
+            "target_begin_immediate_rows_cursor_count_and_state_atomic"
+        );
+        assert_eq!(
+            policy.idempotency,
+            "durable_cursor_exact_resume_completed_retry_noop"
+        );
+        assert_eq!(policy.staging_rows, "append_only_immutable");
+        assert_eq!(policy.evidence_revalidation, "before_every_page");
+        assert!(!policy.live_product_row_mutation);
+        assert!(!policy.hidden_clock_or_entropy);
     }
 
     fn assert_fixed_schema_policy(
@@ -2309,6 +2829,201 @@ mod tests {
             Some(journal)
         );
         reopened.close().await.expect("close reopened target");
+    }
+
+    #[tokio::test]
+    async fn event_staging_is_bounded_resumable_atomic_and_isolated_from_live_rows() {
+        let target_root = tempfile::tempdir().expect("target root");
+        let legacy_root = tempfile::tempdir().expect("legacy root");
+        let backup_root = tempfile::tempdir().expect("backup root");
+        let event_path = legacy_root.path().join("event_store.sqlite");
+        let events = [
+            signed_event("one"),
+            signed_event("two"),
+            signed_event("three"),
+        ];
+        let event_connection = supported_event_database(&event_path, &events).await;
+        let plan = LegacyImportPlan::new(
+            LegacyImportId::new([128; 16]).expect("import id"),
+            vec![
+                LegacySource::new(LegacySourceKind::EventStore, &event_path).expect("event source"),
+            ],
+            backup_root.path(),
+            12_800,
+        )
+        .expect("event import plan");
+        let (target_paths, store) = target(target_root.path()).await;
+        let prepared = store
+            .prepare_legacy_import(&plan)
+            .await
+            .expect("prepared event import");
+        let classified = store
+            .classify_legacy_import(&prepared)
+            .await
+            .expect("classified event import");
+        assert_eq!(classified.sources()[0].schema(), LegacySchema::EventStoreV1);
+        store
+            .begin_legacy_import(&classified, 12_801)
+            .await
+            .expect("begin event import");
+        assert!(matches!(
+            store.stage_legacy_events(&classified, 0, 12_802).await,
+            Err(Error::InvalidLegacyImportStageRequest)
+        ));
+
+        let first = store
+            .stage_legacy_events(&classified, 2, 12_802)
+            .await
+            .expect("first event page");
+        assert_eq!(first.staged_rows(), 2);
+        assert_eq!(first.staged_row_count(), 2);
+        assert_eq!(first.resume_cursor(), Some(&encode_event_stage_cursor(2)));
+        assert!(!first.is_complete());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_events")
+                .fetch_one(&store.pool)
+                .await
+                .expect("live event count"),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_runtime_legacy_event_staging",
+            )
+            .fetch_one(&store.pool)
+            .await
+            .expect("staged event count"),
+            2
+        );
+        let journal = store
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("staging journal")
+            .expect("durable staging journal");
+        assert_eq!(journal.state(), LegacyImportState::Staging);
+        assert_eq!(
+            journal.members()[0].state(),
+            LegacyImportMemberState::Staging
+        );
+        assert_eq!(journal.members()[0].staged_row_count(), 2);
+        assert_eq!(
+            journal.members()[0].resume_cursor(),
+            Some(encode_event_stage_cursor(2).as_slice())
+        );
+
+        store.close().await.expect("close target between pages");
+        let reopened =
+            SqliteStorage::open(OpenOptions::new(target_paths, OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen target between pages");
+        let second = reopened
+            .stage_legacy_events(&classified, 2, 12_803)
+            .await
+            .expect("second event page");
+        assert_eq!(second.staged_rows(), 1);
+        assert_eq!(second.staged_row_count(), 3);
+        assert_eq!(second.resume_cursor(), Some(&encode_event_stage_cursor(3)));
+        assert!(second.is_complete());
+        let complete = reopened
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("ready journal")
+            .expect("durable ready journal");
+        assert_eq!(complete.state(), LegacyImportState::Ready);
+        assert_eq!(
+            complete.members()[0].state(),
+            LegacyImportMemberState::Ready
+        );
+        let retry = reopened
+            .stage_legacy_events(&classified, 2, 12_803)
+            .await
+            .expect("completed retry");
+        assert_eq!(retry.staged_rows(), 0);
+        assert_eq!(retry.staged_row_count(), 3);
+        assert_eq!(retry.resume_cursor(), second.resume_cursor());
+        assert!(retry.is_complete());
+        for statement in [
+            "UPDATE radroots_runtime_legacy_event_staging SET legacy_sequence = 4 WHERE legacy_sequence = 1",
+            "DELETE FROM radroots_runtime_legacy_event_staging WHERE legacy_sequence = 1",
+        ] {
+            assert!(
+                sqlx::query(statement)
+                    .execute(&reopened.pool)
+                    .await
+                    .is_err(),
+                "staging guard accepted `{statement}`"
+            );
+        }
+        event_connection.close().await.expect("close event source");
+        reopened.close().await.expect("close reopened target");
+    }
+
+    #[tokio::test]
+    async fn invalid_legacy_event_rolls_back_rows_cursor_count_and_state() {
+        let target_root = tempfile::tempdir().expect("target root");
+        let legacy_root = tempfile::tempdir().expect("legacy root");
+        let backup_root = tempfile::tempdir().expect("backup root");
+        let event_path = legacy_root.path().join("event_store.sqlite");
+        let events = [signed_event("valid"), signed_event("invalid identity")];
+        let mut event_connection = supported_event_database(&event_path, &events).await;
+        sqlx::query("UPDATE event_envelopes SET event_id = ? WHERE seq = 2")
+            .bind("0".repeat(64))
+            .execute(&mut event_connection)
+            .await
+            .expect("corrupt legacy event identity");
+        let plan = LegacyImportPlan::new(
+            LegacyImportId::new([129; 16]).expect("import id"),
+            vec![
+                LegacySource::new(LegacySourceKind::EventStore, &event_path).expect("event source"),
+            ],
+            backup_root.path(),
+            12_900,
+        )
+        .expect("event import plan");
+        let (_target_paths, store) = target(target_root.path()).await;
+        let prepared = store
+            .prepare_legacy_import(&plan)
+            .await
+            .expect("prepared event import");
+        let classified = store
+            .classify_legacy_import(&prepared)
+            .await
+            .expect("classified event import");
+        store
+            .begin_legacy_import(&classified, 12_901)
+            .await
+            .expect("begin event import");
+
+        assert!(matches!(
+            store.stage_legacy_events(&classified, 2, 12_902).await,
+            Err(Error::LegacyImportRowInvalid {
+                source_kind: "event_store",
+                legacy_sequence: 2,
+            })
+        ));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_runtime_legacy_event_staging",
+            )
+            .fetch_one(&store.pool)
+            .await
+            .expect("rolled-back staging count"),
+            0
+        );
+        let journal = store
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("rolled-back journal")
+            .expect("durable import journal");
+        assert_eq!(journal.state(), LegacyImportState::Classified);
+        assert_eq!(
+            journal.members()[0].state(),
+            LegacyImportMemberState::Pending
+        );
+        assert_eq!(journal.members()[0].resume_cursor(), None);
+        assert_eq!(journal.members()[0].staged_row_count(), 0);
+        event_connection.close().await.expect("close event source");
+        store.close().await.expect("close target");
     }
 
     #[test]

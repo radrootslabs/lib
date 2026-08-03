@@ -281,6 +281,12 @@ pub enum Error {
     InvalidLegacyImportJournal,
     LegacyImportConflict,
     LegacyImportJournalFailed,
+    InvalidLegacyImportStageRequest,
+    LegacyImportStagingFailed,
+    LegacyImportRowInvalid {
+        source_kind: &'static str,
+        legacy_sequence: i64,
+    },
     UnsupportedLegacySchema {
         source_kind: &'static str,
         user_version: i64,
@@ -559,6 +565,19 @@ impl fmt::Display for Error {
             Self::LegacyImportJournalFailed => {
                 formatter.write_str("SQLite legacy import journal operation failed")
             }
+            Self::InvalidLegacyImportStageRequest => {
+                formatter.write_str("SQLite legacy import staging request is invalid")
+            }
+            Self::LegacyImportStagingFailed => {
+                formatter.write_str("SQLite legacy import staging operation failed")
+            }
+            Self::LegacyImportRowInvalid {
+                source_kind,
+                legacy_sequence,
+            } => write!(
+                formatter,
+                "SQLite legacy {source_kind} row {legacy_sequence} is invalid"
+            ),
             Self::UnsupportedLegacySchema {
                 source_kind,
                 user_version,

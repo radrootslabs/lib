@@ -54,7 +54,15 @@ and ordered classification digest, plus one exact member row per predecessor
 source. SQLite guards immutable identity, one-shot conflicts, legal monotonic
 state transitions, timestamps, staged counts, and retained audit history.
 Repeated begin calls resume the exact journal; conflicting attempts fail
-closed. No legacy or live product row is converted by this checkpoint.
+closed.
+
+Runtime schema v7 adds isolated, append-only event-import staging. Each bounded
+page revalidates the immutable evidence, decodes and identifier-checks the
+legacy signed events, preserves their exact JSON and untrusted predecessor
+admission evidence, and atomically advances an eight-byte legacy sequence
+cursor with its durable row count. Restart resumes after that exact cursor and
+a completed retry is a no-op. Staging never mutates the live canonical event
+table or upgrades predecessor verification claims.
 
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;

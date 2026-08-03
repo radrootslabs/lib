@@ -1,0 +1,26 @@
+schema_version = 1
+authority = "runtime_sqlite_owned_forward_migration_v7"
+source_kind = "event_store"
+supported_schemas = [
+  "event_store_v1",
+  "event_store_v2",
+  "event_store_v3",
+  "event_store_v4",
+]
+source_table = "event_envelopes"
+ordering = "strict_legacy_sequence_ascending"
+cursor = "positive_i64_big_endian_8_bytes"
+page_limit_max = 256
+conversion = [
+  "decode_id_verified_nip01_signed_event",
+  "require_legacy_event_id_match",
+  "event_id_hex_to_32_bytes",
+  "preserve_exact_signed_event_json_bytes",
+  "preserve_legacy_admission_evidence_without_trust_upgrade",
+]
+transaction = "target_begin_immediate_rows_cursor_count_and_state_atomic"
+idempotency = "durable_cursor_exact_resume_completed_retry_noop"
+staging_rows = "append_only_immutable"
+evidence_revalidation = "before_every_page"
+live_product_row_mutation = false
+hidden_clock_or_entropy = false

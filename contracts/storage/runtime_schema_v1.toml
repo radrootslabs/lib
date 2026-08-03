@@ -2,9 +2,9 @@ schema_version = 1
 database = "runtime.sqlite"
 application_id = 1380209236 # ASCII "RDRT"
 minimum_version = 1
-current_version = 6
-migration_name = "legacy_import_journal"
-migration_sha256 = "5858336c25b048d6cdae1beedc8bf0bdfb530b858c3c50f501621c3314d23d4a"
+current_version = 7
+migration_name = "legacy_event_staging"
+migration_sha256 = "cb10766ab1a98fa13e27f36fdab869c72efefda98ea2331da32e90b3528c63aa"
 forward_only = true
 raw_sql_public = false
 
@@ -18,6 +18,7 @@ authorities = [
   "event_index_metadata",
   "atomic_commit_receipts",
   "legacy_import_recovery",
+  "legacy_event_staging",
 ]
 
 source_invariants = [
@@ -230,6 +231,56 @@ owned_objects = [
   "radroots_runtime_journal_idempotency_idx",
   "radroots_runtime_journal_operations",
   "radroots_runtime_journal_recovery_idx",
+  "radroots_runtime_legacy_import_delete_guard",
+  "radroots_runtime_legacy_import_identity_guard",
+  "radroots_runtime_legacy_import_member_delete_guard",
+  "radroots_runtime_legacy_import_member_identity_guard",
+  "radroots_runtime_legacy_import_member_state_guard",
+  "radroots_runtime_legacy_import_members",
+  "radroots_runtime_legacy_import_state_guard",
+  "radroots_runtime_legacy_import_state_idx",
+  "radroots_runtime_legacy_imports",
+  "radroots_runtime_outbox_items",
+  "radroots_runtime_outbox_operation_idx",
+  "radroots_runtime_outbox_ready_idx",
+  "radroots_runtime_outbox_targets",
+  "radroots_runtime_projection_checkpoints",
+  "radroots_runtime_projection_invalidations",
+  "radroots_runtime_projection_rebuilds",
+  "radroots_runtime_projection_rebuilds_stage_idx",
+  "radroots_runtime_source_generations",
+  "radroots_runtime_source_generations_active_idx",
+  "radroots_runtime_source_generations_delete_guard",
+  "radroots_runtime_source_generations_identity_guard",
+  "radroots_runtime_source_generations_sequence_guard",
+]
+
+[[migrations]]
+version = 7
+name = "legacy_event_staging"
+sha256 = "cb10766ab1a98fa13e27f36fdab869c72efefda98ea2331da32e90b3528c63aa"
+
+owned_objects = [
+  "radroots_runtime_atomic_commits",
+  "radroots_runtime_delivery_evidence",
+  "radroots_runtime_delivery_evidence_item_idx",
+  "radroots_runtime_event_index_checkpoints",
+  "radroots_runtime_event_index_manifests",
+  "radroots_runtime_event_index_shards",
+  "radroots_runtime_event_provenance",
+  "radroots_runtime_event_provenance_observed_idx",
+  "radroots_runtime_events",
+  "radroots_runtime_events_admission_idx",
+  "radroots_runtime_events_delete_guard",
+  "radroots_runtime_events_event_id_idx",
+  "radroots_runtime_events_raw_update_guard",
+  "radroots_runtime_journal_idempotency_idx",
+  "radroots_runtime_journal_operations",
+  "radroots_runtime_journal_recovery_idx",
+  "radroots_runtime_legacy_event_staging",
+  "radroots_runtime_legacy_event_staging_delete_guard",
+  "radroots_runtime_legacy_event_staging_insert_guard",
+  "radroots_runtime_legacy_event_staging_update_guard",
   "radroots_runtime_legacy_import_delete_guard",
   "radroots_runtime_legacy_import_identity_guard",
   "radroots_runtime_legacy_import_member_delete_guard",
