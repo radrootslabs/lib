@@ -3,12 +3,10 @@ use std::sync::Arc;
 use futures_executor::block_on;
 use radroots_protocol::runtime::v1::{OPERATION_SCHEMA_VERSION, SyncCapabilityState, SyncHealth};
 use radroots_signing::{Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus};
-use radroots_storage::{
-    Storage, event::SourceGeneration, memory::MemoryStorage, projection::ProjectionId,
-};
+use radroots_storage::{event::SourceGeneration, memory::MemoryStorage, projection::ProjectionId};
 use radroots_sync::{
     Engine,
-    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
+    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
 };
 use radroots_transport::{
     DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, EventSource, FetchPage,
@@ -24,7 +22,7 @@ struct FixedClock;
 struct FixedIds;
 
 type TestDependencies = (
-    Arc<dyn Storage>,
+    Arc<dyn SyncStorage>,
     Arc<dyn Clock>,
     Arc<dyn IdSource>,
     DeadlinePolicy,

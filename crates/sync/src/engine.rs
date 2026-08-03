@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
 use radroots_signing::Signer;
-use radroots_storage::Storage;
 use radroots_transport::{EventSink, EventSource};
 
-use crate::policy::{Clock, DeadlinePolicy, EngineBuilder, IdSource};
+use crate::policy::{Clock, DeadlinePolicy, EngineBuilder, IdSource, SyncStorage};
 
 /// Injected, executor-neutral synchronization composition boundary.
 #[derive(Clone)]
 pub struct Engine {
-    pub(crate) storage: Arc<dyn Storage>,
+    pub(crate) storage: Arc<dyn SyncStorage>,
     pub(crate) source: Option<Arc<dyn EventSource>>,
     pub(crate) sink: Option<Arc<dyn EventSink>>,
     pub(crate) signer: Option<Arc<dyn Signer>>,
@@ -21,7 +20,7 @@ pub struct Engine {
 impl Engine {
     /// Starts an explicit capability builder around required host policies.
     pub fn builder(
-        storage: Arc<dyn Storage>,
+        storage: Arc<dyn SyncStorage>,
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdSource>,
         deadlines: DeadlinePolicy,
@@ -30,7 +29,7 @@ impl Engine {
     }
 
     /// Returns the canonical storage capability.
-    pub fn storage(&self) -> &dyn Storage {
+    pub fn storage(&self) -> &dyn SyncStorage {
         self.storage.as_ref()
     }
 

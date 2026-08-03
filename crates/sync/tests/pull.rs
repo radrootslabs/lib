@@ -5,11 +5,11 @@ use std::{
 
 use futures_executor::block_on;
 use radroots_event::{SignedEvent, draft::SignedEventParts};
-use radroots_storage::{Storage, event::SourceGeneration, memory::MemoryStorage};
+use radroots_storage::{event::SourceGeneration, memory::MemoryStorage};
 use radroots_sync::{
     Engine, PullRequest,
     ingest::RegistryPolicy,
-    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
+    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
     pull::{PULL_MAX_PAGES, PullTermination},
 };
 use radroots_transport::{
@@ -173,7 +173,7 @@ fn observed(signature: &str, observed_at: u64) -> ObservedEvent {
 }
 
 fn engine(source: Arc<ScriptedSource>, clock: Arc<dyn Clock>, timeout_ms: u64) -> Engine {
-    let storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new(
+    let storage: Arc<dyn SyncStorage> = Arc::new(MemoryStorage::new(
         SourceGeneration::new([8; 32]).expect("generation"),
     ));
     Engine::builder(

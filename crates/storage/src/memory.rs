@@ -41,7 +41,8 @@ use crate::{
     },
     status::{
         EventStoreHealth, EventStoreMode, EventStoreStatus, IntegrityHealth, IntegrityStatus,
-        ShutdownState, StorageBackend, StorageOpenMode, StorageStatus, WriterPolicy,
+        ShutdownState, StorageBackend, StorageOpenMode, StorageStatus, StorageStatusProvider,
+        WriterPolicy,
     },
 };
 
@@ -1127,6 +1128,15 @@ impl StorageReliability for MemoryStorage {
         Box::pin(async move {
             let mut state = self.state_any()?;
             state.closed = true;
+            Self::status_locked(&state)
+        })
+    }
+}
+
+impl StorageStatusProvider for MemoryStorage {
+    fn storage_status(&self) -> BoxFuture<'_, Result<StorageStatus, Error>> {
+        Box::pin(async move {
+            let state = self.state_any()?;
             Self::status_locked(&state)
         })
     }

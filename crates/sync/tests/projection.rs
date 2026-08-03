@@ -12,14 +12,14 @@ use radroots_event::{
     wire::compute_canonical_nip01_event_id,
 };
 use radroots_storage::{
-    EventStore, ProjectionStore, Storage,
+    EventStore, ProjectionStore,
     event::{EventAdmission, SourceGeneration, StoredVisibleEvent},
     memory::MemoryStorage,
     projection::{ProjectionGeneration, ProjectionHealth, ProjectionId},
 };
 use radroots_sync::{
     Engine,
-    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
+    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
     projection::{Reducer, ReducerError, RefreshKind, RefreshRequest, RefreshState},
 };
 use radroots_transport::{
@@ -131,7 +131,7 @@ fn setup() -> (Engine, Arc<MemoryStorage>, ProjectionId) {
     let storage = Arc::new(MemoryStorage::new(
         SourceGeneration::new([9; 32]).expect("generation"),
     ));
-    let storage_capability: Arc<dyn Storage> = storage.clone();
+    let storage_capability: Arc<dyn SyncStorage> = storage.clone();
     let engine = Engine::builder(
         storage_capability,
         Arc::new(TestClock(AtomicU64::new(1_000))),

@@ -5162,11 +5162,15 @@ dependencies = [
  "radroots_protocol",
  "radroots_signing",
  "radroots_storage",
+ "radroots_storage_sqlite",
  "radroots_trade",
  "radroots_transport",
  "secp256k1",
  "serde",
+ "serde_json",
  "sha2",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

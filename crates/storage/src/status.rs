@@ -1,6 +1,13 @@
 //! Storage capability, health, and integrity status contracts.
 
+use radroots_transport::BoxFuture;
+
 use crate::{Error, event::SourceGeneration};
+
+/// Passive backend-level status capability independent of backup workflows.
+pub trait StorageStatusProvider: Send + Sync {
+    fn storage_status(&self) -> BoxFuture<'_, Result<StorageStatus, Error>>;
+}
 
 /// Storage-engine family needed to interpret durability-specific status.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

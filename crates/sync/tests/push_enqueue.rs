@@ -15,7 +15,7 @@ use radroots_signing::{
     actor::ActorSource, error::Kind as SigningErrorKind, request::CancellationPolicy,
 };
 use radroots_storage::{
-    EventStore, Journal, Outbox, Storage,
+    EventStore, Journal, Outbox,
     event::{EventQuery, EventQueryBounds, SourceGeneration},
     journal::{IdempotencyKey, JournalStage, OperationInstanceId},
     memory::MemoryStorage,
@@ -23,7 +23,7 @@ use radroots_storage::{
 };
 use radroots_sync::{
     Engine, PushRequest,
-    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
+    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
     push::DeliveryRunRequest,
 };
 use radroots_transport::{
@@ -291,7 +291,7 @@ fn setup_engine_with_sink(
     let storage = Arc::new(MemoryStorage::new(
         SourceGeneration::new([6; 32]).expect("generation"),
     ));
-    let capability: Arc<dyn Storage> = storage.clone();
+    let capability: Arc<dyn SyncStorage> = storage.clone();
     let clock = Arc::new(TestClock(AtomicU64::new(1_800_000_200_000)));
     let engine = Engine::builder(
         capability,

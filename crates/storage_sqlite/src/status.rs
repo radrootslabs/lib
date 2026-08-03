@@ -10,9 +10,10 @@ use std::{
 
 use radroots_storage::{
     Error,
+    outbox::BoxFuture,
     status::{
         IntegrityStatus, ShutdownState, StorageBackend, StorageOpenMode, StorageStatus,
-        WriterPolicy,
+        StorageStatusProvider, WriterPolicy,
     },
 };
 
@@ -181,6 +182,12 @@ impl SqliteStorage {
         self.private_pool.close().await;
         self.lifecycle.finish_close()?;
         self.lifecycle.status()
+    }
+}
+
+impl StorageStatusProvider for SqliteStorage {
+    fn storage_status(&self) -> BoxFuture<'_, Result<StorageStatus, Error>> {
+        Box::pin(async move { SqliteStorage::storage_status(self).await })
     }
 }
 

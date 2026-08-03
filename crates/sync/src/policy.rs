@@ -3,12 +3,26 @@
 use std::sync::Arc;
 
 use radroots_signing::Signer;
-use radroots_storage::Storage;
+use radroots_storage::{
+    EventStore, Journal, Outbox, ProjectionStore, atomic::AtomicStorage,
+    status::StorageStatusProvider,
+};
 use radroots_transport::{EventSink, EventSource};
 
 use crate::Engine;
 
 const MAX_OPERATION_TIMEOUT_MS: u64 = 86_400_000;
+
+/// Exact backend-neutral storage capability required by sync orchestration.
+pub trait SyncStorage:
+    EventStore + Journal + Outbox + ProjectionStore + AtomicStorage + StorageStatusProvider
+{
+}
+
+impl<T> SyncStorage for T where
+    T: EventStore + Journal + Outbox + ProjectionStore + AtomicStorage + StorageStatusProvider
+{
+}
 
 /// Sync operation class used for identity and deadline policy.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -115,7 +129,7 @@ const fn valid_timeout(value: u64) -> bool {
 
 /// Builder for an [`Engine`] with explicit optional transport capabilities.
 pub struct EngineBuilder {
-    storage: Arc<dyn Storage>,
+    storage: Arc<dyn SyncStorage>,
     source: Option<Arc<dyn EventSource>>,
     sink: Option<Arc<dyn EventSink>>,
     signer: Option<Arc<dyn Signer>>,
@@ -126,7 +140,7 @@ pub struct EngineBuilder {
 
 impl EngineBuilder {
     pub(crate) fn new(
-        storage: Arc<dyn Storage>,
+        storage: Arc<dyn SyncStorage>,
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdSource>,
         deadlines: DeadlinePolicy,

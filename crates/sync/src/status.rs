@@ -8,10 +8,13 @@ use radroots_protocol::runtime::v1::{
 };
 use radroots_signing::{SignerStatus, status::SignerAvailability};
 use radroots_storage::{
-    BackupSource, EventStore, Outbox, ProjectionStore,
+    EventStore, Outbox, ProjectionStore,
     outbox::{OutboxRecord, OutboxStage, OutboxStatus},
     projection::{ProjectionHealth, ProjectionId, ProjectionStatus},
-    status::{EventStoreHealth, EventStoreStatus, IntegrityHealth, ShutdownState, StorageStatus},
+    status::{
+        EventStoreHealth, EventStoreStatus, IntegrityHealth, ShutdownState, StorageStatus,
+        StorageStatusProvider,
+    },
 };
 use radroots_transport::{SinkStatus, SourceStatus, capability::Availability};
 
@@ -168,7 +171,7 @@ impl Engine {
         {
             return Err(Error::InvalidStatusRequest);
         }
-        let storage = BackupSource::status(self.storage.as_ref())
+        let storage = StorageStatusProvider::storage_status(self.storage.as_ref())
             .await
             .map_err(|_| Error::StorageFailed)?;
         let events = EventStore::status(self.storage.as_ref())

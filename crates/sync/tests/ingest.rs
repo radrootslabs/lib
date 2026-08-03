@@ -6,14 +6,14 @@ use std::sync::{
 use futures_executor::block_on;
 use radroots_event::{SignedEvent, draft::SignedEventParts};
 use radroots_storage::{
-    EventStore, Storage,
+    EventStore,
     event::{AdmissionDisposition, AdmissionStage, EventQuery, EventQueryBounds, SourceGeneration},
     memory::MemoryStorage,
 };
 use radroots_sync::{
     Engine,
     ingest::{AdmissionDecision, AdmissionPolicy, RegistryPolicy},
-    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId},
+    policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
 };
 use radroots_transport::{
     Error as TransportError, EventSource, FetchPage, FetchRequest, SourceStatus, Target,
@@ -91,7 +91,7 @@ fn setup_engine_with_ids(ids: Arc<dyn IdSource>) -> (Engine, Arc<MemoryStorage>)
     let storage = Arc::new(MemoryStorage::new(
         SourceGeneration::new([7; 32]).expect("source generation"),
     ));
-    let storage_capability: Arc<dyn Storage> = storage.clone();
+    let storage_capability: Arc<dyn SyncStorage> = storage.clone();
     let engine = Engine::builder(
         storage_capability,
         Arc::new(FixedClock),
