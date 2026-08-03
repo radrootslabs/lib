@@ -1276,6 +1276,8 @@ mod tests {
         include_str!("../../../contracts/storage/restore_staging_policy_v1.toml");
     const RESTORE_FINALIZE_POLICY: &str =
         include_str!("../../../contracts/storage/restore_finalize_policy_v1.toml");
+    const FAILURE_POLICY: &str =
+        include_str!("../../../contracts/storage/failure_injection_policy_v1.toml");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -1344,6 +1346,51 @@ mod tests {
         backend_after_attempt: String,
     }
 
+    #[derive(Deserialize)]
+    struct FailurePolicy {
+        schema_version: u32,
+        strategy: String,
+        runtime_global_hooks: bool,
+        accepted_reopen_outcomes: Vec<String>,
+        atomic_sql_points: Vec<String>,
+        migration_points: Vec<String>,
+        backup_points: Vec<String>,
+        restore_points: Vec<String>,
+        lock_close_points: Vec<String>,
+        restore_recovery: String,
+        failure_reporting: String,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    #[repr(u8)]
+    enum RestoreCrashPoint {
+        MarkerPersisted = 0,
+        RuntimePreviousRenamed = 1,
+        RuntimeReplacementRenamed = 2,
+        ProtectedPreviousRenamed = 3,
+        ProtectedReplacementRenamed = 4,
+        RuntimePreviousCleaned = 5,
+        ProtectedPreviousCleaned = 6,
+        MarkerCleaned = 7,
+    }
+
+    impl RestoreCrashPoint {
+        const ALL: [Self; 8] = [
+            Self::MarkerPersisted,
+            Self::RuntimePreviousRenamed,
+            Self::RuntimeReplacementRenamed,
+            Self::ProtectedPreviousRenamed,
+            Self::ProtectedReplacementRenamed,
+            Self::RuntimePreviousCleaned,
+            Self::ProtectedPreviousCleaned,
+            Self::MarkerCleaned,
+        ];
+
+        const fn reached(self, point: Self) -> bool {
+            self as u8 >= point as u8
+        }
+    }
+
     fn generation(byte: u8) -> SourceGeneration {
         SourceGeneration::new([byte; 32]).expect("source generation")
     }
@@ -1403,6 +1450,49 @@ mod tests {
         .execute(&store.private_pool)
         .await
         .expect("insert private artifact");
+    }
+
+    fn construct_restore_crash_state(
+        layout: &RestoreLayout,
+        marker: &RestoreMarker,
+        point: RestoreCrashPoint,
+    ) {
+        write_restore_marker(&layout.marker, marker).expect("persist interruption marker");
+        if point.reached(RestoreCrashPoint::RuntimePreviousRenamed) {
+            fs::rename(&layout.runtime_live, &layout.runtime_previous)
+                .expect("rename runtime previous");
+            sync_parent(&layout.runtime_live, "sync runtime previous")
+                .expect("sync runtime previous");
+        }
+        if point.reached(RestoreCrashPoint::RuntimeReplacementRenamed) {
+            fs::rename(&layout.runtime_staging, &layout.runtime_live)
+                .expect("promote runtime replacement");
+            sync_parent(&layout.runtime_live, "sync runtime replacement")
+                .expect("sync runtime replacement");
+        }
+        if point.reached(RestoreCrashPoint::ProtectedPreviousRenamed) {
+            fs::rename(&layout.private_live, &layout.private_previous)
+                .expect("rename protected previous");
+            sync_parent(&layout.private_live, "sync protected previous")
+                .expect("sync protected previous");
+        }
+        if point.reached(RestoreCrashPoint::ProtectedReplacementRenamed) {
+            fs::rename(&layout.private_staging, &layout.private_live)
+                .expect("promote protected replacement");
+            sync_parent(&layout.private_live, "sync protected replacement")
+                .expect("sync protected replacement");
+        }
+        if point.reached(RestoreCrashPoint::RuntimePreviousCleaned) {
+            remove_restore_file(&layout.runtime_previous, "inject runtime cleanup")
+                .expect("clean runtime previous");
+        }
+        if point.reached(RestoreCrashPoint::ProtectedPreviousCleaned) {
+            remove_restore_file(&layout.private_previous, "inject protected cleanup")
+                .expect("clean protected previous");
+        }
+        if point.reached(RestoreCrashPoint::MarkerCleaned) {
+            remove_restore_file(&layout.marker, "inject marker cleanup").expect("clean marker");
+        }
     }
 
     #[test]
@@ -1562,6 +1652,96 @@ mod tests {
             ]
         );
         assert_eq!(policy.backend_after_attempt, "closed_reopen_required");
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_failure_injection_policy() {
+        let policy = toml::from_str::<FailurePolicy>(FAILURE_POLICY).expect("failure policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(
+            policy.strategy,
+            "deterministic_state_construction_and_sql_faults"
+        );
+        assert!(!policy.runtime_global_hooks);
+        assert_eq!(
+            policy.accepted_reopen_outcomes,
+            [
+                "fully_committed_replayable",
+                "typed_recoverable_no_partial_success"
+            ]
+        );
+        assert_eq!(
+            policy.atomic_sql_points,
+            [
+                "source_sequence",
+                "event",
+                "provenance",
+                "projection_checkpoint",
+                "commit_receipt",
+                "journal",
+                "outbox_item",
+                "outbox_target",
+                "delivery_evidence"
+            ]
+        );
+        assert_eq!(
+            policy.migration_points,
+            [
+                "application_identity",
+                "each_pending_step",
+                "user_version",
+                "exact_catalog",
+                "transaction_commit"
+            ]
+        );
+        assert_eq!(
+            policy.backup_points,
+            [
+                "runtime_snapshot",
+                "protected_snapshot",
+                "member_hash",
+                "manifest",
+                "complete_verification",
+                "final_directory_rename",
+                "root_sync"
+            ]
+        );
+        assert_eq!(
+            policy.restore_points,
+            [
+                "runtime_staging",
+                "protected_staging",
+                "staged_validation",
+                "marker",
+                "runtime_previous_rename",
+                "runtime_replacement_rename",
+                "protected_previous_rename",
+                "protected_replacement_rename",
+                "installed_validation",
+                "runtime_previous_cleanup",
+                "protected_previous_cleanup",
+                "marker_cleanup"
+            ]
+        );
+        assert_eq!(
+            policy.lock_close_points,
+            [
+                "lock_file_open",
+                "exclusive_acquisition",
+                "cross_process_contention",
+                "pool_drain",
+                "lock_release",
+                "closed_status"
+            ]
+        );
+        assert_eq!(
+            policy.restore_recovery,
+            "idempotent_forward_completion_before_connection_open"
+        );
+        assert_eq!(
+            policy.failure_reporting,
+            "stable_typed_error_without_backend_details"
+        );
     }
 
     #[tokio::test]
@@ -2183,6 +2363,93 @@ mod tests {
             );
         }
         recovered.close().await.expect("close recovered storage");
+    }
+
+    #[tokio::test]
+    async fn every_durable_restore_crash_point_recovers_to_one_complete_installation() {
+        for (index, point) in RestoreCrashPoint::ALL.into_iter().enumerate() {
+            let database_root = tempfile::tempdir().expect("database root");
+            let backup_parent = tempfile::tempdir().expect("backup parent");
+            let backup_root = backup_parent.path().join("backups");
+            fs::create_dir(&backup_root).expect("backup root");
+            let (paths, store) = create(database_root.path(), Some(&backup_root)).await;
+            sqlx::query(
+                "UPDATE radroots_runtime_source_generations SET sequence_head = 81 WHERE state = 'active'",
+            )
+            .execute(&store.pool)
+            .await
+            .expect("backup runtime state");
+            insert_private_artifact(&store, 5).await;
+            let backup_plan = plan(
+                110 + u8::try_from(index).expect("crash index"),
+                BackupSecretPolicy::IncludeProtectedStorage,
+                11_000 + u64::try_from(index).expect("crash index"),
+            );
+            let manifest = store
+                .capture_backup(&backup_plan)
+                .await
+                .expect("capture crash source");
+            store
+                .finalize_backup(&backup_plan, &manifest)
+                .await
+                .expect("finalize crash source");
+            sqlx::query(
+                "UPDATE radroots_runtime_source_generations SET sequence_head = 82 WHERE state = 'active'",
+            )
+            .execute(&store.pool)
+            .await
+            .expect("advance runtime state");
+            insert_private_artifact(&store, 6).await;
+            let restore = RestorePlan::new(
+                manifest.clone(),
+                BackupSecretPolicy::IncludeProtectedStorage,
+                12_000 + u64::try_from(index).expect("crash index"),
+            )
+            .expect("restore plan");
+            store.stage_restore(&restore).await.expect("stage restore");
+            store.close().await.expect("quiesce crash state");
+            require_sqlite_sidecars_absent(&paths).expect("quiesced SQLite sidecars");
+            let marker = RestoreMarker::from_manifest(&manifest).expect("restore marker");
+            let layout = RestoreLayout::new(&paths, manifest.backup_id()).expect("restore layout");
+            construct_restore_crash_state(&layout, &marker, point);
+
+            let recovered =
+                SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting))
+                    .await
+                    .unwrap_or_else(|error| panic!("recover {point:?}: {error}"));
+            assert_eq!(
+                scalar(
+                    paths.runtime(),
+                    "SELECT sequence_head FROM radroots_runtime_source_generations WHERE state = 'active'"
+                )
+                .await,
+                81,
+                "runtime state after {point:?}"
+            );
+            assert_eq!(
+                scalar(
+                    paths.private(),
+                    "SELECT COUNT(*) FROM radroots_private_artifacts"
+                )
+                .await,
+                1,
+                "protected state after {point:?}"
+            );
+            for artifact in [
+                &layout.runtime_staging,
+                &layout.private_staging,
+                &layout.runtime_previous,
+                &layout.private_previous,
+                &layout.marker,
+            ] {
+                assert!(
+                    !artifact.exists(),
+                    "artifact after {point:?}: {}",
+                    artifact.display()
+                );
+            }
+            recovered.close().await.expect("close recovered state");
+        }
     }
 
     #[tokio::test]

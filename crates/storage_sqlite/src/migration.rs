@@ -394,6 +394,8 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    use sqlx::sqlite::SqliteConnectOptions;
+
     use super::*;
 
     const TEST_V1_OBJECTS: &[&str] = &["radroots_test_one"];
@@ -510,6 +512,36 @@ mod tests {
             .expect("preserved data"),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn committed_migration_reopens_as_current_after_a_lost_success_response() {
+        let directory = tempfile::tempdir().expect("database directory");
+        let path = directory.path().join(RUNTIME_DATABASE);
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("open migration database");
+        establish_runtime_version(&mut connection, 1).await;
+        let _lost_response = migrate_runtime(&mut connection, OpenMode::ReadWriteExisting)
+            .await
+            .expect("commit pending migration");
+        connection.close().await.expect("simulate process exit");
+
+        let mut reopened = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new().filename(&path).read_only(true),
+        )
+        .await
+        .expect("reopen migrated database");
+        let report = migrate_runtime(&mut reopened, OpenMode::ReadOnly)
+            .await
+            .expect("recognize committed migration");
+        assert_eq!(report.initial_version(), runtime::CURRENT_VERSION);
+        assert_eq!(report.final_version(), runtime::CURRENT_VERSION);
+        assert_eq!(report.applied(), 0);
     }
 
     #[tokio::test]
