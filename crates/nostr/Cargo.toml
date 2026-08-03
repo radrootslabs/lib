@@ -26,7 +26,7 @@ std = [
   "radroots_event_codec/std",
   "radroots_identity/std",
 ]
-blossom = ["std", "dep:base64", "dep:radroots_blossom"]
+blossom = ["events", "dep:base64", "dep:radroots_blossom"]
 events = [
   "std",
   "radroots_event/serde",
