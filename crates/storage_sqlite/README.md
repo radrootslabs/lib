@@ -79,6 +79,13 @@ the private commit therefore replays the exact page from the old runtime cursor
 without duplicating counts or exposing secret-bearing staging in
 `runtime.sqlite`.
 
+Classified Studio state is never imported into either owned database. The
+backend instead returns an immutable evidence descriptor bound to the import,
+target generation, manifest, source digest, schema catalog, and byte length.
+Only an exact host receipt carrying that handoff identity and a non-zero opaque
+host-store commitment advances the Studio journal member to ready; exact retry
+is idempotent and conflicting acknowledgement fails closed.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

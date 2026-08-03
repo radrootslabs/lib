@@ -468,6 +468,83 @@ pub struct LegacyPrivateStagePage {
     complete: bool,
 }
 
+/// Immutable host-owned handoff descriptor for one classified Studio snapshot.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyStudioHandoff {
+    import_id: LegacyImportId,
+    evidence_path: PathBuf,
+    byte_length: u64,
+    source_sha256: MemberDigest,
+    catalog_sha256: MemberDigest,
+    handoff_sha256: MemberDigest,
+}
+
+impl LegacyStudioHandoff {
+    /// Returns the import attempt bound to this handoff.
+    pub const fn import_id(&self) -> LegacyImportId {
+        self.import_id
+    }
+
+    /// Returns the immutable backed-up Studio database offered to the host.
+    pub fn evidence_path(&self) -> &Path {
+        &self.evidence_path
+    }
+
+    /// Returns the exact backed-up Studio database length.
+    pub const fn byte_length(&self) -> u64 {
+        self.byte_length
+    }
+
+    /// Returns the exact backed-up Studio database digest.
+    pub const fn source_sha256(&self) -> MemberDigest {
+        self.source_sha256
+    }
+
+    /// Returns the exact classified Studio schema-catalog digest.
+    pub const fn catalog_sha256(&self) -> MemberDigest {
+        self.catalog_sha256
+    }
+
+    /// Returns the deterministic identity the host must acknowledge.
+    pub const fn handoff_sha256(&self) -> MemberDigest {
+        self.handoff_sha256
+    }
+}
+
+/// Host-supplied proof that a specific Studio handoff was durably accepted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LegacyStudioHandoffReceipt {
+    handoff_sha256: MemberDigest,
+    host_commitment_sha256: MemberDigest,
+}
+
+impl LegacyStudioHandoffReceipt {
+    /// Binds an exact handoff to a non-zero host-owned durable commitment.
+    pub const fn new(
+        handoff_sha256: MemberDigest,
+        host_commitment_sha256: MemberDigest,
+    ) -> Result<Self, Error> {
+        if bytes_are_zero(host_commitment_sha256.as_bytes()) {
+            Err(Error::InvalidLegacyImportStageRequest)
+        } else {
+            Ok(Self {
+                handoff_sha256,
+                host_commitment_sha256,
+            })
+        }
+    }
+
+    /// Returns the acknowledged handoff identity.
+    pub const fn handoff_sha256(&self) -> MemberDigest {
+        self.handoff_sha256
+    }
+
+    /// Returns the opaque host-owned durable commitment.
+    pub const fn host_commitment_sha256(&self) -> MemberDigest {
+        self.host_commitment_sha256
+    }
+}
+
 impl LegacyPrivateStagePage {
     pub const fn table(&self) -> LegacyPrivateTable {
         self.table
@@ -1785,6 +1862,143 @@ impl SqliteStorage {
         })
     }
 
+    /// Revalidates and describes a Studio predecessor snapshot for its host.
+    pub async fn prepare_legacy_studio_handoff(
+        &self,
+        classified: &ClassifiedLegacyImport,
+    ) -> Result<LegacyStudioHandoff, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        verify_prepared_evidence(&classified.prepared).await?;
+        let classification_sha256 = classification_digest(classified);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if !journal_matches_classified(&journal, classified, classification_sha256) {
+            return Err(Error::LegacyImportConflict);
+        }
+        let classification = classified
+            .sources()
+            .iter()
+            .find(|source| source.kind() == LegacySourceKind::Studio)
+            .filter(|source| {
+                source.schema() == LegacySchema::StudioV1HostHandoff
+                    && source.schema().disposition() == LegacyImportDisposition::HostHandoff
+            })
+            .ok_or(Error::LegacyImportConflict)?;
+        let member = journal
+            .members()
+            .iter()
+            .find(|member| member.classification().kind() == LegacySourceKind::Studio)
+            .ok_or(Error::LegacyImportConflict)?;
+        if !matches!(
+            member.state(),
+            LegacyImportMemberState::Pending
+                | LegacyImportMemberState::Staging
+                | LegacyImportMemberState::Ready
+        ) || member.staged_row_count() != 0
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let snapshot = classified
+            .prepared
+            .snapshots()
+            .iter()
+            .find(|snapshot| snapshot.kind() == LegacySourceKind::Studio)
+            .ok_or(Error::LegacyImportConflict)?;
+        let evidence_path = classified.bundle_path().join(snapshot.relative_path());
+        Ok(LegacyStudioHandoff {
+            import_id: classified.import_id(),
+            evidence_path,
+            byte_length: snapshot.byte_length(),
+            source_sha256: snapshot.sha256(),
+            catalog_sha256: classification.catalog_sha256(),
+            handoff_sha256: studio_handoff_digest(classified, snapshot, classification),
+        })
+    }
+
+    /// Records an exact host-owned Studio handoff acknowledgement without importing it.
+    pub async fn acknowledge_legacy_studio_handoff(
+        &self,
+        classified: &ClassifiedLegacyImport,
+        receipt: LegacyStudioHandoffReceipt,
+        updated_at_unix_ms: u64,
+    ) -> Result<LegacyImportJournal, Error> {
+        if updated_at_unix_ms == 0 {
+            return Err(Error::InvalidLegacyImportStageRequest);
+        }
+        let handoff = self.prepare_legacy_studio_handoff(classified).await?;
+        if receipt.handoff_sha256() != handoff.handoff_sha256() {
+            return Err(Error::LegacyImportConflict);
+        }
+        let receipt_cursor = studio_handoff_receipt_cursor(receipt);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        let member = journal
+            .members()
+            .iter()
+            .find(|member| member.classification().kind() == LegacySourceKind::Studio)
+            .ok_or(Error::LegacyImportConflict)?;
+        if member.state() == LegacyImportMemberState::Ready {
+            return if member.resume_cursor() == Some(receipt_cursor.as_slice()) {
+                Ok(journal)
+            } else {
+                Err(Error::LegacyImportConflict)
+            };
+        }
+        if !matches!(
+            member.state(),
+            LegacyImportMemberState::Pending | LegacyImportMemberState::Staging
+        ) || member.resume_cursor().is_some()
+            || member.staged_row_count() != 0
+            || updated_at_unix_ms < member.updated_at_unix_ms()
+            || updated_at_unix_ms < journal.updated_at_unix_ms()
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let updated_at = i64::try_from(updated_at_unix_ms)
+            .map_err(|_| Error::InvalidLegacyImportStageRequest)?;
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        if journal.state() == LegacyImportState::Classified {
+            let changed = sqlx::query("UPDATE radroots_runtime_legacy_imports SET state = 'staging', updated_at_ms = ? WHERE import_id = ? AND state = 'classified'")
+                .bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *transaction).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+            if changed.rows_affected() != 1 {
+                return Err(Error::LegacyImportConflict);
+            }
+        }
+        if member.state() == LegacyImportMemberState::Pending {
+            let changed = sqlx::query("UPDATE radroots_runtime_legacy_import_members SET state = 'staging', updated_at_ms = ? WHERE import_id = ? AND source_kind = 'studio' AND state = 'pending' AND resume_cursor IS NULL AND staged_row_count = 0")
+                .bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *transaction).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+            if changed.rows_affected() != 1 {
+                return Err(Error::LegacyImportConflict);
+            }
+        }
+        let changed = sqlx::query("UPDATE radroots_runtime_legacy_import_members SET state = 'ready', resume_cursor = ?, updated_at_ms = ? WHERE import_id = ? AND source_kind = 'studio' AND state = 'staging' AND resume_cursor IS NULL AND staged_row_count = 0")
+            .bind(receipt_cursor.as_slice()).bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *transaction).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if changed.rows_affected() != 1 {
+            return Err(Error::LegacyImportConflict);
+        }
+        let pending = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_legacy_import_members WHERE import_id = ? AND state != 'ready'")
+            .bind(classified.import_id().as_bytes().as_slice()).fetch_one(&mut *transaction).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if pending == 0 {
+            sqlx::query("UPDATE radroots_runtime_legacy_imports SET state = 'ready', updated_at_ms = ? WHERE import_id = ? AND state = 'staging'")
+                .bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *transaction).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        }
+        transaction
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        self.legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)
+    }
+
     fn require_legacy_import_writer(
         &self,
         target_generation: SourceGeneration,
@@ -2315,6 +2529,35 @@ fn classification_digest(classified: &ClassifiedLegacyImport) -> MemberDigest {
     MemberDigest::new(digest.finalize().into())
 }
 
+fn studio_handoff_digest(
+    classified: &ClassifiedLegacyImport,
+    snapshot: &LegacySourceSnapshot,
+    classification: &LegacySourceClassification,
+) -> MemberDigest {
+    let mut digest = Sha256::new();
+    for field in [
+        b"radroots.legacy.studio.handoff.v1".as_slice(),
+        classified.import_id().as_bytes().as_slice(),
+        classified.target_generation().as_bytes().as_slice(),
+        classified.prepared.manifest_sha256().as_bytes().as_slice(),
+        snapshot.relative_path().as_bytes(),
+        snapshot.sha256().as_bytes().as_slice(),
+        classification.catalog_sha256().as_bytes().as_slice(),
+    ] {
+        digest.update(field);
+        digest.update([0]);
+    }
+    digest.update(snapshot.byte_length().to_be_bytes());
+    MemberDigest::new(digest.finalize().into())
+}
+
+fn studio_handoff_receipt_cursor(receipt: LegacyStudioHandoffReceipt) -> [u8; 64] {
+    let mut cursor = [0_u8; 64];
+    cursor[..32].copy_from_slice(receipt.handoff_sha256().as_bytes());
+    cursor[32..].copy_from_slice(receipt.host_commitment_sha256().as_bytes());
+    cursor
+}
+
 fn outbox_stage_query(table: LegacyOutboxTable) -> &'static str {
     match table {
         LegacyOutboxTable::Operations => {
@@ -2841,6 +3084,8 @@ mod tests {
     const OUTBOX_V1_SQL: &str = include_str!("../../outbox/migrations/0001_outbox.up.sql");
     const PRIVATE_STAGING_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_private_staging_policy_v1.toml");
+    const STUDIO_HANDOFF_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_studio_handoff_policy_v1.toml");
     const SDK_PRIVATE_STORE_SOURCE: &str =
         include_str!("../../../../sdk/crates/sdk/src/private_store.rs");
 
@@ -2984,6 +3229,26 @@ mod tests {
         crash_after_private_commit: String,
         conflicting_replay: String,
         live_private_artifact_mutation: bool,
+        hidden_clock_or_entropy: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct StudioHandoffPolicy {
+        schema_version: u32,
+        source_kind: String,
+        supported_schema: String,
+        disposition: String,
+        evidence: String,
+        handoff_identity: String,
+        receipt: String,
+        receipt_cursor_bytes: usize,
+        staged_row_count: u64,
+        exact_retry: String,
+        conflicting_retry: String,
+        sdk_runtime_row_import: bool,
+        sdk_private_row_import: bool,
+        sdk_owned_studio_database: bool,
+        source_deletion: bool,
         hidden_clock_or_entropy: bool,
     }
 
@@ -3601,6 +3866,34 @@ mod tests {
         );
         assert_eq!(policy.conflicting_replay, "reject");
         assert!(!policy.live_private_artifact_mutation);
+        assert!(!policy.hidden_clock_or_entropy);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_studio_handoff_policy() {
+        let policy = toml::from_str::<StudioHandoffPolicy>(STUDIO_HANDOFF_POLICY)
+            .expect("Studio handoff policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(policy.source_kind, "studio");
+        assert_eq!(policy.supported_schema, "studio_v1_host_handoff");
+        assert_eq!(policy.disposition, "host_handoff");
+        assert_eq!(policy.evidence, "immutable_preimport_backup_member");
+        assert_eq!(
+            policy.handoff_identity,
+            "sha256_domain_import_target_manifest_relative_path_source_catalog_length"
+        );
+        assert_eq!(
+            policy.receipt,
+            "handoff_sha256_plus_nonzero_opaque_host_commitment_sha256"
+        );
+        assert_eq!(policy.receipt_cursor_bytes, 64);
+        assert_eq!(policy.staged_row_count, 0);
+        assert_eq!(policy.exact_retry, "idempotent");
+        assert_eq!(policy.conflicting_retry, "reject");
+        assert!(!policy.sdk_runtime_row_import);
+        assert!(!policy.sdk_private_row_import);
+        assert!(!policy.sdk_owned_studio_database);
+        assert!(!policy.source_deletion);
         assert!(!policy.hidden_clock_or_entropy);
     }
 
@@ -4350,6 +4643,117 @@ mod tests {
             .await
             .expect("close private source");
         reopened.close().await.expect("close private target");
+    }
+
+    #[tokio::test]
+    async fn studio_handoff_requires_exact_host_receipt_and_imports_no_rows() {
+        let target_root = tempfile::tempdir().expect("target root");
+        let legacy_root = tempfile::tempdir().expect("legacy root");
+        let backup_root = tempfile::tempdir().expect("backup root");
+        let host_root = tempfile::tempdir().expect("host root");
+        let studio_path = legacy_root.path().join("studio.sqlite");
+        let studio_connection = supported_studio_database(&studio_path).await;
+        let plan = LegacyImportPlan::new(
+            LegacyImportId::new([132; 16]).expect("import id"),
+            vec![LegacySource::new(LegacySourceKind::Studio, &studio_path).expect("Studio source")],
+            backup_root.path(),
+            13_200,
+        )
+        .expect("Studio import plan");
+        let (_, store) = target(target_root.path()).await;
+        let prepared = store
+            .prepare_legacy_import(&plan)
+            .await
+            .expect("prepared Studio import");
+        let classified = store
+            .classify_legacy_import(&prepared)
+            .await
+            .expect("classified Studio import");
+        store
+            .begin_legacy_import(&classified, 13_201)
+            .await
+            .expect("begin Studio import");
+
+        let handoff = store
+            .prepare_legacy_studio_handoff(&classified)
+            .await
+            .expect("Studio handoff");
+        assert_eq!(handoff.import_id(), plan.import_id());
+        assert!(handoff.evidence_path().starts_with(prepared.bundle_path()));
+        assert_eq!(
+            handoff.catalog_sha256(),
+            classified.sources()[0].catalog_sha256()
+        );
+        let host_path = host_root.path().join("studio.sqlite");
+        std::fs::copy(handoff.evidence_path(), &host_path).expect("host accepts evidence");
+        let (host_length, host_commitment) = file_digest(&host_path).expect("host commitment");
+        assert_eq!(host_length, handoff.byte_length());
+        assert_eq!(host_commitment, handoff.source_sha256());
+        assert!(matches!(
+            LegacyStudioHandoffReceipt::new(handoff.handoff_sha256(), MemberDigest::new([0; 32])),
+            Err(Error::InvalidLegacyImportStageRequest)
+        ));
+        let receipt = LegacyStudioHandoffReceipt::new(handoff.handoff_sha256(), host_commitment)
+            .expect("host receipt");
+        let acknowledged = store
+            .acknowledge_legacy_studio_handoff(&classified, receipt, 13_202)
+            .await
+            .expect("acknowledge Studio handoff");
+        assert_eq!(acknowledged.state(), LegacyImportState::Ready);
+        assert_eq!(
+            acknowledged.members()[0].state(),
+            LegacyImportMemberState::Ready
+        );
+        assert_eq!(acknowledged.members()[0].staged_row_count(), 0);
+        assert_eq!(
+            acknowledged.members()[0].resume_cursor().map(<[u8]>::len),
+            Some(64)
+        );
+
+        let retry = store
+            .acknowledge_legacy_studio_handoff(&classified, receipt, 13_202)
+            .await
+            .expect("exact receipt retry");
+        assert_eq!(retry, acknowledged);
+        let conflict =
+            LegacyStudioHandoffReceipt::new(handoff.handoff_sha256(), MemberDigest::new([99; 32]))
+                .expect("conflicting host receipt");
+        assert!(matches!(
+            store
+                .acknowledge_legacy_studio_handoff(&classified, conflict, 13_203)
+                .await,
+            Err(Error::LegacyImportConflict)
+        ));
+        for pool in [store.pool(), store.private_pool()] {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM sqlite_schema WHERE lower(name) LIKE '%studio%'"
+                )
+                .fetch_one(pool)
+                .await
+                .expect("Studio schema isolation"),
+                0
+            );
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_events")
+                .fetch_one(store.pool())
+                .await
+                .expect("runtime event isolation"),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_private_artifacts")
+                .fetch_one(store.private_pool())
+                .await
+                .expect("private artifact isolation"),
+            0
+        );
+        studio_connection
+            .close()
+            .await
+            .expect("close Studio source");
+        store.close().await.expect("close target");
     }
 
     #[test]

@@ -1,0 +1,16 @@
+schema_version = 1
+source_kind = "studio"
+supported_schema = "studio_v1_host_handoff"
+disposition = "host_handoff"
+evidence = "immutable_preimport_backup_member"
+handoff_identity = "sha256_domain_import_target_manifest_relative_path_source_catalog_length"
+receipt = "handoff_sha256_plus_nonzero_opaque_host_commitment_sha256"
+receipt_cursor_bytes = 64
+staged_row_count = 0
+exact_retry = "idempotent"
+conflicting_retry = "reject"
+sdk_runtime_row_import = false
+sdk_private_row_import = false
+sdk_owned_studio_database = false
+source_deletion = false
+hidden_clock_or_entropy = false
