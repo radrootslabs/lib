@@ -39,8 +39,10 @@ serde = { workspace = true, optional = true }
 sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
+futures = { workspace = true }
 futures-executor = { workspace = true }
 radroots_storage = { workspace = true, features = ["memory"] }
+secp256k1 = { workspace = true }
 
 [lints]
 workspace = true

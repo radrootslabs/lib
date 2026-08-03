@@ -12,3 +12,4 @@ pub mod status;
 pub use engine::Engine;
 pub use policy::Error;
 pub use pull::{PullReceipt, PullRequest};
+pub use push::{PushReceipt, PushRequest};

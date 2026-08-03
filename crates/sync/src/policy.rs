@@ -202,6 +202,11 @@ pub enum Error {
     InvalidProjectionRequest,
     ReducerFailed,
     InvalidReducerOutput,
+    InvalidPushRequest,
+    MissingSigner,
+    SignerFailed,
+    SignerDeadlineExceeded,
+    InvalidSignerOutput,
 }
 
 impl core::fmt::Display for Error {
@@ -224,6 +229,11 @@ impl core::fmt::Display for Error {
             Self::InvalidProjectionRequest => "sync projection request is invalid",
             Self::ReducerFailed => "sync projection reducer failed",
             Self::InvalidReducerOutput => "sync projection reducer returned invalid progress",
+            Self::InvalidPushRequest => "sync push request is invalid",
+            Self::MissingSigner => "sync engine has no signer",
+            Self::SignerFailed => "sync signer did not produce an event",
+            Self::SignerDeadlineExceeded => "sync signer exceeded its deadline",
+            Self::InvalidSignerOutput => "sync signer output failed canonical verification",
         })
     }
 }

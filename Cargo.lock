@@ -5155,6 +5155,7 @@ dependencies = [
 name = "radroots_sync"
 version = "0.1.0-alpha"
 dependencies = [
+ "futures",
  "futures-executor",
  "radroots_event",
  "radroots_event_codec",
@@ -5163,6 +5164,7 @@ dependencies = [
  "radroots_storage",
  "radroots_trade",
  "radroots_transport",
+ "secp256k1",
  "serde",
  "sha2",
 ]
