@@ -7,7 +7,8 @@ use core::fmt;
 
 use crate::{
     envelope::kind::{
-        KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
+        KIND_ARTICLE, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING,
+        KIND_COMMENT,
     },
     id::{
         AddressableCoordinate, AddressableCoordinateParts, EventId, ParseError, parse_public_key,
@@ -180,6 +181,7 @@ impl std::error::Error for Nip22CommentError {
 /// Root event kinds supported by the strict Radroots NIP-22 profile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Nip22CommentRootKind {
+    Article,
     ClassifiedListing,
     CalendarDateEvent,
     CalendarTimeEvent,
@@ -188,6 +190,7 @@ pub enum Nip22CommentRootKind {
 impl Nip22CommentRootKind {
     pub const fn as_u32(self) -> u32 {
         match self {
+            Self::Article => KIND_ARTICLE,
             Self::ClassifiedListing => KIND_CLASSIFIED_LISTING,
             Self::CalendarDateEvent => KIND_CALENDAR_DATE_EVENT,
             Self::CalendarTimeEvent => KIND_CALENDAR_TIME_EVENT,
@@ -196,6 +199,7 @@ impl Nip22CommentRootKind {
 
     pub const fn parse(kind: u32) -> Result<Self, Nip22CommentError> {
         match kind {
+            KIND_ARTICLE => Ok(Self::Article),
             KIND_CLASSIFIED_LISTING => Ok(Self::ClassifiedListing),
             KIND_CALENDAR_DATE_EVENT => Ok(Self::CalendarDateEvent),
             KIND_CALENDAR_TIME_EVENT => Ok(Self::CalendarTimeEvent),
@@ -862,6 +866,7 @@ mod tests {
     #[test]
     fn supports_each_root_kind_for_event_and_address_roots() {
         for kind in [
+            KIND_ARTICLE,
             KIND_CLASSIFIED_LISTING,
             KIND_CALENDAR_DATE_EVENT,
             KIND_CALENDAR_TIME_EVENT,
@@ -883,7 +888,7 @@ mod tests {
 
     #[test]
     fn rejects_other_root_kinds_and_ambiguous_parent() {
-        for kind in [1, KIND_COMMENT, 30_023] {
+        for kind in [1, KIND_COMMENT, 30_018] {
             assert!(matches!(
                 Nip22EventRootReference::parse(
                     "a".repeat(64),
