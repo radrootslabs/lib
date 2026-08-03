@@ -8,10 +8,13 @@ use std::{
 };
 
 use radroots_storage::backup::{
-    BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
-    BackupSecretPolicy, MemberDigest, MemberVerification, RestoreMemberStatus, RestorePlan,
+    BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupOperation,
+    BackupPlan, BackupSecretPolicy, BackupTransition, MemberDigest, MemberVerification,
+    ReliabilityRevision, RestoreMemberStatus, RestoreOperation, RestorePlan, RestoreTransition,
+    StorageReliability,
 };
 use radroots_storage::status::EventStoreMode;
+use radroots_storage::{Error as StorageError, outbox::BoxFuture};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -24,6 +27,126 @@ const RUNTIME_MEMBER: &str = "runtime/runtime.sqlite";
 const PRIVATE_MEMBER: &str = "private/private.sqlite";
 const RESTORE_MARKER_MAGIC: &[u8; 8] = b"RDRSTR01";
 const RESTORE_MARKER_BYTES: usize = 105;
+
+#[derive(Default)]
+pub(crate) struct ReliabilityState {
+    backups: Vec<BackupOperation>,
+    restores: Vec<RestoreOperation>,
+}
+
+impl SqliteStorage {
+    fn reliability_state(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, ReliabilityState>, StorageError> {
+        self.lifecycle.require_open()?;
+        self.reliability
+            .lock()
+            .map_err(|_| StorageError::BackendUnavailable)
+    }
+}
+
+impl StorageReliability for SqliteStorage {
+    fn begin_backup(
+        &self,
+        plan: BackupPlan,
+    ) -> BoxFuture<'_, Result<BackupOperation, StorageError>> {
+        Box::pin(async move {
+            let mut state = self.reliability_state()?;
+            if let Some(existing) = state
+                .backups
+                .iter()
+                .find(|operation| operation.plan().backup_id() == plan.backup_id())
+            {
+                return if existing.plan() == &plan {
+                    Ok(existing.clone())
+                } else {
+                    Err(StorageError::ReliabilityRevisionConflict)
+                };
+            }
+            let operation = BackupOperation::planned(plan);
+            state.backups.push(operation.clone());
+            Ok(operation)
+        })
+    }
+
+    fn transition_backup(
+        &self,
+        backup_id: BackupId,
+        expected_revision: ReliabilityRevision,
+        transition: BackupTransition,
+        at_unix_ms: u64,
+    ) -> BoxFuture<'_, Result<BackupOperation, StorageError>> {
+        Box::pin(async move {
+            let mut state = self.reliability_state()?;
+            let operation = state
+                .backups
+                .iter_mut()
+                .find(|operation| operation.plan().backup_id() == backup_id)
+                .ok_or(StorageError::CorruptReliabilityOperation)?;
+            let next = operation.transition(expected_revision, transition, at_unix_ms)?;
+            *operation = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn begin_restore(
+        &self,
+        plan: RestorePlan,
+    ) -> BoxFuture<'_, Result<RestoreOperation, StorageError>> {
+        Box::pin(async move {
+            let mut state = self.reliability_state()?;
+            let backup_id = plan.manifest().backup_id();
+            if let Some(existing) = state
+                .restores
+                .iter()
+                .find(|operation| operation.plan().manifest().backup_id() == backup_id)
+            {
+                return if existing.plan() == &plan {
+                    Ok(existing.clone())
+                } else {
+                    Err(StorageError::ReliabilityRevisionConflict)
+                };
+            }
+            let operation = RestoreOperation::staging(plan);
+            state.restores.push(operation.clone());
+            Ok(operation)
+        })
+    }
+
+    fn transition_restore(
+        &self,
+        backup_id: BackupId,
+        expected_revision: ReliabilityRevision,
+        transition: RestoreTransition,
+        at_unix_ms: u64,
+    ) -> BoxFuture<'_, Result<RestoreOperation, StorageError>> {
+        Box::pin(async move {
+            let mut state = self.reliability_state()?;
+            let operation = state
+                .restores
+                .iter_mut()
+                .find(|operation| operation.plan().manifest().backup_id() == backup_id)
+                .ok_or(StorageError::CorruptReliabilityOperation)?;
+            let next = operation.transition(expected_revision, transition, at_unix_ms)?;
+            *operation = next.clone();
+            Ok(next)
+        })
+    }
+
+    fn integrity(
+        &self,
+    ) -> BoxFuture<'_, Result<radroots_storage::status::IntegrityStatus, StorageError>> {
+        Box::pin(async move { SqliteStorage::integrity(self).await })
+    }
+
+    fn status(&self) -> BoxFuture<'_, Result<radroots_storage::StorageStatus, StorageError>> {
+        Box::pin(async move { SqliteStorage::storage_status(self).await })
+    }
+
+    fn close(&self) -> BoxFuture<'_, Result<radroots_storage::StorageStatus, StorageError>> {
+        Box::pin(async move { SqliteStorage::close(self).await })
+    }
+}
 
 impl SqliteStorage {
     /// Captures consistent SQLite snapshots into a new deterministic staging
@@ -1431,6 +1554,70 @@ mod tests {
             .expect("decode captured member");
         connection.close().await.expect("close captured member");
         value
+    }
+
+    #[tokio::test]
+    async fn aggregate_reliability_state_is_idempotent_conflict_safe_and_close_aware() {
+        let database_root = tempfile::tempdir().expect("database root");
+        let (_paths, store) = create(database_root.path(), None).await;
+        let backup = plan(44, BackupSecretPolicy::ExcludeProtectedStorage, 4_400);
+
+        let planned = StorageReliability::begin_backup(&store, backup.clone())
+            .await
+            .expect("planned backup");
+        assert_eq!(
+            StorageReliability::begin_backup(&store, backup.clone())
+                .await
+                .expect("idempotent backup"),
+            planned
+        );
+        let conflicting = plan(44, BackupSecretPolicy::IncludeProtectedStorage, 4_400);
+        assert_eq!(
+            StorageReliability::begin_backup(&store, conflicting).await,
+            Err(StorageError::ReliabilityRevisionConflict)
+        );
+
+        let failed = StorageReliability::transition_backup(
+            &store,
+            backup.backup_id(),
+            planned.revision(),
+            BackupTransition::Fail,
+            4_401,
+        )
+        .await
+        .expect("failed transition");
+        assert_eq!(
+            failed.stage(),
+            radroots_storage::backup::BackupStage::Failed
+        );
+        assert_eq!(
+            StorageReliability::transition_backup(
+                &store,
+                backup.backup_id(),
+                failed.revision(),
+                BackupTransition::Fail,
+                4_402,
+            )
+            .await,
+            Err(StorageError::ReliabilityOperationTerminal)
+        );
+
+        let status = StorageReliability::status(&store)
+            .await
+            .expect("open status");
+        assert_eq!(status.shutdown(), ShutdownState::Open);
+        let closed = StorageReliability::close(&store)
+            .await
+            .expect("close storage");
+        assert_eq!(closed.shutdown(), ShutdownState::Closed);
+        assert_eq!(
+            StorageReliability::begin_backup(
+                &store,
+                plan(45, BackupSecretPolicy::ExcludeProtectedStorage, 4_500)
+            )
+            .await,
+            Err(StorageError::BackendUnavailable)
+        );
     }
 
     async fn insert_private_artifact(store: &SqliteStorage, byte: u8) {

@@ -10,7 +10,10 @@ use radroots_storage::{
     status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
 };
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use crate::lock::WriterLock;
 use crate::status::StorageLifecycle;
@@ -24,6 +27,7 @@ pub struct SqliteStorage {
     pub(crate) lifecycle: Arc<StorageLifecycle>,
     pub(crate) backup_root: Option<Arc<PathBuf>>,
     pub(crate) paths: Option<Arc<crate::Paths>>,
+    pub(crate) reliability: Arc<Mutex<crate::backup::ReliabilityState>>,
 }
 
 struct StoredEventRow {
@@ -47,6 +51,7 @@ impl SqliteStorage {
             lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
             backup_root: None,
             paths: None,
+            reliability: Arc::new(Mutex::new(crate::backup::ReliabilityState::default())),
         }
     }
 
@@ -65,6 +70,7 @@ impl SqliteStorage {
             lifecycle: Arc::new(StorageLifecycle::scaffold(mode)),
             backup_root: None,
             paths: None,
+            reliability: Arc::new(Mutex::new(crate::backup::ReliabilityState::default())),
         }
     }
 
@@ -94,6 +100,7 @@ impl SqliteStorage {
                 .backup_root()
                 .map(|path| Arc::new(path.to_path_buf())),
             paths: Some(Arc::new(options.paths().clone())),
+            reliability: Arc::new(Mutex::new(crate::backup::ReliabilityState::default())),
         }
     }
 

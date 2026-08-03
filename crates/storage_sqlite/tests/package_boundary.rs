@@ -5,6 +5,9 @@ const ROOT: &str = include_str!("../src/lib.rs");
 
 #[test]
 fn sqlite_storage_declares_the_final_backend_boundaries() {
+    fn assert_complete_storage<T: radroots_storage::Storage>() {}
+    assert_complete_storage::<radroots_storage_sqlite::SqliteStorage>();
+
     for required in [
         "name = \"radroots_storage_sqlite\"",
         "version = \"0.1.0-alpha\"",
