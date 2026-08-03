@@ -3,6 +3,7 @@
 pub mod backup;
 pub mod config;
 pub mod integrity;
+pub mod legacy;
 pub mod lock;
 pub mod migration;
 pub mod open;

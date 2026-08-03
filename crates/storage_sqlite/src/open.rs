@@ -266,6 +266,19 @@ pub enum Error {
         operation: &'static str,
         source: std::io::Error,
     },
+    InvalidLegacyImportPlan,
+    InvalidLegacySource(PathBuf),
+    LegacyImportBackupAlreadyExists(PathBuf),
+    LegacyImportBackupFailed {
+        source_kind: &'static str,
+    },
+    LegacyImportSourceInvalid {
+        source_kind: &'static str,
+    },
+    LegacyImportFilesystem {
+        operation: &'static str,
+        source: std::io::Error,
+    },
     BackupFilesystem {
         operation: &'static str,
         source: std::io::Error,
@@ -496,6 +509,31 @@ impl fmt::Display for Error {
                     "SQLite restore filesystem operation failed: {operation}"
                 )
             }
+            Self::InvalidLegacyImportPlan => {
+                formatter.write_str("SQLite legacy import plan is invalid")
+            }
+            Self::InvalidLegacySource(path) => write!(
+                formatter,
+                "SQLite legacy import source is invalid: {}",
+                path.display()
+            ),
+            Self::LegacyImportBackupAlreadyExists(path) => write!(
+                formatter,
+                "SQLite legacy import backup already exists: {}",
+                path.display()
+            ),
+            Self::LegacyImportBackupFailed { source_kind } => write!(
+                formatter,
+                "failed to back up SQLite legacy {source_kind} source"
+            ),
+            Self::LegacyImportSourceInvalid { source_kind } => write!(
+                formatter,
+                "SQLite legacy {source_kind} source failed integrity validation"
+            ),
+            Self::LegacyImportFilesystem { operation, .. } => write!(
+                formatter,
+                "SQLite legacy import filesystem operation failed: {operation}"
+            ),
             Self::BackupFilesystem { operation, .. } => {
                 write!(
                     formatter,
@@ -763,6 +801,7 @@ impl StdError for Error {
             | Self::WriterLockFailed { source, .. }
             | Self::WriterUnlockFailed { source, .. }
             | Self::RestoreFilesystem { source, .. }
+            | Self::LegacyImportFilesystem { source, .. }
             | Self::BackupFilesystem { source, .. } => Some(source),
             _ => None,
         }

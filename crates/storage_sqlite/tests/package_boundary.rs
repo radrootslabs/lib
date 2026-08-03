@@ -48,6 +48,7 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "backup",
             "config",
             "integrity",
+            "legacy",
             "lock",
             "migration",
             "open",

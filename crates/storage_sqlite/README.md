@@ -29,6 +29,16 @@ to reopen the closed backend. Writable open completes an interrupted marked
 replacement before opening connections; read-only open fails closed until that
 recovery is complete.
 
+Legacy migration starts only from an explicit, forward-only import plan on an
+open writable backend. Before any target mutation, the backend captures every
+caller-identified predecessor database through SQLite's WAL-consistent online
+snapshot operation into a create-new staging directory, verifies SQLite and
+foreign-key integrity, records exact source provenance, lengths, and SHA-256
+digests in a mode-`0600` manifest, synchronizes the evidence, and atomically
+finalizes the immutable bundle. Import identities and timestamps are supplied
+by the host; collisions, owned-database aliases, and unsupported paths fail
+closed.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};
