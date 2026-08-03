@@ -1,8 +1,13 @@
 //! Executor-neutral local-first synchronization orchestration.
 
+mod engine;
+
 pub mod ingest;
 pub mod policy;
 pub mod projection;
 pub mod pull;
 pub mod push;
 pub mod status;
+
+pub use engine::Engine;
+pub use policy::Error;
