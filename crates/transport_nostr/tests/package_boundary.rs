@@ -3,6 +3,10 @@ use std::fs;
 use std::path::Path;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const README: &str = include_str!("../README.md");
+const EXAMPLE: &str = include_str!("../examples/configure_transport.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_transport_nostr.txt");
+const API_INDEX: &str = include_str!("../../../docs/api/README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 
 #[test]
@@ -41,6 +45,72 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
     ] {
         assert!(ROOT.contains(export), "crate root is missing `{export}`");
     }
+}
+
+#[test]
+fn documentation_example_and_reviewed_api_baseline_are_complete() {
+    for required in [
+        "## Configure without connecting",
+        "## Public surface",
+        "## Relay and network security",
+        "## Fetch, delivery, and outcome behavior",
+        "## Deadlines, cancellation, and commit points",
+        "## Serialization and diagnostics",
+        "## Features and runtime requirements",
+        "## Intended consumers",
+        "radroots_crates_release_v1.md#15-radroots_transport_nostr",
+        "examples/configure_transport.rs",
+        "docs/api/radroots_transport_nostr.txt",
+    ] {
+        assert!(README.contains(required), "README is missing `{required}`");
+    }
+    for required in [
+        "Config::new(",
+        "RelayUrlPolicy::Public",
+        "NostrTransport::new(config)",
+        "let source: &dyn EventSource",
+        "let sink: &dyn EventSink",
+        "drop(source.status())",
+        "drop(sink.status())",
+    ] {
+        assert!(
+            EXAMPLE.contains(required),
+            "example is missing `{required}`"
+        );
+    }
+    for required in [
+        "pub struct radroots_transport_nostr::Config",
+        "pub struct radroots_transport_nostr::NostrTransport",
+        "pub struct radroots_transport_nostr::RelayUrl(_)",
+        "pub enum radroots_transport_nostr::RelayUrlPolicy",
+        "pub enum radroots_transport_nostr::Error",
+        "impl radroots_transport::sink::EventSink for radroots_transport_nostr::NostrTransport",
+        "impl radroots_transport::source::EventSource for radroots_transport_nostr::NostrTransport",
+        "NostrTransport::begin_authentication",
+        "NostrTransport::complete_authentication",
+        "NostrTransport::reject_authentication",
+    ] {
+        assert!(
+            PUBLIC_API.contains(required),
+            "public API baseline is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "nostr_sdk",
+        "nostr_relay_pool",
+        "tokio::",
+        "radroots_storage",
+        "radroots_outbox",
+        "pub trait radroots_transport_nostr",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "reviewed public API baseline exposes `{forbidden}`"
+        );
+    }
+    assert!(API_INDEX.contains(
+        "| `radroots_transport_nostr` | [`radroots_transport_nostr.txt`](radroots_transport_nostr.txt) |"
+    ));
 }
 
 fn radroots_dependency_keys(manifest: &str) -> BTreeSet<&str> {

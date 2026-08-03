@@ -1,0 +1,82 @@
+pub mod radroots_transport_nostr
+#[non_exhaustive] pub enum radroots_transport_nostr::Error
+pub radroots_transport_nostr::Error::AuthChallengeConflict
+pub radroots_transport_nostr::Error::AuthChallengeExpired
+pub radroots_transport_nostr::Error::AuthChallengeMissing
+pub radroots_transport_nostr::Error::AuthRejected
+pub radroots_transport_nostr::Error::AuthResponseInvalid
+pub radroots_transport_nostr::Error::AuthResponseMismatch
+pub radroots_transport_nostr::Error::AuthSignerUnavailable
+pub radroots_transport_nostr::Error::AuthStateUnavailable
+pub radroots_transport_nostr::Error::AuthTransport
+pub radroots_transport_nostr::Error::DuplicateRelayUrl
+pub radroots_transport_nostr::Error::DuplicateRelayUrl::url: alloc::string::String
+pub radroots_transport_nostr::Error::EmptyRelaySet
+pub radroots_transport_nostr::Error::EmptyResolution
+pub radroots_transport_nostr::Error::EmptyResolution::url: alloc::string::String
+pub radroots_transport_nostr::Error::InvalidAuthChallenge
+pub radroots_transport_nostr::Error::InvalidConnectionLimit
+pub radroots_transport_nostr::Error::InvalidConnectionLimit::value: usize
+pub radroots_transport_nostr::Error::InvalidRelayUrl
+pub radroots_transport_nostr::Error::InvalidRelayUrl::reason: alloc::string::String
+pub radroots_transport_nostr::Error::InvalidRelayUrl::url: alloc::string::String
+pub radroots_transport_nostr::Error::InvalidTimeout
+pub radroots_transport_nostr::Error::InvalidTimeout::field: &'static str
+pub radroots_transport_nostr::Error::InvalidTimeout::value_ms: u64
+pub radroots_transport_nostr::Error::RelayDestinationDenied
+pub radroots_transport_nostr::Error::RelayDestinationDenied::reason: &'static str
+pub radroots_transport_nostr::Error::RelayDestinationDenied::url: alloc::string::String
+pub radroots_transport_nostr::Error::RelaySchemeDenied
+pub radroots_transport_nostr::Error::RelaySchemeDenied::url: alloc::string::String
+pub radroots_transport_nostr::Error::ResolvedAddressDenied
+pub radroots_transport_nostr::Error::ResolvedAddressDenied::address: alloc::string::String
+pub radroots_transport_nostr::Error::ResolvedAddressDenied::url: alloc::string::String
+pub radroots_transport_nostr::Error::Target(alloc::string::String)
+pub radroots_transport_nostr::Error::TooManyRelays
+pub radroots_transport_nostr::Error::TooManyRelays::actual: usize
+pub radroots_transport_nostr::Error::TooManyRelays::max: usize
+pub radroots_transport_nostr::Error::UnexpectedTransport
+pub radroots_transport_nostr::Error::UnexpectedTransport::actual: alloc::string::String
+impl core::error::Error for radroots_transport_nostr::Error
+impl core::fmt::Display for radroots_transport_nostr::Error
+pub fn radroots_transport_nostr::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_transport_nostr::RelayUrlPolicy
+pub radroots_transport_nostr::RelayUrlPolicy::Local
+pub radroots_transport_nostr::RelayUrlPolicy::PrivateNetwork
+pub radroots_transport_nostr::RelayUrlPolicy::Public
+pub struct radroots_transport_nostr::Config
+impl radroots_transport_nostr::Config
+pub const fn radroots_transport_nostr::Config::connect_timeout_ms(&self) -> u64
+pub const fn radroots_transport_nostr::Config::max_connections(&self) -> usize
+pub fn radroots_transport_nostr::Config::new<I, S>(radroots_transport_nostr::RelayUrlPolicy, I) -> core::result::Result<Self, radroots_transport_nostr::Error> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub const fn radroots_transport_nostr::Config::relay_url_policy(&self) -> radroots_transport_nostr::RelayUrlPolicy
+pub fn radroots_transport_nostr::Config::relays(&self) -> &[radroots_transport_nostr::RelayUrl]
+pub const fn radroots_transport_nostr::Config::request_timeout_ms(&self) -> u64
+pub const fn radroots_transport_nostr::Config::status_timeout_ms(&self) -> u64
+pub fn radroots_transport_nostr::Config::with_max_connections(self, usize) -> core::result::Result<Self, radroots_transport_nostr::Error>
+pub fn radroots_transport_nostr::Config::with_timeouts(self, u64, u64, u64) -> core::result::Result<Self, radroots_transport_nostr::Error>
+pub struct radroots_transport_nostr::NostrTransport
+impl radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::begin_authentication(&self, &radroots_transport_nostr::RelayUrl, impl core::convert::AsRef<str>, u64, u64) -> core::result::Result<alloc::string::String, radroots_transport_nostr::Error>
+pub fn radroots_transport_nostr::NostrTransport::complete_authentication<'a>(&'a self, &'a radroots_transport_nostr::RelayUrl, &'a str, core::option::Option<&'a str>, u64) -> radroots_transport::source::BoxFuture<'a, core::result::Result<(), radroots_transport_nostr::Error>>
+pub fn radroots_transport_nostr::NostrTransport::reject_authentication(&self, &radroots_transport_nostr::RelayUrl, &str) -> core::result::Result<(), radroots_transport_nostr::Error>
+impl radroots_transport_nostr::NostrTransport
+pub const fn radroots_transport_nostr::NostrTransport::config(&self) -> &radroots_transport_nostr::Config
+pub fn radroots_transport_nostr::NostrTransport::new(radroots_transport_nostr::Config) -> Self
+impl core::fmt::Debug for radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl radroots_transport::sink::EventSink for radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::error::Error>>
+pub fn radroots_transport_nostr::NostrTransport::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SinkStatus, radroots_transport::error::Error>>
+impl radroots_transport::source::EventSource for radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
+pub fn radroots_transport_nostr::NostrTransport::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SourceStatus, radroots_transport::error::Error>>
+pub struct radroots_transport_nostr::RelayUrl(_)
+impl radroots_transport_nostr::RelayUrl
+pub fn radroots_transport_nostr::RelayUrl::as_str(&self) -> &str
+pub fn radroots_transport_nostr::RelayUrl::from_target(&radroots_transport::target::Target, radroots_transport_nostr::RelayUrlPolicy) -> core::result::Result<Self, radroots_transport_nostr::Error>
+pub fn radroots_transport_nostr::RelayUrl::parse(impl core::convert::AsRef<str>, radroots_transport_nostr::RelayUrlPolicy) -> core::result::Result<Self, radroots_transport_nostr::Error>
+pub fn radroots_transport_nostr::RelayUrl::to_target(&self) -> core::result::Result<radroots_transport::target::Target, radroots_transport_nostr::Error>
+pub fn radroots_transport_nostr::RelayUrl::validate_resolved_addresses(&self, radroots_transport_nostr::RelayUrlPolicy, impl core::iter::traits::collect::IntoIterator<Item = core::net::ip_addr::IpAddr>) -> core::result::Result<(), radroots_transport_nostr::Error>
+impl core::fmt::Display for radroots_transport_nostr::RelayUrl
+pub fn radroots_transport_nostr::RelayUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

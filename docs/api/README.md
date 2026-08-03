@@ -43,3 +43,4 @@ expand a package beyond its charter.
 | `radroots_nostr_connect` | [`radroots_nostr_connect.txt`](radroots_nostr_connect.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_secrets` | [`radroots_secrets.txt`](radroots_secrets.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_storage` | [`radroots_storage.txt`](radroots_storage.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots_transport_nostr` | [`radroots_transport_nostr.txt`](radroots_transport_nostr.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
