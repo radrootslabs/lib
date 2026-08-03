@@ -6,9 +6,10 @@
 /// Lowest private schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current private schema version created by this package.
-pub const CURRENT_VERSION: u32 = 1;
+pub const CURRENT_VERSION: u32 = 2;
 
 const PRIVATE_V1_SQL: &str = include_str!("0001_private.up.sql");
+const LEGACY_PRIVATE_STAGING_V2_SQL: &str = include_str!("0002_legacy_private_staging.up.sql");
 
 /// Stable, non-SQL description of one forward private migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,17 +48,41 @@ const PRIVATE_V1_OBJECTS: &[&str] = &[
     "radroots_private_artifacts_kind_idx",
 ];
 
+const PRIVATE_V2_OBJECTS: &[&str] = &[
+    "radroots_private_artifacts",
+    "radroots_private_artifacts_delete_guard",
+    "radroots_private_artifacts_envelope_guard",
+    "radroots_private_artifacts_expiry_idx",
+    "radroots_private_artifacts_identity_guard",
+    "radroots_private_artifacts_key_version_idx",
+    "radroots_private_artifacts_kind_idx",
+    "radroots_private_legacy_import_staging",
+    "radroots_private_legacy_import_staging_delete_guard",
+    "radroots_private_legacy_import_staging_insert_guard",
+    "radroots_private_legacy_import_staging_parent_idx",
+    "radroots_private_legacy_import_staging_update_guard",
+];
+
 /// Ordered, immutable private migration plan.
-pub const MIGRATIONS: &[MigrationDescriptor] = &[MigrationDescriptor {
-    version: 1,
-    name: "private_artifacts",
-    up_sha256: "07050386292ff8ce9ec0e756c9ac88e458a249d53e8654e1102caa2e361f11ab",
-    owned_objects: PRIVATE_V1_OBJECTS,
-}];
+pub const MIGRATIONS: &[MigrationDescriptor] = &[
+    MigrationDescriptor {
+        version: 1,
+        name: "private_artifacts",
+        up_sha256: "07050386292ff8ce9ec0e756c9ac88e458a249d53e8654e1102caa2e361f11ab",
+        owned_objects: PRIVATE_V1_OBJECTS,
+    },
+    MigrationDescriptor {
+        version: 2,
+        name: "legacy_private_staging",
+        up_sha256: "299ec0c476b2f5ab995f245d36603969af345827c9ecdf9490cfe0b0dbe4b9f9",
+        owned_objects: PRIVATE_V2_OBJECTS,
+    },
+];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(PRIVATE_V1_SQL),
+        2 => Some(LEGACY_PRIVATE_STAGING_V2_SQL),
         _ => None,
     }
 }
@@ -100,7 +125,7 @@ mod tests {
     #[test]
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
-        let migration = MIGRATIONS[0];
+        let migration = MIGRATIONS[1];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "private.sqlite");
         assert_eq!(snapshot.application_id, 1_380_208_722);
@@ -111,7 +136,7 @@ mod tests {
         assert!(snapshot.forward_only);
         assert!(!snapshot.raw_sql_public);
         assert!(snapshot.encrypted_envelopes);
-        assert_eq!(snapshot.authorities.len(), 4);
+        assert_eq!(snapshot.authorities.len(), 5);
         assert_eq!(snapshot.forbidden_tables, ["studio", "ui_state"]);
         assert_eq!(snapshot.migrations.len(), MIGRATIONS.len());
         for (expected, actual) in snapshot.migrations.iter().zip(MIGRATIONS) {
@@ -124,10 +149,11 @@ mod tests {
 
     #[test]
     fn embedded_migration_checksum_is_pinned() {
-        let migration = MIGRATIONS[0];
-        let sql = migration_sql(migration.version()).expect("registered SQL");
-        assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
-        assert_eq!(migration_sql(2), None);
+        for migration in MIGRATIONS {
+            let sql = migration_sql(migration.version()).expect("registered SQL");
+            assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
+        }
+        assert_eq!(migration_sql(3), None);
     }
 
     #[tokio::test]
@@ -153,7 +179,7 @@ mod tests {
             .iter()
             .map(|row| row.get::<String, _>("name"))
             .collect::<Vec<_>>();
-        assert_eq!(actual, MIGRATIONS[0].owned_objects());
+        assert_eq!(actual, MIGRATIONS[1].owned_objects());
         let forbidden = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_schema
              WHERE lower(name) LIKE '%studio%' OR lower(name) LIKE '%ui_state%'",

@@ -71,6 +71,14 @@ exact parent, and attempts must bind a target from the same plan. Governed
 column-order JSON-array records preserve nullable and scalar predecessor data
 without writing the live operation journal, outbox, or delivery evidence.
 
+Private schema v2 stages secret-bearing predecessor records only inside
+`private.sqlite`. Runtime and private commits use an explicit replay protocol:
+enter runtime staging, idempotently commit and byte-verify one private page,
+then compare-and-swap the runtime table cursor and count. A process loss after
+the private commit therefore replays the exact page from the old runtime cursor
+without duplicating counts or exposing secret-bearing staging in
+`runtime.sqlite`.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

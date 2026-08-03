@@ -2,9 +2,9 @@ schema_version = 1
 database = "private.sqlite"
 application_id = 1380208722 # ASCII "RDPR"
 minimum_version = 1
-current_version = 1
-migration_name = "private_artifacts"
-migration_sha256 = "07050386292ff8ce9ec0e756c9ac88e458a249d53e8654e1102caa2e361f11ab"
+current_version = 2
+migration_name = "legacy_private_staging"
+migration_sha256 = "299ec0c476b2f5ab995f245d36603969af345827c9ecdf9490cfe0b0dbe4b9f9"
 forward_only = true
 raw_sql_public = false
 encrypted_envelopes = true
@@ -14,6 +14,7 @@ authorities = [
   "private_farm_locations",
   "private_trade_artifacts",
   "permitted_nip46_sessions",
+  "legacy_private_import_staging",
 ]
 
 forbidden_tables = [
@@ -33,4 +34,23 @@ owned_objects = [
   "radroots_private_artifacts_identity_guard",
   "radroots_private_artifacts_key_version_idx",
   "radroots_private_artifacts_kind_idx",
+]
+
+[[migrations]]
+version = 2
+name = "legacy_private_staging"
+sha256 = "299ec0c476b2f5ab995f245d36603969af345827c9ecdf9490cfe0b0dbe4b9f9"
+owned_objects = [
+  "radroots_private_artifacts",
+  "radroots_private_artifacts_delete_guard",
+  "radroots_private_artifacts_envelope_guard",
+  "radroots_private_artifacts_expiry_idx",
+  "radroots_private_artifacts_identity_guard",
+  "radroots_private_artifacts_key_version_idx",
+  "radroots_private_artifacts_kind_idx",
+  "radroots_private_legacy_import_staging",
+  "radroots_private_legacy_import_staging_delete_guard",
+  "radroots_private_legacy_import_staging_insert_guard",
+  "radroots_private_legacy_import_staging_parent_idx",
+  "radroots_private_legacy_import_staging_update_guard",
 ]

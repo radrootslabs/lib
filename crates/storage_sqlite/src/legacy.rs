@@ -403,6 +403,89 @@ pub struct LegacyOutboxStagePage {
     complete: bool,
 }
 
+/// Stable predecessor table order for protected legacy private-store staging.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum LegacyPrivateTable {
+    Metadata,
+    WrappedProfileKeys,
+    SigningSecrets,
+    FarmLocations,
+    TradeArtifacts,
+    CursorKeys,
+    Nip46Sessions,
+    RotationProgress,
+}
+
+impl LegacyPrivateTable {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Metadata => "metadata",
+            Self::WrappedProfileKeys => "wrapped_profile_keys",
+            Self::SigningSecrets => "signing_secrets",
+            Self::FarmLocations => "farm_locations",
+            Self::TradeArtifacts => "trade_artifacts",
+            Self::CursorKeys => "cursor_keys",
+            Self::Nip46Sessions => "nip46_sessions",
+            Self::RotationProgress => "rotation_progress",
+        }
+    }
+
+    const fn code(self) -> u8 {
+        match self {
+            Self::Metadata => 1,
+            Self::WrappedProfileKeys => 2,
+            Self::SigningSecrets => 3,
+            Self::FarmLocations => 4,
+            Self::TradeArtifacts => 5,
+            Self::CursorKeys => 6,
+            Self::Nip46Sessions => 7,
+            Self::RotationProgress => 8,
+        }
+    }
+
+    const fn next(self) -> Option<Self> {
+        match self {
+            Self::Metadata => Some(Self::WrappedProfileKeys),
+            Self::WrappedProfileKeys => Some(Self::SigningSecrets),
+            Self::SigningSecrets => Some(Self::FarmLocations),
+            Self::FarmLocations => Some(Self::TradeArtifacts),
+            Self::TradeArtifacts => Some(Self::CursorKeys),
+            Self::CursorKeys => Some(Self::Nip46Sessions),
+            Self::Nip46Sessions => Some(Self::RotationProgress),
+            Self::RotationProgress => None,
+        }
+    }
+}
+
+/// Result of one recoverable protected legacy private-store page.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyPrivateStagePage {
+    table: LegacyPrivateTable,
+    staged_rows: u16,
+    staged_row_count: u64,
+    resume_cursor: Vec<u8>,
+    complete: bool,
+}
+
+impl LegacyPrivateStagePage {
+    pub const fn table(&self) -> LegacyPrivateTable {
+        self.table
+    }
+    pub const fn staged_rows(&self) -> u16 {
+        self.staged_rows
+    }
+    pub const fn staged_row_count(&self) -> u64 {
+        self.staged_row_count
+    }
+    pub fn resume_cursor(&self) -> &[u8] {
+        &self.resume_cursor
+    }
+    pub const fn is_complete(&self) -> bool {
+        self.complete
+    }
+}
+
 impl LegacyOutboxStagePage {
     /// Returns the predecessor table processed by this page.
     pub const fn table(&self) -> LegacyOutboxTable {
@@ -1517,6 +1600,191 @@ impl SqliteStorage {
         })
     }
 
+    /// Stages one recoverable page of an exact predecessor private store.
+    pub async fn stage_legacy_private(
+        &self,
+        classified: &ClassifiedLegacyImport,
+        limit: u16,
+        updated_at_unix_ms: u64,
+    ) -> Result<LegacyPrivateStagePage, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        if limit == 0 || limit > LEGACY_STAGE_PAGE_LIMIT_MAX || updated_at_unix_ms == 0 {
+            return Err(Error::InvalidLegacyImportStageRequest);
+        }
+        verify_prepared_evidence(&classified.prepared).await?;
+        let classification_sha256 = classification_digest(classified);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if !journal_matches_classified(&journal, classified, classification_sha256)
+            || !classified.sources().iter().any(|source| {
+                source.kind() == LegacySourceKind::Private
+                    && source.schema() == LegacySchema::PrivateV1
+            })
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let member = journal
+            .members()
+            .iter()
+            .find(|member| member.classification().kind() == LegacySourceKind::Private)
+            .ok_or(Error::LegacyImportConflict)?;
+        let (table, after) = decode_private_stage_cursor(member.resume_cursor())?;
+        if member.state() == LegacyImportMemberState::Ready {
+            return Ok(LegacyPrivateStagePage {
+                table: LegacyPrivateTable::RotationProgress,
+                staged_rows: 0,
+                staged_row_count: member.staged_row_count(),
+                resume_cursor: member
+                    .resume_cursor()
+                    .ok_or(Error::InvalidLegacyImportJournal)?
+                    .to_vec(),
+                complete: true,
+            });
+        }
+        if !matches!(
+            member.state(),
+            LegacyImportMemberState::Pending | LegacyImportMemberState::Staging
+        ) || updated_at_unix_ms < member.updated_at_unix_ms()
+            || updated_at_unix_ms < journal.updated_at_unix_ms()
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+        let updated_at = i64::try_from(updated_at_unix_ms)
+            .map_err(|_| Error::InvalidLegacyImportStageRequest)?;
+        if member.state() == LegacyImportMemberState::Pending {
+            let mut tx = self
+                .pool
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            if journal.state() == LegacyImportState::Classified {
+                sqlx::query("UPDATE radroots_runtime_legacy_imports SET state = 'staging', updated_at_ms = ? WHERE import_id = ? AND state = 'classified'")
+                    .bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+            }
+            let changed = sqlx::query("UPDATE radroots_runtime_legacy_import_members SET state = 'staging', updated_at_ms = ? WHERE import_id = ? AND source_kind = 'private' AND state = 'pending'")
+                .bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+            if changed.rows_affected() != 1 {
+                return Err(Error::LegacyImportConflict);
+            }
+            tx.commit()
+                .await
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+        }
+        let snapshot = classified
+            .prepared
+            .snapshots()
+            .iter()
+            .find(|snapshot| snapshot.kind() == LegacySourceKind::Private)
+            .ok_or(Error::LegacyImportConflict)?;
+        let mut source = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(classified.bundle_path().join(snapshot.relative_path()))
+                .read_only(true),
+        )
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let rows = sqlx::query(private_stage_query(table))
+            .bind(after.as_str())
+            .bind(i64::from(limit) + 1)
+            .fetch_all(&mut source)
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        source
+            .close()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let table_complete = rows.len() <= usize::from(limit);
+        let page_rows = rows
+            .into_iter()
+            .take(usize::from(limit))
+            .collect::<Vec<_>>();
+        let mut last_key = after.clone();
+        let mut private_tx = self
+            .private_pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        for row in &page_rows {
+            let key = row
+                .try_get::<String, _>("key_cursor")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            let parent = row
+                .try_get::<Option<i64>, _>("parent_key_version")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            let record = row
+                .try_get::<Vec<u8>, _>("record_json")
+                .map_err(|_| Error::LegacyImportStagingFailed)?;
+            if key <= last_key || key.len() > 1024 || record.is_empty() {
+                return Err(Error::LegacyImportRowInvalid {
+                    source_kind: "private",
+                    legacy_sequence: 0,
+                });
+            }
+            sqlx::query("INSERT OR IGNORE INTO radroots_private_legacy_import_staging(import_id, table_kind, key_cursor, parent_key_version, record_json) VALUES (?, ?, ?, ?, ?)")
+                .bind(classified.import_id().as_bytes().as_slice()).bind(table.as_str()).bind(&key).bind(parent).bind(&record).execute(&mut *private_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+            let existing = sqlx::query("SELECT parent_key_version, record_json FROM radroots_private_legacy_import_staging WHERE import_id = ? AND table_kind = ? AND key_cursor = ?")
+                .bind(classified.import_id().as_bytes().as_slice()).bind(table.as_str()).bind(&key).fetch_one(&mut *private_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+            if existing
+                .try_get::<Option<i64>, _>("parent_key_version")
+                .map_err(|_| Error::LegacyImportStagingFailed)?
+                != parent
+                || existing
+                    .try_get::<Vec<u8>, _>("record_json")
+                    .map_err(|_| Error::LegacyImportStagingFailed)?
+                    != record
+            {
+                return Err(Error::LegacyImportConflict);
+            }
+            last_key = key;
+        }
+        private_tx
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let complete = table_complete && table.next().is_none();
+        let next_cursor = if table_complete {
+            encode_private_stage_cursor(
+                table.next().unwrap_or(table),
+                if complete { &last_key } else { "" },
+            )
+        } else {
+            encode_private_stage_cursor(table, &last_key)
+        };
+        let total = member
+            .staged_row_count()
+            .checked_add(
+                u64::try_from(page_rows.len()).map_err(|_| Error::LegacyImportStagingFailed)?,
+            )
+            .ok_or(Error::LegacyImportStagingFailed)?;
+        let mut runtime_tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let changed = sqlx::query("UPDATE radroots_runtime_legacy_import_members SET state = ?, resume_cursor = ?, staged_row_count = ?, updated_at_ms = ? WHERE import_id = ? AND source_kind = 'private' AND staged_row_count = ? AND resume_cursor IS ?")
+            .bind(if complete { "ready" } else { "staging" }).bind(&next_cursor).bind(i64::try_from(total).map_err(|_| Error::LegacyImportStagingFailed)?).bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).bind(i64::try_from(member.staged_row_count()).map_err(|_| Error::LegacyImportStagingFailed)?).bind(member.resume_cursor()).execute(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        if changed.rows_affected() != 1 {
+            return Err(Error::LegacyImportConflict);
+        }
+        let pending = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_legacy_import_members WHERE import_id = ? AND state != 'ready'").bind(classified.import_id().as_bytes().as_slice()).fetch_one(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        sqlx::query("UPDATE radroots_runtime_legacy_imports SET state = ?, updated_at_ms = ? WHERE import_id = ?")
+            .bind(if pending == 0 { "ready" } else { "staging" }).bind(updated_at).bind(classified.import_id().as_bytes().as_slice()).execute(&mut *runtime_tx).await.map_err(|_| Error::LegacyImportStagingFailed)?;
+        runtime_tx
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        Ok(LegacyPrivateStagePage {
+            table,
+            staged_rows: u16::try_from(page_rows.len())
+                .map_err(|_| Error::LegacyImportStagingFailed)?,
+            staged_row_count: total,
+            resume_cursor: next_cursor,
+            complete,
+        })
+    }
+
     fn require_legacy_import_writer(
         &self,
         target_generation: SourceGeneration,
@@ -2139,6 +2407,66 @@ fn decode_exact_outbox_stage_cursor(cursor: &[u8]) -> Result<[u8; 9], Error> {
     <[u8; 9]>::try_from(cursor).map_err(|_| Error::InvalidLegacyImportJournal)
 }
 
+fn private_stage_query(table: LegacyPrivateTable) -> &'static str {
+    match table {
+        LegacyPrivateTable::Metadata => {
+            "SELECT printf('%020d', singleton) AS key_cursor, NULL AS parent_key_version, CAST(json_array(singleton, schema_version, hex(profile_id), hex(runtime_contract_hash), key_version, sqlite_source_id, created_at_ms, updated_at_ms) AS BLOB) AS record_json FROM private_metadata WHERE printf('%020d', singleton) > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::WrappedProfileKeys => {
+            "SELECT printf('%020d', key_version) AS key_cursor, NULL AS parent_key_version, CAST(json_array(key_version, credential_backend, hex(wrapped_key), hex(nonce), created_at_ms, retired_at_ms) AS BLOB) AS record_json FROM wrapped_profile_key WHERE printf('%020d', key_version) > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::SigningSecrets => {
+            "SELECT hex(account_id) AS key_cursor, key_version AS parent_key_version, CAST(json_array(hex(account_id), hex(public_key), key_version, hex(ciphertext), hex(nonce), created_at_ms, updated_at_ms) AS BLOB) AS record_json FROM wrapped_signing_secret WHERE hex(account_id) > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::FarmLocations => {
+            "SELECT printf('%010d|%s|%s', farm_kind, hex(owner_pubkey), farm_d_tag) AS key_cursor, key_version AS parent_key_version, CAST(json_array(farm_kind, hex(owner_pubkey), farm_d_tag, key_version, hex(ciphertext), hex(nonce), created_at_ms, updated_at_ms) AS BLOB) AS record_json FROM private_farm_location WHERE printf('%010d|%s|%s', farm_kind, hex(owner_pubkey), farm_d_tag) > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::TradeArtifacts => {
+            "SELECT artifact_id AS key_cursor, key_version AS parent_key_version, CAST(json_array(artifact_id, trade_id, candidate_id, artifact_kind, schema_id, ciphertext_commitment, key_version, hex(ciphertext), hex(encryption_metadata), retention_class, created_at_ms, expires_at_ms, deleted_at_ms) AS BLOB) AS record_json FROM private_trade_artifacts WHERE artifact_id > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::CursorKeys => {
+            "SELECT hex(key_id) AS key_cursor, key_version AS parent_key_version, CAST(json_array(hex(key_id), key_version, hex(ciphertext), hex(nonce), created_at_ms, retired_at_ms) AS BLOB) AS record_json FROM cursor_hmac_key WHERE hex(key_id) > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::Nip46Sessions => {
+            "SELECT hex(session_id) AS key_cursor, key_version AS parent_key_version, CAST(json_array(hex(session_id), hex(user_pubkey), hex(remote_signer_pubkey), hex(client_pubkey), key_version, hex(ciphertext), hex(nonce), expires_at_ms, status, created_at_ms, updated_at_ms) AS BLOB) AS record_json FROM nip46_session_private WHERE hex(session_id) > ? ORDER BY key_cursor LIMIT ?"
+        }
+        LegacyPrivateTable::RotationProgress => {
+            "SELECT printf('%020d', singleton) AS key_cursor, NULL AS parent_key_version, CAST(json_array(singleton, from_key_version, to_key_version, table_name, hex(last_primary_key), state, started_at_ms, updated_at_ms, error_code) AS BLOB) AS record_json FROM key_rotation_progress WHERE printf('%020d', singleton) > ? ORDER BY key_cursor LIMIT ?"
+        }
+    }
+}
+
+fn encode_private_stage_cursor(table: LegacyPrivateTable, key: &str) -> Vec<u8> {
+    let mut cursor = Vec::with_capacity(key.len() + 1);
+    cursor.push(table.code());
+    cursor.extend_from_slice(key.as_bytes());
+    cursor
+}
+
+fn decode_private_stage_cursor(
+    cursor: Option<&[u8]>,
+) -> Result<(LegacyPrivateTable, String), Error> {
+    let Some(cursor) = cursor else {
+        return Ok((LegacyPrivateTable::Metadata, String::new()));
+    };
+    if cursor.is_empty() || cursor.len() > 1025 {
+        return Err(Error::InvalidLegacyImportJournal);
+    }
+    let table = match cursor[0] {
+        1 => LegacyPrivateTable::Metadata,
+        2 => LegacyPrivateTable::WrappedProfileKeys,
+        3 => LegacyPrivateTable::SigningSecrets,
+        4 => LegacyPrivateTable::FarmLocations,
+        5 => LegacyPrivateTable::TradeArtifacts,
+        6 => LegacyPrivateTable::CursorKeys,
+        7 => LegacyPrivateTable::Nip46Sessions,
+        8 => LegacyPrivateTable::RotationProgress,
+        _ => return Err(Error::InvalidLegacyImportJournal),
+    };
+    let key = std::str::from_utf8(&cursor[1..]).map_err(|_| Error::InvalidLegacyImportJournal)?;
+    Ok((table, key.to_owned()))
+}
+
 struct ConvertedLegacyEvent {
     sequence: i64,
     event_id: [u8; 32],
@@ -2511,6 +2839,10 @@ mod tests {
     const EVENT_STORE_V1_SQL: &str =
         include_str!("../../event_store/migrations/0001_event_store.up.sql");
     const OUTBOX_V1_SQL: &str = include_str!("../../outbox/migrations/0001_outbox.up.sql");
+    const PRIVATE_STAGING_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_private_staging_policy_v1.toml");
+    const SDK_PRIVATE_STORE_SOURCE: &str =
+        include_str!("../../../../sdk/crates/sdk/src/private_store.rs");
 
     #[derive(Deserialize)]
     struct Policy {
@@ -2631,6 +2963,27 @@ mod tests {
         staging_rows: String,
         evidence_revalidation: String,
         live_product_row_mutation: bool,
+        hidden_clock_or_entropy: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct PrivateStagingPolicy {
+        schema_version: u32,
+        runtime_authority: String,
+        private_authority: String,
+        source_kind: String,
+        supported_schema: String,
+        table_order: Vec<String>,
+        cursor: String,
+        page_limit_max: u16,
+        record: String,
+        secret_bearing_staging_database: String,
+        wrapping_key_reference: String,
+        recovery: Vec<String>,
+        crash_before_private_commit: String,
+        crash_after_private_commit: String,
+        conflicting_replay: String,
+        live_private_artifact_mutation: bool,
         hidden_clock_or_entropy: bool,
     }
 
@@ -2845,6 +3198,88 @@ mod tests {
         .execute(&mut connection)
         .await
         .expect("outbox attempt");
+        connection
+    }
+
+    async fn supported_private_database(path: &Path) -> SqliteConnection {
+        let schema = SDK_PRIVATE_STORE_SOURCE
+            .split_once("const PRIVATE_STORE_MIGRATION_UP: &str = r#\"")
+            .expect("private schema prefix")
+            .1
+            .split_once("\"#;")
+            .expect("private schema suffix")
+            .0;
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("supported private database");
+        sqlx::raw_sql(schema)
+            .execute(&mut connection)
+            .await
+            .expect("private v1 schema");
+        sqlx::query("PRAGMA user_version = 1")
+            .execute(&mut connection)
+            .await
+            .expect("private version");
+        sqlx::query("INSERT INTO private_metadata VALUES (1,1,?,?,1,'source',1,1)")
+            .bind([1_u8; 16].as_slice())
+            .bind([2_u8; 32].as_slice())
+            .execute(&mut connection)
+            .await
+            .expect("metadata");
+        sqlx::query(
+            "INSERT INTO wrapped_profile_key VALUES (1,'memory_test_wrapped_v1',?,?,1,NULL)",
+        )
+        .bind([3_u8; 32].as_slice())
+        .bind([4_u8; 24].as_slice())
+        .execute(&mut connection)
+        .await
+        .expect("wrapped key");
+        sqlx::query("INSERT INTO wrapped_signing_secret VALUES (?,?,?,?,?,1,1)")
+            .bind([5_u8; 16].as_slice())
+            .bind([6_u8; 32].as_slice())
+            .bind(1_i64)
+            .bind([7_u8; 8].as_slice())
+            .bind([8_u8; 24].as_slice())
+            .execute(&mut connection)
+            .await
+            .expect("signing secret");
+        sqlx::query("INSERT INTO private_farm_location VALUES (30340,?,?,1,?,?,1,1)")
+            .bind([9_u8; 32].as_slice())
+            .bind("farm")
+            .bind([10_u8; 8].as_slice())
+            .bind([11_u8; 24].as_slice())
+            .execute(&mut connection)
+            .await
+            .expect("farm location");
+        sqlx::query("INSERT INTO private_trade_artifacts VALUES ('artifact','01234567890123456789012345678901',NULL,'message','schema',?,1,?,?,'retain',1,NULL,NULL)")
+            .bind("a".repeat(64)).bind([12_u8;8].as_slice()).bind([13_u8;4].as_slice()).execute(&mut connection).await.expect("trade artifact");
+        sqlx::query("INSERT INTO cursor_hmac_key VALUES (?,1,?,?,1,NULL)")
+            .bind([14_u8; 16].as_slice())
+            .bind([15_u8; 8].as_slice())
+            .bind([16_u8; 24].as_slice())
+            .execute(&mut connection)
+            .await
+            .expect("cursor key");
+        sqlx::query("INSERT INTO nip46_session_private VALUES (?,?,?,?,1,?,?,2,'active',1,1)")
+            .bind([17_u8; 16].as_slice())
+            .bind([18_u8; 32].as_slice())
+            .bind([19_u8; 32].as_slice())
+            .bind([20_u8; 32].as_slice())
+            .bind([21_u8; 8].as_slice())
+            .bind([22_u8; 24].as_slice())
+            .execute(&mut connection)
+            .await
+            .expect("nip46 session");
+        sqlx::query(
+            "INSERT INTO key_rotation_progress VALUES (1,1,2,'done',NULL,'complete',1,1,NULL)",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("rotation progress");
         connection
     }
 
@@ -3106,6 +3541,66 @@ mod tests {
         assert_eq!(policy.staging_rows, "append_only_immutable");
         assert_eq!(policy.evidence_revalidation, "before_every_page");
         assert!(!policy.live_product_row_mutation);
+        assert!(!policy.hidden_clock_or_entropy);
+    }
+
+    #[test]
+    fn implementation_matches_the_governed_private_staging_policy() {
+        let policy = toml::from_str::<PrivateStagingPolicy>(PRIVATE_STAGING_POLICY)
+            .expect("private staging policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(policy.runtime_authority, "runtime_sqlite_import_journal_v8");
+        assert_eq!(
+            policy.private_authority,
+            "private_sqlite_forward_migration_v2"
+        );
+        assert_eq!(policy.source_kind, "private");
+        assert_eq!(policy.supported_schema, "private_v1");
+        assert_eq!(
+            policy.table_order,
+            [
+                "metadata",
+                "wrapped_profile_keys",
+                "signing_secrets",
+                "farm_locations",
+                "trade_artifacts",
+                "cursor_keys",
+                "nip46_sessions",
+                "rotation_progress"
+            ]
+        );
+        assert_eq!(
+            policy.cursor,
+            "table_discriminator_u8_plus_utf8_canonical_key_max_1024"
+        );
+        assert_eq!(policy.page_limit_max, LEGACY_STAGE_PAGE_LIMIT_MAX);
+        assert_eq!(
+            policy.record,
+            "sqlite_json_array_governed_column_order_with_blob_hex"
+        );
+        assert_eq!(policy.secret_bearing_staging_database, "private.sqlite");
+        assert_eq!(
+            policy.wrapping_key_reference,
+            "required_before_dependent_record"
+        );
+        assert_eq!(
+            policy.recovery,
+            [
+                "runtime_enter_staging",
+                "private_exact_idempotent_page_commit",
+                "runtime_cursor_count_commit"
+            ]
+        );
+        assert_eq!(
+            policy.crash_before_private_commit,
+            "no_private_rows_and_old_runtime_cursor"
+        );
+        assert_eq!(
+            policy.crash_after_private_commit,
+            "exact_replay_verification_from_old_runtime_cursor"
+        );
+        assert_eq!(policy.conflicting_replay, "reject");
+        assert!(!policy.live_private_artifact_mutation);
         assert!(!policy.hidden_clock_or_entropy);
     }
 
@@ -3727,6 +4222,134 @@ mod tests {
             .await
             .expect("close outbox source");
         reopened.close().await.expect("close reopened target");
+    }
+
+    #[tokio::test]
+    async fn private_staging_recovers_exact_replay_across_both_databases() {
+        let target_root = tempfile::tempdir().expect("target root");
+        let legacy_root = tempfile::tempdir().expect("legacy root");
+        let backup_root = tempfile::tempdir().expect("backup root");
+        let private_path = legacy_root.path().join("private.sqlite");
+        let private_connection = supported_private_database(&private_path).await;
+        let plan = LegacyImportPlan::new(
+            LegacyImportId::new([131; 16]).expect("import id"),
+            vec![
+                LegacySource::new(LegacySourceKind::Private, &private_path)
+                    .expect("private source"),
+            ],
+            backup_root.path(),
+            13_100,
+        )
+        .expect("private import plan");
+        let (target_paths, store) = target(target_root.path()).await;
+        let prepared = store
+            .prepare_legacy_import(&plan)
+            .await
+            .expect("prepared private import");
+        let classified = store
+            .classify_legacy_import(&prepared)
+            .await
+            .expect("classified private import");
+        store
+            .begin_legacy_import(&classified, 13_101)
+            .await
+            .expect("begin private import");
+
+        let snapshot = prepared
+            .snapshots()
+            .iter()
+            .find(|snapshot| snapshot.kind() == LegacySourceKind::Private)
+            .expect("private snapshot");
+        let mut evidence = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(prepared.bundle_path().join(snapshot.relative_path()))
+                .read_only(true),
+        )
+        .await
+        .expect("private evidence");
+        let row = sqlx::query(private_stage_query(LegacyPrivateTable::Metadata))
+            .bind("")
+            .bind(2_i64)
+            .fetch_one(&mut evidence)
+            .await
+            .expect("metadata replay row");
+        sqlx::query("INSERT INTO radroots_private_legacy_import_staging(import_id, table_kind, key_cursor, parent_key_version, record_json) VALUES (?, 'metadata', ?, NULL, ?)")
+            .bind(plan.import_id().as_bytes().as_slice()).bind(row.get::<String,_>("key_cursor")).bind(row.get::<Vec<u8>,_>("record_json")).execute(store.private_pool()).await.expect("simulate private commit before runtime cursor");
+        evidence.close().await.expect("close evidence");
+
+        let tables = [
+            LegacyPrivateTable::Metadata,
+            LegacyPrivateTable::WrappedProfileKeys,
+            LegacyPrivateTable::SigningSecrets,
+            LegacyPrivateTable::FarmLocations,
+            LegacyPrivateTable::TradeArtifacts,
+            LegacyPrivateTable::CursorKeys,
+            LegacyPrivateTable::Nip46Sessions,
+        ];
+        for (index, table) in tables.into_iter().enumerate() {
+            let page = store
+                .stage_legacy_private(
+                    &classified,
+                    1,
+                    13_102 + u64::try_from(index).expect("page index"),
+                )
+                .await
+                .expect("private page");
+            assert_eq!(page.table(), table);
+            assert_eq!(page.staged_rows(), 1);
+            assert!(!page.is_complete());
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_private_artifacts")
+                .fetch_one(store.private_pool())
+                .await
+                .expect("live private count"),
+            0
+        );
+        store
+            .close()
+            .await
+            .expect("close before final private page");
+        let reopened =
+            SqliteStorage::open(OpenOptions::new(target_paths, OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen private target");
+        let final_page = reopened
+            .stage_legacy_private(&classified, 1, 13_109)
+            .await
+            .expect("rotation page");
+        assert_eq!(final_page.table(), LegacyPrivateTable::RotationProgress);
+        assert_eq!(final_page.staged_rows(), 1);
+        assert_eq!(final_page.staged_row_count(), 8);
+        assert!(final_page.is_complete());
+        let retry = reopened
+            .stage_legacy_private(&classified, 1, 13_109)
+            .await
+            .expect("private completed retry");
+        assert_eq!(retry.staged_rows(), 0);
+        assert_eq!(retry.staged_row_count(), 8);
+        assert!(retry.is_complete());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM radroots_private_legacy_import_staging"
+            )
+            .fetch_one(reopened.private_pool())
+            .await
+            .expect("private staging count"),
+            8
+        );
+        let journal = reopened
+            .legacy_import_journal(plan.import_id())
+            .await
+            .expect("private journal")
+            .expect("durable private journal");
+        assert_eq!(journal.state(), LegacyImportState::Ready);
+        assert_eq!(journal.members()[0].state(), LegacyImportMemberState::Ready);
+        private_connection
+            .close()
+            .await
+            .expect("close private source");
+        reopened.close().await.expect("close private target");
     }
 
     #[test]
