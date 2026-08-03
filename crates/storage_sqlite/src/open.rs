@@ -275,6 +275,14 @@ pub enum Error {
     LegacyImportSourceInvalid {
         source_kind: &'static str,
     },
+    LegacyImportEvidenceInvalid,
+    LegacyImportTargetMismatch,
+    LegacyImportMigrationHistoryInvalid,
+    UnsupportedLegacySchema {
+        source_kind: &'static str,
+        user_version: i64,
+        catalog_sha256: String,
+    },
     LegacyImportFilesystem {
         operation: &'static str,
         source: std::io::Error,
@@ -529,6 +537,23 @@ impl fmt::Display for Error {
             Self::LegacyImportSourceInvalid { source_kind } => write!(
                 formatter,
                 "SQLite legacy {source_kind} source failed integrity validation"
+            ),
+            Self::LegacyImportEvidenceInvalid => {
+                formatter.write_str("SQLite legacy import evidence is invalid")
+            }
+            Self::LegacyImportTargetMismatch => {
+                formatter.write_str("SQLite legacy import target generation does not match")
+            }
+            Self::LegacyImportMigrationHistoryInvalid => {
+                formatter.write_str("SQLite legacy event-store migration history is invalid")
+            }
+            Self::UnsupportedLegacySchema {
+                source_kind,
+                user_version,
+                catalog_sha256,
+            } => write!(
+                formatter,
+                "unsupported SQLite legacy {source_kind} schema at user_version {user_version} with catalog SHA-256 {catalog_sha256}"
             ),
             Self::LegacyImportFilesystem { operation, .. } => write!(
                 formatter,

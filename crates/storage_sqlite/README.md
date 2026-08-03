@@ -39,6 +39,15 @@ finalizes the immutable bundle. Import identities and timestamps are supplied
 by the host; collisions, owned-database aliases, and unsupported paths fail
 closed.
 
+Classification revalidates the finalized manifest, member inventory, hashes,
+SQLite integrity, and foreign keys before inspecting any schema. Event-store
+versions 1 through 4 require the exact governed catalog and, when present, the
+exact contiguous migration ledger; outbox, private, and Studio predecessors
+require their exact catalog and application version. Unknown objects, mixed
+source families, checksum drift, and newer schemas fail closed. Studio records
+are explicitly classified for host handoff and are never imported into SDK
+storage.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};
