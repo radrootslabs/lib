@@ -12,6 +12,7 @@ const ADAPTERS: &str = include_str!("../src/adapters/mod.rs");
 const RADROOTSD: &str = include_str!("../src/adapters/radrootsd.rs");
 const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
+const PUBLICATION: &str = include_str!("../../../contracts/releases/publication.toml");
 
 #[test]
 fn manifest_has_final_identity_and_dependency_boundary() {
@@ -140,6 +141,59 @@ fn root_declares_exact_final_module_skeleton() {
     assert!(ROOT.contains("pub use crate::client::{Client, ClientBuilder};"));
     assert!(ROOT.contains("pub use crate::error::{Error, Result};"));
     assert!(!ROOT.contains("pub use radroots_"));
+}
+
+#[test]
+fn package_contains_only_reachable_sources_and_registered_targets() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    assert_eq!(
+        rust_files(&root.join("src")),
+        BTreeSet::from([
+            "adapters/mod.rs".to_owned(),
+            "adapters/radrootsd.rs".to_owned(),
+            "capability.rs".to_owned(),
+            "client.rs".to_owned(),
+            "diagnostics.rs".to_owned(),
+            "error.rs".to_owned(),
+            "farm.rs".to_owned(),
+            "lib.rs".to_owned(),
+            "listing.rs".to_owned(),
+            "signing.rs".to_owned(),
+            "storage.rs".to_owned(),
+            "sync.rs".to_owned(),
+            "trade.rs".to_owned(),
+            "transport.rs".to_owned(),
+        ])
+    );
+    assert_eq!(
+        rust_files(&root.join("tests")),
+        BTreeSet::from([
+            "lifecycle.rs".to_owned(),
+            "package_boundary.rs".to_owned(),
+            "public_api.rs".to_owned(),
+            "unit/adapters_radrootsd_tests.rs".to_owned(),
+        ])
+    );
+    assert_eq!(
+        rust_files(&root.join("examples")),
+        BTreeSet::from([
+            "safe_memory_client.rs".to_owned(),
+            "transport_profile.rs".to_owned(),
+        ])
+    );
+}
+
+#[test]
+fn remaining_compatibility_package_is_retired_and_not_publishable() {
+    assert!(PUBLICATION.contains("retired = [\"radroots_runtime_contract_v1\"]"));
+    let approved = PUBLICATION
+        .split_once("approved_packages = [")
+        .expect("approved package list")
+        .1
+        .split_once("\n]")
+        .expect("approved package list terminator")
+        .0;
+    assert!(!approved.contains("radroots_runtime_contract_v1"));
 }
 
 #[test]
@@ -444,4 +498,25 @@ fn dependency_names(manifest: &str) -> BTreeSet<&str> {
         .filter_map(|line| line.split_once(" = ").map(|(name, _)| name.trim()))
         .filter(|name| name.starts_with("radroots_"))
         .collect()
+}
+
+fn rust_files(root: &std::path::Path) -> BTreeSet<String> {
+    let mut files = BTreeSet::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory).expect("read package source directory") {
+            let path = entry.expect("read package source entry").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().and_then(|value| value.to_str()) == Some("rs") {
+                files.insert(
+                    path.strip_prefix(root)
+                        .expect("source remains below root")
+                        .to_string_lossy()
+                        .replace(std::path::MAIN_SEPARATOR, "/"),
+                );
+            }
+        }
+    }
+    files
 }
