@@ -1,7 +1,9 @@
 //! Concrete Nostr transport composition.
 
 use crate::{Error, RelayUrl, RelayUrlPolicy};
+use core::fmt;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 /// Maximum relay targets accepted by one transport instance.
 pub(crate) const MAX_RELAYS: usize = 64;
@@ -120,20 +122,38 @@ fn validate_timeout(field: &'static str, value_ms: u64) -> Result<(), Error> {
 }
 
 /// Concrete Nostr implementation of the transport source and sink SPIs.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct NostrTransport {
     config: Config,
+    pub(crate) client: Arc<dyn crate::sink::RelayClient>,
 }
 
 impl NostrTransport {
     /// Creates an inert transport from validated explicit configuration.
-    pub const fn new(config: Config) -> Self {
-        Self { config }
+    pub fn new(config: Config) -> Self {
+        Self {
+            config,
+            client: Arc::new(crate::sink::LiveRelayClient),
+        }
     }
 
     /// Returns the transport configuration.
     pub const fn config(&self) -> &Config {
         &self.config
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_client(config: Config, client: Arc<dyn crate::sink::RelayClient>) -> Self {
+        Self { config, client }
+    }
+}
+
+impl fmt::Debug for NostrTransport {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("NostrTransport")
+            .field("config", &self.config)
+            .finish_non_exhaustive()
     }
 }
 

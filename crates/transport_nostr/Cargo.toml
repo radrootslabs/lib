@@ -15,11 +15,15 @@ readme = "README.md"
 name = "radroots_transport_nostr"
 
 [dependencies]
-radroots_event_codec = { workspace = true, default-features = false }
-radroots_nostr = { workspace = true, default-features = false }
+radroots_event_codec = { workspace = true, default-features = false, features = ["json"] }
+radroots_nostr = { workspace = true, default-features = false, features = ["events"] }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
+nostr-sdk = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
 
 [lints]
 workspace = true
