@@ -1,0 +1,15 @@
+schema_version = 1
+required_import_state = "ready"
+required_member_state = "ready"
+source_evidence = "reverified_immutable_backup"
+source_count_match = "exact_per_member"
+studio_source_count = 0
+snapshot = "runtime_begin_immediate_then_private_begin_immediate"
+validation_identity = "sha256_framed_import_target_manifest_classification_members_staged_rows"
+runtime_staging_rows = ["events", "outbox_graph"]
+private_staging_rows = ["private_records"]
+studio_receipt = "member_cursor_only"
+validation_mutation = false
+source_deletion = false
+dual_write = false
+hidden_clock_or_entropy = false

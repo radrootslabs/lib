@@ -86,6 +86,12 @@ Only an exact host receipt carrying that handoff identity and a non-zero opaque
 host-store commitment advances the Studio journal member to ready; exact retry
 is idempotent and conflicting acknowledgement fails closed.
 
+Before finalization, `validate_legacy_import` revalidates the immutable evidence,
+requires every member to be ready, matches each staged count to its exact source
+count, and hashes framed member cursors plus every runtime/private staging row
+under write-stable snapshots. The returned digest is the deterministic commit
+identity; validation itself mutates nothing.
+
 ```rust,no_run
 use radroots_storage::event::SourceGeneration;
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};

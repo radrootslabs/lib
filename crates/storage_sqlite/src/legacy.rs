@@ -518,6 +518,25 @@ pub struct LegacyStudioHandoffReceipt {
     host_commitment_sha256: MemberDigest,
 }
 
+/// Snapshot-consistent proof that every legacy member is ready to commit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LegacyImportValidation {
+    imported_row_count: u64,
+    validation_sha256: MemberDigest,
+}
+
+impl LegacyImportValidation {
+    /// Returns the exact number of predecessor rows staged for SDK-owned storage.
+    pub const fn imported_row_count(&self) -> u64 {
+        self.imported_row_count
+    }
+
+    /// Returns the deterministic commit identity for all staged rows and receipts.
+    pub const fn validation_sha256(&self) -> MemberDigest {
+        self.validation_sha256
+    }
+}
+
 impl LegacyStudioHandoffReceipt {
     /// Binds an exact handoff to a non-zero host-owned durable commitment.
     pub const fn new(
@@ -1999,6 +2018,128 @@ impl SqliteStorage {
             .ok_or(Error::InvalidLegacyImportJournal)
     }
 
+    /// Proves every classified source is completely staged or acknowledged.
+    pub async fn validate_legacy_import(
+        &self,
+        classified: &ClassifiedLegacyImport,
+    ) -> Result<LegacyImportValidation, Error> {
+        self.require_legacy_import_writer(classified.target_generation())?;
+        verify_prepared_evidence(&classified.prepared).await?;
+        let classification_sha256 = classification_digest(classified);
+        let journal = self
+            .legacy_import_journal(classified.import_id())
+            .await?
+            .ok_or(Error::InvalidLegacyImportJournal)?;
+        if !journal_matches_classified(&journal, classified, classification_sha256)
+            || journal.state() != LegacyImportState::Ready
+            || journal.members().iter().any(|member| {
+                member.state() != LegacyImportMemberState::Ready
+                    || (member.classification().kind() == LegacySourceKind::Studio
+                        && member.staged_row_count() != 0)
+            })
+        {
+            return Err(Error::LegacyImportConflict);
+        }
+
+        let mut source_counts = Vec::with_capacity(classified.sources().len());
+        for source in classified.sources() {
+            source_counts.push((
+                source.kind(),
+                source_import_row_count(classified, source.kind()).await?,
+            ));
+        }
+
+        let mut runtime_tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let mut private_tx = self
+            .private_pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let current_state = sqlx::query_scalar::<_, String>(
+            "SELECT state FROM radroots_runtime_legacy_imports WHERE import_id = ?",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_one(&mut *runtime_tx)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        let member_rows = sqlx::query(
+            "SELECT source_kind, state, resume_cursor, staged_row_count
+             FROM radroots_runtime_legacy_import_members
+             WHERE import_id = ? ORDER BY source_kind",
+        )
+        .bind(classified.import_id().as_bytes().as_slice())
+        .fetch_all(&mut *runtime_tx)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+        if current_state != "ready" || member_rows.len() != classified.sources().len() {
+            return Err(Error::LegacyImportConflict);
+        }
+
+        let mut digest = Sha256::new();
+        for field in [
+            b"radroots.legacy.import.validation.v1".as_slice(),
+            classified.import_id().as_bytes().as_slice(),
+            classified.target_generation().as_bytes().as_slice(),
+            classified.prepared.manifest_sha256().as_bytes().as_slice(),
+            classification_sha256.as_bytes().as_slice(),
+        ] {
+            update_framed_digest(&mut digest, field)?;
+        }
+        let mut imported_row_count = 0_u64;
+        for row in member_rows {
+            let kind_value = row
+                .try_get::<String, _>("source_kind")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?;
+            let kind = parse_source_kind(kind_value.as_str())?;
+            let state = row
+                .try_get::<String, _>("state")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?;
+            let cursor = row
+                .try_get::<Option<Vec<u8>>, _>("resume_cursor")
+                .map_err(|_| Error::InvalidLegacyImportJournal)?;
+            let staged = u64::try_from(
+                row.try_get::<i64, _>("staged_row_count")
+                    .map_err(|_| Error::InvalidLegacyImportJournal)?,
+            )
+            .map_err(|_| Error::InvalidLegacyImportJournal)?;
+            let source_count = source_counts
+                .iter()
+                .find_map(|(source_kind, count)| (*source_kind == kind).then_some(*count))
+                .ok_or(Error::LegacyImportConflict)?;
+            if state != "ready"
+                || staged != source_count
+                || cursor.is_none()
+                || (kind == LegacySourceKind::Studio && staged != 0)
+            {
+                return Err(Error::LegacyImportConflict);
+            }
+            update_framed_digest(&mut digest, kind_value.as_bytes())?;
+            update_framed_digest(&mut digest, cursor.as_deref().unwrap_or_default())?;
+            update_framed_digest(&mut digest, &staged.to_be_bytes())?;
+            imported_row_count = imported_row_count
+                .checked_add(staged)
+                .ok_or(Error::LegacyImportStagingFailed)?;
+        }
+        hash_runtime_legacy_staging(&mut runtime_tx, classified.import_id(), &mut digest).await?;
+        hash_private_legacy_staging(&mut private_tx, classified.import_id(), &mut digest).await?;
+        runtime_tx
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        private_tx
+            .commit()
+            .await
+            .map_err(|_| Error::LegacyImportStagingFailed)?;
+        Ok(LegacyImportValidation {
+            imported_row_count,
+            validation_sha256: MemberDigest::new(digest.finalize().into()),
+        })
+    }
+
     fn require_legacy_import_writer(
         &self,
         target_generation: SourceGeneration,
@@ -2558,6 +2699,126 @@ fn studio_handoff_receipt_cursor(receipt: LegacyStudioHandoffReceipt) -> [u8; 64
     cursor
 }
 
+fn update_framed_digest(digest: &mut Sha256, value: &[u8]) -> Result<(), Error> {
+    let length = u64::try_from(value.len()).map_err(|_| Error::LegacyImportStagingFailed)?;
+    digest.update(length.to_be_bytes());
+    digest.update(value);
+    Ok(())
+}
+
+async fn source_import_row_count(
+    classified: &ClassifiedLegacyImport,
+    kind: LegacySourceKind,
+) -> Result<u64, Error> {
+    if kind == LegacySourceKind::Studio {
+        return Ok(0);
+    }
+    let snapshot = classified
+        .prepared
+        .snapshots()
+        .iter()
+        .find(|snapshot| snapshot.kind() == kind)
+        .ok_or(Error::LegacyImportConflict)?;
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(classified.bundle_path().join(snapshot.relative_path()))
+            .read_only(true),
+    )
+    .await
+    .map_err(|_| Error::LegacyImportStagingFailed)?;
+    let query = match kind {
+        LegacySourceKind::EventStore => "SELECT COUNT(*) FROM event_envelopes",
+        LegacySourceKind::Outbox => {
+            "SELECT (SELECT COUNT(*) FROM outbox_operations)
+                  + (SELECT COUNT(*) FROM outbox_event)
+                  + (SELECT COUNT(*) FROM outbox_delivery_plan)
+                  + (SELECT COUNT(*) FROM outbox_delivery_target)
+                  + (SELECT COUNT(*) FROM outbox_delivery_attempt)"
+        }
+        LegacySourceKind::Private => {
+            "SELECT (SELECT COUNT(*) FROM private_metadata)
+                  + (SELECT COUNT(*) FROM wrapped_profile_key)
+                  + (SELECT COUNT(*) FROM wrapped_signing_secret)
+                  + (SELECT COUNT(*) FROM private_farm_location)
+                  + (SELECT COUNT(*) FROM private_trade_artifacts)
+                  + (SELECT COUNT(*) FROM cursor_hmac_key)
+                  + (SELECT COUNT(*) FROM nip46_session_private)
+                  + (SELECT COUNT(*) FROM key_rotation_progress)"
+        }
+        LegacySourceKind::Studio => unreachable!("Studio is host-owned"),
+    };
+    let count = sqlx::query_scalar::<_, i64>(query)
+        .fetch_one(&mut connection)
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+    connection
+        .close()
+        .await
+        .map_err(|_| Error::LegacyImportStagingFailed)?;
+    u64::try_from(count).map_err(|_| Error::LegacyImportStagingFailed)
+}
+
+async fn hash_runtime_legacy_staging(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    import_id: LegacyImportId,
+    digest: &mut Sha256,
+) -> Result<(), Error> {
+    update_framed_digest(digest, b"runtime_events")?;
+    let event_rows = sqlx::query_scalar::<_, String>(
+        "SELECT json_array(legacy_sequence, hex(event_id), hex(signed_event),
+                 legacy_verification_status, legacy_contract_status,
+                 legacy_projection_eligible, legacy_inserted_at_ms,
+                 legacy_updated_at_ms)
+         FROM radroots_runtime_legacy_event_staging
+         WHERE import_id = ? ORDER BY legacy_sequence",
+    )
+    .bind(import_id.as_bytes().as_slice())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(|_| Error::LegacyImportStagingFailed)?;
+    for row in event_rows {
+        update_framed_digest(digest, row.as_bytes())?;
+    }
+
+    update_framed_digest(digest, b"runtime_outbox")?;
+    let outbox_rows = sqlx::query_scalar::<_, String>(
+        "SELECT json_array(table_kind, legacy_id, parent_legacy_id,
+                 related_legacy_id, hex(record_json))
+         FROM radroots_runtime_legacy_outbox_staging
+         WHERE import_id = ? ORDER BY table_kind, legacy_id",
+    )
+    .bind(import_id.as_bytes().as_slice())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(|_| Error::LegacyImportStagingFailed)?;
+    for row in outbox_rows {
+        update_framed_digest(digest, row.as_bytes())?;
+    }
+    Ok(())
+}
+
+async fn hash_private_legacy_staging(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    import_id: LegacyImportId,
+    digest: &mut Sha256,
+) -> Result<(), Error> {
+    update_framed_digest(digest, b"private_records")?;
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT json_array(table_kind, key_cursor, parent_key_version,
+                 hex(record_json))
+         FROM radroots_private_legacy_import_staging
+         WHERE import_id = ? ORDER BY table_kind, key_cursor",
+    )
+    .bind(import_id.as_bytes().as_slice())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(|_| Error::LegacyImportStagingFailed)?;
+    for row in rows {
+        update_framed_digest(digest, row.as_bytes())?;
+    }
+    Ok(())
+}
+
 fn outbox_stage_query(table: LegacyOutboxTable) -> &'static str {
     match table {
         LegacyOutboxTable::Operations => {
@@ -3086,6 +3347,8 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_private_staging_policy_v1.toml");
     const STUDIO_HANDOFF_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_studio_handoff_policy_v1.toml");
+    const IMPORT_VALIDATION_POLICY: &str =
+        include_str!("../../../contracts/storage/legacy_import_validation_policy_v1.toml");
     const SDK_PRIVATE_STORE_SOURCE: &str =
         include_str!("../../../../sdk/crates/sdk/src/private_store.rs");
 
@@ -3249,6 +3512,25 @@ mod tests {
         sdk_private_row_import: bool,
         sdk_owned_studio_database: bool,
         source_deletion: bool,
+        hidden_clock_or_entropy: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct ImportValidationPolicy {
+        schema_version: u32,
+        required_import_state: String,
+        required_member_state: String,
+        source_evidence: String,
+        source_count_match: String,
+        studio_source_count: u64,
+        snapshot: String,
+        validation_identity: String,
+        runtime_staging_rows: Vec<String>,
+        private_staging_rows: Vec<String>,
+        studio_receipt: String,
+        validation_mutation: bool,
+        source_deletion: bool,
+        dual_write: bool,
         hidden_clock_or_entropy: bool,
     }
 
@@ -3897,6 +4179,33 @@ mod tests {
         assert!(!policy.hidden_clock_or_entropy);
     }
 
+    #[test]
+    fn implementation_matches_the_governed_import_validation_policy() {
+        let policy = toml::from_str::<ImportValidationPolicy>(IMPORT_VALIDATION_POLICY)
+            .expect("import validation policy");
+        assert_eq!(policy.schema_version, 1);
+        assert_eq!(policy.required_import_state, "ready");
+        assert_eq!(policy.required_member_state, "ready");
+        assert_eq!(policy.source_evidence, "reverified_immutable_backup");
+        assert_eq!(policy.source_count_match, "exact_per_member");
+        assert_eq!(policy.studio_source_count, 0);
+        assert_eq!(
+            policy.snapshot,
+            "runtime_begin_immediate_then_private_begin_immediate"
+        );
+        assert_eq!(
+            policy.validation_identity,
+            "sha256_framed_import_target_manifest_classification_members_staged_rows"
+        );
+        assert_eq!(policy.runtime_staging_rows, ["events", "outbox_graph"]);
+        assert_eq!(policy.private_staging_rows, ["private_records"]);
+        assert_eq!(policy.studio_receipt, "member_cursor_only");
+        assert!(!policy.validation_mutation);
+        assert!(!policy.source_deletion);
+        assert!(!policy.dual_write);
+        assert!(!policy.hidden_clock_or_entropy);
+    }
+
     fn assert_fixed_schema_policy(
         policy: &FixedSchemaPolicy,
         user_version: i64,
@@ -4316,6 +4625,12 @@ mod tests {
         assert_eq!(retry.staged_row_count(), 3);
         assert_eq!(retry.resume_cursor(), second.resume_cursor());
         assert!(retry.is_complete());
+        let validation = reopened
+            .validate_legacy_import(&classified)
+            .await
+            .expect("validate event import");
+        assert_eq!(validation.imported_row_count(), 3);
+        assert!(!bytes_are_zero(validation.validation_sha256().as_bytes()));
         for statement in [
             "UPDATE radroots_runtime_legacy_event_staging SET legacy_sequence = 4 WHERE legacy_sequence = 1",
             "DELETE FROM radroots_runtime_legacy_event_staging WHERE legacy_sequence = 1",
@@ -4498,6 +4813,12 @@ mod tests {
         assert_eq!(retry.staged_rows(), 0);
         assert_eq!(retry.staged_row_count(), 5);
         assert!(retry.is_complete());
+        let validation = reopened
+            .validate_legacy_import(&classified)
+            .await
+            .expect("validate outbox import");
+        assert_eq!(validation.imported_row_count(), 5);
+        assert!(!bytes_are_zero(validation.validation_sha256().as_bytes()));
         for statement in [
             "UPDATE radroots_runtime_legacy_outbox_staging SET legacy_id = 2 WHERE legacy_id = 1",
             "DELETE FROM radroots_runtime_legacy_outbox_staging WHERE legacy_id = 1",
@@ -4638,6 +4959,19 @@ mod tests {
             .expect("durable private journal");
         assert_eq!(journal.state(), LegacyImportState::Ready);
         assert_eq!(journal.members()[0].state(), LegacyImportMemberState::Ready);
+        let validation = reopened
+            .validate_legacy_import(&classified)
+            .await
+            .expect("validate private import");
+        assert_eq!(validation.imported_row_count(), 8);
+        assert!(!bytes_are_zero(validation.validation_sha256().as_bytes()));
+        assert_eq!(
+            reopened
+                .validate_legacy_import(&classified)
+                .await
+                .expect("repeat private validation"),
+            validation
+        );
         private_connection
             .close()
             .await
@@ -4715,6 +5049,19 @@ mod tests {
             .await
             .expect("exact receipt retry");
         assert_eq!(retry, acknowledged);
+        let validation = store
+            .validate_legacy_import(&classified)
+            .await
+            .expect("validate Studio handoff");
+        assert_eq!(validation.imported_row_count(), 0);
+        assert!(!bytes_are_zero(validation.validation_sha256().as_bytes()));
+        assert_eq!(
+            store
+                .validate_legacy_import(&classified)
+                .await
+                .expect("repeat Studio validation"),
+            validation
+        );
         let conflict =
             LegacyStudioHandoffReceipt::new(handoff.handoff_sha256(), MemberDigest::new([99; 32]))
                 .expect("conflicting host receipt");
@@ -4749,6 +5096,19 @@ mod tests {
                 .expect("private artifact isolation"),
             0
         );
+        sqlx::query(
+            "UPDATE radroots_runtime_legacy_import_members
+             SET staged_row_count = 1, updated_at_ms = 13204
+             WHERE import_id = ? AND source_kind = 'studio'",
+        )
+        .bind(plan.import_id().as_bytes().as_slice())
+        .execute(store.pool())
+        .await
+        .expect("simulate inconsistent Studio count");
+        assert!(matches!(
+            store.validate_legacy_import(&classified).await,
+            Err(Error::LegacyImportConflict)
+        ));
         studio_connection
             .close()
             .await
