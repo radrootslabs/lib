@@ -1,0 +1,1 @@
+//! Synchronization capability composition.

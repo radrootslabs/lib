@@ -6,236 +6,80 @@ edition.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Public Rust SDK for Radroots"
+description = "Host-neutral asynchronous client engine for Radroots"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
+autotests = false
+autoexamples = false
 
 [lib]
 name = "radroots_sdk"
 
 [features]
-default = ["std", "serde", "serde_json", "identity-models"]
-std = [
-  "radroots_event/std",
-  "radroots_event_codec/std",
-  "radroots_trade/std",
-]
-serde = [
-  "dep:serde",
-  "radroots_event/serde",
-  "radroots_trade/serde",
-]
-serde_json = [
-  "dep:serde_json",
-  "serde",
-  "nostr",
-  "radroots_event_codec/json",
-  "radroots_trade/serde_json",
-]
-nostr = []
-knowledge = [
-  "serde",
-  "serde_json",
-  "radroots_event/knowledge",
-  "radroots_event_codec/manifests",
-]
-identity-models = [
-  "radroots_identity/std",
-]
-signing = [
-  "dep:nostr",
+default = ["memory"]
+memory = ["radroots_storage/memory"]
+sqlite = ["dep:radroots_storage_sqlite"]
+sync = ["dep:radroots_sync"]
+nostr = [
+  "sync",
   "dep:radroots_nostr",
-  "dep:radroots_protocol",
+  "dep:radroots_transport_nostr",
+]
+nip46 = [
   "nostr",
-  "radroots_nostr/std",
-  "radroots_protocol/std",
-  "radroots_signing/std",
-]
-transport-nostr-client = [
-  "signing",
-  "std",
-  "serde_json",
-  "dep:radroots_transport_nostr",
-  "radroots_transport_nostr/client",
-]
-radrootsd-execution = [
-  "std",
-  "serde_json",
-  "dep:futures",
-  "dep:radroots_protocol",
-  "dep:radroots_transport",
-  "dep:radroots_transport_nostr",
-  "dep:reqwest",
-  "radroots_protocol/serde",
-  "radroots_protocol/std",
-  "radroots_transport/serde",
-  "radroots_transport_nostr/std",
-]
-signer-adapters = [
-  "identity-models",
-  "local-signer",
-  "signing",
-  "std",
   "dep:radroots_nostr_connect",
-  "dep:radroots_nostr_signer",
-  "dep:tokio",
-  "radroots_nostr/events",
 ]
-runtime = [
-  "std",
-  "serde_json",
-  "dep:tokio",
-  "dep:base64",
-  "dep:hex",
-  "dep:radroots_event_store",
-  "dep:radroots_geocoder",
-  "dep:radroots_outbox",
-  "dep:radroots_protected_store",
-  "dep:radroots_protocol",
-  "dep:radroots_transport",
-  "dep:radroots_transport_nostr",
-  "dep:radroots_transport_reticulum",
-  "dep:radroots_runtime_paths",
-  "dep:radroots_secret_vault",
-  "dep:sha2",
-  "dep:sqlx",
-  "dep:uuid",
-  "radroots_signing/std",
-  "radroots_event_store/sqlite",
-  "radroots_event_store/runtime-tokio",
-  "radroots_outbox/sqlite",
-  "radroots_outbox/runtime-tokio",
-  "radroots_protected_store/std",
-  "radroots_protocol/std",
-  "radroots_secret_vault/std",
-  "radroots_transport/serde",
-  "radroots_transport_nostr/std",
-  "radroots_transport_nostr/storage",
-  "radroots_transport_nostr/runtime-tokio",
-]
-local-signer = [
-  "runtime",
-  "signing",
+local-signing = [
   "dep:radroots_secrets",
   "radroots_nostr/signing",
 ]
-transport-nostr-runtime = [
-  "runtime",
-  "dep:radroots_nostr",
-  "radroots_transport_nostr/client",
+radrootsd = [
+  "sync",
+  "dep:reqwest",
 ]
-local-runtime = [
-  "std",
-  "serde",
-  "serde_json",
-  "runtime",
-  "signer-adapters",
-  "transport-nostr-runtime",
-  "transport-nostr-client",
+geonames = ["dep:radroots_geonames"]
+knowledge = [
+  "radroots_event/knowledge",
+  "radroots_event_codec/knowledge",
 ]
-local-runtime-radrootsd-execution = [
-  "std",
-  "serde",
-  "serde_json",
-  "runtime",
-  "signer-adapters",
-  "radrootsd-execution",
-]
-test-fixture-geonames-asset = [
-  "runtime",
-  "radroots_geocoder/test-fixture-geonames-asset",
+native = ["sqlite", "sync", "local-signing"]
+full = [
+  "native",
+  "nostr",
+  "nip46",
+  "radrootsd",
+  "geonames",
+  "knowledge",
 ]
 
 [dependencies]
-base64 = { workspace = true, optional = true }
-futures = { workspace = true, optional = true }
-radroots_event_store = { workspace = true, optional = true, default-features = false }
+radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
-radroots_geocoder = { workspace = true, optional = true }
-radroots_outbox = { workspace = true, optional = true, default-features = false }
-radroots_protocol = { workspace = true, optional = true, default-features = false }
-radroots_protected_store = { workspace = true, optional = true, default-features = false }
-radroots_transport = { workspace = true, optional = true, default-features = false }
-radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
-radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
-radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
-radroots_secret_vault = { workspace = true, optional = true, default-features = false }
-radroots_secrets = { workspace = true, optional = true, default-features = false }
-radroots_signing = { workspace = true, default-features = false }
-radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
+radroots_signing = { workspace = true, default-features = false }
+radroots_storage = { workspace = true, default-features = false }
+radroots_trade = { workspace = true, default-features = false }
+radroots_transport = { workspace = true, default-features = false }
+
+radroots_geonames = { workspace = true, optional = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
-radroots_nostr_connect = { workspace = true, optional = true }
-radroots_nostr_signer = { workspace = true, optional = true, default-features = false }
+radroots_nostr_connect = { workspace = true, optional = true, default-features = false }
+radroots_secrets = { workspace = true, optional = true, default-features = false }
+radroots_storage_sqlite = { workspace = true, optional = true, default-features = false }
+radroots_sync = { workspace = true, optional = true, default-features = false }
+radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
+
 reqwest = { workspace = true, optional = true, default-features = false, features = [
   "json",
   "rustls-tls",
 ] }
-hex = { workspace = true, optional = true }
-nostr = { workspace = true, optional = true }
-serde = { workspace = true, optional = true, default-features = false, features = [
-  "derive",
-  "alloc",
-] }
-serde_json = { workspace = true, optional = true, default-features = false, features = [
-  "alloc",
-] }
-sha2 = { workspace = true, optional = true }
-sqlx = { version = "0.9.0", optional = true, default-features = false, features = [
-  "runtime-tokio",
-  "sqlite-bundled",
-] }
-tokio = { workspace = true, optional = true, features = ["macros", "rt", "sync", "time"] }
-uuid = { workspace = true, optional = true }
 
-[[example]]
-name = "sdk_v1_listing_prepare"
-path = "examples/sdk_v1_listing_prepare.rs"
-required-features = ["runtime"]
-
-[[example]]
-name = "sdk_v1_knowledge_prepare"
-path = "examples/sdk_v1_knowledge_prepare.rs"
-required-features = ["knowledge"]
-
-[[example]]
-name = "sdk_v1_local_enqueue_and_mock_sync"
-path = "examples/sdk_v1_local_enqueue_and_mock_sync.rs"
-required-features = ["runtime", "signer-adapters"]
-
-[[example]]
-name = "sdk_v1_myc_nip46_signer_setup"
-path = "examples/sdk_v1_myc_nip46_signer_setup.rs"
-required-features = ["runtime", "signer-adapters"]
-
-[[example]]
-name = "runtime_local"
-path = "examples/runtime_local.rs"
-required-features = ["local-runtime"]
-
-[dev-dependencies]
-futures = { workspace = true }
-nostr = { workspace = true }
-radroots_core = { workspace = true, default-features = false, features = [
-  "std",
-] }
-radroots_signing = { workspace = true, default-features = false, features = ["std"] }
-radroots_replica_store = { workspace = true, default-features = false, features = [
-  "native",
-] }
-radroots_replica_schema = { workspace = true }
-radroots_replica_sync = { workspace = true, features = ["std", "legacy-ingest"] }
-radroots_sql_core = { workspace = true, features = ["native"] }
-radroots_nostr = { workspace = true, default-features = false, features = [
-  "std",
-  "events",
-  "signing",
-] }
-tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-tokio-tungstenite = "0.26.2"
+[[test]]
+name = "package_boundary"
+path = "tests/package_boundary.rs"
 
 [lints]
 workspace = true
