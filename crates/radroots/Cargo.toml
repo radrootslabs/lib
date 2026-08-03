@@ -9,8 +9,15 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 readme = "README.md"
+documentation = "https://docs.rs/radroots"
+keywords = ["radroots", "local-food", "sdk", "nostr"]
+categories = ["api-bindings", "asynchronous", "network-programming"]
+include = ["src/**", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 publish = false
 autoexamples = false
+
+[package.metadata.docs.rs]
+features = ["client", "nostr", "nip46", "geonames", "knowledge"]
 
 [lints]
 workspace = true

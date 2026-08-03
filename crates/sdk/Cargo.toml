@@ -10,8 +10,15 @@ description = "Host-neutral asynchronous client engine for Radroots"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
+documentation = "https://docs.rs/radroots_sdk"
+keywords = ["radroots", "sdk", "local-food", "nostr"]
+categories = ["api-bindings", "asynchronous", "network-programming"]
+include = ["src/**", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 autotests = false
 autoexamples = false
+
+[package.metadata.docs.rs]
+features = ["memory", "sync", "nostr", "nip46", "local-signing", "geonames", "knowledge"]
 
 [lib]
 name = "radroots_sdk"

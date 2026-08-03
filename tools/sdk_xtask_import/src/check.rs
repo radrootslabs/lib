@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Read,
     path::{Path, PathBuf},
@@ -144,6 +144,7 @@ pub fn check() -> Result<(), String> {
     let root = workspace_root()?;
     crate::architecture::validate(&root)?;
     check_publication_policy(&root)?;
+    check_public_rust_package_metadata(&root)?;
     check_radroots_facade_conformance(&root)?;
     validate_sdk_contracts(&root)?;
     check_sdk_feature_matrix(&root)?;
@@ -161,6 +162,7 @@ pub fn check() -> Result<(), String> {
 pub fn architecture_ci(root: &Path) -> Result<(), String> {
     validate_package_matrix()?;
     check_publication_policy(root)?;
+    check_public_rust_package_metadata(root)?;
     check_radroots_facade_conformance(root)?;
     validate_sdk_contracts(root)?;
     check_sdk_feature_matrix(root)?;
@@ -641,6 +643,196 @@ fn policy_set(
     Ok(result)
 }
 
+fn package_field_configured(package: &toml::value::Table, field: &str) -> bool {
+    match package.get(field) {
+        Some(toml::Value::String(value)) => !value.trim().is_empty(),
+        Some(toml::Value::Array(values)) => !values.is_empty(),
+        Some(toml::Value::Table(value)) => value
+            .get("workspace")
+            .and_then(toml::Value::as_bool)
+            .is_some_and(|configured| configured),
+        _ => false,
+    }
+}
+
+fn package_string_array<'a>(
+    package: &'a toml::value::Table,
+    package_name: &str,
+    field: &str,
+) -> Result<Vec<&'a str>, String> {
+    let values = package
+        .get(field)
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| format!("public package {package_name} must define package.{field}"))?;
+    if values.is_empty() {
+        return Err(format!(
+            "public package {package_name} package.{field} must not be empty"
+        ));
+    }
+    let mut resolved = Vec::with_capacity(values.len());
+    let mut unique = BTreeSet::new();
+    for value in values {
+        let value = value.as_str().ok_or_else(|| {
+            format!("public package {package_name} package.{field} entries must be strings")
+        })?;
+        if value.trim().is_empty() || !unique.insert(value) {
+            return Err(format!(
+                "public package {package_name} package.{field} entries must be non-empty and unique"
+            ));
+        }
+        resolved.push(value);
+    }
+    Ok(resolved)
+}
+
+fn check_public_rust_package_metadata(root: &Path) -> Result<(), String> {
+    let policy_path = root.join("contracts/releases/publication.toml");
+    let policy_raw = fs::read_to_string(&policy_path)
+        .map_err(|error| format!("failed to read {}: {error}", policy_path.display()))?;
+    let policy_file = toml::from_str::<PublicationPolicyFile>(&policy_raw)
+        .map_err(|error| format!("failed to parse {}: {error}", policy_path.display()))?;
+    let local = policy_set(
+        policy_file.publication.local_packages,
+        "publication.local_packages",
+    )?;
+
+    let mut manifests = BTreeMap::new();
+    for manifest_path in sdk_manifest_paths(root)?.into_iter().skip(1) {
+        let raw = fs::read_to_string(&manifest_path)
+            .map_err(|error| format!("failed to read {}: {error}", manifest_path.display()))?;
+        let manifest = raw
+            .parse::<toml::Value>()
+            .map_err(|error| format!("failed to parse {}: {error}", manifest_path.display()))?;
+        let package_name = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .and_then(|package| package.get("name"))
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("{} must define package.name", manifest_path.display()))?
+            .to_owned();
+        if manifests
+            .insert(package_name.clone(), (manifest_path, manifest))
+            .is_some()
+        {
+            return Err(format!("duplicate workspace package name {package_name}"));
+        }
+    }
+
+    for package_name in local {
+        let (manifest_path, manifest) = manifests
+            .get(&package_name)
+            .ok_or_else(|| format!("public package {package_name} has no workspace manifest"))?;
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .expect("workspace package manifest has a package table");
+        for field in [
+            "authors",
+            "version",
+            "edition",
+            "rust-version",
+            "license",
+            "repository",
+            "homepage",
+            "documentation",
+            "readme",
+            "description",
+        ] {
+            if !package_field_configured(package, field) {
+                return Err(format!(
+                    "public package {package_name} must configure package.{field}"
+                ));
+            }
+        }
+        let expected_documentation = format!("https://docs.rs/{package_name}");
+        if package.get("documentation").and_then(toml::Value::as_str)
+            != Some(expected_documentation.as_str())
+        {
+            return Err(format!(
+                "public package {package_name} package.documentation must be {expected_documentation}"
+            ));
+        }
+        if package.get("license-file").is_some() {
+            return Err(format!(
+                "public package {package_name} must use the workspace SPDX license expression"
+            ));
+        }
+
+        let keywords = package_string_array(package, &package_name, "keywords")?;
+        let categories = package_string_array(package, &package_name, "categories")?;
+        if keywords.len() > 5 || categories.len() > 5 {
+            return Err(format!(
+                "public package {package_name} keywords and categories must respect crates.io limits"
+            ));
+        }
+        let include = package_string_array(package, &package_name, "include")?;
+        for required in ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"] {
+            if !include.contains(&required) {
+                return Err(format!(
+                    "public package {package_name} package.include must contain {required}"
+                ));
+            }
+        }
+
+        let package_root = manifest_path
+            .parent()
+            .expect("workspace member manifest has a parent");
+        for relative in ["LICENSE-APACHE", "LICENSE-MIT"] {
+            let package_bytes = fs::read(package_root.join(relative)).map_err(|error| {
+                format!("public package {package_name} must include {relative}: {error}")
+            })?;
+            let root_bytes = fs::read(root.join(relative))
+                .map_err(|error| format!("failed to read {relative}: {error}"))?;
+            if package_bytes != root_bytes {
+                return Err(format!(
+                    "public package {package_name} {relative} must match the workspace license"
+                ));
+            }
+        }
+        if !package_root.join("README.md").is_file() {
+            return Err(format!(
+                "public package {package_name} must include a package-local README.md"
+            ));
+        }
+
+        let docs_rs = package
+            .get("metadata")
+            .and_then(toml::Value::as_table)
+            .and_then(|metadata| metadata.get("docs"))
+            .and_then(toml::Value::as_table)
+            .and_then(|docs| docs.get("rs"))
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| {
+                format!("public package {package_name} must define [package.metadata.docs.rs]")
+            })?;
+        if docs_rs
+            .get("all-features")
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Err(format!(
+                "public package {package_name} docs.rs must use an intentional feature set"
+            ));
+        }
+        let docs_features = docs_rs
+            .get("features")
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("public package {package_name} docs.rs must define features"))?;
+        let declared_features = manifest.get("features").and_then(toml::Value::as_table);
+        for feature in docs_features {
+            let feature = feature.as_str().ok_or_else(|| {
+                format!("public package {package_name} docs.rs features must be strings")
+            })?;
+            if !declared_features.is_some_and(|features| features.contains_key(feature)) {
+                return Err(format!(
+                    "public package {package_name} docs.rs selects unknown feature {feature}"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn check_sdk_feature_matrix(root: &Path) -> Result<(), String> {
     let path = root.join("crates/sdk/Cargo.toml");
     let raw = fs::read_to_string(&path)
@@ -797,7 +989,7 @@ fn inspect_manifest_table_for_reticulum_dependencies(
             path.pop();
             continue;
         }
-        if key == "features" {
+        if key == "features" && path.len() == 1 {
             let features = value.as_table().ok_or_else(|| {
                 format!(
                     "{manifest_label} section `{}` must be a table",
@@ -2502,6 +2694,26 @@ radroots_transport_reticulum = { workspace = true, optional = true, default-feat
 
         check_manifest_reticulum_dependency_boundaries(&manifest, "crates/sdk/Cargo.toml")
             .expect("first-party preview dependency is allowed");
+    }
+
+    #[test]
+    fn reticulum_gate_ignores_docs_rs_feature_selection() {
+        let manifest = manifest_value(
+            r#"
+[package]
+name = "radroots_sdk"
+
+[package.metadata.docs.rs]
+features = ["nostr", "nip46"]
+
+[features]
+nostr = []
+nip46 = ["nostr"]
+"#,
+        );
+
+        check_manifest_reticulum_dependency_boundaries(&manifest, "crates/sdk/Cargo.toml")
+            .expect("docs.rs feature arrays are metadata, not Cargo feature tables");
     }
 
     #[test]
