@@ -3,8 +3,8 @@
 
 //! Curated ordinary-user entry point for Radroots.
 //!
-//! This non-publishable scaffold reserves the final module and feature
-//! vocabulary without exposing private migration packages.
+//! The root exposes only the ordinary client boundary. Deliberately selected
+//! domain types live in the named modules below.
 
 pub mod client;
 pub mod event;
@@ -17,3 +17,5 @@ pub mod storage;
 pub mod sync;
 pub mod trade;
 pub mod transport;
+
+pub use radroots_sdk::{Client, ClientBuilder, Error, Result};

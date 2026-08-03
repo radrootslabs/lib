@@ -224,14 +224,57 @@ fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
     {
         return Err("radroots facade [lib] must use name radroots and path src/lib.rs".to_owned());
     }
-    for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+    let dependencies = manifest
+        .get("dependencies")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| "radroots facade must define [dependencies]".to_owned())?;
+    let actual_dependencies = dependencies
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let expected_dependencies = [
+        "radroots_core",
+        "radroots_event",
+        "radroots_identity",
+        "radroots_sdk",
+        "radroots_trade",
+        "radroots_transport",
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    if actual_dependencies != expected_dependencies {
+        return Err(format!(
+            "radroots facade dependencies must be exactly {}; found {}",
+            expected_dependencies
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", "),
+            actual_dependencies
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    for (name, dependency) in dependencies {
+        if dependency
+            .as_table()
+            .and_then(|value| value.get("workspace"))
+            .and_then(toml::Value::as_bool)
+            != Some(true)
+        {
+            return Err(format!(
+                "radroots facade dependency {name} must inherit the governed workspace entry"
+            ));
+        }
+    }
+    for dependency_table in ["dev-dependencies", "build-dependencies"] {
         if manifest
             .get(dependency_table)
             .and_then(toml::Value::as_table)
             .is_some_and(|dependencies| !dependencies.is_empty())
         {
             return Err(format!(
-                "radroots scaffold must not depend on private migration packages through [{dependency_table}]"
+                "radroots facade must not define [{dependency_table}]"
             ));
         }
     }
@@ -278,9 +321,15 @@ fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
             actual_modules.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
-    if source.contains("pub mod sdk") || source.contains("pub use radroots_sdk") {
+    if source.contains("pub mod sdk") || source.contains("pub use radroots_sdk::*") {
         return Err(
             "radroots facade must not expose an sdk namespace or broad SDK re-export".to_owned(),
+        );
+    }
+    if !source.contains("pub use radroots_sdk::{Client, ClientBuilder, Error, Result};") {
+        return Err(
+            "radroots facade must export exactly the four approved SDK root entry points"
+                .to_owned(),
         );
     }
     for module in RADROOTS_FACADE_MODULES {
