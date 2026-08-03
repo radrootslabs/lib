@@ -814,8 +814,19 @@ pub trait ProjectionStore: Send + Sync {
         &self,
         invalidation: ProjectionInvalidation,
     ) -> BoxFuture<'_, Result<ProjectionStatus, Error>>;
+    /// Returns the latest durable invalidation selecting a replacement generation.
+    fn invalidation(
+        &self,
+        projection_id: ProjectionId,
+        replacement_generation: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<Option<ProjectionInvalidation>, Error>>;
     fn request_rebuild(&self, ticket: RebuildTicket)
     -> BoxFuture<'_, Result<RebuildTicket, Error>>;
+    /// Returns one durable rebuild execution by identity.
+    fn rebuild(
+        &self,
+        ticket_id: RebuildTicketId,
+    ) -> BoxFuture<'_, Result<Option<RebuildTicket>, Error>>;
     fn transition_rebuild(
         &self,
         transition: RebuildTransition,

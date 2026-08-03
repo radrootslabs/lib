@@ -17,6 +17,7 @@ const MAX_OPERATION_TIMEOUT_MS: u64 = 86_400_000;
 #[non_exhaustive]
 pub enum OperationKind {
     Ingest,
+    Projection,
     Pull,
     Sign,
     Deliver,
@@ -87,6 +88,7 @@ impl DeadlinePolicy {
             // Ingest performs local verification and one atomic commit. It
             // shares the inbound operation budget with pull orchestration.
             OperationKind::Ingest => self.pull_timeout_ms,
+            OperationKind::Projection => self.pull_timeout_ms,
             OperationKind::Pull => self.pull_timeout_ms,
             OperationKind::Sign => self.sign_timeout_ms,
             OperationKind::Deliver => self.delivery_timeout_ms,
@@ -197,6 +199,9 @@ pub enum Error {
     InvalidPullRequest,
     MissingSource,
     InvalidSourcePage,
+    InvalidProjectionRequest,
+    ReducerFailed,
+    InvalidReducerOutput,
 }
 
 impl core::fmt::Display for Error {
@@ -216,6 +221,9 @@ impl core::fmt::Display for Error {
             Self::InvalidPullRequest => "sync pull request is outside its bounds",
             Self::MissingSource => "sync engine has no event source",
             Self::InvalidSourcePage => "sync source returned an invalid page",
+            Self::InvalidProjectionRequest => "sync projection request is invalid",
+            Self::ReducerFailed => "sync projection reducer failed",
+            Self::InvalidReducerOutput => "sync projection reducer returned invalid progress",
         })
     }
 }

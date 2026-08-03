@@ -135,7 +135,10 @@ impl ProjectionStore for SqliteStorage {
             .ok_or(Error::ProjectionCheckpointMismatch)?;
             let status = decode_status(&status_row)?;
             if status.generation() != ticket.invalidation().replacement_generation()
-                || status.health() != ProjectionHealth::Invalidated
+                || !matches!(
+                    status.health(),
+                    ProjectionHealth::Invalidated | ProjectionHealth::Failed
+                )
                 || load_invalidation(
                     &mut transaction,
                     ticket.invalidation().projection_id(),
@@ -158,6 +161,48 @@ impl ProjectionStore for SqliteStorage {
             put_status_transaction(&mut transaction, &next).await?;
             transaction.commit().await.map_err(map_backend)?;
             Ok(ticket)
+        })
+    }
+
+    fn invalidation(
+        &self,
+        projection_id: ProjectionId,
+        replacement_generation: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<Option<ProjectionInvalidation>, Error>> {
+        Box::pin(async move {
+            sqlx::query(
+                "SELECT * FROM radroots_runtime_projection_invalidations
+                 WHERE projection_id = ? AND replacement_generation = ?
+                 ORDER BY invalidated_at_unix_ms DESC LIMIT 1",
+            )
+            .bind(projection_id.as_str())
+            .bind(replacement_generation.as_bytes().as_slice())
+            .fetch_optional(self.pool())
+            .await
+            .map_err(map_backend)?
+            .as_ref()
+            .map(decode_invalidation)
+            .transpose()
+        })
+    }
+
+    fn rebuild(
+        &self,
+        ticket_id: RebuildTicketId,
+    ) -> BoxFuture<'_, Result<Option<RebuildTicket>, Error>> {
+        Box::pin(async move {
+            let mut connection = self.pool().acquire().await.map_err(map_backend)?;
+            let row = sqlx::query(
+                "SELECT * FROM radroots_runtime_projection_rebuilds WHERE ticket_id = ?",
+            )
+            .bind(ticket_id.as_bytes().as_slice())
+            .fetch_optional(&mut *connection)
+            .await
+            .map_err(map_backend)?;
+            match row {
+                Some(row) => decode_ticket(&mut connection, &row).await.map(Some),
+                None => Ok(None),
+            }
         })
     }
 

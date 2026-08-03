@@ -37,7 +37,7 @@ use crate::{
     projection::{
         EventIndexCheckpoint, EventIndexManifest, ProjectionCheckpoint, ProjectionGeneration,
         ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionStatus, RebuildStage,
-        RebuildTicket, RebuildTransition,
+        RebuildTicket, RebuildTicketId, RebuildTransition,
     },
     status::{
         EventStoreHealth, EventStoreMode, EventStoreStatus, IntegrityHealth, IntegrityStatus,
@@ -58,6 +58,7 @@ struct State {
     journal: Vec<OperationRecord>,
     outbox: Vec<OutboxRecord>,
     projections: Vec<ProjectionStatus>,
+    projection_invalidations: Vec<ProjectionInvalidation>,
     rebuilds: Vec<RebuildTicket>,
     event_index_manifests: Vec<EventIndexManifest>,
     event_index_checkpoints: Vec<EventIndexCheckpoint>,
@@ -83,6 +84,7 @@ impl MemoryStorage {
                 journal: Vec::new(),
                 outbox: Vec::new(),
                 projections: Vec::new(),
+                projection_invalidations: Vec::new(),
                 rebuilds: Vec::new(),
                 event_index_manifests: Vec::new(),
                 event_index_checkpoints: Vec::new(),
@@ -690,12 +692,12 @@ impl ProjectionStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<ProjectionStatus, Error>> {
         Box::pin(async move {
             let mut state = self.state()?;
-            let status = state
+            let status_index = state
                 .projections
-                .iter_mut()
-                .find(|status| status.projection_id() == invalidation.projection_id())
+                .iter()
+                .position(|status| status.projection_id() == invalidation.projection_id())
                 .ok_or(Error::ProjectionCheckpointMismatch)?;
-            if status.generation() != invalidation.invalid_generation() {
+            if state.projections[status_index].generation() != invalidation.invalid_generation() {
                 return Err(Error::ProjectionCheckpointMismatch);
             }
             let next = ProjectionStatus::new(
@@ -705,8 +707,34 @@ impl ProjectionStore for MemoryStorage {
                 None,
                 None,
             )?;
-            *status = next.clone();
+            if !state
+                .projection_invalidations
+                .iter()
+                .any(|existing| existing == &invalidation)
+            {
+                state.projection_invalidations.push(invalidation);
+            }
+            state.projections[status_index] = next.clone();
             Ok(next)
+        })
+    }
+
+    fn invalidation(
+        &self,
+        projection_id: ProjectionId,
+        replacement_generation: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<Option<ProjectionInvalidation>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .projection_invalidations
+                .iter()
+                .rev()
+                .find(|invalidation| {
+                    invalidation.projection_id() == &projection_id
+                        && invalidation.replacement_generation() == replacement_generation
+                })
+                .cloned())
         })
     }
 
@@ -734,7 +762,10 @@ impl ProjectionStore for MemoryStorage {
                 .find(|status| status.projection_id() == projection_id)
                 .ok_or(Error::ProjectionCheckpointMismatch)?;
             if status.generation() != ticket.invalidation().replacement_generation()
-                || status.health() != ProjectionHealth::Invalidated
+                || !matches!(
+                    status.health(),
+                    ProjectionHealth::Invalidated | ProjectionHealth::Failed
+                )
             {
                 return Err(Error::ProjectionCheckpointMismatch);
             }
@@ -747,6 +778,20 @@ impl ProjectionStore for MemoryStorage {
             )?;
             state.rebuilds.push(ticket.clone());
             Ok(ticket)
+        })
+    }
+
+    fn rebuild(
+        &self,
+        ticket_id: RebuildTicketId,
+    ) -> BoxFuture<'_, Result<Option<RebuildTicket>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .rebuilds
+                .iter()
+                .find(|ticket| ticket.ticket_id() == ticket_id)
+                .cloned())
         })
     }
 
