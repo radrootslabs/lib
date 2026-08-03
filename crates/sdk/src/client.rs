@@ -245,6 +245,12 @@ impl Client {
         Ok(self.sync()?.map(crate::farm::Operations::new))
     }
 
+    /// Returns listing commit operations when canonical synchronization is configured.
+    #[cfg(feature = "sync")]
+    pub fn listing(&self) -> Result<Option<crate::listing::Operations<'_>>> {
+        Ok(self.sync()?.map(crate::listing::Operations::new))
+    }
+
     /// Returns whether explicit close completed successfully or reached the
     /// lower storage commit point.
     #[must_use]

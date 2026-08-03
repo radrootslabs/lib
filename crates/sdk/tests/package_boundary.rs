@@ -4,6 +4,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const CLIENT: &str = include_str!("../src/client.rs");
 const FARM: &str = include_str!("../src/farm.rs");
+const LISTING: &str = include_str!("../src/listing.rs");
 const SYNC: &str = include_str!("../src/sync.rs");
 const TRANSPORT: &str = include_str!("../src/transport.rs");
 
@@ -228,6 +229,42 @@ fn farm_operations_preserve_pure_planning_commit_and_privacy_boundaries() {
     }
     let source_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     assert!(!source_root.join("farms_runtime.rs").exists());
+}
+
+#[test]
+fn listing_operations_reuse_trade_event_sync_and_privacy_boundaries() {
+    for required in [
+        "canonicalize_operational_listing_edit",
+        "RadrootsOperationalListingMutation",
+        "RadrootsOperationalListingLifecycleState",
+        "build_operational_listing_mutation_draft",
+        "radroots_sync::PushRequest::new",
+        "PrivateArtifactStore",
+    ] {
+        assert!(
+            LISTING.contains(required),
+            "missing listing boundary `{required}`"
+        );
+    }
+    for forbidden in [
+        "SdkMutationState",
+        "ListingEnqueueReceipt",
+        "enqueue_signed_workflow",
+        "local_event_seq",
+        "outbox_event_id",
+        "latitude:",
+        "longitude:",
+    ] {
+        assert!(
+            !LISTING.contains(forbidden),
+            "listing source contains retired duplicate or private representation `{forbidden}`"
+        );
+    }
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/listings_runtime.rs")
+            .exists()
+    );
 }
 
 fn dependency_names(manifest: &str) -> BTreeSet<&str> {
