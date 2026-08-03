@@ -246,18 +246,21 @@ fn live_client_and_http_ownership_belongs_to_transport_nostr() {
         );
     }
 
-    for required in ["nostr-sdk", "reqwest", "nip11 = [\"client\""] {
+    for required in ["nostr-sdk", "radroots_transport", "radroots_event_codec"] {
         assert!(
             TRANSPORT_MANIFEST.contains(required),
             "transport manifest is missing live-client ownership marker `{required}`"
         );
     }
     for required in [
+        "mod auth;",
         "mod client;",
-        "mod relays;",
-        "mod nip11;",
-        "pub use client::{",
-        "pub use nip11::fetch_nip11;",
+        "mod relay;",
+        "mod sink;",
+        "mod source;",
+        "mod status;",
+        "pub use client::{Config, NostrTransport};",
+        "pub use relay::{RelayUrl, RelayUrlPolicy};",
     ] {
         assert!(
             TRANSPORT_ROOT.contains(required),
@@ -275,15 +278,16 @@ fn live_client_and_http_ownership_belongs_to_transport_nostr() {
             .exists()
     );
     assert!(
-        manifest_dir
+        !manifest_dir
             .join("../transport_nostr/src/relays.rs")
             .exists()
     );
     assert!(
-        manifest_dir
+        !manifest_dir
             .join("../transport_nostr/src/nip11.rs")
             .exists()
     );
+    assert!(!TRANSPORT_MANIFEST.contains("reqwest"));
 
     let forbidden_source = [
         "nostr_sdk",

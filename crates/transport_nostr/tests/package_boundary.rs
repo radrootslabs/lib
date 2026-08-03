@@ -1,4 +1,6 @@
 use std::collections::BTreeSet;
+use std::fs;
+use std::path::Path;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -66,4 +68,45 @@ fn private_modules(root: &str) -> BTreeSet<&str> {
         .filter_map(|line| line.trim().strip_prefix("mod "))
         .filter_map(|module| module.strip_suffix(';'))
         .collect()
+}
+
+#[test]
+fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
+    for forbidden in [
+        "radroots_event_store",
+        "radroots_outbox",
+        "radroots_storage",
+        "publish_claimed",
+        "fetch_and_ingest",
+        "projection_refresh",
+        "retry_schedule",
+    ] {
+        assert!(!MANIFEST.contains(forbidden));
+        assert!(!ROOT.contains(forbidden));
+    }
+
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let source_files = fs::read_dir(source_root)
+        .expect("source directory")
+        .map(|entry| {
+            entry
+                .expect("source entry")
+                .file_name()
+                .into_string()
+                .expect("utf-8 source name")
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        source_files,
+        BTreeSet::from([
+            "auth.rs".to_owned(),
+            "client.rs".to_owned(),
+            "error.rs".to_owned(),
+            "lib.rs".to_owned(),
+            "relay.rs".to_owned(),
+            "sink.rs".to_owned(),
+            "source.rs".to_owned(),
+            "status.rs".to_owned(),
+        ])
+    );
 }

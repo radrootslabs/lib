@@ -567,14 +567,19 @@ fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
         "Reticulum preview must not implement the predecessor monolithic SPI"
     );
 
-    let nostr_source = read_source(crates_root.join("transport_nostr/src/publish.rs").as_path());
+    let nostr_sink = read_source(crates_root.join("transport_nostr/src/sink.rs").as_path());
+    let nostr_source = read_source(crates_root.join("transport_nostr/src/source.rs").as_path());
     assert!(
-        nostr_source.contains("impl<A> EventSink for RadrootsNostrTransport<A>"),
-        "Nostr adapter must implement the final sink-only SPI"
+        nostr_sink.contains("impl EventSink for NostrTransport"),
+        "Nostr adapter must implement the final sink SPI"
     );
     assert!(
-        !nostr_source
-            .contains("impl<A> RadrootsRuntimeTransportShim for RadrootsNostrTransport<A>"),
+        nostr_source.contains("impl EventSource for NostrTransport"),
+        "Nostr adapter must implement the final source SPI"
+    );
+    assert!(
+        !nostr_sink.contains("RadrootsRuntimeTransportShim")
+            && !nostr_source.contains("RadrootsRuntimeTransportShim"),
         "Nostr adapter must not implement the predecessor monolithic SPI"
     );
 }
@@ -735,12 +740,15 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
     );
 
     let relay_source = read_source(crates_root.join("transport_nostr/src/relay.rs").as_path());
-    for required in [
-        "Target::new(TransportId::NOSTR, original)",
-        "RadrootsRelayTransportError::DuplicateRelayUrl",
-    ] {
+    let client_source = read_source(crates_root.join("transport_nostr/src/client.rs").as_path());
+    for required in ["Target::nostr_relay(original)", "Error::DuplicateRelayUrl"] {
+        let source = if required.contains("Duplicate") {
+            client_source.as_str()
+        } else {
+            relay_source.as_str()
+        };
         assert!(
-            relay_source.contains(required),
+            source.contains(required),
             "Nostr relay target source must retain canonical identity witness `{required}`"
         );
     }
@@ -813,39 +821,19 @@ fn required_target_semantics_stay_fingerprint_exact() {
     }
 
     let nostr_publish_source =
-        read_source(crates_root.join("transport_nostr/src/publish.rs").as_path());
+        read_source(crates_root.join("transport_nostr/src/sink.rs").as_path());
     for required in [
-        "RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } =>",
-        "let mut satisfied_required_targets = BTreeSet::new();",
-        "targets.contains(target.fingerprint())",
-        "counts_as_satisfied(*class)",
-        "targets\n                .iter()\n                .all(|target| satisfied_required_targets.contains(target))",
+        "DeliveryReceipt::for_request(&request, receipts)",
+        "DeliveryTargetReceipt::attempted(target, outcome)",
+        "DeliveryTargetReceipt::skipped(",
     ] {
         assert!(
             nostr_publish_source.contains(required),
-            "direct Nostr publish must retain exact required-target witness `{required}`"
+            "Nostr sink must delegate exact target satisfaction to the generic receipt contract `{required}`"
         );
     }
-
-    let nostr_outbox_source =
-        read_source(crates_root.join("transport_nostr/src/outbox.rs").as_path());
-    let publishable_relays_source = source_between(
-        nostr_outbox_source.as_str(),
-        "let required_targets = match &plan.satisfaction_policy",
-        "Ok(PublishableRelays {",
-    );
-    for required in [
-        "RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } =>",
-        ".is_none_or(|required| required.contains(&target.endpoint_fingerprint))",
-        ".is_some_and(|required| required.contains(&target.endpoint_fingerprint))",
-        "required_targets.is_none() || required_for_satisfaction",
-        "required_targets.is_some()",
-    ] {
-        assert!(
-            publishable_relays_source.contains(required),
-            "direct Nostr outbox publish must retain exact required-target witness `{required}`"
-        );
-    }
+    assert!(!crates_root.join("transport_nostr/src/outbox.rs").exists());
+    assert!(!crates_root.join("transport_nostr/src/publish.rs").exists());
 }
 
 #[test]

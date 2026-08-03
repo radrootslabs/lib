@@ -2597,16 +2597,10 @@ const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/relay_document.rs",
-        required_fragments: &["pub struct RelayDocument"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/transport_nostr/src/nip11.rs",
-        required_fragments: &["pub async fn fetch_nip11(ws_url: &str) -> Option<RelayDocument>"],
-    },
-];
+const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 1] = [EventBoundarySourceWitness {
+    relative_path: "crates/event/src/relay_document.rs",
+    required_fragments: &["pub struct RelayDocument"],
+}];
 
 const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
