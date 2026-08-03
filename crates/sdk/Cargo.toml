@@ -31,6 +31,7 @@ nip46 = [
   "dep:radroots_nostr_connect",
 ]
 local-signing = [
+  "dep:radroots_nostr",
   "dep:radroots_secrets",
   "radroots_nostr/signing",
 ]

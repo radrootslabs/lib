@@ -1,143 +1,99 @@
 # radroots_sdk
 
-Curated Radroots Rust SDK for local-first Radroots product workflows.
+`radroots_sdk` is the host-neutral asynchronous client engine for Radroots.
+It composes the canonical event, trade, signing, transport, storage, and sync
+crates without installing a runtime, starting workers, opening files, probing
+the network, selecting an account, or choosing fallback transports.
 
-The SDK v1 product runtime is centered on `RadrootsClient::builder()`,
-`sdk.farms()`, `sdk.listings()`, `sdk.trades()`, `sdk.market()`, and `sdk.sync()`.
+The crate root intentionally exports only `Client`, `ClientBuilder`, `Error`,
+and `Result`. Advanced operations live in the `farm`, `listing`, `trade`,
+`signing`, `transport`, `storage`, `sync`, `diagnostics`, and `capability`
+modules.
 
-The current refactor exposes explicit memory or SQLite storage composition and
-never creates files until the host invokes an I/O constructor. Canonical SQLite
-storage owns only `runtime.sqlite` and `private.sqlite`; application presentation
-state belongs to the host.
+## Feature contract
 
-## Studio state migration
+The complete public feature vocabulary is:
 
-The predecessor SDK-owned `studio.sqlite` database is not opened, copied,
-backed up, restored, or deleted by this release. Before upgrading, a Studio host
-that needs values from that file must use the predecessor version to export the
-application state, validate the export, and import it into a host-owned schema.
-The host must retain its original file until it has independently verified the
-new state. This SDK intentionally provides no dual read, dual write, implicit
-migration, or fallback path.
+| Feature | Capability |
+| --- | --- |
+| `memory` | deterministic in-process reference storage; the default feature |
+| `sqlite` | explicit canonical SQLite storage construction |
+| `sync` | composition with a caller-supplied canonical sync engine |
+| `nostr` | Nostr conversion and concrete source/sink adapters; implies `sync` |
+| `nip46` | NIP-46 signer provider; implies `nostr` |
+| `local-signing` | explicit local signing and secret-provider adapters |
+| `radrootsd` | explicitly invoked private daemon execution adapter; implies `sync` |
+| `geonames` | concrete GeoNames provider integration |
+| `knowledge` | deterministic knowledge event contracts/codecs |
+| `native` | `sqlite`, `sync`, and `local-signing` |
+| `full` | every supported production capability |
 
-When `signer-adapters` is enabled, `RadrootsClient::builder()` accepts a configured
-`RadrootsSdkSignerProvider`. The production signing modes are `local_key` and `myc_nip46`. Product
-enqueue methods use that configured provider, so callers do not pass signing internals through every
-farm, listing, or trade write call. `signer_status()`, `configured_signer()`, and
-`sign_with_configured_signer(...)` expose the typed SDK signer boundary.
+There are no `runtime`, `local-runtime`, `signer-adapters`,
+`transport-nostr-runtime`, `transport-nostr-client`, or fixture features.
+Features compile capabilities; they do not perform I/O. Optional dependencies
+are activated only by their owning feature.
 
-`sdk.listings().prepare_publish(...)` is side-effect-free and returns a typed
-`ListingPublishPlan`. With a configured signer, `sdk.listings().enqueue_prepared_publish(...)` signs
-that prepared plan, ingests it into the local event store, queues signed outbox work, and returns a
-typed `ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)` is the convenience path that
-prepares once and delegates to `enqueue_prepared_publish(...)`. Farm and trade write methods follow
-the same configured signer pattern. The enqueue path uses typed transport target and idempotency
-inputs; write requests require explicit UUIDv7 idempotency keys. `SatisfactionPolicy::NoWait`
-records first-class no-wait delivery plans, so enqueue-only product workflows can complete without
-accepted or delivered transport targets and without fabricated target delivery receipts.
+The supported qualification matrix is:
 
-Event `created_at` and local observation time are separate contracts. The event timestamp remains
-the authored event-envelope timestamp, while event-store and outbox mutation timestamps use the SDK
-clock at enqueue time. Listing enqueue receipts report mutation state with the product names
-`StoredAndQueued` and `AlreadyQueued`.
-
-`sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued signed outbox work
-when `transport-nostr-runtime` is enabled. Push time uses the delivery targets already stored on each
-queued outbox event, so already queued work does not require a configured builder profile. Reticulum
-work reports explicit deferred-until-implemented receipt state with zero network
-attempts; it does not deliver and does not fall back to another transport. Nostr transport publishing
-and radrootsd execution consume signed outbox events; neither path owns signing.
-`push_outbox_with_transport(...)` remains available for tests and controlled transport-level
-substrate checks. `radrootsd-execution` adds daemon-resolved publishing through `publish.event`.
-
-`sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can read
-`sdk.trades().capabilities()`, seal/open/delete protected private artifacts, issue semantic trade
-commands through `sdk.trades().commands()`, and read semantic projections through
-`sdk.trades().queries()`. Query methods read local projections and evidence; they are not network
-fetches.
-
-Configured-signer trade writes compile when both `runtime` and `signer-adapters` are enabled.
-Trade write workflows use `SubmitProposalRequest`, `ProposeRevisionRequest`,
-`DecideCandidateRequest`, `CancelTradeRequest`, and `ResumeOperationRequest` through the command
-service. Runtime-only builds keep explicit-signer methods available and do not expose a parallel
-buyer/seller workflow namespace.
-
-The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
-enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `transport-nostr-runtime`, and
-`transport-nostr-client`. `signer-adapters` contains the SDK `local_key` and `myc_nip46` signing surface.
-`transport-nostr-client` supplies the Nostr relay WebSocket publish adapter used when signed outbox work
-targets Nostr relay URLs. `local-runtime-radrootsd-execution` uses daemon-resolved publishing through
-`publish.event` and the same configured signer provider API.
-
-`radroots_sdk_myc_nip46_product_permissions()` and
-`radroots_sdk_myc_nip46_product_permission_strings()` expose the SDK product NIP-46
-`sign_event:<kind>` permission set for Myc connection setup. The set is derived from the farm,
-listing, and canonical trade mutation event kinds the SDK can write.
-
-Relay URL policy is explicit. Public relay URLs must use `wss://`. Local development `ws://` relay
-URLs are accepted only under `NostrRelayUrlPolicy::Localhost` and only for `localhost`, `127.0.0.1`,
-or `[::1]`. Non-local insecure `ws://` targets, including private LAN addresses, are rejected.
-
-Low-level event-contract, wire-codec, reducer, and agreement-attestation contract ownership lives in
-the shared Radroots libraries. The SDK exposes product APIs and selected adapter boundaries; it does
-not expose a public workflow-bypass namespace for product callers.
-
-## Examples
-
-Compile the SDK v1 product examples with:
-
-```bash
-cargo check -p radroots_sdk --example sdk_v1_listing_prepare --features runtime
-cargo check -p radroots_sdk --example sdk_v1_knowledge_prepare --features knowledge
-cargo check -p radroots_sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,signer-adapters
-cargo check -p radroots_sdk --example sdk_v1_myc_nip46_signer_setup --features runtime,signer-adapters
+```sh
+cargo check -p radroots_sdk --all-targets --no-default-features
+cargo check -p radroots_sdk --all-targets
+cargo check -p radroots_sdk --all-targets --no-default-features --features memory
+cargo check -p radroots_sdk --all-targets --no-default-features --features sqlite
+cargo check -p radroots_sdk --all-targets --no-default-features --features sync
+cargo check -p radroots_sdk --all-targets --no-default-features --features nostr
+cargo check -p radroots_sdk --all-targets --no-default-features --features nip46
+cargo check -p radroots_sdk --all-targets --no-default-features --features local-signing
+cargo check -p radroots_sdk --all-targets --no-default-features --features radrootsd
+cargo check -p radroots_sdk --all-targets --no-default-features --features geonames
+cargo check -p radroots_sdk --all-targets --no-default-features --features knowledge
+cargo check -p radroots_sdk --all-targets --no-default-features --features native
+cargo check -p radroots_sdk --all-targets --no-default-features --features full
+cargo check -p radroots_sdk --all-targets --all-features
 ```
 
-`sdk_v1_listing_prepare` shows `RadrootsClient::builder()`,
-`ListingPreparePublishRequest`, and `ListingPublishPlan`.
-`sdk_v1_knowledge_prepare` shows `radroots_sdk::knowledge`, typed event builders, frozen draft
-preparation, signed-event verification, decoded event matching, and manifest hash access without
-local runtime storage.
-`sdk_v1_local_enqueue_and_mock_sync` shows localhost Nostr target selection, configured local-key
-signing, prepared listing enqueue, `push_outbox_with_transport(...)` with a Nostr transport facade, and
-queued outbox sync. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer provider setup and
-product permission derivation at the SDK boundary. The examples stay on product APIs and do not use
-wire-event internals.
+## Explicit composition
 
-SDK v1 does not claim strict NIP-99 Markdown-content interoperability. It emits and consumes
-Radroots v1 listing and trade event contracts.
+`ClientBuilder` requires a storage capability. `ClientBuilder::memory(...)`
+and `ClientBuilder::sqlite(...)` are explicit constructors; merely enabling a
+feature or constructing an empty builder creates no resource. Signers, event
+sources, event sinks, and the sync engine are injected separately.
 
-Optional advanced substrate is explicitly feature-scoped:
+Transport profiles are explicit. `Profile::local_only()` contains no target.
+`Profile::delivery(...)` retains the exact canonical target set and
+satisfaction policy. Preview transports report unavailable and never
+substitute Nostr, daemon, local persistence, or another route.
 
-- `identity-models`: identity data types without local storage coupling
-- `signing`: dependency substrate for curated Nostr adapters; it exposes no
-  generic builder or caller-constructed wire-part signing module
-- `transport-nostr-client`: Nostr relay WebSocket client and publish adapters
-- `signer-adapters`: SDK local-key and Myc NIP-46 signer providers plus configured-signer product
-  write APIs
+Farm, listing, and trade preparation is deterministic and side-effect-free.
+Commit operations accept native operation and idempotency identities,
+cancellation policy, and an explicit transport profile, then return the
+canonical sync receipt. Repeating the same idempotent request is the supported
+resume/replay path.
 
-The crate is licensed as `MIT OR Apache-2.0`. Its manifest is configured for a future crates.io
-release, but a public release still requires the full SDK check lane, generated artifact
-reproducibility checks, metadata review, and a publish dry run.
+## Reliability and privacy
 
-Runtime errors use a non-exhaustive `RadrootsSdkError` enum. Public callers should branch on the
-stable method surface: `code`, `class`, `retryable`, `detail_json`, and `recovery_actions`.
+Backup, restore, integrity, and status operations delegate to
+`radroots_storage::StorageReliability` and return its native versioned plans,
+manifests, revisions, stages, and status values. Restore is staged and must be
+explicitly finalized. Client shutdown is explicit and asynchronous.
 
-## Runtime DTO Stability
+Public farm/listing events contain only the coarse locality represented by the
+canonical event model. Exact coordinates, private trade terms, protected
+content, and key references remain behind the private-artifact and secrets
+SPIs. Diagnostics contain only capability and canonical storage status. Public
+errors and daemon failures use stable, redacted classifications while retaining
+private source chains for local diagnostics.
 
-Runtime request DTOs are constructor-led and marked non-exhaustive where they carry public fields:
-`ListingPreparePublishRequest`, `ListingEnqueuePublishRequest`, `SubmitProposalRequest`,
-`ProposeRevisionRequest`, `DecideCandidateRequest`, `CancelTradeRequest`, `ResumeOperationRequest`,
-`GetTradeRequest`, `ListTradesRequest`, `RefreshTradeEvidenceRequest`, `InspectEvidenceRequest`,
-`StorageStatusRequest`, `BackupRequest`, `IntegrityRequest`, `SyncStatusRequest`, and
-`PushOutboxRequest`. Restore uses the same request posture through `RestoreRequest`. Use `new`,
-`parse`, `default`, and `with_*` methods rather than struct literals.
+## Daemon execution
 
-Runtime enums that may gain variants are non-exhaustive. This includes storage, clock,
-target-policy, transport-profile, mutation-state, trade-status, sync-status, relay-auth, and
-push-outbox state or outcome enums.
+The `radrootsd` feature compiles a private HTTP/RPC adapter using the versioned
+`radroots_protocol::radrootsd::transport_publish::v5` contract. Constructing
+`transport::DaemonDelivery` is inert. Network contact occurs only when the host
+invokes `deliver`; bearer credentials are redacted, HTTP error bodies are not
+surfaced, and the response must match the signed event and requested policies.
 
-Runtime receipts and status records expose stable serialized public fields for CLI and local-runtime
-reporting. Future additive reporting must add fields without changing existing serialized field
-names, meanings, or types. Restore archive and receipt records follow that same serialized-field
-stance.
+## Release posture
+
+This package remains `publish = false` until the complete package-realistic
+release qualification and separately authorized publication step. The crate is
+licensed under `MIT OR Apache-2.0`.

@@ -43,6 +43,64 @@ fn manifest_has_final_identity_and_dependency_boundary() {
 }
 
 #[test]
+fn manifest_has_exact_feature_vocabulary_and_explicit_optional_activation() {
+    let features = MANIFEST
+        .split_once("[features]")
+        .expect("feature section")
+        .1
+        .split_once("[dependencies]")
+        .expect("dependency section")
+        .0
+        .lines()
+        .filter_map(|line| line.split_once(" = ").map(|(name, _)| name.trim()))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        features,
+        BTreeSet::from([
+            "default",
+            "full",
+            "geonames",
+            "knowledge",
+            "local-signing",
+            "memory",
+            "native",
+            "nip46",
+            "nostr",
+            "radrootsd",
+            "sqlite",
+            "sync",
+        ])
+    );
+    for activation in [
+        "dep:radroots_storage_sqlite",
+        "dep:radroots_sync",
+        "dep:radroots_nostr",
+        "dep:radroots_transport_nostr",
+        "dep:radroots_nostr_connect",
+        "dep:radroots_secrets",
+        "dep:reqwest",
+        "dep:serde",
+        "dep:serde_json",
+        "dep:radroots_geonames",
+    ] {
+        assert!(
+            MANIFEST.contains(activation),
+            "missing activation `{activation}`"
+        );
+    }
+    for retired in [
+        "runtime =",
+        "local-runtime",
+        "signer-adapters",
+        "transport-nostr-runtime",
+        "transport-nostr-client",
+        "fixtures =",
+    ] {
+        assert!(!MANIFEST.contains(retired), "retired feature `{retired}`");
+    }
+}
+
+#[test]
 fn root_declares_exact_final_module_skeleton() {
     let actual = ROOT
         .lines()
