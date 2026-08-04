@@ -94,6 +94,7 @@ serde_json = { workspace = true, optional = true, features = ["std"] }
 uuid = { workspace = true, optional = true, features = ["v4"] }
 
 [dev-dependencies]
+nostr = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
