@@ -65,6 +65,7 @@ impl TryFrom<ByteVerifiedDescriptor> for AuthoredImage {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};

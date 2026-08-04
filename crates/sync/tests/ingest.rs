@@ -141,6 +141,12 @@ fn valid_visible_ingest_is_atomic_and_preserves_provenance() {
         &RegistryPolicy::visible(),
     ))
     .expect("visible ingest");
+    assert_eq!(receipt.sync_id().as_bytes(), &[1; 16]);
+    assert_eq!(
+        receipt.commit_disposition(),
+        radroots_storage::atomic::AtomicCommitDisposition::Committed
+    );
+    assert_eq!(receipt.committed_at_unix_ms(), 1_800_000_200_000);
     assert_eq!(receipt.admission().stage(), AdmissionStage::Visible);
     assert_eq!(
         receipt.admission().disposition(),

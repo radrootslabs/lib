@@ -466,6 +466,27 @@ mod tests {
             plans[0].private_terms().unwrap().artifact_id(),
             "artifact-1"
         );
+        let private = plans[0].private_terms().expect("private terms");
+        assert_eq!(
+            private.candidate_id(),
+            match &plans[0].mutation().body {
+                TradeMutationBodyV1::Proposal { candidate } =>
+                    candidate.candidate_id.as_ref().expect("candidate id"),
+                _ => unreachable!(),
+            }
+        );
+        assert_eq!(private.schema_id(), "radroots.private.fulfillment.v1");
+        assert_eq!(private.ciphertext_commitment(), "ee".repeat(32));
+        assert_eq!(
+            plans[0].mutation_id(),
+            plans[0]
+                .mutation()
+                .mutation_id
+                .as_ref()
+                .expect("mutation id")
+        );
+        assert_eq!(plans[0].trade_id(), &plans[0].mutation().trade_id);
+        assert_eq!(plans[0].clone().into_mutation(), *plans[0].mutation());
         for plan in &plans[1..] {
             let expected = if plan.kind() == TradeMutationKindV1::RevisionProposal {
                 &[
@@ -504,9 +525,14 @@ mod tests {
         let mut invalid = all_operation_mutations().remove(1);
         invalid.parent_mutation_ids.clear();
         assert_eq!(
-            WorkflowPlan::prepare(invalid).unwrap_err().kind(),
+            WorkflowPlan::prepare(invalid.clone()).unwrap_err().kind(),
             ErrorKind::InvalidMutation
         );
+        let error = WorkflowPlan::prepare(invalid).expect_err("invalid mutation");
+        assert!(error.protocol_error().is_some());
+        assert!(!error.to_string().is_empty());
+        #[cfg(feature = "std")]
+        assert!(core::error::Error::source(&error).is_some());
     }
 
     #[cfg(feature = "json")]

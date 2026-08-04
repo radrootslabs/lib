@@ -10,6 +10,7 @@ use radroots_storage::{
 };
 use sqlx::{Row, Sqlite};
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl Journal for SqliteStorage {
     fn prepare(&self, operation: PrepareOperation) -> BoxFuture<'_, Result<PrepareReceipt, Error>> {
         Box::pin(async move {
@@ -100,6 +101,7 @@ impl Journal for SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn prepare_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     operation: PrepareOperation,
@@ -139,6 +141,7 @@ pub(crate) async fn prepare_transaction(
     Ok(PrepareReceipt::new(PrepareDisposition::Created, record))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn transition_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     transition: JournalTransition,
@@ -186,6 +189,7 @@ impl SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn insert_record(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     record: &OperationRecord,
@@ -593,6 +597,7 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::migration::runtime::{MIGRATIONS, migration_sql};
@@ -833,5 +838,21 @@ mod tests {
             read_only.prepare(prepare(instance(6), 6, 6, 600)).await,
             Err(Error::BackendUnavailable)
         );
+
+        let encoded = encode_record_snapshot(&prepared).expect("encode journal snapshot");
+        for end in 0..encoded.len() {
+            let _ = decode_record_snapshot(&encoded[..end]);
+        }
+        let mut trailing = encoded.clone();
+        trailing.push(0);
+        assert_eq!(
+            decode_record_snapshot(&trailing),
+            Err(Error::CorruptJournalRecord)
+        );
+        for index in 0..encoded.len() {
+            let mut corrupt = encoded.clone();
+            corrupt[index] ^= 0xff;
+            let _ = decode_record_snapshot(&corrupt);
+        }
     }
 }

@@ -428,3 +428,150 @@ fn bounds_generations_and_status_reject_invalid_state() {
         Err(Error::CorruptStoredEvent)
     );
 }
+
+#[test]
+fn event_value_models_cover_bounds_accessors_and_durable_reconstruction() {
+    let generation = SourceGeneration::new([1; 32]).expect("generation");
+    let other_generation = SourceGeneration::new([2; 32]).expect("other generation");
+    let sequence = EventSequence::new(1).expect("sequence");
+    let position = EventPosition::new(generation, sequence);
+    assert_eq!(generation.as_bytes(), &[1; 32]);
+    assert_eq!(sequence.get(), 1);
+    assert_eq!(position.generation(), generation);
+    assert_eq!(position.sequence(), sequence);
+
+    assert_eq!(
+        EventQueryBounds::first(radroots_storage::event::EVENT_QUERY_LIMIT_MAX + 1),
+        Err(Error::InvalidEventQueryLimit)
+    );
+    let bounds = EventQueryBounds::first(1).expect("bounds").after(position);
+    assert_eq!(bounds.limit(), 1);
+    assert_eq!(bounds.cursor(), Some(position));
+    let event = signed_event();
+    let event_id = *event.id();
+    assert_eq!(
+        EventQuery::for_ids(bounds, Vec::new()),
+        Err(Error::EmptyEventQueryIds)
+    );
+    assert_eq!(
+        EventQuery::for_ids(bounds, vec![event_id, event_id]),
+        Err(Error::DuplicateEventQueryId)
+    );
+    assert_eq!(
+        EventQuery::for_ids(
+            bounds,
+            vec![event_id; radroots_storage::event::EVENT_QUERY_ID_MAX + 1]
+        ),
+        Err(Error::TooManyEventQueryIds)
+    );
+    let all = EventQuery::all(bounds);
+    assert!(all.event_ids().is_empty());
+    assert!(all.selects(&event_id));
+    let selected = EventQuery::for_ids(bounds, vec![event_id]).expect("selected query");
+    assert_eq!(selected.bounds(), bounds);
+    assert_eq!(selected.event_ids(), &[event_id]);
+    assert!(selected.selects(&event_id));
+    let other_event_id = EventId::parse("f".repeat(64)).expect("other event id");
+    assert!(!selected.selects(&other_event_id));
+
+    let raw_admission = EventAdmission::raw(observed(event.clone(), 1));
+    assert_eq!(raw_admission.stage(), AdmissionStage::Raw);
+    assert_eq!(raw_admission.event(), &event);
+    assert_eq!(raw_admission.event_id(), &event_id);
+    assert_eq!(raw_admission.provenance().observed_at_unix_ms(), 1);
+    assert!(raw_admission.verified_event().is_none());
+    assert!(raw_admission.visible_event().is_none());
+    let verified_admission =
+        EventAdmission::verified(observed(event.clone(), 2), verified(&event)).expect("verified");
+    assert!(verified_admission.verified_event().is_some());
+    assert!(verified_admission.visible_event().is_none());
+    let visible_admission =
+        EventAdmission::visible(observed(event.clone(), 3), visible(&event)).expect("visible");
+    assert!(visible_admission.verified_event().is_some());
+    assert!(visible_admission.visible_event().is_some());
+    assert_eq!(
+        EventAdmission::visible(
+            observed(signed_event_with_signature("43"), 4),
+            visible(&event)
+        ),
+        Err(Error::AdmissionEventMismatch)
+    );
+
+    let receipt = AdmissionReceipt::new(
+        event_id,
+        position,
+        AdmissionStage::Raw,
+        AdmissionDisposition::Inserted,
+    );
+    assert_eq!(receipt.event_id(), &event_id);
+    assert_eq!(receipt.position(), position);
+    assert_eq!(receipt.stage(), AdmissionStage::Raw);
+    assert_eq!(receipt.disposition(), AdmissionDisposition::Inserted);
+    let stored_raw = StoredRawEvent::new(position, event.clone(), AdmissionStage::Raw);
+    assert_eq!(stored_raw.position(), position);
+    assert_eq!(stored_raw.event(), &event);
+    assert_eq!(stored_raw.stage(), AdmissionStage::Raw);
+    let stored_verified = StoredVerifiedEvent::new(position, event.clone());
+    assert_eq!(stored_verified.position(), position);
+    assert_eq!(stored_verified.event(), &event);
+    let stored_visible = StoredVisibleEvent::new(position, event);
+    assert_eq!(stored_visible.position(), position);
+    assert_eq!(stored_visible.event().id(), &event_id);
+
+    assert_eq!(
+        EventPage::new(
+            generation,
+            vec![1, 2],
+            None,
+            EventQueryBounds::first(1).unwrap()
+        ),
+        Err(Error::EventPageLimitExceeded)
+    );
+    assert_eq!(
+        EventPage::<u8>::new(
+            generation,
+            vec![],
+            Some(EventPosition::new(other_generation, sequence)),
+            EventQueryBounds::first(1).unwrap(),
+        ),
+        Err(Error::CursorGenerationMismatch)
+    );
+    let page = EventPage::new(generation, vec![1], Some(position), bounds).expect("page");
+    assert_eq!(page.generation(), generation);
+    assert_eq!(page.items(), &[1]);
+    assert_eq!(page.next_cursor(), Some(position));
+
+    let provenance = observed(signed_event(), 5).provenance().clone();
+    let stored = StoredEventProvenance::new(position, provenance.clone());
+    assert_eq!(stored.position(), position);
+    assert_eq!(stored.provenance(), &provenance);
+    let reconstructed = StoredEventProvenance::from_stored_parts(
+        position,
+        "nostr",
+        provenance.target().as_str(),
+        5,
+        Some("cursor"),
+    )
+    .expect("stored provenance");
+    assert_eq!(
+        reconstructed.provenance().cursor().unwrap().as_str(),
+        "cursor"
+    );
+    for (transport, target, observed_at, cursor) in [
+        ("BAD ID", provenance.target().as_str(), 5, None),
+        ("nostr", "bad", 5, None),
+        ("nostr", provenance.target().as_str(), 0, None),
+        ("nostr", provenance.target().as_str(), 5, Some(" bad")),
+    ] {
+        assert_eq!(
+            StoredEventProvenance::from_stored_parts(
+                position,
+                transport,
+                target,
+                observed_at,
+                cursor,
+            ),
+            Err(Error::CorruptStoredEvent)
+        );
+    }
+}

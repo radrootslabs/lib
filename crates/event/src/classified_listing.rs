@@ -74,6 +74,7 @@ pub fn classify_classified_listing_marker_names<'a>(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

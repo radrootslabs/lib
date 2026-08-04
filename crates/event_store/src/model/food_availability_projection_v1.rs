@@ -2,6 +2,7 @@ use super::{
     RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1, RadrootsEventStoreSourceGeneration,
 };
 use crate::RadrootsEventStoreError;
+use crate::error::require_invariant;
 use radroots_blossom::Sha256;
 use radroots_event::{
     food::availability::{
@@ -250,16 +251,16 @@ impl RadrootsStoredFoodAvailabilityV1 {
         source_transition_seq: i64,
         projection: &RadrootsInboundFoodAvailabilityProjection,
     ) -> Result<Self, RadrootsEventStoreError> {
-        if event_seq <= 0 {
-            return Err(food_projection_drift(format!(
+        require_invariant(event_seq > 0, || {
+            food_projection_drift(format!(
                 "event sequence must be positive, found {event_seq}"
-            )));
-        }
-        if source_transition_seq <= 0 {
-            return Err(food_projection_drift(format!(
+            ))
+        })?;
+        require_invariant(source_transition_seq > 0, || {
+            food_projection_drift(format!(
                 "source transition sequence must be positive, found {source_transition_seq}"
-            )));
-        }
+            ))
+        })?;
         projection
             .published_at()
             .validate_created_at(created_at)
@@ -272,12 +273,15 @@ impl RadrootsStoredFoodAvailabilityV1 {
                 "quantity unit does not match the price unit",
             ));
         }
-        if projection.images().len() > RADROOTS_FOOD_IMAGE_MAX_COUNT {
-            return Err(food_projection_drift(format!(
-                "bounded projection has {} images; maximum is {RADROOTS_FOOD_IMAGE_MAX_COUNT}",
-                projection.images().len()
-            )));
-        }
+        require_invariant(
+            projection.images().len() <= RADROOTS_FOOD_IMAGE_MAX_COUNT,
+            || {
+                food_projection_drift(format!(
+                    "bounded projection has {} images; maximum is {RADROOTS_FOOD_IMAGE_MAX_COUNT}",
+                    projection.images().len()
+                ))
+            },
+        )?;
 
         let images = projection
             .images()
@@ -517,6 +521,11 @@ mod tests {
             diagnosed.diagnostics(),
             &[RadrootsFoodAvailabilityImageDiagnostic::DimensionsMissing]
         );
+        assert_eq!(qualified.image_index(), 0);
+        assert_eq!(qualified.raw_tag()[0], "image");
+        assert_eq!(qualified.url(), Some("https://example.test/image.webp"));
+        assert_eq!(qualified.dimensions(), None);
+        assert_eq!(qualified.blossom_sha256(), None);
     }
 
     #[test]
@@ -528,5 +537,47 @@ mod tests {
             ),
             Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
         ));
+    }
+
+    #[test]
+    fn projection_diagnostics_reject_drift_and_preserve_order() {
+        let image = |index, diagnostics| RadrootsStoredFoodAvailabilityImageV1 {
+            image_index: index,
+            raw_tag: vec!["image".to_owned()],
+            url: None,
+            dimensions: None,
+            blossom_sha256: None,
+            diagnostics,
+        };
+
+        let image_level_count = image(
+            0,
+            vec![RadrootsFoodAvailabilityImageDiagnostic::CountExceeded],
+        );
+        assert!(validate_projection_diagnostics(&[], &[image_level_count]).is_err());
+
+        let diagnosed = image(
+            0,
+            vec![RadrootsFoodAvailabilityImageDiagnostic::DimensionsMissing],
+        );
+        assert!(validate_projection_diagnostics(&[], std::slice::from_ref(&diagnosed)).is_err());
+        assert!(
+            validate_projection_diagnostics(
+                &[RadrootsFoodAvailabilityImageDiagnostic::DimensionsMissing],
+                &[diagnosed],
+            )
+            .is_ok()
+        );
+
+        let retained = (0..RADROOTS_FOOD_IMAGE_MAX_COUNT)
+            .map(|index| image(index as u32, Vec::new()))
+            .collect::<Vec<_>>();
+        assert!(
+            validate_projection_diagnostics(
+                &[RadrootsFoodAvailabilityImageDiagnostic::CountExceeded],
+                &retained,
+            )
+            .is_ok()
+        );
     }
 }

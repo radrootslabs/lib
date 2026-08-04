@@ -195,14 +195,17 @@ fn single_and_multiple_pages_propagate_cursor_deadline_and_ingest_results() {
         next: NextPage::Complete,
     }]));
     let single = engine(single_source.clone(), Arc::new(FixedClock(100)), 50);
-    let receipt = block_on(single.pull(
-        PullRequest::new(targets(), 20, 1).expect("request"),
-        &RegistryPolicy::visible(),
-    ))
-    .expect("pull");
+    let request = PullRequest::new(targets(), 20, 1).expect("request");
+    assert_eq!(request.targets().len(), 1);
+    assert_eq!(request.page_limit(), 20);
+    assert_eq!(request.max_pages(), 1);
+    assert!(request.cursor().is_none());
+    let receipt = block_on(single.pull(request, &RegistryPolicy::visible())).expect("pull");
     assert_eq!(receipt.termination(), PullTermination::Complete);
     assert_eq!(receipt.pages_fetched(), 1);
     assert_eq!(receipt.events_observed(), 1);
+    assert_ne!(receipt.sync_id().as_bytes(), &[0; 16]);
+    assert_eq!(receipt.deadline_unix_ms(), 150);
     assert!(receipt.ingest_outcomes()[0].is_ok());
     assert_eq!(single_source.requests()[0].deadline_unix_ms, 150);
 
@@ -291,6 +294,18 @@ fn source_failure_and_cancelled_page_return_resumable_partial_receipts() {
 fn page_and_deadline_limits_stop_without_hidden_fetches() {
     assert_eq!(
         PullRequest::new(targets(), 0, 1),
+        Err(Error::InvalidPullRequest)
+    );
+    assert_eq!(
+        PullRequest::new(
+            targets(),
+            radroots_transport::source::FETCH_PAGE_MAX_EVENTS + 1,
+            1
+        ),
+        Err(Error::InvalidPullRequest)
+    );
+    assert_eq!(
+        PullRequest::new(targets(), 1, 0),
         Err(Error::InvalidPullRequest)
     );
     assert_eq!(

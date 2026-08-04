@@ -3,6 +3,7 @@ use super::{
     RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore, bool_from_i64, u64_from_i64,
 };
 use crate::RadrootsEventStoreError;
+use crate::error::require_invariant;
 use crate::generated::food_availability_projection_manifest as food_manifest;
 use crate::model::{
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
@@ -183,11 +184,10 @@ async fn ensure_projection_cursor(
     )?;
     let floor: i64 = source.try_get("transition_floor_seq")?;
     let feed_version: i64 = source.try_get("addressable_feed_version")?;
-    if feed_version != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1) {
-        return Err(projection_drift(format!(
-            "addressable feed version is {feed_version}"
-        )));
-    }
+    require_invariant(
+        feed_version == i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1),
+        || projection_drift(format!("addressable feed version is {feed_version}")),
+    )?;
 
     let existing = sqlx::query(
         "SELECT source_generation, feed_version, projection_version, scope_fingerprint, hook_manifest_sha256, last_transition_seq, projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
@@ -208,11 +208,9 @@ async fn ensure_projection_cursor(
             )
             .execute(&mut *connection)
             .await?;
-            if deleted.rows_affected() != 1 {
-                return Err(projection_drift(
-                    "generation reset did not delete exactly one projection cursor",
-                ));
-            }
+            require_invariant(deleted.rows_affected() == 1, || {
+                projection_drift("generation reset did not delete exactly one projection cursor")
+            })?;
         }
     }
 
@@ -233,11 +231,9 @@ async fn ensure_projection_cursor(
         .bind(floor)
         .execute(&mut *connection)
         .await?;
-        if inserted.rows_affected() != 1 {
-            return Err(projection_drift(
-                "projection cursor initialization did not insert one row",
-            ));
-        }
+        require_invariant(inserted.rows_affected() == 1, || {
+            projection_drift("projection cursor initialization did not insert one row")
+        })?;
     }
 
     let row = sqlx::query(
@@ -268,19 +264,19 @@ fn validate_cursor_identity(
         "stored cursor generation is invalid",
     )?;
     let scope_fingerprint: Vec<u8> = row.try_get("scope_fingerprint")?;
-    if stored_generation != generation
-        || row.try_get::<i64, _>("feed_version")?
-            != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1)
-        || row.try_get::<i64, _>("projection_version")?
-            != i64::from(RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1)
-        || scope_fingerprint.as_slice() != scope.fingerprint().as_bytes().as_slice()
-        || row.try_get::<String, _>("hook_manifest_sha256")?
-            != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256
-    {
-        return Err(projection_drift(
-            "projection cursor identity is inconsistent",
-        ));
-    }
+    let identity_matches = [
+        stored_generation == generation,
+        row.try_get::<i64, _>("feed_version")?
+            == i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1),
+        row.try_get::<i64, _>("projection_version")?
+            == i64::from(RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1),
+        scope_fingerprint.as_slice() == scope.fingerprint().as_bytes().as_slice(),
+        row.try_get::<String, _>("hook_manifest_sha256")?
+            == food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256,
+    ];
+    require_invariant(identity_matches == [true; 5], || {
+        projection_drift("projection cursor identity is inconsistent")
+    })?;
     validate_projected_row_count(row.try_get("projected_row_count")?)?;
     Ok(())
 }
@@ -297,11 +293,9 @@ async fn advance_projection_cursor(
         .ok_or_else(|| projection_drift("projection row count overflowed"))?;
     validate_projected_row_count(next_projected_row_count)?;
     if next.last_transition_seq() == expected.feed_cursor.last_transition_seq() {
-        if projected_row_delta != 0 {
-            return Err(projection_drift(
-                "projection row count changed without a feed transition",
-            ));
-        }
+        require_invariant(projected_row_delta == 0, || {
+            projection_drift("projection row count changed without a feed transition")
+        })?;
         return Ok(expected.clone());
     }
     let updated = sqlx::query(
@@ -314,13 +308,13 @@ async fn advance_projection_cursor(
     .bind(expected.projected_row_count)
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return Err(projection_drift(format!(
+    require_invariant(updated.rows_affected() == 1, || {
+        projection_drift(format!(
             "projection cursor compare-and-swap expected sequence {} and row count {}",
             expected.feed_cursor.last_transition_seq(),
             expected.projected_row_count,
-        )));
-    }
+        ))
+    })?;
     Ok(FoodAvailabilityProjectionCursorState {
         feed_cursor: next,
         projected_row_count: next_projected_row_count,
@@ -355,19 +349,20 @@ async fn apply_transition(
             .bind(retracted.event_id().to_hex())
             .execute(&mut *connection)
             .await?;
-            if deleted.rows_affected() != 1 {
-                return Err(projection_drift(
-                    "pending FoodAvailability retraction did not delete one row",
-                ));
-            }
+            require_invariant(deleted.rows_affected() == 1, || {
+                projection_drift("pending FoodAvailability retraction did not delete one row")
+            })?;
             projected_row_delta = -1;
         }
         (Some(existing), None) if visible_event_id.as_deref() == Some(existing) => {
-            if transition.contract_id() != Some(FOOD_AVAILABILITY_CONTRACT_ID) {
-                return Err(projection_drift(
-                    "unchanged visible FoodAvailability event lost its contract admission",
-                ));
-            }
+            require_invariant(
+                transition.contract_id() == Some(FOOD_AVAILABILITY_CONTRACT_ID),
+                || {
+                    projection_drift(
+                        "unchanged visible FoodAvailability event lost its contract admission",
+                    )
+                },
+            )?;
             return Ok(0);
         }
         (Some(_), _) => {
@@ -404,15 +399,15 @@ async fn apply_transition(
             }
         };
     let event = ingest.event();
-    if canonical.event_id().to_hex() != event.id_hex()
-        || canonical.pubkey() != event.author()
-        || canonical.created_at() != event.created_at_u64()
-        || canonical.kind() != event.kind_u32()
-    {
-        return Err(projection_drift(
-            "canonical event identity disagrees with its verified raw JSON",
-        ));
-    }
+    let canonical_identity_matches = [
+        canonical.event_id().to_hex() == event.id_hex(),
+        canonical.pubkey() == event.author(),
+        canonical.created_at() == event.created_at_u64(),
+        canonical.kind() == event.kind_u32(),
+    ];
+    require_invariant(canonical_identity_matches == [true; 4], || {
+        projection_drift("canonical event identity disagrees with its verified raw JSON")
+    })?;
     let stored = RadrootsStoredFoodAvailabilityV1::from_projection(
         transition.source_generation(),
         *canonical.pubkey(),
@@ -465,11 +460,9 @@ async fn persist_projection(
     .bind(projection.source_transition_seq())
     .execute(&mut *connection)
     .await?;
-    if inserted.rows_affected() != 1 {
-        return Err(projection_drift(
-            "FoodAvailability projection insert did not affect one row",
-        ));
-    }
+    require_invariant(inserted.rows_affected() == 1, || {
+        projection_drift("FoodAvailability projection insert did not affect one row")
+    })?;
     for image in projection.images() {
         persist_image(connection, projection, image).await?;
     }
@@ -500,11 +493,9 @@ async fn persist_image(
     .bind(diagnostics_json)
     .execute(&mut *connection)
     .await?;
-    if inserted.rows_affected() != 1 {
-        return Err(projection_drift(
-            "FoodAvailability image insert did not affect one row",
-        ));
-    }
+    require_invariant(inserted.rows_affected() == 1, || {
+        projection_drift("FoodAvailability image insert did not affect one row")
+    })?;
     Ok(())
 }
 
@@ -535,12 +526,12 @@ pub(crate) async fn validate_food_availability_projection_hook_v1(
     }
     let actual_row_count = i64::try_from(actual_coordinates.len())
         .map_err(|_| projection_drift("projection row count exceeds i64"))?;
-    if actual_row_count != state.projected_row_count {
-        return Err(projection_drift(format!(
+    require_invariant(actual_row_count == state.projected_row_count, || {
+        projection_drift(format!(
             "projection row count {} differs from sealed count {}",
             actual_row_count, state.projected_row_count,
-        )));
-    }
+        ))
+    })?;
     let expected_coordinates = sqlx::query(
         "SELECT pubkey, d_tag, raw_head_event_id, raw_head_event_seq, raw_head_created_at FROM radroots_event_store_addressable_head_state WHERE source_generation = ? AND kind = 30402 AND admission_status = 'admitted' AND admission_code IS NULL AND contract_id = ? AND visibility = 'visible' AND nip09_outcome = 'visible' ORDER BY pubkey, d_tag",
     )
@@ -559,22 +550,22 @@ pub(crate) async fn validate_food_availability_projection_hook_v1(
         ))
     })
     .collect::<Result<Vec<_>, _>>()?;
-    if actual_coordinates != expected_coordinates {
-        return Err(projection_drift(
+    require_invariant(actual_coordinates == expected_coordinates, || {
+        projection_drift(
             "projection coordinate witnesses do not equal the current admitted, visible FoodAvailability heads",
-        ));
-    }
+        )
+    })?;
     let fts_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM radroots_event_store_food_availability_search_fts",
     )
     .fetch_one(&mut *connection)
     .await?;
-    if fts_count != state.projected_row_count {
-        return Err(projection_drift(format!(
+    require_invariant(fts_count == state.projected_row_count, || {
+        projection_drift(format!(
             "FoodAvailability FTS row count {fts_count} differs from sealed count {}",
             state.projected_row_count,
-        )));
-    }
+        ))
+    })?;
     #[cfg(test)]
     wait_at_food_availability_audit_fts_checkpoint().await;
     sqlx::query(
@@ -605,12 +596,11 @@ async fn validate_projection_source_transition(
     .bind(FOOD_AVAILABILITY_CONTRACT_ID)
     .fetch_one(&mut *connection)
     .await?;
-    if authoritative != 1 {
-        return Err(projection_drift(
+    require_invariant(authoritative == 1, || {
+        projection_drift(
             "stored FoodAvailability source transition is not authoritative for its projection",
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 #[cfg(test)]
@@ -659,21 +649,19 @@ async fn food_availability_projection_cursor_state_fast_v1(
         .checked_sub(generation_floor)
         .filter(|count| *count >= 0)
         .ok_or_else(|| projection_drift("source high-water precedes its transition floor"))?;
-    if row.try_get::<i64, _>("addressable_feed_version")?
-        != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1)
-        || integrity_floor != generation_floor
-        || integrity_high_water != source_high_water
-        || transition_count != expected_transition_count
-    {
-        return Err(projection_drift(
-            "active addressable feed integrity seal is inconsistent",
-        ));
-    }
-    if cursor_high_water != source_high_water {
-        return Err(projection_drift(
-            "projection cursor is not at the source high-water",
-        ));
-    }
+    let feed_integrity_matches = [
+        row.try_get::<i64, _>("addressable_feed_version")?
+            == i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1),
+        integrity_floor == generation_floor,
+        integrity_high_water == source_high_water,
+        transition_count == expected_transition_count,
+    ];
+    require_invariant(feed_integrity_matches == [true; 4], || {
+        projection_drift("active addressable feed integrity seal is inconsistent")
+    })?;
+    require_invariant(cursor_high_water == source_high_water, || {
+        projection_drift("projection cursor is not at the source high-water")
+    })?;
     let projected_row_count: i64 = row.try_get("projected_row_count")?;
     validate_projected_row_count(projected_row_count)?;
     Ok(FoodAvailabilityProjectionCursorState {
@@ -714,23 +702,27 @@ fn load_and_validate_projection_row(
     let raw_json: String = row.try_get("immutable_raw_json")?;
     let ingest = RadrootsEventIngest::from_raw_json(raw_json, 0)
         .map_err(|error| projection_drift(format!("projected event reverify failed: {error}")))?;
-    if ingest.event().id() != &event_id
-        || ingest.event().author() != &pubkey
-        || ingest.event().created_at_u64() != created_at
-        || ingest.event().kind_u32() != 30_402
-    {
-        return Err(projection_drift(
-            "projection identity disagrees with immutable signed event",
-        ));
-    }
+    let event_identity_matches = [
+        ingest.event().id() == &event_id,
+        ingest.event().author() == &pubkey,
+        ingest.event().created_at_u64() == created_at,
+        ingest.event().kind_u32() == 30_402,
+    ];
+    require_invariant(event_identity_matches == [true; 4], || {
+        projection_drift("projection identity disagrees with immutable signed event")
+    })?;
     let admission = EventAdmission::for_profile(
         ReconciliationProfile::Nip09V1RegistryV7,
         ingest.verified_event(),
     )
     .map_err(|error| projection_drift(format!("stored admission is invalid: {error}")))?;
-    if admission.status != RadrootsEventAdmissionStatus::Admitted
-        || admission.contract.map(|contract| contract.id) != Some(FOOD_AVAILABILITY_CONTRACT_ID)
-    {
+    if (
+        admission.status,
+        admission.contract.map(|contract| contract.id),
+    ) != (
+        RadrootsEventAdmissionStatus::Admitted,
+        Some(FOOD_AVAILABILITY_CONTRACT_ID),
+    ) {
         return Err(projection_drift(
             "projected event is not registry-v7 FoodAvailability",
         ));
@@ -772,34 +764,29 @@ fn validate_projection_columns(
     let expected_diagnostics = diagnostic_codes_json(expected.diagnostics())?;
     let quantity_amount = expected.quantity().map(|quantity| quantity.amount());
     let quantity_unit = expected.quantity().map(|quantity| quantity.unit().as_str());
-    if row.try_get::<String, _>("d_tag")? != expected.identifier().as_str()
-        || row.try_get::<String, _>("contract_id")? != FOOD_AVAILABILITY_CONTRACT_ID
-        || row.try_get::<String, _>("content")? != expected.content().as_str()
-        || row.try_get::<String, _>("title")? != expected.title().as_str()
-        || row.try_get::<String, _>("summary")? != expected.summary().as_str()
-        || u64_from_i64("food.published_at", row.try_get("published_at")?)
-            .map_err(|error| projection_drift(error.to_string()))?
-            != expected.published_at().as_u64()
-        || row.try_get::<String, _>("location")? != expected.location().as_str()
-        || row.try_get::<String, _>("price_amount")? != expected.price().amount()
-        || row.try_get::<String, _>("price_currency")? != expected.price().currency().as_str()
-        || row.try_get::<String, _>("price_unit")? != expected.price().unit().as_str()
-        || row
-            .try_get::<Option<String>, _>("quantity_amount")?
-            .as_deref()
-            != quantity_amount
-        || row
-            .try_get::<Option<String>, _>("quantity_unit")?
-            .as_deref()
-            != quantity_unit
-        || row.try_get::<String, _>("status")? != expected.status().as_str()
-        || row.try_get::<String, _>("diagnostic_codes_json")? != expected_diagnostics
-    {
-        return Err(projection_drift(
-            "stored FoodAvailability columns differ from registry-v7 reprojection",
-        ));
-    }
-    Ok(())
+    let published_at = u64_from_i64("food.published_at", row.try_get("published_at")?)
+        .map_err(|error| projection_drift(error.to_string()))?;
+    let stored_quantity_amount: Option<String> = row.try_get("quantity_amount")?;
+    let stored_quantity_unit: Option<String> = row.try_get("quantity_unit")?;
+    let columns_match = [
+        row.try_get::<String, _>("d_tag")? == expected.identifier().as_str(),
+        row.try_get::<String, _>("contract_id")? == FOOD_AVAILABILITY_CONTRACT_ID,
+        row.try_get::<String, _>("content")? == expected.content().as_str(),
+        row.try_get::<String, _>("title")? == expected.title().as_str(),
+        row.try_get::<String, _>("summary")? == expected.summary().as_str(),
+        published_at == expected.published_at().as_u64(),
+        row.try_get::<String, _>("location")? == expected.location().as_str(),
+        row.try_get::<String, _>("price_amount")? == expected.price().amount(),
+        row.try_get::<String, _>("price_currency")? == expected.price().currency().as_str(),
+        row.try_get::<String, _>("price_unit")? == expected.price().unit().as_str(),
+        stored_quantity_amount.as_deref() == quantity_amount,
+        stored_quantity_unit.as_deref() == quantity_unit,
+        row.try_get::<String, _>("status")? == expected.status().as_str(),
+        row.try_get::<String, _>("diagnostic_codes_json")? == expected_diagnostics,
+    ];
+    require_invariant(columns_match == [true; 14], || {
+        projection_drift("stored FoodAvailability columns differ from registry-v7 reprojection")
+    })
 }
 
 #[derive(Deserialize)]
@@ -822,11 +809,9 @@ fn validate_image_rows(
     let rows: Vec<StoredFoodAvailabilityImageRowV1> =
         serde_json::from_str(stored_images_json.as_str())
             .map_err(|error| projection_drift(format!("stored image rows are invalid: {error}")))?;
-    if rows.len() != expected.images().len() {
-        return Err(projection_drift(
-            "stored FoodAvailability image count differs",
-        ));
-    }
+    require_invariant(rows.len() == expected.images().len(), || {
+        projection_drift("stored FoodAvailability image count differs")
+    })?;
     for (row, image) in rows.into_iter().zip(expected.images()) {
         let dimensions = image.dimensions();
         let stored_blossom_sha256 = row
@@ -837,24 +822,24 @@ fn validate_image_rows(
                 })
             })
             .transpose()?;
-        if row.image_index != i64::from(image.image_index())
-            || row.raw_tag_json
-                != serde_json::to_string(image.raw_tag()).map_err(|error| {
-                    projection_drift(format!("expected image tag is not serializable: {error}"))
-                })?
-            || row.url.as_deref() != image.url()
-            || row.width != dimensions.map(|value| i64::from(value.width()))
-            || row.height != dimensions.map(|value| i64::from(value.height()))
-            || stored_blossom_sha256 != image.blossom_sha256()
-            || bool_from_i64("food.image.qualifies", row.qualifies)
-                .map_err(|error| projection_drift(error.to_string()))?
-                != image.qualifies()
-            || row.diagnostic_codes_json != diagnostic_codes_json(image.diagnostics())?
-        {
-            return Err(projection_drift(
-                "stored FoodAvailability image differs from registry-v7 reprojection",
-            ));
-        }
+        let expected_raw_tag_json = serde_json::to_string(image.raw_tag()).map_err(|error| {
+            projection_drift(format!("expected image tag is not serializable: {error}"))
+        })?;
+        let stored_qualifies = bool_from_i64("food.image.qualifies", row.qualifies)
+            .map_err(|error| projection_drift(error.to_string()))?;
+        let image_matches = [
+            row.image_index == i64::from(image.image_index()),
+            row.raw_tag_json == expected_raw_tag_json,
+            row.url.as_deref() == image.url(),
+            row.width == dimensions.map(|value| i64::from(value.width())),
+            row.height == dimensions.map(|value| i64::from(value.height())),
+            stored_blossom_sha256 == image.blossom_sha256(),
+            stored_qualifies == image.qualifies(),
+            row.diagnostic_codes_json == diagnostic_codes_json(image.diagnostics())?,
+        ];
+        require_invariant(image_matches == [true; 8], || {
+            projection_drift("stored FoodAvailability image differs from registry-v7 reprojection")
+        })?;
     }
     Ok(())
 }
@@ -870,19 +855,18 @@ async fn validate_fts_row(
     .fetch_optional(&mut *connection)
     .await?
     .ok_or_else(|| projection_drift("FoodAvailability FTS row is missing"))?;
-    if row.try_get::<String, _>("event_id")? != projection.event_id().to_hex()
-        || row.try_get::<String, _>("pubkey")? != projection.pubkey().to_hex()
-        || row.try_get::<String, _>("d_tag")? != projection.identifier().as_str()
-        || row.try_get::<String, _>("title")? != projection.title().as_str()
-        || row.try_get::<String, _>("summary")? != projection.summary().as_str()
-        || row.try_get::<String, _>("content")? != projection.content().as_str()
-        || row.try_get::<String, _>("location")? != projection.location().as_str()
-    {
-        return Err(projection_drift(
-            "FoodAvailability FTS row differs from projection",
-        ));
-    }
-    Ok(())
+    let fts_matches = [
+        row.try_get::<String, _>("event_id")? == projection.event_id().to_hex(),
+        row.try_get::<String, _>("pubkey")? == projection.pubkey().to_hex(),
+        row.try_get::<String, _>("d_tag")? == projection.identifier().as_str(),
+        row.try_get::<String, _>("title")? == projection.title().as_str(),
+        row.try_get::<String, _>("summary")? == projection.summary().as_str(),
+        row.try_get::<String, _>("content")? == projection.content().as_str(),
+        row.try_get::<String, _>("location")? == projection.location().as_str(),
+    ];
+    require_invariant(fts_matches == [true; 7], || {
+        projection_drift("FoodAvailability FTS row differs from projection")
+    })
 }
 
 fn diagnostic_codes_json(
@@ -898,14 +882,14 @@ fn diagnostic_codes_json(
 }
 
 fn validate_query_limit(limit: u32) -> Result<(), RadrootsEventStoreError> {
-    if !(1..=RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX).contains(&limit) {
-        return Err(RadrootsEventStoreError::QueryLimitOutOfRange {
+    require_invariant(
+        (1..=RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX).contains(&limit),
+        || RadrootsEventStoreError::QueryLimitOutOfRange {
             min: 1,
             max: RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,
             actual: limit,
-        });
-    }
-    Ok(())
+        },
+    )
 }
 
 fn projection_drift(reason: impl Into<String>) -> RadrootsEventStoreError {
@@ -915,12 +899,9 @@ fn projection_drift(reason: impl Into<String>) -> RadrootsEventStoreError {
 }
 
 fn validate_projected_row_count(value: i64) -> Result<(), RadrootsEventStoreError> {
-    if value < 0 {
-        return Err(projection_drift(format!(
-            "projection cursor has negative row count {value}",
-        )));
-    }
-    Ok(())
+    require_invariant(value >= 0, || {
+        projection_drift(format!("projection cursor has negative row count {value}",))
+    })
 }
 
 fn projection_generation_from_blob(

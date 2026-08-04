@@ -4,12 +4,15 @@ use futures_executor::block_on;
 use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
-    EventStore, Journal, Outbox, ProjectionStore,
+    Error, EventStore, Journal, Outbox, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicStorage,
         AtomicWorkflow, CommitIngested, CommitSigned,
     },
-    event::{EventAdmission, EventQuery, EventQueryBounds, SourceGeneration},
+    event::{
+        EventAdmission, EventPosition, EventQuery, EventQueryBounds, EventSequence,
+        SourceGeneration,
+    },
     journal::{
         IdempotencyDigest, IdempotencyKey, JournalRevision, JournalStage, OperationInstanceId,
         PrepareOperation,
@@ -344,5 +347,283 @@ fn atomic_projection_failure_leaves_event_and_checkpoint_unchanged() {
             .expect("checkpoint")
             .projected_rows(),
         2
+    );
+}
+
+#[test]
+fn memory_event_journal_and_closed_state_fail_closed() {
+    let generation = SourceGeneration::new([7; 32]).unwrap();
+    let store = MemoryStorage::new(generation);
+    assert_eq!(store.generation(), generation);
+    let event = signed_event();
+    let inserted = block_on(store.admit(admission(event.clone(), 10))).unwrap();
+    assert_eq!(
+        block_on(store.admit(admission(event.clone(), 10)))
+            .unwrap()
+            .disposition(),
+        radroots_storage::event::AdmissionDisposition::Duplicate
+    );
+    let wrong_cursor = EventPosition::new(
+        SourceGeneration::new([8; 32]).unwrap(),
+        EventSequence::new(1).unwrap(),
+    );
+    let query = EventQuery::all(EventQueryBounds::first(1).unwrap().after(wrong_cursor));
+    assert_eq!(
+        block_on(store.query_raw(query)),
+        Err(Error::SourceGenerationChanged)
+    );
+    assert_eq!(
+        block_on(store.query_provenance(
+            *event.id(),
+            EventQueryBounds::first(1).unwrap().after(wrong_cursor),
+        )),
+        Err(Error::SourceGenerationChanged)
+    );
+    let after = EventQueryBounds::first(1)
+        .unwrap()
+        .after(inserted.position());
+    assert!(
+        block_on(store.query_provenance(*event.id(), after))
+            .unwrap()
+            .items()
+            .is_empty()
+    );
+    assert_eq!(
+        block_on(store.query_provenance(
+            radroots_event::EventId::parse("f".repeat(64)).unwrap(),
+            EventQueryBounds::first(1).unwrap(),
+        )),
+        Err(Error::EventNotFound)
+    );
+
+    let instance = OperationInstanceId::new([1; 16]).unwrap();
+    let operation = prepare(instance);
+    block_on(store.prepare(operation.clone())).unwrap();
+    assert_eq!(
+        block_on(
+            store.prepare(
+                PrepareOperation::new(
+                    instance,
+                    OperationId::SyncPush,
+                    IdempotencyKey::parse("memory-operation").unwrap(),
+                    IdempotencyDigest::new([4; 32]),
+                    100,
+                )
+                .unwrap()
+            )
+        ),
+        Err(Error::IdempotencyConflict)
+    );
+    assert_eq!(
+        block_on(
+            store.prepare(
+                PrepareOperation::new(
+                    instance,
+                    OperationId::SyncPush,
+                    IdempotencyKey::parse("different-key").unwrap(),
+                    IdempotencyDigest::new([3; 32]),
+                    100,
+                )
+                .unwrap()
+            )
+        ),
+        Err(Error::OperationIdentityMismatch)
+    );
+    assert!(
+        block_on(store.operation(OperationInstanceId::new([2; 16]).unwrap()))
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        block_on(store.by_idempotency_key(
+            OperationId::SyncPull,
+            IdempotencyKey::parse("memory-operation").unwrap()
+        ))
+        .unwrap()
+        .is_none()
+    );
+    assert_eq!(
+        block_on(store.recoverable(0)),
+        Err(Error::InvalidJournalQueryLimit)
+    );
+
+    block_on(radroots_storage::backup::StorageReliability::close(&store)).unwrap();
+    assert_eq!(
+        block_on(EventStore::status(&store)),
+        Err(Error::BackendUnavailable)
+    );
+    assert_eq!(
+        block_on(store.admit(admission(event, 11))),
+        Err(Error::BackendUnavailable)
+    );
+}
+
+#[test]
+fn memory_outbox_conflict_and_claim_matrix_is_complete() {
+    let store = MemoryStorage::default();
+    let make_item = |item: u8, instance: u8, digest: u8, created: u64| {
+        EnqueueOutboxItem::new(
+            OutboxItemId::new([item; 16]).unwrap(),
+            OperationInstanceId::new([instance; 16]).unwrap(),
+            DeliveryPlanDigest::new([digest; 32]),
+            delivery_request(signed_event()),
+            created,
+        )
+        .unwrap()
+    };
+    block_on(store.enqueue(make_item(1, 1, 1, 100))).unwrap();
+    assert_eq!(
+        block_on(store.enqueue(make_item(1, 1, 2, 100))),
+        Err(Error::OutboxPlanConflict)
+    );
+    assert_eq!(
+        block_on(store.enqueue(make_item(2, 1, 1, 100))),
+        Err(Error::OutboxPlanConflict)
+    );
+    assert!(
+        block_on(store.item(OutboxItemId::new([9; 16]).unwrap()))
+            .unwrap()
+            .is_none()
+    );
+    let first_claim = ClaimOutboxItems::new(
+        LeaseOwner::parse("worker").unwrap(),
+        LeaseId::new([3; 16]).unwrap(),
+        200,
+        300,
+        1,
+    )
+    .unwrap();
+    assert_eq!(block_on(store.claim(first_claim)).unwrap().len(), 1);
+    let concurrent = ClaimOutboxItems::new(
+        LeaseOwner::parse("worker-two").unwrap(),
+        LeaseId::new([4; 16]).unwrap(),
+        250,
+        350,
+        1,
+    )
+    .unwrap();
+    assert!(block_on(store.claim(concurrent)).unwrap().is_empty());
+    assert_eq!(
+        block_on(store.release(
+            OutboxItemId::new([9; 16]).unwrap(),
+            LeaseId::new([4; 16]).unwrap(),
+            radroots_storage::outbox::OutboxRevision::INITIAL,
+            260,
+            None,
+        )),
+        Err(Error::OutboxItemNotFound)
+    );
+}
+
+#[test]
+fn memory_projection_and_private_artifact_conflict_matrix_is_complete() {
+    let store = MemoryStorage::default();
+    let projection_id = ProjectionId::parse("memory.matrix").unwrap();
+    let initial = ProjectionGeneration::new([4; 32]).unwrap();
+    let replacement = ProjectionGeneration::new([5; 32]).unwrap();
+    let initial_checkpoint =
+        ProjectionCheckpoint::new(projection_id.clone(), initial, None, 1, 100).unwrap();
+    block_on(store.checkpoint(initial_checkpoint.clone())).unwrap();
+    assert_eq!(
+        block_on(store.checkpoint(
+            ProjectionCheckpoint::new(projection_id.clone(), replacement, None, 2, 101).unwrap()
+        )),
+        Err(Error::ProjectionCheckpointMismatch)
+    );
+    assert_eq!(
+        block_on(store.checkpoint(
+            ProjectionCheckpoint::new(projection_id.clone(), initial, None, 0, 101).unwrap()
+        )),
+        Err(Error::ProjectionCheckpointRegression)
+    );
+    let missing = ProjectionInvalidation::new(
+        ProjectionId::parse("missing").unwrap(),
+        initial,
+        replacement,
+        InvalidationReason::OperatorRequested,
+        110,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.invalidate(missing)),
+        Err(Error::ProjectionCheckpointMismatch)
+    );
+    let wrong = ProjectionInvalidation::new(
+        projection_id.clone(),
+        replacement,
+        ProjectionGeneration::new([6; 32]).unwrap(),
+        InvalidationReason::OperatorRequested,
+        110,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.invalidate(wrong)),
+        Err(Error::ProjectionCheckpointMismatch)
+    );
+    let invalidation = ProjectionInvalidation::new(
+        projection_id.clone(),
+        initial,
+        replacement,
+        InvalidationReason::OperatorRequested,
+        110,
+    )
+    .unwrap();
+    block_on(store.invalidate(invalidation.clone())).unwrap();
+    assert!(
+        block_on(store.invalidation(projection_id.clone(), replacement))
+            .unwrap()
+            .is_some()
+    );
+    let ticket = RebuildTicket::requested(RebuildTicketId::new([7; 16]).unwrap(), invalidation);
+    assert_eq!(
+        block_on(store.request_rebuild(ticket.clone())).unwrap(),
+        ticket
+    );
+    assert_eq!(
+        block_on(store.request_rebuild(ticket.clone())).unwrap(),
+        ticket
+    );
+    assert!(
+        block_on(store.rebuild(ticket.ticket_id()))
+            .unwrap()
+            .is_some()
+    );
+
+    let metadata = private_metadata();
+    assert_eq!(
+        block_on(store.put_metadata(metadata.clone())).unwrap(),
+        metadata
+    );
+    assert_eq!(
+        block_on(store.put_metadata(metadata.clone())).unwrap(),
+        metadata
+    );
+    let conflict = PrivateArtifactMetadata::new(
+        metadata.artifact_id(),
+        ArtifactKind::parse("memory.private").unwrap(),
+        ArtifactSchemaId::parse("memory.private.v1").unwrap(),
+        ArtifactCommitment::new([9; 32]),
+        64,
+        DurableSecretReference::new("memory", "caller-owned-key", 1).unwrap(),
+        RetentionPolicy::new(None, Some(300)).unwrap(),
+        100,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.put_metadata(conflict)),
+        Err(Error::PrivateArtifactConflict)
+    );
+    assert!(
+        block_on(store.metadata(PrivateArtifactId::new([8; 16]).unwrap()))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        block_on(store.expired(0, 1)),
+        Err(Error::InvalidExpiredArtifactQueryLimit)
+    );
+    assert_eq!(
+        block_on(store.expired(1, 0)),
+        Err(Error::InvalidExpiredArtifactQueryLimit)
     );
 }

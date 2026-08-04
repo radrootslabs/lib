@@ -166,8 +166,11 @@ impl SyncStatus {
 impl Engine {
     /// Aggregates passive status without spawning work or initiating recovery.
     pub async fn status(&self, projection_ids: &[ProjectionId]) -> Result<SyncStatus, Error> {
-        if projection_ids.len() > STATUS_PROJECTION_LIMIT
-            || projection_ids.iter().collect::<BTreeSet<_>>().len() != projection_ids.len()
+        if [
+            projection_ids.len() > STATUS_PROJECTION_LIMIT,
+            projection_ids.iter().collect::<BTreeSet<_>>().len() != projection_ids.len(),
+        ]
+        .contains(&true)
         {
             return Err(Error::InvalidStatusRequest);
         }
@@ -306,11 +309,15 @@ fn aggregate_health(
     signer: &CapabilityReport<SignerStatus>,
     projections: &[ProjectionReport],
 ) -> SyncHealth {
-    if matches!(
-        storage.shutdown(),
-        ShutdownState::Closing | ShutdownState::Closed
-    ) || storage.integrity().health() == IntegrityHealth::Corrupt
-        || events.health() == EventStoreHealth::Unavailable
+    if [
+        matches!(
+            storage.shutdown(),
+            ShutdownState::Closing | ShutdownState::Closed
+        ),
+        storage.integrity().health() == IntegrityHealth::Corrupt,
+        events.health() == EventStoreHealth::Unavailable,
+    ]
+    .contains(&true)
     {
         return SyncHealth::Unavailable;
     }
@@ -330,10 +337,13 @@ fn aggregate_health(
             Some(ProjectionHealth::Ready)
         )
     });
-    if storage.integrity().health() != IntegrityHealth::Healthy
-        || events.health() == EventStoreHealth::Degraded
-        || capability_degraded
-        || projection_degraded
+    if [
+        storage.integrity().health() != IntegrityHealth::Healthy,
+        events.health() == EventStoreHealth::Degraded,
+        capability_degraded,
+        projection_degraded,
+    ]
+    .contains(&true)
     {
         SyncHealth::Degraded
     } else {

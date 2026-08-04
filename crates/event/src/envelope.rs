@@ -606,6 +606,7 @@ fn validate_tag_elements(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

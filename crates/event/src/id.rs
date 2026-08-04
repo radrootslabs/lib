@@ -733,6 +733,7 @@ fn validate_relay_url(value: &str) -> Result<String, ParseError> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

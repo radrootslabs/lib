@@ -223,6 +223,7 @@ pub struct OperationalListingImageSize {
 }
 
 #[cfg(all(test, feature = "std"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use crate::farm::FarmRef;
 

@@ -399,6 +399,15 @@ mod tests {
         assert_eq!(id.version(), 1);
         assert_eq!(id.to_string(), id.as_str());
         assert_eq!(id, id.as_str().parse().expect("FromStr schema id"));
+        assert_eq!(
+            SchemaId::try_from(id.as_str()).expect("borrowed conversion"),
+            id
+        );
+        assert_eq!(
+            SchemaId::try_from(id.as_str().to_string()).expect("owned conversion"),
+            id
+        );
+        assert_eq!(id.as_ref(), id.as_str());
     }
 
     #[test]
@@ -486,6 +495,8 @@ mod tests {
         );
         let unknown = SchemaId::parse("radroots.protocol.unknown.v1").expect("unknown id");
         assert_eq!(registry.module_for(&unknown), None);
+        assert_eq!(registry.descriptor(&unknown), None);
+        assert!(Registry::default().is_empty());
     }
 
     #[test]
@@ -546,6 +557,40 @@ mod tests {
                 ModuleVersion::CapabilityV1
             };
             assert_eq!(registry.module_for(descriptor.id()), Some(expected));
+        }
+    }
+
+    #[test]
+    fn schema_errors_have_stable_messages() {
+        let errors = [
+            Error::EmptySchemaId,
+            Error::SchemaIdTooLong {
+                actual: 256,
+                max: 255,
+            },
+            Error::MissingSchemaNamespace,
+            Error::InvalidSchemaNamespaceSegment { index: 2 },
+            Error::InvalidSchemaVersion,
+            Error::SchemaVersionMismatch {
+                schema_id: "radroots.test.v1".into(),
+                declared: 2,
+                encoded: 1,
+            },
+            Error::DuplicateSchemaId {
+                schema_id: "radroots.test.v1".into(),
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+
+        for value in [
+            "radroots.protocol.event.v",
+            "radroots.protocol.event.v-1",
+            "radroots.protocol.event.vx",
+            "radroots.protocol.event.v999999",
+        ] {
+            assert_eq!(SchemaId::parse(value), Err(Error::InvalidSchemaVersion));
         }
     }
 }

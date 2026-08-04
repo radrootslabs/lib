@@ -2658,4 +2658,89 @@ mod tests {
             RadrootsTradeEvidenceStateV1::Missing
         );
     }
+
+    #[test]
+    fn passive_reducer_types_expose_every_governed_accessor() {
+        let root = proposal();
+        let mutation_id = root.mutation_id.expect("mutation id");
+        let candidate_id = match &root.body {
+            TradeMutationBodyV1::Proposal { candidate } => {
+                candidate.candidate_id.expect("candidate")
+            }
+            _ => unreachable!(),
+        };
+        let transport_event_id = event_id('e');
+        let record = RadrootsTradeMutationRecordV1::new(Some(transport_event_id), root.clone());
+        assert_eq!(record.transport_event_id(), Some(&transport_event_id));
+        assert_eq!(record.mutation(), &root);
+
+        let private = RadrootsTradePrivateTermsEvidenceV1::new(
+            candidate_id,
+            RadrootsTradePrivateTermsStateV1::AvailableVerified,
+        );
+        assert_eq!(private.candidate_id(), &candidate_id);
+        assert_eq!(
+            private.state(),
+            RadrootsTradePrivateTermsStateV1::AvailableVerified
+        );
+        let attestation = RadrootsTradeAttestationRecordV1::new(
+            event_id('f'),
+            mutation_id,
+            RadrootsTradeAttestationResultV1::Valid,
+        );
+        assert_eq!(attestation.event_id(), &event_id('f'));
+        assert_eq!(attestation.claim_mutation_id(), &mutation_id);
+        assert_eq!(
+            attestation.result(),
+            RadrootsTradeAttestationResultV1::Valid
+        );
+
+        let input = RadrootsTradeReductionInputV1::new(trade_id())
+            .with_mutations(vec![record])
+            .with_private_terms(vec![private])
+            .with_attestations(vec![attestation])
+            .with_evidence_state(RadrootsTradeEvidenceStateV1::QueryPartial)
+            .with_observed_at_unix_s(Some(123));
+        assert_eq!(input.trade_id(), &trade_id());
+        assert_eq!(input.mutations().len(), 1);
+        assert_eq!(input.private_terms().len(), 1);
+        assert_eq!(input.attestations().len(), 1);
+        assert_eq!(
+            input.evidence_state(),
+            RadrootsTradeEvidenceStateV1::QueryPartial
+        );
+        assert_eq!(input.observed_at_unix_s(), Some(123));
+
+        let projection = reduce_trade_records(input);
+        assert_eq!(
+            projection.reducer_contract_id(),
+            RADROOTS_TRADE_REDUCER_CONTRACT_ID
+        );
+        assert_eq!(projection.reducer_version(), RADROOTS_TRADE_REDUCER_VERSION);
+        assert_eq!(projection.trade_id(), &trade_id());
+        let _ = projection.root_mutation_id();
+        let _ = projection.buyer_pubkey();
+        let _ = projection.seller_pubkey();
+        let _ = projection.farm_id();
+        let _ = projection.negotiation_state();
+        let _ = projection.agreement_state();
+        let _ = projection.evidence_state();
+        let _ = projection.conflict_state();
+        let _ = projection.private_terms_state();
+        let _ = projection.attestation_state();
+        let _ = projection.fulfillment_state();
+        let _ = projection.payment_state();
+        let _ = projection.candidate_heads();
+        let _ = projection.agreement_claims();
+        let _ = projection.active_agreement_claim_ids();
+        let _ = projection.contested_claim_ids();
+        let _ = projection.cancelled_claim_ids();
+        let _ = projection.declined_candidate_ids();
+        let _ = projection.missing_parent_ids();
+        let _ = projection.missing_proposal_ids();
+        let _ = projection.unsupported_mutation_ids();
+        let _ = projection.issues();
+        let _ = projection.attestations();
+        assert!(!projection.projection_digest().is_empty());
+    }
 }

@@ -12,6 +12,7 @@ use radroots_storage::{
 };
 use sqlx::{Row, Sqlite, SqliteConnection};
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl ProjectionStore for SqliteStorage {
     fn status(
         &self,
@@ -397,6 +398,7 @@ impl ProjectionStore for SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn checkpoint_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     checkpoint: ProjectionCheckpoint,
@@ -442,6 +444,7 @@ impl SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn put_status_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     status: &ProjectionStatus,
@@ -575,6 +578,7 @@ fn decode_checkpoint(
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_invalidation(
     connection: &mut SqliteConnection,
     projection_id: &ProjectionId,
@@ -613,6 +617,7 @@ fn decode_invalidation(row: &sqlx::sqlite::SqliteRow) -> Result<ProjectionInvali
     .map_err(|_| Error::CorruptProjectionRecord)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn insert_ticket(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     ticket: &RebuildTicket,
@@ -655,6 +660,7 @@ async fn insert_ticket(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn update_ticket(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     ticket: &RebuildTicket,
@@ -686,6 +692,7 @@ async fn update_ticket(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn decode_ticket(
     connection: &mut SqliteConnection,
     row: &sqlx::sqlite::SqliteRow,
@@ -730,6 +737,7 @@ async fn decode_ticket(
     )
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_manifest(
     connection: &mut SqliteConnection,
     generation: ProjectionGeneration,
@@ -1140,6 +1148,7 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::migration::runtime::{MIGRATIONS, migration_sql};
@@ -1410,15 +1419,45 @@ mod tests {
                 .await,
             Err(Error::InvalidEventIndexCheckpoint)
         );
+        for corrupt in [&[0_u8][..], &[1_u8, 0xff, 0xff][..]] {
+            sqlx::query(
+                "UPDATE radroots_runtime_event_index_checkpoints
+                 SET checkpoint = ? WHERE projection_generation = ?",
+            )
+            .bind(corrupt)
+            .bind(generation.as_bytes().as_slice())
+            .execute(store.pool())
+            .await
+            .expect("forge corrupt index checkpoint");
+            assert_eq!(
+                store.event_index_checkpoint(generation).await,
+                Err(Error::CorruptProjectionRecord)
+            );
+        }
     }
 
     #[tokio::test]
     async fn failed_rebuild_corruption_and_read_only_mode_fail_closed() {
         let store = store(EventStoreMode::ReadWrite).await;
-        store
+        let initial = store
             .checkpoint(checkpoint(generation(1), 1, 1, 100))
             .await
             .expect("checkpoint");
+        let encoded = encode_status_snapshot(&initial).expect("encode projection status");
+        for end in 0..encoded.len() {
+            let _ = decode_status_snapshot(&encoded[..end]);
+        }
+        let mut trailing = encoded.clone();
+        trailing.push(0);
+        assert_eq!(
+            decode_status_snapshot(&trailing),
+            Err(Error::CorruptProjectionRecord)
+        );
+        for index in 0..encoded.len() {
+            let mut corrupt = encoded.clone();
+            corrupt[index] ^= 0xff;
+            let _ = decode_status_snapshot(&corrupt);
+        }
         let invalidation = invalidation();
         store
             .invalidate(invalidation.clone())

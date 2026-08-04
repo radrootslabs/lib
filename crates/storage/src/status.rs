@@ -246,3 +246,182 @@ impl EventStoreStatus {
         self.visible_events
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn integrity() -> IntegrityStatus {
+        IntegrityStatus::new(IntegrityHealth::Healthy, Some(1), 3, 0).unwrap()
+    }
+
+    #[test]
+    fn integrity_status_covers_every_invariant_and_accessor() {
+        assert_eq!(
+            IntegrityStatus::new(IntegrityHealth::Healthy, Some(0), 0, 0),
+            Err(Error::InvalidIntegrityStatus)
+        );
+        assert_eq!(
+            IntegrityStatus::new(IntegrityHealth::Healthy, Some(1), 0, 1),
+            Err(Error::InvalidIntegrityStatus)
+        );
+        assert_eq!(
+            IntegrityStatus::new(IntegrityHealth::Corrupt, Some(1), 1, 0),
+            Err(Error::InvalidIntegrityStatus)
+        );
+        assert_eq!(
+            IntegrityStatus::new(IntegrityHealth::Unknown, Some(1), 0, 0),
+            Err(Error::InvalidIntegrityStatus)
+        );
+
+        let status = integrity();
+        assert_eq!(status.health(), IntegrityHealth::Healthy);
+        assert_eq!(status.checked_at_unix_ms(), Some(1));
+        assert_eq!(status.verified_members(), 3);
+        assert_eq!(status.failed_members(), 0);
+        assert!(IntegrityStatus::new(IntegrityHealth::Degraded, None, 0, 1).is_ok());
+        assert!(IntegrityStatus::new(IntegrityHealth::Corrupt, None, 0, 1).is_ok());
+        assert!(IntegrityStatus::new(IntegrityHealth::Unknown, None, 0, 0).is_ok());
+    }
+
+    #[test]
+    fn storage_status_covers_memory_and_sqlite_policy_matrix() {
+        let memory = StorageStatus::new(
+            StorageBackend::Memory,
+            StorageOpenMode::Create,
+            WriterPolicy::NoWriter,
+            ShutdownState::Open,
+            integrity(),
+            false,
+            0,
+        )
+        .unwrap();
+        assert_eq!(memory.backend(), StorageBackend::Memory);
+        assert_eq!(memory.open_mode(), StorageOpenMode::Create);
+        assert_eq!(memory.writer_policy(), WriterPolicy::NoWriter);
+        assert_eq!(memory.shutdown(), ShutdownState::Open);
+        assert_eq!(memory.integrity(), integrity());
+        assert!(!memory.wal_enabled());
+        assert_eq!(memory.busy_timeout_ms(), 0);
+
+        for (writer, wal, timeout) in [
+            (WriterPolicy::AdvisoryProcessLock, false, 0),
+            (WriterPolicy::NoWriter, true, 0),
+            (WriterPolicy::NoWriter, false, 1),
+        ] {
+            assert_eq!(
+                StorageStatus::new(
+                    StorageBackend::Memory,
+                    StorageOpenMode::ReadOnly,
+                    writer,
+                    ShutdownState::Closed,
+                    integrity(),
+                    wal,
+                    timeout,
+                ),
+                Err(Error::InvalidStorageStatus)
+            );
+        }
+
+        assert!(
+            StorageStatus::new(
+                StorageBackend::Sqlite,
+                StorageOpenMode::ReadOnly,
+                WriterPolicy::NoWriter,
+                ShutdownState::Closing,
+                integrity(),
+                false,
+                0,
+            )
+            .is_ok()
+        );
+        assert!(
+            StorageStatus::new(
+                StorageBackend::Sqlite,
+                StorageOpenMode::ReadWriteExisting,
+                WriterPolicy::AdvisoryProcessLock,
+                ShutdownState::Open,
+                integrity(),
+                true,
+                1,
+            )
+            .is_ok()
+        );
+        for (mode, writer, wal, timeout) in [
+            (
+                StorageOpenMode::ReadOnly,
+                WriterPolicy::AdvisoryProcessLock,
+                false,
+                0,
+            ),
+            (StorageOpenMode::Create, WriterPolicy::NoWriter, true, 1),
+            (
+                StorageOpenMode::Create,
+                WriterPolicy::AdvisoryProcessLock,
+                false,
+                1,
+            ),
+            (
+                StorageOpenMode::Create,
+                WriterPolicy::AdvisoryProcessLock,
+                true,
+                0,
+            ),
+        ] {
+            assert_eq!(
+                StorageStatus::new(
+                    StorageBackend::Sqlite,
+                    mode,
+                    writer,
+                    ShutdownState::Open,
+                    integrity(),
+                    wal,
+                    timeout,
+                ),
+                Err(Error::InvalidStorageStatus)
+            );
+        }
+    }
+
+    #[test]
+    fn event_store_status_covers_bounds_and_accessors() {
+        let generation = SourceGeneration::new([1; 32]).unwrap();
+        assert_eq!(
+            EventStoreStatus::new(
+                generation,
+                EventStoreMode::ReadOnly,
+                EventStoreHealth::Unavailable,
+                1,
+                2,
+                0,
+            ),
+            Err(Error::CorruptStoredEvent)
+        );
+        assert_eq!(
+            EventStoreStatus::new(
+                generation,
+                EventStoreMode::ReadWrite,
+                EventStoreHealth::Degraded,
+                2,
+                1,
+                2,
+            ),
+            Err(Error::CorruptStoredEvent)
+        );
+        let status = EventStoreStatus::new(
+            generation,
+            EventStoreMode::ReadWrite,
+            EventStoreHealth::Available,
+            3,
+            2,
+            1,
+        )
+        .unwrap();
+        assert_eq!(status.generation(), generation);
+        assert_eq!(status.mode(), EventStoreMode::ReadWrite);
+        assert_eq!(status.health(), EventStoreHealth::Available);
+        assert_eq!(status.raw_events(), 3);
+        assert_eq!(status.verified_events(), 2);
+        assert_eq!(status.visible_events(), 1);
+    }
+}

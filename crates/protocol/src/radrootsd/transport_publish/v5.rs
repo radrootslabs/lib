@@ -1211,6 +1211,32 @@ mod tests {
         }
     }
 
+    fn outcome(kind: OutcomeKind) -> TargetOutcome {
+        TargetOutcome {
+            transport_kind: "nostr".to_owned(),
+            endpoint_uri: "wss://relay.example.com".to_owned(),
+            target_scope: None,
+            target_label: None,
+            source: TargetSource::Request,
+            attempted: true,
+            outcome_kind: kind,
+            message: None,
+            latency_ms: None,
+        }
+    }
+
+    fn completed_job(status: JobStatus, kind: OutcomeKind) -> Job {
+        let mut job = accepted_job();
+        job.status = status;
+        job.terminal = job_status_is_terminal(status);
+        job.delivery_satisfied = status == JobStatus::DeliverySatisfied;
+        job.targets = vec![outcome(kind)];
+        job.acknowledged_count = usize::from(kind.counts_toward_accepted_delivery());
+        job.retryable_count = usize::from(kind.is_retryable());
+        job.terminal_count = usize::from(kind.is_terminal_failure());
+        job
+    }
+
     #[test]
     fn request_job_and_schema_registry_validate() {
         request().validate(1).expect("request");
@@ -1246,6 +1272,449 @@ mod tests {
                 expected_len: 64,
             })
         );
+    }
+
+    #[test]
+    fn errors_have_stable_human_readable_messages() {
+        let errors = [
+            Error::InvalidHexField {
+                field: "id",
+                expected_len: 64,
+            },
+            Error::EmptyRawEventJson,
+            Error::EmptyTag { index: 1 },
+            Error::EmptyIdempotencyKey,
+            Error::EmptyTransportKind { index: 2 },
+            Error::InvalidTransportKind { index: 3 },
+            Error::EmptyEndpointUri { index: 4 },
+            Error::InvalidEndpointUri { index: 5 },
+            Error::EmptyTargetScope { index: 6 },
+            Error::InvalidTargetScope { index: 7 },
+            Error::EmptyTargetLabel { index: 8 },
+            Error::InvalidTargetLabel { index: 9 },
+            Error::InvalidReticulumBehavior { index: 10 },
+            Error::InvalidTimeoutMs,
+            Error::InvalidReticulumEndpoint { index: 11 },
+            Error::DuplicateTarget { index: 12 },
+            Error::TargetLimitExceeded { max: 1, actual: 2 },
+            Error::EmptyTargetSet,
+            Error::InvalidQuorum,
+            Error::EmptyRequiredTargetSet,
+            Error::DuplicateRequiredTargetFingerprint { index: 13 },
+            Error::RequiredTargetNotInTargetSet { index: 14 },
+            Error::EmptyPrincipalId,
+            Error::EmptyJobId,
+            Error::InvalidJobTargetCount {
+                expected: 1,
+                actual: 2,
+            },
+            Error::InvalidJobAcknowledgedCount {
+                expected: 1,
+                actual: 2,
+            },
+            Error::InvalidJobRetryableCount {
+                expected: 1,
+                actual: 2,
+            },
+            Error::InvalidJobTerminalCount {
+                expected: 1,
+                actual: 2,
+            },
+            Error::InvalidJobTerminalState,
+            Error::InvalidJobDeliverySatisfiedState,
+            Error::InvalidJobCompletedAt,
+            Error::InvalidJobStatusState,
+            Error::InvalidExplicitTargetOutcome { index: 15 },
+            Error::InvalidTargetOutcomeKind { index: 16 },
+            Error::InvalidTargetSource { index: 17 },
+            Error::InvalidReticulumOutcome { index: 18 },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    #[test]
+    fn target_and_request_validation_cover_every_structural_rule() {
+        let valid = Target::nostr("ws://relay.example.com")
+            .with_scope("farm.eu-1")
+            .with_label("Farm relay");
+        assert_eq!(valid.transport_kind, "nostr");
+        assert_eq!(valid.target_scope.as_deref(), Some("farm.eu-1"));
+        assert_eq!(valid.target_label.as_deref(), Some("Farm relay"));
+        assert!(valid.validate_structure(0).is_ok());
+        assert!(
+            Target::reticulum(ReticulumBehavior::DeferDeliveryPlans)
+                .validate_structure(0)
+                .is_ok()
+        );
+
+        let invalid = [
+            (
+                Target {
+                    transport_kind: String::new(),
+                    ..valid.clone()
+                },
+                Error::EmptyTransportKind { index: 0 },
+            ),
+            (
+                Target {
+                    transport_kind: " \t".to_owned(),
+                    ..valid.clone()
+                },
+                Error::EmptyTransportKind { index: 0 },
+            ),
+            (
+                Target {
+                    transport_kind: "NOSTR".to_owned(),
+                    ..valid.clone()
+                },
+                Error::InvalidTransportKind { index: 0 },
+            ),
+            (
+                Target {
+                    endpoint_uri: String::new(),
+                    ..valid.clone()
+                },
+                Error::EmptyEndpointUri { index: 0 },
+            ),
+            (
+                Target {
+                    endpoint_uri: " wss://relay.example.com".to_owned(),
+                    ..valid.clone()
+                },
+                Error::InvalidEndpointUri { index: 0 },
+            ),
+            (
+                Target {
+                    endpoint_uri: "https://relay.example.com".to_owned(),
+                    ..valid.clone()
+                },
+                Error::InvalidEndpointUri { index: 0 },
+            ),
+            (
+                Target {
+                    target_scope: Some(String::new()),
+                    ..valid.clone()
+                },
+                Error::EmptyTargetScope { index: 0 },
+            ),
+            (
+                Target {
+                    target_scope: Some("bad scope".to_owned()),
+                    ..valid.clone()
+                },
+                Error::InvalidTargetScope { index: 0 },
+            ),
+            (
+                Target {
+                    target_scope: Some(" scope".to_owned()),
+                    ..valid.clone()
+                },
+                Error::InvalidTargetScope { index: 0 },
+            ),
+            (
+                Target {
+                    target_label: Some(" \t".to_owned()),
+                    ..valid.clone()
+                },
+                Error::EmptyTargetLabel { index: 0 },
+            ),
+            (
+                Target {
+                    target_label: Some(" label".to_owned()),
+                    ..valid.clone()
+                },
+                Error::InvalidTargetLabel { index: 0 },
+            ),
+            (
+                Target {
+                    target_label: Some("bad\nlabel".to_owned()),
+                    ..valid.clone()
+                },
+                Error::InvalidTargetLabel { index: 0 },
+            ),
+            (
+                Target {
+                    reticulum_behavior: Some(ReticulumBehavior::RejectDeliveryAttempts),
+                    ..valid.clone()
+                },
+                Error::InvalidReticulumBehavior { index: 0 },
+            ),
+            (
+                Target {
+                    transport_kind: "reticulum".to_owned(),
+                    endpoint_uri: "reticulum:other".to_owned(),
+                    target_scope: None,
+                    target_label: None,
+                    reticulum_behavior: None,
+                },
+                Error::InvalidReticulumEndpoint { index: 0 },
+            ),
+        ];
+        for (target, error) in invalid {
+            assert_eq!(target.validate_structure(0), Err(error));
+        }
+
+        let mut empty = request();
+        empty.raw_event_json.clear();
+        assert_eq!(empty.validate(1), Err(Error::EmptyRawEventJson));
+        let mut no_targets = request();
+        no_targets.target_policy = TargetPolicy::explicit_targets(vec![]);
+        assert_eq!(no_targets.validate(1), Err(Error::EmptyTargetSet));
+        let mut too_many = request();
+        too_many.target_policy = TargetPolicy::explicit_targets(vec![
+            valid.clone(),
+            Target::nostr("wss://second.example.com"),
+        ]);
+        assert_eq!(
+            too_many.validate(1),
+            Err(Error::TargetLimitExceeded { max: 1, actual: 2 })
+        );
+        let mut duplicate = request();
+        duplicate.target_policy = TargetPolicy::explicit_targets(vec![valid.clone(), valid]);
+        assert_eq!(
+            duplicate.validate(2),
+            Err(Error::DuplicateTarget { index: 1 })
+        );
+        let mut nostr = request();
+        nostr.target_policy = TargetPolicy::nostr(
+            NostrTargetSourcePolicy::DaemonDefaultOnly,
+            vec!["wss://a.example".to_owned(), "wss://a.example".to_owned()],
+        );
+        assert_eq!(nostr.target_policy.request_target_count(), 2);
+        assert_eq!(nostr.validate(2), Err(Error::DuplicateTarget { index: 1 }));
+        nostr.target_policy = TargetPolicy::nostr(
+            NostrTargetSourcePolicy::ExplicitOnly,
+            vec!["https://bad.example".to_owned()],
+        );
+        assert_eq!(
+            nostr.validate(1),
+            Err(Error::InvalidEndpointUri { index: 0 })
+        );
+        let mut blank_key = request();
+        blank_key.idempotency_key = Some(" \t".to_owned());
+        assert_eq!(blank_key.validate(1), Err(Error::EmptyIdempotencyKey));
+    }
+
+    #[test]
+    fn delivery_policy_and_outcome_classifications_are_exhaustive() {
+        let fingerprint = TargetFingerprint::parse("a".repeat(64)).expect("fingerprint");
+        assert_eq!(fingerprint.as_str(), "a".repeat(64));
+        assert!(TargetFingerprint::parse("A".repeat(64)).is_err());
+        assert_eq!(
+            DeliveryPolicy::required_targets(vec![]),
+            Err(Error::EmptyRequiredTargetSet)
+        );
+        assert_eq!(
+            DeliveryPolicy::required_targets(vec![fingerprint.clone(), fingerprint.clone()]),
+            Err(Error::DuplicateRequiredTargetFingerprint { index: 1 })
+        );
+        let required = DeliveryPolicy::required_targets(vec![fingerprint]).expect("required");
+        assert_eq!(required.required_target_count(9), 1);
+        assert!(required.validate().is_ok());
+        assert_eq!(
+            DeliveryPolicy::Quorum { quorum: 0 }.validate(),
+            Err(Error::InvalidQuorum)
+        );
+        assert!(DeliveryPolicy::Any.validate().is_ok());
+        assert!(DeliveryPolicy::All.validate().is_ok());
+        assert!(DeliveryPolicy::Quorum { quorum: 2 }.validate().is_ok());
+        assert_eq!(DeliveryPolicy::Any.required_target_count(0), 0);
+        assert_eq!(DeliveryPolicy::Any.required_target_count(2), 1);
+        assert_eq!(DeliveryPolicy::All.required_target_count(2), 2);
+        assert_eq!(
+            DeliveryPolicy::Quorum { quorum: 2 }.required_target_count(9),
+            2
+        );
+
+        for kind in [
+            OutcomeKind::Accepted,
+            OutcomeKind::DuplicateAccepted,
+            OutcomeKind::SkippedAlreadyAccepted,
+        ] {
+            assert!(kind.counts_toward_accepted_delivery());
+            assert!(!kind.is_retryable());
+            assert!(!kind.is_terminal_failure());
+        }
+        for kind in [
+            OutcomeKind::RateLimited,
+            OutcomeKind::PowRequired,
+            OutcomeKind::AuthRequired,
+            OutcomeKind::Error,
+            OutcomeKind::Timeout,
+            OutcomeKind::ConnectionFailed,
+            OutcomeKind::Unknown,
+        ] {
+            assert!(kind.is_retryable());
+            assert!(!kind.counts_toward_accepted_delivery());
+        }
+        for kind in [
+            OutcomeKind::Blocked,
+            OutcomeKind::Invalid,
+            OutcomeKind::Restricted,
+            OutcomeKind::Muted,
+            OutcomeKind::Unsupported,
+            OutcomeKind::PaymentRequired,
+            OutcomeKind::TargetRejected,
+        ] {
+            assert!(kind.is_terminal_failure());
+            assert!(!kind.is_retryable());
+        }
+        assert!(OutcomeKind::DeferredUntilImplemented.is_deferred_until_implemented());
+    }
+
+    #[test]
+    fn job_validation_covers_counts_lifecycle_and_transport_rules() {
+        for status in [JobStatus::Accepted, JobStatus::Publishing] {
+            let mut job = accepted_job();
+            job.status = status;
+            job.terminal = false;
+            job.delivery_satisfied = false;
+            job.completed_at_ms = None;
+            assert!(job.validate().is_ok());
+        }
+        for (status, kind) in [
+            (JobStatus::DeliverySatisfied, OutcomeKind::Accepted),
+            (
+                JobStatus::DeliveryUnsatisfiedRetryable,
+                OutcomeKind::Timeout,
+            ),
+            (JobStatus::DeliveryUnsatisfiedTerminal, OutcomeKind::Blocked),
+        ] {
+            assert!(completed_job(status, kind).validate().is_ok());
+        }
+        let mut deferred = completed_job(
+            JobStatus::DeliveryDeferred,
+            OutcomeKind::DeferredUntilImplemented,
+        );
+        deferred.target_policy = TargetPolicy::explicit_targets(vec![Target::reticulum(
+            ReticulumBehavior::DeferDeliveryPlans,
+        )]);
+        deferred.targets[0] = TargetOutcome {
+            transport_kind: "reticulum".to_owned(),
+            endpoint_uri: RETICULUM_ENDPOINT_URI.to_owned(),
+            source: TargetSource::Reticulum,
+            attempted: false,
+            outcome_kind: OutcomeKind::DeferredUntilImplemented,
+            ..outcome(OutcomeKind::DeferredUntilImplemented)
+        };
+        assert!(deferred.validate().is_ok());
+        deferred.status = JobStatus::DeliveryDeferredUntilImplemented;
+        assert!(deferred.validate().is_ok());
+
+        let mut rejected = accepted_job();
+        rejected.status = JobStatus::Rejected;
+        rejected.terminal = true;
+        rejected.delivery_satisfied = false;
+        rejected.target_policy =
+            TargetPolicy::nostr(NostrTargetSourcePolicy::DaemonDefaultOnly, vec![]);
+        rejected.target_count = 0;
+        rejected.acknowledged_count = 0;
+        rejected.targets.clear();
+        assert!(rejected.validate().is_ok());
+
+        let mut cases = Vec::new();
+        let mut job = accepted_job();
+        job.job_id = " ".to_owned();
+        cases.push((job, Error::EmptyJobId));
+        let mut job = accepted_job();
+        job.pubkey = "g".repeat(64);
+        cases.push((
+            job,
+            Error::InvalidHexField {
+                field: "pubkey",
+                expected_len: 64,
+            },
+        ));
+        let mut job = accepted_job();
+        job.terminal = false;
+        cases.push((job, Error::InvalidJobTerminalState));
+        let mut job = accepted_job();
+        job.delivery_satisfied = false;
+        cases.push((job, Error::InvalidJobDeliverySatisfiedState));
+        let mut job = accepted_job();
+        job.completed_at_ms = None;
+        cases.push((job, Error::InvalidJobCompletedAt));
+        let mut job = accepted_job();
+        job.completed_at_ms = Some(0);
+        cases.push((job, Error::InvalidJobCompletedAt));
+        let mut job = accepted_job();
+        job.target_count = 2;
+        cases.push((
+            job,
+            Error::InvalidJobTargetCount {
+                expected: 1,
+                actual: 2,
+            },
+        ));
+        let mut job = accepted_job();
+        job.acknowledged_count = 0;
+        cases.push((
+            job,
+            Error::InvalidJobAcknowledgedCount {
+                expected: 1,
+                actual: 0,
+            },
+        ));
+        let mut job = completed_job(
+            JobStatus::DeliveryUnsatisfiedRetryable,
+            OutcomeKind::Timeout,
+        );
+        job.retryable_count = 0;
+        cases.push((
+            job,
+            Error::InvalidJobRetryableCount {
+                expected: 1,
+                actual: 0,
+            },
+        ));
+        let mut job = completed_job(JobStatus::DeliveryUnsatisfiedTerminal, OutcomeKind::Blocked);
+        job.terminal_count = 0;
+        cases.push((
+            job,
+            Error::InvalidJobTerminalCount {
+                expected: 1,
+                actual: 0,
+            },
+        ));
+        for (job, error) in cases {
+            assert_eq!(job.validate(), Err(error));
+        }
+
+        let mut invalid = accepted_job();
+        invalid.targets[0].source = TargetSource::Reticulum;
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::InvalidTargetSource { index: 0 })
+        );
+        let mut invalid = accepted_job();
+        invalid.targets[0].outcome_kind = OutcomeKind::DeferredUntilImplemented;
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::InvalidTargetOutcomeKind { index: 0 })
+        );
+        let mut invalid = deferred.clone();
+        invalid.targets[0].attempted = true;
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::InvalidReticulumOutcome { index: 0 })
+        );
+        let mut invalid = accepted_job();
+        invalid.targets[0].endpoint_uri = "wss://other.example".to_owned();
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::InvalidExplicitTargetOutcome { index: 0 })
+        );
+        let mut invalid = accepted_job();
+        invalid.targets.push(outcome(OutcomeKind::Accepted));
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::InvalidExplicitTargetOutcome { index: 1 })
+        );
+        let mut invalid = completed_job(JobStatus::DeliverySatisfied, OutcomeKind::Blocked);
+        invalid.delivery_satisfied = true;
+        assert_eq!(invalid.validate(), Err(Error::InvalidJobStatusState));
     }
 
     #[cfg(feature = "serde")]

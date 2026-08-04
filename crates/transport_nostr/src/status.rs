@@ -265,5 +265,44 @@ mod tests {
             Availability::Unavailable
         );
         assert!(!format!("{tracker:?}").contains("token=secret"));
+        assert_eq!(
+            sink_status(&tracker, false).availability(),
+            Availability::Unavailable
+        );
+        assert_eq!(
+            source_status(&tracker, false).availability(),
+            Availability::Unavailable
+        );
+        tracker.record_sink(0, 0, None);
+        assert_eq!(
+            sink_status(&tracker, true).availability(),
+            Availability::Available
+        );
+        tracker.record_source(2, 0, None);
+        assert_eq!(
+            source_status(&tracker, true).availability(),
+            Availability::Available
+        );
+        assert!(delivery_succeeded(&DeliveryOutcome::accepted()));
+        assert!(delivery_succeeded(&DeliveryOutcome::delivered()));
+        assert!(!delivery_succeeded(&DeliveryOutcome::rejected()));
+
+        for message in [
+            "invalid event",
+            "restricted",
+            "rejected",
+            "malformed event",
+            "decode failed",
+        ] {
+            assert_eq!(fetch_failure(message).0, FetchTargetState::FailedTerminal);
+        }
+        assert_eq!(
+            fetch_failure("offline").0,
+            FetchTargetState::FailedRetryable
+        );
+        assert_eq!(
+            delivery_failure("malformed event").kind(),
+            DeliveryOutcomeKind::Rejected
+        );
     }
 }

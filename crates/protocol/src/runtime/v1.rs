@@ -1198,6 +1198,22 @@ mod tests {
                 OperationId::parse(descriptor.operation_id.as_str()),
                 Ok(descriptor.operation_id)
             );
+            assert!(
+                descriptor
+                    .request_schema_id()
+                    .starts_with("radroots.runtime.")
+            );
+            assert!(descriptor.request_schema_id().ends_with(".request.v1"));
+            assert!(
+                descriptor
+                    .receipt_schema_id()
+                    .starts_with("radroots.runtime.")
+            );
+            assert!(descriptor.receipt_schema_id().ends_with(".receipt.v1"));
+            assert_eq!(
+                operation_descriptor(descriptor.operation_id),
+                Ok(*descriptor)
+            );
         }
     }
 
@@ -1260,6 +1276,149 @@ mod tests {
             validate_catalog(invalid.as_slice()),
             Err(Error::CatalogInvalid {
                 message: "operation profile.inspect has invalid idempotency policy".into(),
+            })
+        );
+
+        let mut invalid = CATALOG.to_vec();
+        invalid[1].idempotency = IdempotencyPolicy::Forbidden;
+        assert!(matches!(
+            validate_catalog(&invalid),
+            Err(Error::CatalogInvalid { .. })
+        ));
+
+        let mut invalid = CATALOG.to_vec();
+        invalid[0].schema_version = 2;
+        assert_eq!(
+            validate_catalog(&invalid),
+            Err(Error::UnsupportedOperationSchemaVersion {
+                operation_id: OperationId::ProfileInspect,
+                version: 2,
+            })
+        );
+
+        for required in [
+            OperationId::TransportCapabilityList,
+            OperationId::TransportConfigInspect,
+            OperationId::TransportConfigUpdate,
+            OperationId::TransportStatusInspect,
+            OperationId::TransportDeliveryInspect,
+            OperationId::TransportDeliveryRetry,
+            OperationId::SyncStatus,
+            OperationId::SyncPull,
+            OperationId::SyncPush,
+            OperationId::DiagnosticsInspect,
+        ] {
+            let missing = CATALOG
+                .iter()
+                .copied()
+                .filter(|descriptor| descriptor.operation_id != required)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                validate_catalog(&missing),
+                Err(Error::MissingRequiredOperation {
+                    operation_id: required,
+                })
+            );
+        }
+
+        for delivery in [
+            OperationId::FarmPublish,
+            OperationId::ListingPublish,
+            OperationId::ListingPause,
+            OperationId::ListingWithdraw,
+            OperationId::TradeProposalSubmit,
+            OperationId::TradeRevisionPropose,
+            OperationId::TradeCandidateDecide,
+            OperationId::TradeCancellationSubmit,
+            OperationId::TradeOperationResume,
+        ] {
+            let missing = CATALOG
+                .iter()
+                .copied()
+                .filter(|descriptor| descriptor.operation_id != delivery)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                validate_catalog(&missing),
+                Err(Error::MissingRequiredOperation {
+                    operation_id: delivery,
+                })
+            );
+        }
+
+        let mut invalid = CATALOG.to_vec();
+        let delivery = invalid
+            .iter_mut()
+            .find(|descriptor| descriptor.operation_id == OperationId::FarmPublish)
+            .expect("delivery descriptor");
+        delivery.transport_capability.deliver = false;
+        assert!(matches!(
+            validate_catalog(&invalid),
+            Err(Error::CatalogInvalid { .. })
+        ));
+    }
+
+    #[test]
+    fn route_constructors_and_errors_cover_all_variants() {
+        let none = TransportRoute::none();
+        assert!(!none.includes_transport(TransportKind::LOCAL));
+        assert!(!none.includes_transport(TransportKind::NOSTR));
+        assert!(!none.includes_transport(TransportKind::RETICULUM));
+        assert!(!none.includes_transport(TransportKind::parse("future").expect("custom")));
+        assert!(TransportRoute::local().includes_transport(TransportKind::LOCAL));
+        assert!(TransportRoute::delivery().includes_transport(TransportKind::NOSTR));
+        assert!(TransportRoute::delivery().includes_transport(TransportKind::RETICULUM));
+        assert!(TransportRoute::fetch().fetch);
+        assert!(TransportRoute::diagnostics().diagnostics);
+
+        let errors = [
+            Error::DuplicateOperationId {
+                operation_id: OperationId::ProfileInspect,
+            },
+            Error::MissingRequiredOperation {
+                operation_id: OperationId::SyncStatus,
+            },
+            Error::UnknownOperationId {
+                operation_id: "unknown".to_owned(),
+            },
+            Error::UnsupportedOperationSchemaVersion {
+                operation_id: OperationId::SyncStatus,
+                version: 2,
+            },
+            Error::CatalogInvalid {
+                message: "invalid catalog".to_owned(),
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+
+        let invalid = SyncStatusReceipt {
+            schema_version: 2,
+            health: SyncHealth::Unavailable,
+            storage: SyncCapabilityState::Unsupported,
+            source: SyncCapabilityState::Compiled,
+            sink: SyncCapabilityState::Configured,
+            signer: SyncCapabilityState::Degraded,
+            outbox: SyncOutboxStatus {
+                pending: 0,
+                leased: 0,
+                retryable: 0,
+                satisfied: 0,
+                exhausted: 0,
+            },
+            projections: SyncProjectionStatus {
+                ready: 0,
+                invalidated: 0,
+                rebuilding: 0,
+                failed: 0,
+                untracked: 0,
+            },
+        };
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::UnsupportedOperationSchemaVersion {
+                operation_id: OperationId::SyncStatus,
+                version: 2,
             })
         );
     }

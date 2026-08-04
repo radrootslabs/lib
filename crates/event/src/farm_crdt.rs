@@ -289,6 +289,7 @@ impl From<FarmSemanticKind> for String {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

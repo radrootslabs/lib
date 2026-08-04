@@ -1,7 +1,7 @@
 use radroots_transport::capability::{Availability, Maturity};
 use radroots_transport::sink::EventSink;
 use radroots_transport::source::{EventSource, FetchBounds, FetchRequest};
-use radroots_transport::target::TargetScope;
+use radroots_transport::target::{TargetLabel, TargetScope};
 use radroots_transport::{
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
@@ -636,6 +636,27 @@ fn destination_deserialization_revalidates_canonical_identity() {
 fn destination_rejects_non_reticulum_targets() {
     let local = Target::new(TransportId::LOCAL, "local:memory").expect("local target");
     assert!(ReticulumDestinationV1::from_target(&local).is_err());
+
+    let missing_scope = Target::new(TransportId::RETICULUM, RADROOTS_RETICULUM_ENDPOINT_URI)
+        .expect("unscoped target");
+    assert_eq!(
+        ReticulumDestinationV1::from_target(&missing_scope),
+        Err(radroots_transport::RadrootsTransportError::EmptyTargetScope)
+    );
+
+    let label = TargetLabel::parse("Local node").unwrap();
+    let destination = ReticulumDestinationV1::new(
+        RADROOTS_RETICULUM_ENDPOINT_URI,
+        TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).unwrap(),
+        Some(label.clone()),
+    )
+    .unwrap();
+    assert_eq!(destination.label(), Some(&label));
+    let target = destination.transport_target().unwrap();
+    assert_eq!(
+        ReticulumDestinationV1::from_target(&target).unwrap(),
+        destination
+    );
 }
 
 #[test]

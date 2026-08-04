@@ -57,6 +57,7 @@ pub const TAG_SUBJECT: &str = "subject";
 pub const TAG_IMETA: &str = "imeta";
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

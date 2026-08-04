@@ -323,7 +323,19 @@ fn authorized_signing_atomically_enqueues_and_replays_without_resigning() {
     }));
     let (engine, storage) = setup_engine(signer.clone());
     let request = request(1, "wss://relay.example");
+    assert_eq!(request.operation_id().as_bytes(), &[1; 16]);
+    assert_eq!(request.idempotency_key().as_str(), "push-1");
+    assert_ne!(request.actor().public_key().as_bytes(), &[0; 32]);
+    assert!(!request.draft().content().is_empty());
+    assert_eq!(request.targets().len(), 1);
+    assert_eq!(request.satisfaction().class(), SatisfactionClass::Accepted);
+    assert_eq!(
+        request.cancellation(),
+        CancellationPolicy::PreservePublishedRequest
+    );
+    assert!(format!("{request:?}").contains("redacted frozen event draft"));
     let receipt = block_on(engine.sign_and_enqueue(request.clone())).expect("enqueue");
+    assert_eq!(receipt.operation_id().as_bytes(), &[1; 16]);
     assert!(!receipt.is_replay());
     assert_eq!(receipt.outbox().stage(), OutboxStage::Pending);
     assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
@@ -659,6 +671,67 @@ fn delivery_run_rejects_unbounded_claims() {
         DeliveryRunRequest::new(owner, seed, 1_000, 0),
         Err(Error::InvalidDeliveryRequest)
     );
+    let owner = LeaseOwner::parse("sync-delivery-test").expect("lease owner");
+    assert_eq!(
+        DeliveryRunRequest::new(owner.clone(), seed, 86_400_001, 1),
+        Err(Error::InvalidDeliveryRequest)
+    );
+    assert_eq!(
+        DeliveryRunRequest::new(
+            owner,
+            seed,
+            1_000,
+            radroots_storage::outbox::OUTBOX_CLAIM_LIMIT_MAX + 1,
+        ),
+        Err(Error::InvalidDeliveryRequest)
+    );
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix: 1_800_000_200,
+    }));
+    let (engine, _) = setup_engine(signer);
+    let over_engine_budget = DeliveryRunRequest::new(
+        LeaseOwner::parse("sync-delivery-test").expect("lease owner"),
+        seed,
+        10_001,
+        1,
+    )
+    .expect("globally bounded delivery run");
+    assert_eq!(
+        block_on(engine.deliver_pending(over_engine_budget)),
+        Err(Error::InvalidDeliveryRequest)
+    );
+
+    let valid = request(72, "wss://one.example");
+    let invalid_quorum = PushRequest::new(
+        valid.operation_id(),
+        valid.idempotency_key().clone(),
+        valid.actor().clone(),
+        valid.draft().clone(),
+        valid.targets().clone(),
+        SatisfactionPolicy::new(
+            SatisfactionClass::Accepted,
+            TargetPolicy::quorum(2).expect("quorum"),
+        ),
+        valid.cancellation(),
+    );
+    assert!(matches!(invalid_quorum, Err(Error::InvalidPushRequest)));
+    let absent = Target::new(TransportId::NOSTR, "wss://absent.example")
+        .expect("absent target")
+        .fingerprint()
+        .clone();
+    let invalid_required = PushRequest::new(
+        valid.operation_id(),
+        valid.idempotency_key().clone(),
+        valid.actor().clone(),
+        valid.draft().clone(),
+        valid.targets().clone(),
+        SatisfactionPolicy::new(
+            SatisfactionClass::Accepted,
+            TargetPolicy::required(vec![absent]).expect("required"),
+        ),
+        valid.cancellation(),
+    );
+    assert!(matches!(invalid_required, Err(Error::InvalidPushRequest)));
 }
 
 #[test]
@@ -691,6 +764,10 @@ fn retry_decisions_are_passive_typed_and_deadline_aware() {
     assert_eq!(
         engine.retry_decision(claimed.record(), now + 1),
         Ok(SyncRetryDecision::InFlightUntil { unix_ms: now + 100 })
+    );
+    assert_eq!(
+        engine.retry_decision(claimed.record(), now + 100),
+        Ok(SyncRetryDecision::Ready)
     );
     let deferred = block_on(Outbox::release(
         &*storage,

@@ -1066,6 +1066,7 @@ impl<'de> Visitor<'de> for NoDuplicateJsonValueVisitor {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::id::parse_public_key;

@@ -215,7 +215,7 @@ impl CalendarUid {
             .as_bytes()
             .last()
             .is_some_and(|byte| matches!(byte, b'A' | b'Q' | b'g' | b'w'));
-        if value.len() != 22 || !valid_alphabet || !valid_final_quantum {
+        if [value.len() == 22, valid_alphabet, valid_final_quantum] != [true; 3] {
             return Err(CalendarEventError::InvalidCalendarUid);
         }
         Ok(Self(value.to_string()))
@@ -336,14 +336,19 @@ impl CalendarEventReference {
     pub fn is_canonical(&self) -> bool {
         // Nostr does not define relay URL normalization. Strict admission validates the
         // lowercase ws/wss syntax while preserving the caller's host, port, path, and query.
-        self.coordinate.as_str() == format!("{}:{}:{}", self.kind, self.author, self.d_tag)
-            && self
-                .relay()
-                .is_none_or(|relay| RelayUrl::parse(relay).is_ok())
+        [
+            self.coordinate.as_str() == format!("{}:{}:{}", self.kind, self.author, self.d_tag),
+            self.relay()
+                .is_none_or(|relay| RelayUrl::parse(relay).is_ok()),
+        ] == [true; 2]
     }
 
     fn has_same_coordinate(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.author == other.author && self.d_tag == other.d_tag
+        [
+            self.kind == other.kind,
+            self.author == other.author,
+            self.d_tag == other.d_tag,
+        ] == [true; 3]
     }
 }
 
@@ -429,10 +434,11 @@ impl CalendarEventAuthorReference {
 
     pub fn is_canonical(&self) -> bool {
         // Relay hints use strict Radroots syntax; their raw URL spelling is not normalized.
-        self.raw_pubkey == self.pubkey.to_hex()
-            && self
-                .relay()
-                .is_none_or(|relay| RelayUrl::parse(relay).is_ok())
+        [
+            self.raw_pubkey == self.pubkey.to_hex(),
+            self.relay()
+                .is_none_or(|relay| RelayUrl::parse(relay).is_ok()),
+        ] == [true; 2]
     }
 }
 
@@ -446,7 +452,11 @@ impl IanaTimeZoneId {
         let Some((canonical, _)) = jiff_tzdb::get(value) else {
             return Err(CalendarEventError::InvalidTimeZone);
         };
-        if canonical != value || !canonical_calendar_tag_text_is_valid(value) {
+        if [
+            canonical == value,
+            canonical_calendar_tag_text_is_valid(value),
+        ] != [true; 2]
+        {
             return Err(CalendarEventError::InvalidTimeZone);
         }
         Ok(Self(value.into()))
@@ -505,13 +515,15 @@ pub struct CalendarUri(String);
 impl CalendarUri {
     pub fn parse(value: impl AsRef<str>) -> Result<Self, CalendarEventError> {
         let value = value.as_ref();
-        if value.trim() != value
-            || value
-                .chars()
-                .any(|character| character.is_whitespace() || character.is_control())
-            || value.len() > DEFAULT_TAG_ELEMENT_MAX_BYTES
-            || Url::parse(value).is_err()
-        {
+        let valid = [
+            value.trim() == value,
+            !value.chars().any(|character| {
+                [character.is_whitespace(), character.is_control()].contains(&true)
+            }),
+            value.len() <= DEFAULT_TAG_ELEMENT_MAX_BYTES,
+            Url::parse(value).is_ok(),
+        ];
+        if valid != [true; 4] {
             return Err(CalendarEventError::InvalidUrl("URI"));
         }
         Ok(Self(value.into()))
@@ -838,11 +850,12 @@ impl CalendarRequest {
         let Ok(parts) = crate::id::AddressableCoordinateParts::parse(self.calendar.as_str()) else {
             return false;
         };
-        self.calendar.as_str() == format!("{}:{}:{}", parts.kind, parts.pubkey, parts.d_tag)
-            && self
-                .relay
+        [
+            self.calendar.as_str() == format!("{}:{}:{}", parts.kind, parts.pubkey, parts.d_tag),
+            self.relay
                 .as_deref()
-                .is_none_or(|relay| RelayUrl::parse(relay).is_ok())
+                .is_none_or(|relay| RelayUrl::parse(relay).is_ok()),
+        ] == [true; 2]
     }
 }
 
@@ -1717,12 +1730,14 @@ impl AdmittedCalendarTimeEvent {
     ) -> Result<Self, CalendarAdmissionError> {
         validate_admitted_calendar_common(&parsed.common)?;
         let d_tag = admitted_d_tag(&parsed.common)?;
-        if parsed.start_wire != parsed.start.to_string()
-            || parsed
+        if [
+            parsed.start_wire == parsed.start.to_string(),
+            !parsed
                 .end_wire
                 .as_deref()
                 .zip(parsed.end)
-                .is_some_and(|(wire, end)| wire != end.to_string())
+                .is_some_and(|(wire, end)| wire != end.to_string()),
+        ] != [true; 2]
         {
             return Err(CalendarAdmissionError::NonCanonicalField("timestamp"));
         }
@@ -1797,26 +1812,33 @@ fn validated_title(value: String) -> Result<String, CalendarEventError> {
 }
 
 fn parse_calendar_decimal(value: &str) -> Option<u64> {
-    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+    if [
+        !value.is_empty(),
+        value.bytes().all(|byte| byte.is_ascii_digit()),
+    ] != [true; 2]
+    {
         return None;
     }
     value.parse().ok()
 }
 
 pub fn calendar_tag_text_is_valid(value: &str) -> bool {
-    !value.trim().is_empty()
-        && !value.chars().any(char::is_control)
-        && value.len() <= DEFAULT_TAG_ELEMENT_MAX_BYTES
+    [
+        !value.trim().is_empty(),
+        !value.chars().any(char::is_control),
+        value.len() <= DEFAULT_TAG_ELEMENT_MAX_BYTES,
+    ] == [true; 3]
 }
 
 pub fn canonical_calendar_tag_text_is_valid(value: &str) -> bool {
-    calendar_tag_text_is_valid(value) && value.trim() == value
+    [calendar_tag_text_is_valid(value), value.trim() == value] == [true; 2]
 }
 
 pub fn calendar_geohash_is_valid(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 12
-        && value.bytes().all(|byte| {
+    [
+        !value.is_empty(),
+        value.len() <= 12,
+        value.bytes().all(|byte| {
             matches!(
                 byte.to_ascii_lowercase(),
                 b'0'..=b'9'
@@ -1843,38 +1865,52 @@ pub fn calendar_geohash_is_valid(value: &str) -> bool {
                     | b'y'
                     | b'z'
             )
-        })
+        }),
+    ] == [true; 3]
 }
 
 pub fn canonical_calendar_geohash_is_valid(value: &str) -> bool {
-    calendar_geohash_is_valid(value) && value.bytes().all(|byte| !byte.is_ascii_uppercase())
+    [
+        calendar_geohash_is_valid(value),
+        value.bytes().all(|byte| !byte.is_ascii_uppercase()),
+    ] == [true; 2]
 }
 
 pub fn calendar_relay_url_is_valid(value: &str) -> bool {
-    if value.is_empty()
-        || value
+    if [
+        !value.is_empty(),
+        !value
             .chars()
-            .any(|character| character.is_control() || character.is_whitespace())
+            .any(|character| [character.is_control(), character.is_whitespace()].contains(&true)),
+    ] != [true; 2]
     {
         return false;
     }
     let Some((scheme, remainder)) = value.split_once("://") else {
         return false;
     };
-    if !(scheme.eq_ignore_ascii_case("ws") || scheme.eq_ignore_ascii_case("wss")) {
+    if ![
+        scheme.eq_ignore_ascii_case("ws"),
+        scheme.eq_ignore_ascii_case("wss"),
+    ]
+    .contains(&true)
+    {
         return false;
     }
     let Ok(parsed) = Url::parse(value) else {
         return false;
     };
     let authority = remainder.split(['/', '?', '#']).next().unwrap_or(remainder);
-    matches!(parsed.scheme(), "ws" | "wss")
-        && parsed.host_str().is_some_and(|host| !host.is_empty())
-        && parsed.username().is_empty()
-        && parsed.password().is_none()
-        && parsed.fragment().is_none()
-        && parsed.port() != Some(0)
-        && !authority.contains('@')
+    [
+        !authority.is_empty(),
+        matches!(parsed.scheme(), "ws" | "wss"),
+        parsed.host_str().is_some_and(|host| !host.is_empty()),
+        parsed.username().is_empty(),
+        parsed.password().is_none(),
+        parsed.fragment().is_none(),
+        parsed.port() != Some(0),
+        !authority.contains('@'),
+    ] == [true; 8]
 }
 
 fn parse_calendar_reference_relay(
@@ -2624,8 +2660,10 @@ impl AdmittedCalendarEventRsvp {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 
     #[test]
     fn authored_date_event_validates_each_optional_field_at_construction() {
@@ -2726,6 +2764,8 @@ mod tests {
             "2026-06-00",
             "2026-6-20",
             "+2026-06-20",
+            "2026/06-20",
+            "2026-06/20",
         ] {
             assert_eq!(
                 CalendarDate::parse(invalid),
@@ -3116,6 +3156,565 @@ mod tests {
         let error = AdmittedCalendarEventRsvp::try_from_parsed(parsed).unwrap_err();
         assert_eq!(error, CalendarAdmissionError::AuthorHintMismatch);
         assert_eq!(error.code(), "author_hint_mismatch");
+    }
+
+    #[test]
+    fn calendar_value_types_cover_conversion_serialization_and_error_contracts() {
+        let uid = CalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAQ").unwrap();
+        assert_eq!(uid.as_ref(), uid.as_str());
+        assert_eq!(uid.to_string(), uid.as_str());
+        assert_eq!(CalendarUid::from_str(uid.as_str()).unwrap(), uid);
+        assert_eq!(CalendarUid::try_from(uid.as_str()).unwrap(), uid);
+        assert_eq!(CalendarUid::try_from(uid.to_string()).unwrap(), uid);
+        assert_eq!(serde_json::to_string(&uid).unwrap(), format!("\"{uid}\""));
+
+        let date = CalendarDate::from_str("2028-02-29").unwrap();
+        assert_eq!(date.as_ref(), "2028-02-29");
+        assert_eq!(date.to_string(), "2028-02-29");
+        assert_eq!(serde_json::to_string(&date).unwrap(), "\"2028-02-29\"");
+        assert_eq!(
+            serde_json::from_str::<CalendarDate>("\"2028-02-29\"").unwrap(),
+            date
+        );
+
+        let zone = IanaTimeZoneId::from_str("UTC").unwrap();
+        assert_eq!(zone.as_ref(), "UTC");
+        assert_eq!(zone.to_string(), "UTC");
+        assert_eq!(serde_json::to_string(&zone).unwrap(), "\"UTC\"");
+        assert_eq!(
+            serde_json::from_str::<IanaTimeZoneId>("\"UTC\"").unwrap(),
+            zone
+        );
+
+        let uri = CalendarUri::from_str("https://example.com/calendar").unwrap();
+        assert_eq!(uri.as_ref(), uri.as_str());
+        assert_eq!(uri.to_string(), uri.as_str());
+        assert_eq!(
+            serde_json::from_str::<CalendarUri>(&serde_json::to_string(&uri).unwrap()).unwrap(),
+            uri
+        );
+
+        let event_errors = [
+            CalendarEventError::InvalidIdentifier,
+            CalendarEventError::InvalidCalendarUid,
+            CalendarEventError::InvalidEventReference,
+            CalendarEventError::InvalidRevisionReference,
+            CalendarEventError::InvalidAuthorReference,
+            CalendarEventError::DuplicateEventReference,
+            CalendarEventError::AuthorHintMismatch,
+            CalendarEventError::DeclinedFreeBusyForbidden,
+            CalendarEventError::InvalidTitle,
+            CalendarEventError::InvalidText("field"),
+            CalendarEventError::InvalidUrl("field"),
+            CalendarEventError::InvalidGeohash,
+            CalendarEventError::InvalidTimeZone,
+            CalendarEventError::InvalidParticipant { index: 2 },
+            CalendarEventError::TooManyParticipants { max: 1, actual: 2 },
+            CalendarEventError::ContentTooLarge { max: 1, actual: 2 },
+            CalendarEventError::TagElementTooLarge {
+                field: "x",
+                max: 1,
+                actual: 2,
+            },
+            CalendarEventError::TagCountExceeded { max: 1, actual: 2 },
+            CalendarEventError::TagBytesExceeded { max: 1, actual: 2 },
+            CalendarEventError::InvalidDate,
+            CalendarEventError::InvalidRange,
+            CalendarEventError::CoveredDayLimitExceeded { max: 1, actual: 2 },
+        ];
+        for error in event_errors {
+            assert!(!error.code().is_empty());
+            assert!(!error.to_string().is_empty());
+        }
+        let admission_errors = [
+            CalendarAdmissionError::NonCanonicalField("field"),
+            CalendarAdmissionError::DuplicateEventReference,
+            CalendarAdmissionError::AuthorHintMismatch,
+            CalendarAdmissionError::ForbiddenDateDayIndex,
+            CalendarAdmissionError::IncompleteDayCoverage,
+            CalendarAdmissionError::CoveredDayLimitExceeded { max: 1, actual: 2 },
+            CalendarAdmissionError::NonBlossomImage,
+        ];
+        for error in admission_errors {
+            assert!(!error.code().is_empty());
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    #[test]
+    fn calendar_references_and_requests_cover_canonical_accessors_and_rejections() {
+        let event = canonical_event_reference("market");
+        assert_eq!(
+            event.kind(),
+            crate::envelope::kind::KIND_CALENDAR_TIME_EVENT
+        );
+        assert_eq!(event.d_tag().as_str(), "market");
+        assert!(event.is_canonical());
+        assert_eq!(event.relay(), Some("wss://relay.example"));
+
+        let revision = CalendarEventRevisionReference::parse("b".repeat(64), None).unwrap();
+        assert_eq!(revision.raw_event_id(), revision.event_id().to_hex());
+        assert_eq!(revision.relay(), None);
+        assert!(revision.is_canonical());
+        let author = CalendarEventAuthorReference::parse("a".repeat(64), None).unwrap();
+        assert_eq!(author.raw_pubkey(), author.pubkey().to_hex());
+        assert_eq!(author.relay(), None);
+        assert!(author.is_canonical());
+
+        let coordinate = format!("31924:{}:calendar", "a".repeat(64));
+        let request = CalendarRequest::new(&coordinate, Some("wss://relay.example")).unwrap();
+        assert_eq!(request.calendar().as_str(), coordinate);
+        assert_eq!(request.relay(), Some("wss://relay.example"));
+        assert!(request.is_canonical());
+        assert!(CalendarRequest::new("bad", None).is_err());
+        assert!(CalendarRequest::new(format!("31923:{}:event", "a".repeat(64)), None).is_err());
+        assert!(CalendarRequest::new(&coordinate, Some("https://relay.example")).is_err());
+        assert!(CalendarEventReference::parse("bad", None).is_err());
+        assert!(CalendarEventRevisionReference::parse("bad", None).is_err());
+        assert!(CalendarEventAuthorReference::parse("bad", None).is_err());
+    }
+
+    #[test]
+    fn full_authored_calendar_models_expose_every_validated_field() {
+        let uid = CalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAQ").unwrap();
+        let reference = canonical_event_reference("market");
+        let image = calendar_image();
+        let calendar = AuthoredCalendar::new(
+            uid.clone(),
+            "Farm calendar",
+            "Fresh food",
+            vec![reference.clone()],
+        )
+        .unwrap()
+        .with_list_description("Weekly calendar")
+        .unwrap()
+        .with_image(image.clone())
+        .unwrap();
+        assert_eq!(calendar.uid(), &uid);
+        assert_eq!(calendar.title(), "Farm calendar");
+        assert_eq!(calendar.content(), "Fresh food");
+        assert_eq!(calendar.event_references(), &[reference]);
+        assert_eq!(calendar.list_description(), Some("Weekly calendar"));
+        assert!(calendar.image().is_some());
+
+        let request = CalendarRequest::new(
+            format!("31924:{}:calendar", "a".repeat(64)),
+            Some("wss://relay.example"),
+        )
+        .unwrap();
+        let participant = CalendarParticipant {
+            pubkey: "a".repeat(64),
+            relay: Some("wss://relay.example".into()),
+            role: Some("host".into()),
+        };
+        let uri = CalendarUri::parse("https://example.com/details").unwrap();
+        let date = AuthoredCalendarDateEvent::new(
+            "market",
+            "Market",
+            CalendarDate::parse("2026-06-20").unwrap(),
+        )
+        .unwrap()
+        .with_end(CalendarDate::parse("2026-06-21").unwrap())
+        .unwrap()
+        .with_description("description")
+        .unwrap()
+        .with_locations(vec!["Barn".into()])
+        .unwrap()
+        .with_geohash("c23nb62w20st")
+        .unwrap()
+        .with_summary("summary")
+        .unwrap()
+        .with_image(image.clone())
+        .unwrap()
+        .with_participants(vec![participant.clone()])
+        .unwrap()
+        .with_categories(vec!["market".into()])
+        .unwrap()
+        .with_references(vec![uri.clone()])
+        .unwrap()
+        .with_calendar_requests(vec![request.clone()])
+        .unwrap();
+        assert_eq!(date.d_tag().as_str(), "market");
+        assert_eq!(date.title(), "Market");
+        assert_eq!(date.start().as_str(), "2026-06-20");
+        assert_eq!(date.end().unwrap().as_str(), "2026-06-21");
+        assert_eq!(date.description(), Some("description"));
+        assert_eq!(date.locations(), ["Barn"]);
+        assert_eq!(date.geohash(), Some("c23nb62w20st"));
+        assert_eq!(date.summary(), Some("summary"));
+        assert!(date.image().is_some());
+        assert_eq!(date.participants().unwrap(), &vec![participant.clone()]);
+        assert_eq!(date.categories(), ["market"]);
+        assert_eq!(date.references(), std::slice::from_ref(&uri));
+        assert_eq!(date.calendar_requests(), std::slice::from_ref(&request));
+
+        let time = AuthoredCalendarTimeEvent::new("shift", "Shift", 86_400)
+            .unwrap()
+            .with_end(90_000)
+            .unwrap()
+            .with_description("description")
+            .unwrap()
+            .with_start_tzid("UTC")
+            .unwrap()
+            .with_end_tzid("America/Vancouver")
+            .unwrap()
+            .with_locations(vec!["Barn".into()])
+            .unwrap()
+            .with_geohash("c23nb62w20st")
+            .unwrap()
+            .with_summary("summary")
+            .unwrap()
+            .with_image(image)
+            .unwrap()
+            .with_participants(vec![participant])
+            .unwrap()
+            .with_categories(vec!["shift".into()])
+            .unwrap()
+            .with_references(vec![uri])
+            .unwrap()
+            .with_calendar_requests(vec![request])
+            .unwrap();
+        assert_eq!(time.d_tag().as_str(), "shift");
+        assert_eq!(time.title(), "Shift");
+        assert_eq!(time.start(), 86_400);
+        assert_eq!(time.end(), Some(90_000));
+        assert_eq!(time.description(), Some("description"));
+        assert_eq!(time.start_tzid().unwrap().as_str(), "UTC");
+        assert_eq!(time.end_tzid().unwrap().as_str(), "America/Vancouver");
+        assert_eq!(time.effective_end_tzid(), time.end_tzid());
+        assert_eq!(time.locations(), ["Barn"]);
+        assert_eq!(time.geohash(), Some("c23nb62w20st"));
+        assert_eq!(time.summary(), Some("summary"));
+        assert!(time.image().is_some());
+        assert_eq!(time.participants().unwrap().len(), 1);
+        assert_eq!(time.categories(), ["shift"]);
+        assert_eq!(time.references().len(), 1);
+        assert_eq!(time.calendar_requests().len(), 1);
+    }
+
+    #[test]
+    fn parsed_and_admitted_event_layers_preserve_complete_canonical_shapes() {
+        let image_url = format!("https://media.example/{}.webp", "c".repeat(64));
+        let common = ParsedNip52CalendarCommon::try_new(ParsedNip52CalendarCommonParts {
+            d_tag: "event".into(),
+            title: "Event".into(),
+            description: Some("Description".into()),
+            locations: vec!["Barn".into()],
+            geohash: Some("c23nb62w20st".into()),
+            summary: Some("Summary".into()),
+            image: Some(CalendarUri::parse(&image_url).unwrap()),
+            participants: vec![CalendarParticipant {
+                pubkey: "a".repeat(64),
+                relay: None,
+                role: None,
+            }],
+            categories: vec!["market".into()],
+            references: vec![CalendarUri::parse("https://example.com/details").unwrap()],
+            calendar_requests: vec![
+                CalendarRequest::new(format!("31924:{}:calendar", "a".repeat(64)), None).unwrap(),
+            ],
+            legacy_name: Some("Legacy".into()),
+        })
+        .unwrap();
+        assert_eq!(common.d_tag(), "event");
+        assert_eq!(common.title(), "Event");
+        assert_eq!(common.description(), Some("Description"));
+        assert_eq!(common.locations(), ["Barn"]);
+        assert_eq!(common.geohash(), Some("c23nb62w20st"));
+        assert_eq!(common.summary(), Some("Summary"));
+        assert!(common.image().is_some());
+        assert_eq!(common.participants().len(), 1);
+        assert_eq!(common.categories(), ["market"]);
+        assert_eq!(common.references().len(), 1);
+        assert_eq!(common.calendar_requests().len(), 1);
+        assert_eq!(common.legacy_name(), Some("Legacy"));
+
+        let date = ParsedNip52CalendarDateEvent::try_new(
+            common.clone(),
+            CalendarDate::parse("2026-06-20").unwrap(),
+            None,
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(date.common(), &common);
+        assert_eq!(date.start().as_str(), "2026-06-20");
+        assert_eq!(date.end(), None);
+        assert!(date.extension_day_tags().is_empty());
+        let admitted_date = AdmittedCalendarDateEvent::try_from_parsed(date).unwrap();
+        assert_eq!(admitted_date.parsed().common().title(), "Event");
+        assert_eq!(admitted_date.d_tag().as_str(), "event");
+        assert_eq!(admitted_date.blossom_image().unwrap().as_str(), image_url);
+
+        let time = ParsedNip52CalendarTimeEvent::try_new(
+            common,
+            "86400".into(),
+            86_400,
+            Some("90000".into()),
+            Some(90_000),
+            vec![ObservedUtcDay::parse("1").unwrap()],
+            Some(IanaTimeZoneId::parse("UTC").unwrap()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(time.start_wire(), "86400");
+        assert_eq!(time.start(), 86_400);
+        assert_eq!(time.end_wire(), Some("90000"));
+        assert_eq!(time.end(), Some(90_000));
+        assert_eq!(time.observed_day_indices()[0].index(), 1);
+        assert_eq!(time.start_tzid().unwrap().as_str(), "UTC");
+        assert_eq!(time.end_tzid(), None);
+        assert_eq!(time.effective_end_tzid(), time.start_tzid());
+        let admitted_time = AdmittedCalendarTimeEvent::try_from_parsed(time).unwrap();
+        assert_eq!(admitted_time.parsed().common().title(), "Event");
+        assert_eq!(admitted_time.d_tag().as_str(), "event");
+        assert_eq!(admitted_time.covered_utc_days(), [1]);
+        assert_eq!(admitted_time.blossom_image().unwrap().as_str(), image_url);
+    }
+
+    #[test]
+    fn calendar_validation_helpers_reject_noncanonical_inputs() {
+        for valid in ["text", "Märket", "a-b_c.1"] {
+            assert!(calendar_tag_text_is_valid(valid));
+        }
+        for invalid in ["", " text", "text ", "line\nbreak", "x\u{0000}"] {
+            assert!(!canonical_calendar_tag_text_is_valid(invalid));
+        }
+        for valid in ["c23nb62w20st", "0", "zzzz"] {
+            assert!(calendar_geohash_is_valid(valid));
+        }
+        for invalid in ["", "C23", "a", "i234"] {
+            assert!(!canonical_calendar_geohash_is_valid(invalid));
+        }
+        for valid in ["ws://localhost", "wss://relay.example/path?x=1"] {
+            assert!(calendar_relay_url_is_valid(valid));
+        }
+        for invalid in [
+            "",
+            " wss://relay.example",
+            "wss://relay.example/line\nbreak",
+            "relay.example",
+            "ftp://relay.example",
+            "wss:///path",
+            "https://relay.example",
+            "wss://user@relay.example",
+            "wss://relay.example/#fragment",
+        ] {
+            assert!(!calendar_relay_url_is_valid(invalid));
+        }
+        assert!(ObservedUtcDay::parse("").is_err());
+        assert!(ObservedUtcDay::parse("x").is_err());
+        assert!(ObservedUtcDay::parse("18446744073709551616").is_err());
+    }
+
+    #[test]
+    fn parsed_calendar_layers_fail_closed_across_optional_and_range_branches() {
+        for invalid in [
+            " https://example.com/path",
+            "https://example.com/line\nbreak",
+            "not-a-uri",
+        ] {
+            assert!(CalendarUri::parse(invalid).is_err(), "{invalid}");
+        }
+        assert!(
+            CalendarUri::parse(format!(
+                "https://example.com/{}",
+                "x".repeat(DEFAULT_TAG_ELEMENT_MAX_BYTES)
+            ))
+            .is_err()
+        );
+
+        let minimal_common = ParsedNip52CalendarCommon::try_new(ParsedNip52CalendarCommonParts {
+            d_tag: "event".into(),
+            title: "Event".into(),
+            description: None,
+            locations: Vec::new(),
+            geohash: None,
+            summary: None,
+            image: None,
+            participants: Vec::new(),
+            categories: Vec::new(),
+            references: Vec::new(),
+            calendar_requests: Vec::new(),
+            legacy_name: None,
+        })
+        .unwrap();
+        assert_eq!(minimal_common.description(), None);
+        assert_eq!(minimal_common.geohash(), None);
+        assert_eq!(minimal_common.summary(), None);
+        assert_eq!(minimal_common.legacy_name(), None);
+        let invalid_common = ParsedNip52CalendarCommon::try_new(ParsedNip52CalendarCommonParts {
+            d_tag: "event".into(),
+            title: "Event".into(),
+            description: None,
+            locations: Vec::new(),
+            geohash: Some("INVALID".into()),
+            summary: None,
+            image: None,
+            participants: Vec::new(),
+            categories: Vec::new(),
+            references: Vec::new(),
+            calendar_requests: Vec::new(),
+            legacy_name: None,
+        });
+        assert_eq!(invalid_common, Err(CalendarEventError::InvalidGeohash));
+
+        let start_date = CalendarDate::parse("2026-06-20").unwrap();
+        assert_eq!(
+            ParsedNip52CalendarDateEvent::try_new(
+                minimal_common.clone(),
+                start_date.clone(),
+                Some(start_date.clone()),
+                Vec::new(),
+            ),
+            Err(CalendarEventError::InvalidRange)
+        );
+        let extension_date = ParsedNip52CalendarDateEvent::try_new(
+            minimal_common.clone(),
+            start_date,
+            None,
+            vec![vec!["D".into(), "1".into()]],
+        )
+        .unwrap();
+        assert_eq!(
+            AdmittedCalendarDateEvent::try_from_parsed(extension_date),
+            Err(CalendarAdmissionError::ForbiddenDateDayIndex)
+        );
+
+        let make_time = |start_wire: &str,
+                         start: u64,
+                         end_wire: Option<&str>,
+                         end: Option<u64>,
+                         days: Vec<&str>| {
+            ParsedNip52CalendarTimeEvent::try_new(
+                minimal_common.clone(),
+                start_wire.into(),
+                start,
+                end_wire.map(str::to_owned),
+                end,
+                days.into_iter()
+                    .map(|day| ObservedUtcDay::parse(day).unwrap())
+                    .collect(),
+                None,
+                None,
+            )
+        };
+        assert_eq!(
+            make_time("2", 1, None, None, vec!["0"]),
+            Err(CalendarEventError::InvalidRange)
+        );
+        assert_eq!(
+            make_time("1", 1, Some("3"), Some(2), vec!["0"]),
+            Err(CalendarEventError::InvalidRange)
+        );
+        assert_eq!(
+            make_time("1", 1, Some("2"), None, vec!["0"]),
+            Err(CalendarEventError::InvalidRange)
+        );
+        assert_eq!(
+            make_time("1", 1, Some("1"), Some(1), vec!["0"]),
+            Err(CalendarEventError::InvalidRange)
+        );
+        assert_eq!(
+            make_time("1", 1, None, None, Vec::new()),
+            Err(CalendarEventError::InvalidRange)
+        );
+        assert_eq!(
+            make_time("1", 1, None, None, vec!["1"]),
+            Err(CalendarEventError::InvalidRange)
+        );
+
+        let noncanonical = make_time("01", 1, None, None, vec!["0"]).unwrap();
+        assert_eq!(
+            AdmittedCalendarTimeEvent::try_from_parsed(noncanonical),
+            Err(CalendarAdmissionError::NonCanonicalField("timestamp"))
+        );
+        let incomplete = make_time("1", 1, Some("86401"), Some(86_401), vec!["0"]).unwrap();
+        assert_eq!(
+            AdmittedCalendarTimeEvent::try_from_parsed(incomplete),
+            Err(CalendarAdmissionError::IncompleteDayCoverage)
+        );
+        let noncanonical_day = make_time("1", 1, None, None, vec!["00"]).unwrap();
+        assert_eq!(
+            AdmittedCalendarTimeEvent::try_from_parsed(noncanonical_day),
+            Err(CalendarAdmissionError::IncompleteDayCoverage)
+        );
+    }
+
+    #[test]
+    fn authored_and_admitted_rsvp_layers_cover_optional_transitions() {
+        let uid = CalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAQ").unwrap();
+        let event = canonical_event_reference("shift");
+        let revision = CalendarEventRevisionReference::parse("b".repeat(64), None).unwrap();
+        let author = CalendarEventAuthorReference::parse("a".repeat(64), None).unwrap();
+        let authored = AuthoredCalendarEventRsvp::new(
+            uid.clone(),
+            event.clone(),
+            CalendarEventRsvpStatus::Accepted,
+        )
+        .unwrap()
+        .with_revision_reference(revision.clone())
+        .unwrap()
+        .with_free_busy(CalendarEventFreeBusy::Free)
+        .unwrap()
+        .with_author_hint(author.clone())
+        .unwrap()
+        .with_note("Attending")
+        .unwrap();
+        assert_eq!(authored.uid(), &uid);
+        assert_eq!(authored.event_reference(), &event);
+        assert_eq!(authored.revision_reference(), Some(&revision));
+        assert_eq!(authored.status(), &CalendarEventRsvpStatus::Accepted);
+        assert_eq!(
+            authored.observed_free_busy(),
+            Some(&CalendarEventFreeBusy::Free)
+        );
+        assert_eq!(
+            authored.effective_free_busy(),
+            Some(&CalendarEventFreeBusy::Free)
+        );
+        assert_eq!(authored.author_hint(), Some(&author));
+        assert_eq!(authored.note(), Some("Attending"));
+
+        let parsed = ParsedNip52CalendarEventRsvp::try_new(ParsedNip52CalendarEventRsvpParts {
+            d_tag: uid.to_string(),
+            event_reference: event,
+            revision_reference: Some(revision),
+            status: CalendarEventRsvpStatus::Tentative,
+            observed_free_busy: Some(CalendarEventFreeBusy::Busy),
+            author_hint: Some(author),
+            note: Some("Maybe".into()),
+        })
+        .unwrap();
+        assert_eq!(parsed.d_tag(), uid.as_str());
+        assert_eq!(parsed.note(), Some("Maybe"));
+        assert_eq!(
+            parsed.effective_free_busy(),
+            Some(&CalendarEventFreeBusy::Busy)
+        );
+        let admitted = AdmittedCalendarEventRsvp::try_from_parsed(parsed).unwrap();
+        assert_eq!(admitted.parsed().d_tag(), uid.as_str());
+        assert_eq!(admitted.uid(), &uid);
+        assert_eq!(admitted.status(), &CalendarEventRsvpStatus::Tentative);
+        assert_eq!(admitted.note(), Some("Maybe"));
+    }
+
+    fn calendar_image() -> AuthoredImage {
+        let bytes = b"calendar-image";
+        let hash = Sha256::digest(bytes);
+        let media_type = MediaType::parse("image/webp").unwrap();
+        let descriptor = BlobDescriptor::new(
+            BlobUrl::parse(&format!("https://media.example/{hash}.webp")).unwrap(),
+            hash,
+            bytes.len() as u64,
+            media_type.clone(),
+            1_784_347_200,
+        )
+        .unwrap()
+        .approve_reference()
+        .unwrap()
+        .verify_bytes(bytes, &media_type)
+        .unwrap();
+        AuthoredImage::try_from(descriptor).unwrap()
     }
 
     fn canonical_event_reference(d_tag: &str) -> CalendarEventReference {

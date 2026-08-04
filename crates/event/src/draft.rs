@@ -1,20 +1,31 @@
 #![forbid(unsafe_code)]
 
 #[cfg(all(not(feature = "std"), not(test)))]
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 #[cfg(any(feature = "std", test))]
-use std::{borrow::ToOwned, string::String, vec::Vec};
+use std::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use crate::contract::registry_v7::{
-    ContractValidationError, EventContract, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
-    event_contract, validate_event_contract_parts,
+    ContractValidationError, EventAuthoringPolicy, EventContract,
+    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, event_contract, validate_event_contract_parts,
 };
-use crate::envelope::{EventEnvelope, EventEnvelopeError, EventKind, EventTags, EventTimestamp};
+use crate::envelope::{
+    EventEnvelope, EventEnvelopeError, EventKind, EventTags, EventTimestamp, kind::KIND_POST,
+};
 use crate::id::{EventId, EventSignature, ParseError, parse_public_key};
+use crate::post::{
+    AuthoredUpdate,
+    reply::{AuthoredNip10Reply, Nip10ReplyReference},
+};
 use crate::wire::v1::{
     CanonicalEventIdError, EventWireError, Nip01EventWire, canonical_nip01_event_id_preimage,
     compute_canonical_nip01_event_id,
+};
+#[cfg(feature = "serde")]
+use crate::{
+    envelope::kind::KIND_PROFILE,
+    profile::{AuthoredProfile, RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES},
 };
 use core::fmt;
 use radroots_identity::PublicKey;
@@ -208,6 +219,27 @@ pub struct EventDraft {
     content: String,
     expected_pubkey: PublicKey,
     expected_event_id: EventId,
+    #[cfg_attr(any(feature = "serde", test), serde(skip))]
+    typed_authoring: Option<TypedAuthoringKind>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TypedAuthoringKind {
+    #[cfg(feature = "serde")]
+    Profile,
+    Update,
+    Reply,
+}
+
+impl TypedAuthoringKind {
+    const fn contract_id(self) -> &'static str {
+        match self {
+            #[cfg(feature = "serde")]
+            Self::Profile => "radroots.profile.metadata.v1",
+            Self::Update => "radroots.social.update.v1",
+            Self::Reply => "radroots.social.reply.v1",
+        }
+    }
 }
 
 impl EventDraft {
@@ -224,13 +256,13 @@ impl EventDraft {
             Some(contract) => contract,
             None => return Err(DraftError::UnknownContract(contract_id.clone())),
         };
-        if contract.kind != kind {
-            return Err(DraftError::ContractKindMismatch {
-                contract_id,
+        crate::require_invariant(contract.kind == kind, &|| {
+            DraftError::ContractKindMismatch {
+                contract_id: contract_id.clone(),
                 expected_kind: contract.kind,
                 actual_kind: kind,
-            });
-        }
+            }
+        })?;
         ensure_generic_draft_authorable(contract)?;
         let expected_pubkey = parse_public_key(expected_pubkey.as_ref())?;
         let content = content.into();
@@ -258,6 +290,152 @@ impl EventDraft {
             content,
             expected_pubkey,
             expected_event_id,
+            typed_authoring: None,
+        })
+    }
+
+    /// Freezes one strict authored root text update for the generic signer SPI.
+    ///
+    /// Unlike [`Self::new`], this sealed constructor retains proof that wire
+    /// parts originated from the event-owned authored type. The proof is not
+    /// serialized, so a serialized typed draft cannot be used to recreate
+    /// typed-authoring authority.
+    pub fn from_authored_update(
+        update: &AuthoredUpdate,
+        created_at: u64,
+        expected_pubkey: impl AsRef<str>,
+    ) -> Result<Self, DraftError> {
+        Self::from_typed_parts(
+            TypedAuthoringKind::Update,
+            KIND_POST,
+            created_at,
+            Vec::new(),
+            update.content().to_owned(),
+            expected_pubkey,
+        )
+    }
+
+    /// Freezes one strict authored marked NIP-10 reply for the signer SPI.
+    pub fn from_authored_reply(
+        reply: &AuthoredNip10Reply,
+        created_at: u64,
+        expected_pubkey: impl AsRef<str>,
+    ) -> Result<Self, DraftError> {
+        let parent = reply.parent();
+        let mut tags = Vec::with_capacity(2 + 2 * usize::from(parent.is_some()));
+        tags.push(nip10_event_tag(reply.root(), "root"));
+        tags.extend(parent.map(|parent| nip10_event_tag(parent, "reply")));
+        tags.push(nip10_public_key_tag(reply.root()));
+        tags.extend(
+            parent
+                .filter(|parent| parent.author() != reply.root().author())
+                .map(nip10_public_key_tag),
+        );
+        Self::from_typed_parts(
+            TypedAuthoringKind::Reply,
+            KIND_POST,
+            created_at,
+            tags,
+            reply.content().to_owned(),
+            expected_pubkey,
+        )
+    }
+
+    /// Freezes one complete strict authored profile replacement for signing.
+    #[cfg(feature = "serde")]
+    pub fn from_authored_profile(
+        profile: &AuthoredProfile,
+        created_at: u64,
+        expected_pubkey: impl AsRef<str>,
+    ) -> Result<Self, DraftError> {
+        #[derive(serde::Serialize)]
+        struct Metadata<'a> {
+            name: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            display_name: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            about: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            picture: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            banner: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            nip05: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            bot: Option<bool>,
+        }
+
+        let metadata = Metadata {
+            name: profile.name(),
+            display_name: profile.display_name(),
+            about: profile.about(),
+            picture: profile
+                .picture()
+                .map(|image| image.descriptor().url().as_str()),
+            banner: profile
+                .banner()
+                .map(|image| image.descriptor().url().as_str()),
+            nip05: profile.nip05().map(|identifier| identifier.as_str()),
+            bot: profile.bot(),
+        };
+        let content = serde_json::to_string(&metadata)
+            .expect("authored profile metadata contains only infallible JSON scalar types");
+        crate::require_invariant(
+            content.len() <= RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES,
+            &|| {
+                DraftError::Envelope(EventEnvelopeError::ContentTooLarge {
+                    max: RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES,
+                    actual: content.len(),
+                })
+            },
+        )?;
+        Self::from_typed_parts(
+            TypedAuthoringKind::Profile,
+            KIND_PROFILE,
+            created_at,
+            Vec::new(),
+            content,
+            expected_pubkey,
+        )
+    }
+
+    fn from_typed_parts(
+        authoring: TypedAuthoringKind,
+        kind: u32,
+        created_at: u64,
+        tags: Vec<Vec<String>>,
+        content: String,
+        expected_pubkey: impl AsRef<str>,
+    ) -> Result<Self, DraftError> {
+        let contract = event_contract(authoring.contract_id())
+            .ok_or_else(|| DraftError::UnknownContract(authoring.contract_id().to_owned()))?;
+        ensure_typed_draft_authorable(contract, authoring)?;
+        crate::require_invariant(contract.kind == kind, &|| {
+            DraftError::ContractKindMismatch {
+                contract_id: contract.id.to_owned(),
+                expected_kind: contract.kind,
+                actual_kind: kind,
+            }
+        })?;
+        let expected_pubkey = parse_public_key(expected_pubkey.as_ref())?;
+        let typed_tags = EventTags::new(tags)?;
+        let expected_event_id = compute_nip01_event_id_for_valid_pubkey(
+            expected_pubkey.to_hex().as_str(),
+            created_at,
+            kind,
+            &typed_tags.to_vec(),
+            &content,
+        );
+        Ok(Self {
+            contract_id: contract.id.to_owned(),
+            contract_registry_version: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+            kind: EventKind::new(kind),
+            created_at: EventTimestamp::new(created_at),
+            tags: typed_tags,
+            content,
+            expected_pubkey,
+            expected_event_id,
+            typed_authoring: Some(authoring),
         })
     }
 
@@ -277,32 +455,37 @@ impl EventDraft {
     /// Signing boundaries must call this even for a previously validated draft
     /// so persisted data cannot bypass current registry authority.
     pub fn validate_for_signing(&self) -> Result<(), DraftError> {
-        if self.contract_registry_version != RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
-            return Err(DraftError::ContractRegistryVersionMismatch {
+        crate::require_invariant(
+            self.contract_registry_version == RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+            &|| DraftError::ContractRegistryVersionMismatch {
                 expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
                 actual: self.contract_registry_version,
-            });
-        }
+            },
+        )?;
         let contract = event_contract(self.contract_id())
             .ok_or_else(|| DraftError::UnknownContract(self.contract_id().to_owned()))?;
-        if contract.kind != self.kind_u32() {
-            return Err(DraftError::ContractKindMismatch {
+        crate::require_invariant(contract.kind == self.kind_u32(), &|| {
+            DraftError::ContractKindMismatch {
                 contract_id: contract.id.to_owned(),
                 expected_kind: contract.kind,
                 actual_kind: self.kind_u32(),
-            });
-        }
-        ensure_generic_draft_authorable(contract)?;
-        validate_event_contract_parts(
-            self.kind_u32(),
-            &self.tags_as_vec(),
-            self.content(),
-            contract.id,
-        )
-        .map_err(|error| DraftError::ContractShape {
-            contract_id: contract.id.to_owned(),
-            error,
+            }
         })?;
+        if let Some(authoring) = self.typed_authoring {
+            ensure_typed_draft_authorable(contract, authoring)?;
+        } else {
+            ensure_generic_draft_authorable(contract)?;
+            validate_event_contract_parts(
+                self.kind_u32(),
+                &self.tags_as_vec(),
+                self.content(),
+                contract.id,
+            )
+            .map_err(|error| DraftError::ContractShape {
+                contract_id: contract.id.to_owned(),
+                error,
+            })?;
+        }
         let expected_pubkey = self.expected_pubkey.to_hex();
         let actual_event_id = compute_nip01_event_id_for_valid_pubkey(
             expected_pubkey.as_str(),
@@ -311,12 +494,12 @@ impl EventDraft {
             &self.tags_as_vec(),
             self.content(),
         );
-        if actual_event_id != self.expected_event_id {
-            return Err(DraftError::DraftExpectedEventIdMismatch {
+        crate::require_invariant(actual_event_id == self.expected_event_id, &|| {
+            DraftError::DraftExpectedEventIdMismatch {
                 expected_event_id: actual_event_id.to_hex(),
                 actual_event_id: self.expected_event_id.to_hex(),
-            });
-        }
+            }
+        })?;
         Ok(())
     }
 
@@ -381,12 +564,39 @@ impl EventDraft {
 }
 
 fn ensure_generic_draft_authorable(contract: &EventContract) -> Result<(), DraftError> {
-    if !contract.authoring_policy().permits_generic_draft() {
-        return Err(DraftError::ContractNotDraftAuthorable {
+    crate::require_invariant(contract.authoring_policy().permits_generic_draft(), &|| {
+        DraftError::ContractNotDraftAuthorable {
             contract_id: contract.id.to_owned(),
-        });
-    }
-    Ok(())
+        }
+    })
+}
+
+fn ensure_typed_draft_authorable(
+    contract: &EventContract,
+    authoring: TypedAuthoringKind,
+) -> Result<(), DraftError> {
+    crate::require_invariant(
+        [
+            contract.id == authoring.contract_id(),
+            contract.authoring_policy() == EventAuthoringPolicy::TypedOnly,
+        ] == [true; 2],
+        &|| DraftError::ContractNotDraftAuthorable {
+            contract_id: contract.id.to_owned(),
+        },
+    )
+}
+
+fn nip10_event_tag(reference: &Nip10ReplyReference, marker: &str) -> Vec<String> {
+    vec![
+        "e".to_owned(),
+        reference.event_id().to_hex(),
+        reference.relay_or_empty().to_owned(),
+        marker.to_owned(),
+    ]
+}
+
+fn nip10_public_key_tag(reference: &Nip10ReplyReference) -> Vec<String> {
+    vec!["p".to_owned(), reference.author().to_hex()]
 }
 
 #[cfg(any(feature = "serde", test))]
@@ -559,9 +769,7 @@ impl SignedEvent {
         let raw_json = raw_json.into();
         let parsed =
             Nip01EventWire::parse_json(raw_json.as_str()).map_err(SignedEventError::RawJson)?;
-        if parsed != wire {
-            return Err(SignedEventError::RawJsonMismatch);
-        }
+        crate::require_invariant(parsed == wire, &|| SignedEventError::RawJsonMismatch)?;
         let envelope = wire
             .clone()
             .into_unverified_envelope()
@@ -666,44 +874,44 @@ pub fn validate_signed_nostr_event_matches_draft(
     draft: &EventDraft,
 ) -> Result<(), DraftError> {
     draft.validate_for_signing()?;
-    if signed_event.pubkey() != draft.expected_pubkey() {
-        return Err(DraftError::SignedEventPubkeyMismatch {
+    crate::require_invariant(signed_event.pubkey() == draft.expected_pubkey(), &|| {
+        DraftError::SignedEventPubkeyMismatch {
             expected_pubkey: draft.expected_pubkey().to_hex(),
             actual_pubkey: signed_event.pubkey().to_hex(),
-        });
-    }
-    if signed_event.created_at() != draft.created_at_u64() {
-        return Err(DraftError::SignedEventCreatedAtMismatch {
+        }
+    })?;
+    crate::require_invariant(signed_event.created_at() == draft.created_at_u64(), &|| {
+        DraftError::SignedEventCreatedAtMismatch {
             expected_created_at: draft.created_at_u64(),
             actual_created_at: signed_event.created_at(),
-        });
-    }
-    if signed_event.kind() != draft.kind_u32() {
-        return Err(DraftError::SignedEventKindMismatch {
+        }
+    })?;
+    crate::require_invariant(signed_event.kind() == draft.kind_u32(), &|| {
+        DraftError::SignedEventKindMismatch {
             expected_kind: draft.kind_u32(),
             actual_kind: signed_event.kind(),
-        });
-    }
+        }
+    })?;
     let signed_tags = signed_event.tags_as_vec();
     let draft_tags = draft.tags_as_vec();
-    if signed_tags != draft_tags {
-        return Err(DraftError::SignedEventTagsMismatch {
+    crate::require_invariant(signed_tags == draft_tags, &|| {
+        DraftError::SignedEventTagsMismatch {
             expected_len: draft_tags.len(),
             actual_len: signed_tags.len(),
-        });
-    }
-    if signed_event.content() != draft.content() {
-        return Err(DraftError::SignedEventContentMismatch {
+        }
+    })?;
+    crate::require_invariant(signed_event.content() == draft.content(), &|| {
+        DraftError::SignedEventContentMismatch {
             expected_len: draft.content().len(),
             actual_len: signed_event.content().len(),
-        });
-    }
-    if signed_event.id() != draft.expected_event_id() {
-        return Err(DraftError::SignedEventIdMismatch {
+        }
+    })?;
+    crate::require_invariant(signed_event.id() == draft.expected_event_id(), &|| {
+        DraftError::SignedEventIdMismatch {
             expected_event_id: draft.expected_event_id.to_hex(),
             actual_event_id: signed_event.id().to_hex(),
-        });
-    }
+        }
+    })?;
     let signed_pubkey = signed_event.pubkey().to_hex();
     let computed_event_id = compute_nip01_event_id_for_valid_pubkey(
         signed_pubkey.as_str(),
@@ -712,13 +920,12 @@ pub fn validate_signed_nostr_event_matches_draft(
         &signed_tags,
         signed_event.content(),
     );
-    if computed_event_id != *signed_event.id() {
-        return Err(DraftError::SignedEventComputedIdMismatch {
+    crate::require_invariant(computed_event_id == *signed_event.id(), &|| {
+        DraftError::SignedEventComputedIdMismatch {
             expected_event_id: signed_event.id().to_hex(),
             computed_event_id: computed_event_id.to_hex(),
-        });
-    }
-    Ok(())
+        }
+    })
 }
 
 pub fn compute_nip01_event_id(
@@ -772,6 +979,7 @@ fn nip01_event_id_preimage_for_valid_pubkey(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::envelope::kind::{
@@ -998,6 +1206,50 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn sealed_typed_drafts_preserve_exact_authored_wire_authority() {
+        let author = hex_64('a');
+        let update = AuthoredUpdate::new("Harvest update").expect("authored update");
+        let update_draft =
+            EventDraft::from_authored_update(&update, 7, &author).expect("sealed update draft");
+        assert_eq!(update_draft.contract_id(), "radroots.social.update.v1");
+        assert_eq!(update_draft.kind_u32(), KIND_POST);
+        assert!(update_draft.tags_as_vec().is_empty());
+        assert_eq!(update_draft.content(), "Harvest update");
+        update_draft.validate_for_signing().expect("update proof");
+
+        let root =
+            Nip10ReplyReference::parse(hex_64('c'), hex_64('d'), None).expect("root reference");
+        let reply = AuthoredNip10Reply::direct("Direct reply", root).expect("authored reply");
+        let reply_draft =
+            EventDraft::from_authored_reply(&reply, 8, &author).expect("sealed reply draft");
+        assert_eq!(reply_draft.contract_id(), "radroots.social.reply.v1");
+        assert_eq!(reply_draft.tags_as_vec().len(), 2);
+        assert_eq!(reply_draft.tags_as_vec()[0][3], "root");
+        reply_draft.validate_for_signing().expect("reply proof");
+
+        let profile = AuthoredProfile::new("farm")
+            .expect("authored profile")
+            .with_display_name("Farm")
+            .with_about("Local food")
+            .with_bot(false);
+        let profile_draft =
+            EventDraft::from_authored_profile(&profile, 9, &author).expect("sealed profile draft");
+        assert_eq!(profile_draft.contract_id(), "radroots.profile.metadata.v1");
+        assert_eq!(profile_draft.kind_u32(), KIND_PROFILE);
+        assert_eq!(
+            profile_draft.content(),
+            r#"{"name":"farm","display_name":"Farm","about":"Local food","bot":false}"#
+        );
+        profile_draft.validate_for_signing().expect("profile proof");
+
+        let serialized = serde_json::to_value(&update_draft).expect("typed draft evidence");
+        let error = serde_json::from_value::<EventDraft>(serialized)
+            .expect_err("serialized fields cannot recreate typed authority");
+        assert!(error.to_string().contains("not authorable"));
     }
 
     #[test]

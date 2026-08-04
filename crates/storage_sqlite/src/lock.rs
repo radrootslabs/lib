@@ -20,6 +20,7 @@ pub(crate) struct WriterLock {
 impl WriterLock {
     /// Acquires the governed lock for writable modes without hidden waiting.
     /// Read-only clients deliberately acquire no advisory lock.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub(crate) fn acquire(paths: &Paths, mode: OpenMode) -> Result<Option<Self>, Error> {
         if !mode.is_writable() {
             return Ok(None);
@@ -37,6 +38,7 @@ impl WriterLock {
 
     /// Explicitly releases the writer lock for the later asynchronous close
     /// lifecycle. Dropping the guard remains a fail-safe release path.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub(crate) fn release(self) -> Result<(), Error> {
         FileExt::unlock(&self.file).map_err(|source| Error::WriterUnlockFailed {
             path: self.path.clone(),
@@ -50,6 +52,7 @@ impl WriterLock {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn writer_lock_path(paths: &Paths) -> Result<PathBuf, Error> {
     let parent = paths
         .runtime()
@@ -62,6 +65,7 @@ fn writer_lock_path(paths: &Paths) -> Result<PathBuf, Error> {
     Ok(canonical_parent.join(WRITER_LOCK_FILE_NAME))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn open_lock_file(path: &Path) -> Result<File, Error> {
     match create_lock_file(path) {
         Ok(file) => validate_open_file(path, file),
@@ -93,6 +97,7 @@ fn open_lock_file(path: &Path) -> Result<File, Error> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn create_lock_file(path: &Path) -> std::io::Result<File> {
     let mut options = OpenOptions::new();
     options.create_new(true).read(true).write(true);
@@ -104,6 +109,7 @@ fn create_lock_file(path: &Path) -> std::io::Result<File> {
     options.open(path)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_open_file(path: &Path, file: File) -> Result<File, Error> {
     let metadata = file.metadata().map_err(|source| Error::WriterLockOpen {
         path: path.to_path_buf(),

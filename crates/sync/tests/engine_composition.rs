@@ -177,6 +177,21 @@ fn source_only_sink_only_and_full_compositions_are_explicit() {
             .expect("deadline"),
         31_000
     );
+    assert_eq!(
+        block_on(full.storage().storage_status())
+            .expect("storage status")
+            .shutdown(),
+        radroots_storage::status::ShutdownState::Open
+    );
+    assert_ne!(
+        full.ids()
+            .next_id(OperationKind::Ingest)
+            .expect("identity")
+            .as_bytes(),
+        &[0; 16]
+    );
+    assert!(format!("{full:?}").contains("Engine"));
+    assert!(format!("{:?}", full.clone()).contains("signer: true"));
 }
 
 #[test]
@@ -202,6 +217,64 @@ fn invalid_compositions_and_ambient_policy_inputs_fail_closed() {
         Err(Error::InvalidDeadlinePolicy)
     );
     assert_eq!(SyncId::new([0; 16]), Err(Error::InvalidSyncId));
+    let id = SyncId::new([9; 16]).expect("sync identity");
+    assert_eq!(id.as_bytes(), &[9; 16]);
+    for invalid in [
+        DeadlinePolicy::new(1, 0, 1),
+        DeadlinePolicy::new(1, 1, 0),
+        DeadlinePolicy::new(u64::MAX, 1, 1),
+        DeadlinePolicy::new(1, u64::MAX, 1),
+        DeadlinePolicy::new(1, 1, u64::MAX),
+    ] {
+        assert_eq!(invalid, Err(Error::InvalidDeadlinePolicy));
+    }
+    let deadlines = DeadlinePolicy::new(10, 20, 30).expect("deadlines");
+    for (operation, expected) in [
+        (OperationKind::Ingest, 10),
+        (OperationKind::Projection, 10),
+        (OperationKind::Pull, 10),
+        (OperationKind::Sign, 20),
+        (OperationKind::Deliver, 30),
+    ] {
+        assert_eq!(deadlines.timeout_ms(operation), expected);
+    }
+    assert_eq!(
+        deadlines.deadline_unix_ms(OperationKind::Pull, 0),
+        Err(Error::ClockUnavailable)
+    );
+    assert_eq!(
+        deadlines.deadline_unix_ms(OperationKind::Pull, u64::MAX),
+        Err(Error::DeadlineOverflow)
+    );
+    for error in [
+        Error::InvalidSyncId,
+        Error::InvalidDeadlinePolicy,
+        Error::ClockUnavailable,
+        Error::DeadlineOverflow,
+        Error::MissingTransportCapability,
+        Error::SignerWithoutSink,
+        Error::VerificationFailed,
+        Error::PolicyRejected,
+        Error::StorageConflict,
+        Error::StorageFailed,
+        Error::InvalidIngestReceipt,
+        Error::InvalidPullRequest,
+        Error::MissingSource,
+        Error::InvalidSourcePage,
+        Error::InvalidProjectionRequest,
+        Error::ReducerFailed,
+        Error::InvalidReducerOutput,
+        Error::InvalidPushRequest,
+        Error::MissingSigner,
+        Error::SignerFailed,
+        Error::SignerDeadlineExceeded,
+        Error::InvalidSignerOutput,
+        Error::InvalidDeliveryRequest,
+        Error::MissingSink,
+        Error::InvalidStatusRequest,
+    ] {
+        assert!(!error.to_string().is_empty());
+    }
 }
 
 #[test]
@@ -219,6 +292,18 @@ fn status_aggregates_typed_capability_and_protocol_reports() {
     assert_eq!(status.source().state(), SyncCapabilityState::Available);
     assert_eq!(status.sink().state(), SyncCapabilityState::Degraded);
     assert_eq!(status.signer().state(), SyncCapabilityState::Configured);
+    assert_eq!(
+        status.storage().shutdown(),
+        radroots_storage::status::ShutdownState::Open
+    );
+    assert_eq!(
+        status.events().health(),
+        radroots_storage::status::EventStoreHealth::Available
+    );
+    assert_eq!(status.outbox().total(), Some(0));
+    assert!(status.source().status().is_some());
+    assert!(status.sink().status().is_some());
+    assert!(status.signer().status().is_some());
     assert_eq!(status.projections()[0].projection_id(), &projection);
     assert!(status.projections()[0].status().is_none());
     let protocol = status.to_protocol();
@@ -250,6 +335,11 @@ fn status_aggregates_typed_capability_and_protocol_reports() {
 
     assert_eq!(
         block_on(full.status(&[projection.clone(), projection])),
+        Err(Error::InvalidStatusRequest)
+    );
+    let too_many = vec![ProjectionId::parse("too-many-projections").expect("projection id"); 257];
+    assert_eq!(
+        block_on(full.status(&too_many)),
         Err(Error::InvalidStatusRequest)
     );
 }

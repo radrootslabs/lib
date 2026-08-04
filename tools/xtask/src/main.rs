@@ -2,6 +2,12 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "256"]
 
+// These release-qualification modules are executable integration boundaries:
+// their governed lanes invoke external toolchains, fuzzers, package builds,
+// advisory scanners, SBOM generators, and target checks. They are exercised
+// by their dedicated release gates and must not recursively execute inside
+// xtask's unit-coverage process.
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
@@ -10,14 +16,19 @@ mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod dto_roots;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod fuzz_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod generate;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod hygiene;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod portable_qualification;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod target_qualification;
 
 use std::env;

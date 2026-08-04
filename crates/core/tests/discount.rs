@@ -1,7 +1,7 @@
 mod common;
 
 use radroots_core::{
-    Percent,
+    Percent, Unit,
     pricing::{Discount, DiscountError, DiscountScope, DiscountThreshold, DiscountValue},
 };
 
@@ -37,6 +37,28 @@ fn checked_constructor_and_accessors_preserve_valid_shape() {
     assert!(matches!(discount.value(), DiscountValue::MoneyPerBin(_)));
     assert_eq!(discount.validate(), Ok(()));
     assert!(discount.is_non_negative());
+}
+
+#[test]
+fn order_quantity_and_positive_percent_cover_the_alternate_valid_shape() {
+    let discount = Discount::try_new(
+        DiscountScope::OrderTotal,
+        DiscountThreshold::OrderQuantity {
+            min: common::qty("2", Unit::Each),
+        },
+        DiscountValue::Percent(Percent::new(common::dec("12.5"))),
+    )
+    .unwrap();
+
+    assert_eq!(discount.scope(), &DiscountScope::OrderTotal);
+    assert!(matches!(
+        discount.threshold(),
+        DiscountThreshold::OrderQuantity { min } if min.amount() == common::dec("2")
+    ));
+    assert!(
+        matches!(discount.value(), DiscountValue::Percent(percent) if percent.value() == common::dec("12.5"))
+    );
+    assert_eq!(discount.validate(), Ok(()));
 }
 
 #[test]

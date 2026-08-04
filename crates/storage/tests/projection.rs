@@ -5,8 +5,9 @@ use radroots_storage::{
     projection::{
         ArtifactDigest, EventIdRange, EventIndexCheckpoint, EventIndexManifest, EventIndexShard,
         EventIndexShardCheckpoint, EventIndexShardId, InvalidationReason, ProjectionCheckpoint,
-        ProjectionGeneration, ProjectionHealth, ProjectionId, ProjectionRevision, ProjectionStatus,
-        RebuildStage, RebuildTicket, RebuildTicketId, RebuildTransition,
+        ProjectionGeneration, ProjectionHealth, ProjectionId, ProjectionInvalidation,
+        ProjectionRevision, ProjectionStatus, RebuildStage, RebuildTicket, RebuildTicketId,
+        RebuildTransition,
     },
 };
 
@@ -276,5 +277,502 @@ fn projection_spi_is_dyn_compatible_and_validated_identifiers_fail_closed() {
             1,
         ),
         Err(Error::InvalidProjectionInvalidation)
+    );
+}
+
+#[test]
+fn projection_models_cover_all_accessors_and_validation_bounds() {
+    let id = projection_id();
+    let generation_one = generation(1);
+    assert_eq!(id.as_str(), "food_availability.v1");
+    assert_eq!(generation_one.as_bytes(), &[1; 32]);
+    for invalid in ["", "Uppercase", " leading", "trailing ", "bad/slash"] {
+        assert_eq!(
+            ProjectionId::parse(invalid),
+            Err(Error::InvalidProjectionId)
+        );
+        assert_eq!(
+            EventIndexShardId::parse(invalid),
+            Err(Error::InvalidEventIndexShardId)
+        );
+    }
+    assert_eq!(
+        ProjectionId::parse("x".repeat(radroots_storage::projection::PROJECTION_ID_MAX_BYTES + 1)),
+        Err(Error::InvalidProjectionId)
+    );
+    assert_eq!(
+        ProjectionRevision::new(0),
+        Err(Error::InvalidProjectionRevision)
+    );
+    assert_eq!(ProjectionRevision::new(2).unwrap().get(), 2);
+
+    let checkpoint = checkpoint(generation_one, 10, 4, 100);
+    assert_eq!(checkpoint.projection_id(), &id);
+    assert_eq!(checkpoint.generation(), generation_one);
+    assert_eq!(checkpoint.source_position(), Some(position(9, 10)));
+    assert_eq!(checkpoint.projected_rows(), 4);
+    assert_eq!(checkpoint.updated_at_unix_ms(), 100);
+    let empty = ProjectionCheckpoint::new(id.clone(), generation_one, None, 0, 100).unwrap();
+    assert!(empty.advances(&empty));
+    assert!(checkpoint.advances(&empty));
+    assert!(!empty.advances(&checkpoint));
+    assert!(
+        !ProjectionCheckpoint::new(id.clone(), generation(2), None, 0, 101)
+            .unwrap()
+            .advances(&empty)
+    );
+    assert!(
+        !ProjectionCheckpoint::new(
+            ProjectionId::parse("other").unwrap(),
+            generation_one,
+            None,
+            0,
+            101,
+        )
+        .unwrap()
+        .advances(&empty)
+    );
+    assert!(
+        !ProjectionCheckpoint::new(id.clone(), generation_one, None, 0, 99)
+            .unwrap()
+            .advances(&empty)
+    );
+
+    assert_eq!(
+        ProjectionInvalidation::new(
+            id.clone(),
+            generation_one,
+            generation(2),
+            InvalidationReason::OperatorRequested,
+            0,
+        ),
+        Err(Error::InvalidProjectionInvalidation)
+    );
+    let invalidation = ProjectionInvalidation::new(
+        id.clone(),
+        generation_one,
+        generation(2),
+        InvalidationReason::IntegrityFailure,
+        100,
+    )
+    .unwrap();
+    assert_eq!(invalidation.projection_id(), &id);
+    assert_eq!(invalidation.invalid_generation(), generation_one);
+    assert_eq!(invalidation.replacement_generation(), generation(2));
+    assert_eq!(invalidation.reason(), InvalidationReason::IntegrityFailure);
+    assert_eq!(invalidation.invalidated_at_unix_ms(), 100);
+    let ticket_id = RebuildTicketId::new([3; 16]).unwrap();
+    assert_eq!(ticket_id.as_bytes(), &[3; 16]);
+    let ticket = RebuildTicket::requested(ticket_id, invalidation);
+    assert_eq!(ticket.ticket_id(), ticket_id);
+    assert_eq!(ticket.revision(), ProjectionRevision::INITIAL);
+    assert_eq!(ticket.stage(), RebuildStage::Requested);
+    assert!(ticket.checkpoint().is_none());
+    assert_eq!(ticket.requested_at_unix_ms(), 100);
+    assert_eq!(ticket.updated_at_unix_ms(), 100);
+    assert_eq!(
+        RebuildTransition::start(ticket_id, ticket.revision(), 101).ticket_id(),
+        ticket_id
+    );
+}
+
+#[test]
+fn durable_rebuild_matrix_rejects_every_inconsistent_shape() {
+    let invalidation = ProjectionInvalidation::new(
+        projection_id(),
+        generation(1),
+        generation(2),
+        InvalidationReason::ProjectionGenerationChanged,
+        100,
+    )
+    .unwrap();
+    let ticket_id = RebuildTicketId::new([3; 16]).unwrap();
+    let replacement = checkpoint(generation(2), 1, 1, 105);
+    let durable = |revision, stage, checkpoint, requested, updated| {
+        RebuildTicket::from_durable_parts(
+            ticket_id,
+            invalidation.clone(),
+            revision,
+            stage,
+            checkpoint,
+            requested,
+            updated,
+        )
+    };
+    assert!(
+        durable(
+            ProjectionRevision::INITIAL,
+            RebuildStage::Requested,
+            None,
+            100,
+            100
+        )
+        .is_ok()
+    );
+    assert!(
+        durable(
+            ProjectionRevision::new(2).unwrap(),
+            RebuildStage::Running,
+            Some(replacement.clone()),
+            100,
+            105
+        )
+        .is_ok()
+    );
+    assert!(
+        durable(
+            ProjectionRevision::new(2).unwrap(),
+            RebuildStage::Completed,
+            Some(replacement.clone()),
+            100,
+            105
+        )
+        .is_ok()
+    );
+    for result in [
+        durable(
+            ProjectionRevision::INITIAL,
+            RebuildStage::Requested,
+            None,
+            99,
+            100,
+        ),
+        durable(
+            ProjectionRevision::INITIAL,
+            RebuildStage::Requested,
+            None,
+            100,
+            99,
+        ),
+        durable(
+            ProjectionRevision::new(2).unwrap(),
+            RebuildStage::Requested,
+            None,
+            100,
+            100,
+        ),
+        durable(
+            ProjectionRevision::INITIAL,
+            RebuildStage::Requested,
+            None,
+            100,
+            101,
+        ),
+        durable(
+            ProjectionRevision::INITIAL,
+            RebuildStage::Running,
+            None,
+            100,
+            101,
+        ),
+        durable(
+            ProjectionRevision::INITIAL,
+            RebuildStage::Requested,
+            Some(replacement.clone()),
+            100,
+            100,
+        ),
+        durable(
+            ProjectionRevision::new(2).unwrap(),
+            RebuildStage::Completed,
+            None,
+            100,
+            105,
+        ),
+        durable(
+            ProjectionRevision::new(2).unwrap(),
+            RebuildStage::Running,
+            Some(checkpoint(generation(1), 1, 1, 105)),
+            100,
+            105,
+        ),
+        durable(
+            ProjectionRevision::new(2).unwrap(),
+            RebuildStage::Running,
+            Some(checkpoint(generation(2), 1, 1, 106)),
+            100,
+            105,
+        ),
+    ] {
+        assert_eq!(result, Err(Error::CorruptProjectionRecord));
+    }
+
+    let requested = RebuildTicket::requested(ticket_id, invalidation.clone());
+    assert_eq!(
+        requested.transition(RebuildTransition::start(
+            ticket_id,
+            ProjectionRevision::new(2).unwrap(),
+            101
+        )),
+        Err(Error::ProjectionRevisionConflict)
+    );
+    assert_eq!(
+        requested.transition(RebuildTransition::start(
+            RebuildTicketId::new([4; 16]).unwrap(),
+            requested.revision(),
+            101,
+        )),
+        Err(Error::ProjectionRevisionConflict)
+    );
+    assert_eq!(
+        requested.transition(RebuildTransition::start(
+            ticket_id,
+            requested.revision(),
+            99
+        )),
+        Err(Error::InvalidProjectionTimestamp)
+    );
+    assert_eq!(
+        requested.transition(RebuildTransition::checkpoint(
+            ticket_id,
+            requested.revision(),
+            101,
+            replacement.clone()
+        )),
+        Err(Error::InvalidRebuildTransition)
+    );
+    let running = requested
+        .transition(RebuildTransition::start(
+            ticket_id,
+            requested.revision(),
+            101,
+        ))
+        .unwrap();
+    assert_eq!(
+        running.transition(RebuildTransition::checkpoint(
+            ticket_id,
+            running.revision(),
+            102,
+            checkpoint(generation(1), 1, 1, 102),
+        )),
+        Err(Error::ProjectionCheckpointMismatch)
+    );
+    let progressed = running
+        .transition(RebuildTransition::checkpoint(
+            ticket_id,
+            running.revision(),
+            103,
+            checkpoint(generation(2), 2, 2, 103),
+        ))
+        .unwrap();
+    assert_eq!(
+        progressed.transition(RebuildTransition::complete(
+            ticket_id,
+            progressed.revision(),
+            104,
+            checkpoint(generation(2), 1, 2, 104),
+        )),
+        Err(Error::ProjectionCheckpointRegression)
+    );
+    let failed = running
+        .transition(RebuildTransition::fail(ticket_id, running.revision(), 102))
+        .unwrap();
+    assert_eq!(failed.stage(), RebuildStage::Failed);
+    assert_eq!(
+        failed.transition(RebuildTransition::fail(ticket_id, failed.revision(), 103)),
+        Err(Error::RebuildTicketTerminal)
+    );
+}
+
+#[test]
+fn event_index_models_cover_manifest_and_checkpoint_edges() {
+    let first_id = event_id('1');
+    let last_id = event_id('2');
+    assert_eq!(
+        EventIdRange::new(last_id, first_id),
+        Err(Error::InvalidEventIndexRange)
+    );
+    let range = EventIdRange::new(first_id, last_id).unwrap();
+    assert_eq!(range.first(), &first_id);
+    assert_eq!(range.last(), &last_id);
+    let digest = ArtifactDigest::new([5; 32]);
+    assert_eq!(digest.as_bytes(), &[5; 32]);
+    let shard_id = EventIndexShardId::parse("a").unwrap();
+    assert_eq!(shard_id.as_str(), "a");
+    for path in ["", "/absolute", "../escape", "a/../b", "a//b", "a\\b", " a"] {
+        assert_eq!(
+            EventIndexShard::new(shard_id.clone(), path, 1, range.clone(), 1, 2, digest),
+            Err(Error::InvalidEventIndexArtifactPath)
+        );
+    }
+    assert_eq!(
+        EventIndexShard::new(
+            shard_id.clone(),
+            "x".repeat(radroots_storage::projection::EVENT_INDEX_ARTIFACT_PATH_MAX_BYTES + 1),
+            1,
+            range.clone(),
+            1,
+            2,
+            digest,
+        ),
+        Err(Error::InvalidEventIndexArtifactPath)
+    );
+    assert_eq!(
+        EventIndexShard::new(shard_id.clone(), "a.json", 0, range.clone(), 1, 2, digest),
+        Err(Error::InvalidEventIndexShardCount)
+    );
+    assert_eq!(
+        EventIndexShard::new(shard_id.clone(), "a.json", 1, range.clone(), 0, 2, digest),
+        Err(Error::InvalidEventIndexTimestamp)
+    );
+    assert_eq!(
+        EventIndexShard::new(shard_id.clone(), "a.json", 1, range.clone(), 2, 1, digest),
+        Err(Error::InvalidEventIndexTimestamp)
+    );
+    let shard = EventIndexShard::new(shard_id.clone(), "a.json", 1, range, 1, 2, digest).unwrap();
+    assert_eq!(shard.shard_id(), &shard_id);
+    assert_eq!(shard.artifact_path(), "a.json");
+    assert_eq!(shard.event_count(), 1);
+    assert_eq!(shard.first_published_at_unix_s(), 1);
+    assert_eq!(shard.last_published_at_unix_s(), 2);
+    assert_eq!(shard.sha256(), digest);
+    assert_eq!(
+        EventIndexManifest::new(generation(1), 1, 1, 1, 2, vec![]),
+        Err(Error::InvalidEventIndexShardCount)
+    );
+    assert_eq!(
+        EventIndexManifest::new(generation(1), 1, 0, 1, 2, vec![shard.clone()]),
+        Err(Error::InvalidEventIndexManifest)
+    );
+    assert_eq!(
+        EventIndexManifest::new(generation(1), 0, 1, 1, 2, vec![shard.clone()]),
+        Err(Error::InvalidEventIndexManifest)
+    );
+    assert_eq!(
+        EventIndexManifest::new(generation(1), 1, 1, 0, 2, vec![shard.clone()]),
+        Err(Error::InvalidEventIndexManifest)
+    );
+    assert_eq!(
+        EventIndexManifest::new(generation(1), 1, 1, 1, 3, vec![shard.clone()]),
+        Err(Error::InvalidEventIndexManifest)
+    );
+    assert_eq!(
+        EventIndexManifest::new(
+            generation(1),
+            1,
+            1,
+            1,
+            2,
+            vec![shard.clone(); radroots_storage::projection::EVENT_INDEX_SHARDS_MAX + 1],
+        ),
+        Err(Error::InvalidEventIndexShardCount)
+    );
+    let manifest = EventIndexManifest::new(generation(1), 1, 1, 1, 2, vec![shard.clone()]).unwrap();
+    assert_eq!(manifest.generation(), generation(1));
+    assert_eq!(manifest.target_shard_size(), 1);
+    assert_eq!(manifest.first_published_at_unix_s(), 1);
+    assert_eq!(manifest.last_published_at_unix_s(), 2);
+
+    for cursor in [
+        Some(String::new()),
+        Some(" leading".to_owned()),
+        Some("bad\nvalue".to_owned()),
+    ] {
+        assert_eq!(
+            EventIndexShardCheckpoint::new(shard_id.clone(), 1, None, cursor),
+            Err(Error::InvalidEventIndexCursor)
+        );
+    }
+    assert_eq!(
+        EventIndexShardCheckpoint::new(shard_id.clone(), 0, None, None),
+        Err(Error::InvalidEventIndexTimestamp)
+    );
+    let shard_checkpoint = EventIndexShardCheckpoint::new(
+        shard_id.clone(),
+        2,
+        Some(last_id),
+        Some("cursor".to_owned()),
+    )
+    .unwrap();
+    assert_eq!(shard_checkpoint.shard_id(), &shard_id);
+    assert_eq!(shard_checkpoint.last_created_at_unix_s(), 2);
+    assert_eq!(shard_checkpoint.last_event_id(), Some(&last_id));
+    assert_eq!(shard_checkpoint.cursor(), Some("cursor"));
+    assert_eq!(
+        EventIndexCheckpoint::new(generation(1), 0, vec![]),
+        Err(Error::InvalidEventIndexCheckpoint)
+    );
+    assert_eq!(
+        EventIndexCheckpoint::new(
+            generation(1),
+            1,
+            vec![
+                shard_checkpoint.clone();
+                radroots_storage::projection::EVENT_INDEX_SHARDS_MAX + 1
+            ],
+        ),
+        Err(Error::InvalidEventIndexCheckpoint)
+    );
+    let index = EventIndexCheckpoint::new(generation(1), 3, vec![shard_checkpoint]).unwrap();
+    assert_eq!(index.generation(), generation(1));
+    assert_eq!(index.generated_at_unix_ms(), 3);
+    assert_eq!(index.shards().len(), 1);
+    assert!(index.shard(&shard_id).is_some());
+    assert!(
+        index
+            .shard(&EventIndexShardId::parse("missing").unwrap())
+            .is_none()
+    );
+
+    let status = ProjectionStatus::new(
+        projection_id(),
+        generation(1),
+        ProjectionHealth::Ready,
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(status.projection_id(), &projection_id());
+    assert_eq!(status.generation(), generation(1));
+    assert!(status.checkpoint().is_none());
+    assert!(status.active_rebuild().is_none());
+    assert_eq!(
+        ProjectionStatus::new(
+            projection_id(),
+            generation(1),
+            ProjectionHealth::Rebuilding,
+            None,
+            None
+        ),
+        Err(Error::CorruptProjectionRecord)
+    );
+    assert_eq!(
+        ProjectionStatus::new(
+            projection_id(),
+            generation(1),
+            ProjectionHealth::Ready,
+            None,
+            Some(RebuildTicketId::new([1; 16]).unwrap())
+        ),
+        Err(Error::CorruptProjectionRecord)
+    );
+    assert_eq!(
+        ProjectionStatus::new(
+            projection_id(),
+            generation(1),
+            ProjectionHealth::Ready,
+            Some(checkpoint(generation(2), 1, 1, 2)),
+            None
+        ),
+        Err(Error::CorruptProjectionRecord)
+    );
+    assert_eq!(
+        ProjectionStatus::new(
+            projection_id(),
+            generation(1),
+            ProjectionHealth::Ready,
+            Some(
+                ProjectionCheckpoint::new(
+                    ProjectionId::parse("other").unwrap(),
+                    generation(1),
+                    None,
+                    1,
+                    2,
+                )
+                .unwrap(),
+            ),
+            None,
+        ),
+        Err(Error::CorruptProjectionRecord)
     );
 }

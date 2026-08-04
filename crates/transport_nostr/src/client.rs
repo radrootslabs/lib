@@ -217,4 +217,38 @@ mod tests {
         assert!(config.clone().with_timeouts(1, 120_001, 1).is_err());
         assert!(config.with_max_connections(2).is_err());
     }
+
+    #[test]
+    fn valid_configuration_accessors_and_transport_debug_are_complete() {
+        let config = Config::new(
+            RelayUrlPolicy::Public,
+            ["wss://one.example", "wss://two.example"],
+        )
+        .expect("config")
+        .with_timeouts(1, 2, 3)
+        .expect("timeouts")
+        .with_max_connections(2)
+        .expect("connections");
+        assert_eq!(config.relays().len(), 2);
+        assert_eq!(config.relay_url_policy(), RelayUrlPolicy::Public);
+        assert_eq!(config.connect_timeout_ms(), 1);
+        assert_eq!(config.request_timeout_ms(), 2);
+        assert_eq!(config.status_timeout_ms(), 3);
+        assert_eq!(config.max_connections(), 2);
+        assert!(config.clone().with_timeouts(120_001, 1, 1).is_err());
+        assert!(config.clone().with_timeouts(1, 1, 0).is_err());
+        assert!(config.clone().with_max_connections(0).is_err());
+        assert!(
+            config
+                .clone()
+                .with_max_connections(MAX_CONNECTIONS + 1)
+                .is_err()
+        );
+
+        let transport = NostrTransport::new(config.clone());
+        assert_eq!(transport.config(), &config);
+        let debug = format!("{transport:?}");
+        assert!(debug.contains("NostrTransport"));
+        assert!(!debug.contains("client"));
+    }
 }

@@ -153,7 +153,8 @@ pub fn metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::metadata_has_fields;
+    use super::{ApplicationHandlerSpec, build_application_handler_event, metadata_has_fields};
+    use crate::error::Error;
     use crate::types::RadrootsNostrMetadata;
 
     #[test]
@@ -168,5 +169,13 @@ mod tests {
             ..Default::default()
         };
         assert!(metadata_has_fields(&metadata));
+    }
+
+    #[test]
+    fn application_handler_requires_at_least_one_kind() {
+        assert!(matches!(
+            build_application_handler_event(&ApplicationHandlerSpec::new(Vec::new())),
+            Err(Error::FilterTagError(message)) if message == "application handler kinds are empty"
+        ));
     }
 }

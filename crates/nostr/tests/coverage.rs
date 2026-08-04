@@ -7,7 +7,15 @@ use nostr::{Keys as RadrootsNostrKeys, RelayUrl as RadrootsNostrRelayUrl, nips::
 #[cfg(feature = "events")]
 use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 #[cfg(feature = "events")]
+use radroots_event_codec::decode::job::{JobEventBorrow, JobEventLike};
+#[cfg(feature = "events")]
 use radroots_nostr::event::build_nip10_reply as build_nip10_reply_event;
+#[cfg(feature = "events")]
+use radroots_nostr::event::{
+    ApplicationHandlerSpec, EventAdapter, build_application_handler, metadata_has_fields,
+    to_job_feedback_index, to_job_feedback_metadata, to_job_request_index, to_job_request_metadata,
+    to_job_result_index, to_job_result_metadata, to_post_event_metadata, to_profile_event_metadata,
+};
 use radroots_nostr::event::{Kind as RadrootsNostrKind, Timestamp as RadrootsNostrTimestamp};
 use radroots_nostr::event::{
     build_job_feedback as build_event_job_feedback, build_job_result as build_event_job_result,
@@ -354,4 +362,97 @@ fn util_helpers_cover_conversion_paths() {
 
     let event = text_event_with_tags(&keys, Vec::new());
     let _ = event_created_at_u32_saturating(&event);
+}
+
+#[cfg(feature = "events")]
+#[test]
+fn event_and_job_adapters_cover_native_value_boundaries() {
+    let keys = make_keys();
+    let event = nostr::EventBuilder::new(RadrootsNostrKind::Custom(5_001), "job")
+        .tags(vec![RadrootsNostrTag::custom(
+            RadrootsNostrTagKind::Custom(Cow::Borrowed("i")),
+            vec!["input".to_string()],
+        )])
+        .sign_with_keys(&keys)
+        .unwrap();
+
+    let adapter = EventAdapter::new(&event);
+    assert_eq!(JobEventLike::raw_id(&adapter), event.id.to_hex());
+    assert_eq!(JobEventLike::raw_author(&adapter), event.pubkey.to_hex());
+    assert_eq!(
+        JobEventLike::raw_published_at(&adapter),
+        event.created_at.as_secs()
+    );
+    assert_eq!(JobEventLike::raw_kind(&adapter), 5_001);
+    assert_eq!(JobEventLike::raw_content(&adapter), "job");
+    assert_eq!(JobEventLike::raw_tags(&adapter).len(), 1);
+    assert_eq!(JobEventLike::raw_sig(&adapter), event.sig.to_string());
+    assert_eq!(JobEventBorrow::raw_id(&adapter), event.id.to_hex());
+    assert_eq!(JobEventBorrow::raw_author(&adapter), event.pubkey.to_hex());
+    assert_eq!(JobEventBorrow::raw_content(&adapter), "job");
+    assert_eq!(JobEventBorrow::raw_kind(&adapter), 5_001);
+
+    let profile_event = nostr::EventBuilder::metadata(&nostr::Metadata::new().name("Alice"))
+        .sign_with_keys(&keys)
+        .unwrap();
+    let ordinary_adapter = EventAdapter::new(&profile_event);
+    assert_eq!(JobEventLike::raw_kind(&ordinary_adapter), 0);
+    assert_eq!(JobEventBorrow::raw_kind(&ordinary_adapter), 0);
+    assert_eq!(
+        to_post_event_metadata(&profile_event).data.content,
+        profile_event.content
+    );
+    assert!(to_profile_event_metadata(&profile_event).is_some());
+    let unrelated_tag_profile =
+        nostr::EventBuilder::new(RadrootsNostrKind::Metadata, profile_event.content.clone())
+            .tag(RadrootsNostrTag::custom(
+                RadrootsNostrTagKind::Custom(Cow::Borrowed("x")),
+                vec!["ignored".to_string()],
+            ))
+            .sign_with_keys(&keys)
+            .unwrap();
+    assert!(to_profile_event_metadata(&unrelated_tag_profile).is_some());
+    let invalid_profile = nostr::EventBuilder::new(RadrootsNostrKind::Metadata, "not-json")
+        .sign_with_keys(&keys)
+        .unwrap();
+    assert!(to_profile_event_metadata(&invalid_profile).is_none());
+
+    let _ = to_job_request_metadata(&event);
+    let _ = to_job_request_index(&event);
+    let _ = to_job_result_metadata(&event);
+    let _ = to_job_result_index(&event);
+    let _ = to_job_feedback_metadata(&event);
+    let _ = to_job_feedback_index(&event);
+}
+
+#[cfg(feature = "events")]
+#[test]
+fn application_handler_builder_covers_optional_metadata_and_tag_filters() {
+    assert!(build_application_handler(&ApplicationHandlerSpec::new(Vec::new())).is_err());
+    let empty = nostr::Metadata::new();
+    assert!(!metadata_has_fields(&empty));
+    assert!(
+        build_application_handler(
+            &ApplicationHandlerSpec::new(vec![1]).with_metadata(empty.clone())
+        )
+        .is_ok()
+    );
+    assert!(build_application_handler(&ApplicationHandlerSpec::new(vec![1])).is_ok());
+    let metadata = nostr::Metadata::new().name("Market app");
+    assert!(metadata_has_fields(&metadata));
+    let spec = ApplicationHandlerSpec::new(vec![1, 30_001])
+        .with_identifier("market-app")
+        .with_metadata(metadata)
+        .with_relays(vec![" ".into(), RELAY_PRIMARY_WSS.into()])
+        .with_nostr_connect_url(" nostrconnect://app ")
+        .with_extra_tags(vec![Vec::new(), vec!["x".into(), "value".into()]]);
+    assert_eq!(spec.kinds(), [1, 30_001]);
+    assert_eq!(spec.identifier(), Some("market-app"));
+    assert!(spec.metadata().is_some());
+    assert_eq!(spec.extra_tags().len(), 2);
+    assert_eq!(spec.relays().len(), 2);
+    assert_eq!(spec.nostr_connect_url(), Some(" nostrconnect://app "));
+    let builder = build_application_handler(&spec).unwrap();
+    let event = builder.sign_with_keys(&make_keys()).unwrap();
+    assert_eq!(event.kind, RadrootsNostrKind::Custom(31_990));
 }

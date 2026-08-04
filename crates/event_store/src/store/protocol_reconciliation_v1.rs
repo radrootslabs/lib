@@ -42,7 +42,7 @@ pub(super) struct ProtocolReconciliationV1IngestResult {
     post_extension_authority_seal: ProtocolPostExtensionAuthoritySeal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct ProtocolPostExtensionAuthoritySeal {
     source_generation: RadrootsEventStoreSourceGeneration,
     generation_ordinal: i64,
@@ -236,10 +236,12 @@ async fn read_protocol_post_extension_authority_seal(
     .await?;
     let expected_global_min = (last_transition_seq > 0).then_some(1);
     let expected_global_max = (last_transition_seq > 0).then_some(last_transition_seq);
-    if last_transition_seq < 0
-        || global_transition_min_seq != expected_global_min
-        || global_transition_max_seq != expected_global_max
-    {
+    let global_bounds_match = [
+        last_transition_seq >= 0,
+        global_transition_min_seq == expected_global_min,
+        global_transition_max_seq == expected_global_max,
+    ];
+    if global_bounds_match != [true; 3] {
         return protocol_post_extension_drift(format!(
             "global transition bounds disagree with source state: min={global_transition_min_seq:?}, max={global_transition_max_seq:?}, last={last_transition_seq}"
         ));
@@ -276,10 +278,12 @@ async fn read_protocol_post_extension_authority_seal(
         })?)
     };
     let expected_active_max = (active_transition_span > 0).then_some(last_transition_seq);
-    if active_transition_span < 0
-        || active_transition_min_seq != expected_active_min
-        || active_transition_max_seq != expected_active_max
-    {
+    let active_bounds_match = [
+        active_transition_span >= 0,
+        active_transition_min_seq == expected_active_min,
+        active_transition_max_seq == expected_active_max,
+    ];
+    if active_bounds_match != [true; 3] {
         return protocol_post_extension_drift(format!(
             "active transition bounds disagree with source state: floor={transition_floor_seq}, last={last_transition_seq}, min={active_transition_min_seq:?}, max={active_transition_max_seq:?}"
         ));
@@ -333,89 +337,7 @@ fn protocol_post_extension_authority_matches(
     expected: &ProtocolPostExtensionAuthoritySeal,
     actual: &ProtocolPostExtensionAuthoritySeal,
 ) -> bool {
-    let ProtocolPostExtensionAuthoritySeal {
-        source_generation: expected_source_generation,
-        generation_ordinal: expected_generation_ordinal,
-        reconciliation_version: expected_reconciliation_version,
-        addressable_feed_version: expected_addressable_feed_version,
-        event_contract_registry_version: expected_event_contract_registry_version,
-        hook_id: expected_hook_id,
-        hook_manifest_sha256: expected_hook_manifest_sha256,
-        transition_floor_seq: expected_transition_floor_seq,
-        baseline_raw_event_count: expected_baseline_raw_event_count,
-        baseline_raw_tag_count: expected_baseline_raw_tag_count,
-        baseline_raw_high_water_seq: expected_baseline_raw_high_water_seq,
-        raw_event_count: expected_raw_event_count,
-        raw_tag_count: expected_raw_tag_count,
-        raw_event_bytes: expected_raw_event_bytes,
-        raw_tag_bytes: expected_raw_tag_bytes,
-        raw_high_water_seq: expected_raw_high_water_seq,
-        last_transition_seq: expected_last_transition_seq,
-        retained_generation_count: expected_retained_generation_count,
-        retained_generation_limit: expected_retained_generation_limit,
-        actual_raw_high_water_seq: expected_actual_raw_high_water_seq,
-        global_transition_min_seq: expected_global_transition_min_seq,
-        global_transition_max_seq: expected_global_transition_max_seq,
-        active_transition_min_seq: expected_active_transition_min_seq,
-        active_transition_max_seq: expected_active_transition_max_seq,
-        main_schema_version: expected_main_schema_version,
-        temp_schema_version: expected_temp_schema_version,
-    } = expected;
-    let ProtocolPostExtensionAuthoritySeal {
-        source_generation: actual_source_generation,
-        generation_ordinal: actual_generation_ordinal,
-        reconciliation_version: actual_reconciliation_version,
-        addressable_feed_version: actual_addressable_feed_version,
-        event_contract_registry_version: actual_event_contract_registry_version,
-        hook_id: actual_hook_id,
-        hook_manifest_sha256: actual_hook_manifest_sha256,
-        transition_floor_seq: actual_transition_floor_seq,
-        baseline_raw_event_count: actual_baseline_raw_event_count,
-        baseline_raw_tag_count: actual_baseline_raw_tag_count,
-        baseline_raw_high_water_seq: actual_baseline_raw_high_water_seq,
-        raw_event_count: actual_state_raw_event_count,
-        raw_tag_count: actual_state_raw_tag_count,
-        raw_event_bytes: actual_raw_event_bytes,
-        raw_tag_bytes: actual_raw_tag_bytes,
-        raw_high_water_seq: actual_state_raw_high_water_seq,
-        last_transition_seq: actual_last_transition_seq,
-        retained_generation_count: actual_retained_generation_count,
-        retained_generation_limit: actual_retained_generation_limit,
-        actual_raw_high_water_seq: actual_observed_raw_high_water_seq,
-        global_transition_min_seq: actual_global_transition_min_seq,
-        global_transition_max_seq: actual_global_transition_max_seq,
-        active_transition_min_seq: actual_active_transition_min_seq,
-        active_transition_max_seq: actual_active_transition_max_seq,
-        main_schema_version: actual_main_schema_version,
-        temp_schema_version: actual_temp_schema_version,
-    } = actual;
-
-    expected_source_generation == actual_source_generation
-        && expected_generation_ordinal == actual_generation_ordinal
-        && expected_reconciliation_version == actual_reconciliation_version
-        && expected_addressable_feed_version == actual_addressable_feed_version
-        && expected_event_contract_registry_version == actual_event_contract_registry_version
-        && expected_hook_id == actual_hook_id
-        && expected_hook_manifest_sha256 == actual_hook_manifest_sha256
-        && expected_transition_floor_seq == actual_transition_floor_seq
-        && expected_baseline_raw_event_count == actual_baseline_raw_event_count
-        && expected_baseline_raw_tag_count == actual_baseline_raw_tag_count
-        && expected_baseline_raw_high_water_seq == actual_baseline_raw_high_water_seq
-        && expected_raw_event_count == actual_state_raw_event_count
-        && expected_raw_tag_count == actual_state_raw_tag_count
-        && expected_raw_event_bytes == actual_raw_event_bytes
-        && expected_raw_tag_bytes == actual_raw_tag_bytes
-        && expected_raw_high_water_seq == actual_state_raw_high_water_seq
-        && expected_last_transition_seq == actual_last_transition_seq
-        && expected_retained_generation_count == actual_retained_generation_count
-        && expected_retained_generation_limit == actual_retained_generation_limit
-        && expected_actual_raw_high_water_seq == actual_observed_raw_high_water_seq
-        && expected_global_transition_min_seq == actual_global_transition_min_seq
-        && expected_global_transition_max_seq == actual_global_transition_max_seq
-        && expected_active_transition_min_seq == actual_active_transition_min_seq
-        && expected_active_transition_max_seq == actual_active_transition_max_seq
-        && expected_main_schema_version == actual_main_schema_version
-        && expected_temp_schema_version == actual_temp_schema_version
+    expected == actual
 }
 
 fn protocol_post_extension_drift<T>(reason: String) -> Result<T, RadrootsEventStoreError> {

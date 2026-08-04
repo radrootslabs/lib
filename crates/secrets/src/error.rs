@@ -292,3 +292,89 @@ impl fmt::Display for Error {
 
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_normalized_error_has_a_secret_safe_message() {
+        let id_errors = [
+            SecretIdError::Empty,
+            SecretIdError::TooLong {
+                actual_bytes: 2,
+                max_bytes: 1,
+            },
+            SecretIdError::InvalidCharacter { byte_offset: 3 },
+        ];
+        for error in id_errors {
+            assert!(!error.to_string().is_empty());
+        }
+        let errors = [
+            Error::InvalidSecretId(SecretIdError::Empty),
+            Error::InvalidKeyVersion,
+            Error::InvalidSecretLength {
+                actual_bytes: 0,
+                max_bytes: 1,
+            },
+            Error::InvalidWrappedLength {
+                actual_bytes: 0,
+                max_bytes: 1,
+            },
+            Error::BackendUnavailable {
+                backend: BackendKind::Memory,
+            },
+            Error::PolicyUnsupported {
+                backend: BackendKind::File,
+                requirement: PolicyRequirement::DeviceLocal,
+            },
+            Error::BackendMismatch {
+                provider: BackendKind::Memory,
+                reference: BackendKind::File,
+            },
+            Error::BackendFailure {
+                backend: BackendKind::Keyring,
+                operation: Operation::Open,
+            },
+            Error::SecretNotFound {
+                backend: BackendKind::External,
+                key_version: 1,
+            },
+            Error::SecretAlreadyExists {
+                backend: BackendKind::Memory,
+                key_version: 2,
+            },
+            Error::InvalidRotation,
+            Error::UnsafePath,
+            Error::InsecurePermissions,
+            Error::InvalidServiceName,
+            Error::EnvelopeTooLarge {
+                actual_bytes: 2,
+                max_bytes: 1,
+            },
+            Error::EnvelopeMalformed,
+            Error::UnsupportedEnvelopeVersion { version: 2 },
+            Error::UnsupportedCipher { cipher: 9 },
+            Error::UnsupportedKeySource { key_source: 9 },
+            Error::UnsupportedBackend { backend: 9 },
+            Error::InvalidDataKeyLength { actual_bytes: 1 },
+            Error::EncryptFailed,
+            Error::DecryptFailed,
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+        for operation in [
+            Operation::Open,
+            Operation::Provision,
+            Operation::Rotate,
+            Operation::Remove,
+            Operation::Read,
+            Operation::Write,
+            Operation::Wrap,
+            Operation::Unwrap,
+        ] {
+            assert!(!format!("{operation:?}").is_empty());
+        }
+    }
+}

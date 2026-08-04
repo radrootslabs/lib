@@ -219,6 +219,30 @@ impl Money {
     }
 }
 
+#[cfg(test)]
+mod invariant_tests {
+    use super::*;
+
+    fn negative_zero() -> crate::Decimal {
+        crate::Decimal::from_backend(rust_decimal::Decimal::from_parts(0, 0, 0, true, 0))
+    }
+
+    #[test]
+    fn internal_nonnegative_invariant_covers_invalid_and_signed_zero_states() {
+        let invalid = Money {
+            amount: crate::Decimal::from_backend(rust_decimal::Decimal::from_parts(
+                1, 0, 0, true, 0,
+            )),
+            currency: crate::Currency::USD,
+        };
+        assert_eq!(invalid.ensure_non_negative(), Err(Error::NegativeAmount));
+
+        let canonical = Money::try_new(negative_zero(), crate::Currency::USD).unwrap();
+        assert_eq!(canonical.amount(), crate::Decimal::ZERO);
+        assert_eq!(canonical.ensure_non_negative(), Ok(()));
+    }
+}
+
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Money {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {

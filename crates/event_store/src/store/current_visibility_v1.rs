@@ -114,9 +114,11 @@ pub(super) fn suppression_evidence_from_row(
             address_reference_cutoff,
         })),
         (None, None)
-            if event_reference_request_id.is_none()
-                && address_reference_request_id.is_none()
-                && address_reference_cutoff.is_none() =>
+            if (
+                event_reference_request_id.is_some(),
+                address_reference_request_id.is_some(),
+                address_reference_cutoff.is_some(),
+            ) == (false, false, false) =>
         {
             Ok(None)
         }
@@ -209,31 +211,40 @@ fn validate_visibility_shape(
     }
     let valid = match visibility.decision {
         RadrootsCurrentVisibilityDecisionV1::Visible => {
-            visibility.event.admission_status
-                == crate::model::RadrootsEventAdmissionStatus::Admitted
-                && visibility.is_raw_head
-                && evidence
-                    .is_some_and(|value| value.outcome == RadrootsNip09SuppressionOutcome::Visible)
+            (
+                visibility.event.admission_status
+                    == crate::model::RadrootsEventAdmissionStatus::Admitted,
+                visibility.is_raw_head,
+                evidence.map(|value| value.outcome),
+            ) == (true, true, Some(RadrootsNip09SuppressionOutcome::Visible))
         }
         RadrootsCurrentVisibilityDecisionV1::NotAdmitted => {
-            visibility.event.admission_status
-                != crate::model::RadrootsEventAdmissionStatus::Admitted
-                && evidence.is_none()
+            (
+                visibility.event.admission_status
+                    == crate::model::RadrootsEventAdmissionStatus::Admitted,
+                evidence.is_some(),
+            ) == (false, false)
         }
         RadrootsCurrentVisibilityDecisionV1::NotCurrent => {
-            visibility.event.admission_status
-                == crate::model::RadrootsEventAdmissionStatus::Admitted
-                && !visibility.is_raw_head
-                && visibility.raw_head_event_id.is_some()
-                && evidence.is_some()
+            (
+                visibility.event.admission_status
+                    == crate::model::RadrootsEventAdmissionStatus::Admitted,
+                visibility.is_raw_head,
+                visibility.raw_head_event_id.is_some(),
+                evidence.is_some(),
+            ) == (true, false, true, true)
         }
         RadrootsCurrentVisibilityDecisionV1::Suppressed => {
-            visibility.event.admission_status
-                == crate::model::RadrootsEventAdmissionStatus::Admitted
-                && visibility.is_raw_head
-                && evidence.is_some_and(|value| {
-                    value.outcome == RadrootsNip09SuppressionOutcome::Suppressed
-                })
+            (
+                visibility.event.admission_status
+                    == crate::model::RadrootsEventAdmissionStatus::Admitted,
+                visibility.is_raw_head,
+                evidence.map(|value| value.outcome),
+            ) == (
+                true,
+                true,
+                Some(RadrootsNip09SuppressionOutcome::Suppressed),
+            )
         }
     };
     if !valid {
@@ -284,39 +295,42 @@ async fn validate_addressable_head_projection(
         })
         .transpose()
         .map_err(|error| visibility_authority_error("stored address deletion cutoff", error))?;
-    if row.try_get::<String, _>("raw_head_event_id")? != visibility.event.event_id
-        || row.try_get::<i64, _>("raw_head_event_seq")? != visibility.event.seq
-        || row.try_get::<i64, _>("raw_head_created_at")?
-            != i64::try_from(visibility.event.created_at).map_err(|_| {
-                RadrootsEventStoreError::CurrentVisibilityDrift {
-                    reason: format!(
-                        "addressable event `{}` timestamp is outside SQLite range",
-                        visibility.event.event_id
-                    ),
-                }
-            })?
-        || row.try_get::<String, _>("admission_status")?
-            != visibility.event.admission_status.as_str()
-        || row.try_get::<Option<String>, _>("admission_code")?
-            != row.try_get::<Option<String>, _>("coordinate_admission_code")?
-        || row.try_get::<Option<String>, _>("contract_id")? != visibility.event.contract_id
-        || row.try_get::<String, _>("visibility")? != visibility.decision.as_str()
-        || row
-            .try_get::<Option<String>, _>("nip09_outcome")?
-            .as_deref()
-            != evidence.map(|value| value.outcome.code())
-        || row.try_get::<Option<String>, _>("nip09_reason")?.as_deref()
-            != evidence.map(|value| value.reason.code())
-        || row.try_get::<Option<String>, _>("event_reference_request_id")?
-            != evidence
+    let expected_created_at = i64::try_from(visibility.event.created_at).map_err(|_| {
+        RadrootsEventStoreError::CurrentVisibilityDrift {
+            reason: format!(
+                "addressable event `{}` timestamp is outside SQLite range",
+                visibility.event.event_id
+            ),
+        }
+    })?;
+    let admission_code: Option<String> = row.try_get("admission_code")?;
+    let coordinate_admission_code: Option<String> = row.try_get("coordinate_admission_code")?;
+    let nip09_outcome: Option<String> = row.try_get("nip09_outcome")?;
+    let nip09_reason: Option<String> = row.try_get("nip09_reason")?;
+    let event_reference_request_id: Option<String> = row.try_get("event_reference_request_id")?;
+    let address_reference_request_id: Option<String> =
+        row.try_get("address_reference_request_id")?;
+    let authority_matches = [
+        row.try_get::<String, _>("raw_head_event_id")? == visibility.event.event_id,
+        row.try_get::<i64, _>("raw_head_event_seq")? == visibility.event.seq,
+        row.try_get::<i64, _>("raw_head_created_at")? == expected_created_at,
+        row.try_get::<String, _>("admission_status")? == visibility.event.admission_status.as_str(),
+        admission_code == coordinate_admission_code,
+        row.try_get::<Option<String>, _>("contract_id")? == visibility.event.contract_id,
+        row.try_get::<String, _>("visibility")? == visibility.decision.as_str(),
+        nip09_outcome.as_deref() == evidence.map(|value| value.outcome.code()),
+        nip09_reason.as_deref() == evidence.map(|value| value.reason.code()),
+        event_reference_request_id
+            == evidence
                 .and_then(|value| value.event_reference_request_id.as_ref())
-                .map(EventId::to_hex)
-        || row.try_get::<Option<String>, _>("address_reference_request_id")?
-            != evidence
+                .map(EventId::to_hex),
+        address_reference_request_id
+            == evidence
                 .and_then(|value| value.address_reference_request_id.as_ref())
-                .map(EventId::to_hex)
-        || stored_cutoff != evidence.and_then(|value| value.address_reference_cutoff)
-    {
+                .map(EventId::to_hex),
+        stored_cutoff == evidence.and_then(|value| value.address_reference_cutoff),
+    ];
+    if authority_matches != [true; 12] {
         return current_visibility_drift(format!(
             "central visibility disagrees with addressable head state for `{}`",
             visibility.event.event_id
@@ -337,5 +351,246 @@ fn visibility_authority_error(
 ) -> RadrootsEventStoreError {
     RadrootsEventStoreError::CurrentVisibilityDrift {
         reason: format!("{context} is invalid: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{
+        RadrootsEventAdmissionStatus, RadrootsEventStoreSourceGeneration, RadrootsStoredRawEvent,
+    };
+
+    fn event_id(byte: char) -> EventId {
+        EventId::parse(byte.to_string().repeat(64)).expect("event id")
+    }
+
+    fn stored(
+        class: StoredEventClass,
+        admission: RadrootsEventAdmissionStatus,
+    ) -> RadrootsStoredRawEvent {
+        RadrootsStoredRawEvent {
+            seq: 1,
+            event_id: event_id('a').to_hex(),
+            pubkey: "b".repeat(64),
+            created_at: 10,
+            kind: if class == StoredEventClass::Addressable {
+                30_402
+            } else {
+                1
+            },
+            tags_json: "[]".to_owned(),
+            content: String::new(),
+            sig: "c".repeat(128),
+            raw_json: "{}".to_owned(),
+            admission_status: admission,
+            contract_id: None,
+            event_class: class,
+            valid_stream_eligible: admission == RadrootsEventAdmissionStatus::Admitted,
+            inserted_at_ms: 1,
+            updated_at_ms: 1,
+        }
+    }
+
+    fn evidence(
+        outcome: RadrootsNip09SuppressionOutcome,
+        reason: RadrootsNip09SuppressionReason,
+        event_reference: bool,
+    ) -> RadrootsNip09SuppressionEvidenceV1 {
+        RadrootsNip09SuppressionEvidenceV1 {
+            outcome,
+            reason,
+            event_reference_request_id: event_reference.then(|| event_id('d')),
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        }
+    }
+
+    fn visibility(
+        class: StoredEventClass,
+        admission: RadrootsEventAdmissionStatus,
+        is_raw_head: bool,
+        raw_head: bool,
+        suppression: Option<RadrootsNip09SuppressionEvidenceV1>,
+        decision: RadrootsCurrentVisibilityDecisionV1,
+    ) -> RadrootsCurrentEventVisibilityV1 {
+        RadrootsCurrentEventVisibilityV1 {
+            source_generation: RadrootsEventStoreSourceGeneration::from_bytes([1; 32]),
+            event: stored(class, admission),
+            is_raw_head,
+            raw_head_event_id: raw_head.then(|| event_id('a')),
+            suppression,
+            decision,
+        }
+    }
+
+    #[test]
+    fn visibility_shape_accepts_each_decision_and_rejects_component_drift() {
+        use RadrootsCurrentVisibilityDecisionV1::{NotAdmitted, NotCurrent, Suppressed, Visible};
+        use RadrootsEventAdmissionStatus::{Admitted, Unsupported};
+        use RadrootsNip09SuppressionOutcome::{
+            Suppressed as SuppressedOutcome, Visible as VisibleOutcome,
+        };
+        use RadrootsNip09SuppressionReason::{EventIdReference, NoAuthorizedReference};
+        use StoredEventClass::{Ephemeral, Regular, Replaceable};
+
+        let visible_evidence = || evidence(VisibleOutcome, NoAuthorizedReference, false);
+        let suppressed_evidence = || evidence(SuppressedOutcome, EventIdReference, true);
+
+        for valid in [
+            visibility(Regular, Unsupported, true, false, None, NotAdmitted),
+            visibility(
+                Regular,
+                Admitted,
+                true,
+                false,
+                Some(visible_evidence()),
+                Visible,
+            ),
+            visibility(Replaceable, Unsupported, false, false, None, NotAdmitted),
+            visibility(
+                Replaceable,
+                Admitted,
+                false,
+                true,
+                Some(visible_evidence()),
+                NotCurrent,
+            ),
+            visibility(
+                Replaceable,
+                Admitted,
+                true,
+                true,
+                Some(visible_evidence()),
+                Visible,
+            ),
+            visibility(
+                Replaceable,
+                Admitted,
+                true,
+                true,
+                Some(suppressed_evidence()),
+                Suppressed,
+            ),
+        ] {
+            validate_visibility_shape(&valid).expect("coherent visibility");
+        }
+
+        let invalid = [
+            visibility(
+                Ephemeral,
+                Admitted,
+                true,
+                false,
+                Some(visible_evidence()),
+                Visible,
+            ),
+            visibility(Regular, Unsupported, true, true, None, NotAdmitted),
+            visibility(Regular, Unsupported, false, false, None, NotAdmitted),
+            visibility(
+                Replaceable,
+                Admitted,
+                true,
+                false,
+                Some(visible_evidence()),
+                Visible,
+            ),
+            visibility(
+                Replaceable,
+                Admitted,
+                false,
+                false,
+                Some(visible_evidence()),
+                Visible,
+            ),
+            visibility(Replaceable, Admitted, true, true, None, Visible),
+            visibility(
+                Replaceable,
+                Admitted,
+                true,
+                true,
+                Some(visible_evidence()),
+                NotAdmitted,
+            ),
+            visibility(
+                Replaceable,
+                Unsupported,
+                false,
+                true,
+                Some(visible_evidence()),
+                NotCurrent,
+            ),
+            visibility(
+                Replaceable,
+                Admitted,
+                true,
+                true,
+                Some(visible_evidence()),
+                NotCurrent,
+            ),
+            visibility(
+                Replaceable,
+                Admitted,
+                true,
+                true,
+                Some(visible_evidence()),
+                Suppressed,
+            ),
+        ];
+        for value in invalid {
+            assert!(validate_visibility_shape(&value).is_err());
+        }
+
+        let mut mismatched_head = visibility(
+            Replaceable,
+            Admitted,
+            true,
+            true,
+            Some(visible_evidence()),
+            Visible,
+        );
+        mismatched_head.raw_head_event_id = Some(event_id('f'));
+        assert!(validate_visibility_shape(&mismatched_head).is_err());
+
+        let mut incoherent = visibility(
+            Replaceable,
+            Admitted,
+            true,
+            true,
+            Some(visible_evidence()),
+            Visible,
+        );
+        incoherent
+            .suppression
+            .as_mut()
+            .expect("evidence")
+            .address_reference_request_id = Some(event_id('e'));
+        assert!(validate_visibility_shape(&incoherent).is_err());
+    }
+
+    #[test]
+    fn suppression_parsers_cover_all_stable_values_and_unknowns() {
+        for raw in ["visible", "suppressed"] {
+            assert!(parse_suppression_outcome(raw).is_ok());
+        }
+        assert!(parse_suppression_outcome("unknown").is_err());
+        for raw in [
+            "deletion_request_immune",
+            "deletion_no_authorized_reference",
+            "deletion_request_author_mismatch",
+            "deletion_address_cutoff_precedes_target",
+            "deletion_event_id_reference",
+            "deletion_address_reference",
+            "deletion_event_id_and_address_reference",
+        ] {
+            assert!(parse_suppression_reason(raw).is_ok());
+        }
+        assert!(parse_suppression_reason("unknown").is_err());
+        assert!(current_visibility_drift::<()>("drift").is_err());
+        assert!(
+            visibility_authority_error("authority", "private")
+                .to_string()
+                .contains("authority")
+        );
     }
 }

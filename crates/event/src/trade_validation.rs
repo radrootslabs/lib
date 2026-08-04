@@ -89,6 +89,7 @@ impl core::fmt::Display for OperationalListingValidationError {
 impl std::error::Error for OperationalListingValidationError {}
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

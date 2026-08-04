@@ -65,6 +65,7 @@ mod generated_roots;
 pub use generated_roots::dto_bindgen_roots as dto_roots;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::collections::BTreeSet;
 

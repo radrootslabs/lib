@@ -2,7 +2,7 @@ use futures_executor::block_on;
 use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
-    EventStore, Journal, Outbox, ProjectionStore,
+    Error, EventStore, Journal, Outbox, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicStorage,
         AtomicWorkflow, CommitEnqueued, CommitIngested, CommitSigned,
@@ -222,6 +222,16 @@ pub(crate) fn assert_atomic_workflow_conformance(harness: &impl StorageConforman
     );
 
     let enqueue = enqueue([11; 16], instance, event.clone());
+    assert_eq!(
+        CommitEnqueued::new(
+            instance,
+            JournalRevision::new(2).expect("journal revision"),
+            admission(event.clone(), 120),
+            enqueue.clone(),
+            0,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
     let enqueued = block_on(
         harness.atomic_storage().commit(atomic_commit(
             12,

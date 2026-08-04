@@ -465,5 +465,69 @@ mod tests {
                 kind: RETIRED_KINDS[0],
             })
         );
+
+        const RETIRED_NAME: &str = concat!("listing", "_draft");
+        let retired_name = EventDescriptor {
+            name: RETIRED_NAME,
+            kind: u32::MAX,
+            event_class: EventClass::Regular,
+            purpose: "retired",
+        };
+        assert_eq!(
+            validate_catalog(&[retired_name]),
+            Err(Error::RetiredEventName {
+                name: RETIRED_NAME.into()
+            })
+        );
+        let duplicate_kind = EventDescriptor {
+            name: "different_name",
+            kind: first.kind,
+            event_class: EventClass::Regular,
+            purpose: "duplicate kind",
+        };
+        assert_eq!(
+            validate_catalog(&[first, duplicate_kind]),
+            Err(Error::DuplicateEventKind { kind: first.kind })
+        );
+        assert_eq!(
+            validate_trade_state_vocabulary(&[TradeState::Missing, TradeState::Missing]),
+            Err(Error::DuplicateTradeState {
+                state: TradeState::Missing
+            })
+        );
+
+        for retired in [
+            "revision_proposed",
+            "agreed_pending_rhi",
+            "pending_rhi",
+            "pending_validation",
+        ] {
+            assert!(matches!(
+                TradeState::parse(retired),
+                Err(Error::RetiredTradeState { .. })
+            ));
+        }
+        let errors = [
+            Error::DuplicateEventName {
+                name: "event".into(),
+            },
+            Error::DuplicateEventKind { kind: 1 },
+            Error::DuplicateTradeState {
+                state: TradeState::Invalid,
+            },
+            Error::RetiredEventKind { kind: 2 },
+            Error::RetiredEventName {
+                name: "retired".into(),
+            },
+            Error::RetiredTradeState {
+                state: "retired".into(),
+            },
+            Error::UnknownTradeState {
+                value: "unknown".into(),
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
     }
 }

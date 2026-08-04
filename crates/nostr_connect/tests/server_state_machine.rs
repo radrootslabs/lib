@@ -1,5 +1,6 @@
 use radroots_nostr_connect::message::{RequestId, RequestMessage};
 use radroots_nostr_connect::permission::{Permission, Permissions};
+use radroots_nostr_connect::server::SERVER_MESSAGE_MAX_BYTES;
 use radroots_nostr_connect::{Error, Method, Request, Response, Server};
 use std::str::FromStr;
 
@@ -65,6 +66,29 @@ fn server_rejects_unsupported_extensions_and_malformed_requests() {
 }
 
 #[test]
+fn server_rejects_invalid_configuration_message_and_fingerprint_bounds() {
+    assert!(matches!(
+        Server::with_supported_extensions([Method::Ping]),
+        Err(Error::InvalidServerState { .. })
+    ));
+    let mut server = Server::default();
+    assert!(matches!(
+        server.parse("event", &"x".repeat(SERVER_MESSAGE_MAX_BYTES + 1)),
+        Err(Error::InvalidServerRequest { .. })
+    ));
+    for fingerprint in ["", "line\nbreak"] {
+        assert!(matches!(
+            server.parse(fingerprint, &request_json("request", Request::Ping)),
+            Err(Error::InvalidServerRequest { .. })
+        ));
+    }
+    assert!(matches!(
+        server.parse("x".repeat(129), &request_json("request", Request::Ping)),
+        Err(Error::InvalidServerRequest { .. })
+    ));
+}
+
+#[test]
 fn configured_extension_is_admitted_with_a_permission_input() {
     let extension = Method::from_str("vendor_action").expect("extension");
     let mut server = Server::with_supported_extensions([extension.clone()]).expect("server");
@@ -99,6 +123,7 @@ fn server_constructs_correlated_plaintext_for_host_signing() {
         request.request_id(),
         &RequestId::parse("request-response").expect("request id")
     );
+    assert_eq!(request.request(), &Request::Ping);
     let response = request.respond(Response::Pong).expect("response");
     assert_eq!(
         response.envelope().request_id().expect("response id"),

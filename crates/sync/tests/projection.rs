@@ -104,6 +104,7 @@ struct CountingReducer {
     projection_id: ProjectionId,
     generation: ProjectionGeneration,
     fail: bool,
+    regress: bool,
 }
 
 impl Reducer for CountingReducer {
@@ -120,6 +121,9 @@ impl Reducer for CountingReducer {
     ) -> Result<u64, ReducerError> {
         if self.fail {
             return Err(ReducerError);
+        }
+        if self.regress {
+            return Ok(prior_projected_rows.saturating_sub(1));
         }
         prior_projected_rows
             .checked_add(u64::try_from(events.len()).expect("event count"))
@@ -207,6 +211,7 @@ fn reducer(id: &ProjectionId, generation: u8, fail: bool) -> CountingReducer {
         projection_id: id.clone(),
         generation: ProjectionGeneration::new([generation; 32]).expect("generation"),
         fail,
+        regress: false,
     }
 }
 
@@ -215,14 +220,17 @@ fn incremental_refresh_checkpoints_visible_events() {
     let (engine, storage, id) = setup();
     seed(&storage, 1);
     let reducer = reducer(&id, 1, false);
-    let receipt = block_on(engine.refresh_projection(
-        RefreshRequest::new(id.clone(), reducer.generation(), 10, 1).expect("request"),
-        &reducer,
-    ))
-    .expect("refresh");
+    let request = RefreshRequest::new(id.clone(), reducer.generation(), 10, 1).expect("request");
+    assert_eq!(request.projection_id(), &id);
+    assert_eq!(request.generation(), reducer.generation());
+    assert_eq!(request.batch_limit(), 10);
+    assert_eq!(request.max_batches(), 1);
+    let receipt = block_on(engine.refresh_projection(request, &reducer)).expect("refresh");
     assert_eq!(receipt.kind(), RefreshKind::Incremental);
     assert_eq!(receipt.state(), RefreshState::Complete);
     assert_eq!(receipt.events_reduced(), 1);
+    assert_eq!(receipt.batches(), 1);
+    assert!(receipt.rebuild_ticket().is_none());
     assert_eq!(
         receipt.checkpoint().expect("checkpoint").projected_rows(),
         1
@@ -270,6 +278,15 @@ fn generation_change_rebuilds_and_reducer_failure_is_durable() {
             .health(),
         ProjectionHealth::Failed
     );
+    let retried_failure = block_on(
+        engine.refresh_projection(
+            RefreshRequest::new(failing.projection_id().clone(), failing.generation(), 10, 1)
+                .expect("failed generation request"),
+            &failing,
+        ),
+    )
+    .expect("retry failed generation");
+    assert_eq!(retried_failure.state(), RefreshState::Failed);
 }
 
 #[test]
@@ -308,9 +325,88 @@ fn partial_rebuild_resumes_and_rejects_concurrent_generation() {
     .expect("second batch");
     assert_eq!(second.state(), RefreshState::Partial);
     let complete = block_on(engine.refresh_projection(
-        RefreshRequest::new(id, replacement.generation(), 1, 1).expect("request"),
+        RefreshRequest::new(id.clone(), replacement.generation(), 1, 1).expect("request"),
         &replacement,
     ))
     .expect("complete rebuild");
     assert_eq!(complete.state(), RefreshState::Complete);
+    for invalid in [
+        RefreshRequest::new(id.clone(), replacement.generation(), 0, 1),
+        RefreshRequest::new(
+            id.clone(),
+            replacement.generation(),
+            radroots_storage::event::EVENT_QUERY_LIMIT_MAX + 1,
+            1,
+        ),
+        RefreshRequest::new(id.clone(), replacement.generation(), 1, 0),
+        RefreshRequest::new(
+            id,
+            replacement.generation(),
+            1,
+            radroots_sync::projection::PROJECTION_REFRESH_MAX_BATCHES + 1,
+        ),
+    ] {
+        assert_eq!(invalid, Err(Error::InvalidProjectionRequest));
+    }
+}
+
+#[test]
+fn reducer_identity_progress_and_multi_batch_boundaries_fail_closed() {
+    let (engine, storage, id) = setup();
+    seed(&storage, 3);
+    let active_reducer = reducer(&id, 1, false);
+    let request =
+        RefreshRequest::new(id.clone(), active_reducer.generation(), 1, 2).expect("request");
+    let wrong_id = reducer(
+        &ProjectionId::parse("different-projection").expect("projection id"),
+        1,
+        false,
+    );
+    assert_eq!(
+        block_on(engine.refresh_projection(request.clone(), &wrong_id)),
+        Err(Error::InvalidProjectionRequest)
+    );
+    let wrong_generation = reducer(&id, 2, false);
+    assert_eq!(
+        block_on(engine.refresh_projection(request.clone(), &wrong_generation)),
+        Err(Error::InvalidProjectionRequest)
+    );
+    let partial =
+        block_on(engine.refresh_projection(request, &active_reducer)).expect("two batches");
+    assert_eq!(partial.state(), RefreshState::Partial);
+    assert_eq!(partial.batches(), 2);
+
+    let (engine, storage, id) = setup();
+    seed(&storage, 1);
+    let failing = reducer(&id, 1, true);
+    let failed = block_on(engine.refresh_projection(
+        RefreshRequest::new(id.clone(), failing.generation(), 1, 1).expect("request"),
+        &failing,
+    ))
+    .expect("normalized incremental failure");
+    assert_eq!(failed.state(), RefreshState::Failed);
+    assert!(failed.rebuild_ticket().is_none());
+
+    let (engine, storage, id) = setup();
+    seed(&storage, 1);
+    let initial = reducer(&id, 1, false);
+    block_on(engine.refresh_projection(
+        RefreshRequest::new(id.clone(), initial.generation(), 1, 1).expect("request"),
+        &initial,
+    ))
+    .expect("initial projection");
+    seed(&storage, 2);
+    let regressing = CountingReducer {
+        projection_id: id.clone(),
+        generation: initial.generation(),
+        fail: false,
+        regress: true,
+    };
+    assert_eq!(
+        block_on(engine.refresh_projection(
+            RefreshRequest::new(id, regressing.generation(), 1, 1).expect("request"),
+            &regressing,
+        )),
+        Err(Error::InvalidReducerOutput)
+    );
 }

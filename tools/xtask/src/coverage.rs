@@ -15,12 +15,16 @@ pub struct CoverageSummary {
     pub functions_percent: f64,
     pub summary_lines_percent: f64,
     pub summary_regions_percent: f64,
+    normalized_executable_lines: Option<CoverageCount>,
+    normalized_branches: Option<CoverageCount>,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct DetailedCoverageSummary {
     functions_percent: f64,
     regions_percent: f64,
+    executable_lines: CoverageCount,
+    branches: CoverageCount,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -91,7 +95,7 @@ struct CoverageGateReportCounts {
     branches: CoverageCount,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct CoverageCount {
     covered: u64,
     total: u64,
@@ -143,12 +147,14 @@ struct LlvmCovFunction {
     filenames: Vec<String>,
     #[serde(default)]
     regions: Vec<[u64; 8]>,
+    #[serde(default)]
+    branches: Vec<[u64; 9]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct FunctionCoverageKey {
     filenames: Vec<String>,
-    regions: Vec<RegionCoverageKey>,
+    definition: RegionCoverageKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -158,6 +164,56 @@ struct RegionCoverageKey {
     line_end: u64,
     column_end: u64,
     kind: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct BranchCoverageKey {
+    line_start: u64,
+    column_start: u64,
+    line_end: u64,
+    column_end: u64,
+    kind: u64,
+}
+
+#[derive(Debug)]
+struct CoverageSource {
+    raw: String,
+    cfg_test_lines: Vec<bool>,
+    coverage_off_lines: Vec<bool>,
+}
+
+type CoverageSourceCache = BTreeMap<String, Option<CoverageSource>>;
+
+impl CoverageSource {
+    fn new(raw: String) -> Self {
+        let cfg_test_lines = cfg_test_source_lines(&raw);
+        let coverage_off_lines = coverage_off_source_lines(&raw);
+        Self {
+            raw,
+            cfg_test_lines,
+            coverage_off_lines,
+        }
+    }
+
+    fn is_cfg_test_line(&self, line_number: u64) -> bool {
+        line_number
+            .checked_sub(1)
+            .and_then(|index| self.cfg_test_lines.get(index as usize))
+            .copied()
+            .unwrap_or(false)
+    }
+
+    fn is_coverage_off_line(&self, line_number: u64) -> bool {
+        line_number
+            .checked_sub(1)
+            .and_then(|index| self.coverage_off_lines.get(index as usize))
+            .copied()
+            .unwrap_or(false)
+    }
+
+    fn is_ignorable_line(&self, line_number: u64) -> bool {
+        self.is_cfg_test_line(line_number) || self.is_coverage_off_line(line_number)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,14 +324,17 @@ fn read_summary_for_scope(path: &Path, scope: Option<&str>) -> Result<CoverageSu
         functions_percent: totals.functions.percent,
         summary_lines_percent: totals.lines.percent,
         summary_regions_percent: totals.regions.percent,
+        normalized_executable_lines: None,
+        normalized_branches: None,
     };
 
     let details_path = coverage_details_path(path);
     if details_path.exists() {
         let normalized = read_detailed_summary(&details_path, scope)?;
-        if (summary.functions_percent - 100.0).abs() < f64::EPSILON {
-            summary.summary_regions_percent = normalized.regions_percent;
-        }
+        summary.functions_percent = normalized.functions_percent;
+        summary.summary_regions_percent = normalized.regions_percent;
+        summary.normalized_executable_lines = Some(normalized.executable_lines);
+        summary.normalized_branches = Some(normalized.branches);
     }
 
     Ok(summary)
@@ -323,19 +382,16 @@ fn read_detailed_summary(
         if function.filenames.is_empty() || function.regions.is_empty() {
             continue;
         }
+        let region = function.regions[0];
         let key = FunctionCoverageKey {
             filenames: function.filenames.clone(),
-            regions: function
-                .regions
-                .iter()
-                .map(|region| RegionCoverageKey {
-                    line_start: region[0],
-                    column_start: region[1],
-                    line_end: region[2],
-                    column_end: region[3],
-                    kind: region[7],
-                })
-                .collect(),
+            definition: RegionCoverageKey {
+                line_start: region[0],
+                column_start: region[1],
+                line_end: region[2],
+                column_end: region[3],
+                kind: region[7],
+            },
         };
         functions_by_key.entry(key).or_default().push(function);
     }
@@ -347,44 +403,61 @@ fn read_detailed_summary(
         ));
     }
 
-    let mut regions_total = 0_u64;
-    let mut regions_covered = 0_u64;
+    let mut all_regions = BTreeMap::<(String, RegionCoverageKey), bool>::new();
     let mut functions_total = 0_u64;
     let mut functions_covered = 0_u64;
-    let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut executable_lines = BTreeMap::<(String, u64), bool>::new();
+    let mut branches = BTreeMap::<(String, BranchCoverageKey), (bool, bool)>::new();
+    let mut source_cache = CoverageSourceCache::new();
     let scope_filter = scope.map(scope_path_fragment);
     for variants in functions_by_key.values() {
         if let Some(scope_filter) = scope_filter.as_deref()
             && !variants.iter().any(|function| {
                 function
                     .filenames
-                    .first()
-                    .is_some_and(|filename| filename.contains(scope_filter))
+                    .iter()
+                    .any(|filename| filename.contains(scope_filter))
             })
         {
             continue;
         }
-        let primary_filename = variants
-            .iter()
-            .filter_map(|function| function.filenames.first())
-            .find(|filename| {
-                scope_filter
-                    .as_deref()
-                    .is_none_or(|scope_filter| filename.contains(scope_filter))
-            })
-            .map(String::as_str);
-        if primary_filename.is_some_and(|filename| {
+        let primary_definition = variants.iter().find_map(|function| {
+            let region = function.regions.first()?;
+            let filename = region_filename(function, region)?;
+            if scope_filter
+                .as_deref()
+                .is_none_or(|scope_filter| filename.contains(scope_filter))
+            {
+                Some((filename, region[0]))
+            } else {
+                None
+            }
+        });
+        if primary_definition.is_some_and(|(filename, _)| {
             is_ignorable_detail_function(filename, variants, &mut source_cache)
         }) {
             continue;
         }
-        functions_total = functions_total.saturating_add(1);
-        if variants.iter().any(|function| function.count > 0) {
-            functions_covered = functions_covered.saturating_add(1);
+        if primary_definition.is_some_and(|(filename, line)| {
+            is_authored_function_line(filename, line, &mut source_cache)
+        }) {
+            functions_total = functions_total.saturating_add(1);
+            if variants.iter().any(|function| function.count > 0) {
+                functions_covered = functions_covered.saturating_add(1);
+            }
         }
-        let mut group_regions: BTreeMap<RegionCoverageKey, bool> = BTreeMap::new();
+        let mut group_regions: BTreeMap<(String, RegionCoverageKey), bool> = BTreeMap::new();
         for function in variants {
             for region in &function.regions {
+                let Some(filename) = region_filename(function, region) else {
+                    continue;
+                };
+                if scope_filter
+                    .as_deref()
+                    .is_some_and(|scope_filter| !filename.contains(scope_filter))
+                {
+                    continue;
+                }
                 let key = RegionCoverageKey {
                     line_start: region[0],
                     column_start: region[1],
@@ -394,48 +467,155 @@ fn read_detailed_summary(
                 };
                 let covered = region[4] > 0;
                 group_regions
-                    .entry(key)
+                    .entry((filename.to_owned(), key))
                     .and_modify(|existing| *existing |= covered)
                     .or_insert(covered);
             }
         }
-        for (region, covered) in group_regions {
-            if !covered
-                && primary_filename.is_some_and(|filename| {
-                    is_ignorable_synthetic_region(filename, &region, &mut source_cache)
-                })
-            {
+        for ((filename, region), covered) in group_regions {
+            if !covered && is_ignorable_synthetic_region(&filename, &region, &mut source_cache) {
                 continue;
             }
-            regions_total = regions_total.saturating_add(1);
-            if covered {
-                regions_covered = regions_covered.saturating_add(1);
+            all_regions
+                .entry((filename.clone(), region.clone()))
+                .and_modify(|existing| *existing |= covered)
+                .or_insert(covered);
+            if region.kind == 0 {
+                for line in region.line_start..=region.line_end {
+                    if !is_ignorable_lcov_source_line(&filename, line, &mut source_cache) {
+                        executable_lines
+                            .entry((filename.clone(), line))
+                            .and_modify(|existing| *existing |= covered)
+                            .or_insert(covered);
+                    }
+                }
+            }
+        }
+        for function in variants {
+            for branch in &function.branches {
+                let Some(filename) = branch_filename(function, branch) else {
+                    continue;
+                };
+                if scope_filter
+                    .as_deref()
+                    .is_some_and(|scope_filter| !filename.contains(scope_filter))
+                {
+                    continue;
+                }
+                let key = BranchCoverageKey {
+                    line_start: branch[0],
+                    column_start: branch[1],
+                    line_end: branch[2],
+                    column_end: branch[3],
+                    kind: branch[8],
+                };
+                if is_ignorable_synthetic_branch(filename, &key, &mut source_cache) {
+                    continue;
+                }
+                let true_covered = branch[4] > 0;
+                let false_covered = branch[5] > 0;
+                branches
+                    .entry((filename.to_owned(), key))
+                    .and_modify(|covered| {
+                        covered.0 |= true_covered;
+                        covered.1 |= false_covered;
+                    })
+                    .or_insert((true_covered, false_covered));
             }
         }
     }
 
+    let executable_lines_total = executable_lines.len() as u64;
+    let executable_lines_covered = executable_lines
+        .values()
+        .filter(|covered| **covered)
+        .count() as u64;
+    let branches_total = (branches.len() * 2) as u64;
+    let branches_covered = branches
+        .values()
+        .map(|covered| u64::from(covered.0) + u64::from(covered.1))
+        .sum();
+    let regions_total = all_regions.len() as u64;
+    let regions_covered = all_regions.values().filter(|covered| **covered).count() as u64;
+
     Ok(DetailedCoverageSummary {
         functions_percent: percentage(functions_covered, functions_total),
         regions_percent: percentage(regions_covered, regions_total),
+        executable_lines: CoverageCount {
+            covered: executable_lines_covered,
+            total: executable_lines_total,
+        },
+        branches: CoverageCount {
+            covered: branches_covered,
+            total: branches_total,
+        },
     })
+}
+
+fn region_filename<'a>(function: &'a LlvmCovFunction, region: &[u64; 8]) -> Option<&'a str> {
+    function
+        .filenames
+        .get(region[5] as usize)
+        .or_else(|| function.filenames.first())
+        .map(String::as_str)
+}
+
+fn branch_filename<'a>(function: &'a LlvmCovFunction, branch: &[u64; 9]) -> Option<&'a str> {
+    function
+        .filenames
+        .get(branch[6] as usize)
+        .or_else(|| function.filenames.first())
+        .map(String::as_str)
+}
+
+fn is_authored_function_line(
+    filename: &str,
+    line: u64,
+    source_cache: &mut CoverageSourceCache,
+) -> bool {
+    let source = source_cache
+        .entry(filename.to_string())
+        .or_insert_with(|| fs::read_to_string(filename).ok().map(CoverageSource::new));
+    source
+        .as_ref()
+        .and_then(|source| source.raw.lines().nth(line.saturating_sub(1) as usize))
+        .is_some_and(|source_line| source_line.contains("fn "))
+}
+
+fn is_ignorable_synthetic_branch(
+    filename: &str,
+    branch: &BranchCoverageKey,
+    source_cache: &mut CoverageSourceCache,
+) -> bool {
+    is_ignorable_synthetic_region(
+        filename,
+        &RegionCoverageKey {
+            line_start: branch.line_start,
+            column_start: branch.column_start,
+            line_end: branch.line_end,
+            column_end: branch.column_end,
+            kind: branch.kind,
+        },
+        source_cache,
+    )
 }
 
 fn is_ignorable_detail_function(
     filename: &str,
     variants: &[&LlvmCovFunction],
-    source_cache: &mut BTreeMap<String, Option<String>>,
+    source_cache: &mut CoverageSourceCache,
 ) -> bool {
     let source = source_cache
         .entry(filename.to_string())
-        .or_insert_with(|| fs::read_to_string(filename).ok());
+        .or_insert_with(|| fs::read_to_string(filename).ok().map(CoverageSource::new));
     let Some(source) = source.as_ref() else {
         return false;
     };
     variants.iter().all(|function| {
         function
             .regions
-            .iter()
-            .all(|region| is_cfg_test_source_line(source, region[0]))
+            .first()
+            .is_some_and(|region| source.is_ignorable_line(region[0]))
     })
 }
 
@@ -455,21 +635,22 @@ fn percentage(covered: u64, total: u64) -> f64 {
 fn is_ignorable_synthetic_region(
     filename: &str,
     region: &RegionCoverageKey,
-    source_cache: &mut BTreeMap<String, Option<String>>,
+    source_cache: &mut CoverageSourceCache,
 ) -> bool {
     let source = source_cache
         .entry(filename.to_string())
-        .or_insert_with(|| fs::read_to_string(filename).ok());
+        .or_insert_with(|| fs::read_to_string(filename).ok().map(CoverageSource::new));
     let Some(source) = source.as_ref() else {
         return false;
     };
-    if is_cfg_test_source_line(source, region.line_start) {
+    if source.is_ignorable_line(region.line_start) {
         return true;
     }
     if region.line_start != region.line_end {
         return false;
     }
     let Some(line) = source
+        .raw
         .lines()
         .nth(region.line_start.saturating_sub(1) as usize)
     else {
@@ -496,18 +677,22 @@ fn is_ignorable_synthetic_region(
 fn is_ignorable_lcov_source_line(
     filename: &str,
     line_number: u64,
-    source_cache: &mut BTreeMap<String, Option<String>>,
+    source_cache: &mut CoverageSourceCache,
 ) -> bool {
     let source = source_cache
         .entry(filename.to_string())
-        .or_insert_with(|| fs::read_to_string(filename).ok());
+        .or_insert_with(|| fs::read_to_string(filename).ok().map(CoverageSource::new));
     let Some(source) = source.as_ref() else {
         return false;
     };
-    if is_cfg_test_source_line(source, line_number) {
+    if source.is_ignorable_line(line_number) {
         return true;
     }
-    let Some(line) = source.lines().nth(line_number.saturating_sub(1) as usize) else {
+    let Some(line) = source
+        .raw
+        .lines()
+        .nth(line_number.saturating_sub(1) as usize)
+    else {
         return false;
     };
     let trimmed = line.trim();
@@ -529,41 +714,212 @@ fn is_ignorable_lcov_source_line(
         || line.contains("panic!(\"unexpected")
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn is_cfg_test_source_line(source: &str, line_number: u64) -> bool {
+    line_number
+        .checked_sub(1)
+        .and_then(|index| cfg_test_source_lines(source).get(index as usize).copied())
+        .unwrap_or(false)
+}
+
+fn cfg_test_source_lines(source: &str) -> Vec<bool> {
     let mut pending_cfg_test = false;
     let mut test_depth: Option<i64> = None;
-    for (index, line) in source.lines().enumerate() {
-        let current_line = index as u64 + 1;
+    let mut lines = Vec::with_capacity(source.lines().count());
+    for (line, delta) in source.lines().zip(source_brace_deltas(source)) {
         let trimmed = line.trim();
-        let mut started_test_block = false;
-        if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,") {
+        let mut in_test = test_depth.is_some();
+        if test_depth.is_none()
+            && (trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,"))
+        {
             pending_cfg_test = true;
-        } else if pending_cfg_test && trimmed.starts_with("mod tests") && trimmed.contains('{') {
-            test_depth = Some(brace_delta(trimmed));
-            pending_cfg_test = false;
-            started_test_block = true;
+            in_test = true;
+        } else if test_depth.is_none() && pending_cfg_test {
+            in_test = true;
+            let is_item_content =
+                !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with("#[");
+            if is_item_content {
+                if delta > 0 {
+                    test_depth = Some(0);
+                    pending_cfg_test = false;
+                } else if trimmed.contains('{') || trimmed.ends_with(';') {
+                    pending_cfg_test = false;
+                }
+            }
         }
-        let in_test = pending_cfg_test || test_depth.is_some();
-        if current_line == line_number {
-            return in_test;
-        }
-        if started_test_block {
-            continue;
-        }
+        lines.push(in_test);
         if let Some(depth) = test_depth.as_mut() {
-            *depth += brace_delta(trimmed);
+            *depth += delta;
             if *depth <= 0 {
                 test_depth = None;
             }
         }
     }
-    false
+    lines
 }
 
-fn brace_delta(line: &str) -> i64 {
-    let opens = line.bytes().filter(|byte| *byte == b'{').count() as i64;
-    let closes = line.bytes().filter(|byte| *byte == b'}').count() as i64;
-    opens - closes
+fn coverage_off_source_lines(source: &str) -> Vec<bool> {
+    let mut pending_coverage_off = false;
+    let mut coverage_off_depth: Option<i64> = None;
+    let mut lines = Vec::with_capacity(source.lines().count());
+    for (line, delta) in source.lines().zip(source_brace_deltas(source)) {
+        let trimmed = line.trim();
+        let mut excluded = coverage_off_depth.is_some();
+        if coverage_off_depth.is_none()
+            && trimmed.contains("cfg_attr(coverage_nightly, coverage(off))")
+        {
+            pending_coverage_off = true;
+            excluded = true;
+        } else if coverage_off_depth.is_none() && pending_coverage_off {
+            excluded = true;
+            let is_item_content =
+                !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with("#[");
+            if is_item_content {
+                if delta > 0 {
+                    coverage_off_depth = Some(0);
+                    pending_coverage_off = false;
+                } else if trimmed.contains('{') || trimmed.ends_with(';') {
+                    pending_coverage_off = false;
+                }
+            }
+        }
+        lines.push(excluded);
+        if let Some(depth) = coverage_off_depth.as_mut() {
+            *depth += delta;
+            if *depth <= 0 {
+                coverage_off_depth = None;
+            }
+        }
+    }
+    lines
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+enum RustLexicalState {
+    #[default]
+    Normal,
+    String {
+        escaped: bool,
+    },
+    RawString {
+        hashes: usize,
+    },
+    BlockComment {
+        depth: usize,
+    },
+}
+
+fn source_brace_deltas(source: &str) -> impl Iterator<Item = i64> + '_ {
+    let mut state = RustLexicalState::Normal;
+    source
+        .lines()
+        .map(move |line| rust_line_brace_delta(line, &mut state))
+}
+
+fn rust_line_brace_delta(line: &str, state: &mut RustLexicalState) -> i64 {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    let mut delta = 0;
+    while index < bytes.len() {
+        match *state {
+            RustLexicalState::Normal => match bytes[index] {
+                b'/' if bytes.get(index + 1) == Some(&b'/') => break,
+                b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                    *state = RustLexicalState::BlockComment { depth: 1 };
+                    index += 2;
+                }
+                b'r' => {
+                    if let Some((hashes, content_start)) = raw_string_start(bytes, index) {
+                        *state = RustLexicalState::RawString { hashes };
+                        index = content_start;
+                    } else {
+                        index += 1;
+                    }
+                }
+                b'"' => {
+                    *state = RustLexicalState::String { escaped: false };
+                    index += 1;
+                }
+                b'\'' => {
+                    index = char_literal_end(line, index).unwrap_or(index + 1);
+                }
+                b'{' => {
+                    delta += 1;
+                    index += 1;
+                }
+                b'}' => {
+                    delta -= 1;
+                    index += 1;
+                }
+                _ => index += 1,
+            },
+            RustLexicalState::String { escaped } => {
+                if escaped {
+                    *state = RustLexicalState::String { escaped: false };
+                } else if bytes[index] == b'\\' {
+                    *state = RustLexicalState::String { escaped: true };
+                } else if bytes[index] == b'"' {
+                    *state = RustLexicalState::Normal;
+                }
+                index += 1;
+            }
+            RustLexicalState::RawString { hashes } => {
+                if bytes[index] == b'"'
+                    && bytes
+                        .get(index + 1..index + 1 + hashes)
+                        .is_some_and(|suffix| suffix.iter().all(|byte| *byte == b'#'))
+                {
+                    *state = RustLexicalState::Normal;
+                    index += 1 + hashes;
+                } else {
+                    index += 1;
+                }
+            }
+            RustLexicalState::BlockComment { depth } => {
+                if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+                    *state = RustLexicalState::BlockComment { depth: depth + 1 };
+                    index += 2;
+                } else if bytes[index] == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                    *state = if depth == 1 {
+                        RustLexicalState::Normal
+                    } else {
+                        RustLexicalState::BlockComment { depth: depth - 1 }
+                    };
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+            }
+        }
+    }
+    delta
+}
+
+fn raw_string_start(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
+    let mut index = start.checked_add(1)?;
+    while bytes.get(index) == Some(&b'#') {
+        index += 1;
+    }
+    (bytes.get(index) == Some(&b'"')).then_some((index - start - 1, index + 1))
+}
+
+fn char_literal_end(line: &str, start: usize) -> Option<usize> {
+    let remainder = line.get(start + 1..)?;
+    let mut chars = remainder.char_indices();
+    let (_, first) = chars.next()?;
+    let content_len = if first == '\\' {
+        let (escape_index, escape) = chars.next()?;
+        if escape == 'u' && remainder.as_bytes().get(escape_index + 1) == Some(&b'{') {
+            let close = remainder.get(escape_index + 2..)?.find('}')?;
+            escape_index + 2 + close + 1
+        } else {
+            escape_index + escape.len_utf8()
+        }
+    } else {
+        first.len_utf8()
+    };
+    let closing = start + 1 + content_len;
+    (line.as_bytes().get(closing) == Some(&b'\'')).then_some(closing + 1)
 }
 
 impl CoveragePolicyFile {
@@ -855,7 +1211,7 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
     };
 
     let mut current_filename: Option<String> = None;
-    let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut source_cache = CoverageSourceCache::new();
     let mut da_total: u64 = 0;
     let mut da_covered: u64 = 0;
     let mut executable_total: u64 = 0;
@@ -1296,8 +1652,8 @@ fn coverage_ignore_filename_regex(
         if package_name == crate_name {
             found_target = true;
             patterns.push(format!(
-                "^{}/",
-                escape_regex_literal(&absolute_member.join("tests").display().to_string())
+                "^{}/([^/]+/)*tests/",
+                escape_regex_literal(&absolute_member.display().to_string())
             ));
             continue;
         }
@@ -1497,7 +1853,25 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
     };
 
     let mut summary = read_summary_for_scope(&summary_path, Some(&scope))?;
-    let lcov = read_lcov(&lcov_path)?;
+    let mut lcov = read_lcov(&lcov_path)?;
+    if let Some(lines) = summary
+        .normalized_executable_lines
+        .filter(|lines| lines.total > 0)
+    {
+        lcov.executable_total = lines.total;
+        lcov.executable_covered = lines.covered;
+        lcov.executable_percent = percentage(lines.covered, lines.total);
+        lcov.executable_source = ExecutableSource::Da;
+    }
+    if let Some(branches) = summary
+        .normalized_branches
+        .filter(|branches| branches.total > 0)
+    {
+        lcov.branch_total = branches.total;
+        lcov.branch_covered = branches.covered;
+        lcov.branches_available = true;
+        lcov.branch_percent = Some(percentage(branches.covered, branches.total));
+    }
     normalize_summary_for_gate(&scope, &summary_path, &lcov, &mut summary)?;
     let gate = evaluate_gate(&summary, &lcov, thresholds);
 
@@ -1938,7 +2312,7 @@ mod tests {
     }
 
     #[test]
-    fn read_summary_keeps_original_regions_when_functions_are_not_perfect() {
+    fn read_summary_normalizes_details_when_aggregate_functions_are_not_perfect() {
         let root = temp_dir_path("summary_details_not_applied");
         let summary_path = root.join("coverage-summary.json");
         write_file(
@@ -1974,9 +2348,9 @@ mod tests {
 }"#,
         );
 
-        let summary = read_summary(&summary_path).expect("parse preserved summary");
-        assert_eq!(summary.functions_percent, 95.0);
-        assert_eq!(summary.summary_regions_percent, 22.0);
+        let summary = read_summary(&summary_path).expect("parse normalized summary");
+        assert_eq!(summary.functions_percent, 100.0);
+        assert_eq!(summary.summary_regions_percent, 100.0);
 
         fs::remove_dir_all(root).expect("remove summary preserve root");
     }
@@ -2108,7 +2482,7 @@ mod tests {
         );
         let summary =
             read_detailed_summary(&filtered, Some("radroots_a")).expect("filtered summary");
-        assert_eq!(summary.functions_percent, 0.0);
+        assert_eq!(summary.functions_percent, 100.0);
         assert_eq!(summary.regions_percent, 0.0);
 
         fs::remove_dir_all(root).expect("remove detail edge root");
@@ -2354,6 +2728,65 @@ mod tests {
 
         assert!(is_cfg_test_source_line(source, 2));
         assert!(is_cfg_test_source_line(source, 4));
+    }
+
+    #[test]
+    fn cfg_test_source_line_stops_after_non_block_items_and_accepts_named_modules() {
+        let source = "#[cfg(test)]\nuse crate::fixture;\npub fn production() {}\n#[cfg(test)]\nmod migration_framework {\n    fn helper() {}\n}\n";
+
+        assert!(is_cfg_test_source_line(source, 2));
+        assert!(!is_cfg_test_source_line(source, 3));
+        assert!(is_cfg_test_source_line(source, 5));
+        assert!(is_cfg_test_source_line(source, 6));
+    }
+
+    #[test]
+    fn cfg_test_source_lines_ignore_braces_inside_rust_lexical_literals() {
+        let source = r####"#[cfg(test)]
+mod tests {
+    const FORMAT: &str = "{value}";
+    const RAW: &str = r###"raw { } text"###;
+    const BYTE_RAW: &[u8] = br#"bytes { }"#;
+    const OPEN: char = '{';
+    const CLOSE: char = '}';
+    // comment braces }}}
+    /* outer { /* nested } */ still ignored } */
+    fn helper() {}
+}
+pub fn production() {}
+"####;
+
+        for line in 1..=11 {
+            assert!(is_cfg_test_source_line(source, line), "test line {line}");
+        }
+        assert!(!is_cfg_test_source_line(source, 12));
+    }
+
+    #[test]
+    fn coverage_off_source_lines_cover_only_the_annotated_item() {
+        let source = "#[cfg_attr(coverage_nightly, coverage(off))]\npub fn glue(\n    enabled: bool,\n) -> bool {\n    if enabled { true } else { false }\n}\npub fn policy() -> bool { true }\n";
+        let lines = coverage_off_source_lines(source);
+
+        for line in 1..=6 {
+            assert!(lines[line - 1], "annotated item line {line}");
+        }
+        assert!(!lines[6], "following production item remains measured");
+    }
+
+    #[test]
+    fn coverage_off_source_lines_ignore_literal_and_comment_braces() {
+        let source = r####"#[cfg_attr(coverage_nightly, coverage(off))]
+fn excluded() {
+    let _ = "}";
+    let _ = r###"{ raw }"###;
+    /* } */
+}
+fn measured() {}
+"####;
+        let lines = coverage_off_source_lines(source);
+
+        assert!(lines[..6].iter().all(|excluded| *excluded));
+        assert!(!lines[6]);
     }
 
     #[test]
@@ -3443,6 +3876,8 @@ mod tests {
             functions_percent: 100.0,
             summary_lines_percent: 100.0,
             summary_regions_percent: 100.0,
+            normalized_executable_lines: None,
+            normalized_branches: None,
         };
         let lcov = LcovCoverage {
             executable_total: 10,
@@ -3913,6 +4348,8 @@ test_threads = 0
             functions_percent: 40.0,
             summary_lines_percent: 50.0,
             summary_regions_percent: 60.0,
+            normalized_executable_lines: None,
+            normalized_branches: None,
         };
         let lcov = LcovCoverage {
             executable_total: 20,
@@ -4052,7 +4489,7 @@ test_threads = 0
             coverage_ignore_filename_regex(&root, "radroots_core").expect("build ignore regex");
         assert!(ignore_regex.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX));
         assert!(ignore_regex.contains("crates/identity"));
-        assert!(ignore_regex.contains("crates/core/tests"));
+        assert!(ignore_regex.contains("crates/core/([^/]+/)*tests/"));
         assert!(!ignore_regex.contains("crates/core/src"));
     }
 

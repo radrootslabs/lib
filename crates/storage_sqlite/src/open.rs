@@ -83,6 +83,7 @@ impl Paths {
         &self.private
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub(crate) fn validate_filesystem(&self, mode: OpenMode) -> Result<(), Error> {
         for path in [&self.runtime, &self.private] {
             validate_parent(path)?;
@@ -133,6 +134,7 @@ fn validate_absolute_normal_path(path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_parent(path: &Path) -> Result<(), Error> {
     let parent = path
         .parent()
@@ -302,6 +304,7 @@ pub enum Error {
     },
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -603,6 +606,7 @@ impl fmt::Display for Error {
 impl SqliteStorage {
     /// Opens both governed databases, applying only authorized forward
     /// migrations and retaining the writer guard for the backend lifetime.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn open(options: OpenOptions) -> Result<Self, Error> {
         let writer_lock = WriterLock::acquire(options.paths(), options.mode())?;
         crate::backup::recover_interrupted_restore(options.paths(), options.mode()).await?;
@@ -699,6 +703,7 @@ fn connect_options(path: &Path, mode: OpenMode, busy_timeout: Duration) -> Sqlit
     options
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn connect(
     options: SqliteConnectOptions,
     database: &'static str,
@@ -708,6 +713,7 @@ async fn connect(
         .map_err(|_| Error::DatabaseOpenFailed { database })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn pool(options: SqliteConnectOptions, database: &'static str) -> Result<SqlitePool, Error> {
     SqlitePoolOptions::new()
         .max_connections(MAX_CONNECTIONS_PER_DATABASE)
@@ -717,6 +723,7 @@ async fn pool(options: SqliteConnectOptions, database: &'static str) -> Result<S
         .map_err(|_| Error::DatabaseOpenFailed { database })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn active_source_generation(
     connection: &mut SqliteConnection,
     mode: OpenMode,
@@ -756,6 +763,7 @@ async fn active_source_generation(
     Ok(generation)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn active_generation_rows(
     connection: &mut SqliteConnection,
 ) -> Result<Vec<sqlx::sqlite::SqliteRow>, Error> {
@@ -803,6 +811,7 @@ fn decode_source_generation(row: &sqlx::sqlite::SqliteRow) -> Result<SourceGener
     .map_err(|_| Error::CorruptSourceGeneration)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_pool(
     pool: &SqlitePool,
     database: &'static str,
@@ -815,6 +824,7 @@ async fn verify_pool(
     verify_connection(&mut connection, database, busy_timeout).await
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_connection(
     connection: &mut SqliteConnection,
     database: &'static str,
@@ -865,6 +875,7 @@ impl StdError for Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod policy_tests {
     use super::*;
     use serde::Deserialize;

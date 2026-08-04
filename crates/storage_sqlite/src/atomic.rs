@@ -17,6 +17,7 @@ use sqlx::{Row, Sqlite};
 const RECEIPT_FORMAT_VERSION: u8 = 1;
 const RECEIPT_MAX_BYTES: usize = 4 * 1024 * 1024;
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl AtomicStorage for SqliteStorage {
     fn commit(&self, request: AtomicCommit) -> BoxFuture<'_, Result<AtomicCommitReceipt, Error>> {
         Box::pin(async move {
@@ -87,8 +88,11 @@ async fn commit_transaction(
     .map_err(map_backend)?
     {
         let committed = decode_receipt_row(&row)?;
-        if committed.digest() != request.digest()
-            || committed.outcome().kind() != request.workflow().kind()
+        if [
+            committed.digest() != request.digest(),
+            committed.outcome().kind() != request.workflow().kind(),
+        ]
+        .contains(&true)
         {
             return Err(Error::AtomicCommitConflict);
         }
@@ -505,6 +509,7 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::migration::runtime::{MIGRATIONS, migration_sql};

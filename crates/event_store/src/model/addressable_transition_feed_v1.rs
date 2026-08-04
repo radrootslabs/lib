@@ -62,14 +62,6 @@ impl RadrootsAddressableTransitionScopeV1 {
         if kinds.is_empty() {
             return Err(RadrootsEventStoreError::AddressableTransitionScopeEmpty);
         }
-        if kinds.len() > RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1 {
-            return Err(
-                RadrootsEventStoreError::AddressableTransitionScopeTooLarge {
-                    max: RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1,
-                    actual: kinds.len(),
-                },
-            );
-        }
         if let Some(kind) = kinds
             .iter()
             .copied()
@@ -614,6 +606,20 @@ mod tests {
         ));
 
         value["feed_version"] = serde_json::json!(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1);
+        value["source_generation"] = serde_json::json!("00");
+        assert!(matches!(
+            RadrootsAddressableTransitionCursorV1::from_json(
+                serde_json::to_string(&value)
+                    .expect("short encoding JSON")
+                    .as_str()
+            ),
+            Err(
+                RadrootsEventStoreError::AddressableTransitionCursorEncoding {
+                    field: "source_generation"
+                }
+            )
+        ));
+
         value["source_generation"] = serde_json::json!("AA".repeat(32));
         assert!(matches!(
             RadrootsAddressableTransitionCursorV1::from_json(

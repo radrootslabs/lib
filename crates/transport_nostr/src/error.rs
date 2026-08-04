@@ -117,3 +117,59 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_error_has_a_stable_nonempty_message() {
+        let errors = [
+            Error::EmptyRelaySet,
+            Error::TooManyRelays { max: 1, actual: 2 },
+            Error::DuplicateRelayUrl {
+                url: "wss://relay.example".into(),
+            },
+            Error::InvalidRelayUrl {
+                url: "bad".into(),
+                reason: "invalid".into(),
+            },
+            Error::RelaySchemeDenied {
+                url: "ws://relay.example".into(),
+            },
+            Error::RelayDestinationDenied {
+                url: "wss://localhost".into(),
+                reason: "denied",
+            },
+            Error::EmptyResolution {
+                url: "wss://relay.example".into(),
+            },
+            Error::ResolvedAddressDenied {
+                url: "wss://relay.example".into(),
+                address: "127.0.0.1".into(),
+            },
+            Error::InvalidTimeout {
+                field: "request",
+                value_ms: 0,
+            },
+            Error::InvalidConnectionLimit { value: 0 },
+            Error::UnexpectedTransport {
+                actual: "local".into(),
+            },
+            Error::Target("invalid".into()),
+            Error::InvalidAuthChallenge,
+            Error::AuthChallengeConflict,
+            Error::AuthChallengeMissing,
+            Error::AuthChallengeExpired,
+            Error::AuthSignerUnavailable,
+            Error::AuthResponseMismatch,
+            Error::AuthResponseInvalid,
+            Error::AuthRejected,
+            Error::AuthStateUnavailable,
+            Error::AuthTransport,
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+    }
+}

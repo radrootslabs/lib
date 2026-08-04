@@ -332,6 +332,7 @@ fn upper_hex_digit(byte: u8) -> bool {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::id::RelayUrl;

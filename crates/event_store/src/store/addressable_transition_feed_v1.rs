@@ -2,6 +2,7 @@ use super::current_visibility_v1::{parse_suppression_outcome, parse_suppression_
 use super::protocol_storage_v1::stored_raw_event_from_row;
 use super::{RadrootsEventStore, u32_from_i64, u64_from_i64};
 use crate::RadrootsEventStoreError;
+use crate::error::require_invariant;
 use crate::model::{
     RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1,
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
@@ -151,14 +152,14 @@ pub(super) async fn addressable_transition_page_in_transaction_v1(
 }
 
 fn validate_limit(limit: u32) -> Result<(), RadrootsEventStoreError> {
-    if !(1..=RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1).contains(&limit) {
-        return Err(RadrootsEventStoreError::QueryLimitOutOfRange {
+    require_invariant(
+        (1..=RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1).contains(&limit),
+        || RadrootsEventStoreError::QueryLimitOutOfRange {
             min: 1,
             max: RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1,
             actual: limit,
-        });
-    }
-    Ok(())
+        },
+    )
 }
 
 struct FeedSourceAuthority {
@@ -188,35 +189,42 @@ async fn read_and_validate_source_authority(
         floor: row.try_get("transition_floor_seq")?,
         high_water: row.try_get("last_transition_seq")?,
     };
-    if authority.feed_version != RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1 {
-        return Err(
-            RadrootsEventStoreError::AddressableTransitionFeedVersionMismatch {
-                expected: RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
-                actual: authority.feed_version,
-            },
-        );
-    }
-    if authority.floor < 0 || authority.high_water < authority.floor {
-        return Err(corruption(format!(
-            "active transition interval has floor={} and high-water={}",
-            authority.floor, authority.high_water
-        )));
-    }
+    require_invariant(
+        authority.feed_version == RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
+        || RadrootsEventStoreError::AddressableTransitionFeedVersionMismatch {
+            expected: RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
+            actual: authority.feed_version,
+        },
+    )?;
+    require_invariant(
+        (
+            authority.floor >= 0,
+            authority.high_water >= authority.floor,
+        ) == (true, true),
+        || {
+            corruption(format!(
+                "active transition interval has floor={} and high-water={}",
+                authority.floor, authority.high_water
+            ))
+        },
+    )?;
     let expected_count = authority.high_water - authority.floor;
     let sealed_floor: i64 = row.try_get("sealed_floor_seq")?;
     let sealed_high_water: i64 = row.try_get("sealed_last_transition_seq")?;
     let sealed_count: i64 = row.try_get("sealed_transition_count")?;
-    if sealed_floor != authority.floor
-        || sealed_high_water != authority.high_water
-        || sealed_count != expected_count
-    {
-        return Err(RadrootsEventStoreError::AddressableTransitionSequenceGap {
+    let feed_seal_matches = [
+        sealed_floor == authority.floor,
+        sealed_high_water == authority.high_water,
+        sealed_count == expected_count,
+    ];
+    require_invariant(feed_seal_matches == [true; 3], || {
+        RadrootsEventStoreError::AddressableTransitionSequenceGap {
             reason: format!(
                 "active interval floor={} high-water={} disagrees with seal floor={sealed_floor}, high-water={sealed_high_water}, count={sealed_count}",
                 authority.floor, authority.high_water,
             ),
-        });
-    }
+        }
+    })?;
     if authority.high_water > authority.floor {
         let first_sequence = authority
             .floor
@@ -235,14 +243,14 @@ async fn read_and_validate_source_authority(
         } else {
             2
         };
-        if boundary_count != expected_boundary_count {
-            return Err(RadrootsEventStoreError::AddressableTransitionSequenceGap {
+        require_invariant(boundary_count == expected_boundary_count, || {
+            RadrootsEventStoreError::AddressableTransitionSequenceGap {
                 reason: format!(
                     "sealed interval {}..={} is missing a boundary transition",
                     first_sequence, authority.high_water
                 ),
-            });
-        }
+            }
+        })?;
     }
     Ok(authority)
 }
@@ -256,34 +264,31 @@ async fn validate_or_create_cursor(
     let Some(cursor) = cursor else {
         return Ok(source.floor);
     };
-    if cursor.feed_version() != RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1 {
-        return Err(
-            RadrootsEventStoreError::AddressableTransitionFeedVersionMismatch {
-                expected: RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
-                actual: cursor.feed_version(),
-            },
-        );
-    }
-    if cursor.scope_fingerprint() != scope.fingerprint() {
-        return Err(RadrootsEventStoreError::AddressableTransitionScopeMismatch);
-    }
-    if cursor.source_generation() != source.generation {
-        return Err(RadrootsEventStoreError::AddressableTransitionSourceGenerationMismatch);
-    }
-    if cursor.last_transition_seq() < source.floor {
-        return Err(
-            RadrootsEventStoreError::AddressableTransitionCursorExpired {
-                cursor: cursor.last_transition_seq(),
-                floor: source.floor,
-            },
-        );
-    }
-    if cursor.last_transition_seq() > source.high_water {
-        return Err(RadrootsEventStoreError::AddressableTransitionCursorAhead {
+    require_invariant(
+        cursor.feed_version() == RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
+        || RadrootsEventStoreError::AddressableTransitionFeedVersionMismatch {
+            expected: RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
+            actual: cursor.feed_version(),
+        },
+    )?;
+    require_invariant(cursor.scope_fingerprint() == scope.fingerprint(), || {
+        RadrootsEventStoreError::AddressableTransitionScopeMismatch
+    })?;
+    require_invariant(cursor.source_generation() == source.generation, || {
+        RadrootsEventStoreError::AddressableTransitionSourceGenerationMismatch
+    })?;
+    require_invariant(cursor.last_transition_seq() >= source.floor, || {
+        RadrootsEventStoreError::AddressableTransitionCursorExpired {
+            cursor: cursor.last_transition_seq(),
+            floor: source.floor,
+        }
+    })?;
+    require_invariant(cursor.last_transition_seq() <= source.high_water, || {
+        RadrootsEventStoreError::AddressableTransitionCursorAhead {
             cursor: cursor.last_transition_seq(),
             high_water: source.high_water,
-        });
-    }
+        }
+    })?;
     if cursor.last_transition_seq() != source.floor
         && cursor.last_transition_seq() != source.high_water
     {
@@ -294,14 +299,14 @@ async fn validate_or_create_cursor(
         .bind(cursor.last_transition_seq())
         .fetch_one(&mut *connection)
         .await?;
-        if exists != 1 {
-            return Err(RadrootsEventStoreError::AddressableTransitionSequenceGap {
+        require_invariant(exists == 1, || {
+            RadrootsEventStoreError::AddressableTransitionSequenceGap {
                 reason: format!(
                     "cursor sequence {} is absent from the sealed active interval",
                     cursor.last_transition_seq()
                 ),
-            });
-        }
+            }
+        })?;
     }
     Ok(cursor.last_transition_seq())
 }
@@ -312,18 +317,16 @@ async fn transition_from_row(
     expected_generation: RadrootsEventStoreSourceGeneration,
 ) -> Result<RadrootsAddressableTransitionV1, RadrootsEventStoreError> {
     let transition_seq: i64 = row.try_get("transition_seq")?;
-    if transition_seq <= 0 {
-        return Err(corruption(format!(
+    require_invariant(transition_seq > 0, || {
+        corruption(format!(
             "transition sequence {transition_seq} is not positive"
-        )));
-    }
+        ))
+    })?;
     let source_generation = generation_from_blob(row.try_get("source_generation")?)
         .map_err(|error| corruption(format!("transition generation is invalid: {error}")))?;
-    if source_generation != expected_generation {
-        return Err(corruption(
-            "scoped query returned a transition from another generation",
-        ));
-    }
+    require_invariant(source_generation == expected_generation, || {
+        corruption("scoped query returned a transition from another generation")
+    })?;
     let origin =
         RadrootsAddressableTransitionOriginV1::parse(row.try_get::<String, _>("origin")?.as_str())
             .map_err(|error| corruption(error.to_string()))?;
@@ -331,11 +334,13 @@ async fn transition_from_row(
         .map_err(|error| corruption(error.to_string()))?;
     let pubkey: String = row.try_get("pubkey")?;
     let d_tag: String = row.try_get("d_tag")?;
-    if !(30_000..=39_999).contains(&kind)
-        || d_tag.len() > RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1
-    {
-        return Err(corruption("transition coordinate is outside wire bounds"));
-    }
+    let coordinate_is_bounded = [
+        (30_000..=39_999).contains(&kind),
+        d_tag.len() <= RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1,
+    ];
+    require_invariant(coordinate_is_bounded == [true; 2], || {
+        corruption("transition coordinate is outside wire bounds")
+    })?;
     let coordinate = RadrootsAddressableTransitionCoordinateV1 {
         kind,
         pubkey: PublicKey::from_hex(pubkey.as_str())
@@ -406,22 +411,24 @@ async fn transition_from_row(
         &raw_event,
     )
     .await?;
-    if raw_event.created_at != raw_head_created_at
-        || admission.status != admission_status
-        || admission.code.as_deref() != admission_code.as_deref()
-        || admission.contract.map(|contract| contract.id) != contract_id.as_deref()
-    {
-        return Err(corruption(format!(
+    let raw_head_matches = [
+        raw_event.created_at == raw_head_created_at,
+        admission.status == admission_status,
+        admission.code.as_deref() == admission_code.as_deref(),
+        admission.contract.map(|contract| contract.id) == contract_id.as_deref(),
+    ];
+    require_invariant(raw_head_matches == [true; 4], || {
+        corruption(format!(
             "transition {transition_seq} disagrees with its raw-head event"
-        )));
-    }
+        ))
+    })?;
 
     let visible_event = if let Some(reference) = visible_reference.as_ref() {
-        if reference != &raw_head {
-            return Err(corruption(format!(
+        require_invariant(reference == &raw_head, || {
+            corruption(format!(
                 "transition {transition_seq} visible event is not the raw head"
-            )));
-        }
+            ))
+        })?;
         Some(RadrootsStoreProducedCanonicalEventV1 {
             event_id: *raw_head.event_id(),
             pubkey: *coordinate.pubkey(),
@@ -443,11 +450,14 @@ async fn transition_from_row(
             &event,
         )
         .await?;
-        if admission.status != RadrootsEventAdmissionStatus::Admitted {
-            return Err(corruption(format!(
-                "transition {transition_seq} retracts an event that is not admitted"
-            )));
-        }
+        require_invariant(
+            admission.status == RadrootsEventAdmissionStatus::Admitted,
+            || {
+                corruption(format!(
+                    "transition {transition_seq} retracts an event that is not admitted"
+                ))
+            },
+        )?;
     }
     let cause = if let Some(reference) = cause_reference.as_ref() {
         if reference == &raw_head {
@@ -562,30 +572,28 @@ async fn validate_incremental_cause(
         cause.ok_or_else(|| corruption("incremental transition cause could not be loaded"))?;
     match decision {
         RadrootsAddressableTransitionRawHeadDecisionV1::Applied => {
-            if cause_reference != raw_head {
-                return Err(corruption(
-                    "applied incremental transition cause is not its new raw head",
-                ));
-            }
+            require_invariant(cause_reference == raw_head, || {
+                corruption("applied incremental transition cause is not its new raw head")
+            })?;
         }
         RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected => {
-            if cause_event.kind != 5
-                || cause_admission.status != RadrootsEventAdmissionStatus::Admitted
-            {
-                return Err(corruption(
-                    "non-head incremental transition was not caused by an admitted deletion request",
-                ));
-            }
+            require_invariant(
+                (cause_event.kind, cause_admission.status)
+                    == (5, RadrootsEventAdmissionStatus::Admitted),
+                || {
+                    corruption(
+                        "non-head incremental transition was not caused by an admitted deletion request",
+                    )
+                },
+            )?;
             let author_matches = cause_event.pubkey == coordinate.pubkey().to_hex();
             let records_author_mismatch = suppression.is_some_and(|evidence| {
                 evidence.reason()
                     == crate::model::RadrootsNip09SuppressionReason::RequestAuthorMismatch
             });
-            if author_matches == records_author_mismatch {
-                return Err(corruption(
-                    "deletion cause author does not agree with suppression evidence",
-                ));
-            }
+            require_invariant(author_matches != records_author_mismatch, || {
+                corruption("deletion cause author does not agree with suppression evidence")
+            })?;
             let targeted: i64 = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM radroots_event_store_nip09_event_target WHERE source_generation = ? AND request_event_id = ? AND target_event_id = ?) OR EXISTS(SELECT 1 FROM radroots_event_store_nip09_address_target WHERE source_generation = ? AND request_event_id = ? AND target_kind = ? AND target_pubkey = ? AND target_d_tag = ?)",
             )
@@ -599,11 +607,9 @@ async fn validate_incremental_cause(
             .bind(coordinate.d_tag())
             .fetch_one(&mut *connection)
             .await?;
-            if targeted != 1 {
-                return Err(corruption(
-                    "deletion cause does not target the transitioned coordinate",
-                ));
-            }
+            require_invariant(targeted == 1, || {
+                corruption("deletion cause does not target the transitioned coordinate")
+            })?;
         }
         RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
         | RadrootsAddressableTransitionRawHeadDecisionV1::SkippedOlder
@@ -667,26 +673,26 @@ async fn validate_retraction_lineage(
             .map_err(|error| corruption(error.to_string()))?,
             suppression: suppression_evidence_from_transition_row(&prior)?,
         };
-        if prior_state == *current {
-            return Err(corruption(
-                "incremental transition repeats the complete prior state",
-            ));
-        }
+        require_invariant(prior_state != *current, || {
+            corruption("incremental transition repeats the complete prior state")
+        })?;
         (prior_state.visibility == RadrootsAddressableTransitionVisibilityV1::Visible
             && (current.visibility != RadrootsAddressableTransitionVisibilityV1::Visible
                 || prior_state.raw_head != current.raw_head))
             .then_some(prior_state.raw_head)
     } else {
-        if origin == RadrootsAddressableTransitionOriginV1::Baseline && retracted.is_some() {
-            return Err(corruption("baseline transition retracts prior state"));
-        }
+        require_invariant(
+            (
+                origin == RadrootsAddressableTransitionOriginV1::Baseline,
+                retracted.is_some(),
+            ) != (true, true),
+            || corruption("baseline transition retracts prior state"),
+        )?;
         None
     };
-    if expected.as_ref() != retracted {
-        return Err(corruption(
-            "transition retraction does not match the immediately preceding visible state",
-        ));
-    }
+    require_invariant(expected.as_ref() == retracted, || {
+        corruption("transition retraction does not match the immediately preceding visible state")
+    })?;
     Ok(())
 }
 
@@ -707,49 +713,55 @@ fn validate_transition_shape(
 ) -> Result<(), RadrootsEventStoreError> {
     let origin_valid = match origin {
         RadrootsAddressableTransitionOriginV1::Baseline => {
-            cause_event.is_none()
-                && retracted_event.is_none()
-                && raw_head_decision
-                    == RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+            (
+                cause_event.is_some(),
+                retracted_event.is_some(),
+                raw_head_decision,
+            ) == (
+                false,
+                false,
+                RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+            )
         }
         RadrootsAddressableTransitionOriginV1::Incremental => {
-            cause_event.is_some()
-                && raw_head_decision
-                    != RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+            (
+                cause_event.is_some(),
+                raw_head_decision
+                    == RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+            ) == (true, false)
         }
     };
-    let admission_valid = match admission_status {
-        RadrootsEventAdmissionStatus::Admitted => admission_code.is_none() && contract_id.is_some(),
+    let expected_admission_shape = match admission_status {
+        RadrootsEventAdmissionStatus::Admitted => (false, true),
         RadrootsEventAdmissionStatus::Unsupported | RadrootsEventAdmissionStatus::Invalid => {
-            admission_code.is_some() && contract_id.is_none()
+            (true, false)
         }
     };
-    let visibility_valid = match visibility {
-        RadrootsAddressableTransitionVisibilityV1::Visible => {
-            admission_status == RadrootsEventAdmissionStatus::Admitted
-                && visible_event == Some(raw_head)
-                && suppression.is_some_and(|evidence| {
-                    evidence.outcome() == RadrootsNip09SuppressionOutcome::Visible
-                })
-        }
-        RadrootsAddressableTransitionVisibilityV1::NotAdmitted => {
-            admission_status != RadrootsEventAdmissionStatus::Admitted
-                && visible_event.is_none()
-                && suppression.is_none()
-        }
-        RadrootsAddressableTransitionVisibilityV1::Suppressed => {
-            admission_status == RadrootsEventAdmissionStatus::Admitted
-                && visible_event.is_none()
-                && suppression.is_some_and(|evidence| {
-                    evidence.outcome() == RadrootsNip09SuppressionOutcome::Suppressed
-                })
-        }
+    let admission_valid =
+        (admission_code.is_some(), contract_id.is_some()) == expected_admission_shape;
+    let expected_visibility_shape = match visibility {
+        RadrootsAddressableTransitionVisibilityV1::Visible => (
+            true,
+            Some(raw_head),
+            Some(RadrootsNip09SuppressionOutcome::Visible),
+        ),
+        RadrootsAddressableTransitionVisibilityV1::NotAdmitted => (false, None, None),
+        RadrootsAddressableTransitionVisibilityV1::Suppressed => (
+            true,
+            None,
+            Some(RadrootsNip09SuppressionOutcome::Suppressed),
+        ),
     };
-    if !origin_valid || !admission_valid || !visibility_valid {
-        return Err(corruption(
-            "transition fields have an incoherent decision shape",
-        ));
-    }
+    let visibility_shape = (
+        admission_status == RadrootsEventAdmissionStatus::Admitted,
+        visible_event,
+        suppression.map(RadrootsNip09SuppressionEvidenceV1::outcome),
+    );
+    let visibility_valid = visibility_shape == expected_visibility_shape;
+    require_invariant(
+        (origin_valid, admission_valid, visibility_valid) == (true, true, true),
+        || corruption("transition fields have an incoherent decision shape"),
+    )?;
     if let (Some(visible), Some(retracted)) = (visible_event, retracted_event)
         && visible == retracted
     {
@@ -765,12 +777,10 @@ fn validate_suppression_shape(
     evidence: &RadrootsNip09SuppressionEvidenceV1,
     raw_head_created_at: u64,
 ) -> Result<(), RadrootsEventStoreError> {
-    if !evidence.is_coherent_for_event(30_000, raw_head_created_at) {
-        return Err(corruption(
-            "suppression evidence is internally inconsistent",
-        ));
-    }
-    Ok(())
+    require_invariant(
+        evidence.is_coherent_for_event(30_000, raw_head_created_at),
+        || corruption("suppression evidence is internally inconsistent"),
+    )
 }
 
 fn suppression_evidence_from_transition_row(
@@ -802,9 +812,11 @@ fn suppression_evidence_from_transition_row(
             address_reference_cutoff,
         })),
         (None, None)
-            if event_reference_request_id.is_none()
-                && address_reference_request_id.is_none()
-                && address_reference_cutoff.is_none() =>
+            if (
+                event_reference_request_id.is_some(),
+                address_reference_request_id.is_some(),
+                address_reference_cutoff.is_some(),
+            ) == (false, false, false) =>
         {
             Ok(None)
         }
@@ -817,9 +829,9 @@ fn required_reference(
     event_id: String,
     event_seq: i64,
 ) -> Result<RadrootsAddressableTransitionEventReferenceV1, RadrootsEventStoreError> {
-    if event_seq <= 0 {
-        return Err(corruption(format!("{field} sequence is not positive")));
-    }
+    require_invariant(event_seq > 0, || {
+        corruption(format!("{field} sequence is not positive"))
+    })?;
     Ok(RadrootsAddressableTransitionEventReferenceV1 {
         event_id: parse_event_id(field, event_id)?,
         event_seq,
@@ -880,33 +892,37 @@ async fn load_and_validate_stored_event(
             "stored raw event tags cannot be canonicalized: {error}"
         ))
     })?;
-    if stored.event_id != event.id_hex()
-        || stored.pubkey != event.author().to_hex()
-        || stored.created_at != event.created_at_u64()
-        || stored.kind != event.kind_u32()
-        || stored.tags_json != tags_json
-        || stored.content != event.content()
-        || stored.sig != event.signature_hex()
-    {
-        return Err(corruption(format!(
+    let event_identity_matches = [
+        stored.event_id == event.id_hex(),
+        stored.pubkey == event.author().to_hex(),
+        stored.created_at == event.created_at_u64(),
+        stored.kind == event.kind_u32(),
+        stored.tags_json == tags_json,
+        stored.content == event.content(),
+        stored.sig == event.signature_hex(),
+    ];
+    require_invariant(event_identity_matches == [true; 7], || {
+        corruption(format!(
             "stored event `{}` disagrees with its signed raw JSON",
             reference.event_id()
-        )));
-    }
+        ))
+    })?;
     let admission = EventAdmission::for_profile(
         ReconciliationProfile::Nip09V1RegistryV7,
         reconstructed.verified_event(),
     )
     .map_err(|error| corruption(format!("stored raw event cannot be admitted: {error}")))?;
-    if admission.status != stored.admission_status
-        || admission.contract.map(|contract| contract.id) != stored.contract_id.as_deref()
-        || admission.valid_stream_eligible(event.kind_class()) != stored.valid_stream_eligible
-    {
-        return Err(corruption(format!(
+    let admission_matches = [
+        admission.status == stored.admission_status,
+        admission.contract.map(|contract| contract.id) == stored.contract_id.as_deref(),
+        admission.valid_stream_eligible(event.kind_class()) == stored.valid_stream_eligible,
+    ];
+    require_invariant(admission_matches == [true; 3], || {
+        corruption(format!(
             "stored event `{}` disagrees with registry-v7 admission",
             reference.event_id()
-        )));
-    }
+        ))
+    })?;
     Ok((stored, admission))
 }
 
@@ -917,18 +933,20 @@ async fn validate_addressable_reference(
     reference: &RadrootsAddressableTransitionEventReferenceV1,
     event: &RadrootsStoredRawEvent,
 ) -> Result<(), RadrootsEventStoreError> {
-    if event.event_class != StoredEventClass::Addressable
-        || event.kind != coordinate.kind()
-        || event.pubkey != coordinate.pubkey().to_hex()
-    {
-        return Err(corruption(format!(
+    let coordinate_matches = [
+        event.event_class == StoredEventClass::Addressable,
+        event.kind == coordinate.kind(),
+        event.pubkey == coordinate.pubkey().to_hex(),
+    ];
+    require_invariant(coordinate_matches == [true; 3], || {
+        corruption(format!(
             "event `{}` does not match transition coordinate `{}:{}:{}`",
             reference.event_id(),
             coordinate.kind(),
             coordinate.pubkey(),
             coordinate.d_tag()
-        )));
-    }
+        ))
+    })?;
     let exists: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM radroots_event_store_event_coordinate WHERE source_generation = ? AND event_seq = ? AND event_id = ? AND coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND raw_d_tag = ?",
     )
@@ -940,17 +958,142 @@ async fn validate_addressable_reference(
     .bind(coordinate.d_tag())
     .fetch_one(&mut *connection)
     .await?;
-    if exists != 1 {
-        return Err(corruption(format!(
+    require_invariant(exists == 1, || {
+        corruption(format!(
             "event `{}` has no matching addressable coordinate authority",
             reference.event_id()
-        )));
-    }
-    Ok(())
+        ))
+    })
 }
 
 fn corruption(reason: impl Into<String>) -> RadrootsEventStoreError {
     RadrootsEventStoreError::AddressableTransitionCorruption {
         reason: reason.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{RadrootsNip09SuppressionOutcome, RadrootsNip09SuppressionReason};
+
+    fn event_reference(byte: char, sequence: i64) -> RadrootsAddressableTransitionEventReferenceV1 {
+        RadrootsAddressableTransitionEventReferenceV1 {
+            event_id: EventId::parse(byte.to_string().repeat(64)).expect("event id"),
+            event_seq: sequence,
+        }
+    }
+
+    fn evidence(
+        outcome: RadrootsNip09SuppressionOutcome,
+        reason: RadrootsNip09SuppressionReason,
+    ) -> RadrootsNip09SuppressionEvidenceV1 {
+        RadrootsNip09SuppressionEvidenceV1 {
+            outcome,
+            reason,
+            event_reference_request_id: None,
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        }
+    }
+
+    #[test]
+    fn transition_shape_rejects_each_independent_coherence_boundary() {
+        let raw_head = event_reference('a', 1);
+        let visible_evidence = evidence(
+            RadrootsNip09SuppressionOutcome::Visible,
+            RadrootsNip09SuppressionReason::NoAuthorizedReference,
+        );
+        validate_transition_shape(
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            &raw_head,
+            Some(&raw_head),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("food.availability.v1"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible_evidence),
+            None,
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+            10,
+        )
+        .expect("coherent baseline");
+
+        assert!(
+            validate_transition_shape(
+                RadrootsAddressableTransitionOriginV1::Baseline,
+                &raw_head,
+                Some(&raw_head),
+                None,
+                RadrootsEventAdmissionStatus::Admitted,
+                None,
+                Some("food.availability.v1"),
+                RadrootsAddressableTransitionVisibilityV1::Visible,
+                Some(&visible_evidence),
+                Some(&raw_head),
+                RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+                10,
+            )
+            .is_err()
+        );
+
+        assert!(
+            validate_transition_shape(
+                RadrootsAddressableTransitionOriginV1::Incremental,
+                &raw_head,
+                Some(&raw_head),
+                Some(&raw_head),
+                RadrootsEventAdmissionStatus::Admitted,
+                None,
+                Some("food.availability.v1"),
+                RadrootsAddressableTransitionVisibilityV1::Visible,
+                Some(&visible_evidence),
+                Some(&raw_head),
+                RadrootsAddressableTransitionRawHeadDecisionV1::Applied,
+                10,
+            )
+            .is_err()
+        );
+
+        let incoherent = evidence(
+            RadrootsNip09SuppressionOutcome::Visible,
+            RadrootsNip09SuppressionReason::EventIdReference,
+        );
+        assert!(
+            validate_transition_shape(
+                RadrootsAddressableTransitionOriginV1::Baseline,
+                &raw_head,
+                Some(&raw_head),
+                None,
+                RadrootsEventAdmissionStatus::Admitted,
+                None,
+                Some("food.availability.v1"),
+                RadrootsAddressableTransitionVisibilityV1::Visible,
+                Some(&incoherent),
+                None,
+                RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+                10,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn transition_reference_helpers_reject_negative_partial_and_malformed_identity() {
+        assert!(required_reference("raw", "a".repeat(64), 0).is_err());
+        assert!(optional_reference("optional", Some("a".repeat(64)), None).is_err());
+        assert!(optional_reference("optional", None, Some(1)).is_err());
+        assert!(
+            optional_reference("optional", None, None)
+                .expect("absent")
+                .is_none()
+        );
+        assert!(optional_event_id("optional", Some("bad".to_owned())).is_err());
+        assert!(
+            optional_event_id("optional", None)
+                .expect("absent")
+                .is_none()
+        );
     }
 }

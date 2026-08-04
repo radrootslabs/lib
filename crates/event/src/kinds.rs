@@ -672,6 +672,7 @@ pub const fn request_kind_for_result_kind(kind: u32) -> Option<u32> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

@@ -2,12 +2,22 @@
 mod test_fixtures;
 
 use nostr::{Event, EventBuilder, JsonUtil, Keys, SecretKey, Timestamp, UnsignedEvent};
-use radroots_nostr_connect::message::{
-    PENDING_CONNECTION_ERROR, PendingConnectionOutcome, RemoteSessionCapability, RequestMessage,
-    ResponseEnvelope, SignedEvent as ConnectSignedEvent, UnsignedEvent as ConnectUnsignedEvent,
+use radroots_nostr_connect::client::{
+    CancellationToken, Client, Completion, Progress, Receive, Target as ClientTarget,
 };
-use radroots_nostr_connect::permission::Permissions;
-use radroots_nostr_connect::uri::{CLIENT_URL_MAX_BYTES, ClientMetadata, RelayUrl, Uri};
+use radroots_nostr_connect::message::{
+    PENDING_CONNECTION_ERROR, PendingConnectionOutcome, REMOTE_CAPABILITY_RELAY_COUNT_MAX,
+    REQUEST_ID_MAX_BYTES, REQUEST_PARAM_COUNT_MAX, REQUEST_PARAM_MAX_BYTES,
+    REQUEST_PARAMS_MAX_BYTES, RESPONSE_ERROR_MAX_BYTES, RESPONSE_RESULT_MAX_BYTES,
+    RemoteSessionCapability, RequestId, RequestMessage, ResponseEnvelope, ResponseValidator,
+    SignedEvent as ConnectSignedEvent, UnsignedEvent as ConnectUnsignedEvent,
+};
+use radroots_nostr_connect::permission::{
+    PERMISSION_PARAMETER_MAX_BYTES, PERMISSIONS_MAX_BYTES, Permissions,
+};
+use radroots_nostr_connect::uri::{
+    CLIENT_URL_MAX_BYTES, ClientMetadata, RelayUrl, URI_MAX_BYTES, Uri,
+};
 use radroots_nostr_connect::{Error, Method, Permission, Request, Response};
 use serde_json::{Value, json};
 use std::str::FromStr;
@@ -1256,4 +1266,191 @@ fn pending_connection_poll_outcome_uses_typed_variants() {
         PendingConnectionOutcome::UnexpectedResponse { response }
             if response == "pong"
     ));
+}
+
+#[test]
+fn client_and_message_wrappers_cover_redacted_debug_and_value_accessors() {
+    let target = ClientTarget::try_new(
+        test_public_key(),
+        vec![relay(RELAY_PRIMARY_WSS), relay(RELAY_PRIMARY_WSS)],
+    )
+    .unwrap();
+    assert_eq!(target.remote_signer_public_key(), test_public_key());
+    assert_eq!(target.relays().len(), 1);
+    let client = Client::generate(target.clone()).unwrap();
+    assert_eq!(client.target(), &target);
+    assert!(client.public_key().is_ok());
+    assert!(format!("{client:?}").contains("<redacted>"));
+    assert!(Client::from_secret("invalid", target).is_err());
+
+    let token = CancellationToken::new();
+    assert!(!token.is_cancelled());
+    token.cancel();
+    assert!(token.is_cancelled());
+    assert!(matches!(
+        Completion::response(Response::Pong),
+        Completion::Response(_)
+    ));
+    assert!(matches!(
+        Receive::event(
+            radroots_nostr_connect::client::ClientEvent::from_json(&signed_event().as_json())
+                .unwrap()
+        ),
+        Receive::Event(_)
+    ));
+    assert!(
+        format!(
+            "{:?}",
+            Progress::AuthChallenge {
+                url: "secret".into()
+            }
+        )
+        .contains("<redacted>")
+    );
+
+    let unsigned = ConnectUnsignedEvent::from_json(&unsigned_event().as_json()).unwrap();
+    assert_eq!(unsigned.kind(), 1);
+    assert!(format!("{unsigned:?}").contains("<redacted>"));
+    let signed = ConnectSignedEvent::from_json(&signed_event().as_json()).unwrap();
+    assert!(format!("{signed:?}").contains("<redacted>"));
+
+    let envelope = ResponseEnvelope::try_new("request", Some(json!("pong")), None).unwrap();
+    assert_eq!(envelope.result(), Some(&json!("pong")));
+    assert_eq!(envelope.error(), None);
+    assert!(format!("{envelope:?}").contains("has_result"));
+
+    let capability = RemoteSessionCapability::try_new(
+        test_public_key(),
+        vec![relay(RELAY_PRIMARY_WSS)],
+        Permissions::from(vec![Permission::new(Method::Ping)]),
+    )
+    .unwrap();
+    assert_eq!(capability.user_public_key(), test_public_key());
+    assert_eq!(capability.relays().len(), 1);
+    assert!(capability.permissions().allows_request(&Method::Ping, None));
+
+    let responses = [
+        Response::ConnectAcknowledged,
+        Response::ConnectSecretEcho("secret".into()),
+        Response::LogoutAcknowledged,
+        Response::PendingConnection,
+        Response::UserPublicKey(test_public_key()),
+        Response::RemoteSessionCapability(capability),
+        Response::SignedEvent(signed),
+        Response::Pong,
+        Response::Nip04Encrypt("cipher".into()),
+        Response::Nip04Decrypt("plain".into()),
+        Response::Nip44Encrypt("cipher".into()),
+        Response::Nip44Decrypt("plain".into()),
+        Response::RelayList(vec![relay(RELAY_PRIMARY_WSS)]),
+        Response::RelayListUnchanged,
+        Response::AuthUrl("https://auth.example".into()),
+        Response::Error {
+            result: None,
+            error: "rejected".into(),
+        },
+        Response::Custom {
+            result: None,
+            error: None,
+        },
+    ];
+    for response in responses {
+        let debug = format!("{response:?}");
+        assert!(debug.contains("<redacted>"));
+    }
+}
+
+#[test]
+fn bounded_message_permission_and_uri_validators_cover_each_limit_branch() {
+    for invalid_id in ["", " request", "line\nbreak"] {
+        assert!(RequestId::parse(invalid_id).is_err());
+    }
+    assert!(RequestId::parse("x".repeat(REQUEST_ID_MAX_BYTES + 1)).is_err());
+
+    for error in [
+        "".to_string(),
+        "line\nbreak".to_string(),
+        "x".repeat(RESPONSE_ERROR_MAX_BYTES + 1),
+    ] {
+        assert!(ResponseEnvelope::try_new("request", None, Some(error)).is_err());
+    }
+    assert!(
+        ResponseEnvelope::try_new(
+            "request",
+            Some(json!("x".repeat(RESPONSE_RESULT_MAX_BYTES + 1))),
+            None,
+        )
+        .is_err()
+    );
+
+    let custom = Method::custom("vendor_action").unwrap();
+    for params in [
+        vec!["x".into(); REQUEST_PARAM_COUNT_MAX + 1],
+        vec!["x".repeat(REQUEST_PARAM_MAX_BYTES + 1)],
+        vec![
+            "x".repeat(REQUEST_PARAM_MAX_BYTES);
+            REQUEST_PARAMS_MAX_BYTES / REQUEST_PARAM_MAX_BYTES + 1
+        ],
+    ] {
+        assert!(
+            RequestMessage::try_new(
+                "request",
+                Request::Custom {
+                    method: custom.clone(),
+                    params
+                },
+            )
+            .is_err()
+        );
+    }
+
+    for parameter in [
+        "".to_string(),
+        " padded ".to_string(),
+        "comma,value".to_string(),
+        "line\nbreak".to_string(),
+        "x".repeat(PERMISSION_PARAMETER_MAX_BYTES + 1),
+    ] {
+        assert!(
+            Permissions::try_from_vec(vec![Permission::with_parameter(Method::Ping, parameter,)])
+                .is_err()
+        );
+    }
+    assert!(Permissions::from_str(&"p".repeat(PERMISSIONS_MAX_BYTES + 1)).is_err());
+
+    let envelope = ResponseEnvelope::try_new("request", Some(json!("pong")), None).unwrap();
+    let mut validator =
+        ResponseValidator::new(RequestId::parse("request").unwrap(), test_public_key());
+    for fingerprint in ["", "line\nbreak"] {
+        assert!(
+            validator
+                .validate(test_public_key(), fingerprint, &envelope)
+                .is_err()
+        );
+    }
+    assert!(
+        validator
+            .validate(
+                test_public_key(),
+                "x".repeat(REQUEST_ID_MAX_BYTES + 1),
+                &envelope,
+            )
+            .is_err()
+    );
+
+    assert!(Uri::parse(&"x".repeat(URI_MAX_BYTES + 1)).is_err());
+    let duplicate_secret = format!(
+        "nostrconnect://{}?relay={}&secret=one&secret=two",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+    );
+    assert!(Uri::parse(&duplicate_secret).is_err());
+
+    let too_many_relays = (0..=REMOTE_CAPABILITY_RELAY_COUNT_MAX)
+        .map(|index| relay(&format!("wss://relay-{index}.example")))
+        .collect::<Vec<_>>();
+    assert!(
+        RemoteSessionCapability::try_new(test_public_key(), too_many_relays, Permissions::new(),)
+            .is_err()
+    );
 }

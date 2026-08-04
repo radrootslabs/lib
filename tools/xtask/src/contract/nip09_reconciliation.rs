@@ -91,7 +91,7 @@ const EVENT_STORE_STORE_ROOT_BASELINE_SHA256: &str =
 const EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256: &str =
     "69f3c730f8a4f3a4af0028c74f6903126def01ceb63eed8a173e696ce291dc09";
 const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
-    "7fa8fdbea6ce9a84486d238954cdb19d500dccfe727e3dd8434b6711db6330b1";
+    "63262a093cb03f6664d6a42cbf9b031977215452b871f6d2ff05175c11fb7aa1";
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
     "919889c27489b3d6869b013c910c7cf711fa9d8645d0d5ad7957e3491b8ad263";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
@@ -12035,7 +12035,7 @@ fn validate_source_maintenance_manifest_validator_reachability(
     file: &syn::File,
 ) -> Result<(), String> {
     const EXPECTED_TOKEN_SHA256: &str =
-        "711c977666d6a7e3ce3c1759e6ca7a9811bab9690bffda8994b605b8f6c539a2";
+        "527318c73d4a6bfebfdbe64aeed263a301ba867b79a40ee21b5f254b2981beed";
 
     let function = exact_top_level_function(
         relative,
@@ -12281,11 +12281,11 @@ fn validate_event_store_migration_support_authority(
         ),
         (
             "validate_migration_registry",
-            "e6cf2795b0308a51ef5958ce91f41877fb9c73f8f4c7008c90b1e5e70b37364a",
+            "9538a9af4c040312ddd8327dcf04f3e4251eaae0ccf5b5d3aa00af6942a21616",
         ),
         (
             "validate_generated_nip09_manifest_descriptor",
-            "44d44c3c35a8ea923d9fce80afea4a9db35e9225172090c831fd151bd2c5d4a1",
+            "84403f0b62d85a7e761f9d58491f227eb048ccc2b4db111418b10a00eb8fffac",
         ),
     ];
 
@@ -12565,11 +12565,12 @@ fn validate_sqlite_encoding_preflight_authority(
         ) -> Result<(), RadrootsEventStoreError> {
             let max_connections = pool.options().get_max_connections();
             let existing_options = pool.connect_options();
-            if !file_backed && max_connections != 1 {
-                return Err(RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
+            require_invariant(
+                (file_backed, max_connections == 1) != (false, false),
+                || RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
                     actual: max_connections,
-                });
-            }
+                },
+            )?;
 
             let mut connections = Vec::with_capacity(max_connections as usize);
             for _ in 0..max_connections {
@@ -12578,12 +12579,12 @@ fn validate_sqlite_encoding_preflight_authority(
             for connection in &mut connections {
                 let main_filename = main_database_filename(connection).await?;
                 let database_is_memory = main_filename.is_empty();
-                if file_backed == database_is_memory {
-                    return Err(RadrootsEventStoreError::SqlitePoolBackingMismatch {
+                require_invariant(file_backed != database_is_memory, || {
+                    RadrootsEventStoreError::SqlitePoolBackingMismatch {
                         file_backed,
-                        filename: main_filename,
-                    });
-                }
+                        filename: main_filename.clone(),
+                    }
+                },)?;
                 validate_main_database_encoding(connection).await?;
                 crate::schema::validate_event_store_temp_schema(connection).await?;
             }
@@ -12614,7 +12615,9 @@ fn validate_sqlite_encoding_preflight_authority(
     "#;
     if compact_tokens(configure_pool) != compact_source_tokens(expected_configure_pool) {
         return Err(format!(
-            "{relative} `configure_pool` must validate every main database as UTF-8 after backing classification and before TEMP-schema, connection-option, PRAGMA, or journal mutation"
+            "{relative} `configure_pool` must validate every main database as UTF-8 after backing classification and before TEMP-schema, connection-option, PRAGMA, or journal mutation: expected `{}`, found `{}`",
+            compact_source_tokens(expected_configure_pool),
+            compact_tokens(configure_pool),
         ));
     }
 
@@ -12626,10 +12629,9 @@ fn validate_sqlite_encoding_preflight_authority(
             let actual: String = sqlx::query_scalar("PRAGMA main.encoding")
                 .fetch_one(&mut *connection)
                 .await?;
-            if actual == "UTF-8" {
-                return Ok(());
-            }
-            Err(RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual, })
+            require_invariant(actual == "UTF-8", || {
+                RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual, }
+            },)
         }
     "#;
     if compact_tokens(validator) != compact_source_tokens(expected_validator) {
@@ -12810,7 +12812,7 @@ fn validate_source_maintenance_runtime_token_authority(
     workspace_root: &Path,
 ) -> Result<(), String> {
     const SOURCE_RUNTIME_AST_SHA256: &str =
-        "78b9d310aeed0a2d8bcbced1af900fc1e8e6841d9d10398daa4f82a0ca957f23";
+        "85ad2939eb91b251aaba0117720217d74b98fb49cdff87b00bba1c3820064734";
     const FUNCTION_SPECS: [(&str, &str, &str); 4] = [
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
@@ -12820,12 +12822,12 @@ fn validate_source_maintenance_runtime_token_authority(
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "read_protocol_post_extension_authority_seal",
-            "490e59d21fb84f3321c593ffb67a4d1ada1e5cc8373ed41e2c6834114f2a6ef9",
+            "d08e9910698b1f00d331023c5151261d13388dec5a47ef08eabb4449edb72bab",
         ),
         (
             "crates/event_store/src/nip09/reconciliation_v1.rs",
             "apply_reconciliation_hook",
-            "41a0bc1f4e529528f9bc13be28b4a31305156124282c1c7e955ed2e4a56e86d2",
+            "2ec5f664bdbf94dc71cf5970dfd39f511762c776f8e9b7251fc98a591f890e5a",
         ),
         (
             EVENT_STORE_STORE_SOURCE_RELATIVE,

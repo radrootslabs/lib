@@ -44,6 +44,9 @@ impl LiveAuthClient {
 }
 
 impl AuthClient for LiveAuthClient {
+    // Relay submission is external SDK I/O; the state machine and submission
+    // outcomes are covered through the injected AuthClient boundary.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn submit<'a>(&'a self, relay: RelayUrl, event: Event) -> BoxFuture<'a, Result<(), Error>> {
         Box::pin(async move {
             let expected = relay.as_str().trim_end_matches('/');
@@ -404,6 +407,88 @@ mod tests {
         assert_eq!(
             transport.begin_authentication(&relay, "different", 1_000, 2_000),
             Err(Error::AuthChallengeConflict)
+        );
+        assert_eq!(
+            transport.reject_authentication(&relay, "different"),
+            Err(Error::AuthResponseMismatch)
+        );
+        transport
+            .begin_authentication(&relay, "secret-challenge", 1_000, 2_000)
+            .expect("idempotent challenge");
+    }
+
+    #[test]
+    fn challenge_validation_rejects_each_invalid_boundary() {
+        for (challenge, required, expires) in [
+            ("", 1, 2),
+            (&"a".repeat(MAX_CHALLENGE_BYTES + 1), 1, 2),
+            (" challenge", 1, 2),
+            ("challenge ", 1, 2),
+            ("chall\nenge", 1, 2),
+            ("challenge", 0, 2),
+            ("challenge", 2, 2),
+            ("challenge", 2, 1),
+            ("challenge", 1, MAX_CHALLENGE_LIFETIME_MS + 2),
+        ] {
+            assert_eq!(
+                validate_challenge(challenge, required, expires),
+                Err(Error::InvalidAuthChallenge)
+            );
+        }
+        assert!(validate_challenge("challenge", 1, MAX_CHALLENGE_LIFETIME_MS + 1).is_ok());
+
+        assert!(has_exact_tag(
+            &[vec!["challenge".into(), "value".into()]],
+            "challenge",
+            "value"
+        ));
+        assert!(!has_exact_tag(&[], "challenge", "value"));
+        assert!(!has_exact_tag(
+            &[vec!["challenge".into()]],
+            "challenge",
+            "value"
+        ));
+        assert!(!has_exact_tag(
+            &[vec!["other".into(), "value".into()]],
+            "challenge",
+            "value"
+        ));
+        assert!(!has_exact_tag(
+            &[vec!["challenge".into(), "other".into()]],
+            "challenge",
+            "value"
+        ));
+    }
+
+    #[test]
+    fn authentication_rejects_unconfigured_and_malformed_responses() {
+        let (transport, _, relay) = transport();
+        let other =
+            RelayUrl::parse("wss://other.example.com", RelayUrlPolicy::Public).expect("other");
+        assert_eq!(
+            transport.begin_authentication(&other, "challenge", 1, 2),
+            Err(Error::AuthResponseMismatch)
+        );
+        transport
+            .begin_authentication(&relay, "challenge", 1_000, 2_000)
+            .expect("begin");
+        assert_eq!(
+            futures::executor::block_on(transport.complete_authentication(
+                &relay,
+                "wrong",
+                Some("{}"),
+                1_500
+            )),
+            Err(Error::AuthResponseMismatch)
+        );
+        assert_eq!(
+            futures::executor::block_on(transport.complete_authentication(
+                &relay,
+                "challenge",
+                Some("{}"),
+                1_500
+            )),
+            Err(Error::AuthResponseInvalid)
         );
     }
 }

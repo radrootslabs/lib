@@ -729,6 +729,7 @@ fn validate_inventory_commitments(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use radroots_core::{Currency, Decimal, Money, Unit};

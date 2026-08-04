@@ -13,6 +13,12 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+/// Applies one fail-closed invariant without duplicating control-flow branches
+/// across the event domain's typed validation boundaries.
+pub(crate) fn require_invariant<E>(condition: bool, error: &dyn Fn() -> E) -> Result<(), E> {
+    condition.then_some(()).ok_or_else(error)
+}
+
 #[cfg(test)]
 /// Returns deterministic 64-character fixtures that are also valid secp256k1
 /// x-only public keys; labels without a curve point are remapped.

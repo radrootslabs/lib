@@ -354,6 +354,7 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

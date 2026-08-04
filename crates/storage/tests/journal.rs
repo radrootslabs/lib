@@ -310,3 +310,224 @@ fn invalid_records_and_inputs_fail_closed() {
         Err(Error::InvalidRecoveryAttempt)
     );
 }
+
+#[test]
+fn journal_value_and_state_validation_matrix_is_complete() {
+    let instance_id = instance(1);
+    assert_eq!(instance_id.as_bytes(), &[1; 16]);
+    for invalid in ["", " leading", "trailing ", "bad\nkey"] {
+        assert_eq!(
+            IdempotencyKey::parse(invalid),
+            Err(Error::InvalidIdempotencyKey)
+        );
+    }
+    assert_eq!(
+        IdempotencyKey::parse("x".repeat(radroots_storage::journal::IDEMPOTENCY_KEY_MAX_BYTES + 1)),
+        Err(Error::InvalidIdempotencyKey)
+    );
+    let idempotency_key = key(1);
+    assert_eq!(idempotency_key.as_str(), "sync-push-01");
+    let digest = IdempotencyDigest::new([2; 32]);
+    assert_eq!(digest.as_bytes(), &[2; 32]);
+    assert_eq!(JournalRevision::new(0), Err(Error::InvalidJournalRevision));
+    assert_eq!(JournalRevision::new(2).unwrap().get(), 2);
+    assert_eq!(
+        RecoveryRecord::new(
+            RecoveryPoint::Prepared,
+            RecoveryReason::Interrupted,
+            1,
+            Some(0),
+        ),
+        Err(Error::InvalidRecoveryDeadline)
+    );
+    let recovery = RecoveryRecord::new(
+        RecoveryPoint::Signed {
+            event_id: event_id("a"),
+        },
+        RecoveryReason::TransportUnavailable,
+        2,
+        Some(150),
+    )
+    .unwrap();
+    assert!(matches!(recovery.point(), RecoveryPoint::Signed { .. }));
+    assert_eq!(recovery.reason(), RecoveryReason::TransportUnavailable);
+    assert_eq!(recovery.attempt(), 2);
+    assert_eq!(recovery.retry_not_before_unix_ms(), Some(150));
+    for state in [
+        JournalState::Prepared,
+        JournalState::Signed {
+            event_id: event_id("a"),
+        },
+        JournalState::Recoverable(recovery.clone()),
+        JournalState::Committed {
+            event_id: event_id("a"),
+            committed_at_unix_ms: 150,
+        },
+    ] {
+        let expected = match state {
+            JournalState::Prepared => JournalStage::Prepared,
+            JournalState::Signed { .. } => JournalStage::Signed,
+            JournalState::Recoverable(_) => JournalStage::Recoverable,
+            JournalState::Committed { .. } => JournalStage::Committed,
+        };
+        assert_eq!(state.stage(), expected);
+    }
+
+    let build = |state, cancellation| {
+        OperationRecord::from_parts(
+            instance_id,
+            OperationId::SyncPush,
+            idempotency_key.clone(),
+            digest,
+            100,
+            JournalRevision::INITIAL,
+            state,
+            cancellation,
+        )
+    };
+    assert_eq!(
+        OperationRecord::from_parts(
+            instance_id,
+            OperationId::SyncPush,
+            idempotency_key.clone(),
+            digest,
+            0,
+            JournalRevision::INITIAL,
+            JournalState::Prepared,
+            CancellationState::NotRequested,
+        ),
+        Err(Error::InvalidOperationTimestamp)
+    );
+    for result in [
+        build(
+            JournalState::Committed {
+                event_id: event_id("a"),
+                committed_at_unix_ms: 0,
+            },
+            CancellationState::NotRequested,
+        ),
+        build(
+            JournalState::Committed {
+                event_id: event_id("a"),
+                committed_at_unix_ms: 99,
+            },
+            CancellationState::NotRequested,
+        ),
+        build(
+            JournalState::Recoverable(
+                RecoveryRecord::new(
+                    RecoveryPoint::Prepared,
+                    RecoveryReason::Interrupted,
+                    1,
+                    Some(99),
+                )
+                .unwrap(),
+            ),
+            CancellationState::NotRequested,
+        ),
+        build(
+            JournalState::Committed {
+                event_id: event_id("a"),
+                committed_at_unix_ms: 100,
+            },
+            CancellationState::CancelledBeforeCommit,
+        ),
+        build(
+            JournalState::Recoverable(recovery.clone()),
+            CancellationState::ObservedAfterCommit,
+        ),
+        build(
+            JournalState::Recoverable(recovery.clone()),
+            CancellationState::CancelledBeforeCommit,
+        ),
+        build(
+            JournalState::Prepared,
+            CancellationState::ObservedAfterCommit,
+        ),
+        build(
+            JournalState::Signed {
+                event_id: event_id("a"),
+            },
+            CancellationState::CancelledBeforeCommit,
+        ),
+    ] {
+        assert_eq!(result, Err(Error::CorruptJournalRecord));
+    }
+
+    let operation = prepare(instance_id, 2, 100);
+    assert_eq!(operation.instance_id(), instance_id);
+    assert_eq!(operation.operation_id(), OperationId::SyncPush);
+    assert_eq!(operation.idempotency_key(), &idempotency_key);
+    assert_eq!(operation.input_digest(), digest);
+    let record = operation.into_record().unwrap();
+    assert_eq!(record.instance_id(), instance_id);
+    assert_eq!(record.operation_id(), OperationId::SyncPush);
+    assert_eq!(record.idempotency_key(), &idempotency_key);
+    assert_eq!(record.input_digest(), digest);
+    assert_eq!(record.prepared_at_unix_ms(), 100);
+    assert_eq!(record.revision(), JournalRevision::INITIAL);
+    assert_eq!(record.cancellation(), CancellationState::NotRequested);
+    let receipt = PrepareReceipt::new(PrepareDisposition::Created, record.clone());
+    assert_eq!(receipt.disposition(), PrepareDisposition::Created);
+    assert_eq!(receipt.record(), &record);
+
+    assert_eq!(
+        record.transition(&JournalTransition::signed(
+            instance(2),
+            record.revision(),
+            event_id("a"),
+        )),
+        Err(Error::OperationIdentityMismatch)
+    );
+    assert_eq!(
+        record.transition(&JournalTransition::committed(
+            instance_id,
+            record.revision(),
+            event_id("a"),
+            100,
+        )),
+        Err(Error::InvalidJournalTransition)
+    );
+    assert_eq!(
+        record.transition(&JournalTransition::cancelled(
+            instance_id,
+            record.revision(),
+            99,
+        )),
+        Err(Error::InvalidJournalTransition)
+    );
+    let signed = record
+        .transition(&JournalTransition::signed(
+            instance_id,
+            record.revision(),
+            event_id("a"),
+        ))
+        .unwrap();
+    assert_eq!(
+        signed.transition(&JournalTransition::committed(
+            instance_id,
+            signed.revision(),
+            event_id("b"),
+            101,
+        )),
+        Err(Error::InvalidJournalTransition)
+    );
+    let recoverable = signed
+        .transition(&JournalTransition::recoverable(
+            instance_id,
+            signed.revision(),
+            recovery,
+        ))
+        .unwrap();
+    let resumed = recoverable
+        .transition(&JournalTransition::resume(
+            instance_id,
+            recoverable.revision(),
+        ))
+        .unwrap();
+    assert!(matches!(resumed.state(), JournalState::Signed { .. }));
+    assert_eq!(
+        JournalTransition::resume(instance_id, resumed.revision()).instance_id(),
+        instance_id
+    );
+}

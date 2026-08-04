@@ -179,3 +179,38 @@ impl From<&protocol::TransportDescriptor> for SinkCapabilities {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capability_values_cover_all_flags_and_protocol_enum_conversions() {
+        let source = SourceCapabilities::FETCH.with_discovery(true);
+        assert!(source.can_fetch());
+        assert!(source.can_discover());
+        assert!(!SourceCapabilities::NONE.can_fetch());
+        assert!(!SourceCapabilities::NONE.can_discover());
+
+        let sink = SinkCapabilities::DELIVER
+            .with_gateway_forwarding(true)
+            .with_receipt_observation(true);
+        assert!(sink.can_deliver());
+        assert!(sink.can_gateway_forward());
+        assert!(sink.can_observe_receipts());
+        assert!(!SinkCapabilities::NONE.can_deliver());
+
+        for maturity in [Maturity::Experimental, Maturity::Preview, Maturity::Stable] {
+            let protocol_value: protocol::Maturity = maturity.into();
+            assert_eq!(Maturity::from(protocol_value), maturity);
+        }
+        for availability in [
+            Availability::Available,
+            Availability::Degraded,
+            Availability::Unavailable,
+        ] {
+            let protocol_value: protocol::Availability = availability.into();
+            assert_eq!(Availability::from(protocol_value), availability);
+        }
+    }
+}

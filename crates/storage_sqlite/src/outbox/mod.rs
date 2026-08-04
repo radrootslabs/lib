@@ -14,6 +14,7 @@ use radroots_storage::{
 };
 use sqlx::{Row, Sqlite, SqliteConnection};
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl Outbox for SqliteStorage {
     fn enqueue(&self, item: EnqueueOutboxItem) -> BoxFuture<'_, Result<EnqueueReceipt, Error>> {
         Box::pin(async move {
@@ -164,6 +165,7 @@ impl Outbox for SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn enqueue_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     item: EnqueueOutboxItem,
@@ -206,6 +208,7 @@ pub(crate) async fn enqueue_transaction(
     Ok(EnqueueReceipt::new(EnqueueDisposition::Created, record))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn record_attempt_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     evidence: DeliveryAttemptEvidence,
@@ -250,6 +253,7 @@ impl SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn insert_record(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     record: &OutboxRecord,
@@ -291,6 +295,7 @@ async fn insert_record(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn update_record(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     record: &OutboxRecord,
@@ -342,6 +347,7 @@ async fn update_record(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_record(
     connection: &mut SqliteConnection,
     item_id: OutboxItemId,
@@ -412,6 +418,7 @@ async fn load_record(
     .map(Some)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn validate_targets(
     connection: &mut SqliteConnection,
     item_id: OutboxItemId,
@@ -450,6 +457,7 @@ async fn validate_targets(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_evidence(
     connection: &mut SqliteConnection,
     item_id: OutboxItemId,
@@ -1059,6 +1067,7 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::migration::runtime::{MIGRATIONS, migration_sql};
@@ -1418,11 +1427,52 @@ mod tests {
             );
         }
         for target in targets.targets() {
-            assert_eq!(
-                decode_target(&encode_target(target).expect("encode target"))
-                    .expect("decode target"),
-                *target
-            );
+            let encoded = encode_target(target).expect("encode target");
+            assert_eq!(decode_target(&encoded).expect("decode target"), *target);
+            assert_eq!(decode_target(&[0]), Err(Error::CorruptOutboxRecord));
+            let mut trailing = encoded;
+            trailing.push(0);
+            assert_eq!(decode_target(&trailing), Err(Error::CorruptOutboxRecord));
         }
+
+        let encoded = encode_request(&request()).expect("encode request");
+        for end in 0..encoded.len() {
+            let _ = decode_request(&encoded[..end]);
+        }
+        let mut invalid_version = encoded.clone();
+        invalid_version[0] = 0;
+        assert_eq!(
+            decode_request(&invalid_version),
+            Err(Error::CorruptOutboxRecord)
+        );
+        let request_id_length = usize::from(u16::from_be_bytes([encoded[1], encoded[2]]));
+        let event_length_offset = 3 + request_id_length;
+        let event_length = usize::try_from(u32::from_be_bytes(
+            encoded[event_length_offset..event_length_offset + 4]
+                .try_into()
+                .expect("event length"),
+        ))
+        .expect("event length fits");
+        let target_count_offset = event_length_offset + 4 + event_length;
+        let mut no_targets = encoded.clone();
+        no_targets[target_count_offset..target_count_offset + 2]
+            .copy_from_slice(&0_u16.to_be_bytes());
+        assert_eq!(decode_request(&no_targets), Err(Error::CorruptOutboxRecord));
+        let mut too_many_targets = encoded;
+        too_many_targets[target_count_offset..target_count_offset + 2]
+            .copy_from_slice(&u16::MAX.to_be_bytes());
+        assert_eq!(
+            decode_request(&too_many_targets),
+            Err(Error::CorruptOutboxRecord)
+        );
+
+        for kind in 0..=5 {
+            for retryability in 0..=3 {
+                for detail in 0..=2 {
+                    let _ = decode_outcome(&[1, kind, retryability, detail]);
+                }
+            }
+        }
+        assert_eq!(decode_outcome(&[0]), Err(Error::CorruptOutboxRecord));
     }
 }

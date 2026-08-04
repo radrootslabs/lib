@@ -57,6 +57,7 @@ impl MigrationReport {
 }
 
 #[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn migrate_runtime(
     connection: &mut SqliteConnection,
     mode: OpenMode,
@@ -91,6 +92,7 @@ pub(crate) async fn migrate_runtime(
 }
 
 #[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn migrate_private(
     connection: &mut SqliteConnection,
     mode: OpenMode,
@@ -124,6 +126,7 @@ pub(crate) async fn migrate_private(
     .await
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn migrate(
     connection: &mut SqliteConnection,
     mode: OpenMode,
@@ -257,6 +260,7 @@ struct SchemaMetadata {
     version: u32,
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn metadata(
     connection: &mut SqliteConnection,
     database: &'static str,
@@ -326,6 +330,7 @@ fn validate_metadata(plan: &MigrationPlan, metadata: SchemaMetadata) -> Result<(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn validate_catalog(
     connection: &mut SqliteConnection,
     plan: &MigrationPlan,
@@ -350,6 +355,7 @@ async fn validate_catalog(
     validate_exact_catalog(connection, plan.database, version, expected).await
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn validate_exact_catalog(
     connection: &mut SqliteConnection,
     database: &'static str,
@@ -397,6 +403,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use sqlx::sqlite::SqliteConnectOptions;
 
@@ -685,5 +692,43 @@ mod tests {
             .expect("rolled-back catalog"),
             0
         );
+    }
+
+    #[test]
+    fn migration_plan_validation_rejects_every_invalid_shape() {
+        fn plan(minimum_version: u32, current_version: u32, versions: &[u32]) -> MigrationPlan {
+            MigrationPlan {
+                database: "test.sqlite",
+                application_id: 4_242,
+                set_application_id_sql: "PRAGMA application_id = 4242",
+                minimum_version,
+                current_version,
+                steps: versions
+                    .iter()
+                    .copied()
+                    .map(|version| MigrationStep {
+                        version,
+                        sql: "SELECT 1",
+                        owned_objects: &[],
+                    })
+                    .collect(),
+            }
+        }
+
+        assert!(validate_plan(&plan(1, 2, &[1, 2])).is_ok());
+        for invalid in [
+            plan(0, 2, &[1, 2]),
+            plan(3, 2, &[1, 2]),
+            plan(1, 10, &[1, 2]),
+            plan(1, 2, &[1]),
+            plan(1, 2, &[1, 3]),
+        ] {
+            assert!(matches!(
+                validate_plan(&invalid),
+                Err(Error::SchemaMetadataUnavailable {
+                    database: "test.sqlite"
+                })
+            ));
+        }
     }
 }

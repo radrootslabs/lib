@@ -3804,7 +3804,14 @@ pub fn kind_contract_family(contract: &KindContract) -> Option<ContractFamily> {
         | KIND_KNOWLEDGE_CHANGE_PROPOSAL
         | KIND_CONTRIBUTION_ATTESTATION => ContractFamily::Knowledge,
         KIND_JOB_FEEDBACK => ContractFamily::Job,
-        _ if is_request_kind(contract.kind) || is_result_kind(contract.kind) => ContractFamily::Job,
+        _ if [
+            is_request_kind(contract.kind),
+            is_result_kind(contract.kind),
+        ]
+        .contains(&true) =>
+        {
+            ContractFamily::Job
+        }
         _ => return None,
     })
 }
@@ -3861,9 +3868,10 @@ fn identify_event_contract_in_registry(
     kind_contracts: &'static [KindContract],
     event_contracts: &'static [EventContract],
 ) -> Result<&'static EventContract, ContractMatchError> {
-    if !kind_contracts.iter().any(|contract| contract.kind == kind) {
-        return Err(ContractMatchError::UnsupportedKind(kind));
-    }
+    crate::require_invariant(
+        kind_contracts.iter().any(|contract| contract.kind == kind),
+        &|| ContractMatchError::UnsupportedKind(kind),
+    )?;
     identify_from_contracts(
         event_contracts
             .iter()
@@ -3956,17 +3964,18 @@ fn validate_event_contract_parts_in_registry(
     contract: &EventContract,
     event_contracts: &'static [EventContract],
 ) -> Result<(), ContractValidationError> {
-    if kind != contract.kind {
-        return Err(ContractValidationError::KindMismatch {
+    crate::require_invariant(kind == contract.kind, &|| {
+        ContractValidationError::KindMismatch {
             expected: contract.kind,
             actual: kind,
-        });
-    }
-    if matches!(contract.discriminator, EventDiscriminator::AdmissionOnly) {
-        return Err(ContractValidationError::AdmissionRequired {
+        }
+    })?;
+    crate::require_invariant(
+        !matches!(contract.discriminator, EventDiscriminator::AdmissionOnly),
+        &|| ContractValidationError::AdmissionRequired {
             contract_id: contract.id,
-        });
-    }
+        },
+    )?;
     validate_classified_listing_partition_parts(tags, contract)?;
     validate_content_shape_parts(content, contract)?;
     validate_contract_tags_parts_in_registry(tags, contract, event_contracts)?;
@@ -4050,39 +4059,30 @@ where
 }
 
 fn contract_family_for_id(id: &str) -> Option<ContractFamily> {
-    if id.starts_with("radroots.account.") {
-        Some(ContractFamily::Account)
-    } else if id.starts_with("radroots.application.") {
-        Some(ContractFamily::Application)
-    } else if id.starts_with("radroots.calendar.") {
-        Some(ContractFamily::Calendar)
-    } else if id.starts_with("radroots.farm.") {
-        Some(ContractFamily::Farm)
-    } else if id.starts_with("radroots.group.") {
-        Some(ContractFamily::Group)
-    } else if id.starts_with("radroots.http.") {
-        Some(ContractFamily::Http)
-    } else if id.starts_with("radroots.job.") {
-        Some(ContractFamily::Job)
-    } else if id.starts_with("radroots.knowledge.") || id.starts_with("radroots.wiki.") {
-        Some(ContractFamily::Knowledge)
-    } else if id.starts_with("radroots.list.") || id.starts_with("radroots.list_set.") {
-        Some(ContractFamily::List)
-    } else if id.starts_with("radroots.operational_listing.") || id.starts_with("radroots.food.") {
-        Some(ContractFamily::Market)
-    } else if id.starts_with("radroots.message.") {
-        Some(ContractFamily::Message)
-    } else if id.starts_with("radroots.profile.") {
-        Some(ContractFamily::Profile)
-    } else if id.starts_with("radroots.relay.") {
-        Some(ContractFamily::Relay)
-    } else if id.starts_with("radroots.social.") {
-        Some(ContractFamily::Social)
-    } else if id.starts_with("radroots.trade.") {
-        Some(ContractFamily::Trade)
-    } else {
-        None
-    }
+    const PREFIX_FAMILIES: [(&str, ContractFamily); 18] = [
+        ("radroots.account.", ContractFamily::Account),
+        ("radroots.application.", ContractFamily::Application),
+        ("radroots.calendar.", ContractFamily::Calendar),
+        ("radroots.farm.", ContractFamily::Farm),
+        ("radroots.group.", ContractFamily::Group),
+        ("radroots.http.", ContractFamily::Http),
+        ("radroots.job.", ContractFamily::Job),
+        ("radroots.knowledge.", ContractFamily::Knowledge),
+        ("radroots.wiki.", ContractFamily::Knowledge),
+        ("radroots.list.", ContractFamily::List),
+        ("radroots.list_set.", ContractFamily::List),
+        ("radroots.operational_listing.", ContractFamily::Market),
+        ("radroots.food.", ContractFamily::Market),
+        ("radroots.message.", ContractFamily::Message),
+        ("radroots.profile.", ContractFamily::Profile),
+        ("radroots.relay.", ContractFamily::Relay),
+        ("radroots.social.", ContractFamily::Social),
+        ("radroots.trade.", ContractFamily::Trade),
+    ];
+
+    PREFIX_FAMILIES
+        .iter()
+        .find_map(|(prefix, family)| id.starts_with(prefix).then_some(*family))
 }
 
 fn validate_content_shape_parts(
@@ -4127,47 +4127,45 @@ fn validate_contract_tags_parts_in_registry(
             > 1;
         match tag_contract.cardinality {
             TagCardinality::RequiredOne => {
-                if count == 0 {
-                    return Err(ContractValidationError::MissingTag {
+                crate::require_invariant(count != 0, &|| ContractValidationError::MissingTag {
+                    contract_id: contract.id,
+                    name: tag_contract.name,
+                })?;
+                crate::require_invariant(
+                    [count == 1, has_multiple_contracts_for_name].contains(&true),
+                    &|| ContractValidationError::TagCardinalityMismatch {
                         contract_id: contract.id,
                         name: tag_contract.name,
-                    });
-                }
-                if count != 1 && !has_multiple_contracts_for_name {
-                    return Err(ContractValidationError::TagCardinalityMismatch {
-                        contract_id: contract.id,
-                        name: tag_contract.name,
-                    });
-                }
+                    },
+                )?;
             }
             TagCardinality::RequiredMany => {
-                if count == 0 {
-                    return Err(ContractValidationError::MissingTag {
-                        contract_id: contract.id,
-                        name: tag_contract.name,
-                    });
-                }
+                crate::require_invariant(count != 0, &|| ContractValidationError::MissingTag {
+                    contract_id: contract.id,
+                    name: tag_contract.name,
+                })?;
             }
             TagCardinality::OptionalOne => {
-                if count > 1 && !has_multiple_contracts_for_name {
-                    return Err(ContractValidationError::TagCardinalityMismatch {
+                crate::require_invariant(
+                    [count <= 1, has_multiple_contracts_for_name].contains(&true),
+                    &|| ContractValidationError::TagCardinalityMismatch {
                         contract_id: contract.id,
                         name: tag_contract.name,
-                    });
-                }
+                    },
+                )?;
             }
             TagCardinality::OptionalMany => {}
         }
         if tag_contract.name == "contract" {
             let actual = tag_value(tags, "contract").map(ToOwned::to_owned);
-            if actual.as_deref() != Some(contract.id) {
-                return Err(ContractValidationError::TagValueMismatch {
+            crate::require_invariant(actual.as_deref() == Some(contract.id), &|| {
+                ContractValidationError::TagValueMismatch {
                     contract_id: contract.id,
                     name: "contract",
                     expected: contract.id.to_owned(),
-                    actual,
-                });
-            }
+                    actual: actual.clone(),
+                }
+            })?;
         }
         validate_contract_tag_values_in_registry(tags, contract, tag_contract, event_contracts)?;
     }
@@ -4184,14 +4182,15 @@ fn validate_contract_tag_values_in_registry(
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(tag_contract.name))
     {
-        if !tag_value_is_valid_in_registry(tag, tag_contract.value_type, event_contracts) {
-            return Err(ContractValidationError::TagValueMismatch {
+        crate::require_invariant(
+            tag_value_is_valid_in_registry(tag, tag_contract.value_type, event_contracts),
+            &|| ContractValidationError::TagValueMismatch {
                 contract_id: contract.id,
                 name: tag_contract.name,
                 expected: tag_value_type_expectation(tag_contract.value_type).to_owned(),
                 actual: tag.get(1).cloned(),
-            });
-        }
+            },
+        )?;
     }
     Ok(())
 }
@@ -4247,46 +4246,54 @@ fn event_pointer_tag_is_valid(tag: &[String]) -> bool {
     let author = tag[2].as_str();
     let kind = tag[3].as_str();
     let d_tag = tag[4].as_str();
-    EventId::parse(id).is_ok()
-        && parse_public_key(author).is_ok()
-        && kind.parse::<u32>().is_ok()
-        && (d_tag.is_empty() || DTag::parse(d_tag).is_ok())
-        && tag
-            .iter()
+    [
+        EventId::parse(id).is_ok(),
+        parse_public_key(author).is_ok(),
+        kind.parse::<u32>().is_ok(),
+        [d_tag.is_empty(), DTag::parse(d_tag).is_ok()].contains(&true),
+        tag.iter()
             .skip(5)
-            .all(|relay| relay_url_is_valid(relay.as_str()))
+            .all(|relay| relay_url_is_valid(relay.as_str())),
+    ] == [true; 5]
 }
 
 fn visible_text_is_valid(value: &str) -> bool {
-    !value.trim().is_empty() && !value.chars().any(char::is_control)
+    [
+        !value.trim().is_empty(),
+        !value.chars().any(char::is_control),
+    ] == [true; 2]
 }
 
 fn url_is_valid(value: &str) -> bool {
-    value
-        .strip_prefix("https://")
-        .or_else(|| value.strip_prefix("http://"))
-        .is_some_and(|remainder| !remainder.is_empty())
-        && value.trim() == value
-        && !value.chars().any(char::is_control)
+    [
+        value
+            .strip_prefix("https://")
+            .or_else(|| value.strip_prefix("http://"))
+            .is_some_and(|remainder| !remainder.is_empty()),
+        value.trim() == value,
+        !value.chars().any(char::is_control),
+    ] == [true; 3]
 }
 
 fn geohash_is_valid(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 12
-        && value
+    [
+        !value.is_empty(),
+        value.len() <= 12,
+        value
             .bytes()
-            .all(|byte| matches!(byte.to_ascii_lowercase(), b'0'..=b'9' | b'b'..=b'h' | b'j'..=b'k' | b'm'..=b'n' | b'p'..=b'z'))
+            .all(|byte| matches!(byte.to_ascii_lowercase(), b'0'..=b'9' | b'b'..=b'h' | b'j'..=b'k' | b'm'..=b'n' | b'p'..=b'z')),
+    ] == [true; 3]
 }
 
 fn uuid_is_valid(value: &str) -> bool {
     let bytes = value.as_bytes();
-    if bytes.len() != 36 {
-        return false;
-    }
-    bytes.iter().enumerate().all(|(index, byte)| match index {
-        8 | 13 | 18 | 23 => *byte == b'-',
-        _ => byte.is_ascii_hexdigit(),
-    })
+    [
+        bytes.len() == 36,
+        bytes.iter().enumerate().all(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => *byte == b'-',
+            _ => byte.is_ascii_hexdigit(),
+        }),
+    ] == [true; 2]
 }
 
 fn tag_value_type_expectation(value_type: TagValueType) -> &'static str {
@@ -4318,13 +4325,12 @@ fn tag_value_type_expectation(value_type: TagValueType) -> &'static str {
 }
 
 fn canonical_u64(value: &str) -> Option<u64> {
-    if value.is_empty()
-        || (value.len() > 1 && value.starts_with('0'))
-        || !value.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-    value.parse().ok()
+    let valid = [
+        !value.is_empty(),
+        [value.len() > 1, value.starts_with('0')] != [true; 2],
+        value.bytes().all(|byte| byte.is_ascii_digit()),
+    ];
+    (valid == [true; 3]).then_some(value.parse().ok()).flatten()
 }
 
 fn validate_custom_calendar_contract_parts(
@@ -4354,18 +4360,20 @@ fn validate_calendar_collection_contract(
         .filter(|tag| tag.first().map(String::as_str) == Some("a"))
         .collect::<Vec<_>>();
     for (index, reference) in event_references.iter().enumerate() {
-        if event_references
-            .iter()
-            .skip(index + 1)
-            .any(|candidate| candidate.get(1) == reference.get(1))
-        {
-            return Err(calendar_tag_mismatch(
-                contract,
-                "a",
-                "duplicate_free_calendar_event_coordinates",
-                reference.get(1).cloned(),
-            ));
-        }
+        crate::require_invariant(
+            !event_references
+                .iter()
+                .skip(index + 1)
+                .any(|candidate| candidate.get(1) == reference.get(1)),
+            &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "a",
+                    "duplicate_free_calendar_event_coordinates",
+                    reference.get(1).cloned(),
+                )
+            },
+        )?;
     }
     Ok(())
 }
@@ -4387,16 +4395,20 @@ fn validate_calendar_rsvp_contract(
         .map(|parts| parts.pubkey);
     if let Some(author_hint) = tag_value(tags, "p") {
         let hint = parse_public_key(author_hint).ok();
-        if hint.as_ref() != event_author.as_ref()
-            || hint.as_ref().is_none_or(|key| key.to_hex() != author_hint)
-        {
-            return Err(calendar_tag_mismatch(
-                contract,
-                "p",
-                "canonical_calendar_event_author_matching_a_coordinate",
-                Some(author_hint.to_owned()),
-            ));
-        }
+        crate::require_invariant(
+            [
+                hint.as_ref() == event_author.as_ref(),
+                hint.as_ref().is_some_and(|key| key.to_hex() == author_hint),
+            ] == [true; 2],
+            &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "p",
+                    "canonical_calendar_event_author_matching_a_coordinate",
+                    Some(author_hint.to_owned()),
+                )
+            },
+        )?;
     }
     Ok(())
 }
@@ -4415,14 +4427,21 @@ fn validate_calendar_event_reference_tags(
         let relay_is_valid = tag
             .get(2)
             .is_none_or(|relay| !relay.is_empty() && relay_url_is_valid(relay));
-        if !(2..=3).contains(&tag.len()) || !coordinate_is_valid || !relay_is_valid {
-            return Err(calendar_tag_mismatch(
-                contract,
-                "a",
-                "canonical_kind_31922_or_31923_coordinate_with_optional_relay",
-                tag.get(1).cloned(),
-            ));
-        }
+        crate::require_invariant(
+            [
+                (2..=3).contains(&tag.len()),
+                coordinate_is_valid,
+                relay_is_valid,
+            ] == [true; 3],
+            &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "a",
+                    "canonical_kind_31922_or_31923_coordinate_with_optional_relay",
+                    tag.get(1).cloned(),
+                )
+            },
+        )?;
     }
     Ok(())
 }
@@ -4447,18 +4466,25 @@ fn validate_calendar_rsvp_pointer_tag(
         let relay_is_valid = tag
             .get(2)
             .is_none_or(|relay| !relay.is_empty() && relay_url_is_valid(relay));
-        if !(2..=3).contains(&tag.len()) || !value_is_canonical || !relay_is_valid {
-            return Err(calendar_tag_mismatch(
-                contract,
-                name,
-                if event_id {
-                    "canonical_event_id_with_optional_relay"
-                } else {
-                    "canonical_public_key_with_optional_relay"
-                },
-                tag.get(1).cloned(),
-            ));
-        }
+        crate::require_invariant(
+            [
+                (2..=3).contains(&tag.len()),
+                value_is_canonical,
+                relay_is_valid,
+            ] == [true; 3],
+            &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    name,
+                    if event_id {
+                        "canonical_event_id_with_optional_relay"
+                    } else {
+                        "canonical_public_key_with_optional_relay"
+                    },
+                    tag.get(1).cloned(),
+                )
+            },
+        )?;
     }
     Ok(())
 }
@@ -4473,17 +4499,18 @@ fn validate_canonical_calendar_text_tags(
             .iter()
             .filter(|tag| tag.first().map(String::as_str) == Some(*name))
         {
-            if !tag
-                .get(1)
-                .is_some_and(|value| canonical_calendar_tag_text_is_valid(value))
-            {
-                return Err(calendar_tag_mismatch(
-                    contract,
-                    name,
-                    "canonical_visible_calendar_text",
-                    tag.get(1).cloned(),
-                ));
-            }
+            crate::require_invariant(
+                tag.get(1)
+                    .is_some_and(|value| canonical_calendar_tag_text_is_valid(value)),
+                &|| {
+                    calendar_tag_mismatch(
+                        contract,
+                        name,
+                        "canonical_visible_calendar_text",
+                        tag.get(1).cloned(),
+                    )
+                },
+            )?;
         }
     }
     Ok(())
@@ -4493,17 +4520,19 @@ fn validate_calendar_blossom_image(
     tags: &[Vec<String>],
     contract: &EventContract,
 ) -> Result<(), ContractValidationError> {
-    if let Some(image) = tag_value(tags, "image")
-        && BlobUrl::parse(image).is_err()
-    {
-        return Err(calendar_tag_mismatch(
-            contract,
-            "image",
-            "structural_blossom_hash_path_url",
-            Some(image.to_owned()),
-        ));
-    }
-    Ok(())
+    tag_value(tags, "image")
+        .map(|image| {
+            crate::require_invariant(BlobUrl::parse(image).is_ok(), &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "image",
+                    "structural_blossom_hash_path_url",
+                    Some(image.to_owned()),
+                )
+            })
+        })
+        .transpose()
+        .map(|_| ())
 }
 
 fn validate_calendar_date_contract(
@@ -4521,30 +4550,32 @@ fn validate_calendar_date_contract(
     validate_calendar_inclusion_request_tags(tags, contract)?;
     validate_canonical_calendar_common_tags(tags, contract)?;
 
-    if let Some(tag) = tags
+    let forbidden_day_tag = tags
         .iter()
-        .find(|tag| tag.first().map(String::as_str) == Some("D"))
-    {
-        return Err(calendar_tag_mismatch(
+        .find(|tag| tag.first().map(String::as_str) == Some("D"));
+    crate::require_invariant(forbidden_day_tag.is_none(), &|| {
+        calendar_tag_mismatch(
             contract,
             "D",
             "forbidden_on_calendar_date_event",
-            tag.get(1).cloned(),
-        ));
-    }
+            forbidden_day_tag.and_then(|tag| tag.get(1)).cloned(),
+        )
+    })?;
 
     let start = calendar_date_tag(tags, contract, "start")?;
-    if let Some(end) = optional_calendar_date_tag(tags, contract, "end")?
-        && end <= start
-    {
-        return Err(calendar_tag_mismatch(
-            contract,
-            "end",
-            "gregorian_date_later_than_start",
-            Some(end.as_str().to_owned()),
-        ));
-    }
-    Ok(())
+    optional_calendar_date_tag(tags, contract, "end")?
+        .map(|end| {
+            crate::require_invariant(end > start, &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "end",
+                    "gregorian_date_later_than_start",
+                    Some(end.as_str().to_owned()),
+                )
+            })
+        })
+        .transpose()
+        .map(|_| ())
 }
 
 fn validate_calendar_time_contract(
@@ -4577,14 +4608,14 @@ fn validate_calendar_time_contract(
 
     let start = canonical_calendar_u64_tag(tags, contract, "start")?;
     let end = optional_canonical_calendar_u64_tag(tags, contract, "end")?;
-    if end.is_some_and(|end| end <= start) {
-        return Err(calendar_tag_mismatch(
+    crate::require_invariant(!end.is_some_and(|end| end <= start), &|| {
+        calendar_tag_mismatch(
             contract,
             "end",
             "canonical_unix_seconds_later_than_start",
             tag_value(tags, "end").map(ToOwned::to_owned),
-        ));
-    }
+        )
+    })?;
 
     let expected_days = covered_utc_days(start, end).map_err(|_| {
         calendar_tag_mismatch(
@@ -4626,14 +4657,9 @@ fn validate_exact_calendar_tags(
             .iter()
             .filter(|tag| tag.first().map(String::as_str) == Some(*name))
         {
-            if tag.len() != 2 {
-                return Err(calendar_tag_mismatch(
-                    contract,
-                    name,
-                    "exact_two_element_tag",
-                    tag.get(1).cloned(),
-                ));
-            }
+            crate::require_invariant(tag.len() == 2, &|| {
+                calendar_tag_mismatch(contract, name, "exact_two_element_tag", tag.get(1).cloned())
+            })?;
         }
     }
     Ok(())
@@ -4643,14 +4669,10 @@ fn validate_calendar_participant_tags(
     tags: &[Vec<String>],
     contract: &EventContract,
 ) -> Result<(), ContractValidationError> {
-    if tag_count(tags, "p") > RADROOTS_CALENDAR_MAX_PARTICIPANTS {
-        return Err(calendar_tag_mismatch(
-            contract,
-            "p",
-            "bounded_participant_count",
-            None,
-        ));
-    }
+    crate::require_invariant(
+        tag_count(tags, "p") <= RADROOTS_CALENDAR_MAX_PARTICIPANTS,
+        &|| calendar_tag_mismatch(contract, "p", "bounded_participant_count", None),
+    )?;
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(String::as_str) == Some("p"))
@@ -4667,19 +4689,23 @@ fn validate_calendar_participant_tags(
             .map(|role| canonical_calendar_tag_text_is_valid(role))
             .unwrap_or(true);
         let placeholder_is_canonical = !(tag.len() == 3 && tag[2].is_empty());
-        if !(2..=4).contains(&tag.len())
-            || !pubkey_is_canonical
-            || !relay_is_valid
-            || !role_is_valid
-            || !placeholder_is_canonical
-        {
-            return Err(calendar_tag_mismatch(
-                contract,
-                "p",
-                "participant_pubkey_with_optional_relay_and_role",
-                tag.get(1).cloned(),
-            ));
-        }
+        crate::require_invariant(
+            [
+                (2..=4).contains(&tag.len()),
+                pubkey_is_canonical,
+                relay_is_valid,
+                role_is_valid,
+                placeholder_is_canonical,
+            ] == [true; 5],
+            &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "p",
+                    "participant_pubkey_with_optional_relay_and_role",
+                    tag.get(1).cloned(),
+                )
+            },
+        )?;
     }
     Ok(())
 }
@@ -4698,14 +4724,21 @@ fn validate_calendar_inclusion_request_tags(
         let relay_is_valid = tag
             .get(2)
             .is_none_or(|relay| !relay.is_empty() && relay_url_is_valid(relay));
-        if !(2..=3).contains(&tag.len()) || !coordinate_is_calendar || !relay_is_valid {
-            return Err(calendar_tag_mismatch(
-                contract,
-                "a",
-                "kind_31924_coordinate_with_optional_relay",
-                tag.get(1).cloned(),
-            ));
-        }
+        crate::require_invariant(
+            [
+                (2..=3).contains(&tag.len()),
+                coordinate_is_calendar,
+                relay_is_valid,
+            ] == [true; 3],
+            &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "a",
+                    "kind_31924_coordinate_with_optional_relay",
+                    tag.get(1).cloned(),
+                )
+            },
+        )?;
     }
     Ok(())
 }
@@ -4720,7 +4753,11 @@ fn canonical_calendar_coordinate_is_valid(value: &str) -> bool {
     let Ok(parts) = crate::id::AddressableCoordinateParts::parse(value) else {
         return false;
     };
-    kind == "31924" && pubkey == parts.pubkey.to_hex() && d_tag == parts.d_tag.as_str()
+    [
+        kind == "31924",
+        pubkey == parts.pubkey.to_hex(),
+        d_tag == parts.d_tag.as_str(),
+    ] == [true; 3]
 }
 
 fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
@@ -4733,12 +4770,15 @@ fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
     let Ok(parts) = crate::id::AddressableCoordinateParts::parse(value) else {
         return false;
     };
-    matches!(
-        parts.kind,
-        KIND_CALENDAR_DATE_EVENT | KIND_CALENDAR_TIME_EVENT
-    ) && matches!(kind, "31922" | "31923")
-        && pubkey == parts.pubkey.to_hex()
-        && d_tag == parts.d_tag.as_str()
+    [
+        matches!(
+            parts.kind,
+            KIND_CALENDAR_DATE_EVENT | KIND_CALENDAR_TIME_EVENT
+        ),
+        matches!(kind, "31922" | "31923"),
+        pubkey == parts.pubkey.to_hex(),
+        d_tag == parts.d_tag.as_str(),
+    ] == [true; 4]
 }
 
 fn validate_canonical_calendar_common_tags(
@@ -4750,39 +4790,33 @@ fn validate_canonical_calendar_common_tags(
             .iter()
             .filter(|tag| tag.first().map(String::as_str) == Some(name))
         {
-            if !tag
-                .get(1)
-                .is_some_and(|value| canonical_calendar_tag_text_is_valid(value))
-            {
-                return Err(calendar_tag_mismatch(
-                    contract,
-                    name,
-                    "canonical_visible_calendar_text",
-                    tag.get(1).cloned(),
-                ));
-            }
+            crate::require_invariant(
+                tag.get(1)
+                    .is_some_and(|value| canonical_calendar_tag_text_is_valid(value)),
+                &|| {
+                    calendar_tag_mismatch(
+                        contract,
+                        name,
+                        "canonical_visible_calendar_text",
+                        tag.get(1).cloned(),
+                    )
+                },
+            )?;
         }
     }
-    if let Some(geohash) = tag_value(tags, "g")
-        && !canonical_calendar_geohash_is_valid(geohash)
-    {
-        return Err(calendar_tag_mismatch(
-            contract,
-            "g",
-            "canonical_lowercase_geohash",
-            Some(geohash.to_owned()),
-        ));
-    }
-    if let Some(image) = tag_value(tags, "image")
-        && BlobUrl::parse(image).is_err()
-    {
-        return Err(calendar_tag_mismatch(
-            contract,
-            "image",
-            "structural_blossom_hash_path_url",
-            Some(image.to_owned()),
-        ));
-    }
+    tag_value(tags, "g")
+        .map(|geohash| {
+            crate::require_invariant(canonical_calendar_geohash_is_valid(geohash), &|| {
+                calendar_tag_mismatch(
+                    contract,
+                    "g",
+                    "canonical_lowercase_geohash",
+                    Some(geohash.to_owned()),
+                )
+            })
+        })
+        .transpose()?;
+    validate_calendar_blossom_image(tags, contract)?;
     Ok(())
 }
 
@@ -4906,11 +4940,12 @@ fn validate_discriminator_parts(
     content: &str,
     contract: &EventContract,
 ) -> Result<(), ContractValidationError> {
-    if matches!(contract.discriminator, EventDiscriminator::AdmissionOnly) {
-        return Err(ContractValidationError::AdmissionRequired {
+    crate::require_invariant(
+        !matches!(contract.discriminator, EventDiscriminator::AdmissionOnly),
+        &|| ContractValidationError::AdmissionRequired {
             contract_id: contract.id,
-        });
-    }
+        },
+    )?;
     let (field, value) = match &contract.discriminator {
         EventDiscriminator::ContentJsonFieldEquals { field, value } => (*field, *value),
         EventDiscriminator::EnvelopeType(value) => ("type", *value),
@@ -4953,9 +4988,9 @@ fn reject_forbidden_knowledge_fields(
         "trust_status",
         "trusted",
     ] {
-        if object.contains_key(field) {
-            return Err(ContractValidationError::ForbiddenContentField { contract_id, field });
-        }
+        crate::require_invariant(!object.contains_key(field), &|| {
+            ContractValidationError::ForbiddenContentField { contract_id, field }
+        })?;
     }
     Ok(())
 }
@@ -5035,4 +5070,5 @@ fn content_json_string_field_equals(content: &str, field: &str, value: &str) -> 
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests;

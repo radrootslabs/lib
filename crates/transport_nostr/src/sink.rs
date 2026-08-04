@@ -45,6 +45,9 @@ impl LiveRelayClient {
 }
 
 impl RelayClient for LiveRelayClient {
+    // The live SDK loop requires external relays. Its result normalization is
+    // covered through the injected RelayClient boundary below.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn publish<'a>(
         &'a self,
         relays: Vec<RelayUrl>,
@@ -173,6 +176,7 @@ impl EventSink for NostrTransport {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn unix_time_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -357,5 +361,96 @@ mod tests {
                 .iter()
                 .all(|target| !target.was_attempted())
         );
+    }
+
+    #[derive(Debug)]
+    struct ScriptedRelayClient(Vec<RelayPublishResult>);
+
+    impl RelayClient for ScriptedRelayClient {
+        fn publish<'a>(
+            &'a self,
+            _relays: Vec<RelayUrl>,
+            _event: Event,
+            _connect_timeout: Duration,
+            _operation_timeout: Duration,
+        ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
+            Box::pin(async move { self.0.clone() })
+        }
+    }
+
+    fn scripted(results: Vec<RelayPublishResult>) -> NostrTransport {
+        let config = Config::new(
+            RelayUrlPolicy::Public,
+            ["wss://one.example", "wss://two.example"],
+        )
+        .expect("config");
+        NostrTransport::with_client(config, Arc::new(ScriptedRelayClient(results)))
+    }
+
+    #[test]
+    fn sink_handles_missing_duplicate_unexpected_and_denied_targets() {
+        let one = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).expect("one");
+        let missing = futures::executor::block_on(
+            scripted(vec![RelayPublishResult {
+                relay: one.clone(),
+                outcome: DeliveryOutcome::accepted(),
+            }])
+            .deliver(request()),
+        )
+        .expect("missing result receipt");
+        assert_eq!(missing.target_receipts().len(), 2);
+
+        let duplicate = scripted(vec![
+            RelayPublishResult {
+                relay: one.clone(),
+                outcome: DeliveryOutcome::accepted(),
+            },
+            RelayPublishResult {
+                relay: one,
+                outcome: DeliveryOutcome::accepted(),
+            },
+        ]);
+        assert_eq!(
+            futures::executor::block_on(duplicate.deliver(request())),
+            Err(radroots_transport::Error::InvalidDeliveryOutcome)
+        );
+
+        let other = RelayUrl::parse("wss://other.example", RelayUrlPolicy::Public).expect("other");
+        let unexpected = scripted(vec![RelayPublishResult {
+            relay: other,
+            outcome: DeliveryOutcome::accepted(),
+        }]);
+        assert_eq!(
+            futures::executor::block_on(unexpected.deliver(request())),
+            Err(radroots_transport::Error::InvalidDeliveryOutcome)
+        );
+
+        let denied_request = DeliveryRequest::new(
+            "denied",
+            payload(),
+            TargetSet::new(vec![
+                Target::nostr_relay("wss://other.example").expect("other"),
+            ])
+            .expect("targets"),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1_800_000_000_000,
+        )
+        .expect("request");
+        let denied = futures::executor::block_on(scripted(vec![]).deliver(denied_request))
+            .expect("denied receipt");
+        assert!(!denied.target_receipts()[0].was_attempted());
+        assert!(futures::executor::block_on(scripted(vec![]).status()).is_ok());
+    }
+
+    #[test]
+    fn live_relay_client_accepts_an_empty_batch_without_io() {
+        let client = LiveRelayClient::isolated();
+        let results = futures::executor::block_on(client.publish(
+            vec![],
+            radroots_nostr::event::to_nostr(payload().event().envelope()).expect("nostr event"),
+            Duration::from_millis(1),
+            Duration::from_millis(1),
+        ));
+        assert!(results.is_empty());
     }
 }

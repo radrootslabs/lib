@@ -656,4 +656,5 @@ fn push_unicode_escape(target: &mut String, character: char) {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests;

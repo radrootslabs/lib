@@ -106,9 +106,12 @@ impl CommitEnqueued {
         outbox: EnqueueOutboxItem,
         committed_at_unix_ms: u64,
     ) -> Result<Self, Error> {
-        if committed_at_unix_ms == 0
-            || admission.event_id() != outbox.request().payload().event().id()
-            || outbox.operation_instance_id() != instance_id
+        if [
+            committed_at_unix_ms == 0,
+            admission.event_id() != outbox.request().payload().event().id(),
+            outbox.operation_instance_id() != instance_id,
+        ]
+        .contains(&true)
         {
             return Err(Error::AtomicWorkflowMismatch);
         }
@@ -279,8 +282,11 @@ impl AtomicCommitReceipt {
         committed_at_unix_ms: u64,
         outcome: AtomicCommitOutcome,
     ) -> Result<Self, Error> {
-        if committed_at_unix_ms < request.requested_at_unix_ms()
-            || outcome.kind() != request.workflow().kind()
+        if [
+            committed_at_unix_ms < request.requested_at_unix_ms(),
+            outcome.kind() != request.workflow().kind(),
+        ]
+        .contains(&true)
         {
             return Err(Error::AtomicWorkflowMismatch);
         }

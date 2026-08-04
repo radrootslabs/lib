@@ -170,8 +170,16 @@ mod tests {
     fn usernames_normalize_to_one_canonical_form() {
         let username = Username::parse("  RadRoots.Test  ").unwrap();
         assert_eq!(username.as_str(), "radroots.test");
+        assert_eq!(username.as_ref(), "radroots.test");
         assert_eq!(username.to_string(), "radroots.test");
+        assert_eq!(format!("{username:?}"), "Username(\"radroots.test\")");
         assert_eq!(Username::from_str("radroots.test").unwrap(), username);
+        assert_eq!(Username::try_from("radroots.test").unwrap(), username);
+        assert_eq!(
+            Username::try_from(String::from("radroots.test")).unwrap(),
+            username
+        );
+        assert_eq!(username.clone().into_string(), "radroots.test");
     }
 
     #[test]
@@ -179,6 +187,10 @@ mod tests {
         assert!(matches!(
             Username::parse("rr"),
             Err(Error::InvalidUsernameLength { actual: 2, .. })
+        ));
+        assert!(matches!(
+            Username::parse(&"r".repeat(MAX_LENGTH + 1)),
+            Err(Error::InvalidUsernameLength { actual, .. }) if actual == MAX_LENGTH + 1
         ));
         assert!(matches!(
             Username::parse("rad roots"),
@@ -203,5 +215,6 @@ mod tests {
         assert_eq!(username.as_str(), "radroots");
         assert_eq!(serde_json::to_string(&username).unwrap(), "\"radroots\"");
         assert!(serde_json::from_str::<Username>("\"rr\"").is_err());
+        assert!(serde_json::from_str::<Username>("42").is_err());
     }
 }

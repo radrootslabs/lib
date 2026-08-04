@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::error::require_invariant;
 use crate::generated::nip09_reconciliation_manifest::{
     NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
     NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION,
@@ -135,14 +136,14 @@ impl ReconciliationCapacity {
                 limit,
             },
         )?;
-        if actual > limit {
-            return Err(RadrootsEventStoreError::SourceCapacityExceeded {
+        require_invariant(actual <= limit, || {
+            RadrootsEventStoreError::SourceCapacityExceeded {
                 resource,
                 current: self.value(resource),
                 requested: amount,
                 limit,
-            });
-        }
+            }
+        })?;
         *self.value_mut(resource) = actual;
         Ok(())
     }
@@ -156,14 +157,14 @@ impl ReconciliationCapacity {
         ] {
             let actual = self.value(resource);
             let limit = limits.limit(resource);
-            if actual > limit {
-                return Err(RadrootsEventStoreError::SourceCapacityExceeded {
+            require_invariant(actual <= limit, || {
+                RadrootsEventStoreError::SourceCapacityExceeded {
                     resource,
                     current: actual,
                     requested: 0,
                     limit,
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }
@@ -576,11 +577,9 @@ pub(crate) async fn apply_reconciliation_hook(
     .bind(generation.as_bytes().as_slice())
     .fetch_one(&mut *connection)
     .await?;
-    if generation_exists != 0 {
-        return hook_drift(
-            "fresh source generation collided with existing generation history".to_owned(),
-        );
-    }
+    require_hook_invariant(generation_exists == 0, || {
+        "fresh source generation collided with existing generation history".to_owned()
+    })?;
 
     let transition_floor_seq: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(transition_seq), 0) FROM radroots_event_store_addressable_head_transition",
@@ -594,15 +593,16 @@ pub(crate) async fn apply_reconciliation_hook(
     .await?;
     let generation_ordinal =
         checked_authority_add(prior_generation_ordinal, 1, "source generation ordinal")?;
-    if let Some(prior) = prior.as_ref()
-        && (prior.last_transition_seq != transition_floor_seq
-            || prior.raw_event_count != raw_event_count
-            || prior.raw_tag_count != raw_tag_count
-            || prior.raw_high_water_seq != raw_high_water_seq)
-    {
-        return hook_drift(
-            "prior source authority does not bind the immutable rebuild baseline".to_owned(),
-        );
+    if let Some(prior) = prior.as_ref() {
+        let prior_seal_matches = [
+            prior.last_transition_seq == transition_floor_seq,
+            prior.raw_event_count == raw_event_count,
+            prior.raw_tag_count == raw_tag_count,
+            prior.raw_high_water_seq == raw_high_water_seq,
+        ];
+        require_hook_invariant(prior_seal_matches == [true; 4], || {
+            "prior source authority does not bind the immutable rebuild baseline".to_owned()
+        })?;
     }
     let plan = SourceRebuildPlan {
         generation,
@@ -740,13 +740,12 @@ async fn rotate_source_state(
         .execute(&mut *connection)
         .await?
     };
-    if changed.rows_affected() != 1 {
-        return hook_drift(format!(
+    require_hook_invariant(changed.rows_affected() == 1, || {
+        format!(
             "source state rebuild transition affected {} rows",
             changed.rows_affected()
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 async fn close_source_rebuild_marker(
@@ -759,13 +758,12 @@ async fn close_source_rebuild_marker(
     .bind(generation.as_bytes().as_slice())
     .execute(&mut *connection)
     .await?;
-    if deleted.rows_affected() != 1 {
-        return hook_drift(format!(
+    require_hook_invariant(deleted.rows_affected() == 1, || {
+        format!(
             "source rebuild marker close affected {} rows",
             deleted.rows_affected()
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 async fn validate_sqlite_integrity_after_rebuild(
@@ -788,10 +786,17 @@ async fn validate_sqlite_integrity_after_rebuild(
     let integrity_rows = sqlx::query("PRAGMA integrity_check")
         .fetch_all(&mut *connection)
         .await?;
-    if integrity_rows.len() != 1 || integrity_rows[0].try_get::<String, _>(0)?.as_str() != "ok" {
-        return hook_drift("SQLite integrity validation failed after source rebuild".to_owned());
-    }
-    Ok(())
+    let sqlite_integrity_matches = [
+        integrity_rows.len() == 1,
+        integrity_rows
+            .first()
+            .map(|row| row.try_get::<String, _>(0))
+            .transpose()?
+            .is_some_and(|value| value == "ok"),
+    ];
+    require_hook_invariant(sqlite_integrity_matches == [true; 2], || {
+        "SQLite integrity validation failed after source rebuild".to_owned()
+    })
 }
 
 #[cfg(test)]
@@ -819,11 +824,9 @@ async fn validate_rebuild_hook_state_with_events(
 ) -> Result<(), RadrootsEventStoreError> {
     validate_active_rebuild_marker(connection, generation).await?;
     let state = validate_structural_source_state(connection).await?;
-    if state.generation != generation {
-        return hook_drift(
-            "open rebuild marker target does not match active source generation".to_owned(),
-        );
-    }
+    require_hook_invariant(state.generation == generation, || {
+        "open rebuild marker target does not match active source generation".to_owned()
+    })?;
     validate_hook_state_with_events(connection, &state, events).await
 }
 
@@ -877,12 +880,9 @@ async fn validate_structural_source_state_fast(
     )
     .fetch_all(&mut *connection)
     .await?;
-    if rows.len() != 1 {
-        return hook_drift(format!(
-            "expected one active source state, found {}",
-            rows.len()
-        ));
-    }
+    require_hook_invariant(rows.len() == 1, || {
+        format!("expected one active source state, found {}", rows.len())
+    })?;
     let row = &rows[0];
     let generation = generation_from_blob(row.try_get("active_generation")?)?;
     let profile = reconciliation_profile(
@@ -906,23 +906,25 @@ async fn validate_structural_source_state_fast(
     };
     let generation_ordinal: i64 = row.try_get("generation_ordinal")?;
     let max_generation_ordinal: i64 = row.try_get("max_generation_ordinal")?;
-    if generation_ordinal != max_generation_ordinal {
-        return hook_drift("active generation contract metadata is inconsistent".to_owned());
-    }
-    if state.baseline_raw_event_count > state.raw_event_count
-        || state.baseline_raw_tag_count > state.raw_tag_count
-        || state.baseline_raw_high_water_seq > state.raw_high_water_seq
-        || state.transition_floor_seq > state.last_transition_seq
-    {
-        return hook_drift("active generation baseline exceeds current authority".to_owned());
-    }
+    require_hook_invariant(generation_ordinal == max_generation_ordinal, || {
+        "active generation contract metadata is inconsistent".to_owned()
+    })?;
+    let baseline_is_bounded = [
+        state.baseline_raw_event_count <= state.raw_event_count,
+        state.baseline_raw_tag_count <= state.raw_tag_count,
+        state.baseline_raw_high_water_seq <= state.raw_high_water_seq,
+        state.transition_floor_seq <= state.last_transition_seq,
+    ];
+    require_hook_invariant(baseline_is_bounded == [true; 4], || {
+        "active generation baseline exceeds current authority".to_owned()
+    })?;
     let actual_high_water: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(seq), 0) FROM event_envelopes")
             .fetch_one(&mut *connection)
             .await?;
-    if actual_high_water != state.raw_high_water_seq {
-        return hook_drift("raw high-water does not match active source authority".to_owned());
-    }
+    require_hook_invariant(actual_high_water == state.raw_high_water_seq, || {
+        "raw high-water does not match active source authority".to_owned()
+    })?;
     let first_transition_seq: Option<i64> = sqlx::query_scalar(
         "SELECT transition_seq FROM radroots_event_store_addressable_head_transition WHERE source_generation = ? ORDER BY transition_seq ASC LIMIT 1",
     )
@@ -946,15 +948,17 @@ async fn validate_structural_source_state_fast(
         None
     };
     let expected_last = (expected_count > 0).then_some(state.last_transition_seq);
-    if expected_count < 0
-        || first_transition_seq != expected_first
-        || transition_high_water != expected_last
-    {
-        return hook_drift(format!(
+    let transition_bounds_match = [
+        expected_count >= 0,
+        first_transition_seq == expected_first,
+        transition_high_water == expected_last,
+    ];
+    require_hook_invariant(transition_bounds_match == [true; 3], || {
+        format!(
             "active transition bounds are inconsistent: floor={}, last={}, first={first_transition_seq:?}, high-water={transition_high_water:?}",
             state.transition_floor_seq, state.last_transition_seq
-        ));
-    }
+        )
+    })?;
 
     Ok(state)
 }
@@ -966,12 +970,11 @@ async fn validate_rebuild_marker_absent(
         sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_source_rebuild_marker")
             .fetch_one(&mut *connection)
             .await?;
-    if marker_count != 0 {
-        return hook_drift(format!(
+    require_hook_invariant(marker_count == 0, || {
+        format!(
             "source rebuild marker residue is present outside reconciliation: {marker_count} row(s)"
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 async fn validate_active_rebuild_marker(
@@ -984,12 +987,9 @@ async fn validate_active_rebuild_marker(
     .bind(generation.as_bytes().as_slice())
     .fetch_one(&mut *connection)
     .await?;
-    if valid_marker_count != 1 {
-        return hook_drift(
-            "open source rebuild marker does not bind completed active authority".to_owned(),
-        );
-    }
-    Ok(())
+    require_hook_invariant(valid_marker_count == 1, || {
+        "open source rebuild marker does not bind completed active authority".to_owned()
+    })
 }
 
 async fn validate_projection_cursor_authority(
@@ -1028,11 +1028,11 @@ async fn validate_projection_cursor_authority(
     .bind(raw_high_water)
     .fetch_one(&mut *connection)
     .await?;
-    if invalid_count != 0 {
-        return hook_drift(format!(
+    require_hook_invariant(invalid_count == 0, || {
+        format!(
             "{invalid_count} projection cursor identities are invalid or ahead of raw source authority"
-        ));
-    }
+        )
+    })?;
     let orphan_identity_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)
          FROM radroots_event_store_projection_cursor_source AS source
@@ -1042,12 +1042,9 @@ async fn validate_projection_cursor_authority(
     )
     .fetch_one(&mut *connection)
     .await?;
-    if orphan_identity_count != 0 {
-        return hook_drift(format!(
-            "{orphan_identity_count} projection cursor source identities have no cursor"
-        ));
-    }
-    Ok(())
+    require_hook_invariant(orphan_identity_count == 0, || {
+        format!("{orphan_identity_count} projection cursor source identities have no cursor")
+    })
 }
 
 async fn validate_transition_interval_full(
@@ -1076,17 +1073,18 @@ async fn validate_transition_interval_full(
     .bind(state.transition_floor_seq)
     .fetch_one(&mut *connection)
     .await?;
-    if expected_count < 0
-        || transition_count != expected_count
-        || foreign_transition_count != 0
-        || pre_floor_active_count != 0
-    {
-        return hook_drift(format!(
+    let transition_interval_matches = [
+        expected_count >= 0,
+        transition_count == expected_count,
+        foreign_transition_count == 0,
+        pre_floor_active_count == 0,
+    ];
+    require_hook_invariant(transition_interval_matches == [true; 4], || {
+        format!(
             "active transition interval is not contiguous: floor={}, last={}, count={}, foreign={foreign_transition_count}, pre-floor={pre_floor_active_count}",
             state.transition_floor_seq, state.last_transition_seq, transition_count
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 pub(crate) async fn validate_source_raw_authority(
@@ -1115,11 +1113,9 @@ pub(crate) async fn synchronize_after_insert(
     raw_head_decision: &RadrootsRawHeadDecision,
 ) -> Result<(), RadrootsEventStoreError> {
     validate_rebuild_marker_absent(connection).await?;
-    if inserted_seq == i64::MAX {
-        return hook_drift(
-            "raw source sequence space is exhausted at SQLite INTEGER maximum".to_owned(),
-        );
-    }
+    require_hook_invariant(inserted_seq != i64::MAX, || {
+        "raw source sequence space is exhausted at SQLite INTEGER maximum".to_owned()
+    })?;
     let prior = read_source_state(connection).await?;
     let actual_high_water: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(seq), 0) FROM event_envelopes")
@@ -1136,10 +1132,12 @@ pub(crate) async fn synchronize_after_insert(
             reason: "inserted tag count exceeds SQLite integer range".to_owned(),
         }
     })?;
-    if actual_inserted_tag_count != inserted_tag_count
-        || inserted_seq <= prior.raw_high_water_seq
-        || actual_high_water != inserted_seq
-    {
+    let inserted_source_matches = [
+        actual_inserted_tag_count == inserted_tag_count,
+        inserted_seq > prior.raw_high_water_seq,
+        actual_high_water == inserted_seq,
+    ];
+    if inserted_source_matches != [true; 3] {
         let expected = SourceState {
             generation: prior.generation,
             profile: prior.profile,
@@ -1476,11 +1474,9 @@ async fn load_reconciliation_snapshot(
                     ],
                 )?,
             )?;
-            if seq <= 0 {
-                return hook_drift(format!(
-                    "raw source event `{event_id}` has nonpositive sequence {seq}"
-                ));
-            }
+            require_hook_invariant(seq > 0, || {
+                format!("raw source event `{event_id}` has nonpositive sequence {seq}")
+            })?;
             next_event_seq = seq.checked_add(1).ok_or_else(|| {
                 RadrootsEventStoreError::MigrationHookStateDrift {
                     hook_id: NIP09_HOOK_ID,
@@ -1542,11 +1538,9 @@ async fn load_reconciliation_snapshot(
     if let Some(event_id) = tags_by_event.keys().next() {
         return Err(raw_mismatch(event_id, "tag_rows"));
     }
-    if loaded_capacity != measured_capacity {
-        return hook_drift(
-            "raw source changed while the bounded reconciliation snapshot was loaded".to_owned(),
-        );
-    }
+    require_hook_invariant(loaded_capacity == measured_capacity, || {
+        "raw source changed while the bounded reconciliation snapshot was loaded".to_owned()
+    })?;
     Ok(ReconciliationSnapshot {
         events,
         capacity: loaded_capacity,
@@ -1558,22 +1552,24 @@ fn compare_raw_tags(
     tags: &[Vec<String>],
     rows: Vec<StoredRawTag>,
 ) -> Result<(), RadrootsEventStoreError> {
-    if rows.len() != tags.len() {
-        return Err(raw_mismatch(event_id, "tag_rows"));
-    }
+    require_invariant(rows.len() == tags.len(), || {
+        raw_mismatch(event_id, "tag_rows")
+    })?;
     for (index, (row, tag)) in rows.into_iter().zip(tags).enumerate() {
         let expected_index =
             i64::try_from(index).map_err(|_| raw_mismatch(event_id, "tag_index"))?;
         let expected_name = tag.first().map(String::as_str).unwrap_or("");
         let expected_value = tag.get(1).map(String::as_str);
         let expected_json = serde_json::to_string(tag)?;
-        if row.tag_index != expected_index
-            || row.tag_name != expected_name
-            || row.tag_value.as_deref() != expected_value
-            || row.tag_json != expected_json
-        {
-            return Err(raw_mismatch(event_id, "tag_rows"));
-        }
+        let tag_row_matches = [
+            row.tag_index == expected_index,
+            row.tag_name == expected_name,
+            row.tag_value.as_deref() == expected_value,
+            row.tag_json == expected_json,
+        ];
+        require_invariant(tag_row_matches == [true; 4], || {
+            raw_mismatch(event_id, "tag_rows")
+        })?;
     }
     Ok(())
 }
@@ -1741,29 +1737,32 @@ async fn validate_derived_event_storage(
             let expected_class = StoredEventClass::from_event_kind_class(envelope.kind_class());
             let expected_projection =
                 i64::from(event.admission.valid_stream_eligible(envelope.kind_class()));
-            if seq != event.seq
-                || row.try_get::<String, _>("verification_status")? != "verified"
-                || row.try_get::<String, _>("contract_status")? != event.admission.status.as_str()
-                || row.try_get::<Option<String>, _>("contract_id")?.as_deref()
-                    != event.admission.contract.map(|contract| contract.id)
-                || row.try_get::<Option<String>, _>("event_class")?.as_deref()
-                    != Some(expected_class.as_str())
-                || row.try_get::<i64, _>("projection_eligible")? != expected_projection
-                || row.try_get::<i64, _>("updated_at_ms")? != event.inserted_at_ms
-            {
-                return hook_drift(format!(
+            let stored_contract_id: Option<String> = row.try_get("contract_id")?;
+            let stored_event_class: Option<String> = row.try_get("event_class")?;
+            let envelope_matches = [
+                seq == event.seq,
+                row.try_get::<String, _>("verification_status")? == "verified",
+                row.try_get::<String, _>("contract_status")? == event.admission.status.as_str(),
+                stored_contract_id.as_deref()
+                    == event.admission.contract.map(|contract| contract.id),
+                stored_event_class.as_deref() == Some(expected_class.as_str()),
+                row.try_get::<i64, _>("projection_eligible")? == expected_projection,
+                row.try_get::<i64, _>("updated_at_ms")? == event.inserted_at_ms,
+            ];
+            require_hook_invariant(envelope_matches == [true; 7], || {
+                format!(
                     "derived envelope fields disagree for `{}`",
                     envelope.id_hex()
-                ));
-            }
+                )
+            })?;
         }
         if row_count < RECONCILIATION_SNAPSHOT_BATCH_LEN {
             break;
         }
     }
-    if event_index != events.len() {
-        return hook_drift("derived envelope row count differs from raw events".to_owned());
-    }
+    require_hook_invariant(event_index == events.len(), || {
+        "derived envelope row count differs from raw events".to_owned()
+    })?;
 
     let mut expected_tags = BTreeSet::new();
     for event in events {
@@ -1809,20 +1808,17 @@ async fn validate_derived_event_storage(
                     reason: "derived tag rowid exhausts bounded validation pagination".to_owned(),
                 }
             })?;
-            if !expected_tags.remove(&actual_tag) {
-                return hook_drift(
-                    "derived tag fields disagree with admitted contracts".to_owned(),
-                );
-            }
+            require_hook_invariant(expected_tags.remove(&actual_tag), || {
+                "derived tag fields disagree with admitted contracts".to_owned()
+            })?;
         }
         if row_count < RECONCILIATION_SNAPSHOT_BATCH_LEN {
             break;
         }
     }
-    if !expected_tags.is_empty() {
-        return hook_drift("derived tag row count differs from raw tags".to_owned());
-    }
-    Ok(())
+    require_hook_invariant(expected_tags.is_empty(), || {
+        "derived tag row count differs from raw tags".to_owned()
+    })
 }
 
 async fn validate_raw_heads(
@@ -1878,10 +1874,9 @@ async fn validate_raw_heads(
             })
         })
         .collect::<Result<BTreeSet<_>, sqlx::Error>>()?;
-    if actual != expected {
-        return hook_drift("raw head rows disagree with deterministic NIP-01 selection".to_owned());
-    }
-    Ok(())
+    require_hook_invariant(actual == expected, || {
+        "raw head rows disagree with deterministic NIP-01 selection".to_owned()
+    })
 }
 
 async fn rebuild_raw_heads(
@@ -2043,12 +2038,9 @@ async fn validate_event_coordinate_facts(
     .into_iter()
     .map(event_coordinate_fact_from_row)
     .collect::<Result<BTreeSet<_>, sqlx::Error>>()?;
-    if actual != expected {
-        return hook_drift(
-            "persisted NIP-01 coordinate facts differ from immutable raw events".to_owned(),
-        );
-    }
-    Ok(())
+    require_hook_invariant(actual == expected, || {
+        "persisted NIP-01 coordinate facts differ from immutable raw events".to_owned()
+    })
 }
 
 fn event_coordinate_fact(
@@ -2231,9 +2223,9 @@ async fn validate_nip09_fact_graph(
         })
     })
     .collect::<Result<BTreeSet<_>, sqlx::Error>>()?;
-    if actual_requests != expected_requests {
-        return hook_drift("persisted NIP-09 request facts are incomplete or forged".to_owned());
-    }
+    require_hook_invariant(actual_requests == expected_requests, || {
+        "persisted NIP-09 request facts are incomplete or forged".to_owned()
+    })?;
 
     let actual_event_targets = sqlx::query(
         "SELECT request_event_id, target_event_id, source_tag_index, source_tag_value FROM radroots_event_store_nip09_event_target WHERE source_generation = ? ORDER BY request_event_id, target_event_id",
@@ -2251,9 +2243,9 @@ async fn validate_nip09_fact_graph(
         })
     })
     .collect::<Result<BTreeSet<_>, sqlx::Error>>()?;
-    if actual_event_targets != expected_event_targets {
-        return hook_drift("persisted NIP-09 event targets are incomplete or forged".to_owned());
-    }
+    require_hook_invariant(actual_event_targets == expected_event_targets, || {
+        "persisted NIP-09 event targets are incomplete or forged".to_owned()
+    })?;
 
     let actual_address_targets = sqlx::query(
         "SELECT request_event_id, target_kind, target_pubkey, target_d_tag, inclusive_cutoff, source_tag_index, source_tag_value, source_kind_text, source_pubkey_text, source_d_tag FROM radroots_event_store_nip09_address_target WHERE source_generation = ? ORDER BY request_event_id, target_kind, target_pubkey, target_d_tag",
@@ -2277,9 +2269,9 @@ async fn validate_nip09_fact_graph(
         })
     })
     .collect::<Result<BTreeSet<_>, sqlx::Error>>()?;
-    if actual_address_targets != expected_address_targets {
-        return hook_drift("persisted NIP-09 address targets are incomplete or forged".to_owned());
-    }
+    require_hook_invariant(actual_address_targets == expected_address_targets, || {
+        "persisted NIP-09 address targets are incomplete or forged".to_owned()
+    })?;
 
     Ok(requests)
 }
@@ -2647,12 +2639,9 @@ async fn validate_addressable_state(
 ) -> Result<(), RadrootsEventStoreError> {
     let expected = desired_addressable_states(events, requests)?;
     let actual = read_addressable_states(connection, generation).await?;
-    if actual != expected {
-        return hook_drift(
-            "active addressable head state disagrees with canonical replay".to_owned(),
-        );
-    }
-    Ok(())
+    require_hook_invariant(actual == expected, || {
+        "active addressable head state disagrees with canonical replay".to_owned()
+    })
 }
 
 async fn validate_latest_transitions_match_state(
@@ -2723,12 +2712,11 @@ async fn validate_latest_transitions_match_state(
     .bind(generation.as_bytes().as_slice())
     .fetch_one(&mut *connection)
     .await?;
-    if mismatch_count != 0 {
-        return hook_drift(format!(
+    require_hook_invariant(mismatch_count == 0, || {
+        format!(
             "{mismatch_count} latest addressable transition snapshots disagree with current state"
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 async fn validate_transition_history(
@@ -2774,12 +2762,9 @@ async fn validate_transition_history(
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    if actual != expected {
-        return hook_drift(
-            "addressable transition history disagrees with deterministic arrival replay".to_owned(),
-        );
-    }
-    Ok(())
+    require_hook_invariant(actual == expected, || {
+        "addressable transition history disagrees with deterministic arrival replay".to_owned()
+    })
 }
 
 async fn validate_baseline_authority(
@@ -2799,15 +2784,14 @@ async fn validate_baseline_authority(
     .bind(source.baseline_raw_high_water_seq)
     .fetch_one(&mut *connection)
     .await?;
-    if baseline_event_count != source.baseline_raw_event_count
-        || baseline_tag_count != source.baseline_raw_tag_count
-        || baseline_high_water != source.baseline_raw_high_water_seq
-    {
-        return hook_drift(
-            "active generation baseline raw authority disagrees with canonical replay".to_owned(),
-        );
-    }
-    Ok(())
+    let baseline_authority_matches = [
+        baseline_event_count == source.baseline_raw_event_count,
+        baseline_tag_count == source.baseline_raw_tag_count,
+        baseline_high_water == source.baseline_raw_high_water_seq,
+    ];
+    require_hook_invariant(baseline_authority_matches == [true; 3], || {
+        "active generation baseline raw authority disagrees with canonical replay".to_owned()
+    })
 }
 
 fn expected_transition_history(
@@ -3082,12 +3066,9 @@ async fn addressable_state_for_stored_facts(
     generation: RadrootsEventStoreSourceGeneration,
     event: &EventCoordinateFact,
 ) -> Result<AddressableHeadState, RadrootsEventStoreError> {
-    if event.coordinate_type != "addressable" {
-        return hook_drift(format!(
-            "event coordinate `{}` is not addressable",
-            event.event_id
-        ));
-    }
+    require_hook_invariant(event.coordinate_type == "addressable", || {
+        format!("event coordinate `{}` is not addressable", event.event_id)
+    })?;
     let mut state = AddressableHeadState {
         kind: event.kind,
         pubkey: event.pubkey.clone(),
@@ -3300,18 +3281,15 @@ async fn read_source_state(
     )
     .fetch_all(&mut *connection)
     .await?;
-    if rows.len() != 1 {
-        return hook_drift(format!(
-            "expected one active source state, found {}",
-            rows.len()
-        ));
-    }
+    require_hook_invariant(rows.len() == 1, || {
+        format!("expected one active source state, found {}", rows.len())
+    })?;
     let row = &rows[0];
     let generation_ordinal: i64 = row.try_get("generation_ordinal")?;
     let max_generation_ordinal: i64 = row.try_get("max_generation_ordinal")?;
-    if generation_ordinal != max_generation_ordinal {
-        return hook_drift("active source generation is not the newest generation".to_owned());
-    }
+    require_hook_invariant(generation_ordinal == max_generation_ordinal, || {
+        "active source generation is not the newest generation".to_owned()
+    })?;
     let hook_id: String = row.try_get("hook_id")?;
     let hook_manifest_sha256: String = row.try_get("hook_manifest_sha256")?;
     Ok(SourceState {
@@ -3377,20 +3355,21 @@ async fn validate_source_raw_authority_with_state(
     let actual_tag_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM event_envelope_tags")
         .fetch_one(&mut *connection)
         .await?;
-    if actual_count != state.raw_event_count
-        || actual_high_water != state.raw_high_water_seq
-        || actual_tag_count != state.raw_tag_count
-    {
-        return Err(RadrootsEventStoreError::RawEventSourceDrift {
+    let raw_source_matches = [
+        actual_count == state.raw_event_count,
+        actual_high_water == state.raw_high_water_seq,
+        actual_tag_count == state.raw_tag_count,
+    ];
+    require_invariant(raw_source_matches == [true; 3], || {
+        RadrootsEventStoreError::RawEventSourceDrift {
             expected_count: state.raw_event_count,
             expected_tag_count: state.raw_tag_count,
             expected_high_water: state.raw_high_water_seq,
             actual_count,
             actual_tag_count,
             actual_high_water,
-        });
-    }
-    Ok(())
+        }
+    })
 }
 
 async fn update_source_authority(
@@ -3413,13 +3392,12 @@ async fn update_source_authority(
     .bind(last_transition_seq)
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return hook_drift(format!(
+    require_hook_invariant(updated.rows_affected() == 1, || {
+        format!(
             "source authority update affected {} rows",
             updated.rows_affected()
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 pub(crate) fn generation_from_blob(
@@ -3510,12 +3488,9 @@ fn require_expected_insert(
     rows_affected: u64,
     entity: &'static str,
 ) -> Result<(), RadrootsEventStoreError> {
-    if rows_affected == 1 {
-        return Ok(());
-    }
-    hook_drift(format!(
-        "expected one new {entity} row, inserted {rows_affected}"
-    ))
+    require_hook_invariant(rows_affected == 1, || {
+        format!("expected one new {entity} row, inserted {rows_affected}")
+    })
 }
 
 fn checked_authority_add(
@@ -3536,11 +3511,7 @@ fn compare_raw_field(
     event_id: &str,
     field: &'static str,
 ) -> Result<(), RadrootsEventStoreError> {
-    if matches {
-        Ok(())
-    } else {
-        Err(raw_mismatch(event_id, field))
-    }
+    require_invariant(matches, || raw_mismatch(event_id, field))
 }
 
 fn raw_mismatch(event_id: &str, field: &'static str) -> RadrootsEventStoreError {
@@ -3551,10 +3522,21 @@ fn raw_mismatch(event_id: &str, field: &'static str) -> RadrootsEventStoreError 
 }
 
 fn hook_drift<T>(reason: String) -> Result<T, RadrootsEventStoreError> {
-    Err(RadrootsEventStoreError::MigrationHookStateDrift {
+    Err(hook_drift_error(reason))
+}
+
+fn hook_drift_error(reason: String) -> RadrootsEventStoreError {
+    RadrootsEventStoreError::MigrationHookStateDrift {
         hook_id: NIP09_HOOK_ID,
         reason,
-    })
+    }
+}
+
+fn require_hook_invariant(
+    condition: bool,
+    reason: impl FnOnce() -> String,
+) -> Result<(), RadrootsEventStoreError> {
+    require_invariant(condition, || hook_drift_error(reason()))
 }
 
 fn i64_from_u64(field: &'static str, value: u64) -> Result<i64, RadrootsEventStoreError> {
@@ -3815,6 +3797,147 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
                 ..
             }) if table == "radroots_event_store_owned_child_probe"
         ));
+    }
+
+    #[tokio::test]
+    async fn fast_state_validation_rejects_each_independent_authority_drift_class() {
+        const DROP_TEST_ONLY_GUARDS: &str =
+            "DROP TRIGGER radroots_event_store_source_generation_update_guard;
+DROP TRIGGER radroots_event_store_source_generation_append_guard;
+DROP TRIGGER radroots_event_store_source_generation_insert_conflict_guard;
+DROP TRIGGER radroots_event_store_source_state_authority_update_guard;";
+        let corruptions = [
+            "UPDATE radroots_event_store_source_generation SET event_contract_registry_version = event_contract_registry_version + 1",
+            "UPDATE radroots_event_store_source_generation SET baseline_raw_event_count = baseline_raw_event_count + 1",
+            "UPDATE radroots_event_store_source_state SET raw_high_water_seq = raw_high_water_seq + 1 WHERE singleton = 1",
+            "UPDATE radroots_event_store_source_state SET last_transition_seq = last_transition_seq + 1 WHERE singleton = 1",
+            "INSERT INTO radroots_event_store_source_generation(source_generation, generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq) SELECT zeroblob(32), generation_ordinal + 1, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq FROM radroots_event_store_source_generation ORDER BY generation_ordinal DESC LIMIT 1",
+        ];
+
+        for (index, corruption) in corruptions.into_iter().enumerate() {
+            let pool = open_v1_test_pool().await;
+            install_v2_with_generation(&pool, [0x90 + index as u8; 32]).await;
+            sqlx::raw_sql(DROP_TEST_ONLY_GUARDS)
+                .execute(&pool)
+                .await
+                .expect("remove immutable authority guards in isolated test store");
+            sqlx::query(corruption)
+                .execute(&pool)
+                .await
+                .expect("install isolated authority corruption");
+            let mut connection = pool.acquire().await.expect("validation connection");
+            assert!(
+                validate_active_hook_state_fast(&mut connection)
+                    .await
+                    .is_err(),
+                "authority corruption {index} passed fast validation"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn deep_state_validation_rejects_each_materialized_authority_layer() {
+        let corruptions = [
+            "UPDATE event_envelopes SET content = 'corrupted' WHERE seq = (SELECT MIN(seq) FROM event_envelopes WHERE kind != 5)",
+            "DELETE FROM event_envelope_tags WHERE rowid = (SELECT rowid FROM event_envelope_tags ORDER BY rowid LIMIT 1)",
+            "UPDATE event_envelope_tags SET tag_name = 'x', tag_json = '[\"x\",\"corrupted\"]' WHERE rowid = (SELECT rowid FROM event_envelope_tags ORDER BY rowid LIMIT 1)",
+            "DELETE FROM radroots_event_store_nip09_request",
+            "DELETE FROM radroots_event_store_nip09_event_target",
+            "DELETE FROM radroots_event_store_nip09_address_target",
+            "DELETE FROM radroots_event_store_event_coordinate WHERE kind != 5",
+            "DELETE FROM radroots_event_store_addressable_head_state",
+            "UPDATE radroots_event_store_addressable_head_state SET admission_status = 'invalid'",
+            "DELETE FROM radroots_event_store_addressable_head_transition WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET raw_head_created_at = raw_head_created_at + 1 WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_source_generation SET baseline_raw_event_count = 0",
+            "UPDATE radroots_event_store_source_state SET raw_tag_count = raw_tag_count + 1 WHERE singleton = 1",
+            "INSERT INTO radroots_event_store_projection_cursor_source(projection_id, source_generation, source_revision) VALUES ('orphan', NULL, 1)",
+        ];
+
+        for (index, corruption) in corruptions.into_iter().enumerate() {
+            let pool = open_v1_test_pool().await;
+            let author = fixture_author();
+            let target = signed_event(
+                TARGET_CREATED_AT,
+                KIND_LIST_SET_RELAY,
+                vec![vec!["d".to_owned(), "deep-audit".to_owned()]],
+                "{}",
+            );
+            let target_id = target.id_hex().to_owned();
+            seed_v1_raw_event(&pool, target, 1_000).await;
+            seed_v1_raw_event(
+                &pool,
+                signed_event(
+                    REQUEST_CREATED_AT,
+                    KIND_DELETION_REQUEST,
+                    vec![
+                        vec!["e".to_owned(), target_id],
+                        vec!["a".to_owned(), coordinate(author.as_str(), "deep-audit")],
+                    ],
+                    "remove",
+                ),
+                2_000,
+            )
+            .await;
+            install_v2_with_generation(&pool, [0xa0 + index as u8; 32]).await;
+
+            let mut connection = pool.acquire().await.expect("trusted connection");
+            let triggers: Vec<String> = sqlx::query_scalar(
+                "SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name",
+            )
+            .fetch_all(&mut *connection)
+            .await
+            .expect("trigger inventory");
+            for trigger in triggers {
+                sqlx::query(sqlx::AssertSqlSafe(format!("DROP TRIGGER {trigger}")))
+                    .execute(&mut *connection)
+                    .await
+                    .expect("remove isolated immutable trigger");
+            }
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *connection)
+                .await
+                .expect("disable isolated foreign-key enforcement");
+            sqlx::query("PRAGMA ignore_check_constraints = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("disable isolated check enforcement");
+            sqlx::query(corruption)
+                .execute(&mut *connection)
+                .await
+                .expect("install isolated deep-state corruption");
+            assert!(
+                validate_applied_hook_state(&mut connection).await.is_err(),
+                "deep-state corruption {index} passed validation"
+            );
+        }
+    }
+
+    #[test]
+    fn profile_and_insert_helpers_cover_both_policy_outcomes() {
+        assert_eq!(
+            reconciliation_profile(
+                NIP09_RECONCILIATION_VERSION,
+                NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
+                i64::from(NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION),
+                NIP09_HOOK_ID,
+                NIP09_RECONCILIATION_MANIFEST_SHA256,
+            )
+            .expect("supported profile"),
+            ReconciliationProfile::Nip09V1RegistryV7
+        );
+        assert!(
+            reconciliation_profile(
+                NIP09_RECONCILIATION_VERSION,
+                NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
+                -1,
+                NIP09_HOOK_ID,
+                NIP09_RECONCILIATION_MANIFEST_SHA256,
+            )
+            .is_err()
+        );
+        require_expected_insert(1, "fixture").expect("one insert");
+        assert!(require_expected_insert(0, "fixture").is_err());
     }
 
     #[tokio::test]

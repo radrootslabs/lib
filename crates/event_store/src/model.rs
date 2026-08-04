@@ -606,6 +606,26 @@ mod tests {
     use radroots_event::id::EventId;
     use radroots_identity::PublicKey;
 
+    fn stored_raw_event() -> RadrootsStoredRawEvent {
+        RadrootsStoredRawEvent {
+            seq: 1,
+            event_id: "a".repeat(64),
+            pubkey: "b".repeat(64),
+            created_at: 1,
+            kind: 1,
+            tags_json: "[]".to_owned(),
+            content: String::new(),
+            sig: "c".repeat(128),
+            raw_json: "{}".to_owned(),
+            admission_status: RadrootsEventAdmissionStatus::Admitted,
+            contract_id: Some("social.note.v1".to_owned()),
+            event_class: StoredEventClass::Regular,
+            valid_stream_eligible: true,
+            inserted_at_ms: 1,
+            updated_at_ms: 1,
+        }
+    }
+
     #[test]
     fn admission_status_event_class_and_observation_values_roundtrip() {
         for (status, expected) in [
@@ -922,5 +942,91 @@ mod tests {
         ] {
             assert_eq!(tag_value_type_name(value_type), expected);
         }
+    }
+
+    #[test]
+    fn stored_event_typestates_and_projection_cursor_fail_closed_at_each_boundary() {
+        let raw = stored_raw_event();
+        let valid = RadrootsStoredValidEvent::try_from_raw(raw.clone()).expect("valid event");
+        assert_eq!(valid.raw_event(), &raw);
+        assert_eq!(valid.clone().into_raw_event(), raw);
+
+        for invalid in [
+            RadrootsStoredRawEvent {
+                admission_status: RadrootsEventAdmissionStatus::Invalid,
+                ..stored_raw_event()
+            },
+            RadrootsStoredRawEvent {
+                event_class: StoredEventClass::Addressable,
+                ..stored_raw_event()
+            },
+            RadrootsStoredRawEvent {
+                kind: 20_001,
+                event_class: StoredEventClass::Ephemeral,
+                ..stored_raw_event()
+            },
+            RadrootsStoredRawEvent {
+                valid_stream_eligible: false,
+                ..stored_raw_event()
+            },
+        ] {
+            assert!(RadrootsStoredValidEvent::try_from_raw(invalid).is_err());
+        }
+
+        let visible = RadrootsStoredVisibleEvent::new(valid.clone());
+        assert_eq!(visible.valid_event(), &valid);
+        assert_eq!(visible.clone().into_valid_event(), valid);
+        let raw_head = RadrootsStoredRawEventHead {
+            coordinate_type: StoredEventClass::Regular,
+            kind: 1,
+            pubkey: "b".repeat(64),
+            d_tag: None,
+            event_id: "a".repeat(64),
+            created_at: 1,
+            updated_at_ms: 1,
+        };
+        let visible_head = RadrootsStoredVisibleEventHead::new(raw_head.clone(), visible);
+        assert_eq!(visible_head.raw_head(), &raw_head);
+        assert_eq!(
+            visible_head.event().valid_event().raw_event().event_id,
+            "a".repeat(64)
+        );
+
+        let generation = RadrootsEventStoreSourceGeneration::from_bytes([7; 32]);
+        let cursor = RadrootsProjectionCursor::new("projection", 1, generation, 0, 9)
+            .expect("projection cursor");
+        assert_eq!(cursor.projection_id(), "projection");
+        assert_eq!(cursor.projection_version(), 1);
+        assert_eq!(cursor.source_generation(), generation);
+        assert_eq!(cursor.last_event_seq(), 0);
+        assert_eq!(cursor.updated_at_ms(), 9);
+        assert!(RadrootsProjectionCursor::new("", 1, generation, 0, 0).is_err());
+        assert!(RadrootsProjectionCursor::new("projection", 0, generation, 0, 0).is_err());
+        assert!(RadrootsProjectionCursor::new("projection", 1, generation, -1, 0).is_err());
+    }
+
+    #[test]
+    fn transport_observation_revalidates_both_endpoint_authorities() {
+        let canonical = RadrootsTransportObservation::new(
+            TransportId::NOSTR,
+            "wss://relay.example.test",
+            RadrootsTransportObservationType::Fetch,
+            1,
+        )
+        .expect("canonical observation");
+        canonical
+            .validate_endpoint_for_event("event")
+            .expect("canonical endpoint");
+
+        let other =
+            Target::new(TransportId::NOSTR, "wss://other.example.test").expect("other target");
+        let forged = RadrootsTransportObservation::from_unchecked_parts_for_test(
+            TransportId::NOSTR,
+            canonical.endpoint_uri().clone(),
+            other.fingerprint().clone(),
+            RadrootsTransportObservationType::Fetch,
+            1,
+        );
+        assert!(forged.validate_endpoint_for_event("event").is_err());
     }
 }

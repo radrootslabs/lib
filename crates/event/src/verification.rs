@@ -234,6 +234,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::envelope::EventEnvelopeParts;
@@ -301,5 +302,92 @@ mod tests {
             .verify_signature(&Reject)
             .expect_err("signature must be rejected");
         assert_eq!(error, Error::SignatureInvalid);
+    }
+
+    #[test]
+    fn typestate_accessors_and_consuming_transitions_preserve_the_envelope() {
+        let envelope = valid_profile_event();
+        let raw = RawEvent::new(envelope.clone());
+        assert_eq!(raw.event(), &envelope);
+        assert_eq!(raw.clone().into_event(), envelope);
+
+        let id_verified = raw.verify_id().unwrap();
+        assert_eq!(id_verified.event().kind_u32(), 0);
+        assert_eq!(id_verified.clone().into_event().kind_u32(), 0);
+        let signature_verified = id_verified.verify_signature(&Accept).unwrap();
+        assert_eq!(signature_verified.event().kind_u32(), 0);
+        assert_eq!(signature_verified.clone().into_event().kind_u32(), 0);
+
+        let validated = signature_verified.validate_contract().unwrap();
+        assert_eq!(validated.verified_event().event(), validated.event());
+        assert_eq!(validated.contract().id, validated.contract_id());
+        assert_eq!(
+            validated.clone().into_verified_event().event().kind_u32(),
+            0
+        );
+        assert_eq!(validated.into_event().kind_u32(), 0);
+    }
+
+    #[test]
+    fn id_and_contract_failures_are_typed_and_diagnostic() {
+        let wrong_id = EventEnvelope::new(EventEnvelopeParts {
+            id: "0".repeat(64),
+            author: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_owned(),
+            created_at: 1_800_000_100,
+            kind: 0,
+            tags: vec![],
+            content: "{}".to_owned(),
+            sig: "0".repeat(128),
+        })
+        .unwrap();
+        assert!(matches!(
+            RawEvent::new(wrong_id).verify_id(),
+            Err(Error::IdMismatch { .. })
+        ));
+
+        let unknown = envelope_with_computed_id(65_535, vec![], "{}");
+        let error = RawEvent::new(unknown)
+            .verify_id()
+            .unwrap()
+            .verify_signature(&Accept)
+            .unwrap()
+            .validate_contract()
+            .unwrap_err();
+        assert!(matches!(error, Error::ContractValidation(_)));
+
+        let errors = [
+            Error::MalformedEnvelope,
+            Error::IdMismatch {
+                expected: EventId::parse("1".repeat(64)).unwrap(),
+                actual: EventId::parse("2".repeat(64)).unwrap(),
+            },
+            Error::SignatureInvalid,
+            error,
+        ];
+        for error in errors {
+            assert!(!error.code().is_empty());
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    fn envelope_with_computed_id(
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: &str,
+    ) -> EventEnvelope {
+        let author = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+        let created_at = 1_800_000_100;
+        let id =
+            compute_canonical_nip01_event_id(author, created_at, kind, &tags, content).unwrap();
+        EventEnvelope::new(EventEnvelopeParts {
+            id: id.to_hex(),
+            author: author.to_owned(),
+            created_at,
+            kind,
+            tags,
+            content: content.to_owned(),
+            sig: "0".repeat(128),
+        })
+        .unwrap()
     }
 }

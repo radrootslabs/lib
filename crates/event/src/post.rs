@@ -550,6 +550,9 @@ pub fn post_media_http_url_is_valid(value: &str) -> bool {
     }
     let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
     let authority = &remainder[..authority_end];
+    if authority.is_empty() {
+        return false;
+    }
     let raw_path = remainder[authority_end..]
         .split(['?', '#'])
         .next()
@@ -567,8 +570,10 @@ pub fn post_media_http_url_is_valid(value: &str) -> bool {
 }
 
 #[cfg(all(test, feature = "std", feature = "serde"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use radroots_blossom::{BlobDescriptor, BlobUrl, ByteVerifiedDescriptor, MediaType, Sha256};
 
     #[test]
     fn post_image_media_type_uses_exact_product_grammar() {
@@ -600,6 +605,278 @@ mod tests {
         ] {
             assert!(!post_image_media_type_is_valid(invalid), "{invalid}");
         }
+    }
+
+    #[test]
+    fn authored_post_models_preserve_validated_content_and_image_metadata() {
+        let image = authored_image(b"photo", "image/webp", "webp", "media.example");
+        let dimensions = PostImageDimensions::new(640, 480).unwrap();
+        let primary_url = image.descriptor().url().as_str().to_owned();
+        let post_image = AuthoredPostImage::new(image, dimensions, "market basket").unwrap();
+        let fallback = BlobUrl::parse(&format!(
+            "https://fallback.example/{}.webp",
+            post_image.image().descriptor().sha256()
+        ))
+        .unwrap()
+        .approve()
+        .unwrap();
+        let post_image = post_image.try_with_fallback(fallback.clone()).unwrap();
+
+        assert_eq!(dimensions.width(), 640);
+        assert_eq!(dimensions.height(), 480);
+        assert_eq!(post_image.dimensions(), dimensions);
+        assert_eq!(post_image.alt(), "market basket");
+        assert_eq!(post_image.url(), primary_url);
+        assert_eq!(post_image.fallbacks(), &[fallback]);
+        assert_eq!(post_image.imeta_tag()[0], TAG_IMETA);
+        assert!(
+            post_image
+                .imeta_tag()
+                .iter()
+                .any(|value| value == "dim 640x480")
+        );
+
+        let update = AuthoredUpdate::new("harvest update").unwrap();
+        assert_eq!(update.content(), "harvest update");
+
+        let content = format!("available today {primary_url}");
+        let photo = AuthoredPhotoUpdate::new(content.clone(), vec![post_image.clone()]).unwrap();
+        assert_eq!(photo.content(), content);
+        assert_eq!(photo.images(), std::slice::from_ref(&post_image));
+
+        let ask = AuthoredAsk::new(content.clone(), vec![post_image]).unwrap();
+        assert_eq!(ask.content(), content);
+        assert_eq!(ask.images().len(), 1);
+        assert!(AuthoredAsk::new("where can I buy this?", Vec::new()).is_ok());
+    }
+
+    #[test]
+    fn authored_post_rejects_invalid_content_and_image_shapes() {
+        assert_eq!(
+            PostImageDimensions::new(0, 1),
+            Err(AuthoredPostError::ImageDimensionsInvalid)
+        );
+        assert_eq!(
+            PostImageDimensions::new(1, 0),
+            Err(AuthoredPostError::ImageDimensionsInvalid)
+        );
+        assert_eq!(
+            AuthoredUpdate::new(" \n").unwrap_err(),
+            AuthoredPostError::ContentMissing
+        );
+        let oversized = "x".repeat(RADROOTS_POST_CONTENT_MAX_BYTES + 1);
+        assert_eq!(
+            AuthoredUpdate::new(oversized).unwrap_err(),
+            AuthoredPostError::ContentTooLarge {
+                max: RADROOTS_POST_CONTENT_MAX_BYTES,
+                actual: RADROOTS_POST_CONTENT_MAX_BYTES + 1,
+            }
+        );
+        assert_eq!(
+            AuthoredPhotoUpdate::new("photo", Vec::new()).unwrap_err(),
+            AuthoredPostError::ImageMissing
+        );
+
+        let image = AuthoredPostImage::new(
+            authored_image(b"photo", "image/png", "png", "media.example"),
+            PostImageDimensions::new(1, 1).unwrap(),
+            "photo",
+        )
+        .unwrap();
+        assert_eq!(
+            AuthoredPhotoUpdate::new("missing URL", vec![image.clone()]).unwrap_err(),
+            AuthoredPostError::ImageUrlMissingFromContent
+        );
+        let content = image.url().to_owned();
+        assert_eq!(
+            AuthoredPhotoUpdate::new(content, vec![image.clone(), image]).unwrap_err(),
+            AuthoredPostError::DuplicateImageUrl
+        );
+    }
+
+    #[test]
+    fn authored_image_rejects_invalid_descriptor_metadata_and_bounds() {
+        let dimensions = PostImageDimensions::new(1, 1).unwrap();
+        let empty = authored_image(b"", "image/png", "png", "media.example");
+        assert_eq!(
+            AuthoredPostImage::new(empty, dimensions, "empty").unwrap_err(),
+            AuthoredPostError::ImageSizeInvalid
+        );
+        let valid = authored_image(b"x", "image/png", "png", "media.example");
+        assert_eq!(
+            AuthoredPostImage::new(valid.clone(), dimensions, " \t").unwrap_err(),
+            AuthoredPostError::ImageAltInvalid
+        );
+        let long_alt = "a".repeat(RADROOTS_POST_ALT_MAX_BYTES + 1);
+        assert_eq!(
+            AuthoredPostImage::new(valid, dimensions, long_alt).unwrap_err(),
+            AuthoredPostError::ImageAltTooLarge {
+                max: RADROOTS_POST_ALT_MAX_BYTES,
+                actual: RADROOTS_POST_ALT_MAX_BYTES + 1,
+            }
+        );
+
+        let primary = AuthoredPostImage::new(
+            authored_image(b"primary", "image/png", "png", "media.example"),
+            dimensions,
+            "primary",
+        )
+        .unwrap();
+        let other_hash = Sha256::digest(b"other");
+        let fallback = BlobUrl::parse(&format!("https://fallback.example/{other_hash}.png"))
+            .unwrap()
+            .approve()
+            .unwrap();
+        assert_eq!(
+            primary.try_with_fallback(fallback).unwrap_err(),
+            AuthoredPostError::ImageFallbackHashMismatch
+        );
+    }
+
+    #[test]
+    fn authored_post_enforces_collection_and_wire_accounting_bounds() {
+        let image = AuthoredPostImage::new(
+            authored_image(b"same", "image/png", "png", "media.example"),
+            PostImageDimensions::new(1, 1).unwrap(),
+            "a".repeat(RADROOTS_POST_ALT_MAX_BYTES),
+        )
+        .unwrap();
+        let too_many = vec![image.clone(); RADROOTS_POST_IMETA_MAX_COUNT + 1];
+        assert_eq!(
+            AuthoredAsk::new("ask", too_many).unwrap_err(),
+            AuthoredPostError::ImageCountExceeded {
+                max: RADROOTS_POST_IMETA_MAX_COUNT,
+                actual: RADROOTS_POST_IMETA_MAX_COUNT + 1,
+            }
+        );
+
+        let unique_images = (0..RADROOTS_POST_IMETA_MAX_COUNT)
+            .map(|index| {
+                AuthoredPostImage::new(
+                    authored_image(
+                        format!("image-{index}").as_bytes(),
+                        "image/png",
+                        "png",
+                        "media.example",
+                    ),
+                    PostImageDimensions::new(1, 1).unwrap(),
+                    "a".repeat(RADROOTS_POST_ALT_MAX_BYTES),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let content = unique_images
+            .iter()
+            .map(|image| image.url())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(matches!(
+            AuthoredPhotoUpdate::new(content, unique_images),
+            Err(AuthoredPostError::TagBytesExceeded { .. })
+        ));
+
+        assert!(matches!(
+            validate_tag_element(&"x".repeat(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1)),
+            Err(AuthoredPostError::TagElementTooLarge { .. })
+        ));
+        assert!(matches!(
+            validate_post_event_wire_size(
+                &"\u{001f}".repeat(RADROOTS_POST_CONTENT_MAX_BYTES),
+                true,
+                &[]
+            ),
+            Err(AuthoredPostError::EventWireTooLarge { .. })
+        ));
+    }
+
+    #[test]
+    fn authored_post_errors_expose_stable_codes_and_messages() {
+        let errors = [
+            AuthoredPostError::ContentMissing,
+            AuthoredPostError::ContentTooLarge { max: 1, actual: 2 },
+            AuthoredPostError::ImageMissing,
+            AuthoredPostError::ImageCountExceeded { max: 1, actual: 2 },
+            AuthoredPostError::ImageUrlMissingFromContent,
+            AuthoredPostError::DuplicateImageUrl,
+            AuthoredPostError::ImageMediaTypeInvalid,
+            AuthoredPostError::ImageSizeInvalid,
+            AuthoredPostError::ImageDimensionsInvalid,
+            AuthoredPostError::ImageAltInvalid,
+            AuthoredPostError::ImageAltTooLarge { max: 1, actual: 2 },
+            AuthoredPostError::ImageFallbackHashMismatch,
+            AuthoredPostError::TagElementTooLarge { max: 1, actual: 2 },
+            AuthoredPostError::TagBytesExceeded { max: 1, actual: 2 },
+            AuthoredPostError::EventWireTooLarge { max: 1, actual: 2 },
+        ];
+        for error in errors {
+            assert!(!error.code().is_empty());
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    #[test]
+    fn inbound_media_url_validation_rejects_ambiguous_authorities_and_paths() {
+        for valid in [
+            "https://media.example/path",
+            "HTTP://localhost/path?size=large",
+            "https://[::1]/hash#preview",
+        ] {
+            assert!(post_media_http_url_is_valid(valid), "{valid}");
+        }
+        for invalid in [
+            "",
+            " https://media.example/path",
+            "media.example/path",
+            "ftp://media.example/path",
+            "https://user@media.example/path",
+            "https://user:password@media.example/path",
+            "https://media.example",
+            "https:///path",
+            "not a URL://media.example/path",
+        ] {
+            assert!(!post_media_http_url_is_valid(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn canonical_json_size_accounts_for_every_escape_class() {
+        assert_eq!(canonical_json_string_bytes("plain"), 7);
+        for escaped in ['"', '\\', '\u{0008}', '\t', '\n', '\u{000c}', '\r'] {
+            assert_eq!(canonical_json_string_bytes(&escaped.to_string()), 4);
+        }
+        assert_eq!(canonical_json_string_bytes("\u{0001}"), 8);
+        assert_eq!(canonical_json_string_bytes("é"), 4);
+    }
+
+    fn authored_image(
+        bytes: &[u8],
+        media_type: &str,
+        extension: &str,
+        host: &str,
+    ) -> AuthoredImage {
+        AuthoredImage::try_from(verified_descriptor(bytes, media_type, extension, host)).unwrap()
+    }
+
+    fn verified_descriptor(
+        bytes: &[u8],
+        media_type: &str,
+        extension: &str,
+        host: &str,
+    ) -> ByteVerifiedDescriptor {
+        let hash = Sha256::digest(bytes);
+        let media_type = MediaType::parse(media_type).unwrap();
+        BlobDescriptor::new(
+            BlobUrl::parse(&format!("https://{host}/{hash}.{extension}")).unwrap(),
+            hash,
+            bytes.len() as u64,
+            media_type.clone(),
+            1_784_347_200,
+        )
+        .unwrap()
+        .approve_reference()
+        .unwrap()
+        .verify_bytes(bytes, &media_type)
+        .unwrap()
     }
 }
 #[path = "article.rs"]

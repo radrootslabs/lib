@@ -722,6 +722,7 @@ impl Drop for GeoNamesAssetLock {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::cell::Cell;
     use std::fs;
@@ -736,8 +737,8 @@ mod tests {
     use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 
     use super::{
-        GEONAMES_ASSET_HOST, GeoNamesAssetFetcher, GeoNamesAssetSpec, GeoNamesAssetState,
-        GeoNamesHttpFetchPolicy, ensure_geonames_asset_path_with_fetcher,
+        GEONAMES_ASSET_HOST, GeoNamesAssetFetcher, GeoNamesAssetIdentityWriter, GeoNamesAssetSpec,
+        GeoNamesAssetState, GeoNamesHttpFetchPolicy, ensure_geonames_asset_path_with_fetcher,
         fetch_http_asset_to_writer_with_policy, inspect_geonames_asset_path,
         is_invalid_asset_error, lock_path_for_asset, validate_geonames_asset_file,
         validate_geonames_asset_spec_source,
@@ -781,6 +782,80 @@ mod tests {
             }
             Ok(())
         }
+    }
+
+    struct RejectingWriter;
+
+    impl Write for RejectingWriter {
+        fn write(&mut self, _bytes: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "injected writer failure",
+            ))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn default_fetch_adapters_enforce_bounds_and_propagate_writer_errors() {
+        let fetcher = BytesFetcher {
+            bytes: b"asset".to_vec(),
+            calls: Cell::new(0),
+        };
+        assert_eq!(fetcher.fetch_with_max_bytes(TEST_URL, 5).unwrap(), b"asset");
+        assert!(matches!(
+            fetcher.fetch_with_max_bytes(TEST_URL, 4),
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::ResponseTooLarge {
+                    maximum: 4,
+                    observed_at_least: 5,
+                },
+                ..
+            })
+        ));
+
+        let mut destination = Vec::new();
+        fetcher
+            .fetch_to_writer(TEST_URL, 5, &mut destination)
+            .unwrap();
+        assert_eq!(destination, b"asset");
+
+        assert!(matches!(
+            fetcher.fetch_to_writer(TEST_URL, 5, &mut RejectingWriter),
+            Err(GeocoderError::Io(error)) if error.kind() == std::io::ErrorKind::BrokenPipe
+        ));
+
+        let tempdir = tempfile::tempdir().expect("bounded writer tempdir");
+        let mut bounded_destination =
+            fs::File::create(tempdir.path().join("bounded.bin")).expect("bounded writer file");
+        let error = GeoNamesAssetIdentityWriter::new(&mut bounded_destination, 4)
+            .write_all(b"asset")
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::FileTooLarge);
+    }
+
+    #[test]
+    fn blocking_http_fetch_rejects_oversized_declared_content_length() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\n")
+                .expect("oversized response headers");
+        });
+
+        assert!(matches!(
+            fetch_http_bytes(&server.url, 5, test_http_policy()),
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::ResponseTooLarge {
+                    maximum: 5,
+                    observed_at_least: 6,
+                },
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -904,6 +979,25 @@ mod tests {
                 source: GeoNamesAssetDownloadError::Timeout {
                     phase: GeoNamesAssetDownloadPhase::Response,
                     timeout_ms: 200,
+                },
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn blocking_http_fetch_classifies_refused_connections() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("reserve loopback port");
+        let address = listener.local_addr().expect("loopback address");
+        drop(listener);
+        let url = format!("http://{address}/geonames.db");
+
+        assert!(matches!(
+            fetch_http_bytes(&url, 1, test_http_policy()),
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::Request {
+                    phase: GeoNamesAssetDownloadPhase::Connect,
+                    ..
                 },
                 ..
             })
@@ -1063,6 +1157,16 @@ mod tests {
             validate_geonames_asset_spec_source(&bad_host_spec),
             Err(GeocoderError::InvalidAssetHost { .. })
         ));
+        for url in [
+            "http://assets.radroots.io/data/geonames/geonames-test.db",
+            "not-a-url",
+        ] {
+            let invalid_url_spec = fixture_spec(&bytes, url);
+            assert!(matches!(
+                validate_geonames_asset_spec_source(&invalid_url_spec),
+                Err(GeocoderError::InvalidAssetUrl { .. })
+            ));
+        }
 
         let short_target = tempdir.path().join("short.db");
         let short_spec = fixture_spec(&bytes, TEST_URL);
@@ -1090,6 +1194,11 @@ mod tests {
                 &wrong_hash_spec,
                 &wrong_hash_fetcher,
             ),
+            Err(GeocoderError::InvalidAssetSha256 { .. })
+        ));
+        fs::write(&wrong_hash_target, &bytes).expect("write wrong-hash fixture");
+        assert!(matches!(
+            validate_geonames_asset_file(&wrong_hash_target, &wrong_hash_spec),
             Err(GeocoderError::InvalidAssetSha256 { .. })
         ));
 

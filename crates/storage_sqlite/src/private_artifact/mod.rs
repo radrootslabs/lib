@@ -13,6 +13,7 @@ use radroots_storage::{
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite};
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl PrivateArtifactStore for SqliteStorage {
     fn put_metadata(
         &self,
@@ -142,6 +143,7 @@ impl PrivateArtifactStore for SqliteStorage {
 
 impl SqliteStorage {
     /// Atomically stores validated metadata with its authenticated encrypted envelope.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn put_encrypted_private_artifact(
         &self,
         metadata: PrivateArtifactMetadata,
@@ -165,6 +167,7 @@ impl SqliteStorage {
     }
 
     /// Loads and revalidates an encrypted envelope without opening its plaintext.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn encrypted_private_artifact(
         &self,
         artifact_id: PrivateArtifactId,
@@ -209,6 +212,7 @@ impl SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn put_metadata_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     metadata: PrivateArtifactMetadata,
@@ -259,6 +263,7 @@ async fn put_metadata_transaction(
     Ok(metadata)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn insert_metadata(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     metadata: &PrivateArtifactMetadata,
@@ -315,6 +320,7 @@ async fn insert_metadata(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn load_metadata(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     artifact_id: PrivateArtifactId,
@@ -329,6 +335,7 @@ async fn load_metadata(
         .transpose()
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn update_metadata(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     metadata: &PrivateArtifactMetadata,
@@ -540,6 +547,7 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::migration::{
@@ -729,6 +737,60 @@ mod tests {
                 .await,
             Err(Error::InvalidPrivateArtifactMetadata)
         );
+
+        let envelope = sealed_envelope(b"validation matrix", 9).await;
+        let valid = self::metadata(
+            9,
+            "validation_matrix",
+            &envelope,
+            RetentionPolicy::new(Some(100), Some(100)).expect("retention"),
+        );
+        assert!(validate_envelope(&valid, &envelope).is_ok());
+        let expired = valid
+            .mark_expired(valid.revision(), 100)
+            .expect("expired metadata");
+        assert_eq!(
+            validate_envelope(&expired, &envelope),
+            Err(Error::InvalidPrivateArtifactMetadata)
+        );
+        for (commitment, protected_size, secret_reference) in [
+            (
+                ArtifactCommitment::new([0; 32]),
+                valid.protected_size_bytes(),
+                valid.secret_reference().clone(),
+            ),
+            (
+                valid.commitment(),
+                valid.protected_size_bytes() + 1,
+                valid.secret_reference().clone(),
+            ),
+            (
+                valid.commitment(),
+                valid.protected_size_bytes(),
+                DurableSecretReference::new(
+                    "memory",
+                    "different-private-artifact-key",
+                    valid.secret_reference().key_version(),
+                )
+                .expect("different reference"),
+            ),
+        ] {
+            let invalid = PrivateArtifactMetadata::new(
+                valid.artifact_id(),
+                valid.kind().clone(),
+                valid.schema_id().clone(),
+                commitment,
+                protected_size,
+                secret_reference,
+                valid.retention(),
+                valid.created_at_unix_ms(),
+            )
+            .expect("structurally valid metadata");
+            assert_eq!(
+                validate_envelope(&invalid, &envelope),
+                Err(Error::InvalidPrivateArtifactMetadata)
+            );
+        }
     }
 
     #[tokio::test]

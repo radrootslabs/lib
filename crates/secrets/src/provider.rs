@@ -225,3 +225,113 @@ impl SelectionPolicy {
         Ok(provider)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capability_validation_covers_every_policy_requirement() {
+        let unavailable = SecretCapabilities::unavailable();
+        assert!(!unavailable.is_available());
+        assert_eq!(unavailable.residency(), ResidencySupport::Volatile);
+        assert_eq!(unavailable.user_presence(), CapabilitySupport::Unavailable);
+        assert_eq!(
+            unavailable.hardware_backed(),
+            CapabilitySupport::Unavailable
+        );
+        assert_eq!(
+            unavailable.validate(BackendKind::Memory, AccessPolicy::standard()),
+            Err(Error::BackendUnavailable {
+                backend: BackendKind::Memory
+            })
+        );
+
+        let basic = SecretCapabilities::available(
+            ResidencySupport::UserProfile,
+            CapabilitySupport::Unavailable,
+            CapabilitySupport::Unavailable,
+        );
+        assert!(basic.is_available());
+        assert!(
+            basic
+                .validate(BackendKind::File, AccessPolicy::standard())
+                .is_ok()
+        );
+        assert_eq!(
+            basic.validate(
+                BackendKind::File,
+                AccessPolicy::new(
+                    ResidencyPolicy::DeviceLocal,
+                    UserPresencePolicy::NotRequired,
+                    HardwarePolicy::Any
+                )
+            ),
+            Err(Error::PolicyUnsupported {
+                backend: BackendKind::File,
+                requirement: PolicyRequirement::DeviceLocal
+            })
+        );
+        assert_eq!(
+            basic.validate(
+                BackendKind::File,
+                AccessPolicy::new(
+                    ResidencyPolicy::Any,
+                    UserPresencePolicy::Required,
+                    HardwarePolicy::Any
+                )
+            ),
+            Err(Error::PolicyUnsupported {
+                backend: BackendKind::File,
+                requirement: PolicyRequirement::UserPresence
+            })
+        );
+        assert_eq!(
+            basic.validate(
+                BackendKind::File,
+                AccessPolicy::new(
+                    ResidencyPolicy::Any,
+                    UserPresencePolicy::NotRequired,
+                    HardwarePolicy::RequireHardwareBacked
+                )
+            ),
+            Err(Error::PolicyUnsupported {
+                backend: BackendKind::File,
+                requirement: PolicyRequirement::HardwareBacked
+            })
+        );
+        assert!(
+            basic
+                .validate(
+                    BackendKind::File,
+                    AccessPolicy::new(
+                        ResidencyPolicy::Any,
+                        UserPresencePolicy::NotRequired,
+                        HardwarePolicy::PreferHardwareBacked
+                    )
+                )
+                .is_ok()
+        );
+
+        let complete = SecretCapabilities::available(
+            ResidencySupport::DeviceLocal,
+            CapabilitySupport::Supported,
+            CapabilitySupport::Supported,
+        );
+        assert_eq!(complete.residency(), ResidencySupport::DeviceLocal);
+        assert_eq!(complete.user_presence(), CapabilitySupport::Supported);
+        assert_eq!(complete.hardware_backed(), CapabilitySupport::Supported);
+        assert!(
+            complete
+                .validate(
+                    BackendKind::Keyring,
+                    AccessPolicy::new(
+                        ResidencyPolicy::DeviceLocal,
+                        UserPresencePolicy::Required,
+                        HardwarePolicy::RequireHardwareBacked
+                    )
+                )
+                .is_ok()
+        );
+    }
+}

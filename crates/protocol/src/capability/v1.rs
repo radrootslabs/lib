@@ -412,6 +412,25 @@ mod tests {
 
     #[test]
     fn other_capability_parsers_preserve_v1_diagnostics() {
+        let scope = MeshScopeId::parse("farm.eu-1").expect("scope");
+        assert_eq!(scope.as_str(), "farm.eu-1");
+        let destination = ReticulumDestination::parse("reticulum:local").expect("destination");
+        assert_eq!(destination.as_str(), "reticulum:local");
+        for invalid in ["", " scope", "scope ", "scope/name", "scope\nname"] {
+            assert_eq!(MeshScopeId::parse(invalid), Err(Error::InvalidMeshScopeId));
+        }
+        for invalid in [
+            "",
+            " destination",
+            "destination ",
+            "dest ination",
+            "dest\nination",
+        ] {
+            assert_eq!(
+                ReticulumDestination::parse(invalid),
+                Err(Error::InvalidReticulumDestination)
+            );
+        }
         assert_eq!(
             MeshScopeId::parse("local/scope")
                 .expect_err("invalid scope")
@@ -439,6 +458,59 @@ mod tests {
             Err(Error::MissingRequiredTransport {
                 kind: TransportKind::LOCAL,
             })
+        );
+        assert_eq!(
+            validate_catalog(&[CATALOG[0], CATALOG[2]]),
+            Err(Error::MissingRequiredTransport {
+                kind: TransportKind::NOSTR
+            })
+        );
+        assert_eq!(
+            validate_catalog(&[CATALOG[0], CATALOG[1]]),
+            Err(Error::MissingRequiredTransport {
+                kind: TransportKind::RETICULUM
+            })
+        );
+
+        let errors = [
+            Error::EmptyTransportKind,
+            Error::InvalidTransportKind {
+                value: "BAD".to_owned(),
+            },
+            Error::InvalidMeshScopeId,
+            Error::InvalidReticulumDestination,
+            Error::DuplicateTransportKind {
+                kind: TransportKind::LOCAL,
+            },
+            Error::MissingRequiredTransport {
+                kind: TransportKind::NOSTR,
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn capability_identifiers_round_trip_through_json() {
+        let custom = TransportKind::parse("fieldbus-v2").expect("custom");
+        assert_eq!(custom.to_string(), "fieldbus-v2");
+        let encoded = serde_json::to_string(&custom).expect("encode");
+        assert_eq!(
+            serde_json::from_str::<TransportKind>(&encoded).expect("decode"),
+            custom
+        );
+        assert!(serde_json::from_str::<TransportKind>("\"BAD\"").is_err());
+
+        let target = ReticulumTarget {
+            destination: ReticulumDestination::parse("reticulum:local").expect("destination"),
+            mesh_scope: Some(MeshScopeId::parse("farm-1").expect("scope")),
+        };
+        let value = serde_json::to_value(&target).expect("target JSON");
+        assert_eq!(
+            serde_json::from_value::<ReticulumTarget>(value).expect("target decode"),
+            target
         );
     }
 }

@@ -1,5 +1,7 @@
 //! Native SQLite implementation of the backend-neutral Radroots storage SPIs.
 
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
 pub mod backup;
 pub mod config;
 pub mod integrity;

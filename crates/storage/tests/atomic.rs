@@ -117,6 +117,16 @@ fn failure_before_commit_leaves_no_partial_receipt() {
 
     let committed = block_on(store.commit(request.clone())).expect("commit");
     assert_eq!(committed.disposition(), AtomicCommitDisposition::Committed);
+    assert_eq!(committed.commit_id(), request.commit_id());
+    assert_eq!(committed.digest(), request.digest());
+    assert_eq!(committed.committed_at_unix_ms(), 100);
+    assert_eq!(request.commit_id().as_bytes(), &[1; 16]);
+    assert_eq!(request.digest().as_bytes(), &[2; 32]);
+    assert_eq!(request.requested_at_unix_ms(), 100);
+    assert_eq!(
+        request.workflow().kind(),
+        radroots_storage::atomic::AtomicWorkflowKind::Prepared
+    );
     assert!(
         block_on(store.receipt(request.commit_id()))
             .expect("receipt query")
@@ -157,4 +167,71 @@ fn atomic_contract_is_dyn_compatible_and_rejects_invalid_identity_and_time() {
         ),
         Err(Error::InvalidAtomicCommitTimestamp)
     );
+
+    let outcome = match valid.workflow().clone() {
+        AtomicWorkflow::Prepared(operation) => AtomicCommitOutcome::Prepared {
+            journal: operation.into_record().expect("journal record"),
+        },
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        AtomicCommitReceipt::new(
+            &valid,
+            AtomicCommitDisposition::Committed,
+            99,
+            outcome.clone(),
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    assert_eq!(
+        AtomicCommitReceipt::from_durable_parts(
+            valid.commit_id(),
+            valid.digest(),
+            AtomicCommitDisposition::Committed,
+            0,
+            100,
+            radroots_storage::atomic::AtomicWorkflowKind::Prepared,
+            outcome.clone(),
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    assert_eq!(
+        AtomicCommitReceipt::from_durable_parts(
+            valid.commit_id(),
+            valid.digest(),
+            AtomicCommitDisposition::Committed,
+            100,
+            99,
+            radroots_storage::atomic::AtomicWorkflowKind::Prepared,
+            outcome.clone(),
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    assert_eq!(
+        AtomicCommitReceipt::from_durable_parts(
+            valid.commit_id(),
+            valid.digest(),
+            AtomicCommitDisposition::Committed,
+            100,
+            100,
+            radroots_storage::atomic::AtomicWorkflowKind::Signed,
+            outcome.clone(),
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    let reconstructed = AtomicCommitReceipt::from_durable_parts(
+        valid.commit_id(),
+        valid.digest(),
+        AtomicCommitDisposition::Replay,
+        100,
+        101,
+        radroots_storage::atomic::AtomicWorkflowKind::Prepared,
+        outcome.clone(),
+    )
+    .expect("durable receipt");
+    assert_eq!(reconstructed.commit_id(), valid.commit_id());
+    assert_eq!(reconstructed.digest(), valid.digest());
+    assert_eq!(reconstructed.disposition(), AtomicCommitDisposition::Replay);
+    assert_eq!(reconstructed.committed_at_unix_ms(), 101);
+    assert_eq!(reconstructed.outcome(), &outcome);
 }

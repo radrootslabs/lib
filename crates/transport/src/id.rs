@@ -140,3 +140,40 @@ impl<'de> serde::Deserialize<'de> for TransportId {
         <ProtocolTransportKind as serde::Deserialize>::deserialize(deserializer).map(Self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transport_ids_cover_conversion_and_validation_surfaces() {
+        let id = TransportId::parse_canonical("custom-transport").unwrap();
+        assert_eq!(id.as_str(), "custom-transport");
+        assert_eq!(id.as_ref(), "custom-transport");
+        assert_eq!(id.to_string(), "custom-transport");
+        assert_eq!(id.canonical_label(), "custom-transport");
+        assert_eq!(TransportId::from_str("custom-transport").unwrap(), id);
+        assert_eq!(TransportId::try_from("custom-transport").unwrap(), id);
+        assert_eq!(
+            TransportId::try_from(String::from("custom-transport")).unwrap(),
+            id
+        );
+        let protocol_id: ProtocolTransportKind = id.into();
+        assert_eq!(TransportId::from(protocol_id), id);
+        assert_eq!(
+            TransportId::parse(""),
+            Err(RadrootsTransportError::EmptyTransportKind)
+        );
+        assert_eq!(
+            TransportId::parse("Invalid"),
+            Err(RadrootsTransportError::InvalidTransportKind)
+        );
+
+        #[cfg(feature = "serde")]
+        {
+            let encoded = serde_json::to_string(&id).unwrap();
+            assert_eq!(serde_json::from_str::<TransportId>(&encoded).unwrap(), id);
+            assert!(serde_json::from_str::<TransportId>("\"Invalid\"").is_err());
+        }
+    }
+}

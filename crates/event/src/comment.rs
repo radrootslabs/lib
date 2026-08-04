@@ -580,26 +580,26 @@ fn relay_or_empty(relay: Option<&NostrRelayHint>) -> &str {
 }
 
 fn validate_content(content: &str) -> Result<(), Nip22CommentError> {
-    if content.trim().is_empty() {
-        return Err(Nip22CommentError::ContentMissing);
-    }
-    if content.len() > RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES {
-        return Err(Nip22CommentError::ContentTooLarge {
+    crate::require_invariant(!content.trim().is_empty(), &|| {
+        Nip22CommentError::ContentMissing
+    })?;
+    crate::require_invariant(
+        content.len() <= RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES,
+        &|| Nip22CommentError::ContentTooLarge {
             max: RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES,
             actual: content.len(),
-        });
-    }
-    Ok(())
+        },
+    )
 }
 
 fn validate_tag_element(element: &str) -> Result<(), Nip22CommentError> {
-    if element.len() > RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES {
-        return Err(Nip22CommentError::TagElementTooLarge {
+    crate::require_invariant(
+        element.len() <= RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES,
+        &|| Nip22CommentError::TagElementTooLarge {
             max: RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES,
             actual: element.len(),
-        });
-    }
-    Ok(())
+        },
+    )
 }
 
 fn validate_authored_comment_wire_size(
@@ -750,36 +750,38 @@ fn validate_authored_comment_wire_size(
         _ => unreachable!("constructors preserve root and position compatibility"),
     };
 
-    if tag_count > RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT {
-        return Err(Nip22CommentError::TagCountExceeded {
+    crate::require_invariant(tag_count <= RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT, &|| {
+        Nip22CommentError::TagCountExceeded {
             max: RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT,
             actual: tag_count,
-        });
-    }
+        }
+    })?;
     let tag_element_count = root_tag_element_count.saturating_add(position_tag_element_count);
-    if tag_element_count > RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT {
-        return Err(Nip22CommentError::TagElementCountExceeded {
+    crate::require_invariant(
+        tag_element_count <= RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT,
+        &|| Nip22CommentError::TagElementCountExceeded {
             max: RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT,
             actual: tag_element_count,
-        });
-    }
+        },
+    )?;
 
-    if tag_bytes > RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES {
-        return Err(Nip22CommentError::TagBytesExceeded {
+    crate::require_invariant(
+        tag_bytes <= RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES,
+        &|| Nip22CommentError::TagBytesExceeded {
             max: RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES,
             actual: tag_bytes,
-        });
-    }
+        },
+    )?;
     let actual = RADROOTS_NIP22_COMMENT_SIGNED_EVENT_FIXED_MAX_BYTES
         .saturating_add(tags_json_bytes)
         .saturating_add(canonical_json_string_bytes(content));
-    if actual > RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES {
-        return Err(Nip22CommentError::EventWireTooLarge {
+    crate::require_invariant(
+        actual <= RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
+        &|| Nip22CommentError::EventWireTooLarge {
             max: RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
             actual,
-        });
-    }
-    Ok(())
+        },
+    )
 }
 
 fn add_optional_relay_tag(
@@ -833,6 +835,7 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

@@ -19,6 +19,7 @@ pub struct HttpAuth {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

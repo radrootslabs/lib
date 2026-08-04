@@ -73,6 +73,7 @@ pub struct FarmWorkspaceMediaServer {
 }
 
 #[cfg(all(test, feature = "serde"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::envelope::kind::{

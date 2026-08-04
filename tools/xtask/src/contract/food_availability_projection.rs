@@ -1821,12 +1821,12 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
             }
             let actual_row_count = i64::try_from(actual_coordinates.len())
                 .map_err(|_| projection_drift("projection row count exceeds i64"))?;
-            if actual_row_count != state.projected_row_count {
-                return Err(projection_drift(format!(
+            require_invariant(actual_row_count == state.projected_row_count, || {
+                projection_drift(format!(
                     "projection row count {} differs from sealed count {}",
                     actual_row_count, state.projected_row_count,
-                )));
-            }
+                ))
+            })?;
             let expected_coordinates = sqlx::query(
                 "SELECT pubkey, d_tag, raw_head_event_id, raw_head_event_seq, raw_head_created_at FROM radroots_event_store_addressable_head_state WHERE source_generation = ? AND kind = 30402 AND admission_status = 'admitted' AND admission_code IS NULL AND contract_id = ? AND visibility = 'visible' AND nip09_outcome = 'visible' ORDER BY pubkey, d_tag",
             )
@@ -1845,22 +1845,22 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
                 ))
             })
             .collect::<Result<Vec<_>, _>>()?;
-            if actual_coordinates != expected_coordinates {
-                return Err(projection_drift(
+            require_invariant(actual_coordinates == expected_coordinates, || {
+                projection_drift(
                     "projection coordinate witnesses do not equal the current admitted, visible FoodAvailability heads",
-                ));
-            }
+                )
+            })?;
             let fts_count: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM radroots_event_store_food_availability_search_fts",
             )
             .fetch_one(&mut *connection)
             .await?;
-            if fts_count != state.projected_row_count {
-                return Err(projection_drift(format!(
+            require_invariant(fts_count == state.projected_row_count, || {
+                projection_drift(format!(
                     "FoodAvailability FTS row count {fts_count} differs from sealed count {}",
                     state.projected_row_count,
-                )));
-            }
+                ))
+            })?;
             #[cfg(test)]
             wait_at_food_availability_audit_fts_checkpoint().await;
             sqlx::query(
@@ -1930,20 +1930,20 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
         ),
         (
             "sealed row-count equality",
-            r#"if actual_row_count != state.projected_row_count {
-                return Err(projection_drift(format!(
+            r#"require_invariant(actual_row_count == state.projected_row_count, || {
+                projection_drift(format!(
                     "projection row count {} differs from sealed count {}",
                     actual_row_count, state.projected_row_count,
-                )));
-            }"#,
+                ))
+            })?;"#,
         ),
         (
             "fail-closed coordinate equality",
-            r#"if actual_coordinates != expected_coordinates {
-                return Err(projection_drift(
+            r#"require_invariant(actual_coordinates == expected_coordinates, || {
+                projection_drift(
                     "projection coordinate witnesses do not equal the current admitted, visible FoodAvailability heads",
-                ));
-            }"#,
+                )
+            })?;"#,
         ),
     ] {
         let expected: syn::Stmt = syn::parse_str(expected)
@@ -2023,12 +2023,11 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
                 .bind(FOOD_AVAILABILITY_CONTRACT_ID)
                 .fetch_one(&mut *connection)
                 .await?;
-            if authoritative != 1 {{
-                return Err(projection_drift(
+            require_invariant(authoritative == 1, || {{
+                projection_drift(
                     "stored FoodAvailability source transition is not authoritative for its projection",
-                ));
-            }}
-            Ok(())
+                )
+            }})
         }}"#,
     ))
     .map_err(|error| format!("parse governed Food source-transition authority: {error}"))?;
@@ -4449,15 +4448,15 @@ mod tests {
             (
                 "sealed row-count comparison inversion",
                 source.replacen(
-                    "if actual_row_count != state.projected_row_count",
-                    "if actual_row_count == state.projected_row_count",
+                    "require_invariant(actual_row_count == state.projected_row_count",
+                    "require_invariant(actual_row_count != state.projected_row_count",
                     1,
                 ),
             ),
             (
                 "coordinate equality omission",
                 source.replacen(
-                    "    if actual_coordinates != expected_coordinates {\n        return Err(projection_drift(\n            \"projection coordinate witnesses do not equal the current admitted, visible FoodAvailability heads\",\n        ));\n    }\n",
+                    "    require_invariant(actual_coordinates == expected_coordinates, || {\n        projection_drift(\n            \"projection coordinate witnesses do not equal the current admitted, visible FoodAvailability heads\",\n        )\n    })?;\n",
                     "",
                     1,
                 ),
@@ -4465,8 +4464,8 @@ mod tests {
             (
                 "coordinate overwrite before equality",
                 source.replacen(
-                    "    if actual_coordinates != expected_coordinates {",
-                    "    actual_coordinates = expected_coordinates.clone();\n    if actual_coordinates != expected_coordinates {",
+                    "    require_invariant(actual_coordinates == expected_coordinates, || {",
+                    "    actual_coordinates = expected_coordinates.clone();\n    require_invariant(actual_coordinates == expected_coordinates, || {",
                     1,
                 ),
             ),

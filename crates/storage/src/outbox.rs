@@ -133,11 +133,13 @@ pub struct LeaseOwner(String);
 impl LeaseOwner {
     pub fn parse(value: impl Into<String>) -> Result<Self, Error> {
         let value = value.into();
-        if value.is_empty()
-            || value.len() > LEASE_OWNER_MAX_BYTES
-            || value != value.trim()
-            || value.chars().any(char::is_control)
-        {
+        let invalid = [
+            value.is_empty(),
+            value.len() > LEASE_OWNER_MAX_BYTES,
+            value != value.trim(),
+            value.chars().any(char::is_control),
+        ];
+        if invalid.contains(&true) {
             return Err(Error::InvalidOutboxLeaseOwner);
         }
         Ok(Self(value))
@@ -196,7 +198,12 @@ impl OutboxLease {
         acquired_at_unix_ms: u64,
         expires_at_unix_ms: u64,
     ) -> Result<Self, Error> {
-        if acquired_at_unix_ms == 0 || expires_at_unix_ms <= acquired_at_unix_ms {
+        if [
+            acquired_at_unix_ms == 0,
+            expires_at_unix_ms <= acquired_at_unix_ms,
+        ]
+        .contains(&true)
+        {
             return Err(Error::InvalidOutboxLease);
         }
         Ok(Self {
@@ -359,19 +366,21 @@ impl OutboxRecord {
         retry_not_before_unix_ms: Option<u64>,
         updated_at_unix_ms: u64,
     ) -> Result<Self, Error> {
-        if updated_at_unix_ms < enqueue.created_at_unix_ms
-            || matches!(stage, OutboxStage::Leased) != lease.is_some()
-            || matches!(stage, OutboxStage::Retryable) && last_attempt.is_none()
-            || matches!(stage, OutboxStage::Satisfied)
-                != matches!(satisfaction, SatisfactionResult::Satisfied)
-            || matches!(stage, OutboxStage::Exhausted)
-                != matches!(satisfaction, SatisfactionResult::Exhausted)
-            || matches!(
+        let invalid = [
+            updated_at_unix_ms < enqueue.created_at_unix_ms,
+            matches!(stage, OutboxStage::Leased) != lease.is_some(),
+            matches!(stage, OutboxStage::Retryable) && last_attempt.is_none(),
+            matches!(stage, OutboxStage::Satisfied)
+                != matches!(satisfaction, SatisfactionResult::Satisfied),
+            matches!(stage, OutboxStage::Exhausted)
+                != matches!(satisfaction, SatisfactionResult::Exhausted),
+            matches!(
                 stage,
                 OutboxStage::Pending | OutboxStage::Leased | OutboxStage::Retryable
-            ) && !matches!(satisfaction, SatisfactionResult::Pending)
-            || stage.is_terminal() && retry_not_before_unix_ms.is_some()
-        {
+            ) && !matches!(satisfaction, SatisfactionResult::Pending),
+            stage.is_terminal() && retry_not_before_unix_ms.is_some(),
+        ];
+        if invalid.contains(&true) {
             return Err(Error::CorruptOutboxRecord);
         }
 
@@ -532,9 +541,9 @@ impl OutboxRecord {
         if expected_revision != self.revision {
             return Err(Error::OutboxRevisionConflict);
         }
-        if released_at_unix_ms == 0
-            || matches!(retry_not_before_unix_ms, Some(value) if value <= released_at_unix_ms)
-        {
+        // `validate_lease` already proves this timestamp is within a lease
+        // whose acquisition timestamp is non-zero.
+        if matches!(retry_not_before_unix_ms, Some(value) if value <= released_at_unix_ms) {
             return Err(Error::InvalidOutboxTimestamp);
         }
         self.lease = None;
@@ -659,10 +668,10 @@ impl ClaimOutboxItems {
         lease_expires_at_unix_ms: u64,
         limit: u16,
     ) -> Result<Self, Error> {
-        if now_unix_ms == 0 || lease_expires_at_unix_ms <= now_unix_ms {
+        if [now_unix_ms == 0, lease_expires_at_unix_ms <= now_unix_ms].contains(&true) {
             return Err(Error::InvalidOutboxLease);
         }
-        if limit == 0 || limit > OUTBOX_CLAIM_LIMIT_MAX {
+        if [limit == 0, limit > OUTBOX_CLAIM_LIMIT_MAX].contains(&true) {
             return Err(Error::InvalidOutboxClaimLimit);
         }
         Ok(Self {
@@ -836,7 +845,7 @@ fn validate_evidence(
     updated_at_unix_ms: u64,
 ) -> Result<(), Error> {
     let Some(last_attempt) = last_attempt else {
-        return if evidence.is_empty() && matches!(satisfaction, SatisfactionResult::Pending) {
+        return if evidence.is_empty() & matches!(satisfaction, SatisfactionResult::Pending) {
             Ok(())
         } else {
             Err(Error::CorruptOutboxRecord)
@@ -847,13 +856,16 @@ fn validate_evidence(
         return Err(Error::CorruptOutboxRecord);
     }
     if evidence.iter().any(|entry| {
-        entry.recorded_at_unix_ms() < created_at_unix_ms
-            || entry.recorded_at_unix_ms() > updated_at_unix_ms
-            || !request
+        [
+            entry.recorded_at_unix_ms() < created_at_unix_ms,
+            entry.recorded_at_unix_ms() > updated_at_unix_ms,
+            !request
                 .target_set()
                 .targets()
                 .iter()
-                .any(|target| target.fingerprint() == entry.target())
+                .any(|target| target.fingerprint() == entry.target()),
+        ]
+        .contains(&true)
     }) {
         return Err(Error::CorruptOutboxRecord);
     }
@@ -942,15 +954,16 @@ fn evaluate_satisfaction(
     } else if let Some(threshold) = policy.quorum_threshold() {
         let threshold = usize::from(threshold);
         (successful >= threshold, successful + retryable >= threshold)
-    } else if let Some(required) = policy.required_targets() {
+    } else {
+        // `TargetPolicy` is closed over any/all/quorum/required; after the
+        // preceding branches, the required-target slice is necessarily set.
+        let required = policy.required_targets().unwrap_or_default();
         (
             required.iter().all(&is_successful),
             required
                 .iter()
                 .all(|target| is_successful(target) || is_retryable(target)),
         )
-    } else {
-        (false, false)
     };
     if satisfied {
         SatisfactionResult::Satisfied
@@ -958,5 +971,858 @@ fn evaluate_satisfaction(
         SatisfactionResult::Pending
     } else {
         SatisfactionResult::Exhausted
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_event::{SignedEvent, wire::Nip01EventWire};
+    use radroots_transport::sink::DeliveryPayload;
+
+    fn signed_event() -> SignedEvent {
+        let mut wire = Nip01EventWire {
+            id: "0".repeat(64),
+            pubkey: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_owned(),
+            created_at: 1_800_000_100,
+            kind: 0,
+            tags: vec![],
+            content: "{}".to_owned(),
+            sig: "42".repeat(64),
+            extra: Default::default(),
+        };
+        wire.id = wire.computed_event_id().unwrap().to_hex();
+        let raw = serde_json::json!({
+            "id": wire.id,
+            "pubkey": wire.pubkey,
+            "created_at": wire.created_at,
+            "kind": wire.kind,
+            "tags": wire.tags,
+            "content": wire.content,
+            "sig": wire.sig,
+        })
+        .to_string();
+        SignedEvent::from_wire_verified_id(wire, raw).unwrap()
+    }
+
+    fn request() -> DeliveryRequest {
+        DeliveryRequest::new(
+            "storage-outbox-unit",
+            DeliveryPayload::new(signed_event()),
+            TargetSet::new(vec![Target::nostr_relay("wss://relay.example").unwrap()]).unwrap(),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1_000,
+        )
+        .unwrap()
+    }
+
+    fn enqueue() -> EnqueueOutboxItem {
+        EnqueueOutboxItem::new(
+            OutboxItemId::new([1; 16]).unwrap(),
+            OperationInstanceId::new([2; 16]).unwrap(),
+            DeliveryPlanDigest::new([3; 32]),
+            request(),
+            10,
+        )
+        .unwrap()
+    }
+
+    fn lease(id: u8, acquired: u64, expires: u64) -> OutboxLease {
+        OutboxLease::new(
+            LeaseId::new([id; 16]).unwrap(),
+            LeaseOwner::parse("worker").unwrap(),
+            acquired,
+            expires,
+        )
+        .unwrap()
+    }
+
+    fn receipt_for(request: &DeliveryRequest, outcome: DeliveryOutcome) -> DeliveryReceipt {
+        DeliveryReceipt::for_request(
+            request,
+            vec![DeliveryTargetReceipt::attempted(
+                request.target_set().targets()[0].clone(),
+                outcome,
+            )],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn scalar_types_and_lease_policy_cover_all_bounds() {
+        assert_eq!(OutboxItemId::new([0; 16]), Err(Error::InvalidOutboxItemId));
+        assert_eq!(LeaseId::new([0; 16]), Err(Error::InvalidOutboxLease));
+        assert_eq!(OutboxRevision::new(0), Err(Error::InvalidOutboxRevision));
+        assert_eq!(DeliveryAttempt::new(0), Err(Error::InvalidDeliveryAttempt));
+        let item = OutboxItemId::new([1; 16]).unwrap();
+        let digest = DeliveryPlanDigest::new([2; 32]);
+        assert_eq!(item.as_bytes(), &[1; 16]);
+        assert_eq!(digest.as_bytes(), &[2; 32]);
+        assert_eq!(OutboxRevision::INITIAL.get(), 1);
+        assert_eq!(DeliveryAttempt::FIRST.get(), 1);
+        assert_eq!(
+            OutboxRevision(u64::MAX).next(),
+            Err(Error::CorruptOutboxRecord)
+        );
+        assert_eq!(
+            DeliveryAttempt(u32::MAX).next(),
+            Err(Error::CorruptOutboxRecord)
+        );
+
+        for invalid in ["", " worker", "worker ", "bad\nworker"] {
+            assert_eq!(
+                LeaseOwner::parse(invalid),
+                Err(Error::InvalidOutboxLeaseOwner)
+            );
+        }
+        assert_eq!(
+            LeaseOwner::parse("x".repeat(LEASE_OWNER_MAX_BYTES + 1)),
+            Err(Error::InvalidOutboxLeaseOwner)
+        );
+        let owner = LeaseOwner::parse("worker").unwrap();
+        assert_eq!(owner.as_str(), "worker");
+        let debug = format!("{owner:?}");
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains("worker"));
+
+        let id = LeaseId::new([4; 16]).unwrap();
+        assert_eq!(
+            OutboxLease::new(id, owner.clone(), 0, 2),
+            Err(Error::InvalidOutboxLease)
+        );
+        assert_eq!(
+            OutboxLease::new(id, owner.clone(), 2, 2),
+            Err(Error::InvalidOutboxLease)
+        );
+        assert_eq!(
+            OutboxLease::new(id, owner, 2, 1),
+            Err(Error::InvalidOutboxLease)
+        );
+        let value = lease(4, 2, 4);
+        assert_eq!(value.id().as_bytes(), &[4; 16]);
+        assert_eq!(value.owner().as_str(), "worker");
+        assert_eq!(value.acquired_at_unix_ms(), 2);
+        assert_eq!(value.expires_at_unix_ms(), 4);
+        assert!(!value.is_active_at(1));
+        assert!(value.is_active_at(2));
+        assert!(value.is_active_at(3));
+        assert!(!value.is_active_at(4));
+        assert!(!OutboxStage::Pending.is_terminal());
+        assert!(!OutboxStage::Leased.is_terminal());
+        assert!(!OutboxStage::Retryable.is_terminal());
+        assert!(OutboxStage::Satisfied.is_terminal());
+        assert!(OutboxStage::Exhausted.is_terminal());
+    }
+
+    #[test]
+    fn enqueue_claim_and_evidence_models_cover_accessors_and_bounds() {
+        assert_eq!(
+            EnqueueOutboxItem::new(
+                OutboxItemId::new([1; 16]).unwrap(),
+                OperationInstanceId::new([2; 16]).unwrap(),
+                DeliveryPlanDigest::new([3; 32]),
+                request(),
+                0,
+            ),
+            Err(Error::InvalidOutboxTimestamp)
+        );
+        let value = enqueue();
+        assert_eq!(value.item_id().as_bytes(), &[1; 16]);
+        assert_eq!(value.operation_instance_id().as_bytes(), &[2; 16]);
+        assert_eq!(value.plan_digest().as_bytes(), &[3; 32]);
+        assert_eq!(value.request().request_id().as_str(), "storage-outbox-unit");
+        assert_eq!(value.created_at_unix_ms(), 10);
+        let record = value.into_record();
+        let receipt = EnqueueReceipt::new(EnqueueDisposition::Created, record.clone());
+        assert_eq!(receipt.disposition(), EnqueueDisposition::Created);
+        assert_eq!(receipt.record(), &record);
+
+        for (now, expiry, limit, error) in [
+            (0, 2, 1, Error::InvalidOutboxLease),
+            (2, 2, 1, Error::InvalidOutboxLease),
+            (2, 3, 0, Error::InvalidOutboxClaimLimit),
+            (
+                2,
+                3,
+                OUTBOX_CLAIM_LIMIT_MAX + 1,
+                Error::InvalidOutboxClaimLimit,
+            ),
+        ] {
+            assert_eq!(
+                ClaimOutboxItems::new(
+                    LeaseOwner::parse("worker").unwrap(),
+                    LeaseId::new([1; 16]).unwrap(),
+                    now,
+                    expiry,
+                    limit,
+                ),
+                Err(error)
+            );
+        }
+        let claim = ClaimOutboxItems::new(
+            LeaseOwner::parse("worker").unwrap(),
+            LeaseId::new([1; 16]).unwrap(),
+            2,
+            3,
+            1,
+        )
+        .unwrap();
+        assert_eq!(claim.owner().as_str(), "worker");
+        assert_eq!(claim.lease_id_seed().as_bytes(), &[1; 16]);
+        assert_eq!(
+            claim
+                .lease_id_for(OutboxItemId::new([1; 16]).unwrap())
+                .as_bytes()[0],
+            1
+        );
+        assert_eq!(claim.now_unix_ms(), 2);
+        assert_eq!(claim.lease_expires_at_unix_ms(), 3);
+        assert_eq!(claim.limit(), 1);
+
+        let claimed = ClaimedOutboxItem::new(record.clone(), lease(5, 10, 20));
+        assert_eq!(claimed.record(), &record);
+        assert_eq!(claimed.lease().id().as_bytes(), &[5; 16]);
+        assert_eq!(
+            TargetDeliveryEvidence::new(
+                record.request().target_set().targets()[0]
+                    .fingerprint()
+                    .clone(),
+                DeliveryAttempt::FIRST,
+                true,
+                DeliveryOutcome::accepted(),
+                0,
+            ),
+            Err(Error::InvalidDeliveryEvidence)
+        );
+        let target_evidence = TargetDeliveryEvidence::new(
+            record.request().target_set().targets()[0]
+                .fingerprint()
+                .clone(),
+            DeliveryAttempt::FIRST,
+            true,
+            DeliveryOutcome::accepted(),
+            12,
+        )
+        .unwrap();
+        assert_eq!(target_evidence.attempt(), DeliveryAttempt::FIRST);
+        assert!(target_evidence.was_attempted());
+        assert_eq!(target_evidence.recorded_at_unix_ms(), 12);
+        assert!(
+            target_evidence
+                .outcome()
+                .satisfies(SatisfactionClass::Accepted)
+        );
+    }
+
+    #[test]
+    fn durable_record_and_claim_reject_inconsistent_state() {
+        let base = enqueue();
+        let valid = OutboxRecord::from_durable_parts(
+            base.clone(),
+            OutboxRevision::INITIAL,
+            OutboxStage::Pending,
+            None,
+            None,
+            vec![],
+            SatisfactionResult::Pending,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(valid.item_id().as_bytes(), &[1; 16]);
+        assert_eq!(valid.operation_instance_id().as_bytes(), &[2; 16]);
+        assert_eq!(valid.plan_digest().as_bytes(), &[3; 32]);
+        assert_eq!(valid.revision(), OutboxRevision::INITIAL);
+        assert_eq!(valid.stage(), OutboxStage::Pending);
+        assert!(valid.lease().is_none());
+        assert!(valid.last_attempt().is_none());
+        assert!(valid.evidence().is_empty());
+        assert!(
+            valid
+                .latest_target_evidence(valid.request().target_set().targets()[0].fingerprint())
+                .is_none()
+        );
+        assert_eq!(valid.satisfaction(), SatisfactionResult::Pending);
+        assert_eq!(valid.retry_not_before_unix_ms(), None);
+        assert_eq!(valid.created_at_unix_ms(), 10);
+        assert_eq!(valid.updated_at_unix_ms(), 10);
+
+        let cases = [
+            (
+                OutboxStage::Pending,
+                None,
+                None,
+                SatisfactionResult::Pending,
+                None,
+                9,
+            ),
+            (
+                OutboxStage::Leased,
+                None,
+                None,
+                SatisfactionResult::Pending,
+                None,
+                10,
+            ),
+            (
+                OutboxStage::Pending,
+                Some(lease(1, 10, 20)),
+                None,
+                SatisfactionResult::Pending,
+                None,
+                10,
+            ),
+            (
+                OutboxStage::Retryable,
+                None,
+                None,
+                SatisfactionResult::Pending,
+                None,
+                10,
+            ),
+            (
+                OutboxStage::Satisfied,
+                None,
+                None,
+                SatisfactionResult::Pending,
+                None,
+                10,
+            ),
+            (
+                OutboxStage::Exhausted,
+                None,
+                None,
+                SatisfactionResult::Pending,
+                None,
+                10,
+            ),
+            (
+                OutboxStage::Pending,
+                None,
+                None,
+                SatisfactionResult::Satisfied,
+                None,
+                10,
+            ),
+            (
+                OutboxStage::Satisfied,
+                None,
+                None,
+                SatisfactionResult::Satisfied,
+                Some(20),
+                10,
+            ),
+        ];
+        for (stage, lease, last_attempt, satisfaction, retry, updated) in cases {
+            assert_eq!(
+                OutboxRecord::from_durable_parts(
+                    base.clone(),
+                    OutboxRevision::INITIAL,
+                    stage,
+                    lease,
+                    last_attempt,
+                    vec![],
+                    satisfaction,
+                    retry,
+                    updated,
+                ),
+                Err(Error::CorruptOutboxRecord)
+            );
+        }
+
+        let mut record = valid;
+        assert_eq!(
+            record.release(LeaseId::new([1; 16]).unwrap(), record.revision(), 11, None),
+            Err(Error::OutboxLeaseConflict)
+        );
+        record.claim(lease(1, 10, 20)).unwrap();
+        assert_eq!(
+            record.claim(lease(2, 9, 20)),
+            Err(Error::InvalidOutboxTimestamp)
+        );
+        assert_eq!(
+            record.claim(lease(2, 11, 20)),
+            Err(Error::OutboxLeaseConflict)
+        );
+        assert_eq!(
+            record.release(LeaseId::new([2; 16]).unwrap(), record.revision(), 12, None),
+            Err(Error::OutboxLeaseConflict)
+        );
+        assert_eq!(
+            record.release(
+                LeaseId::new([1; 16]).unwrap(),
+                OutboxRevision::INITIAL,
+                12,
+                None
+            ),
+            Err(Error::OutboxRevisionConflict)
+        );
+        let revision = record.revision();
+        assert_eq!(
+            record.release(LeaseId::new([1; 16]).unwrap(), revision, 12, Some(12)),
+            Err(Error::InvalidOutboxTimestamp)
+        );
+        record
+            .release(LeaseId::new([1; 16]).unwrap(), revision, 12, Some(13))
+            .unwrap();
+        assert_eq!(record.stage(), OutboxStage::Pending);
+        assert_eq!(
+            record.claim(lease(3, 12, 20)),
+            Err(Error::OutboxItemNotReady)
+        );
+        record.claim(lease(3, 13, 20)).unwrap();
+    }
+
+    #[test]
+    fn outbox_status_detects_each_overflow_position() {
+        assert_eq!(
+            OutboxStatus {
+                pending: 1,
+                leased: 2,
+                retryable: 3,
+                satisfied: 4,
+                exhausted: 5
+            }
+            .total(),
+            Some(15)
+        );
+        for status in [
+            OutboxStatus {
+                pending: u64::MAX,
+                leased: 1,
+                retryable: 0,
+                satisfied: 0,
+                exhausted: 0,
+            },
+            OutboxStatus {
+                pending: 0,
+                leased: u64::MAX,
+                retryable: 1,
+                satisfied: 0,
+                exhausted: 0,
+            },
+            OutboxStatus {
+                pending: 0,
+                leased: 0,
+                retryable: u64::MAX,
+                satisfied: 1,
+                exhausted: 0,
+            },
+            OutboxStatus {
+                pending: 0,
+                leased: 0,
+                retryable: 0,
+                satisfied: u64::MAX,
+                exhausted: 1,
+            },
+        ] {
+            assert_eq!(status.total(), None);
+        }
+    }
+
+    #[test]
+    fn evidence_reconstruction_and_attempt_errors_are_fail_closed() {
+        let enqueue = enqueue();
+        let target = enqueue.request().target_set().targets()[0]
+            .fingerprint()
+            .clone();
+        let accepted = TargetDeliveryEvidence::new(
+            target.clone(),
+            DeliveryAttempt::FIRST,
+            true,
+            DeliveryOutcome::accepted(),
+            20,
+        )
+        .unwrap();
+        assert_eq!(
+            OutboxRecord::from_durable_parts(
+                enqueue.clone(),
+                OutboxRevision::new(2).unwrap(),
+                OutboxStage::Satisfied,
+                None,
+                Some(DeliveryAttempt::FIRST),
+                vec![accepted.clone()],
+                SatisfactionResult::Satisfied,
+                None,
+                20,
+            )
+            .unwrap()
+            .latest_target_evidence(&target),
+            Some(&accepted)
+        );
+        let terminal = OutboxRecord::from_durable_parts(
+            enqueue.clone(),
+            OutboxRevision::new(2).unwrap(),
+            OutboxStage::Satisfied,
+            None,
+            Some(DeliveryAttempt::FIRST),
+            vec![accepted.clone()],
+            SatisfactionResult::Satisfied,
+            None,
+            20,
+        )
+        .unwrap();
+        let mut terminal = terminal;
+        assert_eq!(
+            terminal.claim(lease(2, 21, 30)),
+            Err(Error::OutboxItemTerminal)
+        );
+
+        let retryable_evidence = TargetDeliveryEvidence::new(
+            target.clone(),
+            DeliveryAttempt::FIRST,
+            true,
+            DeliveryOutcome::unavailable(),
+            20,
+        )
+        .unwrap();
+        let mut retryable = OutboxRecord::from_durable_parts(
+            enqueue.clone(),
+            OutboxRevision::new(2).unwrap(),
+            OutboxStage::Retryable,
+            None,
+            Some(DeliveryAttempt::FIRST),
+            vec![retryable_evidence],
+            SatisfactionResult::Pending,
+            None,
+            20,
+        )
+        .unwrap();
+        retryable.claim(lease(3, 21, 30)).unwrap();
+        let revision = retryable.revision();
+        retryable
+            .release(LeaseId::new([3; 16]).unwrap(), revision, 22, None)
+            .unwrap();
+        assert_eq!(retryable.stage(), OutboxStage::Retryable);
+
+        let malformed = [
+            (
+                None,
+                vec![accepted.clone()],
+                SatisfactionResult::Pending,
+                20,
+            ),
+            (
+                Some(DeliveryAttempt::FIRST),
+                vec![],
+                SatisfactionResult::Pending,
+                20,
+            ),
+            (
+                Some(DeliveryAttempt::FIRST),
+                vec![
+                    TargetDeliveryEvidence::new(
+                        target.clone(),
+                        DeliveryAttempt::FIRST,
+                        true,
+                        DeliveryOutcome::accepted(),
+                        9,
+                    )
+                    .unwrap(),
+                ],
+                SatisfactionResult::Satisfied,
+                20,
+            ),
+            (
+                Some(DeliveryAttempt::FIRST),
+                vec![
+                    TargetDeliveryEvidence::new(
+                        target.clone(),
+                        DeliveryAttempt::FIRST,
+                        true,
+                        DeliveryOutcome::accepted(),
+                        21,
+                    )
+                    .unwrap(),
+                ],
+                SatisfactionResult::Satisfied,
+                20,
+            ),
+            (
+                Some(DeliveryAttempt::FIRST),
+                vec![
+                    TargetDeliveryEvidence::new(
+                        Target::nostr_relay("wss://foreign.example")
+                            .unwrap()
+                            .fingerprint()
+                            .clone(),
+                        DeliveryAttempt::FIRST,
+                        true,
+                        DeliveryOutcome::accepted(),
+                        20,
+                    )
+                    .unwrap(),
+                ],
+                SatisfactionResult::Satisfied,
+                20,
+            ),
+            (
+                Some(DeliveryAttempt::FIRST),
+                vec![accepted.clone()],
+                SatisfactionResult::Pending,
+                20,
+            ),
+        ];
+        for (last_attempt, evidence, satisfaction, updated) in malformed {
+            assert_eq!(
+                OutboxRecord::from_durable_parts(
+                    enqueue.clone(),
+                    OutboxRevision::new(2).unwrap(),
+                    OutboxStage::Retryable,
+                    None,
+                    last_attempt,
+                    evidence,
+                    satisfaction,
+                    None,
+                    updated,
+                ),
+                Err(Error::CorruptOutboxRecord)
+            );
+        }
+
+        let mut record = enqueue.into_record();
+        let active_lease = lease(1, 20, 40);
+        record.claim(active_lease.clone()).unwrap();
+        let make_evidence = |item_id, revision, attempt, request: &DeliveryRequest| {
+            DeliveryAttemptEvidence::new(
+                item_id,
+                active_lease.id(),
+                revision,
+                attempt,
+                receipt_for(request, DeliveryOutcome::accepted()),
+                30,
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            record.record_attempt(make_evidence(
+                OutboxItemId::new([9; 16]).unwrap(),
+                record.revision(),
+                DeliveryAttempt::FIRST,
+                record.request(),
+            )),
+            Err(Error::OutboxRevisionConflict)
+        );
+        assert_eq!(
+            record.record_attempt(make_evidence(
+                record.item_id(),
+                OutboxRevision::INITIAL,
+                DeliveryAttempt::FIRST,
+                record.request(),
+            )),
+            Err(Error::OutboxRevisionConflict)
+        );
+        assert_eq!(
+            record.record_attempt(make_evidence(
+                record.item_id(),
+                record.revision(),
+                DeliveryAttempt::new(2).unwrap(),
+                record.request(),
+            )),
+            Err(Error::InvalidDeliveryAttempt)
+        );
+        let other = DeliveryRequest::new(
+            "other-request",
+            DeliveryPayload::new(signed_event()),
+            TargetSet::new(vec![Target::nostr_relay("wss://other.example").unwrap()]).unwrap(),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1_000,
+        )
+        .unwrap();
+        assert_eq!(
+            record.record_attempt(make_evidence(
+                record.item_id(),
+                record.revision(),
+                DeliveryAttempt::FIRST,
+                &other,
+            )),
+            Err(Error::InvalidDeliveryEvidence)
+        );
+        let evidence = make_evidence(
+            record.item_id(),
+            record.revision(),
+            DeliveryAttempt::FIRST,
+            record.request(),
+        );
+        assert_eq!(evidence.item_id(), record.item_id());
+        assert_eq!(evidence.lease_id(), active_lease.id());
+        assert_eq!(evidence.expected_revision(), record.revision());
+        assert_eq!(evidence.attempt(), DeliveryAttempt::FIRST);
+        assert_eq!(evidence.recorded_at_unix_ms(), 30);
+        assert_eq!(
+            evidence.receipt().request_id(),
+            record.request().request_id()
+        );
+        record.record_attempt(evidence).unwrap();
+        assert_eq!(record.stage(), OutboxStage::Satisfied);
+    }
+
+    #[test]
+    fn evidence_validation_and_satisfaction_cover_multi_target_policy_edges() {
+        let targets = vec![
+            Target::nostr_relay("wss://one.example").unwrap(),
+            Target::nostr_relay("wss://two.example").unwrap(),
+        ];
+        let request_with = |policy| {
+            DeliveryRequest::new(
+                "storage-outbox-policy-matrix",
+                DeliveryPayload::new(signed_event()),
+                TargetSet::new(targets.clone()).unwrap(),
+                SatisfactionPolicy::new(SatisfactionClass::Accepted, policy),
+                1_000,
+            )
+            .unwrap()
+        };
+        let evidence = |target: &Target,
+                        attempt: u32,
+                        was_attempted: bool,
+                        outcome: DeliveryOutcome,
+                        recorded_at_unix_ms| {
+            TargetDeliveryEvidence::new(
+                target.fingerprint().clone(),
+                DeliveryAttempt::new(attempt).unwrap(),
+                was_attempted,
+                outcome,
+                recorded_at_unix_ms,
+            )
+            .unwrap()
+        };
+
+        let all_request = request_with(TargetPolicy::all());
+        let accepted = vec![
+            evidence(&targets[0], 1, true, DeliveryOutcome::accepted(), 20),
+            evidence(&targets[1], 1, true, DeliveryOutcome::accepted(), 20),
+        ];
+        assert_eq!(
+            validate_evidence(
+                &all_request,
+                Some(DeliveryAttempt::FIRST),
+                &accepted,
+                SatisfactionResult::Satisfied,
+                10,
+                20,
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            validate_evidence(
+                &all_request,
+                None,
+                &[],
+                SatisfactionResult::Satisfied,
+                10,
+                20,
+            ),
+            Err(Error::CorruptOutboxRecord)
+        );
+
+        let duplicated = vec![accepted[0].clone(), accepted[0].clone()];
+        assert_eq!(
+            validate_evidence(
+                &all_request,
+                Some(DeliveryAttempt::FIRST),
+                &duplicated,
+                SatisfactionResult::Satisfied,
+                10,
+                20,
+            ),
+            Err(Error::CorruptOutboxRecord)
+        );
+        let mismatched_times = vec![
+            accepted[0].clone(),
+            evidence(&targets[1], 1, true, DeliveryOutcome::accepted(), 21),
+        ];
+        assert_eq!(
+            validate_evidence(
+                &all_request,
+                Some(DeliveryAttempt::FIRST),
+                &mismatched_times,
+                SatisfactionResult::Satisfied,
+                10,
+                21,
+            ),
+            Err(Error::CorruptOutboxRecord)
+        );
+        let skipped = vec![
+            evidence(&targets[0], 1, false, DeliveryOutcome::unavailable(), 20),
+            evidence(&targets[1], 1, false, DeliveryOutcome::unavailable(), 20),
+        ];
+        assert_eq!(
+            validate_evidence(
+                &all_request,
+                Some(DeliveryAttempt::FIRST),
+                &skipped,
+                SatisfactionResult::Pending,
+                10,
+                20,
+            ),
+            Ok(())
+        );
+        let regressing = vec![
+            accepted[0].clone(),
+            accepted[1].clone(),
+            evidence(&targets[0], 2, true, DeliveryOutcome::accepted(), 19),
+            evidence(&targets[1], 2, true, DeliveryOutcome::accepted(), 19),
+        ];
+        assert_eq!(
+            validate_evidence(
+                &all_request,
+                Some(DeliveryAttempt::new(2).unwrap()),
+                &regressing,
+                SatisfactionResult::Satisfied,
+                10,
+                20,
+            ),
+            Err(Error::CorruptOutboxRecord)
+        );
+
+        let retryable = vec![evidence(
+            &targets[0],
+            1,
+            true,
+            DeliveryOutcome::unavailable(),
+            20,
+        )];
+        let one_accepted = vec![accepted[0].clone()];
+        let any_request = request_with(TargetPolicy::any());
+        assert_eq!(
+            evaluate_satisfaction(&any_request, &[]),
+            SatisfactionResult::Exhausted
+        );
+        assert_eq!(
+            evaluate_satisfaction(&any_request, &retryable),
+            SatisfactionResult::Pending
+        );
+        assert_eq!(
+            evaluate_satisfaction(&any_request, &one_accepted),
+            SatisfactionResult::Satisfied
+        );
+        let quorum_request = request_with(TargetPolicy::quorum(2).unwrap());
+        assert_eq!(
+            evaluate_satisfaction(&quorum_request, &one_accepted),
+            SatisfactionResult::Exhausted
+        );
+        let required_request =
+            request_with(TargetPolicy::required(vec![targets[0].fingerprint().clone()]).unwrap());
+        assert_eq!(
+            evaluate_satisfaction(&required_request, &one_accepted),
+            SatisfactionResult::Satisfied
+        );
+        assert_eq!(
+            evaluate_satisfaction(&required_request, &retryable),
+            SatisfactionResult::Pending
+        );
+
+        assert_eq!(
+            DeliveryAttemptEvidence::new(
+                OutboxItemId::new([1; 16]).unwrap(),
+                LeaseId::new([2; 16]).unwrap(),
+                OutboxRevision::INITIAL,
+                DeliveryAttempt::FIRST,
+                receipt_for(&request(), DeliveryOutcome::accepted()),
+                0,
+            ),
+            Err(Error::InvalidOutboxTimestamp)
+        );
     }
 }

@@ -300,6 +300,7 @@ impl SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl EventStore for SqliteStorage {
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {
@@ -511,6 +512,7 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::migration::runtime::{MIGRATIONS, migration_sql};

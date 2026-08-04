@@ -45,6 +45,7 @@ pub struct Article {
 }
 
 #[cfg(all(test, feature = "std", feature = "serde"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 

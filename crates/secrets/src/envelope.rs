@@ -465,3 +465,96 @@ impl<'a> Decoder<'a> {
         self.remaining.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn envelope() -> EncryptedEnvelope {
+        EncryptedEnvelope {
+            version: ENVELOPE_VERSION,
+            cipher: Cipher::XChaCha20Poly1305,
+            key_source: KeySource::ProviderWrapped,
+            reference: SecretRef::new(
+                SecretId::parse("coverage-key").expect("id"),
+                BackendKind::Memory,
+                KeyVersion::new(1).expect("version"),
+            ),
+            nonce: Nonce::new([7; NONCE_BYTES]),
+            wrapped_key: WrappedSecret::from_bytes(vec![8; 32]).expect("wrapped"),
+            ciphertext: vec![9; AEAD_TAG_BYTES],
+        }
+    }
+
+    #[test]
+    fn decode_and_validation_reject_every_bounded_wire_failure() {
+        let encoded = envelope().encode().expect("encoded");
+        assert_eq!(
+            EncryptedEnvelope::decode(&encoded)
+                .expect("decode")
+                .version(),
+            ENVELOPE_VERSION
+        );
+        assert!(matches!(
+            EncryptedEnvelope::decode(&vec![0; ENVELOPE_MAX_BYTES + 1]),
+            Err(Error::EnvelopeTooLarge { .. })
+        ));
+        assert_eq!(
+            EncryptedEnvelope::decode(&[]).err(),
+            Some(Error::EnvelopeMalformed)
+        );
+
+        let mut malformed = encoded.clone();
+        malformed[0] = b'X';
+        assert_eq!(
+            EncryptedEnvelope::decode(&malformed).err(),
+            Some(Error::EnvelopeMalformed)
+        );
+        let mut unsupported = encoded.clone();
+        unsupported[5] = 2;
+        assert_eq!(
+            EncryptedEnvelope::decode(&unsupported).err(),
+            Some(Error::UnsupportedEnvelopeVersion { version: 2 })
+        );
+        let mut unsupported = encoded.clone();
+        unsupported[6] = 9;
+        assert_eq!(
+            EncryptedEnvelope::decode(&unsupported).err(),
+            Some(Error::UnsupportedCipher { cipher: 9 })
+        );
+        let mut unsupported = encoded.clone();
+        unsupported[7] = 9;
+        assert_eq!(
+            EncryptedEnvelope::decode(&unsupported).err(),
+            Some(Error::UnsupportedKeySource { key_source: 9 })
+        );
+        let mut unsupported = encoded.clone();
+        unsupported[8] = 9;
+        assert_eq!(
+            EncryptedEnvelope::decode(&unsupported).err(),
+            Some(Error::UnsupportedBackend { backend: 9 })
+        );
+        let mut trailing = encoded;
+        trailing.push(0);
+        assert_eq!(
+            EncryptedEnvelope::decode(&trailing).err(),
+            Some(Error::EnvelopeMalformed)
+        );
+
+        let mut invalid = envelope();
+        invalid.version = 2;
+        assert_eq!(
+            invalid.encode().err(),
+            Some(Error::UnsupportedEnvelopeVersion { version: 2 })
+        );
+        let mut invalid = envelope();
+        invalid.ciphertext.clear();
+        assert_eq!(invalid.encode().err(), Some(Error::EnvelopeMalformed));
+        let mut invalid = envelope();
+        invalid.ciphertext = vec![0; ENVELOPE_MAX_BYTES];
+        assert!(matches!(
+            invalid.encode(),
+            Err(Error::EnvelopeTooLarge { .. })
+        ));
+    }
+}

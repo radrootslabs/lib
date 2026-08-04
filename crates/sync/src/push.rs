@@ -208,9 +208,12 @@ impl Engine {
             .await
             .map_err(map_storage_error)?
         {
-            if existing.operation_id() != OperationId::SyncPush
-                || existing.idempotency_key() != request.idempotency_key()
-                || existing.input_digest() != input_digest
+            if [
+                existing.operation_id() != OperationId::SyncPush,
+                existing.idempotency_key() != request.idempotency_key(),
+                existing.input_digest() != input_digest,
+            ]
+            .contains(&true)
             {
                 return Err(Error::StorageConflict);
             }

@@ -35,6 +35,7 @@ use self::protocol_reconciliation_v1::{
 };
 use self::protocol_storage_v1::{raw_head_snapshot_in_transaction, stored_raw_event_from_row};
 use crate::RadrootsEventStoreError;
+use crate::error::require_invariant;
 use crate::model::{
     RadrootsCurrentVisibilityDecisionV1, RadrootsEventIngest, RadrootsEventIngestReceipt,
     RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
@@ -531,13 +532,11 @@ impl RadrootsEventStore {
             cursor.last_event_seq(),
         )
         .await?;
-        if cursor.source_generation() != active_generation {
-            return Err(
-                RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
-                    projection_id: cursor.projection_id().to_owned(),
-                },
-            );
-        }
+        require_invariant(cursor.source_generation() == active_generation, || {
+            RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
+                projection_id: cursor.projection_id().to_owned(),
+            }
+        })?;
         projection_cursor_unchecked(&mut tx, cursor.projection_id(), active_generation).await?;
         match expected_prior_sequence {
             None => {
@@ -556,13 +555,13 @@ impl RadrootsEventStore {
                 }
             }
             Some(expected) => {
-                if cursor.last_event_seq() < expected {
-                    return Err(RadrootsEventStoreError::ProjectionCursorRegression {
+                require_invariant(cursor.last_event_seq() >= expected, || {
+                    RadrootsEventStoreError::ProjectionCursorRegression {
                         projection_id: cursor.projection_id().to_owned(),
                         current: expected,
                         proposed: cursor.last_event_seq(),
-                    });
-                }
+                    }
+                })?;
                 let updated = sqlx::query(
                     "UPDATE projection_cursor SET last_event_seq = ?, updated_at_ms = ? WHERE projection_id = ? AND projection_version = ? AND last_event_seq = ? AND EXISTS (SELECT 1 FROM radroots_event_store_projection_cursor_source AS source WHERE source.projection_id = projection_cursor.projection_id AND source.source_generation = ?)",
                 )
@@ -584,27 +583,26 @@ impl RadrootsEventStore {
         let actual =
             projection_cursor_unchecked(&mut tx, cursor.projection_id(), active_generation).await?;
         if let Some(actual) = actual.as_ref() {
-            if actual.source_generation() != active_generation {
-                return Err(
-                    RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
-                        projection_id: cursor.projection_id().to_owned(),
-                    },
-                );
-            }
-            if actual.projection_version() != cursor.projection_version() {
-                return Err(RadrootsEventStoreError::ProjectionVersionMismatch {
+            require_invariant(actual.source_generation() == active_generation, || {
+                RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
+                    projection_id: cursor.projection_id().to_owned(),
+                }
+            })?;
+            require_invariant(
+                actual.projection_version() == cursor.projection_version(),
+                || RadrootsEventStoreError::ProjectionVersionMismatch {
                     projection_id: cursor.projection_id().to_owned(),
                     expected: cursor.projection_version(),
                     actual: actual.projection_version(),
-                });
-            }
-            if cursor.last_event_seq() < actual.last_event_seq() {
-                return Err(RadrootsEventStoreError::ProjectionCursorRegression {
+                },
+            )?;
+            require_invariant(cursor.last_event_seq() >= actual.last_event_seq(), || {
+                RadrootsEventStoreError::ProjectionCursorRegression {
                     projection_id: cursor.projection_id().to_owned(),
                     current: actual.last_event_seq(),
                     proposed: cursor.last_event_seq(),
-                });
-            }
+                }
+            })?;
         }
         Err(RadrootsEventStoreError::ProjectionCursorConflict {
             projection_id: cursor.projection_id().to_owned(),
@@ -640,13 +638,13 @@ impl RadrootsEventStore {
             )?;
             let last_event_seq: i64 = prior.try_get("last_event_seq")?;
             validate_projection_sequence(projection_id.as_str(), last_event_seq)?;
-            if last_event_seq > target_raw_high_water_seq {
-                return Err(RadrootsEventStoreError::ProjectionCursorAheadOfSource {
-                    projection_id,
+            require_invariant(last_event_seq <= target_raw_high_water_seq, || {
+                RadrootsEventStoreError::ProjectionCursorAheadOfSource {
+                    projection_id: projection_id.clone(),
                     proposed: last_event_seq,
                     high_water: target_raw_high_water_seq,
-                });
-            }
+                }
+            })?;
             let source_generation = prior
                 .try_get::<Option<Vec<u8>>, _>("source_generation")?
                 .map(generation_from_blob)
@@ -697,23 +695,23 @@ impl RadrootsEventStore {
         } = ticket;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let source_generation = active_source_generation(&mut tx).await?;
-        if source_generation != target_source_generation {
-            return Err(
-                RadrootsEventStoreError::ProjectionSourceGenerationMismatch { projection_id },
-            );
-        }
+        require_invariant(source_generation == target_source_generation, || {
+            RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
+                projection_id: projection_id.clone(),
+            }
+        })?;
         let current_high_water: i64 = sqlx::query_scalar(
             "SELECT raw_high_water_seq FROM radroots_event_store_source_state WHERE singleton = 1",
         )
         .fetch_one(&mut *tx)
         .await?;
-        if target_raw_high_water_seq > current_high_water {
-            return Err(RadrootsEventStoreError::ProjectionCursorAheadOfSource {
-                projection_id,
+        require_invariant(target_raw_high_water_seq <= current_high_water, || {
+            RadrootsEventStoreError::ProjectionCursorAheadOfSource {
+                projection_id: projection_id.clone(),
                 proposed: target_raw_high_water_seq,
                 high_water: current_high_water,
-            });
-        }
+            }
+        })?;
         let actual_prior = sqlx::query(
             "SELECT cursor.projection_version, cursor.last_event_seq, cursor.updated_at_ms, source.source_generation, source.source_revision FROM projection_cursor AS cursor LEFT JOIN radroots_event_store_projection_cursor_source AS source ON source.projection_id = cursor.projection_id WHERE cursor.projection_id = ?",
         )
@@ -731,11 +729,11 @@ impl RadrootsEventStore {
                 .bind(updated_at_ms)
                 .execute(&mut *tx)
                 .await?;
-                if inserted.rows_affected() != 1 {
-                    return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
-                        projection_id,
-                    });
-                }
+                require_invariant(inserted.rows_affected() == 1, || {
+                    RadrootsEventStoreError::ProjectionRebuildTicketConflict {
+                        projection_id: projection_id.clone(),
+                    }
+                })?;
             }
             (
                 RadrootsProjectionRebuildPrior::Cursor {
@@ -761,16 +759,18 @@ impl RadrootsEventStore {
                 )?;
                 let actual_sequence: i64 = actual.try_get("last_event_seq")?;
                 let actual_updated_at_ms: i64 = actual.try_get("updated_at_ms")?;
-                if actual_generation != expected_generation
-                    || actual_revision != expected_revision
-                    || actual_version != expected_version
-                    || actual_sequence != expected_sequence
-                    || actual_updated_at_ms != expected_updated_at_ms
-                {
-                    return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
-                        projection_id,
-                    });
-                }
+                let prior_matches = [
+                    actual_generation == expected_generation,
+                    actual_revision == expected_revision,
+                    actual_version == expected_version,
+                    actual_sequence == expected_sequence,
+                    actual_updated_at_ms == expected_updated_at_ms,
+                ];
+                require_invariant(prior_matches == [true; 5], || {
+                    RadrootsEventStoreError::ProjectionRebuildTicketConflict {
+                        projection_id: projection_id.clone(),
+                    }
+                })?;
                 let expected_revision_i64 = i64::try_from(expected_revision).map_err(|_| {
                     RadrootsEventStoreError::InvalidProjectionSourceRevision {
                         projection_id: projection_id.clone(),
@@ -795,11 +795,11 @@ impl RadrootsEventStore {
                 .bind(expected_revision_i64)
                 .execute(&mut *tx)
                 .await?;
-                if updated.rows_affected() != 1 {
-                    return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
-                        projection_id,
-                    });
-                }
+                require_invariant(updated.rows_affected() == 1, || {
+                    RadrootsEventStoreError::ProjectionRebuildTicketConflict {
+                        projection_id: projection_id.clone(),
+                    }
+                })?;
             }
             _ => {
                 return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
@@ -1165,11 +1165,12 @@ async fn configure_pool(
 ) -> Result<(), RadrootsEventStoreError> {
     let max_connections = pool.options().get_max_connections();
     let existing_options = pool.connect_options();
-    if !file_backed && max_connections != 1 {
-        return Err(RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
+    require_invariant(
+        (file_backed, max_connections == 1) != (false, false),
+        || RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
             actual: max_connections,
-        });
-    }
+        },
+    )?;
 
     let mut connections = Vec::with_capacity(max_connections as usize);
     for _ in 0..max_connections {
@@ -1178,12 +1179,12 @@ async fn configure_pool(
     for connection in &mut connections {
         let main_filename = main_database_filename(connection).await?;
         let database_is_memory = main_filename.is_empty();
-        if file_backed == database_is_memory {
-            return Err(RadrootsEventStoreError::SqlitePoolBackingMismatch {
+        require_invariant(file_backed != database_is_memory, || {
+            RadrootsEventStoreError::SqlitePoolBackingMismatch {
                 file_backed,
-                filename: main_filename,
-            });
-        }
+                filename: main_filename.clone(),
+            }
+        })?;
         validate_main_database_encoding(connection).await?;
         crate::schema::validate_event_store_temp_schema(connection).await?;
     }
@@ -1218,10 +1219,9 @@ async fn validate_main_database_encoding(
     let actual: String = sqlx::query_scalar("PRAGMA main.encoding")
         .fetch_one(&mut *connection)
         .await?;
-    if actual == "UTF-8" {
-        return Ok(());
-    }
-    Err(RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual })
+    require_invariant(actual == "UTF-8", || {
+        RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual }
+    })
 }
 
 async fn configure_file_journal_mode(
@@ -1366,9 +1366,11 @@ fn projection_cursor_from_row(
             },
         )
         .and_then(generation_from_blob)?;
-    if source_generation != active_generation {
-        return Err(RadrootsEventStoreError::ProjectionSourceGenerationMismatch { projection_id });
-    }
+    require_invariant(source_generation == active_generation, || {
+        RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
+            projection_id: projection_id.clone(),
+        }
+    })?;
     RadrootsProjectionCursor::new(
         projection_id,
         projection_version,
@@ -1398,35 +1400,30 @@ fn validate_projection_identity(
     projection_version: u32,
 ) -> Result<(), RadrootsEventStoreError> {
     validate_projection_id(projection_id)?;
-    if projection_version == 0 {
-        return Err(RadrootsEventStoreError::InvalidProjectionVersion {
+    require_invariant(projection_version > 0, || {
+        RadrootsEventStoreError::InvalidProjectionVersion {
             projection_id: projection_id.to_owned(),
             value: 0,
-        });
-    }
-    Ok(())
+        }
+    })
 }
 
 fn validate_projection_id(projection_id: &str) -> Result<(), RadrootsEventStoreError> {
-    if projection_id.is_empty() {
-        Err(RadrootsEventStoreError::InvalidProjectionId)
-    } else {
-        Ok(())
-    }
+    require_invariant(!projection_id.is_empty(), || {
+        RadrootsEventStoreError::InvalidProjectionId
+    })
 }
 
 fn validate_projection_sequence(
     projection_id: &str,
     value: i64,
 ) -> Result<(), RadrootsEventStoreError> {
-    if value < 0 {
-        Err(RadrootsEventStoreError::InvalidProjectionCursor {
+    require_invariant(value >= 0, || {
+        RadrootsEventStoreError::InvalidProjectionCursor {
             projection_id: projection_id.to_owned(),
             value,
-        })
-    } else {
-        Ok(())
-    }
+        }
+    })
 }
 
 fn projection_version_from_i64(
@@ -1438,12 +1435,12 @@ fn projection_version_from_i64(
             projection_id: projection_id.to_owned(),
             value,
         })?;
-    if version == 0 {
-        return Err(RadrootsEventStoreError::InvalidProjectionVersion {
+    require_invariant(version > 0, || {
+        RadrootsEventStoreError::InvalidProjectionVersion {
             projection_id: projection_id.to_owned(),
             value,
-        });
-    }
+        }
+    })?;
     Ok(version)
 }
 
@@ -1457,12 +1454,12 @@ fn projection_source_revision_from_i64(
             value: None,
         });
     };
-    if value <= 0 || value == i64::MAX {
-        return Err(RadrootsEventStoreError::InvalidProjectionSourceRevision {
+    require_invariant(value > 0 && value != i64::MAX, || {
+        RadrootsEventStoreError::InvalidProjectionSourceRevision {
             projection_id: projection_id.to_owned(),
             value: Some(value),
-        });
-    }
+        }
+    })?;
     Ok(value as u64)
 }
 
@@ -1476,14 +1473,13 @@ async fn validate_projection_cursor_high_water(
     )
     .fetch_one(&mut **tx)
     .await?;
-    if proposed > high_water {
-        return Err(RadrootsEventStoreError::ProjectionCursorAheadOfSource {
+    require_invariant(proposed <= high_water, || {
+        RadrootsEventStoreError::ProjectionCursorAheadOfSource {
             projection_id: projection_id.to_owned(),
             proposed,
             high_water,
-        });
-    }
-    Ok(())
+        }
+    })
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -2330,6 +2326,79 @@ mod tests {
             tags,
             format!("{summary} Available in Victoria this week.").as_str(),
         )
+    }
+
+    #[test]
+    fn food_availability_stored_projection_rejects_nonpositive_authority_sequences() {
+        let signed = food_availability_event(
+            200,
+            "nantes-carrots",
+            "Nantes Carrots",
+            "Fresh bunches",
+            "active",
+            Vec::new(),
+        );
+        let ingest = RadrootsEventIngest::from_signed_event(signed, 1).expect("verified event");
+        let projection = match radroots_event_codec::decode::food_availability::project_verified_food_availability_event_registry_v7(
+            ingest.verified_event(),
+        )
+        .expect("FoodAvailability projection")
+        {
+            radroots_event_codec::decode::food_availability::RadrootsFoodAvailabilityProjectionOutcome::Focused(projection) => projection,
+            other => panic!("expected focused projection, found {other:?}"),
+        };
+        let source_generation = RadrootsEventStoreSourceGeneration::from_bytes([1; 32]);
+        let pubkey = *ingest.event().author();
+        let event_id = *ingest.event().id();
+        let created_at = ingest.event().created_at_u64();
+
+        assert!(matches!(
+            crate::model::RadrootsStoredFoodAvailabilityV1::from_projection(
+                source_generation,
+                pubkey,
+                event_id,
+                0,
+                created_at,
+                1,
+                &projection,
+            ),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
+        ));
+        assert!(matches!(
+            crate::model::RadrootsStoredFoodAvailabilityV1::from_projection(
+                source_generation,
+                pubkey,
+                event_id,
+                1,
+                created_at,
+                0,
+                &projection,
+            ),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
+        ));
+    }
+
+    #[test]
+    fn projection_revision_and_busy_error_helpers_cover_all_policy_outcomes() {
+        assert!(matches!(
+            projection_source_revision_from_i64("projection", None),
+            Err(RadrootsEventStoreError::InvalidProjectionSourceRevision { value: None, .. })
+        ));
+        for value in [0, i64::MAX] {
+            assert!(matches!(
+                projection_source_revision_from_i64("projection", Some(value)),
+                Err(RadrootsEventStoreError::InvalidProjectionSourceRevision {
+                    value: Some(actual),
+                    ..
+                }) if actual == value
+            ));
+        }
+        assert_eq!(
+            projection_source_revision_from_i64("projection", Some(1))
+                .expect("positive bounded revision"),
+            1
+        );
+        assert!(!sqlite_error_is_busy(&sqlx::Error::PoolClosed));
     }
 
     fn calendar_date_event(
@@ -6856,6 +6925,92 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[tokio::test]
+    async fn food_availability_audit_rejects_each_projection_authority_layer() {
+        let corruptions = [
+            (
+                Some("radroots_event_store_food_availability_cursor_update_guard"),
+                "UPDATE radroots_event_store_food_availability_cursor SET hook_manifest_sha256 = lower(hex(zeroblob(32))) WHERE singleton = 1",
+            ),
+            (
+                None,
+                "UPDATE radroots_event_store_addressable_feed_integrity_v1 SET transition_count = transition_count + 1",
+            ),
+            (
+                Some("radroots_event_store_food_availability_cursor_update_guard"),
+                "UPDATE radroots_event_store_food_availability_cursor SET last_transition_seq = 0 WHERE singleton = 1",
+            ),
+            (
+                Some("radroots_event_store_food_availability_cursor_update_guard"),
+                "UPDATE radroots_event_store_food_availability_cursor SET projected_row_count = projected_row_count + 1 WHERE singleton = 1",
+            ),
+            (
+                Some("radroots_event_store_food_availability_projection_update_guard"),
+                "UPDATE radroots_event_store_food_availability_projection SET created_at = created_at + 1 WHERE d_tag = 'audit-carrots'",
+            ),
+            (
+                Some("radroots_event_store_food_availability_projection_update_guard"),
+                "UPDATE radroots_event_store_food_availability_projection SET title = 'Corrupted title' WHERE d_tag = 'audit-carrots'",
+            ),
+            (
+                Some("radroots_event_store_food_availability_image_delete_guard"),
+                "DELETE FROM radroots_event_store_food_availability_image WHERE d_tag = 'audit-carrots'",
+            ),
+            (
+                Some("radroots_event_store_food_availability_image_update_guard"),
+                "UPDATE radroots_event_store_food_availability_image SET raw_tag_json = '[\"image\",\"https://different.example/image.webp\"]' WHERE d_tag = 'audit-carrots'",
+            ),
+        ];
+
+        for (index, (guard, corruption)) in corruptions.into_iter().enumerate() {
+            let store = RadrootsEventStore::open_memory().await.expect("open");
+            store
+                .ingest_event(RadrootsEventIngest::new(
+                    food_availability_event(
+                        300 + u32::try_from(index).expect("bounded corruption index"),
+                        "audit-carrots",
+                        "Audit Carrots",
+                        "Audit harvest",
+                        "active",
+                        vec![vec![
+                            "image".to_owned(),
+                            "https://media.example/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.webp"
+                                .to_owned(),
+                            "800x600".to_owned(),
+                        ]],
+                    ),
+                    19_500 + index as i64,
+                ))
+                .await
+                .expect("FoodAvailability ingest");
+
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            if let Some(guard) = guard {
+                sqlx::query(sqlx::AssertSqlSafe(format!("DROP TRIGGER {guard}")))
+                    .execute(&mut *connection)
+                    .await
+                    .expect("remove isolated authority guard");
+            }
+            sqlx::query("PRAGMA ignore_check_constraints = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("enable isolated corruption fixture");
+            sqlx::query(corruption)
+                .execute(&mut *connection)
+                .await
+                .expect("install isolated projection corruption");
+            drop(connection);
+
+            assert!(
+                matches!(
+                    store.audit_food_availability_projection_v1().await,
+                    Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
+                ),
+                "projection corruption {index} passed exhaustive audit"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn food_availability_exhaustive_audit_rejects_wrong_source_transition_authority() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         for event in [
@@ -8474,6 +8629,80 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .await,
             Err(RadrootsEventStoreError::AddressableTransitionCorruption { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_rejects_each_row_authority_drift_class() {
+        let corruptions = [
+            "UPDATE radroots_event_store_addressable_head_transition SET d_tag = printf('%.*c', 4097, 'x') WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET raw_head_event_seq = 0 WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET visible_event_id = lower(hex(randomblob(32))), visible_event_seq = 1 WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET raw_head_created_at = raw_head_created_at + 1 WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET admission_status = 'invalid', admission_code = 'corrupt', contract_id = NULL WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET cause_event_id = lower(hex(randomblob(32))), cause_event_seq = 1 WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET origin = 'baseline', cause_event_id = NULL, cause_event_seq = NULL, raw_head_decision = 'baseline_rebuild' WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET retracted_event_id = NULL, retracted_event_seq = NULL WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE radroots_event_store_addressable_head_transition SET admission_code = 'unexpected' WHERE transition_seq = (SELECT MAX(transition_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE event_envelopes SET content = 'corrupted' WHERE seq = (SELECT MAX(raw_head_event_seq) FROM radroots_event_store_addressable_head_transition)",
+            "UPDATE event_envelopes SET contract_status = 'unsupported', contract_id = NULL, projection_eligible = 0 WHERE seq = (SELECT MAX(raw_head_event_seq) FROM radroots_event_store_addressable_head_transition)",
+            "DELETE FROM radroots_event_store_event_coordinate WHERE event_seq = (SELECT MAX(raw_head_event_seq) FROM radroots_event_store_addressable_head_transition)",
+        ];
+
+        for (index, corruption) in corruptions.into_iter().enumerate() {
+            let store = RadrootsEventStore::open_memory().await.expect("open");
+            for (created_at, status) in [(400_u32, "active"), (401_u32, "sold")] {
+                store
+                    .ingest_event(RadrootsEventIngest::new(
+                        food_availability_event(
+                            created_at,
+                            "transition-audit",
+                            "Transition Audit",
+                            "Audited harvest",
+                            status,
+                            Vec::new(),
+                        ),
+                        60_000 + i64::from(created_at),
+                    ))
+                    .await
+                    .expect("FoodAvailability transition ingest");
+            }
+
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            let triggers: Vec<String> = sqlx::query_scalar(
+                "SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name",
+            )
+            .fetch_all(&mut *connection)
+            .await
+            .expect("trigger inventory");
+            for trigger in triggers {
+                sqlx::query(sqlx::AssertSqlSafe(format!("DROP TRIGGER {trigger}")))
+                    .execute(&mut *connection)
+                    .await
+                    .expect("remove isolated immutable trigger");
+            }
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *connection)
+                .await
+                .expect("disable isolated foreign-key enforcement");
+            sqlx::query("PRAGMA ignore_check_constraints = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("disable isolated check enforcement");
+            sqlx::query(corruption)
+                .execute(&mut *connection)
+                .await
+                .expect("install isolated transition corruption");
+            drop(connection);
+
+            let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+            assert!(
+                matches!(
+                    store.addressable_transition_page_v1(&scope, None, 64).await,
+                    Err(RadrootsEventStoreError::AddressableTransitionCorruption { .. })
+                ),
+                "transition corruption {index} passed feed validation"
+            );
+        }
     }
 
     #[tokio::test]

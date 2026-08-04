@@ -26,6 +26,7 @@ pub struct ListEntry {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::envelope::kind::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind};

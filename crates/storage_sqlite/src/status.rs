@@ -200,6 +200,7 @@ const fn storage_open_mode(mode: OpenMode) -> StorageOpenMode {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::time::Duration;
 
@@ -259,6 +260,35 @@ mod tests {
         assert_eq!(reader_status.writer_policy(), WriterPolicy::NoWriter);
         assert!(!reader_status.wal_enabled());
         assert_eq!(reader_status.busy_timeout_ms(), 5_000);
+
+        let healthy = IntegrityStatus::new(IntegrityHealth::Healthy, Some(100), 2, 0)
+            .expect("healthy integrity");
+        assert_eq!(reader.lifecycle.record_integrity(healthy), Ok(healthy));
+        assert_eq!(reader.lifecycle.record_integrity(healthy), Ok(healthy));
+        let older = IntegrityStatus::new(IntegrityHealth::Healthy, Some(99), 2, 0)
+            .expect("older integrity");
+        assert_eq!(
+            reader.lifecycle.record_integrity(older),
+            Err(Error::InvalidIntegrityStatus)
+        );
+        let conflicting = IntegrityStatus::new(IntegrityHealth::Degraded, Some(100), 1, 1)
+            .expect("conflicting integrity");
+        assert_eq!(
+            reader.lifecycle.record_integrity(conflicting),
+            Err(Error::InvalidIntegrityStatus)
+        );
+
+        assert_eq!(reader.lifecycle.begin_restore_close(), Ok(()));
+        assert_eq!(
+            reader.lifecycle.begin_restore_close(),
+            Err(Error::BackendUnavailable)
+        );
+        assert_eq!(reader.lifecycle.finish_close(), Ok(()));
+        assert_eq!(reader.lifecycle.finish_restore_close(), Ok(()));
+        assert_eq!(
+            reader.lifecycle.finish_restore_close(),
+            Err(Error::BackendUnavailable)
+        );
     }
 
     #[tokio::test]

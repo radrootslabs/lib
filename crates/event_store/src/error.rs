@@ -421,6 +421,13 @@ impl From<RadrootsTransportError> for RadrootsEventStoreError {
     }
 }
 
+pub(crate) fn require_invariant(
+    condition: bool,
+    error: impl FnOnce() -> RadrootsEventStoreError,
+) -> Result<(), RadrootsEventStoreError> {
+    if condition { Ok(()) } else { Err(error()) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -433,6 +440,16 @@ mod tests {
         assert!(matches!(
             error,
             RadrootsEventStoreError::Transport(RadrootsTransportError::InvalidTargetUri)
+        ));
+    }
+
+    #[test]
+    fn invariant_helper_is_lazy_and_fail_closed() {
+        require_invariant(true, || panic!("success must not construct an error"))
+            .expect("satisfied invariant");
+        assert!(matches!(
+            require_invariant(false, || RadrootsEventStoreError::InvalidProjectionId),
+            Err(RadrootsEventStoreError::InvalidProjectionId)
         ));
     }
 }

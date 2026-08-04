@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::error::require_invariant;
 use crate::model::{RadrootsEventIngest, RadrootsEventStoreSourceGeneration};
 use crate::nip09::reconciliation_v1::{
     ReconciliationCapacity, ReconciliationCapacityLimits, measure_reconciliation_capacity_bounded,
@@ -182,12 +183,12 @@ pub(crate) async fn advance_source_capacity_after_insert_v1(
     .bind(i64::from(current.retained_generation_limit))
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return source_capacity_drift(format!(
+    require_invariant(updated.rows_affected() == 1, || {
+        source_capacity_drift_error(format!(
             "append authority compare-and-swap affected {} rows",
             updated.rows_affected()
-        ));
-    }
+        ))
+    })?;
     validate_source_capacity_authority_fast_v1(connection)
         .await
         .map(|_| ())
@@ -213,21 +214,22 @@ pub(crate) async fn apply_source_maintenance_hook_v1(
     let raw_tag_count: i64 = row.try_get("raw_tag_count")?;
     let raw_high_water_seq: i64 = row.try_get("raw_high_water_seq")?;
     let retained_generation_count = generation_count(row.try_get("retained_generation_count")?)?;
-    if retained_generation_count > RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1 {
-        return Err(
-            RadrootsEventStoreError::SourceGenerationHistoryLimitReached {
-                current: retained_generation_count,
-                limit: RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
-            },
-        );
-    }
-    if raw_event_count != sqlite_capacity_value(capacity.raw_events, "raw_event_count")?
-        || raw_tag_count != sqlite_capacity_value(capacity.raw_tags, "raw_tag_count")?
-    {
-        return source_capacity_drift(
+    require_invariant(
+        retained_generation_count <= RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+        || RadrootsEventStoreError::SourceGenerationHistoryLimitReached {
+            current: retained_generation_count,
+            limit: RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+        },
+    )?;
+    let raw_row_counts_match = [
+        raw_event_count == sqlite_capacity_value(capacity.raw_events, "raw_event_count")?,
+        raw_tag_count == sqlite_capacity_value(capacity.raw_tags, "raw_tag_count")?,
+    ];
+    require_invariant(raw_row_counts_match == [true; 2], || {
+        source_capacity_drift_error(
             "measured raw row counts disagree with active source state".to_owned(),
-        );
-    }
+        )
+    })?;
     let inserted = sqlx::query(
         "INSERT INTO radroots_event_store_source_capacity_v1(singleton, source_generation, raw_event_count, raw_tag_count, raw_event_bytes, raw_tag_bytes, raw_high_water_seq, retained_generation_count, retained_generation_limit) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
@@ -249,12 +251,12 @@ pub(crate) async fn apply_source_maintenance_hook_v1(
     ))
     .execute(&mut *connection)
     .await?;
-    if inserted.rows_affected() != 1 {
-        return source_capacity_drift(format!(
+    require_invariant(inserted.rows_affected() == 1, || {
+        source_capacity_drift_error(format!(
             "source capacity initialization affected {} rows",
             inserted.rows_affected()
-        ));
-    }
+        ))
+    })?;
     validate_source_capacity_authority_full_v1(connection).await
 }
 
@@ -263,15 +265,17 @@ pub(crate) async fn validate_source_capacity_authority_fast_v1(
 ) -> Result<RadrootsEventStoreSourceCapacityV1, RadrootsEventStoreError> {
     let capacity = read_source_capacity_v1(connection).await?;
     validate_measured_capacity(capacity.capacity)?;
-    if capacity.retained_generation_limit
-        != RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
-    {
-        return source_capacity_drift(format!(
-            "retained generation limit is {}, expected {}",
-            capacity.retained_generation_limit,
-            RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
-        ));
-    }
+    require_invariant(
+        capacity.retained_generation_limit
+            == RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+        || {
+            source_capacity_drift_error(format!(
+                "retained generation limit is {}, expected {}",
+                capacity.retained_generation_limit,
+                RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
+            ))
+        },
+    )?;
     let row = sqlx::query(
         "SELECT state.active_generation, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, generation.generation_ordinal, (SELECT COUNT(*) FROM (SELECT 1 FROM radroots_event_store_source_generation LIMIT 9)) AS retained_generation_count FROM radroots_event_store_source_state AS state JOIN radroots_event_store_source_generation AS generation ON generation.source_generation = state.active_generation WHERE state.singleton = 1",
     )
@@ -291,18 +295,20 @@ pub(crate) async fn validate_source_capacity_authority_fast_v1(
     let raw_high_water_seq: i64 = row.try_get("raw_high_water_seq")?;
     let generation_ordinal = generation_count(row.try_get("generation_ordinal")?)?;
     let retained_generation_count = generation_count(row.try_get("retained_generation_count")?)?;
-    if active_generation != capacity.source_generation
-        || raw_event_count != capacity.capacity.raw_events
-        || raw_tag_count != capacity.capacity.raw_tags
-        || raw_high_water_seq != capacity.raw_high_water_seq
-        || generation_ordinal != retained_generation_count
-        || retained_generation_count != capacity.retained_generation_count
-        || retained_generation_count > capacity.retained_generation_limit
-    {
-        return source_capacity_drift(
+    let capacity_seal_matches = [
+        active_generation == capacity.source_generation,
+        raw_event_count == capacity.capacity.raw_events,
+        raw_tag_count == capacity.capacity.raw_tags,
+        raw_high_water_seq == capacity.raw_high_water_seq,
+        generation_ordinal == retained_generation_count,
+        retained_generation_count == capacity.retained_generation_count,
+        retained_generation_count <= capacity.retained_generation_limit,
+    ];
+    require_invariant(capacity_seal_matches == [true; 7], || {
+        source_capacity_drift_error(
             "capacity seal does not match active source state and generation history".to_owned(),
-        );
-    }
+        )
+    })?;
     Ok(capacity)
 }
 
@@ -317,13 +323,12 @@ pub(crate) async fn validate_source_capacity_authority_full_v1(
     .await?;
     validate_measured_capacity(measured)?;
     validate_no_persisted_ephemeral_raw_rows_v1(connection).await?;
-    if measured != persisted.capacity {
-        return source_capacity_drift(format!(
+    require_invariant(measured == persisted.capacity, || {
+        source_capacity_drift_error(format!(
             "persisted capacity {:?} differs from measured raw authority {measured:?}",
             persisted.capacity
-        ));
-    }
-    Ok(())
+        ))
+    })
 }
 
 pub(crate) async fn validate_no_persisted_ephemeral_raw_rows_v1(
@@ -374,11 +379,11 @@ pub(crate) async fn bind_source_capacity_to_generation_v1(
         return Ok(false);
     }
     let current = read_source_capacity_v1(connection).await?;
-    if current.source_generation == target_generation {
-        return source_capacity_drift(
+    require_invariant(current.source_generation != target_generation, || {
+        source_capacity_drift_error(
             "source rebuild target already owns the persisted capacity seal".to_owned(),
-        );
-    }
+        )
+    })?;
     let updated = sqlx::query(
         "UPDATE radroots_event_store_source_capacity_v1 SET source_generation = ? WHERE singleton = 1 AND source_generation = ? AND raw_event_count = ? AND raw_tag_count = ? AND raw_event_bytes = ? AND raw_tag_bytes = ? AND raw_high_water_seq = ? AND retained_generation_count = ? AND retained_generation_limit = ?",
     )
@@ -405,18 +410,18 @@ pub(crate) async fn bind_source_capacity_to_generation_v1(
     .bind(i64::from(current.retained_generation_limit))
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return source_capacity_drift(format!(
+    require_invariant(updated.rows_affected() == 1, || {
+        source_capacity_drift_error(format!(
             "source rebuild capacity bind affected {} rows",
             updated.rows_affected()
-        ));
-    }
+        ))
+    })?;
     let rebound = validate_source_capacity_authority_fast_v1(connection).await?;
-    if rebound.source_generation != target_generation {
-        return source_capacity_drift(
+    require_invariant(rebound.source_generation == target_generation, || {
+        source_capacity_drift_error(
             "source rebuild capacity bind did not select its target generation".to_owned(),
-        );
-    }
+        )
+    })?;
     Ok(true)
 }
 
@@ -424,12 +429,9 @@ fn validate_source_generation_append_available_v1(
     current: u32,
     limit: u32,
 ) -> Result<(), RadrootsEventStoreError> {
-    if current >= limit {
-        return Err(
-            RadrootsEventStoreError::SourceGenerationHistoryLimitReached { current, limit },
-        );
-    }
-    Ok(())
+    require_invariant(current < limit, || {
+        RadrootsEventStoreError::SourceGenerationHistoryLimitReached { current, limit }
+    })
 }
 
 async fn read_source_capacity_v1(
@@ -440,12 +442,12 @@ async fn read_source_capacity_v1(
     )
     .fetch_all(&mut *connection)
     .await?;
-    if rows.len() != 1 {
-        return source_capacity_drift(format!(
+    require_invariant(rows.len() == 1, || {
+        source_capacity_drift_error(format!(
             "expected one source capacity row, found {}",
             rows.len()
-        ));
-    }
+        ))
+    })?;
     let row = &rows[0];
     Ok(RadrootsEventStoreSourceCapacityV1 {
         source_generation: RadrootsEventStoreSourceGeneration::from_bytes(source_generation_bytes(
@@ -635,8 +637,8 @@ fn source_generation_bytes(value: Vec<u8>) -> Result<[u8; 32], RadrootsEventStor
     )
 }
 
-fn source_capacity_drift<T>(reason: String) -> Result<T, RadrootsEventStoreError> {
-    Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
+fn source_capacity_drift_error(reason: String) -> RadrootsEventStoreError {
+    RadrootsEventStoreError::SourceCapacityStateDrift { reason }
 }
 
 #[cfg(test)]

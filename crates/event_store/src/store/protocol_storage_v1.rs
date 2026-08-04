@@ -217,11 +217,13 @@ fn validate_raw_head_snapshot(
             });
         }
     };
-    if &stored_coordinate != requested_coordinate
-        || stored_coordinate != expected_coordinate
-        || raw_head.event_id != raw_event.event_id
-        || raw_head.created_at != raw_event.created_at
-    {
+    let snapshot_matches = [
+        &stored_coordinate == requested_coordinate,
+        stored_coordinate == expected_coordinate,
+        raw_head.event_id == raw_event.event_id,
+        raw_head.created_at == raw_event.created_at,
+    ];
+    if snapshot_matches != [true; 4] {
         return Err(RadrootsEventStoreError::StoredHeadInconsistent {
             event_id: raw_head.event_id.clone(),
         });
@@ -242,4 +244,77 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsEventSto
 
 fn u64_from_i64(field: &'static str, value: i64) -> Result<u64, RadrootsEventStoreError> {
     u64::try_from(value).map_err(|_| RadrootsEventStoreError::IntegerRange { field, value })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn raw_event() -> RadrootsStoredRawEvent {
+        RadrootsStoredRawEvent {
+            seq: 1,
+            event_id: "a".repeat(64),
+            pubkey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".to_owned(),
+            created_at: 10,
+            kind: 10_000,
+            tags_json: "[]".to_owned(),
+            content: String::new(),
+            sig: "c".repeat(128),
+            raw_json: "{}".to_owned(),
+            admission_status: RadrootsEventAdmissionStatus::Admitted,
+            contract_id: Some("profile.v1".to_owned()),
+            event_class: StoredEventClass::Replaceable,
+            valid_stream_eligible: true,
+            inserted_at_ms: 1,
+            updated_at_ms: 1,
+        }
+    }
+
+    #[test]
+    fn raw_head_snapshot_requires_exact_requested_stored_and_event_authority() {
+        let raw = raw_event();
+        let pubkey = PublicKey::from_hex(&raw.pubkey).expect("pubkey");
+        let coordinate = EventHeadCoordinate::Replaceable {
+            kind: raw.kind,
+            pubkey,
+        };
+        let head = RadrootsStoredRawEventHead {
+            coordinate_type: StoredEventClass::Replaceable,
+            kind: raw.kind,
+            pubkey: raw.pubkey.clone(),
+            d_tag: None,
+            event_id: raw.event_id.clone(),
+            created_at: raw.created_at,
+            updated_at_ms: 1,
+        };
+        validate_raw_head_snapshot(&coordinate, &head, &raw).expect("exact snapshot");
+
+        let wrong_coordinate = EventHeadCoordinate::Replaceable {
+            kind: raw.kind + 1,
+            pubkey,
+        };
+        assert!(validate_raw_head_snapshot(&wrong_coordinate, &head, &raw).is_err());
+        assert!(
+            validate_raw_head_snapshot(
+                &coordinate,
+                &RadrootsStoredRawEventHead {
+                    d_tag: Some("forbidden".to_owned()),
+                    ..head.clone()
+                },
+                &raw,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_raw_head_snapshot(
+                &coordinate,
+                &RadrootsStoredRawEventHead {
+                    created_at: raw.created_at + 1,
+                    ..head
+                },
+                &raw,
+            )
+            .is_err()
+        );
+    }
 }

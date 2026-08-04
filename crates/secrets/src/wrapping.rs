@@ -182,7 +182,9 @@ pub trait KeyWrapping: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::SecretMaterial;
+    use super::{
+        SECRET_MATERIAL_MAX_BYTES, SecretMaterial, WRAPPED_SECRET_MAX_BYTES, WrappedSecret,
+    };
     use alloc::vec::Vec;
     use zeroize::Zeroize;
 
@@ -199,5 +201,8 @@ mod tests {
     #[test]
     fn rejected_owned_plaintext_is_wrapped_before_validation() {
         assert!(SecretMaterial::from_owned(Vec::new()).is_err());
+        assert!(SecretMaterial::from_slice(&vec![0; SECRET_MATERIAL_MAX_BYTES + 1]).is_err());
+        assert!(WrappedSecret::from_bytes(Vec::new()).is_err());
+        assert!(WrappedSecret::from_bytes(vec![0; WRAPPED_SECRET_MAX_BYTES + 1]).is_err());
     }
 }

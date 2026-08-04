@@ -865,6 +865,7 @@ impl PreparedLegacyImport {
 
 impl SqliteStorage {
     /// Captures and verifies every legacy source before any import mutation.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn prepare_legacy_import(
         &self,
         plan: &LegacyImportPlan,
@@ -916,6 +917,7 @@ impl SqliteStorage {
     }
 
     /// Revalidates a prepared bundle and classifies every exact predecessor schema.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn classify_legacy_import(
         &self,
         prepared: &PreparedLegacyImport,
@@ -947,6 +949,7 @@ impl SqliteStorage {
     }
 
     /// Atomically creates or resumes the exact durable journal for a classification.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn begin_legacy_import(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -1038,6 +1041,7 @@ impl SqliteStorage {
     }
 
     /// Reads exact durable recovery state without advancing the importer.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn legacy_import_journal(
         &self,
         import_id: LegacyImportId,
@@ -1193,6 +1197,7 @@ impl SqliteStorage {
     }
 
     /// Converts one bounded page of an exact legacy event store into isolated staging.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn stage_legacy_events(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -1455,6 +1460,7 @@ impl SqliteStorage {
     }
 
     /// Converts one bounded table page from an exact legacy outbox graph.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn stage_legacy_outbox(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -1722,6 +1728,7 @@ impl SqliteStorage {
     }
 
     /// Stages one recoverable page of an exact predecessor private store.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn stage_legacy_private(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -1907,6 +1914,7 @@ impl SqliteStorage {
     }
 
     /// Revalidates and describes a Studio predecessor snapshot for its host.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn prepare_legacy_studio_handoff(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -1962,6 +1970,7 @@ impl SqliteStorage {
     }
 
     /// Records an exact host-owned Studio handoff acknowledgement without importing it.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn acknowledge_legacy_studio_handoff(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -2044,6 +2053,7 @@ impl SqliteStorage {
     }
 
     /// Proves every classified source is completely staged or acknowledged.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn validate_legacy_import(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -2166,6 +2176,7 @@ impl SqliteStorage {
     }
 
     /// Seals validated legacy staging through a private-first recovery protocol.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn finalize_legacy_import(
         &self,
         classified: &ClassifiedLegacyImport,
@@ -2273,6 +2284,7 @@ impl SqliteStorage {
         })
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn completed_legacy_import_receipt(
         &self,
         import_id: LegacyImportId,
@@ -2345,6 +2357,7 @@ impl LegacyBackupLayout {
         }
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn create(&self) -> Result<(), Error> {
         for path in [&self.staging, &self.finalized] {
             if path
@@ -2372,6 +2385,7 @@ impl LegacyBackupLayout {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn capture_legacy_source(source: &LegacySource, destination: &Path) -> Result<(), Error> {
     let destination_text = destination
         .to_str()
@@ -2412,6 +2426,7 @@ async fn capture_legacy_source(source: &LegacySource, destination: &Path) -> Res
     verify_legacy_snapshot(source.kind(), destination).await
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_legacy_snapshot(kind: LegacySourceKind, path: &Path) -> Result<(), Error> {
     let mut connection = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
@@ -2451,6 +2466,7 @@ async fn verify_legacy_snapshot(kind: LegacySourceKind, path: &Path) -> Result<(
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn snapshot(kind: LegacySourceKind, path: &Path) -> Result<LegacySourceSnapshot, Error> {
     let (byte_length, sha256) = file_digest(path)?;
     Ok(LegacySourceSnapshot {
@@ -2461,6 +2477,7 @@ fn snapshot(kind: LegacySourceKind, path: &Path) -> Result<LegacySourceSnapshot,
     })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn file_digest(path: &Path) -> Result<(u64, MemberDigest), Error> {
     let mut file = File::open(path).map_err(|source| Error::LegacyImportFilesystem {
         operation: "open legacy import evidence member",
@@ -2495,6 +2512,7 @@ fn file_digest(path: &Path) -> Result<(u64, MemberDigest), Error> {
     Ok((byte_length, MemberDigest::new(digest.finalize().into())))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_prepared_evidence(prepared: &PreparedLegacyImport) -> Result<(), Error> {
     let bundle_metadata = fs::symlink_metadata(prepared.bundle_path())
         .map_err(|_| Error::LegacyImportEvidenceInvalid)?;
@@ -2557,6 +2575,7 @@ struct CatalogRow {
     sql: Option<String>,
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn classify_snapshot(
     kind: LegacySourceKind,
     path: &Path,
@@ -2612,6 +2631,7 @@ async fn classify_snapshot(
     })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn read_catalog(
     connection: &mut SqliteConnection,
     kind: LegacySourceKind,
@@ -2678,6 +2698,7 @@ fn classify_fixed_catalog(
     })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn classify_event_store(
     connection: &mut SqliteConnection,
     user_version: i64,
@@ -2746,6 +2767,7 @@ async fn classify_event_store(
     Ok((schema, governed))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn validate_event_history(connection: &mut SqliteConnection) -> Result<u32, Error> {
     let rows = sqlx::query(
         "SELECT version, name, up_sha256, down_sha256, schema_sha256 FROM main.radroots_event_store_schema_migrations ORDER BY version",
@@ -2876,6 +2898,7 @@ fn update_framed_digest(digest: &mut Sha256, value: &[u8]) -> Result<(), Error> 
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn source_import_row_count(
     classified: &ClassifiedLegacyImport,
     kind: LegacySourceKind,
@@ -2928,6 +2951,7 @@ async fn source_import_row_count(
     u64::try_from(count).map_err(|_| Error::LegacyImportStagingFailed)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn hash_runtime_legacy_staging(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     import_id: LegacyImportId,
@@ -2967,6 +2991,7 @@ async fn hash_runtime_legacy_staging(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn hash_private_legacy_staging(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     import_id: LegacyImportId,
@@ -3233,12 +3258,16 @@ fn journal_matches_classified(
     classified: &ClassifiedLegacyImport,
     classification_sha256: MemberDigest,
 ) -> bool {
-    journal.import_id() == classified.import_id()
-        && journal.target_generation() == classified.target_generation()
-        && journal.manifest_sha256() == classified.prepared.manifest_sha256()
-        && journal.classification_sha256() == classification_sha256
-        && journal.members().len() == classified.sources().len()
-        && journal
+    let fixed_fields_match = ![
+        journal.import_id() == classified.import_id(),
+        journal.target_generation() == classified.target_generation(),
+        journal.manifest_sha256() == classified.prepared.manifest_sha256(),
+        journal.classification_sha256() == classification_sha256,
+        journal.members().len() == classified.sources().len(),
+    ]
+    .contains(&false);
+    fixed_fields_match
+        & journal
             .members()
             .iter()
             .zip(classified.sources())
@@ -3359,6 +3388,7 @@ fn parse_member_state(value: &str) -> Result<LegacyImportMemberState, Error> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn write_manifest(
     plan: &LegacyImportPlan,
     target_generation: SourceGeneration,
@@ -3406,6 +3436,7 @@ fn write_manifest(
         })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_source_path(path: &Path) -> Result<(), Error> {
     if !path.is_absolute()
         || path.to_str().is_none()
@@ -3422,6 +3453,7 @@ fn validate_source_path(path: &Path) -> Result<(), Error> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> Result<bool, Error> {
     let left_canonical =
         fs::canonicalize(left).map_err(|source| Error::LegacyImportFilesystem {
@@ -3455,6 +3487,7 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> Result<bool, Error> {
     Ok(false)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn sync_directory(path: &Path, operation: &'static str) -> Result<(), Error> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
@@ -3491,6 +3524,7 @@ const fn bytes_are_zero<const N: usize>(bytes: &[u8; N]) -> bool {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use radroots_event::{SignedEvent, wire::Nip01EventWire};
     use radroots_storage::event::SourceGeneration;
@@ -4987,6 +5021,90 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn legacy_event_row_conversion_rejects_each_invalid_scalar_boundary() {
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("row conversion database");
+        let event = signed_event("row conversion matrix");
+        #[allow(clippy::too_many_arguments)]
+        async fn row(
+            connection: &mut SqliteConnection,
+            event: &SignedEvent,
+            sequence: i64,
+            verification_status: &str,
+            contract_status: &str,
+            projection_eligible: i64,
+            inserted_at_ms: i64,
+            updated_at_ms: i64,
+        ) -> sqlx::sqlite::SqliteRow {
+            sqlx::query(
+                "SELECT ? AS seq, ? AS event_id, ? AS raw_json,
+                        ? AS verification_status, ? AS contract_status,
+                        ? AS projection_eligible, ? AS inserted_at_ms, ? AS updated_at_ms",
+            )
+            .bind(sequence)
+            .bind(event.id().to_hex())
+            .bind(event.raw_json())
+            .bind(verification_status)
+            .bind(contract_status)
+            .bind(projection_eligible)
+            .bind(inserted_at_ms)
+            .bind(updated_at_ms)
+            .fetch_one(connection)
+            .await
+            .expect("legacy event row")
+        }
+
+        assert!(
+            convert_legacy_event_row(
+                &row(
+                    &mut connection,
+                    &event,
+                    1,
+                    "verified",
+                    "accepted",
+                    1,
+                    10,
+                    11
+                )
+                .await
+            )
+            .is_ok()
+        );
+        let long_verification = "v".repeat(65);
+        let long_contract = "c".repeat(65);
+        for (sequence, verification, contract, eligible, inserted, updated) in [
+            (0, "verified", "accepted", 1, 10, 11),
+            (1, "", "accepted", 1, 10, 11),
+            (1, long_verification.as_str(), "accepted", 1, 10, 11),
+            (1, "verified", "", 1, 10, 11),
+            (1, "verified", long_contract.as_str(), 1, 10, 11),
+            (1, "verified", "accepted", 2, 10, 11),
+            (1, "verified", "accepted", 1, 0, 11),
+            (1, "verified", "accepted", 1, 10, 9),
+        ] {
+            let candidate = row(
+                &mut connection,
+                &event,
+                sequence,
+                verification,
+                contract,
+                eligible,
+                inserted,
+                updated,
+            )
+            .await;
+            assert!(matches!(
+                convert_legacy_event_row(&candidate),
+                Err(Error::LegacyImportRowInvalid {
+                    source_kind: "event_store",
+                    legacy_sequence: _
+                })
+            ));
+        }
+    }
+
+    #[tokio::test]
     async fn outbox_staging_resumes_across_the_exact_ordered_graph_without_live_mutation() {
         let target_root = tempfile::tempdir().expect("target root");
         let legacy_root = tempfile::tempdir().expect("legacy root");
@@ -5714,9 +5832,27 @@ mod tests {
         ));
         let source =
             LegacySource::new(LegacySourceKind::EventStore, &source_path).expect("regular source");
+        let import_id = LegacyImportId::new([123; 16]).expect("import id");
+        assert!(matches!(
+            LegacyImportPlan::new(import_id, Vec::new(), backup_root.path(), 12_300),
+            Err(Error::InvalidLegacyImportPlan)
+        ));
+        assert!(matches!(
+            LegacyImportPlan::new(import_id, vec![source.clone()], backup_root.path(), 0),
+            Err(Error::InvalidLegacyImportPlan)
+        ));
         assert!(matches!(
             LegacyImportPlan::new(
-                LegacyImportId::new([123; 16]).expect("import id"),
+                import_id,
+                vec![source.clone(); LEGACY_SOURCE_MAX + 1],
+                backup_root.path(),
+                12_300,
+            ),
+            Err(Error::InvalidLegacyImportPlan)
+        ));
+        assert!(matches!(
+            LegacyImportPlan::new(
+                import_id,
                 vec![source.clone(), source],
                 backup_root.path(),
                 12_300,
@@ -5738,5 +5874,90 @@ mod tests {
                 Err(Error::InvalidLegacySource(_))
             ));
         }
+    }
+
+    #[test]
+    fn stage_cursors_reject_every_malformed_boundary() {
+        assert_eq!(
+            decode_outbox_stage_cursor(None).expect("initial outbox cursor"),
+            (LegacyOutboxTable::Operations, 0)
+        );
+        for table in [
+            LegacyOutboxTable::Operations,
+            LegacyOutboxTable::Events,
+            LegacyOutboxTable::DeliveryPlans,
+            LegacyOutboxTable::DeliveryTargets,
+            LegacyOutboxTable::DeliveryAttempts,
+        ] {
+            let encoded = encode_outbox_stage_cursor(table, 1);
+            assert_eq!(
+                decode_outbox_stage_cursor(Some(&encoded)).expect("outbox cursor"),
+                (table, 1)
+            );
+        }
+        for corrupt in [
+            Vec::new(),
+            vec![0; 8],
+            vec![0; 9],
+            encode_outbox_stage_cursor(LegacyOutboxTable::Operations, -1).to_vec(),
+        ] {
+            assert!(matches!(
+                decode_outbox_stage_cursor(Some(&corrupt)),
+                Err(Error::InvalidLegacyImportJournal)
+            ));
+        }
+
+        assert_eq!(
+            decode_private_stage_cursor(None).expect("initial private cursor"),
+            (LegacyPrivateTable::Metadata, String::new())
+        );
+        for table in [
+            LegacyPrivateTable::Metadata,
+            LegacyPrivateTable::WrappedProfileKeys,
+            LegacyPrivateTable::SigningSecrets,
+            LegacyPrivateTable::FarmLocations,
+            LegacyPrivateTable::TradeArtifacts,
+            LegacyPrivateTable::CursorKeys,
+            LegacyPrivateTable::Nip46Sessions,
+            LegacyPrivateTable::RotationProgress,
+        ] {
+            let encoded = encode_private_stage_cursor(table, "cursor");
+            assert_eq!(
+                decode_private_stage_cursor(Some(&encoded)).expect("private cursor"),
+                (table, "cursor".to_owned())
+            );
+            assert!(!private_stage_query(table).is_empty());
+        }
+        for corrupt in [Vec::new(), vec![0], vec![1; 1026], vec![1, 0xff]] {
+            assert!(matches!(
+                decode_private_stage_cursor(Some(&corrupt)),
+                Err(Error::InvalidLegacyImportJournal)
+            ));
+        }
+
+        assert_eq!(
+            decode_event_stage_cursor(None).expect("initial event cursor"),
+            0
+        );
+        let event_cursor = encode_event_stage_cursor(1);
+        assert_eq!(
+            decode_event_stage_cursor(Some(&event_cursor)).expect("event cursor"),
+            1
+        );
+        for corrupt in [Vec::new(), vec![0; 8], (-1_i64).to_be_bytes().to_vec()] {
+            assert!(matches!(
+                decode_event_stage_cursor(Some(&corrupt)),
+                Err(Error::InvalidLegacyImportJournal)
+            ));
+        }
+        assert!(matches!(
+            decode_positive_time(-1),
+            Err(Error::InvalidLegacyImportJournal)
+        ));
+        assert!(matches!(
+            decode_positive_time(0),
+            Err(Error::InvalidLegacyImportJournal)
+        ));
+        assert_eq!(decode_positive_time(1).expect("positive time"), 1);
     }
 }

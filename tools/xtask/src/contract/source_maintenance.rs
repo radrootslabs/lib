@@ -79,7 +79,7 @@ const NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_ID: &str =
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "fe67e81610b2595b291530c5edb64909493e24ea78de1ecd4b8dadeca9ae97d5";
+    "ef32f8973e24dba1cc4727152d2998cfebe79b43cda889d9e99d9541054a3f3f";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",
@@ -2032,7 +2032,7 @@ fn validate_capacity_runtime_authority(workspace_root: &Path) -> Result<(), Stri
             "measure_reconciliation_capacity_bounded(connection,ReconciliationCapacityLimits::production(),).await?",
             "validate_measured_capacity(measured)?",
             "validate_no_persisted_ephemeral_raw_rows_v1(connection).await?",
-            "ifmeasured!=persisted.capacity",
+            "require_invariant(measured==persisted.capacity",
         ],
     )?;
 
@@ -3728,7 +3728,7 @@ struct DelegatedAuthoritySpec {
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
     "b1a7658f47b4561ad816ef65dab47cf68c75de3c459383371319e96e6051d435";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "3b8fcb08ea4e05be5ceef64029462c8f5c15d0675576114320341e2514a9b646";
+    "ad05785d1e9ed452038080f3b95f3bc516a88ad659efe0353342468afb28fce3";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {

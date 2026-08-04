@@ -90,6 +90,7 @@ pub(crate) async fn check_connection(connection: &mut sqlx::SqliteConnection) ->
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod policy_tests {
     use serde::Deserialize;
 
@@ -139,6 +140,7 @@ mod policy_tests {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use radroots_storage::{
         Error,

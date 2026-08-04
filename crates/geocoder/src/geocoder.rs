@@ -599,6 +599,7 @@ fn region_aliases(country_id: &str) -> &'static [(&'static str, &'static str)] {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use std::fs;

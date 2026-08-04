@@ -53,6 +53,9 @@ impl LiveRelaySourceClient {
 }
 
 impl RelaySourceClient for LiveRelaySourceClient {
+    // The live SDK loop requires external relays. Selection and normalized
+    // result handling are covered through the injected source boundary.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn fetch<'a>(&'a self, query: SourceQuery) -> BoxFuture<'a, Vec<RelayFetchBatch>> {
         Box::pin(async move {
             let mut batches = Vec::with_capacity(query.relays.len());
@@ -337,6 +340,7 @@ fn candidate_is_after_cursor(candidate: &Candidate, cursor: &CursorPosition) -> 
         || candidate.created_at == cursor.created_at && candidate.event_id < cursor.event_id
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn unix_time_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -502,5 +506,155 @@ mod tests {
             usize::from(radroots_transport::source::FETCH_PAGE_MAX_EVENTS)
         );
         assert!(FetchBounds::new(1_001, u64::MAX).is_err());
+    }
+
+    #[derive(Debug)]
+    struct ScriptedSourceClient(Vec<RelayFetchBatch>);
+
+    impl RelaySourceClient for ScriptedSourceClient {
+        fn fetch<'a>(&'a self, _query: SourceQuery) -> BoxFuture<'a, Vec<RelayFetchBatch>> {
+            Box::pin(async move { self.0.clone() })
+        }
+    }
+
+    fn scripted(batches: Vec<RelayFetchBatch>) -> NostrTransport {
+        let config = Config::new(
+            RelayUrlPolicy::Public,
+            ["wss://one.example", "wss://two.example"],
+        )
+        .expect("config");
+        NostrTransport::with_source_client(config, Arc::new(ScriptedSourceClient(batches)))
+    }
+
+    #[test]
+    fn source_handles_failed_missing_duplicate_and_unexpected_batches() {
+        let one = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).expect("one");
+        let two = RelayUrl::parse("wss://two.example", RelayUrlPolicy::Public).expect("two");
+        let failed = futures::executor::block_on(
+            scripted(vec![RelayFetchBatch {
+                relay: one.clone(),
+                result: Err("connection timeout".into()),
+            }])
+            .fetch(request(10)),
+        )
+        .expect("failed page");
+        assert_eq!(failed.target_outcomes().len(), 2);
+        assert!(failed.events().is_empty());
+
+        let duplicate = scripted(vec![
+            RelayFetchBatch {
+                relay: one.clone(),
+                result: Ok(vec![]),
+            },
+            RelayFetchBatch {
+                relay: one,
+                result: Ok(vec![]),
+            },
+        ]);
+        assert_eq!(
+            futures::executor::block_on(duplicate.fetch(request(10))),
+            Err(radroots_transport::Error::DuplicateFetchTargetOutcome)
+        );
+
+        let other = RelayUrl::parse("wss://other.example", RelayUrlPolicy::Public).expect("other");
+        let unexpected = scripted(vec![RelayFetchBatch {
+            relay: other,
+            result: Ok(vec![]),
+        }]);
+        assert_eq!(
+            futures::executor::block_on(unexpected.fetch(request(10))),
+            Err(radroots_transport::Error::UnexpectedFetchTargetOutcome)
+        );
+
+        let complete = futures::executor::block_on(
+            scripted(vec![RelayFetchBatch {
+                relay: two,
+                result: Ok(vec![]),
+            }])
+            .fetch(request(10)),
+        )
+        .expect("partial reporting");
+        assert_eq!(complete.target_outcomes().len(), 2);
+    }
+
+    #[test]
+    fn source_rejects_unconfigured_targets_and_expired_deadlines() {
+        let target_set = TargetSet::new(vec![
+            Target::nostr_relay("wss://other.example").expect("other"),
+        ])
+        .expect("targets");
+        let expired = FetchRequest::new(
+            "expired",
+            target_set,
+            FetchBounds::new(1, 1).expect("bounds"),
+        )
+        .expect("request");
+        let page = futures::executor::block_on(transport().fetch(expired)).expect("page");
+        assert!(page.events().is_empty());
+        assert_eq!(page.target_outcomes().len(), 1);
+        assert!(futures::executor::block_on(transport().status()).is_ok());
+    }
+
+    #[test]
+    fn cursor_and_candidate_ordering_cover_boundaries() {
+        for invalid in [
+            "nostr-v1",
+            "nostr-v1:not-a-time:id",
+            "nostr-v1:1",
+            "nostr-v1:1:id:extra",
+            "nostr-v1:1:abc",
+            "nostr-v1:1:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+        ] {
+            let cursor = FetchCursor::parse(invalid).expect("opaque cursor");
+            assert!(matches!(
+                parse_cursor(&cursor),
+                Err(radroots_transport::Error::InvalidFetchCursor)
+            ));
+        }
+        let cursor = CursorPosition {
+            created_at: 10,
+            event_id: "b".repeat(64),
+        };
+        let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).expect("relay");
+        let older = Candidate {
+            relay: relay.clone(),
+            raw: String::new(),
+            created_at: 9,
+            event_id: "f".repeat(64),
+        };
+        let earlier_id = Candidate {
+            relay: relay.clone(),
+            raw: String::new(),
+            created_at: 10,
+            event_id: "a".repeat(64),
+        };
+        let later = Candidate {
+            relay,
+            raw: String::new(),
+            created_at: 11,
+            event_id: "0".repeat(64),
+        };
+        assert!(candidate_is_after_cursor(&older, &cursor));
+        assert!(candidate_is_after_cursor(&earlier_id, &cursor));
+        assert!(!candidate_is_after_cursor(&later, &cursor));
+        assert_ne!(compare_candidate(&older, &later), Ordering::Equal);
+    }
+
+    #[test]
+    fn live_source_short_circuits_selectors_that_cannot_be_encoded() {
+        let client = LiveRelaySourceClient::isolated();
+        let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).expect("relay");
+        let selector = FetchSelector::all()
+            .with_kinds(vec![u32::MAX])
+            .expect("kind");
+        let batches = futures::executor::block_on(client.fetch(SourceQuery {
+            relays: vec![relay],
+            selector,
+            until_unix_seconds: None,
+            connect_timeout: Duration::from_millis(1),
+            timeout: Duration::from_millis(1),
+        }));
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].result, Ok(vec![]));
     }
 }

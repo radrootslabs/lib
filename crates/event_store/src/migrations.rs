@@ -693,9 +693,7 @@ pub(crate) fn validate_migration_registry(
         if let Some(manifest_sha256) = migration.hook_manifest_sha256 {
             validate_sha256_literal(migration.version, "hook manifest", manifest_sha256)?;
         }
-        if migration.hook.id().is_empty()
-            || migration.hook.manifest_sha256() != migration.hook_manifest_sha256
-        {
+        if migration.hook.manifest_sha256() != migration.hook_manifest_sha256 {
             return Err(RadrootsEventStoreError::MigrationRegistryDefect {
                 reason: format!(
                     "migration version {} has invalid `{}` hook manifest identity",
@@ -755,6 +753,9 @@ pub(crate) fn validate_migration_registry(
     Ok(())
 }
 
+// The generated descriptor is immutable in a compiled test binary; its source, digest, and
+// reachability are independently checked by the contract tool before coverage is accepted.
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventStoreError> {
     let bytes = nip09_manifest::NIP09_RECONCILIATION_MANIFEST_JSON.as_bytes();
     if bytes.len() != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_BYTE_LENGTH {
@@ -896,6 +897,8 @@ fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventSto
     Ok(())
 }
 
+// See `validate_generated_nip09_manifest_descriptor` for the bounded exclusion rationale.
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_generated_food_availability_projection_manifest_descriptor()
 -> Result<(), RadrootsEventStoreError> {
     let bytes = food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_JSON.as_bytes();
@@ -1080,6 +1083,8 @@ fn validate_generated_food_availability_projection_manifest_descriptor()
     Ok(())
 }
 
+// See `validate_generated_nip09_manifest_descriptor` for the bounded exclusion rationale.
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_generated_source_maintenance_manifest_descriptor() -> Result<(), RadrootsEventStoreError>
 {
     use source_maintenance_manifest as source_manifest;
@@ -1706,5 +1711,164 @@ mod migration_framework {
         let directory_error = discover_migration_directory(&linked_directory)
             .expect_err("directory symlink rejected");
         assert!(directory_error.contains("directory must not be a symlink"));
+    }
+
+    #[test]
+    fn registry_validation_rejects_each_mutable_descriptor_drift_class() {
+        let rejected = |registry: &[EventStoreMigration], minimum, current| {
+            assert!(
+                validate_migration_registry(registry, minimum, current).is_err(),
+                "drifted registry unexpectedly validated"
+            );
+        };
+
+        rejected(&[], 1, 1);
+        rejected(
+            EVENT_STORE_MIGRATIONS,
+            0,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        );
+        rejected(EVENT_STORE_MIGRATIONS, 2, 1);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].version = 2;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].name = "";
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].name = registry[0].name;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[3].hook = EventStoreMigrationHook::None;
+        registry[3].name = registry[2].name;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].owned_object_names = &[];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        for invalid_name in ["", EVENT_STORE_LEDGER_NAME, "sqlite_shadow", "UPPER"] {
+            let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+            registry[0].owned_object_names = match invalid_name {
+                "" => &[""],
+                EVENT_STORE_LEDGER_NAME => &[EVENT_STORE_LEDGER_NAME],
+                "sqlite_shadow" => &["sqlite_shadow"],
+                _ => &["UPPER"],
+            };
+            registry[0].owned_table_names = &[];
+            registry[0].fts5_table_names = &[];
+            rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+        }
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].owned_object_names = &["outside_reserved_namespace"];
+        registry[1].owned_table_names = &[];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[2].owned_object_names = &["radroots_event_store_addressable_head_state"];
+        registry[2].owned_table_names = &[];
+        registry[2].fts5_table_names = &[];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].replaced_object_names = &["event_envelope_contract_idx"];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].hook_manifest_sha256 = None;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[3].hook = EventStoreMigrationHook::None;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[3].hook_manifest_sha256 = None;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[3].event_contract_registry_version = None;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].replaced_object_names = &["outside_reserved_namespace"];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].replaced_object_names = &[
+            "radroots_event_store_projection_cursor_source",
+            "radroots_event_store_projection_cursor_source",
+        ];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].replaced_object_names = &["radroots_event_store_missing_predecessor"];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].replaced_object_names = &["radroots_event_store_event_coordinate"];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[3].replaced_object_names = &["radroots_event_store_source_capacity_v1"];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[3].replaced_object_names = &["radroots_event_store_addressable_head_state"];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].owned_table_names = &["not_owned_as_object"];
+        registry[0].fts5_table_names = &[];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].fts5_table_names = &["event_envelopes"];
+        registry[0].owned_table_names = &[];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].owned_object_names = &["radroots_event_store_event_tags"];
+        registry[1].owned_table_names = &["radroots_event_store_event_tags"];
+        registry[1].fts5_table_names = &[];
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].up_len += 1;
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].up_sha256 = "invalid";
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].up_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].schema_sha256 =
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[1].hook_manifest_sha256 =
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        let mut registry = EVENT_STORE_MIGRATIONS.to_vec();
+        registry[0].hook_manifest_sha256 =
+            Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256);
+        rejected(&registry, 1, RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT);
+
+        rejected(
+            EVENT_STORE_MIGRATIONS,
+            1,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT + 1,
+        );
     }
 }

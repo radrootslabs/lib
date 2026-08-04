@@ -409,4 +409,22 @@ mod tests {
         assert_eq!(writer.observed, 4);
         assert!(!writer.overflowed);
     }
+
+    #[test]
+    fn invalid_lock_entry_is_reported_as_an_io_failure() {
+        let directory = tempdir().expect("tempdir");
+        let bytes = b"asset";
+        let spec = spec(bytes);
+        let lock_path = directory.path().join(format!(".{}.lock", spec.file_name()));
+        fs::create_dir(lock_path).expect("invalid lock directory");
+        let error = acquire(directory.path(), &spec, &BytesFetcher(bytes.to_vec()))
+            .expect_err("directory lock entry must fail to open");
+        assert!(matches!(
+            error,
+            Error::Io {
+                operation: "open asset lock",
+                ..
+            }
+        ));
+    }
 }

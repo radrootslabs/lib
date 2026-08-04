@@ -210,4 +210,5 @@ fn first_tag_value<'a>(tags: &'a [EventTag], name: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 #[path = "v1/tests.rs"]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests;

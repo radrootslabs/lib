@@ -296,3 +296,72 @@ impl<'de> serde::Deserialize<'de> for DeliveryOutcome {
         Ok(outcome)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::policy::SatisfactionClass;
+
+    #[test]
+    fn outcome_classes_cover_success_failure_retry_and_detail_branches() {
+        for state in [
+            FetchTargetState::Complete,
+            FetchTargetState::Partial,
+            FetchTargetState::Unavailable,
+            FetchTargetState::FailedRetryable,
+            FetchTargetState::FailedTerminal,
+            FetchTargetState::Cancelled,
+        ] {
+            assert_eq!(
+                state.is_retryable(),
+                matches!(
+                    state,
+                    FetchTargetState::Partial
+                        | FetchTargetState::Unavailable
+                        | FetchTargetState::FailedRetryable
+                )
+            );
+            assert_eq!(
+                state.is_terminal(),
+                matches!(
+                    state,
+                    FetchTargetState::Complete | FetchTargetState::FailedTerminal
+                )
+            );
+        }
+
+        let accepted = DeliveryOutcome::accepted();
+        assert!(accepted.satisfies(SatisfactionClass::Accepted));
+        assert!(!accepted.satisfies(SatisfactionClass::Delivered));
+        assert_eq!(accepted.kind(), DeliveryOutcomeKind::Accepted);
+        assert_eq!(accepted.retryability(), Retryability::NotApplicable);
+        let delivered = DeliveryOutcome::delivered();
+        assert!(delivered.satisfies(SatisfactionClass::Accepted));
+        assert!(delivered.satisfies(SatisfactionClass::Delivered));
+        assert!(DeliveryOutcome::unavailable().is_retryable());
+        assert!(DeliveryOutcome::rejected().is_terminal());
+        assert_eq!(
+            DeliveryOutcome::failed(Retryability::NotApplicable),
+            Err(crate::Error::InvalidDeliveryOutcome)
+        );
+        let detailed = DeliveryOutcome::failed(Retryability::Retryable)
+            .unwrap()
+            .with_detail("temporary_failure", "Try again")
+            .unwrap();
+        assert_eq!(detailed.code(), Some("temporary_failure"));
+        assert_eq!(detailed.message(), Some("Try again"));
+        for (code, message) in [
+            ("", "message"),
+            ("BAD", "message"),
+            ("good", ""),
+            ("good", " padded "),
+            ("good", "line\nbreak"),
+        ] {
+            assert!(
+                DeliveryOutcome::rejected()
+                    .with_detail(code, message)
+                    .is_err()
+            );
+        }
+    }
+}

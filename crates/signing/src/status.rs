@@ -267,6 +267,10 @@ mod tests {
                 .expect("challenge");
 
         assert_eq!(challenge.required_at_unix(), 10);
+        assert_eq!(
+            challenge.uri(),
+            "https://auth.example/approve?token=sensitive"
+        );
         assert_eq!(challenge.expires_at_unix(), Some(20));
         assert!(!format!("{challenge:?}").contains("sensitive"));
         assert_eq!(
@@ -279,6 +283,26 @@ mod tests {
             AuthChallenge::new("https://auth.example", 20, Some(10))
                 .expect_err("invalid expiry must fail")
                 .kind(),
+            Kind::InvalidArgument
+        );
+        for invalid in [
+            " https://auth.example",
+            "https://auth.example ",
+            "https://auth.example/line\nbreak",
+        ] {
+            assert_eq!(
+                AuthChallenge::new(invalid, 10, None).unwrap_err().kind(),
+                Kind::InvalidArgument
+            );
+        }
+        assert_eq!(
+            AuthChallenge::new(
+                format!("https://auth.example/{}", "x".repeat(MAX_AUTH_URI_BYTES)),
+                10,
+                None
+            )
+            .unwrap_err()
+            .kind(),
             Kind::InvalidArgument
         );
     }
@@ -299,6 +323,13 @@ mod tests {
             SignProgressStage::AwaitingAuthentication
         );
         assert!(progress.challenge().is_some());
+        let queued = SignProgress::stage(SignProgressStage::Queued).unwrap();
+        assert_eq!(queued.stage_value(), SignProgressStage::Queued);
+        assert_eq!(queued.challenge(), None);
+        let unavailable = SignerStatus::unavailable();
+        assert_eq!(unavailable.availability(), SignerAvailability::Unavailable);
+        assert!(unavailable.capabilities().is_empty());
+        assert_eq!(unavailable.progress(), None);
     }
 
     #[cfg(feature = "serde")]
@@ -331,5 +362,14 @@ mod tests {
             r#"{"stage":"queued","challenge":{"uri":"https://auth.example","required_at_unix":1,"expires_at_unix":null}}"#
         )
         .is_err());
+        assert!(
+            serde_json::from_str::<AuthChallenge>(
+                r#"{"uri":"http://auth.example","required_at_unix":1,"expires_at_unix":null}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<SignProgress>(r#"{"stage":"queued","challenge":null}"#).is_ok()
+        );
     }
 }

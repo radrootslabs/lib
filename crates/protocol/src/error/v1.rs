@@ -891,4 +891,189 @@ mod tests {
         assert_eq!(registry.descriptors()[0].module(), ModuleVersion::ErrorV1);
         assert_eq!(registry.descriptors()[0].id().as_str(), SCHEMA_ID);
     }
+
+    #[test]
+    fn identifier_message_and_detail_validation_cover_bounds() {
+        let known = Code::known(KnownCode::InternalError);
+        assert_eq!(known.known_code(), Some(KnownCode::InternalError));
+        assert_eq!(known.as_str(), "internal_error");
+        for invalid in ["", "Upper", "1starts_with_digit", "has space", "has/slash"] {
+            assert_eq!(Code::parse(invalid), Err(Error::InvalidCode));
+            assert_eq!(
+                CapabilityId::parse(invalid),
+                Err(Error::InvalidCapabilityId)
+            );
+        }
+        assert_eq!(
+            Code::parse("a".repeat(MAX_CODE_BYTES + 1)),
+            Err(Error::InvalidCode)
+        );
+        assert_eq!(
+            CapabilityId::parse("a".repeat(MAX_CAPABILITY_ID_BYTES + 1)),
+            Err(Error::InvalidCapabilityId)
+        );
+        let capability = CapabilityId::parse("transport.nostr-v1").expect("capability");
+        assert_eq!(capability.as_str(), "transport.nostr-v1");
+
+        assert_eq!(SafeMessage::parse(""), Err(Error::InvalidSafeMessage));
+        assert_eq!(
+            SafeMessage::parse("bad\nmessage"),
+            Err(Error::InvalidSafeMessage)
+        );
+        assert_eq!(
+            SafeMessage::parse("a".repeat(MAX_SAFE_MESSAGE_BYTES + 1)),
+            Err(Error::InvalidSafeMessage)
+        );
+        let message = SafeMessage::parse("A safe diagnostic").expect("message");
+        assert_eq!(message.as_str(), "A safe diagnostic");
+        assert_eq!(SafeMessage::redacted().as_str(), REDACTED_MESSAGE);
+
+        let details = SafeDetails::try_new([
+            Detail::new("status", DetailValue::Text("ready_now".into())),
+            Detail::new("actual", DetailValue::Signed(-1)),
+            Detail::new("committed", DetailValue::Bool(true)),
+            Detail::new("limit", DetailValue::Unsigned(5)),
+        ])
+        .expect("details");
+        assert_eq!(details.entries()[0].key, "actual");
+        let vector: Vec<Detail> = details.clone().into();
+        assert_eq!(SafeDetails::try_from(vector).expect("converted"), details);
+        assert_eq!(
+            SafeDetails::try_new([Detail::new("unknown", DetailValue::Bool(true))]),
+            Err(Error::InvalidDetailKey)
+        );
+        assert_eq!(
+            SafeDetails::try_new([Detail::new("private_key", DetailValue::Bool(true))]),
+            Err(Error::SensitiveDetailKey)
+        );
+        assert_eq!(
+            SafeDetails::try_new([Detail::new("status", DetailValue::Text(String::new()))]),
+            Err(Error::InvalidDetailText)
+        );
+        assert_eq!(
+            SafeDetails::try_new([Detail::new("status", DetailValue::Text("BAD".into()))]),
+            Err(Error::InvalidDetailText)
+        );
+        assert_eq!(
+            SafeDetails::try_new([Detail::new(
+                "status",
+                DetailValue::Text("a".repeat(MAX_DETAIL_TEXT_BYTES + 1))
+            )]),
+            Err(Error::InvalidDetailText)
+        );
+        assert_eq!(
+            SafeDetails::try_new([Detail::new(
+                "status",
+                DetailValue::Text("nsec1secret".into())
+            )]),
+            Err(Error::InvalidDetailText)
+        );
+        assert_eq!(
+            SafeDetails::try_new([
+                Detail::new("status", DetailValue::Bool(true)),
+                Detail::new("status", DetailValue::Bool(false)),
+            ]),
+            Err(Error::DuplicateDetailKey)
+        );
+        let too_many = (0..=MAX_DETAIL_ENTRIES)
+            .map(|index| Detail::new("status", DetailValue::Unsigned(index as u64)))
+            .collect::<Vec<_>>();
+        assert_eq!(SafeDetails::try_new(too_many), Err(Error::TooManyDetails));
+    }
+
+    #[test]
+    fn report_validation_and_error_messages_cover_fail_closed_policy() {
+        assert_eq!(
+            ErrorReport::unknown(Code::known(KnownCode::InternalError)),
+            Err(Error::ExpectedUnknownCode)
+        );
+        let report = ErrorReport::known(
+            KnownCode::RelayRateLimited,
+            Some(OperationId::SyncPush),
+            Some(CapabilityId::parse("nostr").expect("capability")),
+            SafeMessage::parse("Retry later").expect("message"),
+            SafeDetails::default(),
+        );
+        assert_eq!(report.schema_version(), 1);
+        assert_eq!(report.operation_id(), Some(OperationId::SyncPush));
+        assert_eq!(
+            report.capability_id().map(CapabilityId::as_str),
+            Some("nostr")
+        );
+        assert!(report.details().is_empty());
+
+        let mut invalid = report.clone();
+        invalid.schema_version = 2;
+        assert_eq!(
+            invalid.validate(),
+            Err(Error::UnsupportedSchemaVersion { version: 2 })
+        );
+        for mutate in 0..3 {
+            let mut invalid = report.clone();
+            match mutate {
+                0 => invalid.class = Class::Unknown,
+                1 => invalid.retryable = false,
+                _ => invalid.recovery_actions.clear(),
+            }
+            assert_eq!(
+                invalid.validate(),
+                Err(Error::DescriptorMismatch {
+                    code: KnownCode::RelayRateLimited
+                })
+            );
+        }
+
+        let unknown =
+            ErrorReport::unknown(Code::parse("future_failure").expect("code")).expect("unknown");
+        let mut variants = Vec::new();
+        let mut value = unknown.clone();
+        value.class = Class::Network;
+        variants.push(value);
+        let mut value = unknown.clone();
+        value.retryable = true;
+        variants.push(value);
+        let mut value = unknown.clone();
+        value
+            .recovery_actions
+            .push(RecoveryAction::RetryAfterTransportFailure);
+        variants.push(value);
+        let mut value = unknown.clone();
+        value.operation_id = Some(OperationId::SyncPush);
+        variants.push(value);
+        let mut value = unknown.clone();
+        value.capability_id = Some(CapabilityId::parse("nostr").expect("capability"));
+        variants.push(value);
+        let mut value = unknown.clone();
+        value.message = SafeMessage::parse("Not redacted").expect("message");
+        variants.push(value);
+        let mut value = unknown;
+        value.details =
+            SafeDetails::try_new([Detail::new("status", DetailValue::Text("failed".into()))])
+                .expect("details");
+        variants.push(value);
+        for invalid in variants {
+            assert_eq!(invalid.validate(), Err(Error::InvalidUnknownCodePolicy));
+        }
+
+        let errors = [
+            Error::InvalidCode,
+            Error::InvalidCapabilityId,
+            Error::InvalidSafeMessage,
+            Error::SensitiveMessage,
+            Error::TooManyDetails,
+            Error::InvalidDetailKey,
+            Error::SensitiveDetailKey,
+            Error::DuplicateDetailKey,
+            Error::InvalidDetailText,
+            Error::ExpectedUnknownCode,
+            Error::UnsupportedSchemaVersion { version: 2 },
+            Error::DescriptorMismatch {
+                code: KnownCode::InternalError,
+            },
+            Error::InvalidUnknownCodePolicy,
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+    }
 }

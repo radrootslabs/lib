@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn verified_governed_database_opens_read_only_and_closes_explicitly() {
         let (_directory, path, spec) = database_fixture(governed_schema());
-        let geocoder = Geocoder::open(&path, &spec).expect("open verified database");
+        let geocoder = Geocoder::open(path.clone(), &spec).expect("open verified database");
         let connection = geocoder.connection.lock().expect("connection lock");
         let count = connection
             .query_row("SELECT COUNT(*) FROM geonames", [], |row| {

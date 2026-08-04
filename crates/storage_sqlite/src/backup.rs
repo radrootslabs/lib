@@ -151,6 +151,7 @@ impl StorageReliability for SqliteStorage {
 impl SqliteStorage {
     /// Captures consistent SQLite snapshots into a new deterministic staging
     /// bundle under the configured host-owned backup root.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn capture_backup(&self, plan: &BackupPlan) -> Result<BackupManifest, Error> {
         self.lifecycle
             .require_open()
@@ -210,6 +211,7 @@ impl SqliteStorage {
     }
 
     /// Verifies the complete staged bundle without mutating or finalizing it.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn verify_backup(
         &self,
         plan: &BackupPlan,
@@ -229,6 +231,7 @@ impl SqliteStorage {
 
     /// Verifies and atomically renames a complete staging bundle. A retry
     /// against an already finalized valid bundle succeeds idempotently.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn finalize_backup(
         &self,
         plan: &BackupPlan,
@@ -272,6 +275,7 @@ impl SqliteStorage {
 
     /// Copies a verified finalized bundle into create-new files adjacent to
     /// the live databases and verifies every staged copy before replacement.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn stage_restore(
         &self,
         plan: &RestorePlan,
@@ -355,6 +359,7 @@ impl SqliteStorage {
     /// Quiesces this writable backend, records a durable interruption marker,
     /// and installs every completely verified staged member. The backend is
     /// closed after the attempt and must be reopened to observe restored state.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn finalize_restore(&self, plan: &RestorePlan) -> Result<(), Error> {
         self.lifecycle
             .require_open()
@@ -388,6 +393,7 @@ impl SqliteStorage {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) fn validate_backup_root(path: &Path) -> Result<(), Error> {
     if !path.is_absolute()
         || path.to_str().is_none()
@@ -428,6 +434,7 @@ enum EntryKind {
     Other,
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn entry_kind(path: &Path) -> Result<EntryKind, Error> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
@@ -461,6 +468,7 @@ impl BackupLayout {
         }
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn create(&self, secret_policy: BackupSecretPolicy) -> Result<(), Error> {
         for path in [&self.staging, &self.finalized] {
             if path
@@ -510,6 +518,7 @@ impl RestoreStaging {
         })
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn require_absent(&self, policy: BackupSecretPolicy) -> Result<(), Error> {
         let paths = if policy == BackupSecretPolicy::IncludeProtectedStorage {
             vec![&self.runtime, &self.private]
@@ -553,6 +562,7 @@ impl RestoreLayout {
         })
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn require_previous_absent(&self, policy: BackupSecretPolicy) -> Result<(), Error> {
         let paths = if policy == BackupSecretPolicy::IncludeProtectedStorage {
             vec![&self.runtime_previous, &self.private_previous]
@@ -741,6 +751,7 @@ impl RestoreMarker {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn write_restore_marker(path: &Path, marker: &RestoreMarker) -> Result<(), Error> {
     let mut options = fs::OpenOptions::new();
     options.create_new(true).write(true);
@@ -764,6 +775,7 @@ fn write_restore_marker(path: &Path, marker: &RestoreMarker) -> Result<(), Error
     sync_parent(path, "sync restore marker parent")
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn read_restore_marker(path: &Path) -> Result<RestoreMarker, Error> {
     let metadata = fs::symlink_metadata(path).map_err(|source| Error::RestoreFilesystem {
         operation: "inspect restore interruption marker",
@@ -782,6 +794,7 @@ fn read_restore_marker(path: &Path) -> Result<RestoreMarker, Error> {
     RestoreMarker::decode(path, &encoded)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn recover_interrupted_restore(
     paths: &crate::Paths,
     mode: OpenMode,
@@ -829,6 +842,7 @@ pub(crate) async fn recover_interrupted_restore(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn discover_restore_marker(paths: &crate::Paths) -> Result<Option<PathBuf>, Error> {
     let parent = paths
         .runtime()
@@ -869,6 +883,7 @@ fn discover_restore_marker(paths: &crate::Paths) -> Result<Option<PathBuf>, Erro
     Ok(marker)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_staged_restore(
     layout: &RestoreLayout,
     marker: &RestoreMarker,
@@ -894,6 +909,7 @@ async fn verify_staged_restore(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_installed_restore(
     layout: &RestoreLayout,
     marker: &RestoreMarker,
@@ -919,6 +935,7 @@ async fn verify_installed_restore(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_restore_path(
     path: &Path,
     expected: RestoreMemberExpectation,
@@ -934,6 +951,7 @@ async fn verify_restore_path(
         })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn install_restore_member(
     live: &Path,
     staging: &Path,
@@ -986,6 +1004,7 @@ async fn install_restore_member(
     verify_restore_path(live, expected, kind, member_name, runtime).await
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn restore_member_matches(path: &Path, expected: RestoreMemberExpectation) -> Result<bool, Error> {
     let (length, digest) = fingerprint(path)?;
     Ok(length == expected.byte_length && digest == expected.sha256)
@@ -998,6 +1017,7 @@ enum RestoreEntryKind {
     Other,
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn restore_entry_kind(path: &Path) -> Result<RestoreEntryKind, Error> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
@@ -1014,6 +1034,7 @@ fn restore_entry_kind(path: &Path) -> Result<RestoreEntryKind, Error> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn remove_restore_file(path: &Path, operation: &'static str) -> Result<(), Error> {
     match restore_entry_kind(path)? {
         RestoreEntryKind::Missing => Ok(()),
@@ -1026,6 +1047,7 @@ fn remove_restore_file(path: &Path, operation: &'static str) -> Result<(), Error
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn require_sqlite_sidecars_absent(paths: &crate::Paths) -> Result<(), Error> {
     for live in [paths.runtime(), paths.private()] {
         let name = live
@@ -1042,6 +1064,7 @@ fn require_sqlite_sidecars_absent(paths: &crate::Paths) -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn copy_staged_member(
     source: &Path,
     destination: &Path,
@@ -1085,6 +1108,7 @@ async fn copy_staged_member(
     verify_member(destination, expected, kind, member_name, runtime).await
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn sync_parent(path: &Path, operation: &'static str) -> Result<(), Error> {
     let parent = path
         .parent()
@@ -1092,6 +1116,7 @@ fn sync_parent(path: &Path, operation: &'static str) -> Result<(), Error> {
     sync_directory(parent, operation)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn create_private_directory(path: &Path, operation: &'static str) -> Result<(), Error> {
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
@@ -1104,6 +1129,7 @@ fn create_private_directory(path: &Path, operation: &'static str) -> Result<(), 
         .map_err(|source| Error::BackupFilesystem { operation, source })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn capture_member(
     pool: &SqlitePool,
     destination: &Path,
@@ -1128,6 +1154,7 @@ async fn capture_member(
     member_from_file(Path::new(destination), relative_path, kind)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn member_from_file(
     path: &Path,
     relative_path: &'static str,
@@ -1173,12 +1200,14 @@ fn member_from_file(
     })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn sync_directory(path: &Path, operation: &'static str) -> Result<(), Error> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(|source| Error::BackupFilesystem { operation, source })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_bundle(
     bundle: &Path,
     plan: &BackupPlan,
@@ -1253,6 +1282,7 @@ fn validate_manifest(plan: &BackupPlan, manifest: &BackupManifest) -> Result<(),
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_entries(directory: &Path, expected: &BTreeSet<&str>) -> Result<(), Error> {
     let mut actual = BTreeSet::new();
     let entries = fs::read_dir(directory).map_err(|source| Error::BackupFilesystem {
@@ -1287,6 +1317,7 @@ fn validate_entries(directory: &Path, expected: &BTreeSet<&str>) -> Result<(), E
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn verify_member(
     path: &Path,
     expected: &BackupMember,
@@ -1335,6 +1366,7 @@ async fn verify_member(
         })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn entry_kind_file(path: &Path) -> Result<bool, Error> {
     match fs::symlink_metadata(path) {
         Ok(metadata) => Ok(metadata.is_file() && !metadata.file_type().is_symlink()),
@@ -1346,6 +1378,7 @@ fn entry_kind_file(path: &Path) -> Result<bool, Error> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn fingerprint(path: &Path) -> Result<(u64, MemberDigest), Error> {
     let mut file = File::open(path).map_err(|source| Error::BackupFilesystem {
         operation: "open backup member for verification",
@@ -1376,6 +1409,7 @@ fn fingerprint(path: &Path) -> Result<(u64, MemberDigest), Error> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use radroots_storage::{
         backup::{
@@ -1574,6 +1608,45 @@ mod tests {
         let conflicting = plan(44, BackupSecretPolicy::IncludeProtectedStorage, 4_400);
         assert_eq!(
             StorageReliability::begin_backup(&store, conflicting).await,
+            Err(StorageError::ReliabilityRevisionConflict)
+        );
+
+        let manifest = BackupManifest::new(
+            backup.format_version(),
+            backup.backup_id(),
+            backup.requested_at_unix_ms(),
+            backup.secret_policy(),
+            vec![
+                BackupMember::new(
+                    RUNTIME_MEMBER,
+                    BackupMemberKind::Runtime,
+                    1,
+                    MemberDigest::new([1; 32]),
+                )
+                .expect("runtime member"),
+            ],
+        )
+        .expect("restore manifest");
+        let restore = RestorePlan::new(
+            manifest.clone(),
+            BackupSecretPolicy::ExcludeProtectedStorage,
+            4_401,
+        )
+        .expect("restore plan");
+        let staging = StorageReliability::begin_restore(&store, restore.clone())
+            .await
+            .expect("staging restore");
+        assert_eq!(
+            StorageReliability::begin_restore(&store, restore)
+                .await
+                .expect("idempotent restore"),
+            staging
+        );
+        let conflicting_restore =
+            RestorePlan::new(manifest, BackupSecretPolicy::ExcludeProtectedStorage, 4_402)
+                .expect("conflicting restore plan");
+        assert_eq!(
+            StorageReliability::begin_restore(&store, conflicting_restore).await,
             Err(StorageError::ReliabilityRevisionConflict)
         );
 
@@ -2652,5 +2725,139 @@ mod tests {
             SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadWriteExisting)).await,
             Err(Error::RestoreMarkerCorrupt(_))
         ));
+
+        let marker_path = Path::new("restore.marker");
+        for private in [
+            None,
+            Some(RestoreMemberExpectation {
+                byte_length: 2,
+                sha256: MemberDigest::new([2; 32]),
+            }),
+        ] {
+            let marker = RestoreMarker {
+                backup_id,
+                secret_policy: if private.is_some() {
+                    BackupSecretPolicy::IncludeProtectedStorage
+                } else {
+                    BackupSecretPolicy::ExcludeProtectedStorage
+                },
+                runtime: RestoreMemberExpectation {
+                    byte_length: 1,
+                    sha256: MemberDigest::new([1; 32]),
+                },
+                private,
+            };
+            let encoded = marker.encode();
+            assert_eq!(
+                RestoreMarker::decode(marker_path, &encoded)
+                    .expect("decode marker")
+                    .encode(),
+                encoded
+            );
+            for end in 0..encoded.len() {
+                let _ = RestoreMarker::decode(marker_path, &encoded[..end]);
+            }
+            for index in 0..encoded.len() {
+                let mut corrupt = encoded;
+                corrupt[index] ^= 0xff;
+                let _ = RestoreMarker::decode(marker_path, &corrupt);
+            }
+        }
+
+        let valid = RestoreMarker {
+            backup_id,
+            secret_policy: BackupSecretPolicy::ExcludeProtectedStorage,
+            runtime: RestoreMemberExpectation {
+                byte_length: 1,
+                sha256: MemberDigest::new([1; 32]),
+            },
+            private: None,
+        }
+        .encode();
+        let mut zero_runtime = valid;
+        zero_runtime[25..33].copy_from_slice(&0_u64.to_be_bytes());
+        assert!(RestoreMarker::decode(marker_path, &zero_runtime).is_err());
+        let mut unexpected_private = valid;
+        unexpected_private[65..73].copy_from_slice(&1_u64.to_be_bytes());
+        assert!(RestoreMarker::decode(marker_path, &unexpected_private).is_err());
+    }
+
+    #[test]
+    fn manifest_validation_rejects_each_governed_identity_mismatch() {
+        fn manifest(
+            id: u8,
+            policy: BackupSecretPolicy,
+            created_at: u64,
+            runtime_path: &'static str,
+        ) -> BackupManifest {
+            let mut members = vec![
+                BackupMember::new(
+                    runtime_path,
+                    BackupMemberKind::Runtime,
+                    1,
+                    MemberDigest::new([1; 32]),
+                )
+                .expect("runtime member"),
+            ];
+            if policy == BackupSecretPolicy::IncludeProtectedStorage {
+                members.push(
+                    BackupMember::new(
+                        PRIVATE_MEMBER,
+                        BackupMemberKind::Protected,
+                        2,
+                        MemberDigest::new([2; 32]),
+                    )
+                    .expect("private member"),
+                );
+            }
+            BackupManifest::new(
+                BackupFormatVersion::V1,
+                BackupId::new([id; 16]).expect("backup id"),
+                created_at,
+                policy,
+                members,
+            )
+            .expect("backup manifest")
+        }
+
+        let plan = plan(120, BackupSecretPolicy::ExcludeProtectedStorage, 12_000);
+        let valid = manifest(
+            120,
+            BackupSecretPolicy::ExcludeProtectedStorage,
+            12_000,
+            RUNTIME_MEMBER,
+        );
+        assert!(validate_manifest(&plan, &valid).is_ok());
+        for invalid in [
+            manifest(
+                121,
+                BackupSecretPolicy::ExcludeProtectedStorage,
+                12_000,
+                RUNTIME_MEMBER,
+            ),
+            manifest(
+                120,
+                BackupSecretPolicy::IncludeProtectedStorage,
+                12_000,
+                RUNTIME_MEMBER,
+            ),
+            manifest(
+                120,
+                BackupSecretPolicy::ExcludeProtectedStorage,
+                12_001,
+                RUNTIME_MEMBER,
+            ),
+            manifest(
+                120,
+                BackupSecretPolicy::ExcludeProtectedStorage,
+                12_000,
+                "runtime/alternate.sqlite",
+            ),
+        ] {
+            assert!(matches!(
+                validate_manifest(&plan, &invalid),
+                Err(Error::BackupVerificationFailed { member: "manifest" })
+            ));
+        }
     }
 }

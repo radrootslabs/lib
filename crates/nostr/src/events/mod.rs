@@ -111,4 +111,12 @@ mod tests {
             }) if actual == kind
         ));
     }
+
+    #[test]
+    fn build_event_ignores_empty_tag_slices() {
+        let builder = build_event_unchecked(1, "test", vec![Vec::new()]).expect("builder");
+        let event = builder
+            .build(RadrootsNostrPublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("pubkey"));
+        assert!(event.tags.is_empty());
+    }
 }

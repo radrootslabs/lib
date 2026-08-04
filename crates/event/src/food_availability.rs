@@ -142,15 +142,15 @@ pub struct FoodContent(String);
 impl FoodContent {
     pub fn new(value: impl Into<String>) -> Result<Self, FoodAvailabilityError> {
         let value = value.into();
-        if value.chars().all(is_food_contract_whitespace) {
-            return Err(FoodAvailabilityError::ContentMissing);
-        }
-        if value.len() > RADROOTS_FOOD_CONTENT_MAX_BYTES {
-            return Err(FoodAvailabilityError::ContentTooLarge {
+        crate::require_invariant(!value.chars().all(is_food_contract_whitespace), &|| {
+            FoodAvailabilityError::ContentMissing
+        })?;
+        crate::require_invariant(value.len() <= RADROOTS_FOOD_CONTENT_MAX_BYTES, &|| {
+            FoodAvailabilityError::ContentTooLarge {
                 max: RADROOTS_FOOD_CONTENT_MAX_BYTES,
                 actual: value.len(),
-            });
-        }
+            }
+        })?;
         Ok(Self(value))
     }
 
@@ -181,19 +181,21 @@ pub struct FoodIdentifier(String);
 impl FoodIdentifier {
     pub fn parse(value: impl AsRef<str>) -> Result<Self, FoodAvailabilityError> {
         let value = value.as_ref();
-        if value.is_empty()
-            || value
-                .chars()
-                .any(|character| character.is_whitespace() || is_control_or_format(character))
-        {
-            return Err(FoodAvailabilityError::IdentifierInvalid);
-        }
-        if value.len() > RADROOTS_FOOD_IDENTIFIER_MAX_BYTES {
-            return Err(FoodAvailabilityError::IdentifierTooLarge {
+        crate::require_invariant(
+            [
+                !value.is_empty(),
+                !value.chars().any(|character| {
+                    [character.is_whitespace(), is_control_or_format(character)].contains(&true)
+                }),
+            ] == [true; 2],
+            &|| FoodAvailabilityError::IdentifierInvalid,
+        )?;
+        crate::require_invariant(value.len() <= RADROOTS_FOOD_IDENTIFIER_MAX_BYTES, &|| {
+            FoodAvailabilityError::IdentifierTooLarge {
                 max: RADROOTS_FOOD_IDENTIFIER_MAX_BYTES,
                 actual: value.len(),
-            });
-        }
+            }
+        })?;
         Ok(Self(value.into()))
     }
 
@@ -232,15 +234,20 @@ pub struct FoodText(String);
 impl FoodText {
     pub fn new(value: impl Into<String>) -> Result<Self, FoodAvailabilityError> {
         let value = value.into();
-        if value.is_empty() || value.trim() != value || value.chars().any(is_control_or_format) {
-            return Err(FoodAvailabilityError::TextInvalid);
-        }
-        if value.len() > RADROOTS_FOOD_TEXT_MAX_BYTES {
-            return Err(FoodAvailabilityError::TextTooLarge {
+        crate::require_invariant(
+            [
+                !value.is_empty(),
+                value.trim() == value,
+                !value.chars().any(is_control_or_format),
+            ] == [true; 3],
+            &|| FoodAvailabilityError::TextInvalid,
+        )?;
+        crate::require_invariant(value.len() <= RADROOTS_FOOD_TEXT_MAX_BYTES, &|| {
+            FoodAvailabilityError::TextTooLarge {
                 max: RADROOTS_FOOD_TEXT_MAX_BYTES,
                 actual: value.len(),
-            });
-        }
+            }
+        })?;
         Ok(Self(value))
     }
 
@@ -277,9 +284,9 @@ impl FoodPublishedAt {
     }
 
     pub fn parse(value: &str) -> Result<Self, FoodAvailabilityError> {
-        if !canonical_unsigned_integer(value) {
-            return Err(FoodAvailabilityError::PublishedAtInvalid);
-        }
+        crate::require_invariant(canonical_unsigned_integer(value), &|| {
+            FoodAvailabilityError::PublishedAtInvalid
+        })?;
         value
             .parse::<u64>()
             .ok()
@@ -322,9 +329,13 @@ pub struct FoodCurrency(String);
 impl FoodCurrency {
     pub fn parse(value: impl AsRef<str>) -> Result<Self, FoodAvailabilityError> {
         let value = value.as_ref();
-        if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_uppercase()) {
-            return Err(FoodAvailabilityError::PriceCurrencyInvalid);
-        }
+        crate::require_invariant(
+            [
+                value.len() == 3,
+                value.bytes().all(|byte| byte.is_ascii_uppercase()),
+            ] == [true; 2],
+            &|| FoodAvailabilityError::PriceCurrencyInvalid,
+        )?;
         Ok(Self(value.into()))
     }
 
@@ -537,12 +548,14 @@ impl FoodImageDimensions {
         let Some((width, height)) = value.split_once('x') else {
             return Err(FoodAvailabilityError::ImageDimensionsInvalid);
         };
-        if height.contains('x')
-            || !canonical_unsigned_integer(width)
-            || !canonical_unsigned_integer(height)
-        {
-            return Err(FoodAvailabilityError::ImageDimensionsInvalid);
-        }
+        crate::require_invariant(
+            [
+                !height.contains('x'),
+                canonical_unsigned_integer(width),
+                canonical_unsigned_integer(height),
+            ] == [true; 3],
+            &|| FoodAvailabilityError::ImageDimensionsInvalid,
+        )?;
         let width = width
             .parse::<u32>()
             .map_err(|_| FoodAvailabilityError::ImageDimensionsInvalid)?;
@@ -643,13 +656,13 @@ pub struct FoodAvailabilityDetailsParts {
 
 impl FoodAvailabilityDetails {
     pub fn new(parts: FoodAvailabilityDetailsParts) -> Result<Self, FoodAvailabilityError> {
-        if parts
-            .quantity
-            .as_ref()
-            .is_some_and(|quantity| quantity.unit() != parts.price.unit())
-        {
-            return Err(FoodAvailabilityError::QuantityInvalid);
-        }
+        crate::require_invariant(
+            !parts
+                .quantity
+                .as_ref()
+                .is_some_and(|quantity| quantity.unit() != parts.price.unit()),
+            &|| FoodAvailabilityError::QuantityInvalid,
+        )?;
         validate_images(&parts.images)?;
         Ok(Self {
             content: parts.content,
@@ -711,26 +724,26 @@ impl FoodAvailabilityDetails {
 }
 
 fn validate_images(images: &[FoodAvailabilityImage]) -> Result<(), FoodAvailabilityError> {
-    if images.len() > RADROOTS_FOOD_IMAGE_MAX_COUNT {
-        return Err(FoodAvailabilityError::ImageCountExceeded {
+    crate::require_invariant(images.len() <= RADROOTS_FOOD_IMAGE_MAX_COUNT, &|| {
+        FoodAvailabilityError::ImageCountExceeded {
             max: RADROOTS_FOOD_IMAGE_MAX_COUNT,
             actual: images.len(),
-        });
-    }
+        }
+    })?;
     for (index, image) in images.iter().enumerate() {
-        if images[..index]
-            .iter()
-            .any(|candidate| candidate.url() == image.url())
-        {
-            return Err(FoodAvailabilityError::ImageDuplicateUrl);
-        }
+        crate::require_invariant(
+            !images[..index]
+                .iter()
+                .any(|candidate| candidate.url() == image.url()),
+            &|| FoodAvailabilityError::ImageDuplicateUrl,
+        )?;
         let digest = image.image().descriptor().sha256();
-        if images[..index]
-            .iter()
-            .any(|candidate| candidate.image().descriptor().sha256() == digest)
-        {
-            return Err(FoodAvailabilityError::ImageDuplicateDigest);
-        }
+        crate::require_invariant(
+            !images[..index]
+                .iter()
+                .any(|candidate| candidate.image().descriptor().sha256() == digest),
+            &|| FoodAvailabilityError::ImageDuplicateDigest,
+        )?;
     }
     Ok(())
 }
@@ -740,14 +753,19 @@ fn validate_images(images: &[FoodAvailabilityImage]) -> Result<(), FoodAvailabil
 /// This is deliberately broader than strict authored Blossom policy. Success
 /// makes no byte-verification, upload, reachability, or media-safety claim.
 pub fn food_media_http_url_is_valid(value: &str) -> bool {
-    if !value.contains("://")
-        || value.chars().any(|character| {
-            character.is_whitespace()
-                || matches!(
+    if [
+        value.contains("://"),
+        !value.chars().any(|character| {
+            [
+                character.is_whitespace(),
+                matches!(
                     get_general_category(character),
                     GeneralCategory::Control | GeneralCategory::Format
-                )
-        })
+                ),
+            ]
+            .contains(&true)
+        }),
+    ] != [true; 2]
     {
         return false;
     }
@@ -755,9 +773,11 @@ pub fn food_media_http_url_is_valid(value: &str) -> bool {
     let Ok(url) = Url::parse(value) else {
         return false;
     };
-    if !matches!(url.scheme(), "http" | "https")
-        || !url.username().is_empty()
-        || url.password().is_some()
+    if [
+        matches!(url.scheme(), "http" | "https"),
+        url.username().is_empty(),
+        url.password().is_none(),
+    ] != [true; 3]
     {
         return false;
     }
@@ -765,14 +785,14 @@ pub fn food_media_http_url_is_valid(value: &str) -> bool {
     let Some((raw_host, raw_path)) = raw_food_media_host_and_path(value) else {
         return false;
     };
-    if raw_path.is_empty() || !raw_path.starts_with('/') {
+    if [!raw_path.is_empty(), raw_path.starts_with('/')] != [true; 2] {
         return false;
     }
 
     match url.host() {
         Some(Host::Domain(_)) => raw_food_dns_host_is_valid(raw_host),
-        Some(Host::Ipv4(_)) => raw_host.is_ascii() && !raw_host.is_empty(),
-        Some(Host::Ipv6(_)) => raw_host.is_ascii() && !raw_host.is_empty(),
+        Some(Host::Ipv4(_)) => [raw_host.is_ascii(), !raw_host.is_empty()] == [true; 2],
+        Some(Host::Ipv6(_)) => [raw_host.is_ascii(), !raw_host.is_empty()] == [true; 2],
         None => false,
     }
 }
@@ -793,7 +813,7 @@ fn raw_food_media_host_and_path(value: &str) -> Option<(&str, &str)> {
     let (_, remainder) = value.split_once("://")?;
     let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
     let authority = &remainder[..authority_end];
-    if authority.is_empty() || authority.contains('@') {
+    if [!authority.is_empty(), !authority.contains('@')] != [true; 2] {
         return None;
     }
     let path_and_suffix = &remainder[authority_end..];
@@ -804,7 +824,7 @@ fn raw_food_media_host_and_path(value: &str) -> Option<(&str, &str)> {
 
     let raw_host = if let Some(bracketed) = authority.strip_prefix('[') {
         let (host, suffix) = bracketed.split_once(']')?;
-        if !suffix.is_empty() && !suffix.starts_with(':') {
+        if [!suffix.is_empty(), !suffix.starts_with(':')] == [true; 2] {
             return None;
         }
         host
@@ -850,24 +870,37 @@ fn validate_canonical_decimal(value: &str) -> bool {
             _ => return false,
         }
     }
-    if digits == 0 || digits > RADROOTS_FOOD_DECIMAL_MAX_DIGITS {
+    if [digits > 0, digits <= RADROOTS_FOOD_DECIMAL_MAX_DIGITS] != [true; 2] {
         return false;
     }
-    if seen_dot && (!digit_after_dot || value.ends_with('0')) {
+    if [
+        seen_dot,
+        [!digit_after_dot, value.ends_with('0')].contains(&true),
+    ] == [true; 2]
+    {
         return false;
     }
     let integer = value.split_once('.').map_or(value, |(integer, _)| integer);
-    !integer.is_empty() && (integer == "0" || !integer.starts_with('0'))
+    [
+        !integer.is_empty(),
+        [integer == "0", !integer.starts_with('0')].contains(&true),
+    ] == [true; 2]
 }
 
 fn canonical_unsigned_integer(value: &str) -> bool {
-    !value.is_empty()
-        && value.bytes().all(|byte| byte.is_ascii_digit())
-        && (value == "0" || !value.starts_with('0'))
+    [
+        !value.is_empty(),
+        value.bytes().all(|byte| byte.is_ascii_digit()),
+        [value == "0", !value.starts_with('0')].contains(&true),
+    ] == [true; 3]
 }
 
 fn is_food_contract_whitespace(character: char) -> bool {
-    character.is_whitespace() || matches!(character, '\u{1c}'..='\u{1f}')
+    [
+        character.is_whitespace(),
+        matches!(character, '\u{1c}'..='\u{1f}'),
+    ]
+    .contains(&true)
 }
 
 fn is_control_or_format(character: char) -> bool {
@@ -878,6 +911,7 @@ fn is_control_or_format(character: char) -> bool {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
@@ -994,14 +1028,32 @@ mod tests {
             format!("http://media.example:0/{hash}?download=1"),
             "https://media.example/not-a-blossom-path.jpg".to_string(),
             format!("https://[::1]/{hash}"),
+            format!("https://127.0.0.1/{hash}"),
+            format!("https://localhost/{hash}"),
         ] {
             assert!(food_media_http_url_is_valid(&valid), "{valid}");
         }
         for invalid in [
             format!("ftp://media.example/{hash}"),
             format!("https://user@media.example/{hash}"),
+            format!("https://user:password@media.example/{hash}"),
             "https://media.example".to_string(),
+            "https://[".to_string(),
+            format!("https://-media.example/{hash}"),
+            format!("https://media-.example/{hash}"),
+            format!("https://media..example/{hash}"),
+            format!("https://bad_host.example/{hash}"),
+            format!("https://{}.example/{hash}", "a".repeat(64)),
+            format!(
+                "https://{}.{}.{}.{}/{hash}",
+                "a".repeat(63),
+                "b".repeat(63),
+                "c".repeat(63),
+                "d".repeat(63)
+            ),
             format!("https://média.example/{hash}"),
+            format!("https://media.example/a b/{hash}"),
+            format!("https://media.example/a\0b/{hash}"),
             format!("https://media.example/\u{200b}{hash}"),
         ] {
             assert!(!food_media_http_url_is_valid(&invalid), "{invalid}");
@@ -1016,6 +1068,7 @@ mod tests {
             food_media_blossom_digest("https://media.example/not-a-hash.jpg"),
             None
         );
+        assert_eq!(food_media_blossom_digest("not a URL"), None);
     }
 
     #[test]
@@ -1090,6 +1143,10 @@ mod tests {
                 created_at: 10,
             }
         );
+        FoodPublishedAt::new(1)
+            .unwrap()
+            .validate_created_at(1)
+            .unwrap();
     }
 
     #[test]
@@ -1203,6 +1260,14 @@ mod tests {
         assert_eq!(
             FoodImageDimensions::parse("800x600").unwrap(),
             FoodImageDimensions::new(800, 600).unwrap()
+        );
+        assert_eq!(
+            FoodImageDimensions::new(0, 1).unwrap_err(),
+            FoodAvailabilityError::ImageDimensionsInvalid
+        );
+        assert_eq!(
+            FoodImageDimensions::new(1, 0).unwrap_err(),
+            FoodAvailabilityError::ImageDimensionsInvalid
         );
         for invalid in [
             "",

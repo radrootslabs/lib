@@ -789,6 +789,7 @@ fn contract_family_helpers_cover_prefixes_and_kind_branches() {
         ("radroots.message.test.v1", Some(ContractFamily::Message)),
         ("radroots.profile.test.v1", Some(ContractFamily::Profile)),
         ("radroots.relay.test.v1", Some(ContractFamily::Relay)),
+        ("radroots.social.test.v1", Some(ContractFamily::Social)),
         ("radroots.trade.test.v1", Some(ContractFamily::Trade)),
         ("radroots.order.test.v1", None),
         ("radroots.test.unknown.v1", None),
@@ -823,6 +824,22 @@ fn contract_family_helpers_cover_prefixes_and_kind_branches() {
         kind_contract_family(&synthetic_kind_contract(999_999)),
         None
     );
+}
+
+#[test]
+fn scalar_contract_validators_cover_canonical_boundaries() {
+    assert_eq!(canonical_u64("0"), Some(0));
+    assert_eq!(canonical_u64(u64::MAX.to_string().as_str()), Some(u64::MAX));
+    for invalid in ["", "00", "01", "+1", "18446744073709551616"] {
+        assert_eq!(canonical_u64(invalid), None, "{invalid}");
+    }
+
+    for valid in ["0", "u4pruydqqvj", "U4PRUYDQQVJ"] {
+        assert!(geohash_is_valid(valid), "{valid}");
+    }
+    for invalid in ["", "u4pruydqqvjz0x", "a", "u4pruydqqv-i"] {
+        assert!(!geohash_is_valid(invalid), "{invalid}");
+    }
 }
 
 #[test]

@@ -481,6 +481,7 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::id::RADROOTS_NIP01_COORDINATE_MAX_BYTES;
