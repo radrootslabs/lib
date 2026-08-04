@@ -22,7 +22,6 @@ const README: &str = include_str!("../README.md");
 const SIGNING_MODULE: &str = include_str!("../src/signing.rs");
 const TAG_MODULE: &str = include_str!("../src/tag.rs");
 const TYPES_MODULE: &str = include_str!("../src/types.rs");
-const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
 const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_nostr.txt");
 const IDENTITY_MANIFEST: &str = include_str!("../../identity/Cargo.toml");
 const IDENTITY_KEY_MODULE: &str = include_str!("../../identity/src/key.rs");
@@ -551,22 +550,13 @@ fn superseded_surface_retirement_is_explicit_and_release_bounded() {
             );
         }
     }
-    for required in [
-        "publish = [\"crates-io\"]",
-        "outside the authorized `oss/lib` and `oss/sdk` crate-surface edit boundary",
-        "no compatibility path was restored",
-        "Step 313 is the exact final pre-release audit",
-    ] {
-        let authority = if required == "publish = [\"crates-io\"]" {
-            MANIFEST
-        } else {
-            COMPATIBILITY
-        };
-        assert!(
-            authority.contains(required),
-            "retirement contract is missing `{required}`"
-        );
-    }
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
+    assert!(
+        !Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("COMPATIBILITY.md")
+            .exists(),
+        "the completed migration record must not ship as an active compatibility contract"
+    );
 
     let public_modules = PUBLIC_API
         .lines()

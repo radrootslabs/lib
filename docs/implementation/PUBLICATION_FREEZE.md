@@ -1,23 +1,21 @@
 # Crates.io publication freeze
 
-Crates.io publication is frozen for the complete release-v1 crate refactor.
-Every workspace package, including packages intended to become public, must
-set:
+Crates.io upload remains frozen for the complete release-v1 crate refactor.
+Step 305 enabled validation metadata for exactly the 17 approved public
+packages:
 
 ```toml
-publish = false
+publish = ["crates-io"]
 ```
 
-`contracts/releases/publish_policy.toml` is the machine authority for this
-freeze. Repository contract and release-preflight validation reject a missing
-publication-control section, an unexpected registry, a different enablement
-checkpoint, or any package that is implicitly or explicitly publishable.
+`contracts/releases/publish_policy.toml` is the machine authority. Repository
+contract and release-preflight validation reject an unexpected registry,
+package, order, version, or enablement checkpoint; every private, preview,
+build, and test-support package remains non-publishable.
 
-The only planned exception is release plan Step 305, after the final package
-inventory, resolved public dependency graph, API surface, target matrix, and
-security gates are green. That checkpoint may set `publication.frozen = false`
-and enable exactly the approved release packages for package-validation
-staging. It does not authorize upload or any crates.io mutation.
+This validation-only state permits packaging, crates.io dry-runs, and local
+ephemeral-registry qualification. It does not authorize upload or any crates.io
+mutation.
 
 Changing the freeze requires an independently reviewed release-control commit.
 Actual publication, tag creation, registry ownership changes, and
