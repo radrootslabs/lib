@@ -2,13 +2,18 @@
 
 use radroots_storage::{
     Error as StorageError, ProjectionStore,
-    event::{EVENT_QUERY_LIMIT_MAX, EventQuery, EventQueryBounds, StoredVisibleEvent},
+    event::{
+        AdmissionStage, EVENT_QUERY_LIMIT_MAX, EventPosition, EventQuery, EventQueryBounds,
+        SourceGeneration, StoredVisibleEvent,
+    },
     projection::{
         InvalidationReason, ProjectionCheckpoint, ProjectionGeneration, ProjectionHealth,
-        ProjectionId, ProjectionInvalidation, ProjectionRevision, ProjectionStatus, RebuildTicket,
-        RebuildTicketId, RebuildTransition,
+        ProjectionId, ProjectionInvalidation, ProjectionRevision, ProjectionStatus,
+        RawSourceDigest, RebuildFailure, RebuildStage, RebuildTicket, RebuildTicketId,
+        RebuildTransition,
     },
 };
+use sha2::{Digest, Sha256};
 
 use crate::{
     Engine,
@@ -17,6 +22,9 @@ use crate::{
 
 /// Maximum number of reducer batches in one explicit refresh call.
 pub const PROJECTION_REFRESH_MAX_BATCHES: u16 = 1_000;
+/// Maximum canonical raw events included in one rebuild source preflight.
+pub const PROJECTION_RAW_SOURCE_MAX_EVENTS: u64 = 1_000_000;
+const RAW_SOURCE_DIGEST_DOMAIN: &[u8] = b"radroots:projection:raw-source:v1\0";
 
 /// Bounded refresh request for one exact reducer generation.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -75,11 +83,26 @@ impl RefreshRequest {
 pub trait Reducer: Send + Sync {
     fn projection_id(&self) -> &ProjectionId;
     fn generation(&self) -> ProjectionGeneration;
+    /// Opens an isolated replacement generation. Existing readers must remain
+    /// bound to the active generation until storage promotes the ticket.
+    fn begin_rebuild(
+        &self,
+        ticket_id: RebuildTicketId,
+        source_generation: SourceGeneration,
+        source_digest: RawSourceDigest,
+    ) -> Result<(), ReducerError>;
     fn reduce(
         &self,
         events: &[StoredVisibleEvent],
         prior_projected_rows: u64,
+        rebuild_ticket: Option<RebuildTicketId>,
     ) -> Result<u64, ReducerError>;
+    /// Discards an isolated replacement generation after durable failure.
+    fn abort_rebuild(
+        &self,
+        ticket_id: RebuildTicketId,
+        failure: RebuildFailure,
+    ) -> Result<(), ReducerError>;
 }
 
 /// Secret-safe reducer rejection normalized at the orchestration boundary.
@@ -153,7 +176,17 @@ impl Engine {
         let status = ProjectionStore::status(self.storage.as_ref(), request.projection_id.clone())
             .await
             .map_err(map_storage_error)?;
-        let mut coordination = self.projection_coordination(&request, status).await?;
+        let source = if status.as_ref().is_some_and(|status| {
+            status.generation() != request.generation
+                || status.health() == ProjectionHealth::Rebuilding
+        }) {
+            Some(self.raw_source_snapshot().await?)
+        } else {
+            None
+        };
+        let mut coordination = self
+            .projection_coordination(&request, status, source.as_ref())
+            .await?;
         let kind = if coordination.ticket.is_some() {
             RefreshKind::Rebuild
         } else {
@@ -167,6 +200,31 @@ impl Engine {
             checkpoint: coordination.checkpoint.clone(),
             rebuild_ticket: coordination.ticket.as_ref().map(RebuildTicket::ticket_id),
         };
+
+        if let Some(ticket) = coordination.ticket.as_ref()
+            && !source.is_some_and(|source| source.matches_ticket(ticket))
+        {
+            self.fail_rebuild(ticket, reducer, RebuildFailure::SourceChanged)
+                .await?;
+            receipt.state = RefreshState::Failed;
+            return Ok(receipt);
+        }
+
+        if coordination.started
+            && let Some(ticket) = coordination.ticket.as_ref()
+            && reducer
+                .begin_rebuild(
+                    ticket.ticket_id(),
+                    ticket.source_generation(),
+                    ticket.source_digest(),
+                )
+                .is_err()
+        {
+            self.fail_rebuild(ticket, reducer, RebuildFailure::ReducerRejected)
+                .await?;
+            receipt.state = RefreshState::Failed;
+            return Ok(receipt);
+        }
 
         for batch_index in 0..request.max_batches {
             let mut bounds =
@@ -190,21 +248,17 @@ impl Engine {
             let projected_rows = if page.items().is_empty() {
                 prior_rows
             } else {
-                match reducer.reduce(page.items(), prior_rows) {
+                match reducer.reduce(
+                    page.items(),
+                    prior_rows,
+                    coordination.ticket.as_ref().map(RebuildTicket::ticket_id),
+                ) {
                     Ok(rows) if rows >= prior_rows => rows,
                     Ok(_) => return Err(Error::InvalidReducerOutput),
                     Err(_) => {
-                        if let Some(ticket) = coordination.ticket.as_mut() {
-                            let failed = self
-                                .storage
-                                .transition_rebuild(RebuildTransition::fail(
-                                    ticket.ticket_id(),
-                                    ticket.revision(),
-                                    self.clock.now_unix_ms()?,
-                                ))
-                                .await
-                                .map_err(map_storage_error)?;
-                            *ticket = failed;
+                        if let Some(ticket) = coordination.ticket.as_ref() {
+                            self.fail_rebuild(ticket, reducer, RebuildFailure::ReducerRejected)
+                                .await?;
                         }
                         receipt.state = RefreshState::Failed;
                         return Ok(receipt);
@@ -231,6 +285,15 @@ impl Engine {
             .map_err(map_storage_error)?;
             let complete = page.items().len() < usize::from(request.batch_limit);
             if let Some(ticket) = coordination.ticket.as_mut() {
+                if complete {
+                    let current_source = self.raw_source_snapshot().await?;
+                    if !current_source.matches_ticket(ticket) {
+                        self.fail_rebuild(ticket, reducer, RebuildFailure::SourceChanged)
+                            .await?;
+                        receipt.state = RefreshState::Failed;
+                        return Ok(receipt);
+                    }
+                }
                 let transition = if complete {
                     RebuildTransition::complete(
                         ticket.ticket_id(),
@@ -246,11 +309,16 @@ impl Engine {
                         checkpoint.clone(),
                     )
                 };
-                *ticket = self
-                    .storage
-                    .transition_rebuild(transition)
-                    .await
-                    .map_err(map_storage_error)?;
+                match self.storage.transition_rebuild(transition).await {
+                    Ok(next) => *ticket = next,
+                    Err(StorageError::SourceGenerationChanged) if complete => {
+                        self.fail_rebuild(ticket, reducer, RebuildFailure::SourceChanged)
+                            .await?;
+                        receipt.state = RefreshState::Failed;
+                        return Ok(receipt);
+                    }
+                    Err(error) => return Err(map_storage_error(error)),
+                }
             } else {
                 self.storage
                     .checkpoint(checkpoint.clone())
@@ -277,6 +345,7 @@ impl Engine {
         &self,
         request: &RefreshRequest,
         status: Option<ProjectionStatus>,
+        source: Option<&RawSourceSnapshot>,
     ) -> Result<ProjectionCoordination, Error> {
         let Some(status) = status else {
             return Ok(ProjectionCoordination::default());
@@ -285,11 +354,10 @@ impl Engine {
             return Ok(ProjectionCoordination {
                 checkpoint: status.checkpoint().cloned(),
                 ticket: None,
+                started: false,
             });
         }
-        if status.generation() == request.generation
-            && status.health() == ProjectionHealth::Rebuilding
-        {
+        if status.health() == ProjectionHealth::Rebuilding {
             let ticket_id = status.active_rebuild().ok_or(Error::StorageFailed)?;
             let ticket = self
                 .storage
@@ -297,9 +365,13 @@ impl Engine {
                 .await
                 .map_err(map_storage_error)?
                 .ok_or(Error::StorageFailed)?;
+            if ticket.invalidation().replacement_generation() != request.generation {
+                return Err(Error::StorageConflict);
+            }
             return Ok(ProjectionCoordination {
                 checkpoint: ticket.checkpoint().cloned(),
                 ticket: Some(ticket),
+                started: false,
             });
         }
 
@@ -307,23 +379,29 @@ impl Engine {
             if status.health() != ProjectionHealth::Ready {
                 return Err(Error::StorageConflict);
             }
-            let invalidation = ProjectionInvalidation::new(
-                request.projection_id.clone(),
-                status.generation(),
-                request.generation,
-                InvalidationReason::ProjectionGenerationChanged,
-                self.clock.now_unix_ms()?,
-            )
-            .map_err(map_storage_error)?;
+            let invalidation = match self
+                .storage
+                .invalidation(request.projection_id.clone(), request.generation)
+                .await
+                .map_err(map_storage_error)?
+            {
+                Some(existing) if existing.invalid_generation() == status.generation() => existing,
+                Some(_) => return Err(Error::StorageConflict),
+                None => ProjectionInvalidation::new(
+                    request.projection_id.clone(),
+                    status.generation(),
+                    request.generation,
+                    InvalidationReason::ProjectionGenerationChanged,
+                    self.clock.now_unix_ms()?,
+                )
+                .map_err(map_storage_error)?,
+            };
             self.storage
                 .invalidate(invalidation.clone())
                 .await
                 .map_err(map_storage_error)?;
             invalidation
-        } else if matches!(
-            status.health(),
-            ProjectionHealth::Invalidated | ProjectionHealth::Failed
-        ) {
+        } else if status.health() == ProjectionHealth::Invalidated {
             self.storage
                 .invalidation(request.projection_id.clone(), request.generation)
                 .await
@@ -333,10 +411,15 @@ impl Engine {
             return Err(Error::StorageConflict);
         };
         let sync_id = self.ids.next_id(OperationKind::Projection)?;
+        let source = source.ok_or(Error::StorageFailed)?;
         let ticket = RebuildTicket::requested(
             RebuildTicketId::new(*sync_id.as_bytes()).map_err(map_storage_error)?,
             invalidation,
-        );
+            source.generation,
+            source.high_water,
+            source.digest,
+        )
+        .map_err(map_storage_error)?;
         let requested = self
             .storage
             .request_rebuild(ticket)
@@ -354,7 +437,84 @@ impl Engine {
         Ok(ProjectionCoordination {
             checkpoint: None,
             ticket: Some(running),
+            started: true,
         })
+    }
+
+    async fn raw_source_snapshot(&self) -> Result<RawSourceSnapshot, Error> {
+        let mut hasher = Sha256::new();
+        hasher.update(RAW_SOURCE_DIGEST_DOMAIN);
+        let mut cursor = None;
+        let mut count = 0_u64;
+        let mut generation = None;
+        let mut high_water = None;
+        loop {
+            let mut bounds =
+                EventQueryBounds::first(EVENT_QUERY_LIMIT_MAX).map_err(map_storage_error)?;
+            if let Some(position) = cursor {
+                bounds = bounds.after(position);
+            }
+            let page = self
+                .storage
+                .query_raw(EventQuery::all(bounds))
+                .await
+                .map_err(map_storage_error)?;
+            if generation
+                .replace(page.generation())
+                .is_some_and(|prior| prior != page.generation())
+            {
+                return Err(Error::StorageConflict);
+            }
+            hasher.update(page.generation().as_bytes());
+            for event in page.items() {
+                count = count.checked_add(1).ok_or(Error::StorageFailed)?;
+                if count > PROJECTION_RAW_SOURCE_MAX_EVENTS {
+                    return Err(Error::InvalidProjectionRequest);
+                }
+                let position = event.position();
+                hasher.update(position.sequence().get().to_be_bytes());
+                hasher.update([admission_stage_byte(event.stage())]);
+                let raw = event.event().raw_json().as_bytes();
+                hasher.update(
+                    u64::try_from(raw.len())
+                        .map_err(|_| Error::StorageFailed)?
+                        .to_be_bytes(),
+                );
+                hasher.update(raw);
+                high_water = Some(position);
+            }
+            cursor = page.next_cursor();
+            if cursor.is_none() {
+                break;
+            }
+        }
+        Ok(RawSourceSnapshot {
+            generation: generation.ok_or(Error::StorageFailed)?,
+            high_water,
+            digest: RawSourceDigest::new(hasher.finalize().into()),
+        })
+    }
+
+    async fn fail_rebuild(
+        &self,
+        ticket: &RebuildTicket,
+        reducer: &dyn Reducer,
+        failure: RebuildFailure,
+    ) -> Result<(), Error> {
+        let failed = self
+            .storage
+            .transition_rebuild(RebuildTransition::fail(
+                ticket.ticket_id(),
+                ticket.revision(),
+                self.clock.now_unix_ms()?,
+                failure,
+            ))
+            .await
+            .map_err(map_storage_error)?;
+        debug_assert_eq!(failed.stage(), RebuildStage::Failed);
+        reducer
+            .abort_rebuild(ticket.ticket_id(), failure)
+            .map_err(|_| Error::InvalidReducerOutput)
     }
 }
 
@@ -362,6 +522,30 @@ impl Engine {
 struct ProjectionCoordination {
     checkpoint: Option<ProjectionCheckpoint>,
     ticket: Option<RebuildTicket>,
+    started: bool,
+}
+
+#[derive(Clone, Copy)]
+struct RawSourceSnapshot {
+    generation: SourceGeneration,
+    high_water: Option<EventPosition>,
+    digest: RawSourceDigest,
+}
+
+impl RawSourceSnapshot {
+    fn matches_ticket(self, ticket: &RebuildTicket) -> bool {
+        self.generation == ticket.source_generation()
+            && self.high_water == ticket.source_high_water()
+            && self.digest == ticket.source_digest()
+    }
+}
+
+const fn admission_stage_byte(stage: AdmissionStage) -> u8 {
+    match stage {
+        AdmissionStage::Raw => 0,
+        AdmissionStage::Verified => 1,
+        AdmissionStage::Visible => 2,
+    }
 }
 
 fn map_storage_error(error: StorageError) -> Error {

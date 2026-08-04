@@ -6,8 +6,8 @@ use radroots_storage::{
         ArtifactDigest, EventIdRange, EventIndexCheckpoint, EventIndexManifest, EventIndexShard,
         EventIndexShardCheckpoint, EventIndexShardId, InvalidationReason, ProjectionCheckpoint,
         ProjectionGeneration, ProjectionHealth, ProjectionId, ProjectionInvalidation,
-        ProjectionRevision, ProjectionStatus, RebuildStage, RebuildTicket, RebuildTicketId,
-        RebuildTransition,
+        ProjectionRevision, ProjectionStatus, RawSourceDigest, RebuildFailure, RebuildStage,
+        RebuildTicket, RebuildTicketId, RebuildTransition,
     },
 };
 
@@ -44,6 +44,20 @@ fn checkpoint(
         at,
     )
     .expect("projection checkpoint")
+}
+
+fn requested_ticket(
+    ticket_id: RebuildTicketId,
+    invalidation: ProjectionInvalidation,
+) -> RebuildTicket {
+    RebuildTicket::requested(
+        ticket_id,
+        invalidation,
+        SourceGeneration::new([9; 32]).expect("source generation"),
+        Some(position(9, 11)),
+        RawSourceDigest::new([8; 32]),
+    )
+    .expect("requested ticket")
 }
 
 fn shard(
@@ -186,7 +200,7 @@ fn invalidation_and_rebuild_lifecycle_is_optimistic_and_terminal() {
     )
     .expect("invalidation");
     let ticket_id = RebuildTicketId::new([7; 16]).expect("ticket id");
-    let requested = RebuildTicket::requested(ticket_id, invalidation);
+    let requested = requested_ticket(ticket_id, invalidation);
     assert_eq!(requested.stage(), RebuildStage::Requested);
 
     let running = requested
@@ -237,6 +251,7 @@ fn invalidation_and_rebuild_lifecycle_is_optimistic_and_terminal() {
             ticket_id,
             completed.revision(),
             150,
+            RebuildFailure::IntegrityFailure,
         )),
         Err(Error::RebuildTicketTerminal)
     );
@@ -363,7 +378,7 @@ fn projection_models_cover_all_accessors_and_validation_bounds() {
     assert_eq!(invalidation.invalidated_at_unix_ms(), 100);
     let ticket_id = RebuildTicketId::new([3; 16]).unwrap();
     assert_eq!(ticket_id.as_bytes(), &[3; 16]);
-    let ticket = RebuildTicket::requested(ticket_id, invalidation);
+    let ticket = requested_ticket(ticket_id, invalidation);
     assert_eq!(ticket.ticket_id(), ticket_id);
     assert_eq!(ticket.revision(), ProjectionRevision::INITIAL);
     assert_eq!(ticket.stage(), RebuildStage::Requested);
@@ -394,7 +409,11 @@ fn durable_rebuild_matrix_rejects_every_inconsistent_shape() {
             invalidation.clone(),
             revision,
             stage,
+            SourceGeneration::new([9; 32]).unwrap(),
+            Some(position(9, 11)),
+            RawSourceDigest::new([8; 32]),
             checkpoint,
+            None,
             requested,
             updated,
         )
@@ -497,7 +516,7 @@ fn durable_rebuild_matrix_rejects_every_inconsistent_shape() {
         assert_eq!(result, Err(Error::CorruptProjectionRecord));
     }
 
-    let requested = RebuildTicket::requested(ticket_id, invalidation.clone());
+    let requested = requested_ticket(ticket_id, invalidation.clone());
     assert_eq!(
         requested.transition(RebuildTransition::start(
             ticket_id,
@@ -565,11 +584,21 @@ fn durable_rebuild_matrix_rejects_every_inconsistent_shape() {
         Err(Error::ProjectionCheckpointRegression)
     );
     let failed = running
-        .transition(RebuildTransition::fail(ticket_id, running.revision(), 102))
+        .transition(RebuildTransition::fail(
+            ticket_id,
+            running.revision(),
+            102,
+            RebuildFailure::ReducerRejected,
+        ))
         .unwrap();
     assert_eq!(failed.stage(), RebuildStage::Failed);
     assert_eq!(
-        failed.transition(RebuildTransition::fail(ticket_id, failed.revision(), 103)),
+        failed.transition(RebuildTransition::fail(
+            ticket_id,
+            failed.revision(),
+            103,
+            RebuildFailure::ReducerRejected,
+        )),
         Err(Error::RebuildTicketTerminal)
     );
 }

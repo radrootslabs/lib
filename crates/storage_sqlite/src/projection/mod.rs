@@ -7,7 +7,8 @@ use radroots_storage::{
         EventIndexCheckpoint, EventIndexManifest, EventIndexShard, EventIndexShardCheckpoint,
         EventIndexShardId, InvalidationReason, ProjectionCheckpoint, ProjectionGeneration,
         ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionRevision,
-        ProjectionStatus, RebuildStage, RebuildTicket, RebuildTicketId, RebuildTransition,
+        ProjectionStatus, RawSourceDigest, RebuildFailure, RebuildStage, RebuildTicket,
+        RebuildTicketId, RebuildTransition,
     },
 };
 use sqlx::{Row, Sqlite, SqliteConnection};
@@ -72,25 +73,37 @@ impl ProjectionStore for SqliteStorage {
             if current.generation() != invalidation.invalid_generation() {
                 return Err(Error::ProjectionCheckpointMismatch);
             }
-            sqlx::query(
-                "INSERT INTO radroots_runtime_projection_invalidations (
-                   projection_id, invalid_generation, replacement_generation, reason,
-                   invalidated_at_unix_ms
-                 ) VALUES (?, ?, ?, ?, ?)",
+            if let Some(existing) = load_invalidation(
+                &mut transaction,
+                invalidation.projection_id(),
+                invalidation.invalid_generation(),
             )
-            .bind(invalidation.projection_id().as_str())
-            .bind(invalidation.invalid_generation().as_bytes().as_slice())
-            .bind(invalidation.replacement_generation().as_bytes().as_slice())
-            .bind(reason_name(invalidation.reason()))
-            .bind(i64_from_u64(invalidation.invalidated_at_unix_ms())?)
-            .execute(&mut *transaction)
-            .await
-            .map_err(map_backend)?;
+            .await?
+            {
+                if existing != invalidation {
+                    return Err(Error::ProjectionRevisionConflict);
+                }
+            } else {
+                sqlx::query(
+                    "INSERT INTO radroots_runtime_projection_invalidations (
+                       projection_id, invalid_generation, replacement_generation, reason,
+                       invalidated_at_unix_ms
+                     ) VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(invalidation.projection_id().as_str())
+                .bind(invalidation.invalid_generation().as_bytes().as_slice())
+                .bind(invalidation.replacement_generation().as_bytes().as_slice())
+                .bind(reason_name(invalidation.reason()))
+                .bind(i64_from_u64(invalidation.invalidated_at_unix_ms())?)
+                .execute(&mut *transaction)
+                .await
+                .map_err(map_backend)?;
+            }
             let next = ProjectionStatus::new(
                 invalidation.projection_id().clone(),
-                invalidation.replacement_generation(),
+                current.generation(),
                 ProjectionHealth::Invalidated,
-                None,
+                current.checkpoint().cloned(),
                 None,
             )?;
             put_status_transaction(&mut transaction, &next).await?;
@@ -135,11 +148,8 @@ impl ProjectionStore for SqliteStorage {
             .map_err(map_backend)?
             .ok_or(Error::ProjectionCheckpointMismatch)?;
             let status = decode_status(&status_row)?;
-            if status.generation() != ticket.invalidation().replacement_generation()
-                || !matches!(
-                    status.health(),
-                    ProjectionHealth::Invalidated | ProjectionHealth::Failed
-                )
+            if status.generation() != ticket.invalidation().invalid_generation()
+                || status.health() != ProjectionHealth::Invalidated
                 || load_invalidation(
                     &mut transaction,
                     ticket.invalidation().projection_id(),
@@ -156,7 +166,7 @@ impl ProjectionStore for SqliteStorage {
                 status.projection_id().clone(),
                 status.generation(),
                 ProjectionHealth::Rebuilding,
-                None,
+                status.checkpoint().cloned(),
                 Some(ticket.ticket_id()),
             )?;
             put_status_transaction(&mut transaction, &next).await?;
@@ -236,26 +246,67 @@ impl ProjectionStore for SqliteStorage {
             .map_err(map_backend)?
             .ok_or(Error::CorruptProjectionRecord)?;
             let current_status = decode_status(&status_row)?;
-            if current_status.generation() != current.invalidation().replacement_generation()
+            if current_status.generation() != current.invalidation().invalid_generation()
                 || current_status.health() != ProjectionHealth::Rebuilding
                 || current_status.active_rebuild() != Some(current.ticket_id())
             {
                 return Err(Error::CorruptProjectionRecord);
             }
             let next = current.transition(transition)?;
-            update_ticket(&mut transaction, &next, current.revision()).await?;
-            let (health, active_rebuild) = match next.stage() {
-                RebuildStage::Requested | RebuildStage::Running => {
-                    (ProjectionHealth::Rebuilding, Some(next.ticket_id()))
+            if next.stage() == RebuildStage::Completed {
+                let source = sqlx::query(
+                    "SELECT generation, sequence_head
+                     FROM radroots_runtime_source_generations WHERE state = 'active'",
+                )
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(map_backend)?;
+                let generation = SourceGeneration::new(array(
+                    source
+                        .try_get::<Vec<u8>, _>("generation")
+                        .map_err(map_corrupt)?,
+                )?)
+                .map_err(|_| Error::CorruptProjectionRecord)?;
+                let sequence = u64_from_i64(
+                    source
+                        .try_get::<i64, _>("sequence_head")
+                        .map_err(map_corrupt)?,
+                )?;
+                if generation != next.source_generation()
+                    || sequence
+                        != next
+                            .source_high_water()
+                            .map_or(0, |position| position.sequence().get())
+                {
+                    return Err(Error::SourceGenerationChanged);
                 }
-                RebuildStage::Completed => (ProjectionHealth::Ready, None),
-                RebuildStage::Failed => (ProjectionHealth::Failed, None),
+            }
+            update_ticket(&mut transaction, &next, current.revision()).await?;
+            let (generation, health, checkpoint, active_rebuild) = match next.stage() {
+                RebuildStage::Requested | RebuildStage::Running => (
+                    current_status.generation(),
+                    ProjectionHealth::Rebuilding,
+                    current_status.checkpoint().cloned(),
+                    Some(next.ticket_id()),
+                ),
+                RebuildStage::Completed => (
+                    next.invalidation().replacement_generation(),
+                    ProjectionHealth::Ready,
+                    next.checkpoint().cloned(),
+                    None,
+                ),
+                RebuildStage::Failed => (
+                    current_status.generation(),
+                    ProjectionHealth::Ready,
+                    current_status.checkpoint().cloned(),
+                    None,
+                ),
             };
             let status = ProjectionStatus::new(
                 next.invalidation().projection_id().clone(),
-                next.invalidation().replacement_generation(),
+                generation,
                 health,
-                next.checkpoint().cloned(),
+                checkpoint,
                 active_rebuild,
             )?;
             put_status_transaction(&mut transaction, &status).await?;
@@ -626,9 +677,10 @@ async fn insert_ticket(
     sqlx::query(
         "INSERT INTO radroots_runtime_projection_rebuilds (
            ticket_id, projection_id, invalid_generation, replacement_generation, revision, stage,
+           source_generation, source_sequence, source_digest,
            checkpoint_source_generation, checkpoint_source_sequence, checkpoint_projected_rows,
-           checkpoint_updated_at_unix_ms, requested_at_unix_ms, updated_at_unix_ms
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           checkpoint_updated_at_unix_ms, failure, requested_at_unix_ms, updated_at_unix_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(ticket.ticket_id().as_bytes().as_slice())
     .bind(ticket.invalidation().projection_id().as_str())
@@ -648,10 +700,19 @@ async fn insert_ticket(
     )
     .bind(i64_from_u64(ticket.revision().get())?)
     .bind(rebuild_stage_name(ticket.stage()))
+    .bind(ticket.source_generation().as_bytes().as_slice())
+    .bind(
+        ticket
+            .source_high_water()
+            .map(|position| i64_from_u64(position.sequence().get()))
+            .transpose()?,
+    )
+    .bind(ticket.source_digest().as_bytes().as_slice())
     .bind(checkpoint.0)
     .bind(checkpoint.1)
     .bind(checkpoint.2)
     .bind(checkpoint.3)
+    .bind(ticket.failure().map(rebuild_failure_name))
     .bind(i64_from_u64(ticket.requested_at_unix_ms())?)
     .bind(i64_from_u64(ticket.updated_at_unix_ms())?)
     .execute(&mut **transaction)
@@ -671,7 +732,7 @@ async fn update_ticket(
         "UPDATE radroots_runtime_projection_rebuilds SET
            revision = ?, stage = ?, checkpoint_source_generation = ?,
            checkpoint_source_sequence = ?, checkpoint_projected_rows = ?,
-           checkpoint_updated_at_unix_ms = ?, updated_at_unix_ms = ?
+           checkpoint_updated_at_unix_ms = ?, failure = ?, updated_at_unix_ms = ?
          WHERE ticket_id = ? AND revision = ?",
     )
     .bind(i64_from_u64(ticket.revision().get())?)
@@ -680,6 +741,7 @@ async fn update_ticket(
     .bind(checkpoint.1)
     .bind(checkpoint.2)
     .bind(checkpoint.3)
+    .bind(ticket.failure().map(rebuild_failure_name))
     .bind(i64_from_u64(ticket.updated_at_unix_ms())?)
     .bind(ticket.ticket_id().as_bytes().as_slice())
     .bind(i64_from_u64(prior.get())?)
@@ -731,7 +793,35 @@ async fn decode_ticket(
                 .map_err(map_corrupt)?
                 .as_str(),
         )?,
+        SourceGeneration::new(array(
+            row.try_get::<Vec<u8>, _>("source_generation")
+                .map_err(map_corrupt)?,
+        )?)
+        .map_err(|_| Error::CorruptProjectionRecord)?,
+        row.try_get::<Option<i64>, _>("source_sequence")
+            .map_err(map_corrupt)?
+            .map(|sequence| {
+                Ok(EventPosition::new(
+                    SourceGeneration::new(array(
+                        row.try_get::<Vec<u8>, _>("source_generation")
+                            .map_err(map_corrupt)?,
+                    )?)
+                    .map_err(|_| Error::CorruptProjectionRecord)?,
+                    radroots_storage::event::EventSequence::new(u64_from_i64(sequence)?)
+                        .map_err(|_| Error::CorruptProjectionRecord)?,
+                ))
+            })
+            .transpose()?,
+        RawSourceDigest::new(array(
+            row.try_get::<Vec<u8>, _>("source_digest")
+                .map_err(map_corrupt)?,
+        )?),
         checkpoint,
+        row.try_get::<Option<String>, _>("failure")
+            .map_err(map_corrupt)?
+            .as_deref()
+            .map(rebuild_failure)
+            .transpose()?,
         u64_from_i64(row.try_get("requested_at_unix_ms").map_err(map_corrupt)?)?,
         u64_from_i64(row.try_get("updated_at_unix_ms").map_err(map_corrupt)?)?,
     )
@@ -1127,6 +1217,25 @@ const fn rebuild_stage(value: &str) -> Result<RebuildStage, Error> {
     }
 }
 
+const fn rebuild_failure_name(value: RebuildFailure) -> &'static str {
+    match value {
+        RebuildFailure::ReducerRejected => "reducer_rejected",
+        RebuildFailure::SourceChanged => "source_changed",
+        RebuildFailure::IntegrityFailure => "integrity_failure",
+        RebuildFailure::PromotionRejected => "promotion_rejected",
+    }
+}
+
+const fn rebuild_failure(value: &str) -> Result<RebuildFailure, Error> {
+    match value.as_bytes() {
+        b"reducer_rejected" => Ok(RebuildFailure::ReducerRejected),
+        b"source_changed" => Ok(RebuildFailure::SourceChanged),
+        b"integrity_failure" => Ok(RebuildFailure::IntegrityFailure),
+        b"promotion_rejected" => Ok(RebuildFailure::PromotionRejected),
+        _ => Err(Error::CorruptProjectionRecord),
+    }
+}
+
 fn array<const N: usize>(bytes: Vec<u8>) -> Result<[u8; N], Error> {
     bytes.try_into().map_err(|_| Error::CorruptProjectionRecord)
 }
@@ -1171,6 +1280,15 @@ mod tests {
                 .await
                 .expect("runtime migration");
         }
+        sqlx::query(
+            "INSERT INTO radroots_runtime_source_generations (
+               generation, sequence_head, state, created_at_unix_ms, retired_at_unix_ms
+             ) VALUES (?, 0, 'active', 1, NULL)",
+        )
+        .bind([41_u8; 32].as_slice())
+        .execute(&pool)
+        .await
+        .expect("active source generation");
         SqliteStorage::new(
             pool,
             SourceGeneration::new([41; 32]).expect("generation"),
@@ -1196,7 +1314,7 @@ mod tests {
             projection_id(),
             generation,
             Some(EventPosition::new(
-                SourceGeneration::new([51; 32]).expect("source generation"),
+                SourceGeneration::new([41; 32]).expect("source generation"),
                 EventSequence::new(sequence).expect("sequence"),
             )),
             rows,
@@ -1252,8 +1370,17 @@ mod tests {
             .await
             .expect("invalidate");
         assert_eq!(invalidated.health(), ProjectionHealth::Invalidated);
-        let ticket =
-            RebuildTicket::requested(RebuildTicketId::new([3; 16]).expect("ticket"), invalidation);
+        let ticket = RebuildTicket::requested(
+            RebuildTicketId::new([3; 16]).expect("ticket"),
+            invalidation,
+            SourceGeneration::new([41; 32]).expect("source generation"),
+            Some(EventPosition::new(
+                SourceGeneration::new([41; 32]).expect("source generation"),
+                EventSequence::new(3).expect("sequence"),
+            )),
+            RawSourceDigest::new([8; 32]),
+        )
+        .expect("ticket");
         let requested = store
             .request_rebuild(ticket.clone())
             .await
@@ -1285,10 +1412,17 @@ mod tests {
                     progress.ticket_id(),
                     running.revision(),
                     230,
+                    RebuildFailure::IntegrityFailure,
                 ))
                 .await,
             Err(Error::ProjectionRevisionConflict)
         );
+        sqlx::query(
+            "UPDATE radroots_runtime_source_generations SET sequence_head = 3 WHERE state = 'active'",
+        )
+        .execute(store.pool())
+        .await
+        .expect("advance source high water");
         let completed = store
             .transition_rebuild(RebuildTransition::complete(
                 progress.ticket_id(),
@@ -1464,10 +1598,16 @@ mod tests {
             .await
             .expect("invalidate");
         let ticket = store
-            .request_rebuild(RebuildTicket::requested(
-                RebuildTicketId::new([9; 16]).expect("ticket"),
-                invalidation,
-            ))
+            .request_rebuild(
+                RebuildTicket::requested(
+                    RebuildTicketId::new([9; 16]).expect("ticket"),
+                    invalidation,
+                    SourceGeneration::new([41; 32]).expect("source generation"),
+                    None,
+                    RawSourceDigest::new([8; 32]),
+                )
+                .expect("ticket"),
+            )
             .await
             .expect("request rebuild");
         let failed = store
@@ -1475,6 +1615,7 @@ mod tests {
                 ticket.ticket_id(),
                 ticket.revision(),
                 210,
+                RebuildFailure::IntegrityFailure,
             ))
             .await
             .expect("fail rebuild");
@@ -1486,7 +1627,7 @@ mod tests {
                 .expect("status")
                 .expect("projection")
                 .health(),
-            ProjectionHealth::Failed
+            ProjectionHealth::Ready
         );
 
         sqlx::query("PRAGMA ignore_check_constraints = ON")

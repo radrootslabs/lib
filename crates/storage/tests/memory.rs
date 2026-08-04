@@ -29,8 +29,8 @@ use radroots_storage::{
     },
     projection::{
         InvalidationReason, ProjectionCheckpoint, ProjectionGeneration, ProjectionHealth,
-        ProjectionId, ProjectionInvalidation, ProjectionRevision, RebuildStage, RebuildTicket,
-        RebuildTicketId, RebuildTransition,
+        ProjectionId, ProjectionInvalidation, ProjectionRevision, RawSourceDigest, RebuildStage,
+        RebuildTicket, RebuildTicketId, RebuildTransition,
     },
 };
 use radroots_transport::{
@@ -280,8 +280,19 @@ fn memory_projection_rebuild_and_private_metadata_share_deterministic_state() {
         ProjectionHealth::Invalidated
     );
     let ticket_id = RebuildTicketId::new([7; 16]).expect("ticket id");
-    block_on(store.request_rebuild(RebuildTicket::requested(ticket_id, invalidation)))
-        .expect("request rebuild");
+    block_on(
+        store.request_rebuild(
+            RebuildTicket::requested(
+                ticket_id,
+                invalidation,
+                store.generation(),
+                None,
+                RawSourceDigest::new([8; 32]),
+            )
+            .expect("ticket"),
+        ),
+    )
+    .expect("request rebuild");
     let running = block_on(store.transition_rebuild(RebuildTransition::start(
         ticket_id,
         ProjectionRevision::INITIAL,
@@ -574,7 +585,14 @@ fn memory_projection_and_private_artifact_conflict_matrix_is_complete() {
             .unwrap()
             .is_some()
     );
-    let ticket = RebuildTicket::requested(RebuildTicketId::new([7; 16]).unwrap(), invalidation);
+    let ticket = RebuildTicket::requested(
+        RebuildTicketId::new([7; 16]).unwrap(),
+        invalidation,
+        store.generation(),
+        None,
+        RawSourceDigest::new([8; 32]),
+    )
+    .unwrap();
     assert_eq!(
         block_on(store.request_rebuild(ticket.clone())).unwrap(),
         ticket

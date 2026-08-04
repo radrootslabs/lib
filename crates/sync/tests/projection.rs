@@ -15,7 +15,10 @@ use radroots_storage::{
     EventStore, ProjectionStore,
     event::{EventAdmission, SourceGeneration, StoredVisibleEvent},
     memory::MemoryStorage,
-    projection::{ProjectionGeneration, ProjectionHealth, ProjectionId},
+    projection::{
+        ProjectionGeneration, ProjectionHealth, ProjectionId, RawSourceDigest, RebuildFailure,
+        RebuildTicketId,
+    },
 };
 use radroots_sync::{
     Engine,
@@ -114,10 +117,19 @@ impl Reducer for CountingReducer {
     fn generation(&self) -> ProjectionGeneration {
         self.generation
     }
+    fn begin_rebuild(
+        &self,
+        _ticket_id: RebuildTicketId,
+        _source_generation: SourceGeneration,
+        _source_digest: RawSourceDigest,
+    ) -> Result<(), ReducerError> {
+        if self.fail { Err(ReducerError) } else { Ok(()) }
+    }
     fn reduce(
         &self,
         events: &[StoredVisibleEvent],
         prior_projected_rows: u64,
+        _rebuild_ticket: Option<RebuildTicketId>,
     ) -> Result<u64, ReducerError> {
         if self.fail {
             return Err(ReducerError);
@@ -128,6 +140,13 @@ impl Reducer for CountingReducer {
         prior_projected_rows
             .checked_add(u64::try_from(events.len()).expect("event count"))
             .ok_or(ReducerError)
+    }
+    fn abort_rebuild(
+        &self,
+        _ticket_id: RebuildTicketId,
+        _failure: RebuildFailure,
+    ) -> Result<(), ReducerError> {
+        Ok(())
     }
 }
 
@@ -276,7 +295,7 @@ fn generation_change_rebuilds_and_reducer_failure_is_durable() {
             .expect("status")
             .expect("projection")
             .health(),
-        ProjectionHealth::Failed
+        ProjectionHealth::Ready
     );
     let retried_failure = block_on(
         engine.refresh_projection(
@@ -308,6 +327,11 @@ fn partial_rebuild_resumes_and_rejects_concurrent_generation() {
     .expect("partial rebuild");
     assert_eq!(partial.state(), RefreshState::Partial);
     assert!(partial.rebuild_ticket().is_some());
+    let visible_status = block_on(ProjectionStore::status(&*storage, id.clone()))
+        .expect("status")
+        .expect("projection");
+    assert_eq!(visible_status.generation(), first.generation());
+    assert_eq!(visible_status.health(), ProjectionHealth::Rebuilding);
 
     let concurrent = reducer(&id, 3, false);
     assert_eq!(
@@ -348,6 +372,43 @@ fn partial_rebuild_resumes_and_rejects_concurrent_generation() {
     ] {
         assert_eq!(invalid, Err(Error::InvalidProjectionRequest));
     }
+}
+
+#[test]
+fn source_change_fails_rebuild_and_preserves_prior_generation() {
+    let (engine, storage, id) = setup();
+    seed(&storage, 2);
+    let active = reducer(&id, 1, false);
+    block_on(engine.refresh_projection(
+        RefreshRequest::new(id.clone(), active.generation(), 10, 1).expect("request"),
+        &active,
+    ))
+    .expect("initial refresh");
+
+    let replacement = reducer(&id, 2, false);
+    let partial = block_on(engine.refresh_projection(
+        RefreshRequest::new(id.clone(), replacement.generation(), 1, 1).expect("request"),
+        &replacement,
+    ))
+    .expect("partial rebuild");
+    let ticket_id = partial.rebuild_ticket().expect("ticket");
+    seed(&storage, 3);
+
+    let failed = block_on(engine.refresh_projection(
+        RefreshRequest::new(id.clone(), replacement.generation(), 1, 1).expect("request"),
+        &replacement,
+    ))
+    .expect("source change is normalized");
+    assert_eq!(failed.state(), RefreshState::Failed);
+    let status = block_on(ProjectionStore::status(&*storage, id))
+        .expect("status")
+        .expect("projection");
+    assert_eq!(status.generation(), active.generation());
+    assert_eq!(status.health(), ProjectionHealth::Ready);
+    let ticket = block_on(storage.rebuild(ticket_id))
+        .expect("ticket lookup")
+        .expect("durable ticket");
+    assert_eq!(ticket.failure(), Some(RebuildFailure::SourceChanged));
 }
 
 #[test]

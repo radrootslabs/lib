@@ -7,7 +7,10 @@ pub use radroots_event::EventId;
 pub use radroots_transport::BoxFuture;
 use std::collections::BTreeSet;
 
-use crate::{Error, event::EventPosition};
+use crate::{
+    Error,
+    event::{EventPosition, SourceGeneration},
+};
 
 pub const PROJECTION_ID_MAX_BYTES: usize = 128;
 pub const EVENT_INDEX_SHARD_ID_MAX_BYTES: usize = 128;
@@ -46,6 +49,21 @@ impl ProjectionGeneration {
         }
         Ok(Self(bytes))
     }
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// SHA-256 digest of one ordered, immutable canonical raw-event snapshot.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct RawSourceDigest([u8; 32]);
+
+impl RawSourceDigest {
+    pub const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub const fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
@@ -223,6 +241,17 @@ pub enum RebuildStage {
     Failed,
 }
 
+/// Stable, secret-safe classification retained for a failed rebuild.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RebuildFailure {
+    ReducerRejected,
+    SourceChanged,
+    IntegrityFailure,
+    PromotionRejected,
+}
+
 /// Optimistic, monotonic projection rebuild state.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -231,23 +260,40 @@ pub struct RebuildTicket {
     invalidation: ProjectionInvalidation,
     revision: ProjectionRevision,
     stage: RebuildStage,
+    source_generation: SourceGeneration,
+    source_high_water: Option<EventPosition>,
+    source_digest: RawSourceDigest,
     checkpoint: Option<ProjectionCheckpoint>,
+    failure: Option<RebuildFailure>,
     requested_at_unix_ms: u64,
     updated_at_unix_ms: u64,
 }
 
 impl RebuildTicket {
-    pub fn requested(ticket_id: RebuildTicketId, invalidation: ProjectionInvalidation) -> Self {
+    pub fn requested(
+        ticket_id: RebuildTicketId,
+        invalidation: ProjectionInvalidation,
+        source_generation: SourceGeneration,
+        source_high_water: Option<EventPosition>,
+        source_digest: RawSourceDigest,
+    ) -> Result<Self, Error> {
+        if source_high_water.is_some_and(|position| position.generation() != source_generation) {
+            return Err(Error::SourceGenerationChanged);
+        }
         let at = invalidation.invalidated_at_unix_ms();
-        Self {
+        Ok(Self {
             ticket_id,
             invalidation,
             revision: ProjectionRevision::INITIAL,
             stage: RebuildStage::Requested,
+            source_generation,
+            source_high_water,
+            source_digest,
             checkpoint: None,
+            failure: None,
             requested_at_unix_ms: at,
             updated_at_unix_ms: at,
-        }
+        })
     }
 
     /// Reconstructs and validates one durable rebuild ticket.
@@ -257,11 +303,16 @@ impl RebuildTicket {
         invalidation: ProjectionInvalidation,
         revision: ProjectionRevision,
         stage: RebuildStage,
+        source_generation: SourceGeneration,
+        source_high_water: Option<EventPosition>,
+        source_digest: RawSourceDigest,
         checkpoint: Option<ProjectionCheckpoint>,
+        failure: Option<RebuildFailure>,
         requested_at_unix_ms: u64,
         updated_at_unix_ms: u64,
     ) -> Result<Self, Error> {
-        if requested_at_unix_ms != invalidation.invalidated_at_unix_ms()
+        if source_high_water.is_some_and(|position| position.generation() != source_generation)
+            || requested_at_unix_ms != invalidation.invalidated_at_unix_ms()
             || updated_at_unix_ms < requested_at_unix_ms
             || matches!(stage, RebuildStage::Requested)
                 && (revision != ProjectionRevision::INITIAL
@@ -269,9 +320,14 @@ impl RebuildTicket {
             || !matches!(stage, RebuildStage::Requested) && revision == ProjectionRevision::INITIAL
             || matches!(stage, RebuildStage::Requested) && checkpoint.is_some()
             || matches!(stage, RebuildStage::Completed) && checkpoint.is_none()
+            || matches!(stage, RebuildStage::Failed) != failure.is_some()
+            || !matches!(stage, RebuildStage::Failed) && failure.is_some()
             || checkpoint.as_ref().is_some_and(|checkpoint| {
                 checkpoint.projection_id() != invalidation.projection_id()
                     || checkpoint.generation() != invalidation.replacement_generation()
+                    || checkpoint
+                        .source_position()
+                        .is_some_and(|position| position.generation() != source_generation)
                     || checkpoint.updated_at_unix_ms() > updated_at_unix_ms
             })
         {
@@ -282,7 +338,11 @@ impl RebuildTicket {
             invalidation,
             revision,
             stage,
+            source_generation,
+            source_high_water,
+            source_digest,
             checkpoint,
+            failure,
             requested_at_unix_ms,
             updated_at_unix_ms,
         })
@@ -299,6 +359,15 @@ impl RebuildTicket {
     pub const fn stage(&self) -> RebuildStage {
         self.stage
     }
+    pub const fn source_generation(&self) -> SourceGeneration {
+        self.source_generation
+    }
+    pub const fn source_high_water(&self) -> Option<EventPosition> {
+        self.source_high_water
+    }
+    pub const fn source_digest(&self) -> RawSourceDigest {
+        self.source_digest
+    }
     pub const fn checkpoint(&self) -> Option<&ProjectionCheckpoint> {
         self.checkpoint.as_ref()
     }
@@ -308,6 +377,9 @@ impl RebuildTicket {
     pub const fn updated_at_unix_ms(&self) -> u64 {
         self.updated_at_unix_ms
     }
+    pub const fn failure(&self) -> Option<RebuildFailure> {
+        self.failure
+    }
 
     pub fn transition(&self, transition: RebuildTransition) -> Result<Self, Error> {
         if transition.ticket_id != self.ticket_id || transition.expected_revision != self.revision {
@@ -316,9 +388,9 @@ impl RebuildTicket {
         if transition.at_unix_ms < self.updated_at_unix_ms {
             return Err(Error::InvalidProjectionTimestamp);
         }
-        let (stage, checkpoint) = match (&self.stage, transition.kind) {
+        let (stage, checkpoint, failure) = match (&self.stage, transition.kind) {
             (RebuildStage::Requested, RebuildTransitionKind::Start) => {
-                (RebuildStage::Running, None)
+                (RebuildStage::Running, None, None)
             }
             (RebuildStage::Running, RebuildTransitionKind::Checkpoint(checkpoint)) => {
                 self.validate_checkpoint(&checkpoint)?;
@@ -329,7 +401,7 @@ impl RebuildTicket {
                 {
                     return Err(Error::ProjectionCheckpointRegression);
                 }
-                (RebuildStage::Running, Some(checkpoint))
+                (RebuildStage::Running, Some(checkpoint), None)
             }
             (RebuildStage::Running, RebuildTransitionKind::Complete(checkpoint)) => {
                 self.validate_checkpoint(&checkpoint)?;
@@ -340,11 +412,12 @@ impl RebuildTicket {
                 {
                     return Err(Error::ProjectionCheckpointRegression);
                 }
-                (RebuildStage::Completed, Some(checkpoint))
+                (RebuildStage::Completed, Some(checkpoint), None)
             }
-            (RebuildStage::Requested | RebuildStage::Running, RebuildTransitionKind::Fail) => {
-                (RebuildStage::Failed, self.checkpoint.clone())
-            }
+            (
+                RebuildStage::Requested | RebuildStage::Running,
+                RebuildTransitionKind::Fail(failure),
+            ) => (RebuildStage::Failed, self.checkpoint.clone(), Some(failure)),
             (RebuildStage::Completed | RebuildStage::Failed, _) => {
                 return Err(Error::RebuildTicketTerminal);
             }
@@ -355,7 +428,11 @@ impl RebuildTicket {
             invalidation: self.invalidation.clone(),
             revision: self.revision.next()?,
             stage,
+            source_generation: self.source_generation,
+            source_high_water: self.source_high_water,
+            source_digest: self.source_digest,
             checkpoint,
+            failure,
             requested_at_unix_ms: self.requested_at_unix_ms,
             updated_at_unix_ms: transition.at_unix_ms,
         })
@@ -364,6 +441,9 @@ impl RebuildTicket {
     fn validate_checkpoint(&self, checkpoint: &ProjectionCheckpoint) -> Result<(), Error> {
         if checkpoint.projection_id() != self.invalidation.projection_id()
             || checkpoint.generation() != self.invalidation.replacement_generation()
+            || checkpoint
+                .source_position()
+                .is_some_and(|position| position.generation() != self.source_generation)
         {
             return Err(Error::ProjectionCheckpointMismatch);
         }
@@ -384,7 +464,7 @@ enum RebuildTransitionKind {
     Start,
     Checkpoint(ProjectionCheckpoint),
     Complete(ProjectionCheckpoint),
-    Fail,
+    Fail(RebuildFailure),
 }
 
 impl RebuildTransition {
@@ -430,12 +510,13 @@ impl RebuildTransition {
         ticket_id: RebuildTicketId,
         expected_revision: ProjectionRevision,
         at_unix_ms: u64,
+        failure: RebuildFailure,
     ) -> Self {
         Self {
             ticket_id,
             expected_revision,
             at_unix_ms,
-            kind: RebuildTransitionKind::Fail,
+            kind: RebuildTransitionKind::Fail(failure),
         }
     }
     pub const fn ticket_id(&self) -> RebuildTicketId {

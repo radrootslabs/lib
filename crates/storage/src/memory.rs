@@ -701,11 +701,18 @@ impl ProjectionStore for MemoryStorage {
             if state.projections[status_index].generation() != invalidation.invalid_generation() {
                 return Err(Error::ProjectionCheckpointMismatch);
             }
+            if let Some(existing) = state.projection_invalidations.iter().find(|existing| {
+                existing.projection_id() == invalidation.projection_id()
+                    && existing.invalid_generation() == invalidation.invalid_generation()
+            }) && existing != &invalidation
+            {
+                return Err(Error::ProjectionRevisionConflict);
+            }
             let next = ProjectionStatus::new(
                 invalidation.projection_id().clone(),
-                invalidation.replacement_generation(),
+                state.projections[status_index].generation(),
                 ProjectionHealth::Invalidated,
-                None,
+                state.projections[status_index].checkpoint().cloned(),
                 None,
             )?;
             if !state
@@ -757,16 +764,18 @@ impl ProjectionStore for MemoryStorage {
                 };
             }
             let projection_id = ticket.invalidation().projection_id();
+            let has_invalidation = state
+                .projection_invalidations
+                .iter()
+                .any(|invalidation| invalidation == ticket.invalidation());
             let status = state
                 .projections
                 .iter_mut()
                 .find(|status| status.projection_id() == projection_id)
                 .ok_or(Error::ProjectionCheckpointMismatch)?;
-            if status.generation() != ticket.invalidation().replacement_generation()
-                || !matches!(
-                    status.health(),
-                    ProjectionHealth::Invalidated | ProjectionHealth::Failed
-                )
+            if status.generation() != ticket.invalidation().invalid_generation()
+                || status.health() != ProjectionHealth::Invalidated
+                || !has_invalidation
             {
                 return Err(Error::ProjectionCheckpointMismatch);
             }
@@ -774,7 +783,7 @@ impl ProjectionStore for MemoryStorage {
                 projection_id.clone(),
                 status.generation(),
                 ProjectionHealth::Rebuilding,
-                None,
+                status.checkpoint().cloned(),
                 Some(ticket.ticket_id()),
             )?;
             state.rebuilds.push(ticket.clone());
@@ -808,24 +817,53 @@ impl ProjectionStore for MemoryStorage {
                 .position(|ticket| ticket.ticket_id() == transition.ticket_id())
                 .ok_or(Error::ProjectionRevisionConflict)?;
             let next = state.rebuilds[index].transition(transition)?;
+            if next.stage() == RebuildStage::Completed
+                && (next.source_generation() != self.generation
+                    || next
+                        .source_high_water()
+                        .map_or(0, |position| position.sequence().get())
+                        != u64::try_from(state.events.len())
+                            .map_err(|_| Error::CorruptProjectionRecord)?)
+            {
+                return Err(Error::SourceGenerationChanged);
+            }
             let projection_id = next.invalidation().projection_id();
             let status = state
                 .projections
                 .iter_mut()
                 .find(|status| status.projection_id() == projection_id)
                 .ok_or(Error::CorruptProjectionRecord)?;
-            let (health, active_rebuild) = match next.stage() {
-                RebuildStage::Requested | RebuildStage::Running => {
-                    (ProjectionHealth::Rebuilding, Some(next.ticket_id()))
-                }
-                RebuildStage::Completed => (ProjectionHealth::Ready, None),
-                RebuildStage::Failed => (ProjectionHealth::Failed, None),
+            if status.generation() != next.invalidation().invalid_generation()
+                || status.health() != ProjectionHealth::Rebuilding
+                || status.active_rebuild() != Some(next.ticket_id())
+            {
+                return Err(Error::CorruptProjectionRecord);
+            }
+            let (generation, health, checkpoint, active_rebuild) = match next.stage() {
+                RebuildStage::Requested | RebuildStage::Running => (
+                    status.generation(),
+                    ProjectionHealth::Rebuilding,
+                    status.checkpoint().cloned(),
+                    Some(next.ticket_id()),
+                ),
+                RebuildStage::Completed => (
+                    next.invalidation().replacement_generation(),
+                    ProjectionHealth::Ready,
+                    next.checkpoint().cloned(),
+                    None,
+                ),
+                RebuildStage::Failed => (
+                    status.generation(),
+                    ProjectionHealth::Ready,
+                    status.checkpoint().cloned(),
+                    None,
+                ),
             };
             *status = ProjectionStatus::new(
                 projection_id.clone(),
-                next.invalidation().replacement_generation(),
+                generation,
                 health,
-                next.checkpoint().cloned(),
+                checkpoint,
                 active_rebuild,
             )?;
             state.rebuilds[index] = next.clone();

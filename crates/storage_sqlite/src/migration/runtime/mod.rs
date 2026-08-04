@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 9;
+pub const CURRENT_VERSION: u32 = 10;
 
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
@@ -17,6 +17,8 @@ const LEGACY_IMPORT_JOURNAL_V6_SQL: &str = include_str!("0006_legacy_import_jour
 const LEGACY_EVENT_STAGING_V7_SQL: &str = include_str!("0007_legacy_event_staging.up.sql");
 const LEGACY_OUTBOX_STAGING_V8_SQL: &str = include_str!("0008_legacy_outbox_staging.up.sql");
 const LEGACY_IMPORT_COMMITS_V9_SQL: &str = include_str!("0009_legacy_import_commits.up.sql");
+const PROJECTION_REBUILD_SOURCE_BINDING_V10_SQL: &str =
+    include_str!("0010_projection_rebuild_source_binding.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -386,6 +388,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "f0807eecd652a26844c3502d81386a9d54480cb178abe1b71035e0601916afb7",
         owned_objects: RUNTIME_V9_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 10,
+        name: "projection_rebuild_source_binding",
+        up_sha256: "8dfe0f83058f51e3edf9bdac16b408c6abdc88dd84a53f8e893aaf06fe89f7c7",
+        owned_objects: RUNTIME_V9_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
@@ -399,6 +407,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         7 => Some(LEGACY_EVENT_STAGING_V7_SQL),
         8 => Some(LEGACY_OUTBOX_STAGING_V8_SQL),
         9 => Some(LEGACY_IMPORT_COMMITS_V9_SQL),
+        10 => Some(PROJECTION_REBUILD_SOURCE_BINDING_V10_SQL),
         _ => None,
     }
 }
@@ -442,22 +451,22 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 9);
-        assert_eq!(MIGRATIONS.len(), 9);
+        assert_eq!(CURRENT_VERSION, 10);
+        assert_eq!(MIGRATIONS.len(), 10);
         let migration = MIGRATIONS[8];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
         assert_eq!(snapshot.application_id, 1_380_209_236);
         assert_eq!(snapshot.minimum_version, MINIMUM_VERSION);
-        assert_eq!(snapshot.current_version, CURRENT_VERSION);
+        assert_eq!(snapshot.current_version, 9);
         assert_eq!(snapshot.migration_name, migration.name());
         assert_eq!(snapshot.migration_sha256, migration.up_sha256());
         assert!(snapshot.forward_only);
         assert!(!snapshot.raw_sql_public);
         assert_eq!(snapshot.authorities.len(), 12);
         assert_eq!(snapshot.source_invariants.len(), 5);
-        assert_eq!(snapshot.migrations.len(), MIGRATIONS.len());
-        for (expected, actual) in snapshot.migrations.iter().zip(MIGRATIONS) {
+        assert_eq!(snapshot.migrations.len(), 9);
+        for (expected, actual) in snapshot.migrations.iter().zip(&MIGRATIONS[..9]) {
             assert_eq!(expected.version, actual.version());
             assert_eq!(expected.name, actual.name());
             assert_eq!(expected.sha256, actual.up_sha256());
@@ -471,7 +480,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(10), None);
+        assert_eq!(migration_sql(11), None);
     }
 
     #[tokio::test]
