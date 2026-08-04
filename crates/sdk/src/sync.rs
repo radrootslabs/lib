@@ -202,7 +202,9 @@ mod tests {
         journal::IdempotencyKey,
         memory::MemoryStorage,
         outbox::LeaseOwner,
-        projection::{ProjectionGeneration, ProjectionId},
+        projection::{
+            ProjectionGeneration, ProjectionId, RawSourceDigest, RebuildFailure, RebuildTicketId,
+        },
     };
     use radroots_sync::{
         Engine, PullRequest, PushRequest,
@@ -286,13 +288,31 @@ mod tests {
             self.generation
         }
 
+        fn begin_rebuild(
+            &self,
+            _ticket_id: RebuildTicketId,
+            _source_generation: SourceGeneration,
+            _source_digest: RawSourceDigest,
+        ) -> Result<(), ReducerError> {
+            Ok(())
+        }
+
         fn reduce(
             &self,
             events: &[StoredVisibleEvent],
             prior_projected_rows: u64,
+            _rebuild_ticket: Option<RebuildTicketId>,
         ) -> Result<u64, ReducerError> {
             assert!(events.is_empty());
             Ok(prior_projected_rows)
+        }
+
+        fn abort_rebuild(
+            &self,
+            _ticket_id: RebuildTicketId,
+            _failure: RebuildFailure,
+        ) -> Result<(), ReducerError> {
+            Ok(())
         }
     }
 

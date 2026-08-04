@@ -487,13 +487,10 @@ impl DaemonDelivery {
 
 #[cfg(test)]
 mod tests {
-    use radroots_event::{SignedEvent, wire::v1::Nip01EventWire};
     use radroots_transport::{
-        DeliveryRequest, Error, FetchRequest, TARGET_SET_MAX_ITEMS, Target,
+        Error, TARGET_SET_MAX_ITEMS, Target,
         capability::{Availability, Maturity},
         policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
-        sink::DeliveryPayload,
-        source::FetchBounds,
         target::TargetFingerprint,
     };
 
@@ -503,10 +500,11 @@ mod tests {
         Target::nostr_relay(format!("wss://relay-{index}.example")).expect("target")
     }
 
-    fn signed_event() -> SignedEvent {
+    #[cfg(feature = "nostr")]
+    fn signed_event() -> radroots_event::SignedEvent {
         let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
-        let wire = Nip01EventWire::parse_json(raw).expect("wire event");
-        SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
+        let wire = radroots_event::wire::v1::Nip01EventWire::parse_json(raw).expect("wire event");
+        radroots_event::SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
     }
 
     #[test]
@@ -698,7 +696,10 @@ mod tests {
     #[cfg(feature = "nostr")]
     #[tokio::test]
     async fn empty_nostr_slot_reports_unavailable_and_rejects_operations() {
-        use radroots_transport::{EventSink as _, EventSource as _};
+        use radroots_transport::{
+            DeliveryRequest, EventSink as _, EventSource as _, FetchRequest, sink::DeliveryPayload,
+            source::FetchBounds,
+        };
 
         let slot = NostrSlot::new(RelayUrlPolicy::Local);
         let source = radroots_transport::EventSource::status(&slot)
