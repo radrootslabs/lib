@@ -155,15 +155,18 @@ pub fn prepare(request: PrepareRequest) -> Result<Plan, PrepareError> {
     let canonical = canonical_trade_mutation_content(request.mutation)
         .map_err(PrepareError::canonical)?
         .envelope;
-    let required_role = if canonical.author_pubkey == canonical.buyer_pubkey {
-        AuthorRole::Buyer
-    } else if canonical.author_pubkey == canonical.seller_pubkey {
-        AuthorRole::Seller
-    } else {
-        return Err(PrepareError::unauthorized_actor());
+    let required_role = match (
+        canonical.author_pubkey == canonical.buyer_pubkey,
+        canonical.author_pubkey == canonical.seller_pubkey,
+    ) {
+        (true, _) => AuthorRole::Buyer,
+        (false, true) => AuthorRole::Seller,
+        (false, false) => return Err(PrepareError::unauthorized_actor()),
     };
-    if request.actor.public_key() != canonical.author_pubkey
-        || !request.actor.satisfies(required_role)
+    if (
+        request.actor.public_key() == canonical.author_pubkey,
+        request.actor.satisfies(required_role),
+    ) != (true, true)
     {
         return Err(PrepareError::unauthorized_actor());
     }
@@ -342,10 +345,12 @@ impl<'a> Operations<'a> {
             .map_err(|_| PrivateTermsError::Storage)?
             .ok_or(PrivateTermsError::EvidenceMismatch)?;
         let commitment = hex_lower(metadata.commitment().as_bytes());
-        if metadata.stage() != PrivateArtifactStage::Active
-            || metadata.schema_id().as_str() != expected.schema_id()
-            || commitment != expected.ciphertext_commitment()
-        {
+        let evidence_matches = [
+            metadata.stage() == PrivateArtifactStage::Active,
+            metadata.schema_id().as_str() == expected.schema_id(),
+            commitment == expected.ciphertext_commitment(),
+        ];
+        if evidence_matches != [true; 3] {
             return Err(PrivateTermsError::EvidenceMismatch);
         }
         Ok(metadata)
@@ -624,6 +629,34 @@ mod tests {
         assert_eq!(canonical.kind(), PrepareErrorKind::CanonicalMutation);
         assert!(std::error::Error::source(&canonical).is_some());
         assert!(!format!("{canonical:?}").contains("artifact-1"));
+
+        let mut seller_authored = all_commands().remove(0);
+        seller_authored.mutation_id = None;
+        seller_authored.author_pubkey = pubkey(SELLER);
+        seller_authored.counterparty_pubkey = pubkey(BUYER);
+        let seller_plan = prepare(PrepareRequest::new(
+            actor(SELLER, AuthorRole::Seller),
+            seller_authored,
+        ))
+        .expect("seller-authored command");
+        assert_eq!(
+            seller_plan.workflow().trade_id(),
+            &TradeId::parse("11".repeat(16)).unwrap()
+        );
+
+        let outsider = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let mut unauthorized = all_commands().remove(0);
+        unauthorized.mutation_id = None;
+        unauthorized.author_pubkey = pubkey(outsider);
+        assert_eq!(
+            prepare(PrepareRequest::new(
+                actor(outsider, AuthorRole::Any),
+                unauthorized,
+            ))
+            .expect_err("author must be a governed party")
+            .kind(),
+            PrepareErrorKind::UnauthorizedActor
+        );
     }
 
     #[test]

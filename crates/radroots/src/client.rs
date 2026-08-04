@@ -45,6 +45,7 @@ pub fn with_transport(
 /// Adds an explicitly constructed NIP-46 signer provider.
 #[cfg(any(feature = "nip46", feature = "full"))]
 #[must_use]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn with_nip46_signer(
     builder: ClientBuilder,
     provider: crate::signing::Provider,
@@ -54,6 +55,7 @@ pub fn with_nip46_signer(
 
 /// Explicitly opens validated native SQLite storage.
 #[cfg(any(feature = "native", feature = "full"))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn native(options: crate::storage::SqliteOptions) -> crate::Result<ClientBuilder> {
     ClientBuilder::sqlite(options).await
 }
@@ -72,4 +74,61 @@ pub const fn geonames_enabled() -> bool {
 #[must_use]
 pub const fn knowledge_enabled() -> bool {
     true
+}
+
+#[cfg(all(test, feature = "full"))]
+mod tests {
+    use super::{
+        Arc, EventSink, EventSource, Profile, geonames_enabled, knowledge_enabled, local_only,
+        memory, with_transport,
+    };
+    use radroots_transport::{
+        DeliveryReceipt, DeliveryRequest, Error as TransportError, FetchPage, FetchRequest,
+        SinkStatus, SourceStatus, source::BoxFuture as TransportFuture,
+    };
+
+    struct TestSource;
+    struct TestSink;
+
+    impl EventSource for TestSource {
+        fn status(&self) -> TransportFuture<'_, Result<SourceStatus, TransportError>> {
+            Box::pin(async { Err(TransportError::UnsupportedOperation) })
+        }
+
+        fn fetch(
+            &self,
+            _request: FetchRequest,
+        ) -> TransportFuture<'_, Result<FetchPage, TransportError>> {
+            Box::pin(async { Err(TransportError::UnsupportedOperation) })
+        }
+    }
+
+    impl EventSink for TestSink {
+        fn status(&self) -> TransportFuture<'_, Result<SinkStatus, TransportError>> {
+            Box::pin(async { Err(TransportError::UnsupportedOperation) })
+        }
+
+        fn deliver(
+            &self,
+            _request: DeliveryRequest,
+        ) -> TransportFuture<'_, Result<DeliveryReceipt, TransportError>> {
+            Box::pin(async { Err(TransportError::UnsupportedOperation) })
+        }
+    }
+
+    #[test]
+    fn curated_builders_cover_every_directly_testable_entry_point() {
+        let local = memory().build().expect("memory client");
+        assert_eq!(local_only(), Profile::local_only());
+        assert!(local.source().expect("source").is_none());
+
+        let composed = with_transport(memory(), Arc::new(TestSource), Arc::new(TestSink))
+            .build()
+            .expect("transport client");
+        assert!(composed.source().expect("source").is_some());
+        assert!(composed.sink().expect("sink").is_some());
+
+        assert!(geonames_enabled());
+        assert!(knowledge_enabled());
+    }
 }

@@ -487,10 +487,13 @@ impl DaemonDelivery {
 
 #[cfg(test)]
 mod tests {
+    use radroots_event::{SignedEvent, wire::v1::Nip01EventWire};
     use radroots_transport::{
-        Error, TARGET_SET_MAX_ITEMS, Target,
+        DeliveryRequest, Error, FetchRequest, TARGET_SET_MAX_ITEMS, Target,
         capability::{Availability, Maturity},
         policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+        sink::DeliveryPayload,
+        source::FetchBounds,
         target::TargetFingerprint,
     };
 
@@ -498,6 +501,12 @@ mod tests {
 
     fn target(index: usize) -> Target {
         Target::nostr_relay(format!("wss://relay-{index}.example")).expect("target")
+    }
+
+    fn signed_event() -> SignedEvent {
+        let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
+        let wire = Nip01EventWire::parse_json(raw).expect("wire event");
+        SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
     }
 
     #[test]
@@ -588,6 +597,11 @@ mod tests {
         );
     }
 
+    #[test]
+    fn default_profile_is_local_only() {
+        assert_eq!(Profile::default(), Profile::local_only());
+    }
+
     #[cfg(feature = "radrootsd")]
     #[test]
     fn daemon_configuration_is_inert_explicit_and_redacted() {
@@ -599,6 +613,57 @@ mod tests {
         let debug = format!("{adapter:?}");
         assert!(!debug.contains("secret-token"));
         assert!(!debug.contains("reqwest"));
+        assert_eq!(format!("{:?}", DaemonAuth::None), "None");
+        assert_eq!(
+            format!("{:?}", DaemonAuth::BearerToken("private".to_owned())),
+            "BearerToken(<redacted>)"
+        );
+    }
+
+    #[cfg(feature = "radrootsd")]
+    #[test]
+    fn daemon_errors_are_stably_classified_and_redacted() {
+        use std::error::Error as _;
+
+        use crate::adapters::radrootsd::RadrootsdError;
+
+        let cases = [
+            (
+                RadrootsdError::InvalidAuthHeader("private".to_owned()),
+                DaemonErrorKind::Authentication,
+                "daemon authentication configuration is invalid",
+            ),
+            (
+                RadrootsdError::InvalidRequest("private".to_owned()),
+                DaemonErrorKind::InvalidRequest,
+                "daemon delivery request is invalid",
+            ),
+            (
+                RadrootsdError::Http("private".to_owned()),
+                DaemonErrorKind::Transport,
+                "daemon transport failed",
+            ),
+            (
+                RadrootsdError::JsonRpc {
+                    code: -1,
+                    message: "private".to_owned(),
+                },
+                DaemonErrorKind::Rpc,
+                "daemon RPC failed",
+            ),
+            (
+                RadrootsdError::MalformedResponse("private".to_owned()),
+                DaemonErrorKind::InvalidResponse,
+                "daemon response is invalid",
+            ),
+        ];
+        for (private, kind, display) in cases {
+            let error = DaemonError::from_private(private);
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.to_string(), display);
+            assert!(error.source().is_some());
+            assert!(!format!("{error:?}").contains("private"));
+        }
     }
 
     #[cfg(feature = "nostr")]
@@ -612,5 +677,59 @@ mod tests {
         assert_eq!(slot.targets(), Some(original));
         slot.clear();
         assert!(slot.targets().is_none());
+        assert!(format!("{slot:?}").contains("configured: false"));
+    }
+
+    #[cfg(feature = "nostr")]
+    #[test]
+    fn poisoned_nostr_slot_fails_closed_for_every_host_operation() {
+        let slot = NostrSlot::new(RelayUrlPolicy::Local);
+        let state = Arc::clone(&slot.state);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = state.write().expect("write lock");
+            panic!("poison transport slot");
+        }));
+
+        slot.clear();
+        assert!(slot.targets().is_none());
+        assert!(slot.configure(["ws://127.0.0.1:7447"]).is_err());
+    }
+
+    #[cfg(feature = "nostr")]
+    #[tokio::test]
+    async fn empty_nostr_slot_reports_unavailable_and_rejects_operations() {
+        use radroots_transport::{EventSink as _, EventSource as _};
+
+        let slot = NostrSlot::new(RelayUrlPolicy::Local);
+        let source = radroots_transport::EventSource::status(&slot)
+            .await
+            .expect("source status");
+        assert_eq!(source.availability(), Availability::Unavailable);
+
+        let targets = TargetSet::new(vec![target(1)]).expect("targets");
+        let fetch = FetchRequest::new(
+            "fetch",
+            targets.clone(),
+            FetchBounds::new(1, 1).expect("bounds"),
+        )
+        .expect("fetch");
+        assert_eq!(slot.fetch(fetch).await, Err(Error::UnsupportedOperation));
+
+        let sink = radroots_transport::EventSink::status(&slot)
+            .await
+            .expect("sink status");
+        assert_eq!(sink.availability(), Availability::Unavailable);
+        let deliver = DeliveryRequest::new(
+            "deliver",
+            DeliveryPayload::new(signed_event()),
+            targets,
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::any()),
+            1,
+        )
+        .expect("delivery");
+        assert_eq!(
+            slot.deliver(deliver).await,
+            Err(Error::UnsupportedOperation)
+        );
     }
 }

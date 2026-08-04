@@ -1575,6 +1575,50 @@ mod tests {
     }
 
     #[test]
+    fn authored_comment_rejects_address_coordinate_author_and_kind_mismatches() {
+        let author = synthetic_pubkey('e');
+        let coordinate = format!("30402:{author}:victoria-market");
+        let request = |author: &str, kind: u32| {
+            serde_json::json!({
+                "content": "Available this week",
+                "root": {
+                    "type": "address",
+                    "coordinate": coordinate,
+                    "author": author,
+                    "kind": kind,
+                    "relay": null,
+                },
+                "position": {
+                    "type": "top_address",
+                    "current_revision": synthetic_event_id('b'),
+                },
+            })
+            .to_string()
+        };
+
+        let author_error =
+            social_comment_build_authored_draft(&request(&synthetic_pubkey('f'), 30402))
+                .expect_err("coordinate author mismatch");
+        assert_eq!(
+            authored_error_inner(author_error),
+            "comment_root_author_mismatch"
+        );
+
+        let kind_error = social_comment_build_authored_draft(&request(&author, 31922))
+            .expect_err("coordinate kind mismatch");
+        assert_eq!(
+            authored_error_inner(kind_error),
+            "comment_root_kind_mismatch"
+        );
+    }
+
+    #[test]
+    fn authored_image_errors_keep_the_stable_binding_code() {
+        let error = image_authored_error(AuthoredImageError::MediaTypeNotImage);
+        assert_eq!(authored_error_inner(error), "media_type_not_image");
+    }
+
+    #[test]
     fn authored_media_binding_verifies_exact_arbitrary_bytes() {
         let bytes = vec![0, 159, 146, 150];
         let hash = Sha256::digest(&bytes);
@@ -1919,6 +1963,53 @@ mod tests {
             serde_json::from_str(&unknown_error).expect("unknown-field error json");
         assert_eq!(unknown_error["code"], "invalid_json");
         assert_eq!(unknown_error["inner_code"], "event_json");
+    }
+
+    #[test]
+    fn event_envelope_error_codes_cover_every_structural_limit_class() {
+        let cases = [
+            (
+                EventEnvelopeError::NonCanonicalAuthor,
+                "author_non_canonical",
+            ),
+            (
+                EventEnvelopeError::NonCanonicalSignature,
+                "signature_non_canonical",
+            ),
+            (EventEnvelopeError::EmptyTag { index: 0 }, "tag_empty"),
+            (
+                EventEnvelopeError::EmptyTagKey { index: 0 },
+                "tag_key_empty",
+            ),
+            (
+                EventEnvelopeError::ControlCharacterTagKey { index: 0 },
+                "tag_key_control_character",
+            ),
+            (
+                EventEnvelopeError::TooManyTags { max: 1, actual: 2 },
+                "too_many_tags",
+            ),
+            (
+                EventEnvelopeError::TooManyTagElements { max: 1, actual: 2 },
+                "too_many_tag_elements",
+            ),
+            (
+                EventEnvelopeError::TagElementTooLarge {
+                    tag_index: 0,
+                    element_index: 0,
+                    max: 1,
+                    actual: 2,
+                },
+                "tag_element_too_large",
+            ),
+            (
+                EventEnvelopeError::TagsTooLarge { max: 1, actual: 2 },
+                "tags_too_large",
+            ),
+        ];
+        for (error, code) in cases {
+            assert_eq!(envelope_error_code(&error), code);
+        }
     }
 
     #[test]

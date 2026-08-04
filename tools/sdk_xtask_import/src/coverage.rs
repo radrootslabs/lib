@@ -10,13 +10,14 @@ use crate::{
 pub fn run(args: &[String]) -> Result<(), String> {
     match args {
         [command] if command == "run" => run_coverage(),
+        [command] if command == "check" => check_coverage(),
         [] => Err(usage()),
         _ => Err(usage()),
     }
 }
 
 fn usage() -> String {
-    "usage: cargo xtask coverage run".to_owned()
+    "usage: cargo xtask coverage run | cargo xtask coverage check".to_owned()
 }
 
 fn run_coverage() -> Result<(), String> {
@@ -29,6 +30,13 @@ fn run_coverage() -> Result<(), String> {
     check::check()?;
     clean_report_output(&root, &contract)?;
     run_llvm_cov(&root, &contract)?;
+    evaluate_report(&root, &root.join(&contract.report.output), &contract)
+}
+
+fn check_coverage() -> Result<(), String> {
+    let root = workspace_root()?;
+    let contract = load_contract(&root)?;
+    validate_contract(&contract)?;
     evaluate_report(&root, &root.join(&contract.report.output), &contract)
 }
 
@@ -45,7 +53,7 @@ fn preflight(contract: &CoverageContract) -> Result<(), String> {
         "rustup",
         &[
             "run",
-            &contract.toolchain.rust,
+            &contract.toolchain.coverage_rust,
             "cargo",
             "llvm-cov",
             "--version",
@@ -54,7 +62,12 @@ fn preflight(contract: &CoverageContract) -> Result<(), String> {
     )?;
     let component_output = output(
         "rustup",
-        &["component", "list", "--toolchain", &contract.toolchain.rust],
+        &[
+            "component",
+            "list",
+            "--toolchain",
+            &contract.toolchain.coverage_rust,
+        ],
     )
     .map_err(|error| format!("failed to inspect Rust components: {error}"))?;
     if !component_output
@@ -63,7 +76,7 @@ fn preflight(contract: &CoverageContract) -> Result<(), String> {
     {
         return Err(format!(
             "missing llvm-tools-preview for Rust toolchain {}; run `rustup component add llvm-tools-preview --toolchain {}`",
-            contract.toolchain.rust, contract.toolchain.rust
+            contract.toolchain.coverage_rust, contract.toolchain.coverage_rust
         ));
     }
     let target_output = output(
@@ -121,13 +134,13 @@ fn run_llvm_cov(root: &Path, contract: &CoverageContract) -> Result<(), String> 
         .current_dir(root)
         .args([
             "run",
-            &contract.toolchain.rust,
+            &contract.toolchain.coverage_rust,
             "cargo",
             "llvm-cov",
             "--workspace",
             "--all-features",
-            "--summary-only",
             "--json",
+            "--branch",
             "--output-path",
             &contract.report.output,
             "--ignore-filename-regex",

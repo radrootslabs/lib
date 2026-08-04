@@ -42,6 +42,66 @@ fn ordinary_memory_and_local_only_construction_is_inert() {
     assert!(radroots::client::local_only().is_local_only());
 }
 
+#[cfg(any(feature = "nostr", feature = "full"))]
+#[test]
+fn explicit_transport_composition_is_inert() {
+    use std::sync::Arc;
+
+    use radroots::transport::{EventSink, EventSource};
+    use radroots_transport::{
+        DeliveryReceipt, DeliveryRequest, Error, FetchPage, FetchRequest, SinkStatus, SourceStatus,
+        source::BoxFuture,
+    };
+
+    struct Source;
+    struct Sink;
+
+    impl EventSource for Source {
+        fn status(&self) -> BoxFuture<'_, Result<SourceStatus, Error>> {
+            Box::pin(async { Err(Error::UnsupportedOperation) })
+        }
+
+        fn fetch(&self, _request: FetchRequest) -> BoxFuture<'_, Result<FetchPage, Error>> {
+            Box::pin(async { Err(Error::UnsupportedOperation) })
+        }
+    }
+
+    impl EventSink for Sink {
+        fn status(&self) -> BoxFuture<'_, Result<SinkStatus, Error>> {
+            Box::pin(async { Err(Error::UnsupportedOperation) })
+        }
+
+        fn deliver(
+            &self,
+            _request: DeliveryRequest,
+        ) -> BoxFuture<'_, Result<DeliveryReceipt, Error>> {
+            Box::pin(async { Err(Error::UnsupportedOperation) })
+        }
+    }
+
+    let client = radroots::client::with_transport(
+        radroots::client::memory(),
+        Arc::new(Source),
+        Arc::new(Sink),
+    )
+    .build()
+    .expect("explicit transport client");
+    assert!(client.source().expect("source").is_some());
+    assert!(client.sink().expect("sink").is_some());
+}
+
+#[cfg(any(feature = "geonames", feature = "full"))]
+#[test]
+fn geonames_selection_is_explicit() {
+    assert!(radroots::client::geonames_enabled());
+}
+
+#[cfg(any(feature = "knowledge", feature = "full"))]
+#[test]
+fn knowledge_selection_is_explicit() {
+    assert!(radroots::client::knowledge_enabled());
+}
+
 #[cfg(any(feature = "knowledge", feature = "full"))]
 #[test]
 fn canonical_knowledge_paths_compile() {

@@ -419,6 +419,43 @@ mod tests {
         assert!(slot.identity().is_none());
         let restored = slot.install(secret.as_str()).expect("restored identity");
         assert_eq!(restored, generated);
+        assert_eq!(restored.public_key_hex(), restored.public_key().to_hex());
+        assert!(restored.npub().starts_with("npub1"));
+
+        let provider = Provider::slot(slot.clone());
+        assert_eq!(provider.mode(), Mode::Local);
+        assert!(format!("{provider:?}").contains("<opaque>"));
+        let (_signer, provider_slot) = provider.into_parts();
+        assert!(provider_slot.is_some());
+
+        slot.clear();
+        assert_eq!(
+            slot.sign(request()).await.expect_err("empty slot").kind(),
+            Kind::SignerUnavailable
+        );
+    }
+
+    #[cfg(feature = "local-signing")]
+    #[tokio::test]
+    async fn poisoned_local_slot_fails_closed_without_exposing_key_state() {
+        let slot = Slot::new();
+        let state = Arc::clone(&slot.state);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = state.write().expect("write lock");
+            panic!("poison signer slot");
+        }));
+
+        slot.clear();
+        assert!(slot.identity().is_none());
+        let (_secret, identity) = slot.generate().expect("secret remains host-owned");
+        assert!(!identity.public_key_hex().is_empty());
+        assert_eq!(
+            slot.sign(request())
+                .await
+                .expect_err("poisoned slot")
+                .kind(),
+            Kind::InternalError
+        );
     }
 
     #[cfg(feature = "nip46")]
@@ -461,6 +498,10 @@ mod tests {
             assert_eq!(
                 provider.sign(request()).await.expect_err("failure").kind(),
                 expected
+            );
+            assert_eq!(
+                provider.as_signer().status().await.expect("status"),
+                SignerStatus::unavailable()
             );
         }
     }

@@ -84,8 +84,8 @@ fn dependency_names(manifest: &str) -> BTreeSet<&str> {
         .split_once("[dependencies]")
         .expect("dependency section")
         .1
-        .split_once("[features]")
-        .expect("feature section")
+        .split_once("\n[")
+        .expect("section after dependencies")
         .0
         .lines()
         .filter_map(|line| line.split_once(" = ").map(|(name, _)| name.trim()))

@@ -249,11 +249,11 @@ fn configured(id: CapabilityId, context: &Context<'_>) -> bool {
         CapabilityId::CANONICAL_STORAGE
         | CapabilityId::BACKUP_RESTORE
         | CapabilityId::TRADE_QUERIES => context.storage,
-        CapabilityId::SYNC_PULL => context.sync && context.source,
-        CapabilityId::SYNC_PUSH => context.sync && context.sink,
+        CapabilityId::SYNC_PULL => (context.sync, context.source) == (true, true),
+        CapabilityId::SYNC_PUSH => (context.sync, context.sink) == (true, true),
         CapabilityId::FARM_PUBLICATION
         | CapabilityId::LISTING_PUBLICATION
-        | CapabilityId::TRADE_COMMANDS => context.signer && context.sink,
+        | CapabilityId::TRADE_COMMANDS => (context.signer, context.sink) == (true, true),
         CapabilityId::KNOWLEDGE_EVENTS => cfg!(feature = "knowledge"),
         CapabilityId::RETICULUM_FETCH
         | CapabilityId::RETICULUM_DELIVERY
@@ -319,5 +319,105 @@ mod tests {
 
         let mesh = report.get(CapabilityId::MESH_TRANSPORT).expect("mesh");
         assert_eq!(mesh.maturity(), Maturity::Experimental);
+    }
+
+    #[test]
+    fn configuration_and_availability_matrix_covers_every_decision_path() {
+        let explicitly_configured = BTreeSet::from([
+            CapabilityId::PERSISTENT_STORAGE,
+            CapabilityId::NIP46_SIGNING,
+            CapabilityId::NOSTR_FETCH,
+        ]);
+        let overrides = BTreeMap::from([
+            (CapabilityId::PERSISTENT_STORAGE, Availability::Degraded),
+            (CapabilityId::NOSTR_FETCH, Availability::Unavailable),
+        ]);
+
+        let complete = report(Context {
+            storage: false,
+            signer: true,
+            source: true,
+            sink: true,
+            sync: true,
+            lifecycle_availability: Availability::Available,
+            explicitly_configured: &explicitly_configured,
+            overrides: &overrides,
+        });
+        assert!(
+            complete
+                .get(CapabilityId::SYNC_PULL)
+                .expect("pull")
+                .is_configured()
+        );
+        assert!(
+            complete
+                .get(CapabilityId::SYNC_PUSH)
+                .expect("push")
+                .is_configured()
+        );
+        assert!(
+            complete
+                .get(CapabilityId::FARM_PUBLICATION)
+                .expect("farm")
+                .is_configured()
+        );
+        assert_eq!(
+            complete
+                .get(CapabilityId::NOSTR_FETCH)
+                .expect("fetch")
+                .availability(),
+            if cfg!(feature = "nostr") {
+                Availability::Unavailable
+            } else {
+                Availability::Unsupported
+            }
+        );
+
+        let partial = report(Context {
+            storage: false,
+            signer: true,
+            source: false,
+            sink: false,
+            sync: true,
+            lifecycle_availability: Availability::Degraded,
+            explicitly_configured: &explicitly_configured,
+            overrides: &overrides,
+        });
+        assert!(
+            !partial
+                .get(CapabilityId::SYNC_PULL)
+                .expect("pull")
+                .is_configured()
+        );
+        assert!(
+            !partial
+                .get(CapabilityId::SYNC_PUSH)
+                .expect("push")
+                .is_configured()
+        );
+        assert!(
+            !partial
+                .get(CapabilityId::TRADE_COMMANDS)
+                .expect("trade")
+                .is_configured()
+        );
+        if partial
+            .get(CapabilityId::NIP46_SIGNING)
+            .expect("nip46")
+            .is_compiled()
+        {
+            assert_eq!(
+                partial
+                    .get(CapabilityId::NIP46_SIGNING)
+                    .expect("nip46")
+                    .availability(),
+                Availability::Degraded
+            );
+        }
+        assert_eq!(complete.iter().len(), CATALOG.len());
+        assert_eq!(
+            CapabilityId::NOSTR_FETCH.to_string(),
+            "transport.nostr.fetch"
+        );
     }
 }

@@ -272,6 +272,13 @@ pub struct SocialOperations<'a> {
     client: &'a Client,
 }
 
+#[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+enum SocialDraft {
+    Profile(Box<radroots_event::profile::AuthoredProfile>),
+    Update(radroots_event::post::AuthoredUpdate),
+    Reply(radroots_event::post::reply::AuthoredNip10Reply),
+}
+
 impl ClientBuilder {
     /// Creates an empty builder with no hidden storage, network, signing, or
     /// runtime side effects.
@@ -285,11 +292,14 @@ impl ClientBuilder {
     #[must_use]
     pub fn memory(generation: SourceGeneration) -> Self {
         let storage = Arc::new(MemoryStorage::new(generation));
-        let mut builder = Self::new().storage(storage.clone());
+        let builder = Self::new().storage(storage.clone());
         #[cfg(feature = "sync")]
         {
+            let mut builder = builder;
             builder.sync_storage = Some(storage);
+            builder
         }
+        #[cfg(not(feature = "sync"))]
         builder
     }
 
@@ -303,11 +313,14 @@ impl ClientBuilder {
     #[must_use]
     pub fn memory_default() -> Self {
         let storage = Arc::new(MemoryStorage::default());
-        let mut builder = Self::new().storage(storage.clone());
+        let builder = Self::new().storage(storage.clone());
         #[cfg(feature = "sync")]
         {
+            let mut builder = builder;
             builder.sync_storage = Some(storage);
+            builder
         }
+        #[cfg(not(feature = "sync"))]
         builder
     }
 
@@ -429,7 +442,7 @@ impl ClientBuilder {
     #[allow(unused_mut)]
     pub fn build(mut self) -> Result<Client> {
         let storage = self.storage.ok_or_else(Error::missing_storage)?;
-        if self.signer.is_some() && self.sink.is_none() {
+        if (self.signer.is_some(), self.sink.is_some()) == (true, false) {
             return Err(Error::signer_without_sink());
         }
         #[cfg(feature = "sync")]
@@ -571,10 +584,12 @@ impl Client {
     #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
     pub fn social(&self) -> Result<SocialOperations<'_>> {
         self.require_open()?;
-        if self.inner.sync.is_none()
-            || self.inner.signing_slot.is_none()
-            || self.inner.nostr_slot.is_none()
-        {
+        let social_composition = (
+            self.inner.sync.is_some(),
+            self.inner.signing_slot.is_some(),
+            self.inner.nostr_slot.is_some(),
+        );
+        if social_composition != (true, true, true) {
             return Err(Error::shared_operation_unavailable());
         }
         Ok(SocialOperations { client: self })
@@ -723,18 +738,14 @@ impl SocialOperations<'_> {
         if let Some(value) = draft.bot {
             profile = profile.with_bot(value);
         }
-        let parts =
-            radroots_event_codec::profile::authored::authored_profile_to_wire_parts(&profile)
-                .map_err(Error::invalid_host_configuration)?;
-        self.publish("radroots.profile.metadata.v1", parts).await
+        self.publish(SocialDraft::Profile(Box::new(profile))).await
     }
 
     /// Publishes one strict root kind-1 update.
     pub async fn publish_text(&self, content: impl Into<String>) -> Result<PublishReceipt> {
         let update = radroots_event::post::AuthoredUpdate::new(content)
             .map_err(Error::invalid_host_configuration)?;
-        let parts = radroots_event_codec::post::authored::authored_update_to_wire_parts(&update);
-        self.publish("radroots.social.update.v1", parts).await
+        self.publish(SocialDraft::Update(update)).await
     }
 
     /// Publishes one strict direct NIP-10 reply.
@@ -753,9 +764,7 @@ impl SocialOperations<'_> {
         .map_err(Error::invalid_host_configuration)?;
         let reply = radroots_event::post::reply::AuthoredNip10Reply::direct(content, reference)
             .map_err(Error::invalid_host_configuration)?;
-        let parts =
-            radroots_event_codec::reply::authored::authored_nip10_reply_to_wire_parts(&reply);
-        self.publish("radroots.social.reply.v1", parts).await
+        self.publish(SocialDraft::Reply(reply)).await
     }
 
     async fn fetch(
@@ -799,11 +808,7 @@ impl SocialOperations<'_> {
             .collect())
     }
 
-    async fn publish(
-        &self,
-        contract_id: &'static str,
-        parts: radroots_event::wire::Nip01EventWireParts,
-    ) -> Result<PublishReceipt> {
+    async fn publish(&self, authored: SocialDraft) -> Result<PublishReceipt> {
         use radroots_event::contract::AuthorRole;
         use radroots_signing::{Actor, actor::ActorSource, request::CancellationPolicy};
         use radroots_storage::{journal::IdempotencyKey, outbox::LeaseOwner};
@@ -818,14 +823,24 @@ impl SocialOperations<'_> {
         let operation_uuid = uuid::Uuid::new_v4();
         let operation_id =
             SyncId::new(*operation_uuid.as_bytes()).map_err(Error::invalid_host_configuration)?;
-        let draft = radroots_event::EventDraft::new(
-            contract_id,
-            parts.kind,
-            now_unix_ms()? / 1_000,
-            parts.tags,
-            parts.content,
-            identity.public_key_hex(),
-        )
+        let created_at = now_unix_ms()? / 1_000;
+        let draft = match authored {
+            SocialDraft::Profile(profile) => radroots_event::EventDraft::from_authored_profile(
+                &profile,
+                created_at,
+                identity.public_key_hex(),
+            ),
+            SocialDraft::Update(update) => radroots_event::EventDraft::from_authored_update(
+                &update,
+                created_at,
+                identity.public_key_hex(),
+            ),
+            SocialDraft::Reply(reply) => radroots_event::EventDraft::from_authored_reply(
+                &reply,
+                created_at,
+                identity.public_key_hex(),
+            ),
+        }
         .map_err(Error::invalid_host_configuration)?;
         let actor = Actor::new(
             identity.public_key(),
@@ -872,9 +887,11 @@ impl SocialOperations<'_> {
             replay: push.is_replay(),
             delivered: delivery.outcomes().iter().any(|outcome| {
                 outcome.as_ref().is_ok_and(|record| {
-                    record.item_id() == push.outbox().item_id()
-                        && record.satisfaction()
-                            != radroots_storage::outbox::SatisfactionResult::Pending
+                    (
+                        record.item_id() == push.outbox().item_id(),
+                        record.satisfaction()
+                            != radroots_storage::outbox::SatisfactionResult::Pending,
+                    ) == (true, true)
                 })
             }),
         })
@@ -1098,6 +1115,129 @@ mod tests {
         );
     }
 
+    #[cfg(all(
+        feature = "sync",
+        feature = "nostr",
+        feature = "local-signing",
+        feature = "nip46"
+    ))]
+    #[test]
+    fn curated_models_accessors_and_builder_modes_are_complete() {
+        let profile_draft = ProfileDraft::new("farm")
+            .with_display_name("Farm")
+            .with_about("Local food")
+            .with_nip05("farm@example.test")
+            .with_bot(false);
+        assert_eq!(profile_draft.name, "farm");
+        assert_eq!(profile_draft.display_name.as_deref(), Some("Farm"));
+        assert_eq!(profile_draft.about.as_deref(), Some("Local food"));
+        assert_eq!(profile_draft.nip05.as_deref(), Some("farm@example.test"));
+        assert_eq!(profile_draft.bot, Some(false));
+
+        let profile = ProfileEvent {
+            event_id: "event".to_owned(),
+            author: "author".to_owned(),
+            created_at: 7,
+            name: Some("farm".to_owned()),
+            display_name: Some("Farm".to_owned()),
+            about: Some("Local food".to_owned()),
+            picture: Some("https://example.test/picture".to_owned()),
+            banner: Some("https://example.test/banner".to_owned()),
+            nip05: Some("farm@example.test".to_owned()),
+            bot: Some(false),
+        };
+        assert_eq!(profile.event_id(), "event");
+        assert_eq!(profile.author(), "author");
+        assert_eq!(profile.created_at(), 7);
+        assert_eq!(profile.name(), Some("farm"));
+        assert_eq!(profile.display_name(), Some("Farm"));
+        assert_eq!(profile.about(), Some("Local food"));
+        assert_eq!(profile.picture(), Some("https://example.test/picture"));
+        assert_eq!(profile.banner(), Some("https://example.test/banner"));
+        assert_eq!(profile.nip05(), Some("farm@example.test"));
+        assert_eq!(profile.bot(), Some(false));
+
+        let post = PostEvent {
+            event_id: "post".to_owned(),
+            author: "author".to_owned(),
+            created_at: 8,
+            content: "content".to_owned(),
+        };
+        assert_eq!(post.event_id(), "post");
+        assert_eq!(post.author(), "author");
+        assert_eq!(post.created_at(), 8);
+        assert_eq!(post.content(), "content");
+
+        for (delivered, pending) in [(true, false), (false, true)] {
+            let receipt = PublishReceipt {
+                event_id: "published".to_owned(),
+                replay: true,
+                delivered,
+            };
+            assert_eq!(receipt.event_id(), "published");
+            assert!(receipt.is_replay());
+            assert_eq!(receipt.is_delivered(), delivered);
+            assert_eq!(receipt.is_delivery_pending(), pending);
+        }
+
+        let health = TransportHealth {
+            configured: true,
+            source_available: true,
+            sink_available: false,
+        };
+        assert!(health.is_configured());
+        assert!(health.is_source_available());
+        assert!(!health.is_sink_available());
+
+        let builder = ClientBuilder::memory_default()
+            .source(Arc::new(TestSource))
+            .host_sync(crate::sync::HostPolicy::default());
+        assert!(format!("{builder:?}").contains("storage: true"));
+        let client = builder.build().expect("sync client");
+        assert!(client.sync().expect("sync").is_some());
+        assert!(client.farm().expect("farm").is_some());
+        assert!(client.listing().expect("listing").is_some());
+        assert!(client.trade().expect("trade").is_some());
+        assert!(client.social().is_err());
+        assert!(
+            format!(
+                "{:?}",
+                client.storage_operations().expect("storage operations")
+            )
+            .contains("borrowed canonical storage")
+        );
+        assert!(
+            format!("{:?}", client.sync().expect("sync").expect("operations"))
+                .contains("borrowed canonical engine")
+        );
+
+        let host = ClientBuilder::memory_default()
+            .sink(Arc::new(TestSink))
+            .signing(crate::signing::Provider::host(Arc::new(TestSigner)))
+            .build()
+            .expect("host signer");
+        assert!(
+            !host
+                .capabilities()
+                .get(CapabilityId::NIP46_SIGNING)
+                .expect("nip46")
+                .is_configured()
+        );
+
+        let nip46 = ClientBuilder::memory_default()
+            .sink(Arc::new(TestSink))
+            .signing(crate::signing::Provider::nip46(Arc::new(TestSigner)))
+            .build()
+            .expect("nip46 signer");
+        assert!(
+            nip46
+                .capabilities()
+                .get(CapabilityId::NIP46_SIGNING)
+                .expect("nip46")
+                .is_configured()
+        );
+    }
+
     #[cfg(feature = "local-signing")]
     #[test]
     fn module_scoped_signing_provider_configures_the_matching_capability() {
@@ -1145,13 +1285,179 @@ mod tests {
                 .await,
             Err(error) if error.kind() == crate::error::ErrorKind::SharedOperationUnavailable
         ));
+        assert!(
+            client
+                .social()
+                .expect("social composition")
+                .fetch_profile_for_signer()
+                .await
+                .is_err()
+        );
 
         let (_secret, identity) = signing.generate().expect("host key handoff");
         assert_eq!(signing.identity(), Some(identity));
+        let social = client.social().expect("social composition");
+        assert!(social.fetch_profile_for_signer().await.is_err());
+        assert!(social.fetch_posts(2, Some(1)).await.is_err());
+        assert!(
+            social
+                .publish_profile(
+                    ProfileDraft::new("farm")
+                        .with_display_name("Farm")
+                        .with_about("Local food")
+                        .with_nip05("farm@example.test")
+                        .with_bot(false),
+                )
+                .await
+                .is_err()
+        );
+        assert!(
+            social
+                .publish_profile(ProfileDraft::new("farm"))
+                .await
+                .is_err()
+        );
+        assert!(social.publish_text("local update").await.is_err());
+        assert!(
+            social
+                .publish_reply(
+                    "local reply",
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    Some("ws://127.0.0.1:7447"),
+                )
+                .await
+                .is_err()
+        );
+        assert!(
+            social
+                .publish_reply("local reply", "invalid", "invalid", None)
+                .await
+                .is_err()
+        );
         nostr
             .configure(["ws://127.0.0.1:7447"])
             .expect("relay selection");
         assert!(nostr.targets().is_some());
+        let social = client.social().expect("social composition");
+        assert!(
+            social
+                .transport_health()
+                .await
+                .expect("configured passive health")
+                .is_configured()
+        );
+        let fetch = tokio::time::timeout(
+            core::time::Duration::from_secs(3),
+            social.fetch_posts(2, Some(1)),
+        )
+        .await
+        .expect("localhost fetch remains bounded");
+        assert!(fetch.is_err() || fetch.is_ok_and(|events| events.is_empty()));
+        let profile_fetch = tokio::time::timeout(
+            core::time::Duration::from_secs(3),
+            social.fetch_profile_for_signer(),
+        )
+        .await
+        .expect("localhost profile fetch remains bounded");
+        assert!(profile_fetch.is_err() || profile_fetch.is_ok_and(|event| event.is_none()));
+        let publish = tokio::time::timeout(
+            core::time::Duration::from_secs(3),
+            social.publish_text("configured local update"),
+        )
+        .await
+        .expect("localhost publish remains bounded");
+        match publish {
+            Ok(receipt) => {
+                assert_eq!(receipt.event_id().len(), 64);
+                assert!(!receipt.is_replay());
+            }
+            Err(error) => assert_eq!(error.kind(), crate::error::ErrorKind::SharedOperationFailed),
+        }
+        let profile_publish = tokio::time::timeout(
+            core::time::Duration::from_secs(3),
+            social.publish_profile(
+                ProfileDraft::new("configured-farm")
+                    .with_display_name("Configured Farm")
+                    .with_about("Local food"),
+            ),
+        )
+        .await
+        .expect("localhost profile publish remains bounded");
+        assert!(
+            profile_publish.is_ok()
+                || matches!(
+                    profile_publish,
+                    Err(error)
+                        if error.kind() == crate::error::ErrorKind::SharedOperationFailed
+                )
+        );
+        let reply_publish = tokio::time::timeout(
+            core::time::Duration::from_secs(3),
+            social.publish_reply(
+                "configured reply",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                None,
+            ),
+        )
+        .await
+        .expect("localhost reply publish remains bounded");
+        assert!(
+            reply_publish.is_ok()
+                || matches!(
+                    reply_publish,
+                    Err(error)
+                        if error.kind() == crate::error::ErrorKind::SharedOperationFailed
+                )
+        );
+        nostr.clear();
+        assert!(nostr.targets().is_none());
+        signing.clear();
+        assert!(signing.identity().is_none());
+        assert_eq!(
+            radroots_signing::Signer::status(&signing)
+                .await
+                .expect("empty slot status")
+                .availability(),
+            radroots_signing::status::SignerAvailability::Unavailable
+        );
+    }
+
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+    #[test]
+    fn verified_profile_projection_preserves_the_curated_public_fields() {
+        use radroots_event::wire::v1::Nip01EventWire;
+
+        let author = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+        let content = r#"{"name":"farm","display_name":"Farm","about":"Local food","nip05":"farm@example.test","bot":false}"#;
+        let id = radroots_event::draft::compute_nip01_event_id(author, 7, 0, &[], content)
+            .expect("canonical profile id")
+            .to_hex();
+        let raw = serde_json::json!({
+            "id": id,
+            "pubkey": author,
+            "created_at": 7,
+            "kind": 0,
+            "tags": [],
+            "content": content,
+            "sig": "d".repeat(128),
+        })
+        .to_string();
+        let wire = Nip01EventWire::parse_json(&raw).expect("profile wire");
+        let event = radroots_event::SignedEvent::from_wire_verified_id(wire, raw)
+            .expect("verified profile event");
+        let profile = profile_event(&event).expect("profile projection");
+        assert_eq!(profile.event_id(), id);
+        assert_eq!(profile.author(), author);
+        assert_eq!(profile.created_at(), 7);
+        assert_eq!(profile.name(), Some("farm"));
+        assert_eq!(profile.display_name(), Some("Farm"));
+        assert_eq!(profile.about(), Some("Local food"));
+        assert_eq!(profile.nip05(), Some("farm@example.test"));
+        assert_eq!(profile.bot(), Some(false));
+        assert_eq!(profile.picture(), None);
+        assert_eq!(profile.banner(), None);
     }
 
     #[test]

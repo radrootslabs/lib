@@ -403,4 +403,63 @@ mod tests {
         assert!(format!("{error:?}").contains("StorageCloseFailed"));
         assert!(!format!("{error:?}").contains("BackendUnavailable"));
     }
+
+    #[test]
+    fn native_constructor_and_descriptor_surface_is_complete() {
+        let source_free = [
+            Error::missing_storage(),
+            Error::signer_without_sink(),
+            Error::close_in_progress(),
+            Error::client_closing(),
+            Error::client_closed(),
+        ];
+        for error in source_free {
+            assert!(error.source().is_none());
+            let descriptor = error.descriptor();
+            assert_eq!(descriptor.kind(), error.kind());
+            assert_eq!(descriptor.class(), descriptor.code().descriptor().class);
+            assert_eq!(
+                descriptor.retryable(),
+                descriptor.code().descriptor().retryable
+            );
+            assert_eq!(descriptor.operation(), None);
+            assert_eq!(descriptor.message(), error.to_string());
+        }
+
+        let inspection =
+            Error::storage_inspection_failed(radroots_storage::Error::BackendUnavailable);
+        assert_eq!(inspection.kind(), ErrorKind::StorageInspectionFailed);
+        assert!(inspection.source().is_some());
+
+        #[cfg(any(feature = "sync", feature = "nostr"))]
+        {
+            let host = Error::invalid_host_configuration(std::io::Error::other("private"));
+            assert_eq!(host.kind(), ErrorKind::InvalidHostConfiguration);
+            assert!(host.source().is_some());
+            assert!(!host.to_string().contains("private"));
+            assert_eq!(
+                Error::shared_operation_unavailable().kind(),
+                ErrorKind::SharedOperationUnavailable
+            );
+        }
+
+        #[cfg(feature = "nostr")]
+        assert!(
+            Error::invalid_host_configuration_without_source()
+                .source()
+                .is_none()
+        );
+
+        #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+        {
+            let failed = Error::shared_operation_failed(std::io::Error::other("private"));
+            assert_eq!(failed.kind(), ErrorKind::SharedOperationFailed);
+            assert!(failed.source().is_some());
+            assert!(
+                Error::shared_operation_failed_without_source()
+                    .source()
+                    .is_none()
+            );
+        }
+    }
 }

@@ -130,7 +130,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run | cargo xtask release qualify-features | cargo xtask release qualify-api | cargo xtask release qualify-portable | cargo xtask release qualify-supply-chain | cargo xtask release qualify-targets"
+    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run | cargo xtask coverage check | cargo xtask release qualify-features | cargo xtask release qualify-api | cargo xtask release qualify-portable | cargo xtask release qualify-supply-chain | cargo xtask release qualify-targets"
         .to_owned()
 }
 
