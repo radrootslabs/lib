@@ -24,6 +24,7 @@ mod generate;
 mod hygiene;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod portable_qualification;
+mod release_graph;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -51,6 +52,7 @@ fn usage() {
     eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask release qualify-features");
+    eprintln!("  cargo xtask release qualify-graph");
     eprintln!("  cargo xtask release qualify-api");
     eprintln!("  cargo xtask release qualify-fuzz");
     eprintln!("  cargo xtask release qualify-portable");
@@ -130,6 +132,7 @@ fn run_release(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("preflight") => release_preflight(),
         Some("qualify-features") => release_qualification::run_feature_matrix(&workspace_root()),
+        Some("qualify-graph") => release_graph::run(&workspace_root()),
         Some("qualify-api") => api_qualification::run(&workspace_root()),
         Some("qualify-fuzz") => fuzz_qualification::run(&workspace_root()),
         Some("qualify-portable") => portable_qualification::run(&workspace_root()),
