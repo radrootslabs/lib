@@ -62,7 +62,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 18] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 19] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -102,6 +102,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 18] = [
     (
         "contracts/conformance/vectors/event/verified_admission.v1.json",
         "crates/event_codec/tests/fixtures/verified_admission.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/event/authored_plan_wire.v1.json",
+        "crates/event_codec/tests/fixtures/authored_plan_wire.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",

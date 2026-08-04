@@ -5,12 +5,19 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 #[cfg(feature = "std")]
 use std::{borrow::ToOwned, string::String, vec::Vec};
 
+use core::fmt;
 use radroots_event::{GenericEventDraft, contract::ContractKey, draft::DraftError, id::EventId};
 use radroots_identity::PublicKey;
 use sha2::{Digest, Sha256};
 
 pub const PLAN_WIRE_VERSION_V1: u32 = 1;
 const PLAN_DIGEST_DOMAIN: &[u8] = b"radroots.authored_event_plan.v1";
+
+mod wire;
+
+pub use wire::{
+    HistoricalPlanIntegrity, PLAN_WIRE_MAX_BYTES, PlanDecodeError, PlanRegistryRelation, PlanWireV1,
+};
 
 /// Exact contract-owned NIP-01 payload fields before author/time binding.
 ///
@@ -83,7 +90,32 @@ impl PlanDigest {
     pub fn to_hex(self) -> String {
         hex::encode(self.0)
     }
+
+    pub fn parse_hex(value: &str) -> Result<Self, PlanDigestError> {
+        if value.len() != Self::BYTE_LENGTH * 2
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(PlanDigestError);
+        }
+        let mut bytes = [0_u8; Self::BYTE_LENGTH];
+        hex::decode_to_slice(value, &mut bytes).map_err(|_| PlanDigestError)?;
+        Ok(Self(bytes))
+    }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlanDigestError;
+
+impl fmt::Display for PlanDigestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("plan digest must be exactly 64 lowercase hexadecimal characters")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for PlanDigestError {}
 
 /// One immutable exact NIP-01 event plan, ready for authorization and signing.
 ///
@@ -117,7 +149,7 @@ impl AuthoredEventPlan {
         ))
     }
 
-    fn from_validated_parts(
+    pub(super) fn from_validated_parts(
         body: AuthoredEventBody,
         author: PublicKey,
         created_at: u64,

@@ -1,0 +1,40 @@
+{
+  "suite": "authored_plan_wire",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "generic_geochat_plan_wire_001",
+      "kind": "authored_plan_wire.v1",
+      "input": {
+        "contract_id": "radroots.social.geochat.v1",
+        "expected_author": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 1700000000,
+        "kind": 20000,
+        "tags": [
+          [
+            "g",
+            "u4pru"
+          ]
+        ],
+        "content": "hello 🍓"
+      },
+      "expected": {
+        "schema_version": 1,
+        "contract_registry_version": 7,
+        "contract_id": "radroots.social.geochat.v1",
+        "expected_author": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 1700000000,
+        "kind": 20000,
+        "tags": [
+          [
+            "g",
+            "u4pru"
+          ]
+        ],
+        "content": "hello 🍓",
+        "expected_event_id": "1623d687ab4f1c27f0b7eebe6e5fc0d3014f94f79c59d36a0ce456805be1e24a",
+        "plan_digest": "eb719fe792ef467b35810967c28a7fdc1c2fb8cebaefdf76efa878fe6dd4f1ec"
+      }
+    }
+  ]
+}

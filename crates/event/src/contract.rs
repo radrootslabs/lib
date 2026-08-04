@@ -84,6 +84,8 @@ impl fmt::Display for ContractId {
 pub struct RegistryVersion(u32);
 
 impl RegistryVersion {
+    /// Frozen registry profile used by the initial authored-plan storage wire.
+    pub const V7: Self = Self(7);
     pub const CURRENT: Self = Self(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION);
 
     pub const fn new(value: u32) -> Result<Self, ContractIdentityError> {
@@ -121,12 +123,15 @@ impl ContractKey {
         registry_version: RegistryVersion,
         contract_id: ContractId,
     ) -> Result<Self, ContractIdentityError> {
-        if registry_version != RegistryVersion::CURRENT {
-            return Err(ContractIdentityError::UnsupportedRegistryVersion {
-                actual: registry_version.get(),
-            });
-        }
-        if event_contract_registry_v7(contract_id.as_str()).is_none() {
+        let contract = match registry_version {
+            RegistryVersion::V7 => event_contract_registry_v7(contract_id.as_str()),
+            _ => {
+                return Err(ContractIdentityError::UnsupportedRegistryVersion {
+                    actual: registry_version.get(),
+                });
+            }
+        };
+        if contract.is_none() {
             return Err(ContractIdentityError::UnknownContract {
                 contract_id: contract_id.into_string(),
             });
@@ -149,8 +154,11 @@ impl ContractKey {
 
     #[must_use]
     pub fn contract(&self) -> &'static EventContract {
-        event_contract_registry_v7(self.contract_id.as_str())
-            .expect("validated registry-v7 contract key must remain resolvable")
+        match self.registry_version {
+            RegistryVersion::V7 => event_contract_registry_v7(self.contract_id.as_str())
+                .expect("validated registry-v7 contract key must remain resolvable"),
+            _ => unreachable!("validated contract key must have a supported registry profile"),
+        }
     }
 }
 
@@ -298,6 +306,7 @@ mod identity_tests {
         let id = ContractId::parse("radroots.social.geochat.v1").expect("contract ID");
         assert_eq!(id.as_str(), "radroots.social.geochat.v1");
         assert_eq!(RegistryVersion::CURRENT.get(), 7);
+        assert_eq!(RegistryVersion::V7.get(), 7);
         let key = ContractKey::new(RegistryVersion::CURRENT, id).expect("contract key");
         assert_eq!(key.contract().id, "radroots.social.geochat.v1");
 
