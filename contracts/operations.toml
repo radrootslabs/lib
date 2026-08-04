@@ -265,17 +265,25 @@ classes = [
 
 [implementation_provenance]
 model_crates = [
-  "radroots_protocol_contract_v1",
-  "radroots_blossom",
   "radroots_core",
   "radroots_event",
-  "radroots_trade",
   "radroots_identity",
+  "radroots_protocol",
+  "radroots_trade",
+  "radroots_transport",
 ]
 algorithm_crates = [
   "radroots_blossom",
   "radroots_event_codec",
+  "radroots_geonames",
   "radroots_nostr",
+  "radroots_nostr_connect",
+  "radroots_secrets",
+  "radroots_signing",
+  "radroots_storage",
+  "radroots_storage_sqlite",
+  "radroots_sync",
+  "radroots_transport_nostr",
 ]
 
 [operations.blossom_parse_hash_path]

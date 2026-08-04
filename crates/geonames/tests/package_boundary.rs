@@ -8,10 +8,6 @@ const EXAMPLE: &str = include_str!("../examples/prepare_query.rs");
 const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_geonames.txt");
 const API_INDEX: &str = include_str!("../../../docs/api/README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
-const LEGACY_MANIFEST: &str = include_str!("../../geocoder/Cargo.toml");
-const LEGACY_README: &str = include_str!("../../geocoder/README");
-const COMPATIBILITY: &str = include_str!("../../../docs/implementation/COMPATIBILITY_SHIMS.md");
-const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
 const PUBLISH_POLICY: &str = include_str!("../../../contracts/releases/publish_policy.toml");
 
 #[test]
@@ -134,51 +130,16 @@ fn provider_source_has_no_hidden_runtime_path_or_download_implementation() {
 }
 
 #[test]
-fn superseded_geocoder_is_a_bounded_publish_frozen_sdk_bridge() {
-    for required in [
-        "name = \"radroots_geocoder\"",
-        "publish = false",
-        "status = \"publish_frozen\"",
-        "replacement = \"radroots_geonames\"",
-        "deviation = \"RCRV1-DEV-011\"",
-        "removal_step = 248",
-        "new_consumers_forbidden = true",
-    ] {
-        assert!(
-            LEGACY_MANIFEST.contains(required),
-            "legacy manifest is missing `{required}`"
-        );
-    }
-    for required in [
-        "## Compatibility quarantine",
-        "RCRV1-DEV-011",
-        "Step 226",
-        "Step 248",
-    ] {
-        assert!(
-            LEGACY_README.contains(required),
-            "legacy README is missing `{required}`"
-        );
-    }
-    for required in [
-        "| `radroots_geocoder` | `radroots_geonames` |",
-        "SDK manifest cutover Step 226",
-        "SDK quarantine removal Step 248",
-    ] {
-        assert!(
-            COMPATIBILITY.contains(required),
-            "quarantine ledger is missing `{required}`"
-        );
-    }
-    assert!(DEVIATIONS.contains("id = \"RCRV1-DEV-011\""));
-    let private = PUBLISH_POLICY
-        .split_once("[workspace_classification]")
-        .expect("workspace classification")
-        .1
-        .split_once("build_codegen")
-        .expect("private classification")
-        .0;
-    assert!(private.contains("\"radroots_geocoder\""));
+fn superseded_geocoder_package_is_removed() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    assert!(
+        !crate_root
+            .parent()
+            .expect("crates root")
+            .join("geocoder")
+            .exists()
+    );
+    assert!(!PUBLISH_POLICY.contains("\"radroots_geocoder\""));
 }
 
 fn radroots_dependency_keys(manifest: &str) -> BTreeSet<&str> {

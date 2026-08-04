@@ -10,11 +10,6 @@ require_branches = true
 # and branches. The 100% policy is intentionally deferred and must be restored
 # by an explicit future contract change after the refactor stabilizes.
 
-[overrides.radroots_log]
-require_branches = false
-temporary = true
-reason = "branch coverage is not applicable while the crate has no measured branch records"
-
 [overrides.radroots_replica_schema]
 require_branches = false
 temporary = true
@@ -27,30 +22,18 @@ reason = "branch coverage is not applicable while the crate has no measured bran
 
 [required]
 crates = [
-  "radroots_authority",
   "radroots_blossom",
   "radroots_core",
-  "radroots_event_store",
   "radroots_event",
   "radroots_event_codec",
-  "radroots_event_index",
-  "radroots_geocoder",
   "radroots_geonames",
   "radroots_identity",
-  "radroots_runtime_store",
-  "radroots_log",
   "radroots_mesh",
   "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
   "radroots_nostr",
-  "radroots_nostr_accounts",
   "radroots_nostr_connect",
   "radroots_nostrdb",
-  "radroots_nostr_signer",
-  "radroots_outbox",
-  "radroots_protocol_contract_v1",
-  "radroots_protected_store",
-  "radroots_transport_publish_protocol",
   "radroots_protocol",
   "radroots_secrets",
   "radroots_signing",
@@ -62,13 +45,9 @@ crates = [
   "radroots_replica_store",
   "radroots_replica_schema",
   "radroots_replica_sync",
-  "radroots_runtime",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
-  "radroots_secret_vault",
-  "radroots_trade_sp1_guest",
-  "radroots_trade_sp1_host",
   "radroots_sql_core",
   "radroots_test_fixtures",
   "radroots_trade",

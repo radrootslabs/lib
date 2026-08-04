@@ -50,21 +50,9 @@ external_packages = ["radroots_sdk", "radroots"]
 
 [workspace_classification]
 private = [
-  "radroots_authority",
-  "radroots_event_index",
-  "radroots_event_store",
-  "radroots_geocoder",
-  "radroots_log",
-  "radroots_nostr_accounts",
-  "radroots_nostr_signer",
-  "radroots_outbox",
-  "radroots_protected_store",
-  "radroots_runtime",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
-  "radroots_runtime_store",
-  "radroots_secret_vault",
   "radroots_sql_core",
 ]
 build_codegen = ["xtask"]
@@ -78,22 +66,14 @@ preview = [
   "radroots_replica_store",
   "radroots_replica_sync",
   "radroots_simplex_agent_proto",
-  "radroots_simplex_agent_runtime",
-  "radroots_simplex_agent_store",
   "radroots_simplex_app_store",
   "radroots_simplex_chat_proto",
-  "radroots_simplex_interop_tests",
   "radroots_simplex_smp_crypto",
   "radroots_simplex_smp_proto",
   "radroots_simplex_smp_transport",
-  "radroots_trade_sp1_guest",
-  "radroots_trade_sp1_host",
   "radroots_transport_reticulum",
 ]
-retired = [
-  "radroots_protocol_contract_v1",
-  "radroots_transport_publish_protocol",
-]
+retired = []
 
 [publish_order]
 crates = [

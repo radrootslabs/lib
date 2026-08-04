@@ -4,22 +4,9 @@ mod admission_authority;
 mod artifact_bundle;
 mod comment_authority;
 mod deletion_authority;
-mod food_availability_projection;
-mod nip09_reconciliation;
 mod registry_v7;
-mod source_maintenance;
-
-pub(crate) use food_availability_projection::{
-    validate_food_availability_projection_manifest, write_food_availability_projection_manifest,
-};
-pub(crate) use nip09_reconciliation::{
-    validate_nip09_reconciliation_manifest, write_nip09_reconciliation_manifest,
-};
 pub(crate) use registry_v7::{
     validate_event_contract_registry_v7_inventory, write_event_contract_registry_v7_inventory,
-};
-pub(crate) use source_maintenance::{
-    validate_source_maintenance_manifest, write_source_maintenance_manifest,
 };
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
@@ -49,24 +36,11 @@ use std::path::{Path, PathBuf};
 
 pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), String> {
     validate_event_contract_registry_v7_inventory(workspace_root)?;
-    validate_nip09_reconciliation_manifest(workspace_root)?;
-    validate_source_maintenance_manifest(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
 
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
-const NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE: &str =
-    "contracts/conformance/vectors/event_store/nip09_reconciliation.v1.json";
-const FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE: &str =
-    "contracts/conformance/vectors/event_store/food_availability_projection.v1.json";
-const SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE: &str =
-    "contracts/conformance/vectors/event_store/source_maintenance.v1.json";
-const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 3] = [
-    NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
-    FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
-    SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE,
-];
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
 const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
@@ -88,7 +62,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 23] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 20] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -128,18 +102,6 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 23] = [
     (
         "contracts/conformance/vectors/event/verified_admission.v1.json",
         "crates/event_codec/tests/fixtures/verified_admission.v1.json",
-    ),
-    (
-        NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
-        "crates/event_store/tests/fixtures/nip09_reconciliation.v1.json",
-    ),
-    (
-        FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
-        "crates/event_store/tests/fixtures/food_availability_projection.v1.json",
-    ),
-    (
-        SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE,
-        "crates/event_store/tests/fixtures/source_maintenance.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
@@ -4248,21 +4210,25 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
         }
     }
 
-    let event_store = fs::read_to_string(workspace_root.join("crates/event_store/Cargo.toml"))
-        .map_err(|error| format!("read crates/event_store/Cargo.toml: {error}"))?;
-    let event_store: toml::Value = toml::from_str(&event_store)
-        .map_err(|error| format!("parse crates/event_store/Cargo.toml: {error}"))?;
-    let sqlite_features = event_store
-        .get("features")
-        .and_then(|features| features.get("sqlite"))
+    let storage_sqlite =
+        fs::read_to_string(workspace_root.join("crates/storage_sqlite/Cargo.toml"))
+            .map_err(|error| format!("read crates/storage_sqlite/Cargo.toml: {error}"))?;
+    let storage_sqlite: toml::Value = toml::from_str(&storage_sqlite)
+        .map_err(|error| format!("parse crates/storage_sqlite/Cargo.toml: {error}"))?;
+    let sqlite_features = storage_sqlite
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("sqlx"))
+        .and_then(|sqlx| sqlx.get("features"))
         .and_then(toml::Value::as_array)
-        .ok_or_else(|| "crates/event_store/Cargo.toml must define features.sqlite".to_string())?;
+        .ok_or_else(|| {
+            "crates/storage_sqlite/Cargo.toml dependencies.sqlx.features is required".to_string()
+        })?;
     if !sqlite_features
         .iter()
-        .any(|feature| feature.as_str() == Some("sqlx/sqlite-bundled"))
+        .any(|feature| feature.as_str() == Some("sqlite-bundled"))
     {
         return Err(
-            "crates/event_store/Cargo.toml features.sqlite must activate sqlx/sqlite-bundled"
+            "crates/storage_sqlite/Cargo.toml dependencies.sqlx.features must activate sqlite-bundled"
                 .to_string(),
         );
     }
@@ -4435,12 +4401,6 @@ fn validate_all_conformance_vectors(
     let canonical_deletion_suppression_path =
         workspace_root.join(DELETION_SUPPRESSION_CONFORMANCE_VECTOR_RELATIVE);
     for path in paths {
-        if SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES
-            .iter()
-            .any(|relative| path == workspace_root.join(relative))
-        {
-            continue;
-        }
         let vector = validate_conformance_vector_file(&path, contract_version)?;
         validate_comment_vector_namespace(&path, &canonical_comment_path, &vector)?;
         validate_deletion_vector_namespace(
@@ -9661,7 +9621,7 @@ documentation = "https://docs.rs/radroots_a"
 readme = "README.md"
 keywords = ["radroots"]
 categories = ["data-structures"]
-include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = []
@@ -12666,7 +12626,7 @@ documentation = "https://docs.rs/radroots_a"
 readme = "README.md"
 keywords = ["radroots"]
 categories = ["data-structures"]
-include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = []
@@ -12997,7 +12957,7 @@ documentation = "https://docs.rs/radroots_a"
 readme = "README.md"
 keywords = ["radroots"]
 categories = ["data-structures"]
-include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = []
@@ -13065,7 +13025,7 @@ documentation = "https://docs.rs/radroots_a"
 readme = "README.md"
 keywords = ["radroots"]
 categories = ["data-structures"]
-include = ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = []

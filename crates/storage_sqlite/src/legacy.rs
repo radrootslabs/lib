@@ -3544,9 +3544,8 @@ mod tests {
         include_str!("../../../contracts/storage/legacy_event_staging_policy_v1.toml");
     const OUTBOX_STAGING_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_outbox_staging_policy_v1.toml");
-    const EVENT_STORE_V1_SQL: &str =
-        include_str!("../../event_store/migrations/0001_event_store.up.sql");
-    const OUTBOX_V1_SQL: &str = include_str!("../../outbox/migrations/0001_outbox.up.sql");
+    const EVENT_STORE_V1_SQL: &str = include_str!("fixtures/legacy_event_store_v1.sql");
+    const OUTBOX_V1_SQL: &str = include_str!("fixtures/legacy_outbox_v1.sql");
     const PRIVATE_STAGING_POLICY: &str =
         include_str!("../../../contracts/storage/legacy_private_staging_policy_v1.toml");
     const STUDIO_HANDOFF_POLICY: &str =

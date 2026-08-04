@@ -15,16 +15,6 @@ const PERMISSION: &str = include_str!("../src/permission.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
 const SERVER: &str = include_str!("../src/server.rs");
 const URI: &str = include_str!("../src/uri.rs");
-const SIGNER_CONSUMERS: &[&str] = &[
-    include_str!("../../nostr_signer/src/backend.rs"),
-    include_str!("../../nostr_signer/src/capability.rs"),
-    include_str!("../../nostr_signer/src/error.rs"),
-    include_str!("../../nostr_signer/src/evaluation.rs"),
-    include_str!("../../nostr_signer/src/manager.rs"),
-    include_str!("../../nostr_signer/src/model.rs"),
-    include_str!("../../nostr_signer/src/nip46.rs"),
-    include_str!("../../nostr_signer/src/store.rs"),
-];
 
 #[test]
 fn manifest_has_final_identity_feature_vocabulary_and_radroots_dependencies() {
@@ -284,23 +274,15 @@ fn protocol_transport_boundary_has_no_relay_pool_or_runtime_owner() {
 }
 
 #[test]
-fn workspace_signer_consumers_use_only_final_protocol_paths() {
-    for source in SIGNER_CONSUMERS {
-        for retired in [
-            "radroots_nostr_connect::prelude",
-            "RadrootsNostrConnectClient",
-            "RadrootsNostrConnectMethod",
-            "RadrootsNostrConnectPermission",
-            "RadrootsNostrConnectRequest",
-            "RadrootsNostrConnectResponse",
-            "RADROOTS_NOSTR_CONNECT_",
-        ] {
-            assert!(
-                !source.contains(retired),
-                "workspace signer consumer retains retired protocol surface `{retired}`"
-            );
-        }
-    }
+fn predecessor_signer_package_is_removed() {
+    let crate_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    assert!(
+        !crate_root
+            .parent()
+            .expect("crates root")
+            .join("nostr_signer")
+            .exists()
+    );
 }
 
 #[test]
