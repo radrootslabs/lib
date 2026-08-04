@@ -8,8 +8,7 @@ use radroots_identity::{
 };
 use serde_json::Value;
 
-const PUBLIC_VALUE_VECTORS: &str =
-    include_str!("../../../contracts/conformance/vectors/identity/public_values.v1.json");
+const PUBLIC_VALUE_VECTORS: &str = include_str!("fixtures/public_values.v1.json");
 
 #[test]
 fn public_value_vectors_are_unique_complete_and_executable() {

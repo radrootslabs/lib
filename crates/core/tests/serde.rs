@@ -8,8 +8,7 @@ use std::collections::BTreeSet;
 use radroots_core::{Currency, Decimal, Money, Percent, Quantity, QuantityPrice, Unit};
 use serde_json::Value;
 
-const SERIALIZATION_VECTORS: &str =
-    include_str!("../../../contracts/conformance/vectors/core/value_serialization.v1.json");
+const SERIALIZATION_VECTORS: &str = include_str!("fixtures/value_serialization.v1.json");
 
 #[test]
 fn decimal_serializes_as_string() {

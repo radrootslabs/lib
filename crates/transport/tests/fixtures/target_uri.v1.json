@@ -1,0 +1,76 @@
+{
+  "suite": "transport",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "transport_target_uri_generic_canonical_001",
+      "kind": "transport.target_uri.valid",
+      "input": {
+        "uri": "MESH://Node.Example/path?q=1#frag"
+      },
+      "expected": {
+        "canonical_uri": "mesh://node.example/path?q=1#frag"
+      }
+    },
+    {
+      "id": "transport_target_uri_empty_002",
+      "kind": "transport.target_uri.invalid",
+      "input": {
+        "uri": " "
+      },
+      "expected": {
+        "error": "empty_target_uri"
+      }
+    },
+    {
+      "id": "transport_target_uri_whitespace_003",
+      "kind": "transport.target_uri.invalid",
+      "input": {
+        "uri": "bad target"
+      },
+      "expected": {
+        "error": "invalid_target_uri"
+      }
+    },
+    {
+      "id": "transport_target_uri_bad_scheme_004",
+      "kind": "transport.target_uri.invalid",
+      "input": {
+        "uri": "1bad:target"
+      },
+      "expected": {
+        "error": "invalid_target_uri"
+      }
+    },
+    {
+      "id": "transport_nostr_relay_canonical_005",
+      "kind": "transport.nostr_relay_target.valid",
+      "input": {
+        "uri": "WSS://Relay.Example/"
+      },
+      "expected": {
+        "canonical_uri": "wss://relay.example"
+      }
+    },
+    {
+      "id": "transport_nostr_relay_query_006",
+      "kind": "transport.nostr_relay_target.invalid",
+      "input": {
+        "uri": "wss://relay.example?subscription=1"
+      },
+      "expected": {
+        "error": "invalid_target_uri"
+      }
+    },
+    {
+      "id": "transport_nostr_relay_nonlocal_ws_007",
+      "kind": "transport.nostr_relay_target.invalid",
+      "input": {
+        "uri": "ws://relay.example"
+      },
+      "expected": {
+        "error": "invalid_target_uri"
+      }
+    }
+  ]
+}

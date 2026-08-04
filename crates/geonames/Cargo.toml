@@ -13,7 +13,7 @@ publish = ["crates-io"]
 documentation = "https://docs.rs/radroots_geonames"
 keywords = ["radroots", "geonames", "geocoding", "locality"]
 categories = ["database"]
-include = ["src/**", "tests/**", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "!tests/package_boundary.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = []

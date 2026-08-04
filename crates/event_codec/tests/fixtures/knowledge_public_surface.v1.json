@@ -1,0 +1,73 @@
+{
+  "suite": "knowledge_public_surface",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "knowledge_source_public_surface_valid_001",
+      "kind": "knowledge.public_surface.valid",
+      "input": {
+        "fixture": "knowledge_source_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.source.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_claim_public_surface_valid_002",
+      "kind": "knowledge.public_surface.valid",
+      "input": {
+        "fixture": "knowledge_claim_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.claim.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_review_public_surface_valid_003",
+      "kind": "knowledge.public_surface.valid",
+      "input": {
+        "fixture": "knowledge_review_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.review.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_field_report_public_surface_valid_004",
+      "kind": "knowledge.public_surface.valid",
+      "input": {
+        "fixture": "knowledge_field_report_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.field_report.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "wiki_article_public_surface_valid_005",
+      "kind": "knowledge.public_surface.valid",
+      "input": {
+        "fixture": "wiki_article_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.wiki.article.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_claim_sdk_builder_public_surface_valid_006",
+      "kind": "knowledge.sdk_builder_event.valid",
+      "input": {
+        "sdk": "radroots_sdk",
+        "builder": "RadrootsKnowledgeClaimBuilder"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.claim.v1",
+        "operation": "build_event_validate_decode_expose"
+      }
+    }
+  ]
+}

@@ -453,8 +453,7 @@ fn sign_event_response_roundtrips_signed_event_json_string() {
 
 #[test]
 fn checked_in_current_session_vectors_match_protocol_behavior() {
-    let vectors =
-        include_str!("../../../contracts/conformance/vectors/nip46/current_session.v1.json");
+    let vectors = include_str!("fixtures/current_session.v1.json");
     let document: Value = serde_json::from_str(vectors).expect("NIP-46 vector JSON");
     assert_eq!(document["suite"], "nip46_current_session");
     assert_eq!(document["contract_version"], "1.0.0");

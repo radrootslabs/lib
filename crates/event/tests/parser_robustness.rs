@@ -5,8 +5,7 @@ use radroots_event::id::{DTag, EventId, EventSignature, Nip01Coordinate};
 use radroots_event::tag::relay_hint::NostrRelayHint;
 use radroots_event::wire::v1::Nip01EventWire;
 
-const VALID_WIRE_VECTOR: &str =
-    include_str!("../../../contracts/conformance/vectors/event/nip01_wire.v1.json");
+const VALID_WIRE_VECTOR: &str = include_str!("fixtures/nip01_wire.v1.json");
 
 #[test]
 fn wire_and_tag_parsers_are_total_over_deterministic_mutation_corpus() {

@@ -13,10 +13,8 @@ use radroots_protocol::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const WIRE_VECTORS: &str =
-    include_str!("../../../contracts/conformance/vectors/protocol/wire_values.v1.json");
-const GENERATED_INVENTORY: &str =
-    include_str!("../../../contracts/codegen/protocol_v1.inventory.json");
+const WIRE_VECTORS: &str = include_str!("fixtures/wire_values.v1.json");
+const GENERATED_INVENTORY: &str = include_str!("fixtures/protocol_v1.inventory.json");
 
 #[test]
 fn language_neutral_wire_vectors_are_unique_and_executable() {

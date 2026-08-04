@@ -1,0 +1,890 @@
+{
+  "schema_version": 1,
+  "generator": "radroots_xtask.protocol_codegen.v1",
+  "package": "radroots_protocol",
+  "source_hash_algorithm": "sha256_bytes_v1",
+  "sources": [
+    {
+      "module": "capability::v1",
+      "path": "crates/protocol/src/capability/v1.rs",
+      "sha256": "db2ac595ff4e45652791df49d3e0129afcac57fb568f71c6b7355e083b359ad6",
+      "types": [
+        {
+          "rust_path": "radroots_protocol::capability::v1::Availability",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::capability::v1::Maturity",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::capability::v1::MeshScopeId",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::capability::v1::ReticulumDestination",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::capability::v1::ReticulumTarget",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::capability::v1::TransportDescriptor",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::capability::v1::TransportKind",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "module": "error::v1",
+      "path": "crates/protocol/src/error/v1.rs",
+      "sha256": "3a4043ea8f1a457193c9f0fdcd00427af650b3db560b55dbc64774a8a5013107",
+      "types": [
+        {
+          "rust_path": "radroots_protocol::error::v1::CapabilityId",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::Class",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::Code",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::Detail",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::DetailValue",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::ErrorReport",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::RecoveryAction",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::SafeDetails",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::error::v1::SafeMessage",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "module": "event::v1",
+      "path": "crates/protocol/src/event/v1.rs",
+      "sha256": "cc5b36e7e5cef0c7e375c2ce473267f5721994416d5154296a135890dface2e4",
+      "types": [
+        {
+          "rust_path": "radroots_protocol::event::v1::EventClass",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::event::v1::EventDescriptor",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::event::v1::TradeState",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "module": "radrootsd::transport_publish::v5",
+      "path": "crates/protocol/src/radrootsd/transport_publish/v5.rs",
+      "sha256": "a562ce9af3fd0e65a31c121c0c73c44a895d45872546c9290c193643b9df8b5b",
+      "types": [
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::AuthCapabilities",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::Capabilities",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::CapabilityAvailability",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::CapabilityMaturity",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::EventRequest",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::EventResponse",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::Implementation",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::Job",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::JobStatus",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::Target",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::TargetPolicyName",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::TargetSource",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::TransportCapability",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "module": "runtime::v1",
+      "path": "crates/protocol/src/runtime/v1.rs",
+      "sha256": "d25db1e8b5beaa017bbed549ccc0ce1a54c34f58de4c636b8a33e6a22b66c17f",
+      "types": [
+        {
+          "rust_path": "radroots_protocol::runtime::v1::ApprovalRequirement",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::DeadlinePolicy",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::DryRunSupport",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::IdempotencyPolicy",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::Mutability",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::OperationDescriptor",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::OperationId",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::PrivacyEffect",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::ProjectionEffect",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::Risk",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SignerRequirement",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncCapabilityState",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncHealth",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncOutboxStatus",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncProjectionStatus",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncRetryDecision",
+          "kind": "enum"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::SyncStatusReceipt",
+          "kind": "struct"
+        },
+        {
+          "rust_path": "radroots_protocol::runtime::v1::TransportRoute",
+          "kind": "struct"
+        }
+      ]
+    }
+  ],
+  "schemas": [
+    {
+      "schema_id": "radroots.protocol.error_report.v1",
+      "module": "error::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.protocol.event_descriptor.v1",
+      "module": "event::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.protocol.reticulum_target.v1",
+      "module": "capability::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.protocol.trade_state.v1",
+      "module": "event::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.protocol.transport_capability_descriptor.v1",
+      "module": "capability::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.protocol.transport_kind.v1",
+      "module": "capability::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.create.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.create.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.import.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.import.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.list.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.list.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.remove.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.remove.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.select.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.account.select.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.create.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.create.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.get.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.get.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.item.add.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.item.add.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.item.remove.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.item.remove.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.item.update.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.item.update.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.list.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.list.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.quote.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.basket.quote.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.diagnostics.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.diagnostics.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.create.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.create.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.get.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.get.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.list.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.list.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.publish.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.publish.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.update.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.farm.update.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.health.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.health.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.create.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.create.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.get.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.get.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.list.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.list.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.pause.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.pause.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.publish.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.publish.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.update.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.update.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.withdraw.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.listing.withdraw.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.market.get.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.market.get.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.market.pull.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.market.pull.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.market.search.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.market.search.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.profile.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.profile.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.profile.reset.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.profile.reset.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.signer.status.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.signer.status.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.store.backup.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.store.backup.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.store.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.store.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.store.restore.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.store.restore.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.sync.pull.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.sync.pull.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.sync.push.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.sync.push.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.sync.status.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.sync.status.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.cancellation.submit.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.cancellation.submit.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.candidate.decide.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.candidate.decide.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.evidence.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.evidence.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.evidence.refresh.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.evidence.refresh.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.get.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.get.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.list.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.list.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.operation.resume.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.operation.resume.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.private_artifact.delete.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.private_artifact.delete.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.private_artifact.open.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.private_artifact.open.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.private_artifact.seal.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.private_artifact.seal.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.proposal.submit.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.proposal.submit.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.revision.propose.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.trade.revision.propose.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.capability.list.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.capability.list.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.config.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.config.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.config.update.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.config.update.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.delivery.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.delivery.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.delivery.retry.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.delivery.retry.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.status.inspect.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.transport.status.inspect.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.validation.status.receipt.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radroots.runtime.validation.status.request.v1",
+      "module": "runtime::v1",
+      "generation": 1
+    },
+    {
+      "schema_id": "radrootsd.transport_publish.v5",
+      "module": "radrootsd::transport_publish::v5",
+      "generation": 5
+    }
+  ]
+}

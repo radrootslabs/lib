@@ -21,12 +21,10 @@ use radroots_event_codec::manifest::{
 };
 use support::knowledge::RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS;
 
-const MANIFEST_JSON: &str =
-    include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.json");
-const MANIFEST_SHA256: &str =
-    include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.sha256");
+const MANIFEST_JSON: &str = include_str!("fixtures/knowledge_event_contract_manifest.v2.json");
+const MANIFEST_SHA256: &str = include_str!("fixtures/knowledge_event_contract_manifest.v2.sha256");
 const KNOWLEDGE_PUBLIC_SURFACE_VECTOR: &str =
-    include_str!("../../../contracts/conformance/vectors/knowledge/public_surface.v1.json");
+    include_str!("fixtures/knowledge_public_surface.v1.json");
 
 const MVP_SUPPORT_CONTRACT_IDS: &[&str] = &[
     "radroots.wiki.article.v1",

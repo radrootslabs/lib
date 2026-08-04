@@ -586,8 +586,7 @@ fn transport_kind_and_target_parsers_cover_negative_edges() {
 
 #[test]
 fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
-    let vectors =
-        include_str!("../../../contracts/conformance/vectors/transport/target_uri.v1.json");
+    let vectors = include_str!("fixtures/target_uri.v1.json");
     let document: Value = serde_json::from_str(vectors).expect("transport target vector json");
     let entries = document
         .get("vectors")

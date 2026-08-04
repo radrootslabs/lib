@@ -1,0 +1,690 @@
+{
+  "schema_version": 2,
+  "registry_version": 7,
+  "radroots_event_version": "0.1.0-alpha",
+  "radroots_event_codec_version": "0.1.0-alpha",
+  "contract_count": 11,
+  "contracts": [
+    {
+      "contract_id": "radroots.knowledge.change_proposal.v1",
+      "kind": 3464,
+      "class": "regular",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsKnowledgeChangeProposal",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.change_proposal.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": false,
+      "sdk_draft_support": false,
+      "wasm_tag_builder_support": false,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.claim.v1",
+      "kind": 3460,
+      "class": "regular",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsKnowledgeClaim",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.claim.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "citation",
+          "cardinality": "optional_many",
+          "semantic": "citation",
+          "value_type": "sha256",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.contribution_attestation.v1",
+      "kind": 3465,
+      "class": "regular",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsContributionAttestation",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.contribution_attestation.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": false,
+      "sdk_draft_support": false,
+      "wasm_tag_builder_support": false,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.evidence_bounty.v1",
+      "kind": 30451,
+      "class": "addressable",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsEvidenceBounty",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.evidence_bounty.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": false,
+      "sdk_draft_support": false,
+      "wasm_tag_builder_support": false,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.field_report.v1",
+      "kind": 3463,
+      "class": "regular",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsKnowledgeFieldReport",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.field_report.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "g",
+          "cardinality": "optional_one",
+          "semantic": "geohash",
+          "value_type": "geohash",
+          "relay_indexed": true
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.relation.v1",
+      "kind": 3461,
+      "class": "regular",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsKnowledgeRelation",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.relation.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.review.v1",
+      "kind": 3462,
+      "class": "regular",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsKnowledgeReview",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.review.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "review_target",
+          "cardinality": "required_one",
+          "semantic": "review_target",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.knowledge.source.v1",
+      "kind": 30450,
+      "class": "addressable",
+      "standard": "radroots",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "payload_type": "RadrootsKnowledgeSource",
+      "discriminators": [
+        {
+          "type": "tag_equals",
+          "name": "contract",
+          "value": "radroots.knowledge.source.v1"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.wiki.article.v1",
+      "kind": 30818,
+      "class": "addressable",
+      "standard": "nip54",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "djot",
+      "payload_type": "RadrootsWikiArticle",
+      "discriminators": [
+        {
+          "type": "kind_only"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "summary",
+          "cardinality": "optional_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "published_at",
+          "cardinality": "optional_one",
+          "semantic": "published_at",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.wiki.merge_request.v1",
+      "kind": 818,
+      "class": "regular",
+      "standard": "nip54",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "payload_type": "RadrootsWikiMergeRequest",
+      "discriminators": [
+        {
+          "type": "kind_only"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "a",
+          "cardinality": "required_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "required_one",
+          "semantic": "source",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_one",
+          "semantic": "previous_event",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    },
+    {
+      "contract_id": "radroots.wiki.redirect.v1",
+      "kind": 30819,
+      "class": "addressable",
+      "standard": "nip54",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "empty",
+      "payload_type": "RadrootsWikiRedirect",
+      "discriminators": [
+        {
+          "type": "kind_only"
+        }
+      ],
+      "tag_contracts": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "required_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ],
+      "codec_support": {
+        "encode": true,
+        "decode": true,
+        "contract_validation": true,
+        "verified_decode": true,
+        "verified_decode_requires_nostr": true
+      },
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
+      "deprecated": false,
+      "replaced_by": null,
+      "introduced_at": "0.1.0-alpha.2"
+    }
+  ]
+}
