@@ -12,9 +12,6 @@ use core::net::Ipv6Addr;
 use core::str::FromStr;
 use sha2::{Digest, Sha256};
 
-const EXTERNAL_RETICULUM_ENDPOINT_URI: &str = "reticulum:local";
-const EXTERNAL_RETICULUM_SCOPE_ID: &str = "local";
-
 /// Maximum number of targets in one operation.
 pub const TARGET_SET_MAX_ITEMS: usize = 64;
 
@@ -104,12 +101,6 @@ impl TargetScope {
             return Err(RadrootsTransportError::InvalidTargetScope);
         }
         Ok(Self(value.to_string()))
-    }
-
-    /// Publish-frozen external-consumer helper; removed at Step 305.
-    #[doc(hidden)]
-    pub fn local_reticulum() -> Self {
-        Self::parse(EXTERNAL_RETICULUM_SCOPE_ID).expect("external Reticulum scope id")
     }
 
     pub fn as_str(&self) -> &str {
@@ -337,30 +328,6 @@ impl Target {
         label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         Self::new_with_metadata(TransportId::NOSTR, uri, scope, label)
-    }
-
-    /// Publish-frozen external-consumer helper; removed at Step 305.
-    #[doc(hidden)]
-    pub fn reticulum() -> Result<Self, RadrootsTransportError> {
-        Self::reticulum_with_metadata(EXTERNAL_RETICULUM_ENDPOINT_URI, None, None)
-    }
-
-    /// Publish-frozen external-consumer helper; removed at Step 305.
-    #[doc(hidden)]
-    pub fn reticulum_with_metadata(
-        uri: impl AsRef<str>,
-        scope: Option<TargetScope>,
-        label: Option<TargetLabel>,
-    ) -> Result<Self, RadrootsTransportError> {
-        if uri.as_ref() != EXTERNAL_RETICULUM_ENDPOINT_URI {
-            return Err(RadrootsTransportError::InvalidTargetUri);
-        }
-        Self::new_with_metadata(
-            TransportId::RETICULUM,
-            uri,
-            Some(scope.unwrap_or_else(TargetScope::local_reticulum)),
-            label,
-        )
     }
 
     pub fn local(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
@@ -848,27 +815,3 @@ fn upper_hex_digit(byte: u8) -> bool {
 fn is_local_ws_relay_host(host: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "[::1]")
 }
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportTargetUri = EndpointUri;
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportMeshScopeId = TargetScope;
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportTargetLabel = TargetLabel;
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportTargetFingerprint = TargetFingerprint;
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportTarget = Target;
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportTargetSet = TargetSet;

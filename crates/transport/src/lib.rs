@@ -26,7 +26,7 @@ pub use delivery::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetReceipt,
 };
 pub use error::{Error, RadrootsTransportError};
-pub use id::{RadrootsTransportKind, TRANSPORT_ID_MAX_BYTES, TransportId};
+pub use id::{TRANSPORT_ID_MAX_BYTES, TransportId};
 pub use kind::{
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
     RadrootsTransportImplementationState,
@@ -38,11 +38,7 @@ pub use status::{
     RadrootsTransportCapabilities, RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportStatus,
 };
-pub use target::{
-    RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetLabel, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
-    TARGET_SET_MAX_ITEMS, Target, TargetSet,
-};
+pub use target::{TARGET_SET_MAX_ITEMS, Target, TargetSet};
 pub use transport::{RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest};
 
 #[cfg(test)]

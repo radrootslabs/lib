@@ -182,23 +182,34 @@ fn source_and_sink_are_independent_dyn_compatible_host_spis() {
     assert!(!SINK.contains("fn fetch("));
 
     assert!(!PREDECESSOR_MODELS.contains("pub trait RadrootsTransport"));
-    for required in [
-        "Publish-frozen external-consumer helper; removed at Step 305.",
-        "#[doc(hidden)]\n    pub fn reticulum(",
-        "#[doc(hidden)]\n    pub fn reticulum_with_metadata(",
-        "#[doc(hidden)]\n    pub fn local_reticulum(",
+    for retired in [
+        "Publish-frozen external-consumer",
+        "pub fn reticulum(",
+        "pub fn reticulum_with_metadata(",
+        "pub fn local_reticulum(",
+        "RadrootsTransportTarget",
     ] {
         assert!(
-            TARGET.contains(required),
-            "external-consumer quarantine is missing `{required}`"
+            !TARGET.contains(retired),
+            "retired external-consumer surface remains: `{retired}`"
+        );
+    }
+    for retired in [
+        "RadrootsTransportKind",
+        "pub const Local",
+        "pub const Nostr",
+        "pub const Reticulum",
+    ] {
+        assert!(
+            !ID.contains(retired),
+            "retired transport identity remains: `{retired}`"
         );
     }
     for required in [
         "id = \"RCRV1-DEV-007\"",
+        "status = \"closed\"",
         "affected_steps = [\"122\", \"170\", \"215\", \"235\", \"305\"]",
-        "runtime-owned unpublished shim until Step 215",
-        "SDK-local unpublished target/satisfaction mapping until Step 235",
-        "external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate",
+        "Step 313 source census confirmed every external-consumer alias and helper is absent",
     ] {
         assert!(
             DEVIATIONS.contains(required),

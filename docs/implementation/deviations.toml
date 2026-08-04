@@ -68,7 +68,7 @@ closure_evidence = [
 [[deviation]]
 id = "RCRV1-DEV-008"
 date = "2026-08-01"
-status = "active"
+status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["153", "155", "171", "179", "226", "288", "293", "313"]
 spec_anchors = [
@@ -87,14 +87,18 @@ verification = [
   "SDK source-boundary tests confine predecessor imports to private_store.rs and require the final optional radroots_secrets dependency edge.",
   "Step 155 release-policy validation keeps every quarantine package non-publishable until its exact removal gate.",
 ]
-unresolved_risk = "Publish-frozen compatibility code remains reachable inside legacy runtime/private-preview paths until Steps 179, 226, 288, 293, and 313; no package-realistic publication may proceed while it remains."
+unresolved_risk = "None; the predecessor packages and all active manifest consumers are absent."
 normative_architecture_change = false
 adr_required = false
+closure_evidence = [
+  "crates/secrets/tests/consumer_migration.rs rejects every predecessor package directory, workspace dependency, and active manifest reference.",
+  "Step 313 source census confirmed the SDK, Myc, CLI, and library runtime paths use only radroots_secrets and final storage owners.",
+]
 
 [[deviation]]
 id = "RCRV1-DEV-007"
 date = "2026-07-30"
-status = "active"
+status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["122", "170", "215", "235", "305"]
 spec_anchors = [
@@ -115,14 +119,18 @@ verification = [
   "Steps 215 and 235 are the exact fail-closed final-removal gates for the remaining runtime and SDK mappings.",
   "Step 305 rejects publication until oss/cli and oss/radrootsd no longer require the documentation-hidden external-consumer aliases and Reticulum helpers.",
 ]
-unresolved_risk = "Runtime, SDK, CLI, and daemon consumers retain bounded publish-frozen predecessor mappings; package-realistic publication remains blocked until every mapping is removed at its explicit gate."
+unresolved_risk = "None; final consumers use TransportId, Target, TargetScope, TargetLabel, and TargetFingerprint directly."
 normative_architecture_change = false
 adr_required = false
+closure_evidence = [
+  "crates/transport/tests/package_boundary.rs rejects the hidden Reticulum constructors, legacy constant spellings, and prefixed target aliases.",
+  "Step 313 source census confirmed every external-consumer alias and helper is absent after the daemon cutover to final transport identities.",
+]
 
 [[deviation]]
 id = "RCRV1-DEV-009"
 date = "2026-08-02"
-status = "active"
+status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["170", "179", "189", "196", "201", "213", "226", "235", "263", "269", "288", "292", "313"]
 spec_anchors = [
@@ -143,9 +151,13 @@ verification = [
   "Workspace checks and tests prove current migration consumers remain buildable while publication stays frozen.",
   "Step 313 performs the all-first-party forbidden-name search and final package deletion."
 ]
-unresolved_risk = "Private compatibility implementations remain reachable until all standalone consumers migrate; package-realistic publication remains blocked until Step 313 removes them."
+unresolved_risk = "None; all four predecessor packages and their active dependency edges are absent."
 normative_architecture_change = false
 adr_required = false
+closure_evidence = [
+  "crates/storage_sqlite/tests/package_boundary.rs and crates/storage/tests/workspace_consumers.rs reject the four predecessor package identities.",
+  "Step 313 removed the final library packages, SDK runtime/event-index surfaces, and CLI source dependency branch after all standalone consumers migrated.",
+]
 
 [[deviation]]
 id = "RCRV1-DEV-005"
@@ -232,7 +244,7 @@ adr_required = false
 [[deviation]]
 id = "RCRV1-DEV-011"
 date = "2026-08-03"
-status = "active"
+status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["225", "226", "248"]
 spec_anchors = [
@@ -250,14 +262,18 @@ verification = [
   "GeoNames package quarantine tests require the predecessor to remain private and absent from the approved publication inventory while the SDK source census remains non-empty.",
   "Step 248 must reject every remaining package, dependency, feature, import, and error-adapter reference to radroots_geocoder before deletion.",
 ]
-unresolved_risk = "The standalone SDK remains coupled to the predecessor API until its ordered cutover; package-realistic publication is blocked until Step 248 removes the bridge."
+unresolved_risk = "None; the SDK consumes radroots_geonames and the predecessor package is absent."
 normative_architecture_change = false
 adr_required = false
+closure_evidence = [
+  "crates/geonames/tests/package_boundary.rs rejects the superseded package directory and release-policy identity.",
+  "The SDK Step 248 checkpoint removed every radroots_geocoder dependency, feature, import, and error-adapter reference.",
+]
 
 [[deviation]]
 id = "RCRV1-DEV-012"
 date = "2026-08-03"
-status = "active"
+status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["279", "282", "283"]
 spec_anchors = [
@@ -276,6 +292,11 @@ verification = [
   "The Nostr adapter applies kind, author, and time constraints remotely and defensively filters returned events before page bounds.",
   "The shared-engine SDK and mobile integration gates must pass before Steps 282 and 283 are marked complete.",
 ]
-unresolved_risk = "Steps 282 and 283 remain blocked until the SDK and mobile bridge checkpoints implement and verify the complete operation surface."
+unresolved_risk = "None; the shared-engine and mobile qualification checkpoints completed with the final selector and SDK ownership model."
 normative_architecture_change = false
 adr_required = false
+closure_evidence = [
+  "crates/transport/tests/source_contract.rs verifies bounded canonical selector construction and request binding.",
+  "crates/transport_nostr/src/source.rs tests remote selector translation and defensive result filtering before page bounds.",
+  "Steps 282 and 283 qualified the SDK-owned signing, Nostr composition, and mobile presentation bridge without lower-package ownership leakage.",
+]

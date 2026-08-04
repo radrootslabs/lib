@@ -25,19 +25,6 @@ impl TransportId {
     /// Daemon-mediated transport.
     pub const RADROOTSD: Self = Self(ProtocolTransportKind::RADROOTSD);
 
-    /// Publish-frozen spelling retained only for external first-party consumers.
-    #[doc(hidden)]
-    #[allow(non_upper_case_globals)]
-    pub const Local: Self = Self::LOCAL;
-    /// Publish-frozen spelling retained only for external first-party consumers.
-    #[doc(hidden)]
-    #[allow(non_upper_case_globals)]
-    pub const Nostr: Self = Self::NOSTR;
-    /// Publish-frozen spelling retained only for external first-party consumers.
-    #[doc(hidden)]
-    #[allow(non_upper_case_globals)]
-    pub const Reticulum: Self = Self::RETICULUM;
-
     /// Parses an exact canonical identity.
     pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
         ProtocolTransportKind::parse(value.as_ref())
@@ -60,10 +47,6 @@ impl TransportId {
         self.as_str().to_string()
     }
 }
-
-/// Publish-frozen external-consumer alias; removed at Step 305.
-#[doc(hidden)]
-pub type RadrootsTransportKind = TransportId;
 
 fn map_protocol_error(error: ProtocolError) -> RadrootsTransportError {
     match error {

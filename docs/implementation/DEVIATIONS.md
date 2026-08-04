@@ -13,11 +13,17 @@ silently change `radroots.crates.release.v1`.
 | `RCRV1-DEV-002` | 249 | Pull only the facade scaffold forward to immediately after Step 014 in `sdk`; do not repeat it later. |
 | `RCRV1-DEV-004` | 098, 155, 225, 260, 268, 294, 298-299, 301-304, 314 | Enforce a temporary 90% four-dimension coverage baseline during heavy development; restore 100% only through a future explicit contract update. |
 | `RCRV1-DEV-005` | 013, 019-026, 027-315 | Pin every Rust crate and internal Radroots dependency in `radrootslabs/lib` to exactly `0.1.0-alpha` until further explicit authority. |
-| `RCRV1-DEV-007` | 122, 170, 215, 235, 305 | Remove the predecessor monolithic transport SPI now; quarantine publish-frozen runtime, SDK, CLI, and daemon consumer shims until their explicit removal gates. |
-| `RCRV1-DEV-008` | 153, 155, 171, 179, 226, 288, 293, 313 | Activate final secrets dependency edges now; quarantine legacy vault/store consumers until their ordered storage, SDK, downstream, and final-removal gates. |
-| `RCRV1-DEV-009` | 170, 179, 189, 196, 201, 213, 226, 235, 263, 269, 288, 292, 313 | Quarantine the four superseded storage packages until their independently buildable first-party consumers migrate, then remove them at Step 313. |
-| `RCRV1-DEV-011` | 225, 226, 248 | Quarantine the superseded geocoder package until the standalone SDK adopts `radroots_geonames`, then remove it at the SDK retirement gate. |
-| `RCRV1-DEV-012` | 279, 282-283 | Complete the mobile shared-engine cutover with bounded transport selectors and SDK-owned signing/Nostr composition before qualifying generated host artifacts. |
+
+## Closed records
+
+| ID | Closure |
+| --- | --- |
+| `RCRV1-DEV-007` | Final transport identities replaced every runtime, SDK, CLI, and daemon compatibility mapping; Step 313 removed the last hidden aliases/helpers. |
+| `RCRV1-DEV-008` | Final secrets and storage owners replaced every vault/store predecessor; Step 313 removed the packages and remaining consumers. |
+| `RCRV1-DEV-009` | Final storage and sync owners replaced the four predecessor packages; Step 313 removed the final SDK/CLI/index surfaces. |
+| `RCRV1-DEV-010` | Step 301 removed the overdue Nostr-runtime and broad-network bridges after their consumer gates were green. |
+| `RCRV1-DEV-011` | Step 248 completed the SDK GeoNames cutover and removed the geocoder bridge. |
+| `RCRV1-DEV-012` | Steps 282-283 qualified the bounded selector, SDK signing/Nostr composition, and mobile bridge. |
 
 ## Record template
 

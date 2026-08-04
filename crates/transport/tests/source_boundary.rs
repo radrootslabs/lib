@@ -9,19 +9,16 @@ struct ForbiddenConcept {
 }
 
 const TRANSPORT_HARDENING_CRATE_SOURCE_ROOTS: &[&str] = &[
+    "protocol/src/radrootsd/transport_publish",
     "transport/src",
     "transport_reticulum/src",
-    "transport_publish_protocol/src",
     "transport_nostr/src",
-    "outbox/src",
 ];
 
 const GENERIC_TRANSPORT_STATUS_SOURCE_ROOTS: &[&str] = &[
-    "event_store/src",
     "mesh_agent_proto/src",
-    "outbox/src",
+    "protocol/src/radrootsd/transport_publish",
     "transport/src",
-    "transport_publish_protocol/src",
     "transport_reticulum/src",
 ];
 
@@ -30,13 +27,10 @@ const CORE_STATUS_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src", "transport
 const CORE_TRANSPORT_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src"];
 
 const TRANSPORT_CONSUMER_SOURCE_ROOTS: &[&str] = &[
-    "event_store/src",
     "mesh/src",
     "mesh_agent_client/src",
-    "outbox/src",
-    "runtime/src",
+    "protocol/src/radrootsd/transport_publish",
     "transport_nostr/src",
-    "transport_publish_protocol/src",
     "transport_reticulum/src",
 ];
 
@@ -50,7 +44,7 @@ const RETIRED_TRANSPORT_TYPE_NAMES: &[&str] = &[
 ];
 
 const DELIVERY_PAYLOAD_CONTRACT_SOURCE_ROOTS: &[&str] =
-    &["transport/src", "runtime/src", "transport_reticulum/src"];
+    &["transport/src", "transport_reticulum/src", "sync/src"];
 
 const FOUNDATION_HARDENING_DOC_ROOTS: &[&str] = &["contracts", "docs"];
 
@@ -509,49 +503,17 @@ fn foundation_hardening_repo_sources_reject_retired_names_and_ambiguous_docs() {
 }
 
 #[test]
-fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
+fn workspace_consumers_use_only_the_final_split_transport_spis() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("transport crate parent");
-    let runtime_source_raw = read_source(crates_root.join("runtime/src/transport.rs").as_path());
-    let runtime_source = production_source(runtime_source_raw.as_str());
+    assert!(
+        !crates_root.join("runtime").exists(),
+        "the predecessor runtime package must remain retired"
+    );
     let reticulum_source_raw =
         read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
     let reticulum_source = production_source(reticulum_source_raw.as_str());
-
-    for required in [
-        "Arc<dyn EventSource>",
-        "Arc<dyn EventSink>",
-        "pub fn register_source<T>",
-        "pub fn register_sink<T>",
-        "T: EventSource + 'static",
-        "T: EventSink + 'static",
-    ] {
-        assert!(
-            runtime_source.contains(required),
-            "runtime registry must expose final split SPI witness `{required}`"
-        );
-    }
-    assert!(
-        runtime_source.contains("Arc<dyn RadrootsRuntimeTransportShim>"),
-        "mixed runtime delivery workers retain the sole runtime-owned unpublished shim until RCLD 40"
-    );
-    assert!(
-        runtime_source.contains("pub trait RadrootsRuntimeTransportShim: Send + Sync"),
-        "the temporary runtime shim must have an explicit, searchable final-removal owner"
-    );
-    let removed_reticulum_runtime_transport =
-        ["RadrootsRuntimeReticulum", "Pre", "viewTransport"].concat();
-    for forbidden in [
-        "pub trait RadrootsRuntimeTransportAdapter".to_owned(),
-        "dyn RadrootsRuntimeTransportAdapter".to_owned(),
-        removed_reticulum_runtime_transport,
-    ] {
-        assert!(
-            !runtime_source.contains(forbidden.as_str()),
-            "runtime transport source must not retain split adapter contract `{forbidden}`"
-        );
-    }
     for required in [
         "impl EventSource for RadrootsReticulumTransport",
         "impl EventSink for RadrootsReticulumTransport",
@@ -561,11 +523,7 @@ fn workspace_consumers_use_split_transport_spis_with_one_runtime_shim() {
             "Reticulum preview must implement final split SPI witness `{required}`"
         );
     }
-    assert!(
-        !reticulum_source
-            .contains("impl RadrootsRuntimeTransportShim for RadrootsReticulumTransport"),
-        "Reticulum preview must not implement the predecessor monolithic SPI"
-    );
+    assert!(!reticulum_source.contains("RadrootsRuntimeTransportShim"));
 
     let nostr_sink = read_source(crates_root.join("transport_nostr/src/sink.rs").as_path());
     let nostr_source = read_source(crates_root.join("transport_nostr/src/source.rs").as_path());
@@ -625,7 +583,7 @@ fn transport_publish_capabilities_keep_canonical_status_fields() {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("transport crate parent")
-            .join("transport_publish_protocol/src/lib.rs")
+            .join("protocol/src/radrootsd/transport_publish/v5.rs")
             .as_path(),
     );
     let source = production_source(source_raw.as_str());
@@ -633,24 +591,24 @@ fn transport_publish_capabilities_keep_canonical_status_fields() {
     for required in [
         "pub transport: String,",
         "pub configured: bool,",
-        "pub implementation: TransportPublishImplementation,",
-        "pub maturity: TransportPublishCapabilityMaturity,",
-        "pub availability: TransportPublishCapabilityAvailability,",
+        "pub implementation: Implementation,",
+        "pub maturity: CapabilityMaturity,",
+        "pub availability: CapabilityAvailability,",
         "pub usable_for_delivery: bool,",
-        "pub capabilities: TransportPublishOperationCapabilities,",
-        "pub struct TransportPublishOperationCapabilities",
+        "pub capabilities: OperationCapabilities,",
+        "pub struct OperationCapabilities",
         "pub deliver: bool,",
         "pub fetch: bool,",
         "pub discovery: bool,",
         "pub gateway_forwarding: bool,",
         "pub receipt_observation: bool,",
-        "TransportPublishImplementation::Real",
-        "TransportPublishCapabilityMaturity::Preview",
-        "TransportPublishCapabilityAvailability::Unavailable",
+        "Implementation::Real",
+        "CapabilityMaturity::Preview",
+        "CapabilityAvailability::Unavailable",
         "configured: true",
         "usable_for_delivery: true",
         "usable_for_delivery: false",
-        "capabilities: TransportPublishOperationCapabilities",
+        "capabilities: OperationCapabilities",
         "deliver: true",
         "fetch: false",
         "discovery: false",
@@ -764,13 +722,13 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
 
     let protocol_source = read_source(
         crates_root
-            .join("transport_publish_protocol/src/lib.rs")
+            .join("protocol/src/radrootsd/transport_publish/v5.rs")
             .as_path(),
     );
     for required in [
-        "validate_explicit_target_uniqueness(targets)?;",
-        "TransportPublishProtocolError::DuplicateTarget { index }",
-        "duplicate_targets.validate(2)",
+        "target.validate_structure(index)?;",
+        "return Err(Error::DuplicateTarget { index });",
+        "Err(Error::DuplicateTarget { index: 1 })",
     ] {
         assert!(
             protocol_source.contains(required),
@@ -778,20 +736,9 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
         );
     }
 
-    let outbox_source = read_source(crates_root.join("outbox/src/store.rs").as_path());
-    for required in [
-        "validate_unique_targets(&targets)?;",
-        "RadrootsTransportError::DuplicateTargetFingerprint",
-        "enqueue_rejects_duplicate_delivery_targets_before_persistence",
-    ] {
-        assert!(
-            outbox_source.contains(required),
-            "outbox source must retain duplicate target rejection witness `{required}`"
-        );
-    }
     assert!(
-        !outbox_source.contains("ordered_unique_targets"),
-        "outbox source must not reintroduce silent ordered target dedupe before delivery-plan preparation"
+        !crates_root.join("outbox").exists(),
+        "the predecessor outbox package must remain retired"
     );
 }
 
@@ -803,16 +750,14 @@ fn required_target_semantics_stay_fingerprint_exact() {
 
     let protocol_source = read_source(
         crates_root
-            .join("transport_publish_protocol/src/lib.rs")
+            .join("protocol/src/radrootsd/transport_publish/v5.rs")
             .as_path(),
     );
     for required in [
         "Self::RequiredTargets { targets } => targets.len()",
-        "pub fn validate_target_membership",
-        "TransportPublishProtocolError::RequiredTargetNotInTargetSet { index }",
-        "let required_outcomes = required_policy_outcomes(targets, &job.targets)?;",
-        "required_outcomes.iter().any(|outcome|",
-        "fingerprint == *required",
+        "validate_required_target_fingerprints(targets.as_slice())",
+        "Error::DuplicateRequiredTargetFingerprint { index }",
+        "Matching fingerprints to native targets is intentionally deferred",
     ] {
         assert!(
             protocol_source.contains(required),
@@ -943,22 +888,21 @@ fn transport_identity_is_extensible_and_reticulum_contracts_are_preview_owned() 
 
     let protocol_source_raw = read_source(
         crates_root
-            .join("transport_publish_protocol/src/lib.rs")
+            .join("protocol/src/radrootsd/transport_publish/v5.rs")
             .as_path(),
     );
     let protocol_source = production_source(protocol_source_raw.as_str());
     assert!(
-        protocol_source.contains("RETICULUM_ENDPOINT_URI as RADROOTS_RETICULUM_ENDPOINT_URI"),
-        "transport publish protocol must consume the versioned protocol endpoint constant"
+        protocol_source.contains("pub const RETICULUM_ENDPOINT_URI: &str = \"reticulum:local\";"),
+        "versioned transport publish protocol must own its endpoint constant"
     );
     assert!(
         !protocol_source.contains(["reticulum:", "pre", "view-unavailable"].concat().as_str()),
         "transport publish protocol must not duplicate the shared endpoint URI"
     );
     assert!(
-        protocol_source
-            .contains("RETICULUM_UNAVAILABLE_MESSAGE as RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
-        "transport publish capabilities must consume the versioned protocol unavailable message"
+        protocol_source.contains("pub const RETICULUM_UNAVAILABLE_MESSAGE: &str = concat!("),
+        "versioned transport publish protocol must own its unavailable message"
     );
     assert!(
         !protocol_source.contains("Reticulum transport is configured in preview mode"),
