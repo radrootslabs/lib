@@ -1,6 +1,6 @@
 [package]
 name = "radroots_protocol"
-publish = false
+publish = ["crates-io"]
 version = "0.1.0-alpha"
 edition.workspace = true
 authors.workspace = true

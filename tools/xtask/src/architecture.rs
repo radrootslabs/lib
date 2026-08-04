@@ -408,9 +408,13 @@ fn validate_public_package_metadata(
                 "public package {name} must use an existing crate-local {PUBLIC_README}"
             ));
         }
-        if package.get("publish").and_then(toml::Value::as_bool) != Some(false) {
+        let publish_registries = package
+            .get("publish")
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("public package {name} must set publish = [\"crates-io\"]"))?;
+        if publish_registries.len() != 1 || publish_registries[0].as_str() != Some("crates-io") {
             return Err(format!(
-                "public package {name} must remain publish = false during migration"
+                "public package {name} must set publish = [\"crates-io\"]"
             ));
         }
         let inherits_lints = manifest
@@ -1337,7 +1341,7 @@ adr_required = false
             complete_workspace_manifest("\"crates/radroots\""),
         )
         .expect("write workspace manifest");
-        let manifest = "[package]\nname = \"radroots\"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\nrepository.workspace = true\nhomepage.workspace = true\nauthors.workspace = true\nreadme = \"README.md\"\npublish = false\n\n[lints]\nworkspace = true\n";
+        let manifest = "[package]\nname = \"radroots\"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\nrepository.workspace = true\nhomepage.workspace = true\nauthors.workspace = true\nreadme = \"README.md\"\npublish = [\"crates-io\"]\n\n[lints]\nworkspace = true\n";
         fs::write(root.join("crates/radroots/Cargo.toml"), manifest)
             .expect("write public manifest");
         fs::write(root.join("crates/radroots/README.md"), "fixture\n")

@@ -2,7 +2,7 @@
 version = "1.0.0-alpha.1"
 
 [publication]
-frozen = true
+frozen = false
 registry = "crates-io"
 final_enablement_step = 305
 spec_id = "radroots.crates.release.v1"
@@ -96,4 +96,22 @@ retired = [
 ]
 
 [publish_order]
-crates = []
+crates = [
+  "radroots_core",
+  "radroots_identity",
+  "radroots_blossom",
+  "radroots_protocol",
+  "radroots_event",
+  "radroots_event_codec",
+  "radroots_trade",
+  "radroots_signing",
+  "radroots_transport",
+  "radroots_nostr",
+  "radroots_nostr_connect",
+  "radroots_secrets",
+  "radroots_storage",
+  "radroots_storage_sqlite",
+  "radroots_transport_nostr",
+  "radroots_sync",
+  "radroots_geonames",
+]
