@@ -1,3 +1,5 @@
+mod support;
+
 use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::{
     envelope::kind::KIND_DELETION_REQUEST,
@@ -13,7 +15,7 @@ use radroots_nostr::event::from_nostr;
 use radroots_nostr::event::{
     GenericBuilder, build_nip09_deletion_request as build_nip09_deletion_request_event,
 };
-use radroots_test_fixtures::{FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
+use support::{FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
 const CREATED_AT: u64 = 1_784_347_200;
 const TARGET_EVENT_ID: &str = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";

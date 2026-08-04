@@ -31,7 +31,7 @@ fn manifest_has_final_identity_feature_vocabulary_and_radroots_dependencies() {
     for required in [
         "name = \"radroots_nostr_connect\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "[lib]\nname = \"radroots_nostr_connect\"",
         "default = [\"serde\"]",
         "radroots_event = { workspace = true, default-features = false }",
@@ -234,7 +234,7 @@ fn client_root_and_transport_use_package_owned_state_machine_types() {
 
 #[test]
 fn separate_repository_compatibility_is_hidden_unpublished_and_scheduled() {
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     for item in [
         "pub type RadrootsNostrConnectClientTransportFuture",
         "pub struct RadrootsNostrConnectClientTarget",

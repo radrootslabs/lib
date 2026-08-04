@@ -1,3 +1,5 @@
+mod support;
+
 use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::{
     envelope::kind::{
@@ -17,7 +19,7 @@ use radroots_nostr::event::Kind as RadrootsNostrKind;
 use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::event::from_nostr;
 use radroots_nostr::event::{GenericBuilder, build_nip22_comment as build_nip22_comment_event};
-use radroots_test_fixtures::{
+use support::{
     FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX,
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
 };

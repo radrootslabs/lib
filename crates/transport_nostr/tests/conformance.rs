@@ -34,7 +34,7 @@ fn public_types_and_split_spis_satisfy_the_adapter_contract() {
 #[test]
 fn root_and_manifest_expose_no_traits_features_or_ambient_runtime() {
     assert!(!MANIFEST.contains("[features]"));
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     for forbidden in [
         "pub trait ",
         "pub mod ",

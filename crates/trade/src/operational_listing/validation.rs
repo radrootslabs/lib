@@ -233,6 +233,10 @@ mod tests {
         OperationalListingValidationError, validate_operational_listing_event,
         validate_operational_listing_model,
     };
+    use crate::test_fixtures::{
+        FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
+        FIXTURE_BOB_SECRET_KEY_HEX,
+    };
     use nostr::{EventBuilder, JsonUtil, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
@@ -250,10 +254,6 @@ mod tests {
     };
     use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
     use radroots_identity::PublicKey;
-    use radroots_test_fixtures::{
-        FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
-        FIXTURE_BOB_SECRET_KEY_HEX,
-    };
 
     const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
     const OTHER_SELLER: &str = FIXTURE_BOB_PUBLIC_KEY_HEX;

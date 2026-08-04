@@ -31,7 +31,7 @@ const CODEC_PROFILE: &str = include_str!("../../event_codec/src/profile/mod.rs")
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_event\""));
     assert!(MANIFEST.contains("version = \"0.1.0-alpha\""));
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     assert!(MANIFEST.contains("[lib]\nname = \"radroots_event\""));
     assert!(MANIFEST.contains("default = [\"std\", \"serde\"]"));
     assert_eq!(
@@ -205,7 +205,7 @@ fn public_native_items_do_not_retain_the_legacy_radroots_prefix() {
 
 #[test]
 fn lossy_legacy_projections_are_quarantined_until_codec_retirement() {
-    assert!(CODEC_MANIFEST.contains("publish = false"));
+    assert!(CODEC_MANIFEST.contains("publish = [\"crates-io\"]"));
     for (source, compatibility_type) in [
         (CODEC_POST_DECODE, "pub struct LegacyPost"),
         (CODEC_PROFILE, "pub struct LegacyProfile"),

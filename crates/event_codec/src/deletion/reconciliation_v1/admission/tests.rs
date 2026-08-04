@@ -2,13 +2,13 @@ use super::*;
 
 #[test]
 fn admitted_contract_resolves_registry_entry() {
+    use crate::test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
     use nostr::secp256k1::Message;
     use nostr::{Keys, SECP256K1};
     use radroots_event::{
         envelope::EventEnvelopeParts, envelope::kind::KIND_DELETION_REQUEST,
         wire::compute_canonical_nip01_event_id,
     };
-    use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
 
     let keys =
         Keys::parse(FIXTURE_ALICE_SECRET_KEY_HEX).expect("fixed fixture secret key must parse");

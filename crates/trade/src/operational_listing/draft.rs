@@ -176,6 +176,7 @@ pub fn canonicalize_operational_listing_edit(
 
 #[cfg(test)]
 mod tests {
+    use crate::test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         envelope::kind::KIND_CLASSIFIED_LISTING,
@@ -189,7 +190,6 @@ mod tests {
         trade::validation::OperationalListingValidationError,
     };
     use radroots_identity::PublicKey;
-    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
     use super::{
         RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditDocumentV1,

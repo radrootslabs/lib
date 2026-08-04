@@ -11,7 +11,7 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
     for required in [
         "name = \"radroots_storage_sqlite\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "[lib]\nname = \"radroots_storage_sqlite\"",
     ] {
         assert!(

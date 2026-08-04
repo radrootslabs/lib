@@ -26,7 +26,7 @@ const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_trade\""));
     assert!(MANIFEST.contains("version = \"0.1.0-alpha\""));
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     assert!(MANIFEST.contains("[lib]\nname = \"radroots_trade\""));
 
     let dependencies = table_keys(MANIFEST, "[dependencies]");

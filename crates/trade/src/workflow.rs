@@ -259,6 +259,7 @@ fn private_terms_plan(body: &TradeMutationBodyV1) -> Result<Option<PrivateTermsP
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
     use radroots_event::{
         id::{ClassifiedListingAddress, DTag, EventId, InventoryBinId},
         trade::{
@@ -272,7 +273,6 @@ mod tests {
         },
     };
     use radroots_identity::PublicKey;
-    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
     #[cfg(feature = "json")]
     const CANONICAL_WORKFLOW_VECTORS: &str =

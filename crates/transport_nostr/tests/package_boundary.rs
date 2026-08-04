@@ -14,7 +14,7 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
     for required in [
         "name = \"radroots_transport_nostr\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "[lib]\nname = \"radroots_transport_nostr\"",
     ] {
         assert!(

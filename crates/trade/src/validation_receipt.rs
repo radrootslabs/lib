@@ -1174,6 +1174,9 @@ mod tests {
         validator_set_content_from_str, validator_set_event_build, validator_set_from_event,
         verify_validation_receipt_event, verify_validator_set_event,
     };
+    use crate::test_fixtures::{
+        FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX, FIXTURE_DIEGO_PUBLIC_KEY_HEX,
+    };
     use radroots_event::{
         envelope::EventEnvelope,
         envelope::EventEnvelopeParts,
@@ -1182,9 +1185,6 @@ mod tests {
         tag::name::TAG_D,
     };
     use radroots_identity::PublicKey;
-    use radroots_test_fixtures::{
-        FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX, FIXTURE_DIEGO_PUBLIC_KEY_HEX,
-    };
 
     fn hash32(c: char) -> String {
         format!("0x{}", c.to_string().repeat(64))

@@ -611,6 +611,13 @@ fn validate_public_dependency_table(
         let dependency_name = declared_package
             .or(path_package.as_deref())
             .unwrap_or(dependency_key.as_str());
+        let first_party =
+            dependency_key.starts_with("radroots_") || dependency_name.starts_with("radroots_");
+        if first_party && !policy.public_packages.contains(dependency_name) {
+            return Err(format!(
+                "public package {owner} {section}.{dependency_key} must not depend on private first-party package {dependency_name}"
+            ));
+        }
         if !policy.public_packages.contains(dependency_name) {
             continue;
         }

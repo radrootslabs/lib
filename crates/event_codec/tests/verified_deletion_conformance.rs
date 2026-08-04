@@ -1,5 +1,7 @@
 #![cfg(feature = "json")]
 
+mod support;
+
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -383,7 +385,7 @@ fn contains_nsec_material(value: &str) -> bool {
 
 fn contains_approved_fixture_secret(value: &str) -> bool {
     let normalized = value.to_ascii_lowercase();
-    radroots_test_fixtures::approved_fixture_identities()
+    support::approved_fixture_identities()
         .iter()
         .any(|identity| normalized.contains(identity.secret_key_hex))
 }
@@ -406,7 +408,7 @@ fn deletion_corpus_hygiene_recognizes_every_approved_fixture_secret() {
         assert!(error.contains(key), "{error}");
     }
 
-    for identity in radroots_test_fixtures::approved_fixture_identities() {
+    for identity in support::approved_fixture_identities() {
         assert!(contains_approved_fixture_secret(identity.secret_key_hex));
         assert!(contains_approved_fixture_secret(
             format!("prefix{}suffix", identity.secret_key_hex).as_str()

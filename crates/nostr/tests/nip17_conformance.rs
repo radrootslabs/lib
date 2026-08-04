@@ -1,18 +1,20 @@
 #![cfg(feature = "nip17")]
 
+mod support;
+
 use nostr::{Keys, SecretKey};
 use radroots_event::social::message::{Message, MessageRecipient};
 use radroots_event::social::message_file::{MessageFile, MessageFileDimensions};
 use radroots_nostr::nip17::{
     Rumor, WrapOptions, unwrap_gift_wrap, wrap_message, wrap_message_file,
 };
-use radroots_test_fixtures::{
-    FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
-    FIXTURE_BOB_SECRET_KEY_HEX,
-};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{borrow::Cow, fs, path::Path};
+use support::{
+    FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
+    FIXTURE_BOB_SECRET_KEY_HEX,
+};
 
 const PACKAGED_VECTORS: &str = include_str!("fixtures/nip17_adapter.v1.json");
 const WORKSPACE_VECTOR_PATH: &str = "../../contracts/conformance/vectors/nip17/adapter.v1.json";

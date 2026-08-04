@@ -73,7 +73,6 @@ sha2 = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
 nostr = { workspace = true, features = ["std"] }
-radroots_test_fixtures = { workspace = true }
 
 [lints]
 workspace = true

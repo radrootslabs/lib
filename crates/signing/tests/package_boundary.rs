@@ -17,7 +17,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
     for required in [
         "name = \"radroots_signing\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "default = [\"std\", \"serde\"]",
         "radroots_event = { workspace = true, default-features = false }",
         "radroots_identity = { workspace = true, default-features = false }",

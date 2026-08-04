@@ -1382,6 +1382,7 @@ fn projection_digest(_projection: &RadrootsTradeProjectionV1) -> Result<String, 
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
     use radroots_event::{
         id::{ClassifiedListingAddress, InventoryBinId},
         trade::{
@@ -1393,7 +1394,6 @@ mod tests {
             canonical_trade_mutation_content,
         },
     };
-    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
     const CANONICAL_REDUCER_VECTORS: &str =
         include_str!("../../../contracts/conformance/vectors/trade/reduce_records.v1.json");

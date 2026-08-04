@@ -12,7 +12,7 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
     for required in [
         "name = \"radroots_secrets\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "documentation = \"https://docs.rs/radroots_secrets\"",
         "[lib]\nname = \"radroots_secrets\"",
         "default = [\"std\", \"serde\"]",

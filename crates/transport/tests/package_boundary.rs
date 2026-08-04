@@ -25,7 +25,7 @@ fn manifest_has_final_identity_features_and_required_radroots_dependencies() {
     for required in [
         "name = \"radroots_transport\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "[lib]\nname = \"radroots_transport\"",
         "default = [\"std\", \"serde\"]",
         "radroots_event = { workspace = true, default-features = false }",

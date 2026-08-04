@@ -18,7 +18,7 @@ fn sync_depends_only_on_final_orchestration_boundaries() {
     for required in [
         "name = \"radroots_sync\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "[lib]\nname = \"radroots_sync\"",
         "default = [\"serde\"]",
     ] {

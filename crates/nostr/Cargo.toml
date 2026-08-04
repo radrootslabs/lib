@@ -68,7 +68,6 @@ radroots_blossom = { workspace = true, default-features = false, features = [
 radroots_protocol = { workspace = true, default-features = false, features = [
   "std",
 ] }
-radroots_test_fixtures = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [[test]]

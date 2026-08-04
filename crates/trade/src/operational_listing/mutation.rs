@@ -169,6 +169,7 @@ pub fn build_operational_listing_mutation_draft(
 
 #[cfg(test)]
 mod tests {
+    use crate::test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX};
     use nostr::{EventBuilder, JsonUtil, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
@@ -187,7 +188,6 @@ mod tests {
     };
     use radroots_event_codec::verification::verify_nip01_event;
     use radroots_identity::PublicKey;
-    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX};
 
     use crate::operational_listing::draft::RadrootsOperationalListingCanonicalEdit;
     use crate::operational_listing::validation::validate_operational_listing_event;

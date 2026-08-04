@@ -1,3 +1,5 @@
+mod support;
+
 use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 use radroots_event_codec::{
@@ -14,7 +16,7 @@ use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::event::build_nip10_reply as build_nip10_reply_event;
 use radroots_nostr::event::from_nostr;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
-use radroots_test_fixtures::{
+use support::{
     FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX,
     RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
 };

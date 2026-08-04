@@ -22,8 +22,8 @@ pub use uri::{BunkerUri, ClientUri};
 /// Private migration surface for separate first-party repositories.
 ///
 /// This module is excluded from the reviewed public API baseline, the package
-/// remains `publish = false`, consumers cut over in Steps 271, 288, and 293,
-/// and Step 313 removes the shim in full.
+/// is enabled only for package-realistic validation, consumers cut over in
+/// Steps 271, 288, and 293, and Step 313 removes the shim in full.
 #[doc(hidden)]
 pub mod prelude {
     pub use crate::client::{

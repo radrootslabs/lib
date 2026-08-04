@@ -1,5 +1,7 @@
 #![cfg(all(feature = "knowledge", feature = "manifests"))]
 
+mod support;
+
 use std::collections::BTreeSet;
 
 use radroots_event::contract::VERSION;
@@ -17,7 +19,7 @@ use radroots_event_codec::manifest::{
     RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION, RadrootsKnowledgeContractManifest,
     contract_manifest_json, contract_manifest_sha256, knowledge_contract_manifest,
 };
-use radroots_test_fixtures::knowledge::RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS;
+use support::knowledge::RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS;
 
 const MANIFEST_JSON: &str =
     include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.json");

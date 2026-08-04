@@ -34,7 +34,7 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
     for required in [
         "name = \"radroots_nostr\"",
         "version = \"0.1.0-alpha\"",
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "[lib]\nname = \"radroots_nostr\"",
         "default = [\"std\", \"events\"]",
         "radroots_identity = { workspace = true, default-features = false }",
@@ -552,12 +552,12 @@ fn superseded_surface_retirement_is_explicit_and_release_bounded() {
         }
     }
     for required in [
-        "publish = false",
+        "publish = [\"crates-io\"]",
         "outside the authorized `oss/lib` and `oss/sdk` crate-surface edit boundary",
         "no compatibility path was restored",
         "Step 313 is the exact final pre-release audit",
     ] {
-        let authority = if required == "publish = false" {
+        let authority = if required == "publish = [\"crates-io\"]" {
             MANIFEST
         } else {
             COMPATIBILITY

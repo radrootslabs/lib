@@ -1,5 +1,7 @@
 #![cfg(feature = "knowledge")]
 
+mod support;
+
 use std::collections::BTreeSet;
 
 use radroots_event::contract::{
@@ -29,8 +31,8 @@ use radroots_event_codec::verification::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };
-use radroots_test_fixtures::RELAY_PRIMARY_WSS;
-use radroots_test_fixtures::knowledge::{
+use support::RELAY_PRIMARY_WSS;
+use support::knowledge::{
     RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES, RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS,
     RadrootsKnowledgeFixture, RadrootsKnowledgeFixtureCase, hex_64, knowledge_claim,
     knowledge_field_report, knowledge_valid_fixtures, wiki_article, wiki_merge_request,

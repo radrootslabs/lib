@@ -6,6 +6,9 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(test)]
+mod test_fixtures;
+
 // TEMPORARY COMPATIBILITY QUARANTINE (publish = false): binding generation,
 // operational-listing consumers, and SP1 validation receipts migrate in
 // Steps 238 and 261-262. Every declaration below is removed in Step 313.

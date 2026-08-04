@@ -17,7 +17,7 @@ const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event_codec.tx
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_event_codec\""));
     assert!(MANIFEST.contains("version = \"0.1.0-alpha\""));
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     assert!(MANIFEST.contains("[lib]\nname = \"radroots_event_codec\""));
 
     let dependencies = table_keys(MANIFEST, "[dependencies]");
@@ -95,7 +95,7 @@ fn canonical_root_exports_are_explicit_and_host_types_do_not_leak() {
 
 #[test]
 fn compatibility_surface_is_private_documentation_hidden_and_has_a_removal_gate() {
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     for module in [
         "comment",
         "deletion",

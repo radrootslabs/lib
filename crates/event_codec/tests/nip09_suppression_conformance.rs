@@ -1,5 +1,7 @@
 #![cfg(feature = "json")]
 
+mod support;
+
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -534,7 +536,7 @@ fn is_forbidden_metadata_key(key: &str) -> bool {
 
 fn contains_approved_fixture_secret(value: &str) -> bool {
     let normalized = value.to_ascii_lowercase();
-    radroots_test_fixtures::approved_fixture_identities()
+    support::approved_fixture_identities()
         .iter()
         .any(|identity| normalized.contains(identity.secret_key_hex))
 }
@@ -555,7 +557,7 @@ fn suppression_corpus_hygiene_rejects_generation_and_effect_authority_metadata()
         assert!(error.contains(key), "{error}");
     }
     assert!(validate_no_forbidden_corpus_metadata(&json!("NSEC1FORBIDDEN"), "$").is_err());
-    for identity in radroots_test_fixtures::approved_fixture_identities() {
+    for identity in support::approved_fixture_identities() {
         assert!(
             validate_no_forbidden_corpus_metadata(&json!(identity.secret_key_hex), "$").is_err()
         );

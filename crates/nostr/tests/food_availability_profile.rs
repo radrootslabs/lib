@@ -1,3 +1,5 @@
+mod support;
+
 use nostr::{Keys as RadrootsNostrKeys, SecretKey as RadrootsNostrSecretKey};
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::food::availability::{
@@ -16,7 +18,7 @@ use radroots_nostr::event::Timestamp as RadrootsNostrTimestamp;
 use radroots_nostr::event::build_food_availability as build_food_availability_event;
 use radroots_nostr::event::from_nostr;
 use radroots_nostr::tag::Tag as RadrootsNostrTag;
-use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
+use support::FIXTURE_ALICE_SECRET_KEY_HEX;
 
 const CREATED_AT: u64 = 1_784_347_200;
 
