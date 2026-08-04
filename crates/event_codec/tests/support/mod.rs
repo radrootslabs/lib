@@ -130,4 +130,5 @@ pub const APP_PRIMARY_HTTPS: &str = "https://app.example.com";
 pub const API_PRIMARY_HTTPS: &str = "https://api.example.com";
 pub const CDN_PRIMARY_HTTPS: &str = "https://cdn.example.com";
 
+#[cfg(feature = "knowledge")]
 pub mod knowledge;
