@@ -492,7 +492,10 @@ const fn meta(
 
 pub fn generate_cli_host() -> Result<(), String> {
     let root = workspace_root()?;
-    let cli_root = cli_root(&root);
+    let Some(cli_root) = cli_root(&root) else {
+        println!("CLI capsule is absent; skipping external host binding generation");
+        return Ok(());
+    };
     let registry = render_registry()?;
     let target = render_target()?;
     write_if_changed(
@@ -509,7 +512,10 @@ pub fn generate_cli_host() -> Result<(), String> {
 
 pub fn check_cli_host() -> Result<(), String> {
     let root = workspace_root()?;
-    let cli_root = cli_root(&root);
+    let Some(cli_root) = cli_root(&root) else {
+        println!("CLI capsule is absent; skipping external host binding freshness check");
+        return Ok(());
+    };
     check_file(
         &cli_root.join("src/generated/runtime_contract_registry.rs"),
         &render_registry()?,
@@ -520,8 +526,12 @@ pub fn check_cli_host() -> Result<(), String> {
     )
 }
 
-fn cli_root(sdk_root: &Path) -> PathBuf {
-    sdk_root.join("../cli")
+fn cli_root(sdk_root: &Path) -> Option<PathBuf> {
+    let candidate = sdk_root.join("../cli");
+    if !candidate.join("Cargo.toml").is_file() {
+        return None;
+    }
+    candidate.canonicalize().ok()
 }
 
 fn check_file(path: &Path, expected: &str) -> Result<(), String> {
@@ -646,4 +656,21 @@ fn namespace(operation_id: &str) -> &str {
 
 fn mcp_tool(operation_id: &str) -> String {
     operation_id.replace('.', "_")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn absent_external_cli_capsule_is_not_a_standalone_sdk_requirement() {
+        let root = tempfile::tempdir().expect("temp root");
+        let sdk = root.path().join("sdk");
+        std::fs::create_dir(&sdk).expect("sdk directory");
+        assert!(super::cli_root(&sdk).is_none());
+
+        let cli = root.path().join("cli");
+        std::fs::create_dir(&cli).expect("cli directory");
+        std::fs::write(cli.join("Cargo.toml"), "[package]\nname = \"consumer\"\n")
+            .expect("consumer manifest");
+        assert_eq!(super::cli_root(&sdk).as_deref(), Some(cli.as_path()));
+    }
 }
