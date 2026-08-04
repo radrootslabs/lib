@@ -796,7 +796,13 @@ fn check_public_rust_package_metadata(root: &Path) -> Result<(), String> {
             ));
         }
         let include = package_string_array(package, &package_name, "include")?;
-        for required in ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"] {
+        for required in [
+            "src/**",
+            "tests/**",
+            "README.md",
+            "LICENSE-APACHE",
+            "LICENSE-MIT",
+        ] {
             if !include.contains(&required) {
                 return Err(format!(
                     "public package {package_name} package.include must contain {required}"
