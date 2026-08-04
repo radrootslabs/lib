@@ -873,7 +873,6 @@ version = "0.1.0-alpha"
 dependencies = [
  "radroots_core",
  "radroots_event",
- "radroots_event_codec",
  "radroots_identity",
  "serde",
 ]
@@ -1429,3 +1428,27 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[patch.unused]]
+name = "radroots_geonames"
+version = "0.1.0-alpha"
+
+[[patch.unused]]
+name = "radroots_secrets"
+version = "0.1.0-alpha"
+
+[[patch.unused]]
+name = "radroots_signing"
+version = "0.1.0-alpha"
+
+[[patch.unused]]
+name = "radroots_storage_sqlite"
+version = "0.1.0-alpha"
+
+[[patch.unused]]
+name = "radroots_sync"
+version = "0.1.0-alpha"
+
+[[patch.unused]]
+name = "radroots_transport_nostr"
+version = "0.1.0-alpha"
