@@ -35,6 +35,8 @@ explicit key, supplies a separate explicit data key and nonce, seals one value,
 serializes the envelope, and opens it again:
 
 ```rust
+# #[cfg(feature = "memory")]
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
 use futures_executor::block_on;
 use radroots_secrets::EncryptedEnvelope;
 use radroots_secrets::envelope::{Nonce, SealMaterial, SealRequest};
@@ -66,7 +68,10 @@ let decoded = EncryptedEnvelope::decode(&encoded)?;
 let opened = block_on(decoded.open(&provider))?;
 
 opened.expose_secret(|bytes| assert_eq!(bytes, b"private profile value"));
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok(())
+# }
+# #[cfg(not(feature = "memory"))]
+# fn main() {}
 ```
 
 A runnable version is available at
