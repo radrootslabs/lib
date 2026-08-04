@@ -1,5 +1,5 @@
 schema_version = 1
-baseline_revision = "88208a1f"
+baseline_revision = "11ade522"
 tool = "cargo-semver-checks"
 minimum_tool_version = "0.50.0"
 release_type = "minor"
