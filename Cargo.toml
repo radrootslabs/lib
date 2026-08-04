@@ -245,26 +245,3 @@ uuid = { version = "1.22.0", features = ["v4", "v7"] }
 x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1" }
-
-# Release-staging bootstrap for unpublished members. Cargo removes package
-# dependency paths while verifying `.crate` archives, so the workspace root
-# supplies the exact local sources until Step 310 proves the same graph through
-# an ephemeral registry. This table is not included in published archives.
-[patch.crates-io]
-radroots_core = { path = "crates/core" }
-radroots_identity = { path = "crates/identity" }
-radroots_blossom = { path = "crates/blossom" }
-radroots_protocol = { path = "crates/protocol" }
-radroots_event = { path = "crates/event" }
-radroots_event_codec = { path = "crates/event_codec" }
-radroots_trade = { path = "crates/trade" }
-radroots_signing = { path = "crates/signing" }
-radroots_transport = { path = "crates/transport" }
-radroots_nostr = { path = "crates/nostr" }
-radroots_nostr_connect = { path = "crates/nostr_connect" }
-radroots_secrets = { path = "crates/secrets" }
-radroots_storage = { path = "crates/storage" }
-radroots_storage_sqlite = { path = "crates/storage_sqlite" }
-radroots_transport_nostr = { path = "crates/transport_nostr" }
-radroots_sync = { path = "crates/sync" }
-radroots_geonames = { path = "crates/geonames" }
