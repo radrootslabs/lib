@@ -17,6 +17,7 @@ mod package_metadata;
 mod portable_qualification;
 mod release_qualification;
 mod smoke;
+mod supply_chain_qualification;
 mod target_qualification;
 mod ts;
 mod wasm;
@@ -36,6 +37,7 @@ enum CommandAction<'a> {
     QualifyFeatures,
     QualifyApi,
     QualifyPortable,
+    QualifySupplyChain,
     QualifyTargets,
     Check,
     Smoke(&'a [String]),
@@ -74,6 +76,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
         }
         CommandAction::QualifyApi => api_qualification::run(&fs::workspace_root()?),
         CommandAction::QualifyPortable => portable_qualification::run(&fs::workspace_root()?),
+        CommandAction::QualifySupplyChain => {
+            supply_chain_qualification::run(&fs::workspace_root()?)
+        }
         CommandAction::QualifyTargets => target_qualification::run(&fs::workspace_root()?),
         CommandAction::Check => check::check(),
         CommandAction::Smoke(rest) => smoke::run(rest),
@@ -111,6 +116,9 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
         [command, target] if command == "release" && target == "qualify-portable" => {
             Ok(CommandAction::QualifyPortable)
         }
+        [command, target] if command == "release" && target == "qualify-supply-chain" => {
+            Ok(CommandAction::QualifySupplyChain)
+        }
         [command, target] if command == "release" && target == "qualify-targets" => {
             Ok(CommandAction::QualifyTargets)
         }
@@ -122,7 +130,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run | cargo xtask release qualify-features | cargo xtask release qualify-api | cargo xtask release qualify-portable | cargo xtask release qualify-targets"
+    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate bindings <swift|kotlin> | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke facade-rust-local | sdk-rust-local | front-doors-rust-local | cargo xtask coverage run | cargo xtask release qualify-features | cargo xtask release qualify-api | cargo xtask release qualify-portable | cargo xtask release qualify-supply-chain | cargo xtask release qualify-targets"
         .to_owned()
 }
 
@@ -239,6 +247,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::Coverage(rest) if rest == ["run"]
+        ));
+    }
+
+    #[test]
+    fn accepts_supply_chain_qualification() {
+        let args = ["release".to_owned(), "qualify-supply-chain".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::QualifySupplyChain
         ));
     }
 
