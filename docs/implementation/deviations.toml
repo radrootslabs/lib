@@ -39,27 +39,31 @@ adr_required = false
 [[deviation]]
 id = "RCRV1-DEV-010"
 date = "2026-08-03"
-status = "active"
+status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
-affected_steps = ["201", "215", "269", "294", "313"]
+affected_steps = ["201", "215", "269", "294", "301", "313"]
 spec_anchors = [
   "docs/specs/radroots_crates_release_v1.md#15-radroots_transport_nostr",
   "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
 ]
 source_evidence = [
-  "The first-party Step 201 census found app_rt resolving radroots_net as radroots_net_core through a sibling path while its downstream cutover remains scheduled for Steps 269-293.",
-  "The private radroots_nostrdb runtime-adapter feature still resolves radroots_nostr_runtime predecessor sink types until canonical sync orchestration is complete.",
-  "Both predecessor packages are excluded from the exact release inventory and neither is reachable from a default public package feature closure.",
+  "The Step 294 downstream matrix proved the former app_rt radroots_net_core consumer had migrated and no current first-party manifest retained an edge to radroots_net.",
+  "Step 301 full workspace qualification proved that the assigned radroots_nostr_runtime Step 215 deletion and radroots_net Step 313 deletion had not been applied even though both removal gates were satisfied.",
+  "Both obsolete packages failed against the final transport boundary when the complete all-feature workspace closure was checked.",
 ]
-replacement_action = "Keep radroots_nostr_runtime as a documentation-hidden publish-frozen bridge only until the Step 215 sync retirement gate; keep radroots_net as a documentation-hidden publish-frozen bridge only until the downstream matrix is green, then delete it at Step 313. Forbid all new consumers, features, contracts, and behavior in both packages."
+replacement_action = "Delete radroots_nostr_runtime, its NostrDB runtime adapter, and radroots_net during Step 301 qualification; forbid their package, dependency, alias, feature, and source identities from being reintroduced."
 verification = [
-  "Both manifests carry machine-readable publish-frozen metadata naming their final owners, this deviation, exact removal step, and new-consumer prohibition.",
-  "Transport-owned quarantine tests require both roots to remain documentation-hidden, private, and absent from the approved publication inventory.",
-  "Step 215 removes radroots_nostr_runtime and its NostrDB adapter; Step 313 rejects residual radroots_net package, dependency, alias, and source identities after the downstream matrix.",
+  "Transport-owned tests reject reintroduction of radroots_nostr_runtime, radroots_net, or the NostrDB runtime-adapter feature.",
+  "Workspace-wide source tests reject every removed transport-client identifier without a compatibility exception.",
+  "The full all-target and all-feature workspace qualification compiles without either predecessor package.",
 ]
-unresolved_risk = "The opt-in predecessor feature closures do not compile against the final adapter API; package-realistic publication remains blocked until the exact removal gates delete them."
+unresolved_risk = "None for the two removed packages; historical names remain only in governed specifications, migration evidence, and fail-closed regression assertions."
 normative_architecture_change = false
 adr_required = false
+closure_evidence = [
+  "crates/transport_nostr/tests/workspace_consumers.rs proves both package directories and workspace dependency identities are absent.",
+  "crates/transport_nostr/tests/legacy_quarantine.rs proves release policy and the compatibility ledger no longer classify either package as a retained shim.",
+]
 
 [[deviation]]
 id = "RCRV1-DEV-008"

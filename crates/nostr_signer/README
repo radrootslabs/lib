@@ -5,12 +5,11 @@ public integrations must use `radroots_signing` for signer injection and
 `radroots_nostr_connect` for NIP-46 protocol types. Myc-private persisted state
 will remain application-owned.
 
-The package remains temporarily because `radroots_net`,
-`radroots_nostr_accounts`, `oss/sdk`, `oss/myc`, and `oss/cli` still consume
-parts of its source API. Their scheduled crate, SDK, and downstream cutovers
-run through Steps 109-294. The package must be removed at Step 313 after the
-Step 294 compatibility matrix proves that every first-party consumer has
-migrated.
+The package remains temporarily because `radroots_nostr_accounts`, `oss/sdk`,
+`oss/myc`, and `oss/cli` still consume parts of its source API. Their scheduled
+crate, SDK, and downstream cutovers run through Steps 109-294. The package must
+be removed at Step 313 after the Step 294 compatibility matrix proves that
+every first-party consumer has migrated.
 
 This package is not an approved public crate, must keep `publish = false`, and
 must not acquire new consumers, features, or behavior while it is retained.

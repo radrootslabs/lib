@@ -1,28 +1,15 @@
+use std::fs;
+use std::path::Path;
+
 const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
 const SHIMS: &str = include_str!("../../../docs/implementation/COMPATIBILITY_SHIMS.md");
 const PUBLISH_POLICY: &str = include_str!("../../../contracts/releases/publish_policy.toml");
 
-const PREDECESSORS: &[(&str, &str, &str, &str, &str, &str)] = &[
-    (
-        "radroots_nostr_runtime",
-        "radroots_transport_nostr + radroots_sync",
-        "215",
-        include_str!("../../nostr_runtime/Cargo.toml"),
-        include_str!("../../nostr_runtime/src/lib.rs"),
-        include_str!("../../nostr_runtime/README"),
-    ),
-    (
-        "radroots_net",
-        "radroots_transport + radroots_sync + radroots_sdk",
-        "313",
-        include_str!("../../net/Cargo.toml"),
-        include_str!("../../net/src/lib.rs"),
-        include_str!("../../net/README"),
-    ),
-];
-
 #[test]
-fn superseded_transport_packages_are_fail_closed_compatibility_quarantines() {
+fn superseded_transport_packages_are_removed_from_release_authority() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let workspace_manifest =
+        fs::read_to_string(workspace.join("Cargo.toml")).expect("workspace manifest");
     let approved = PUBLISH_POLICY
         .split_once("[workspace_classification]")
         .map(|(publication, _)| publication)
@@ -33,47 +20,32 @@ fn superseded_transport_packages_are_fail_closed_compatibility_quarantines() {
         .map(|(entries, _)| entries)
         .expect("private package classification");
 
-    for (package, replacement, removal_step, manifest, root, readme) in PREDECESSORS {
-        for required in [
-            "publish = false",
-            "[package.metadata.radroots.compatibility]",
-            "status = \"publish_frozen\"",
-            "deviation = \"RCRV1-DEV-010\"",
-            "new_consumers_forbidden = true",
-        ] {
-            assert!(
-                manifest.contains(required),
-                "{package} manifest is missing `{required}`"
-            );
-        }
-        assert!(manifest.contains(&format!("replacement = \"{replacement}\"")));
-        assert!(manifest.contains(&format!("removal_step = {removal_step}")));
-        assert!(!manifest.contains("documentation = \"https://docs.rs/"));
-        assert!(root.starts_with("#![doc(hidden)]"));
-        assert!(readme.contains("## Compatibility quarantine"));
-        assert!(readme.contains(&format!("Step {removal_step} removes")));
-        assert!(readme.contains("package"));
+    for package in ["radroots_net", "radroots_nostr_runtime"] {
+        assert!(
+            !workspace
+                .join(format!("crates/{package}/Cargo.toml"))
+                .exists()
+        );
+        assert!(!workspace_manifest.contains(package));
         assert!(!approved.contains(package));
-        assert!(private.contains(&format!("\"{package}\"")));
-        assert!(SHIMS.contains(&format!("| `{package}` |")));
+        assert!(!private.contains(&format!("\"{package}\"")));
+        assert!(!SHIMS.contains(&format!("| `{package}` |")));
     }
 }
 
 #[test]
-fn quarantine_records_consumers_and_exact_removal_gates() {
+fn closure_record_captures_the_pulled_forward_removal_gates() {
     for required in [
         "id = \"RCRV1-DEV-010\"",
-        "app_rt resolving radroots_net as radroots_net_core",
-        "radroots_nostrdb runtime-adapter feature",
-        "Step 215 sync retirement gate",
-        "delete it at Step 313",
-        "opt-in predecessor feature closures do not compile",
+        "status = \"closed\"",
+        "radroots_nostr_runtime Step 215 deletion and radroots_net Step 313 deletion had not been applied",
+        "Delete radroots_nostr_runtime, its NostrDB runtime adapter, and radroots_net during Step 301 qualification",
+        "historical names remain only in governed specifications, migration evidence, and fail-closed regression assertions",
+        "closure_evidence = [",
     ] {
         assert!(
             DEVIATIONS.contains(required),
-            "transport quarantine is missing `{required}`"
+            "transport closure record is missing `{required}`"
         );
     }
-    assert!(SHIMS.contains("| `radroots_nostr_runtime` |"));
-    assert!(SHIMS.contains("| `radroots_net` |"));
 }

@@ -33,10 +33,9 @@ fn manifest_has_final_identity_and_required_radroots_dependencies() {
 }
 
 #[test]
-fn standalone_fuzz_package_uses_the_repository_version_contract() {
-    let package =
-        "name = \"radroots_event_codec_fuzz\"\npublish = false\nversion = \"0.1.0-alpha\"";
-    let locked_package = "name = \"radroots_event_codec_fuzz\"\nversion = \"0.1.0-alpha\"";
+fn consolidated_parser_fuzz_package_uses_the_repository_version_contract() {
+    let package = "name = \"radroots_parser_fuzz\"\npublish = false\nversion = \"0.1.0-alpha\"";
+    let locked_package = "name = \"radroots_parser_fuzz\"\nversion = \"0.1.0-alpha\"";
 
     assert!(FUZZ_MANIFEST.contains(package));
     assert!(FUZZ_LOCK.contains(locked_package));

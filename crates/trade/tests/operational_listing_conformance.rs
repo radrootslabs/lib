@@ -238,8 +238,10 @@ fn verified_event(vector: &Vector, keys: &Keys) -> RadrootsSignatureVerifiedEven
         vector.id
     );
     let message = Message::from_digest(event.id.to_bytes());
-    let deterministic_signature =
-        SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
+    let deterministic_signature = SECP256K1.sign_schnorr_no_aux_rand(
+        &message,
+        &nostr::secp256k1::Keypair::from_secret_key(SECP256K1, keys.secret_key()),
+    );
     assert_eq!(
         event.sig, deterministic_signature,
         "{} deterministic signature drift",

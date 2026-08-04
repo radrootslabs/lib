@@ -12,15 +12,7 @@ const REMOVED_CLIENT_NAMES: [&str; 5] = [
 #[test]
 fn ready_workspace_consumers_do_not_import_the_removed_client_surface() {
     let workspace = workspace_root();
-    let allowed = [
-        workspace.join("crates/net/src"),
-        workspace.join("crates/nostr_runtime/src"),
-    ];
-
     for source in rust_sources(workspace.join("crates")) {
-        if allowed.iter().any(|root| source.starts_with(root)) {
-            continue;
-        }
         let contents = fs::read_to_string(&source).expect("read workspace source");
         for removed in REMOVED_CLIENT_NAMES {
             assert!(
@@ -33,27 +25,23 @@ fn ready_workspace_consumers_do_not_import_the_removed_client_surface() {
 }
 
 #[test]
-fn predecessor_runtime_is_publish_frozen_and_not_default_reachable() {
+fn superseded_transport_packages_and_nostrdb_adapter_are_removed() {
     let workspace = workspace_root();
-    let manifest = fs::read_to_string(workspace.join("crates/nostr_runtime/Cargo.toml"))
-        .expect("runtime manifest");
+    assert!(!workspace.join("crates/nostr_runtime/Cargo.toml").exists());
+    assert!(!workspace.join("crates/net/Cargo.toml").exists());
+    let workspace_manifest =
+        fs::read_to_string(workspace.join("Cargo.toml")).expect("workspace manifest");
     let nostrdb_manifest =
         fs::read_to_string(workspace.join("crates/nostrdb/Cargo.toml")).expect("nostrdb manifest");
-    let readme =
-        fs::read_to_string(workspace.join("crates/nostr_runtime/README")).expect("runtime readme");
     let deviations = fs::read_to_string(workspace.join("docs/implementation/deviations.toml"))
         .expect("deviation authority");
 
-    assert!(manifest.contains("publish = false"));
-    assert!(manifest.contains("default = [\"std\"]"));
-    assert!(!manifest.contains("default = [\"std\", \"nostr-client\""));
-    assert!(
-        !nostrdb_manifest.contains("default = [\"std\", \"rt\", \"nostrdb\", \"runtime-adapter\"]")
-    );
-    assert!(readme.contains("RCRV1-DEV-007"));
-    assert!(readme.contains("radroots_sync"));
-    assert!(deviations.contains("id = \"RCRV1-DEV-007\""));
-    assert!(deviations.contains("affected_steps = [\"122\", \"170\", \"215\", \"235\", \"305\"]"));
+    assert!(!workspace_manifest.contains("radroots_nostr_runtime"));
+    assert!(!workspace_manifest.contains("radroots_net"));
+    assert!(!nostrdb_manifest.contains("runtime-adapter"));
+    assert!(deviations.contains(
+        "Delete radroots_nostr_runtime, its NostrDB runtime adapter, and radroots_net during Step 301 qualification"
+    ));
 }
 
 fn workspace_root() -> PathBuf {

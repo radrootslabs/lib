@@ -15,11 +15,6 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
-[overrides.radroots_net]
-require_branches = false
-temporary = true
-reason = "branch coverage is not applicable while the crate has no measured branch records"
-
 [overrides.radroots_replica_schema]
 require_branches = false
 temporary = true
@@ -47,12 +42,10 @@ crates = [
   "radroots_mesh",
   "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
-  "radroots_net",
   "radroots_nostr",
   "radroots_nostr_accounts",
   "radroots_nostr_connect",
   "radroots_nostrdb",
-  "radroots_nostr_runtime",
   "radroots_nostr_signer",
   "radroots_outbox",
   "radroots_protocol_contract_v1",

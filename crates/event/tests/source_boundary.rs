@@ -191,10 +191,8 @@ fn forbidden_event_name_allowed(relative_path: &str, pattern: &str) -> bool {
 fn is_nostr_protocol_context(relative_path: &str) -> bool {
     relative_path.starts_with("crates/nostr/")
         || relative_path.starts_with("crates/nostrdb/")
-        || relative_path.starts_with("crates/nostr_runtime/")
         || relative_path.starts_with("crates/nostr_signer/")
         || relative_path.starts_with("crates/transport_nostr/")
-        || relative_path.starts_with("crates/net/src/nostr_client/")
 }
 
 fn contains_forbidden_event_name(source: &str, pattern: &str) -> bool {

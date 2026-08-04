@@ -16,17 +16,11 @@ default = ["std", "rt", "nostrdb"]
 std = []
 rt = ["std", "dep:futures", "dep:tokio"]
 nostrdb = ["std", "dep:nostrdb"]
-runtime-adapter = ["std", "dep:radroots_nostr_runtime"]
 giftwrap = ["std", "nostrdb"]
 
 [dependencies]
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
-] }
-radroots_nostr_runtime = { workspace = true, optional = true, default-features = false, features = [
-  "std",
-  "rt",
-  "nostr-client",
 ] }
 futures = { workspace = true, optional = true }
 hex = { workspace = true }

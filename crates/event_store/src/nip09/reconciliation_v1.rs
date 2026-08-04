@@ -4560,7 +4560,10 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
                 .expect("event id");
         let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
         let message = Message::from_digest(nostr_id.to_bytes());
-        let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
+        let signature = SECP256K1.sign_schnorr_no_aux_rand(
+            &message,
+            &nostr::secp256k1::Keypair::from_secret_key(SECP256K1, keys.secret_key()),
+        );
         EventEnvelope::new(EventEnvelopeParts {
             id: id.into_string(),
             author,

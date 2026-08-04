@@ -152,8 +152,8 @@
     {
       "role": "workspace_dependency_authority",
       "path": "Cargo.toml",
-      "byte_length": 12664,
-      "sha256": "0070b6f53f8f2b8033869bf8418c92543bfc8a7e9ac27dc8db960d89f815e625",
+      "byte_length": 12420,
+      "sha256": "a85d7cf805301bfb35f3e7643b3b48537f93d66bf02b9aea1d991934c856a1b1",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -509,8 +509,8 @@
     {
       "role": "event_codec_admission_facade",
       "path": "crates/event_codec/src/admission.rs",
-      "byte_length": 21251,
-      "sha256": "25928e734e7b3688f92af806a12a13458c48fb47e94249f60f0226300d5da2b4",
+      "byte_length": 21347,
+      "sha256": "190478478f4c90a74b2a60d1634fb2f352a7af0cf7b9510ed42fefe95987dc18",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -754,8 +754,8 @@
     {
       "role": "source_generation_rebuild_authority",
       "path": "crates/event_store/src/nip09/reconciliation_v1.rs",
-      "byte_length": 184833,
-      "sha256": "3ca802cb7a8444c8512b2be1390a019281704316a430fb9b75a8ad2cad358a07",
+      "byte_length": 184917,
+      "sha256": "1c02fbf00881839c29de36c286e649061582eef09829fc1ccb526a62478101fd",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -867,7 +867,7 @@
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
       "byte_length": 199270,
-      "sha256": "a75fdd37990073a3f16e0ac771980a638641a2dc8ee317580aa100b41efc99de",
+      "sha256": "4b83f736e7ff8ac01fd7b2b66757af9275cfe997303ede3c1f026872f864bbd0",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

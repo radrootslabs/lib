@@ -12986,7 +12986,7 @@
         "event_json": "{\"id\":\"f8b01f88fffb9281dbc060e9f18cc8329072c5e36740ef189db07e1b0147967a\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000200,\"kind\":1111,\"tags\":[[\"E\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"wss://victoria.example\",\"e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af\"],[\"K\",\"30023\"],[\"P\",\"e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af\",\"wss://victoria.example\"],[\"e\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"wss://victoria.example\",\"e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af\"],[\"k\",\"30402\"],[\"p\",\"e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af\",\"wss://victoria.example\"]],\"content\":\"Are these carrots available Saturday?\",\"sig\":\"da287048f846127b4c10ca8a8bed43f5900ca8eda24532eed3b78d4c35ce88e23109731cc66bb20495728e94509af0c0165c09b140ec98e825ba85082fb61a58\"}"
       },
       "expected": {
-        "error": "comment_root_kind_unsupported"
+        "error": "comment_parent_kind_invalid"
       }
     },
     {

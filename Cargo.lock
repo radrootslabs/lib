@@ -1455,21 +1455,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "directories"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
-dependencies = [
- "dirs-sys 0.5.0",
-]
-
-[[package]]
 name = "dirs"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
 dependencies = [
- "dirs-sys 0.4.1",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -1480,20 +1471,8 @@ checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
 dependencies = [
  "libc",
  "option-ext",
- "redox_users 0.4.6",
+ "redox_users",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
-dependencies = [
- "libc",
- "option-ext",
- "redox_users 0.5.2",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4695,32 +4674,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_net"
-version = "0.1.0-alpha"
-dependencies = [
- "directories",
- "futures",
- "hex",
- "nostr",
- "radroots_event",
- "radroots_event_codec",
- "radroots_identity",
- "radroots_log",
- "radroots_nostr",
- "radroots_nostr_accounts",
- "radroots_nostr_signer",
- "radroots_runtime_paths",
- "radroots_transport_nostr",
- "secrecy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "radroots_nostr"
 version = "0.1.0-alpha"
 dependencies = [
@@ -4774,18 +4727,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_nostr_runtime"
-version = "0.1.0-alpha"
-dependencies = [
- "futures",
- "nostr",
- "radroots_nostr",
- "radroots_transport_nostr",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
 name = "radroots_nostr_signer"
 version = "0.1.0-alpha"
 dependencies = [
@@ -4814,7 +4755,6 @@ dependencies = [
  "nostr",
  "nostrdb",
  "radroots_nostr",
- "radroots_nostr_runtime",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
@@ -5471,17 +5411,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redox_users"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
-dependencies = [
- "getrandom 0.2.17",
- "libredox",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "ref-cast"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5954,15 +5883,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4387882333d3aa8cb20530a17c69a3752e97837832f34f6dccc760e715001d9"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "secrecy"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
-dependencies = [
- "zeroize",
 ]
 
 [[package]]

@@ -676,7 +676,10 @@ fn verified_event(value: &Value, vector_id: &str) -> RadrootsSignatureVerifiedEv
 
     let keys = keys_for_pubkey(&raw.pubkey, vector_id);
     let message = Message::from_digest(event.id.to_bytes());
-    let deterministic = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
+    let deterministic = SECP256K1.sign_schnorr_no_aux_rand(
+        &message,
+        &nostr::secp256k1::Keypair::from_secret_key(SECP256K1, keys.secret_key()),
+    );
     assert_eq!(
         event.sig, deterministic,
         "{vector_id} deterministic signature drift"
@@ -717,7 +720,10 @@ fn directly_signed_verified_event(
         .unwrap_or_else(|error| panic!("{vector_id} direct event id conversion failed: {error}"));
     let keys = keys_for_pubkey(&raw.pubkey, vector_id);
     let message = Message::from_digest(nostr_id.to_bytes());
-    let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
+    let signature = SECP256K1.sign_schnorr_no_aux_rand(
+        &message,
+        &nostr::secp256k1::Keypair::from_secret_key(SECP256K1, keys.secret_key()),
+    );
     raw.id = id.into_string();
     raw.sig = signature.to_string();
 

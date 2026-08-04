@@ -11,7 +11,6 @@ members = [
   "crates/identity",
   "crates/runtime_store",
   "crates/log",
-  "crates/net",
   "crates/nostr",
   "crates/nostr_accounts",
   "crates/nostr_connect",
@@ -24,7 +23,6 @@ members = [
   "crates/geonames",
   "crates/nostr_signer",
   "crates/nostrdb",
-  "crates/nostr_runtime",
   "crates/outbox",
   "crates/protocol_contract_v1",
   "crates/transport_publish_protocol",
@@ -112,8 +110,6 @@ radroots_runtime_paths = { path = "crates/runtime_paths", version = "=0.1.0-alph
 radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "=0.1.0-alpha", default-features = false }
 radroots_runtime_manager = { path = "crates/runtime_manager", version = "=0.1.0-alpha", default-features = false }
 radroots_log = { path = "crates/log", version = "=0.1.0-alpha", default-features = false }
-radroots_net = { path = "crates/net", version = "=0.1.0-alpha", default-features = false }
-radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "=0.1.0-alpha", default-features = false }
 radroots_outbox = { path = "crates/outbox", version = "=0.1.0-alpha", default-features = false }
 radroots_protocol_contract_v1 = { path = "crates/protocol_contract_v1", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_publish_protocol = { path = "crates/transport_publish_protocol", version = "=0.1.0-alpha", default-features = false }

@@ -58,8 +58,6 @@ deferred_publication = [
   "radroots_mesh",
   "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
-  "radroots_net",
-  "radroots_nostr_runtime",
   "radroots_nostrdb",
   "radroots_simplex_chat_proto",
   "radroots_simplex_smp_proto",

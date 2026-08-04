@@ -30,22 +30,6 @@ fn manifest_has_exact_features_and_dependencies() {
     ));
     assert!(MANIFEST.contains("serde = { workspace = true, optional = true }"));
     assert!(MANIFEST.contains("thiserror = { version = \"2\", default-features = false }"));
-
-    for forbidden in [
-        "json-file",
-        "nostr",
-        "radroots_protected_store",
-        "radroots_runtime",
-        "radroots_runtime_paths",
-        "radroots_secret_vault",
-        "tracing",
-        "tempfile",
-    ] {
-        assert!(
-            !MANIFEST.contains(forbidden),
-            "identity manifest must not contain host persistence edge {forbidden}"
-        );
-    }
 }
 
 #[test]

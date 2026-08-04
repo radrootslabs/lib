@@ -20,8 +20,6 @@ pub mod ingest;
 pub mod nostrdb;
 #[cfg(feature = "nostrdb")]
 pub mod query;
-#[cfg(all(feature = "nostrdb", feature = "runtime-adapter"))]
-pub mod runtime_adapter;
 #[cfg(feature = "nostrdb")]
 pub mod subscription;
 
@@ -37,8 +35,6 @@ pub mod prelude {
     pub use crate::nostrdb::RadrootsNostrdb;
     #[cfg(feature = "nostrdb")]
     pub use crate::query::{RadrootsNostrdbNote, RadrootsNostrdbProfile, RadrootsNostrdbQuerySpec};
-    #[cfg(all(feature = "nostrdb", feature = "runtime-adapter"))]
-    pub use crate::runtime_adapter::RadrootsNostrdbEventSinkAdapter;
     #[cfg(all(feature = "nostrdb", feature = "rt"))]
     pub use crate::subscription::RadrootsNostrdbSubscriptionStream;
     #[cfg(feature = "nostrdb")]
