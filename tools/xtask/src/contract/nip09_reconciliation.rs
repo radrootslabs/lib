@@ -237,7 +237,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "02e22f967966c6e67989554bfe643e057ac7ce6b1f3f40c897375432580d86b0",
+        "868e3c32af1495e3a262ce92f1fef7eba742cd0e34859f51ff39174b214905cb",
     ),
 ];
 

@@ -368,6 +368,13 @@ mod tests {
     }
 
     #[test]
+    fn patched_url_parser_rejects_ascii_masking_punycode() {
+        for denied in ["wss://xn--example-.org", "wss://example.org.xn--"] {
+            assert!(RelayUrl::parse(denied, RelayUrlPolicy::Public).is_err());
+        }
+    }
+
+    #[test]
     fn resolved_addresses_are_revalidated() {
         let relay = RelayUrl::parse("wss://relay.example.com", RelayUrlPolicy::Public)
             .expect("public relay");

@@ -1,0 +1,109 @@
+schema_version = 1
+spec_id = "radroots.crates.release.v1"
+package_version = "0.1.0-alpha"
+
+[tools]
+cargo_deny = "0.19.8"
+cargo_cyclonedx = "0.5.9"
+
+[sbom]
+format = "json"
+spec_version = "1.5"
+target = "all"
+all_features = true
+source_date_epoch = 0
+
+[[advisory_exception]]
+id = "RUSTSEC-2024-0384"
+package = "instant"
+affected_version = "0.1.13"
+introduced_by = "nostr 0.44.7"
+classification = "unmaintained"
+mitigation = "No Radroots public API exposes instant; replace the dependency when upstream Nostr removes it."
+remove_when = "nostr >=0.45.0 stable"
+
+[[advisory_exception]]
+id = "RUSTSEC-2024-0421"
+package = "idna"
+affected_version = "0.5.0"
+introduced_by = "nostr 0.44.7 via url-fork 3.0.1"
+classification = "vulnerability"
+mitigation = "radroots_transport_nostr canonicalizes every relay URL with url >=2.5.4 before upstream Nostr receives it."
+remove_when = "nostr >=0.45.0 stable"
+
+[[advisory_exception]]
+id = "CARGO-YANKED-SPIN-0.9.8"
+package = "spin"
+affected_version = "0.9.8"
+introduced_by = "sqlx 0.9.0 via flume 0.12.0"
+classification = "yanked"
+mitigation = "The package has no RustSec vulnerability; the gate rejects every yanked name/version except this exact transitive dependency."
+remove_when = "sqlx no longer resolves flume 0.12.0 with spin 0.9.8"
+
+[[package]]
+name = "radroots_core"
+manifest_path = "crates/core/Cargo.toml"
+
+[[package]]
+name = "radroots_identity"
+manifest_path = "crates/identity/Cargo.toml"
+
+[[package]]
+name = "radroots_blossom"
+manifest_path = "crates/blossom/Cargo.toml"
+
+[[package]]
+name = "radroots_protocol"
+manifest_path = "crates/protocol/Cargo.toml"
+
+[[package]]
+name = "radroots_event"
+manifest_path = "crates/event/Cargo.toml"
+
+[[package]]
+name = "radroots_event_codec"
+manifest_path = "crates/event_codec/Cargo.toml"
+
+[[package]]
+name = "radroots_trade"
+manifest_path = "crates/trade/Cargo.toml"
+
+[[package]]
+name = "radroots_signing"
+manifest_path = "crates/signing/Cargo.toml"
+
+[[package]]
+name = "radroots_transport"
+manifest_path = "crates/transport/Cargo.toml"
+
+[[package]]
+name = "radroots_nostr"
+manifest_path = "crates/nostr/Cargo.toml"
+
+[[package]]
+name = "radroots_nostr_connect"
+manifest_path = "crates/nostr_connect/Cargo.toml"
+
+[[package]]
+name = "radroots_secrets"
+manifest_path = "crates/secrets/Cargo.toml"
+
+[[package]]
+name = "radroots_storage"
+manifest_path = "crates/storage/Cargo.toml"
+
+[[package]]
+name = "radroots_storage_sqlite"
+manifest_path = "crates/storage_sqlite/Cargo.toml"
+
+[[package]]
+name = "radroots_transport_nostr"
+manifest_path = "crates/transport_nostr/Cargo.toml"
+
+[[package]]
+name = "radroots_sync"
+manifest_path = "crates/sync/Cargo.toml"
+
+[[package]]
+name = "radroots_geonames"
+manifest_path = "crates/geonames/Cargo.toml"

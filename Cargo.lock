@@ -3362,9 +3362,9 @@ dependencies = [
 
 [[package]]
 name = "nostr"
-version = "0.44.2"
+version = "0.44.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aa5e3b6a278ed061835fe1ee293b71641e6bf8b401cfe4e1834bbf4ef0a34e1"
+checksum = "c7d3d987ea7078dc36947cde532637c472a229426702e4331dd7667325378bd9"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -5811,9 +5811,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.9"
+version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7df23109aa6c1567d1c575b9952556388da57401e4ace1d15f79eedad0d8f53"
+checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
  "ring",
  "rustls-pki-types",

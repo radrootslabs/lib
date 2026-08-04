@@ -153,7 +153,7 @@
       "role": "workspace_dependency_authority",
       "path": "Cargo.toml",
       "byte_length": 12664,
-      "sha256": "2498c6ce7f41a2543662f203f1043928c521c82ec6609761562e0d5e8d6754c0",
+      "sha256": "0070b6f53f8f2b8033869bf8418c92543bfc8a7e9ac27dc8db960d89f815e625",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -860,14 +860,14 @@
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
       "byte_length": 842433,
-      "sha256": "c5361d9da74ac6cbec1baa890818d5b00c935c5015c8e0cfaa9036a94fe2b69e",
+      "sha256": "6a8474d580d1165da4f89adca039811095f69a0601b4e74e652c22a42b9fc125",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
       "byte_length": 199270,
-      "sha256": "d2a1d4e14043fdff8908d5ce9062fca569a1ed4dd6ceacc9b5453d603e84b3b8",
+      "sha256": "a75fdd37990073a3f16e0ac771980a638641a2dc8ee317580aa100b41efc99de",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -887,8 +887,8 @@
     {
       "role": "xtask_dispatch_and_release_preflight",
       "path": "tools/xtask/src/main.rs",
-      "byte_length": 17242,
-      "sha256": "50524d502c0133dccf1f9d94f020b81ae6f588ca862509793a493dc978298683",
+      "byte_length": 17427,
+      "sha256": "c59c0ff0b3683756c309decd9e9a99ed3e037d186dd3590de56988be74d37289",
       "hash_algorithm": "sha256_bytes_v1"
     }
   ],

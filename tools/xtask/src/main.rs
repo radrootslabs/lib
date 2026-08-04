@@ -17,6 +17,7 @@ mod generate;
 mod hygiene;
 mod portable_qualification;
 mod release_qualification;
+mod supply_chain_qualification;
 mod target_qualification;
 
 use std::env;
@@ -42,6 +43,7 @@ fn usage() {
     eprintln!("  cargo xtask release qualify-api");
     eprintln!("  cargo xtask release qualify-fuzz");
     eprintln!("  cargo xtask release qualify-portable");
+    eprintln!("  cargo xtask release qualify-supply-chain");
     eprintln!("  cargo xtask release qualify-targets");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask coverage required-crates");
@@ -120,6 +122,7 @@ fn run_release(args: &[String]) -> Result<(), String> {
         Some("qualify-api") => api_qualification::run(&workspace_root()),
         Some("qualify-fuzz") => fuzz_qualification::run(&workspace_root()),
         Some("qualify-portable") => portable_qualification::run(&workspace_root()),
+        Some("qualify-supply-chain") => supply_chain_qualification::run(&workspace_root()),
         Some("qualify-targets") => target_qualification::run(&workspace_root()),
         _ => Err("unknown release subcommand".to_string()),
     }
