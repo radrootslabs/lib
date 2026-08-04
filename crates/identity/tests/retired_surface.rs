@@ -89,10 +89,13 @@ fn retired_identity_implementation_modules_are_absent() {
 }
 
 #[test]
-fn release_policy_keeps_replacement_public_and_mixed_packages_private() {
+fn release_policy_enables_replacement_and_keeps_retired_mixed_packages_absent() {
+    let publication = table(RELEASE_POLICY, "[publication]");
     assert!(
-        table(RELEASE_POLICY, "[publication]").contains("frozen = true"),
-        "publication must remain frozen during the refactor"
+        publication.contains("frozen = false")
+            && publication.contains("registry = \"crates-io\"")
+            && publication.contains("final_enablement_step = 305"),
+        "publication validation must remain enabled only through the approved Step 305 policy"
     );
 
     let approved = string_array(RELEASE_POLICY, "[publication]", "approved_packages");
@@ -106,29 +109,13 @@ fn release_policy_keeps_replacement_public_and_mixed_packages_private() {
             !approved.contains(mixed),
             "mixed package must not be approved for publication: {mixed}"
         );
-    }
-
-    let private = string_array(RELEASE_POLICY, "[workspace_classification]", "private");
-    for mixed in [
-        "radroots_authority",
-        "radroots_nostr_accounts",
-        "radroots_nostr_signer",
-    ] {
-        assert!(
-            private.contains(mixed),
-            "mixed package must remain explicitly private until its scheduled retirement: {mixed}"
-        );
-        let manifest = workspace_root()
+        let package_directory = workspace_root()
             .join("crates")
-            .join(mixed.strip_prefix("radroots_").expect("package prefix"))
-            .join("Cargo.toml");
+            .join(mixed.strip_prefix("radroots_").expect("package prefix"));
         assert!(
-            fs::read_to_string(&manifest)
-                .unwrap_or_else(|error| panic!("read {}: {error}", manifest.display()))
-                .lines()
-                .any(|line| line.trim() == "publish = false"),
-            "mixed package manifest must remain unpublished: {}",
-            manifest.display()
+            !package_directory.exists(),
+            "retired mixed package must remain absent: {}",
+            package_directory.display()
         );
     }
 }
