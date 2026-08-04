@@ -22,7 +22,7 @@ use radroots_event::{
 use radroots_identity::PublicKey;
 
 #[cfg(feature = "json")]
-use super::AuthoredEventBody;
+use super::{AuthoredEventBody, typed::validate_historical_typed_profile};
 use super::{AuthoredEventPlan, PLAN_WIRE_VERSION_V1, PlanDigest, PlanDigestError};
 
 /// Hard byte limit applied before JSON parsing or field allocation.
@@ -146,14 +146,25 @@ impl PlanWireV1 {
                 actual: wire.kind,
             });
         }
-        if definition.authoring_policy() != EventAuthoringPolicy::GenericDraft {
-            return Err(PlanDecodeError::HistoricalProfileUnavailable {
-                contract_id: definition.id.to_owned(),
-            });
+        match definition.authoring_policy() {
+            EventAuthoringPolicy::GenericDraft => {
+                validate_event_contract_parts(wire.kind, &wire.tags, &wire.content, definition.id)
+                    .map_err(|error| PlanDecodeError::HistoricalShape(error.code().to_owned()))?;
+            }
+            EventAuthoringPolicy::TypedOnly => validate_historical_typed_profile(
+                definition.id,
+                wire.created_at,
+                wire.kind,
+                &wire.tags,
+                &wire.content,
+            )
+            .map_err(PlanDecodeError::HistoricalShape)?,
+            EventAuthoringPolicy::ReadOnly => {
+                return Err(PlanDecodeError::HistoricalProfileUnavailable {
+                    contract_id: definition.id.to_owned(),
+                });
+            }
         }
-
-        validate_event_contract_parts(wire.kind, &wire.tags, &wire.content, definition.id)
-            .map_err(|error| PlanDecodeError::HistoricalShape(error.code().to_owned()))?;
         EventTags::new(wire.tags.clone())
             .map_err(|error| PlanDecodeError::HistoricalShape(error.to_string()))?;
         let expected_author = PublicKey::from_hex(&wire.expected_author)
@@ -501,18 +512,18 @@ mod tests {
     }
 
     #[test]
-    fn typed_contract_cannot_enter_through_the_generic_historical_profile() {
+    fn typed_contract_rejects_a_shape_from_the_wrong_historical_profile() {
         let typed = mutate(|value| {
             value["contract_id"] = json!("radroots.social.update.v1");
             value["kind"] = json!(1);
-            value["tags"] = json!([]);
+            value["tags"] = json!([["g", "u4pru"]]);
             value["content"] = json!("hello");
         });
         assert_eq!(
             PlanWireV1::from_json(&typed),
-            Err(PlanDecodeError::HistoricalProfileUnavailable {
-                contract_id: "radroots.social.update.v1".to_owned(),
-            })
+            Err(PlanDecodeError::HistoricalShape(
+                "update_tags_forbidden".to_owned()
+            ))
         );
     }
 

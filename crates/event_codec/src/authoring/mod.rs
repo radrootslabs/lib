@@ -13,8 +13,10 @@ use sha2::{Digest, Sha256};
 pub const PLAN_WIRE_VERSION_V1: u32 = 1;
 const PLAN_DIGEST_DOMAIN: &[u8] = b"radroots.authored_event_plan.v1";
 
+mod typed;
 mod wire;
 
+pub use typed::{AuthoredPlanError, REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS};
 pub use wire::{
     HistoricalPlanIntegrity, PLAN_WIRE_MAX_BYTES, PlanDecodeError, PlanRegistryRelation, PlanWireV1,
 };

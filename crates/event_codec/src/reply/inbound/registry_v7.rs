@@ -385,7 +385,7 @@ pub fn project_verified_nip10_reply_event_registry_v7(
     )
 }
 
-fn project_nip10_reply_parts(
+pub(crate) fn project_nip10_reply_parts(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,

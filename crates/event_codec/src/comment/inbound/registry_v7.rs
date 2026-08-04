@@ -822,7 +822,7 @@ pub fn project_verified_nip22_comment_event_registry_v7(
     )
 }
 
-fn project_nip22_comment_parts(
+pub(crate) fn project_nip22_comment_parts(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
