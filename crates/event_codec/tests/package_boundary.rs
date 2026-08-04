@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 #[allow(unused_imports)]
-use radroots_event_codec::{canonical as _, decode as _, encode as _, verify as _};
+use radroots_event_codec::{authoring as _, canonical as _, decode as _, encode as _, verify as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
@@ -46,6 +46,7 @@ fn crate_root_declares_every_approved_module() {
     let declared = root_declarations("pub mod ");
     for module in [
         "admission",
+        "authoring",
         "canonical",
         "decode",
         "encode",
@@ -159,7 +160,7 @@ fn serialization_features_are_explicit_additive_and_final() {
     assert!(MANIFEST.contains("default = [\"std\", \"json\"]"));
     assert!(MANIFEST.contains("json = [\"serde\", \"dep:serde_json\"]"));
     assert!(MANIFEST.contains("knowledge = [\"json\", \"radroots_event/knowledge\"]"));
-    assert!(MANIFEST.contains("manifests = [\"knowledge\", \"dep:hex\", \"dep:sha2\"]"));
+    assert!(MANIFEST.contains("manifests = [\"knowledge\"]"));
 
     for forbidden in [
         "serde_json",

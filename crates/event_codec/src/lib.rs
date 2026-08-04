@@ -5,6 +5,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+pub mod authoring;
 pub mod canonical;
 mod codec;
 pub mod decode;
