@@ -9,7 +9,7 @@ use radroots_event::{
         RADROOTS_POST_TAG_TOTAL_MAX_BYTES, post_image_media_type_is_valid,
     },
 };
-use radroots_event_codec::post::authored::{
+use radroots_event_codec::encode::post::{
     authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
 };
 

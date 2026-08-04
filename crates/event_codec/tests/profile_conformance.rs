@@ -10,9 +10,11 @@ use radroots_event::{
         RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES,
     },
 };
-use radroots_event_codec::profile::{
-    authored::{RadrootsAuthoredProfileEncodeError, authored_profile_to_wire_parts},
-    inbound::{RadrootsProfileMetadataParseError, parse_inbound_profile_metadata},
+use radroots_event_codec::decode::profile::{
+    RadrootsProfileMetadataParseError, parse_inbound_profile_metadata,
+};
+use radroots_event_codec::encode::profile::{
+    RadrootsAuthoredProfileEncodeError, authored_profile_to_wire_parts,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -335,7 +337,7 @@ fn inbound_limit_valid(vector: &Vector) {
 }
 
 fn projected_metadata(
-    metadata: &radroots_event_codec::profile::inbound::RadrootsInboundProfileMetadata,
+    metadata: &radroots_event_codec::decode::profile::RadrootsInboundProfileMetadata,
 ) -> Value {
     let mut projected = Map::new();
     insert_string(&mut projected, "name", metadata.name());

@@ -9,12 +9,13 @@ use radroots_event::{
     social::{ReportFileTarget, ReportType, SocialTarget},
     tag::name::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
 };
-use radroots_event_codec::{
-    error::{EventEncodeError, EventParseError},
-    report::{
-        decode::{data_from_event, parsed_from_event, report_from_event},
-        encode::{report_build_tags, to_wire_parts, to_wire_parts_with_kind},
-    },
+use radroots_event_codec::decode::{
+    EventParseError,
+    report::{data_from_event, parsed_from_event, report_from_event},
+};
+use radroots_event_codec::encode::{
+    EventEncodeError,
+    report::{report_build_tags, to_wire_parts, to_wire_parts_with_kind},
 };
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

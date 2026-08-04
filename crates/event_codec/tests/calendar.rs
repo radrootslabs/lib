@@ -19,23 +19,24 @@ use radroots_event::{
     },
     wire::{DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT},
 };
-use radroots_event_codec::{
+use radroots_event_codec::decode::{
+    EventParseError,
     calendar::{
-        decode::{
-            admit_radroots_calendar_date_event, admit_radroots_calendar_time_event,
-            nip52_calendar_data_from_event, nip52_calendar_event_rsvp_data_from_event,
-            nip52_calendar_event_rsvp_parsed_from_event, nip52_calendar_parsed_from_event,
-            nip52_date_data_from_event, nip52_date_parsed_from_event,
-            parse_nip52_calendar_date_event, parse_nip52_calendar_time_event,
-        },
-        encode::{
-            calendar_date_event_build_tags, calendar_time_event_build_tags, calendar_to_wire_parts,
-            calendar_to_wire_parts_with_kind, date_to_wire_parts, date_to_wire_parts_with_kind,
-            rsvp_to_wire_parts, rsvp_to_wire_parts_with_kind, time_to_wire_parts,
-            time_to_wire_parts_with_kind,
-        },
+        admit_radroots_calendar_date_event, admit_radroots_calendar_time_event,
+        nip52_calendar_data_from_event, nip52_calendar_event_rsvp_data_from_event,
+        nip52_calendar_event_rsvp_parsed_from_event, nip52_calendar_parsed_from_event,
+        nip52_date_data_from_event, nip52_date_parsed_from_event, parse_nip52_calendar_date_event,
+        parse_nip52_calendar_time_event,
     },
-    error::{EventEncodeError, EventParseError},
+};
+use radroots_event_codec::encode::{
+    EventEncodeError,
+    calendar::{
+        calendar_date_event_build_tags, calendar_time_event_build_tags, calendar_to_wire_parts,
+        calendar_to_wire_parts_with_kind, date_to_wire_parts, date_to_wire_parts_with_kind,
+        rsvp_to_wire_parts, rsvp_to_wire_parts_with_kind, time_to_wire_parts,
+        time_to_wire_parts_with_kind,
+    },
 };
 
 const DATE_D_TAG: &str = "fernwood-csa-pickup";

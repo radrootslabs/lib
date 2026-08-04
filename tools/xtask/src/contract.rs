@@ -62,7 +62,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 20] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 18] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -134,14 +134,6 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 20] = [
     (
         "contracts/conformance/vectors/post/verified_profiles.v1.json",
         "crates/event_codec/tests/fixtures/post_verified_profiles.v1.json",
-    ),
-    (
-        "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json",
-        "crates/trade/tests/fixtures/parse_classified_listing_address.v1.json",
-    ),
-    (
-        "contracts/conformance/vectors/trade_validation/validate_operational_listing_event.v1.json",
-        "crates/trade/tests/fixtures/validate_operational_listing_event.v1.json",
     ),
 ];
 const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [
@@ -647,13 +639,13 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         ],
         rust_types: &[
             "radroots_event::tag::relay_hint::NostrRelayHint",
-            "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
-            "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
-            "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
-            "radroots_event_codec::reply::inbound::RadrootsNip10ReplyDiagnostic",
-            "radroots_event_codec::reply::inbound::RadrootsNip10ReplyProjectionError",
-            "radroots_event_codec::reply::inbound::RadrootsNip10ReplyStyle",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::decode::reply::RadrootsInboundNip10EventReference",
+            "radroots_event_codec::decode::reply::RadrootsInboundNip10Participant",
+            "radroots_event_codec::decode::reply::RadrootsInboundNip10ReplyProjection",
+            "radroots_event_codec::decode::reply::RadrootsNip10ReplyDiagnostic",
+            "radroots_event_codec::decode::reply::RadrootsNip10ReplyProjectionError",
+            "radroots_event_codec::decode::reply::RadrootsNip10ReplyStyle",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "social.reply.project_verified_event.valid",
@@ -674,10 +666,10 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         ],
         rust_types: &[
             "radroots_event::envelope::EventEnvelope",
-            "radroots_event_codec::reply::admission::RadrootsAdmittedNip10ReplyEvent",
-            "radroots_event_codec::reply::admission::RadrootsNip10ReplyAdmissionError",
-            "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::admission::reply::RadrootsAdmittedNip10ReplyEvent",
+            "radroots_event_codec::admission::reply::RadrootsNip10ReplyAdmissionError",
+            "radroots_event_codec::decode::reply::RadrootsInboundNip10ReplyProjection",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "social.reply.verify_and_admit_event.valid",
@@ -693,12 +685,12 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         signing: "none",
         rust_modules: &["crates/event_codec/src/post/inbound.rs"],
         rust_types: &[
-            "radroots_event_codec::post::inbound::RadrootsInboundPostImeta",
-            "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
-            "radroots_event_codec::post::inbound::RadrootsPostClassification",
-            "radroots_event_codec::post::inbound::RadrootsPostDiagnostic",
-            "radroots_event_codec::post::inbound::RadrootsPostProjectionError",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::decode::post::RadrootsInboundPostImeta",
+            "radroots_event_codec::decode::post::RadrootsInboundPostProjection",
+            "radroots_event_codec::decode::post::RadrootsPostClassification",
+            "radroots_event_codec::decode::post::RadrootsPostDiagnostic",
+            "radroots_event_codec::decode::post::RadrootsPostProjectionError",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "social.post.project_verified_event.valid",
@@ -719,12 +711,12 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         ],
         rust_types: &[
             "radroots_event::envelope::EventEnvelope",
-            "radroots_event_codec::post::admission::RadrootsAdmittedRootPostEvent",
-            "radroots_event_codec::post::admission::RadrootsPostAdmissionError",
-            "radroots_event_codec::post::admission::RadrootsPostAdmissionOutcome",
-            "radroots_event_codec::post::admission::RadrootsThreadExcludedPostCandidate",
-            "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::admission::post::RadrootsAdmittedRootPostEvent",
+            "radroots_event_codec::admission::post::RadrootsPostAdmissionError",
+            "radroots_event_codec::admission::post::RadrootsPostAdmissionOutcome",
+            "radroots_event_codec::admission::post::RadrootsThreadExcludedPostCandidate",
+            "radroots_event_codec::decode::post::RadrootsInboundPostProjection",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "social.post.verify_and_admit_event.valid",
@@ -1048,7 +1040,7 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
             "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionOutcome",
             "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityImage",
             "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityProjection",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "food_availability.project_verified_event.valid",
@@ -1074,7 +1066,7 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
             "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionError",
             "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionOutcome",
             "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityProjection",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "food_availability.verify_and_admit_event.valid",
@@ -1095,7 +1087,7 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
         rust_types: &[
             "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
             "radroots_event_codec::food_availability::revision::RadrootsFoodAvailabilityRevisionError",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
         case_kinds: &[
             "food_availability.validate_revision.valid",
@@ -2548,16 +2540,11 @@ const TRADE_CANCELLATION_WITNESSES: [EventBoundarySourceWitness; 3] = [
     },
 ];
 
-const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 2] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/validation_receipt.rs",
-        required_fragments: &["pub struct RadrootsTradeValidationReceipt"],
-    },
-    EventBoundarySourceWitness {
+const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 1] =
+    [EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;"],
-    },
-];
+    }];
 
 const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 1] = [EventBoundarySourceWitness {
     relative_path: "crates/event/src/relay_document.rs",

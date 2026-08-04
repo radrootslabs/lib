@@ -3,12 +3,13 @@ mod test_fixtures;
 
 use std::error::Error as _;
 
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::job::encode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::job::JobParseError;
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::job::{
     JobEncodeError, assert_no_inputs_when_encrypted, push_provider_tag, push_relay_tag,
     push_status_tag,
 };
-use radroots_event_codec::job::error::JobParseError;
 #[cfg(feature = "json")]
 use serde::Serialize;
 #[cfg(feature = "json")]
@@ -116,11 +117,11 @@ fn job_json_content_covers_success_and_error_paths() {
         }
     }
 
-    let ok = radroots_event_codec::job::encode::json_content(&vec!["ok".to_string()])
+    let ok = radroots_event_codec::encode::job::json_content(&vec!["ok".to_string()])
         .expect("json content");
     assert_eq!(ok, "[\"ok\"]");
 
-    let err = radroots_event_codec::job::encode::json_content(&BrokenSerialize)
+    let err = radroots_event_codec::encode::job::json_content(&BrokenSerialize)
         .expect_err("json content error");
     assert!(matches!(
         err,

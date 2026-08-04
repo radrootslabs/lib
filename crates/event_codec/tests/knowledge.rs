@@ -19,19 +19,23 @@ use radroots_event::knowledge::{
 };
 use radroots_event::wire::Nip01EventWireParts;
 use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::knowledge::{
-    contribution_attestation_from_event, contribution_attestation_to_wire_parts,
-    evidence_bounty_from_event, evidence_bounty_to_wire_parts,
-    knowledge_change_proposal_from_event, knowledge_change_proposal_to_wire_parts,
-    knowledge_claim_from_event, knowledge_claim_to_wire_parts, knowledge_field_report_from_event,
-    knowledge_field_report_to_wire_parts, knowledge_relation_from_event,
-    knowledge_relation_to_wire_parts, knowledge_review_from_event, knowledge_review_to_wire_parts,
-    knowledge_source_from_event, knowledge_source_to_wire_parts, wiki_article_from_event,
-    wiki_article_to_wire_parts, wiki_merge_request_from_event, wiki_merge_request_to_wire_parts,
-    wiki_redirect_from_event, wiki_redirect_to_wire_parts,
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::knowledge::{
+    contribution_attestation_from_event, evidence_bounty_from_event,
+    knowledge_change_proposal_from_event, knowledge_claim_from_event,
+    knowledge_field_report_from_event, knowledge_relation_from_event, knowledge_review_from_event,
+    knowledge_source_from_event, wiki_article_from_event, wiki_merge_request_from_event,
+    wiki_redirect_from_event,
 };
-use radroots_event_codec::verification::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::knowledge::{
+    contribution_attestation_to_wire_parts, evidence_bounty_to_wire_parts,
+    knowledge_change_proposal_to_wire_parts, knowledge_claim_to_wire_parts,
+    knowledge_field_report_to_wire_parts, knowledge_relation_to_wire_parts,
+    knowledge_review_to_wire_parts, knowledge_source_to_wire_parts, wiki_article_to_wire_parts,
+    wiki_merge_request_to_wire_parts, wiki_redirect_to_wire_parts,
+};
+use radroots_event_codec::verify::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };

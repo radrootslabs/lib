@@ -6,11 +6,12 @@ use radroots_event::{
     social::message::{Message, MessageRecipient},
     tag::EventPtr,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::message::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::message::{
     data_from_event, message_from_tags, parsed_from_event,
 };
-use radroots_event_codec::message::encode::{message_build_tags, to_wire_parts};
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::message::{message_build_tags, to_wire_parts};
 use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]

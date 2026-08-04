@@ -23,14 +23,12 @@ use radroots_event::{
     },
 };
 use radroots_event_codec::{
-    deletion::{
-        admission::verify_and_admit_nip09_deletion_request_event,
-        authored::authored_nip09_deletion_request_to_wire_parts,
-        inbound::{
-            RadrootsInboundNip09DeletionProjection, project_verified_nip09_deletion_request_event,
-        },
+    admission::deletion::verify_and_admit_nip09_deletion_request_event,
+    decode::deletion::{
+        RadrootsInboundNip09DeletionProjection, project_verified_nip09_deletion_request_event,
     },
-    verification::verify_nip01_event,
+    encode::deletion::authored_nip09_deletion_request_to_wire_parts,
+    verify::verify_nip01_event,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

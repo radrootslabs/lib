@@ -16,23 +16,23 @@ use radroots_event::{
     envelope::EventEnvelope, envelope::EventEnvelopeParts,
     listing::classified::ClassifiedListingPartition,
 };
-use radroots_event_codec::food_availability::admission::{
+use radroots_event_codec::admission::food_availability::{
     RadrootsFoodAvailabilityAdmissionError, RadrootsFoodAvailabilityAdmissionOutcome,
     verify_and_admit_food_availability_event,
 };
-use radroots_event_codec::food_availability::authored::{
-    RadrootsFoodAvailabilityEncodeError, authored_food_availability_build_tags,
-    authored_food_availability_to_wire_parts,
+use radroots_event_codec::admission::food_availability::{
+    RadrootsFoodAvailabilityRevisionError, validate_food_availability_revision,
 };
-use radroots_event_codec::food_availability::inbound::{
+use radroots_event_codec::decode::food_availability::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsFoodAvailabilityProjectionError,
     RadrootsFoodAvailabilityProjectionOutcome, RadrootsInboundFoodAvailabilityProjection,
     project_verified_food_availability_event,
 };
-use radroots_event_codec::food_availability::revision::{
-    RadrootsFoodAvailabilityRevisionError, validate_food_availability_revision,
+use radroots_event_codec::encode::food_availability::{
+    RadrootsFoodAvailabilityEncodeError, authored_food_availability_build_tags,
+    authored_food_availability_to_wire_parts,
 };
-use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
+use radroots_event_codec::verify::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use serde::Deserialize;
 use serde_json::{Value, json};
 

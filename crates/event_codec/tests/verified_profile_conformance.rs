@@ -8,11 +8,11 @@ use radroots_event::envelope::event_head::{
 };
 use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts, wire::Nip01EventWire};
 use radroots_event::{id::ParseError, wire::EventWireError};
-use radroots_event_codec::profile::admission::{
+use radroots_event_codec::admission::profile::{
     RadrootsAdmittedProfileEvent, RadrootsProfileAdmissionError, verify_and_admit_profile_event,
 };
-use radroots_event_codec::profile::inbound::RadrootsProfileMetadataParseError;
-use radroots_event_codec::verification::{RadrootsNip01VerificationError, verify_nip01_event};
+use radroots_event_codec::decode::profile::RadrootsProfileMetadataParseError;
+use radroots_event_codec::verify::{RadrootsNip01VerificationError, verify_nip01_event};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 

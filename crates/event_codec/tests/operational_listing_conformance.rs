@@ -6,11 +6,10 @@ use radroots_event::{
     contract::validate_event_contract_shape, envelope::EventEnvelope, envelope::EventEnvelopeParts,
     listing::operational::OperationalListing,
 };
-use radroots_event_codec::{
-    error::EventEncodeError,
+use radroots_event_codec::encode::{
+    EventEncodeError,
     operational_listing::{
-        encode::{operational_listing_build_tags, to_wire_parts},
-        tags::operational_listing_tags_full,
+        operational_listing_build_tags, operational_listing_tags_full, to_wire_parts,
     },
 };
 use serde::{Deserialize, de::DeserializeOwned};

@@ -27,12 +27,9 @@ The curated root exports are `Projection`, `ReductionInput`, `ReducerIssue`,
 human or business-workflow identifier and has no conversion to or from
 `TradeId`.
 
-The pre-release tree still contains operational-listing, binding-generation,
-and versioned-contract migration paths needed by integrated consumers. They
-are not new package identities or authority to add host behavior. Their exact
-consumers and final-removal checkpoint are recorded in
-[`COMPATIBILITY.md`](COMPATIBILITY.md). The reviewed Rust surface is recorded
-in the [public API baseline](../../docs/api/radroots_trade.txt).
+Operational-listing host planning and binding-generation machinery are outside
+this algorithm package. The reviewed Rust surface is recorded in the
+[public API baseline](../../docs/api/radroots_trade.txt).
 
 ## Deterministic reduction
 
@@ -80,22 +77,20 @@ or proof that referenced private material exists.
 | --- | --- | --- |
 | `std` | yes | Standard-library integration for the portable model and errors. |
 | `serde` | yes | Serialization support for native and versioned trade values. |
-| `serde_json` | yes | JSON validation receipts and executable JSON conformance vectors; enables `serde`. |
-| `dto-bindgen` | no | Pre-release generated-binding support used by integrated consumers; enables `std` and `serde_json`. |
+| `json` | yes | Executable JSON conformance vectors and deterministic projection digests; enables `serde`. |
 
 `--no-default-features` keeps the allocation-backed trade model, reducer, and
 workflow planner available in `no_std` environments. Features are additive;
 enabling one never selects a runtime, performs I/O, starts work, or weakens
-validation. The `serde_json` and `dto-bindgen` names are migration-era
-surfaces, not authority to expose code generation or implementation assembly
-as permanent Release V1 capabilities.
+validation. Code generation and implementation-assembly features are not part
+of the Release V1 capability vocabulary.
 
 ## Serialization and versioning
 
 Serde represents validated values; deserialization does not perform actor
 authorization, signature verification, record lookup, or delivery. Canonical
 JSON stability applies only to the explicitly governed reducer and workflow
-conformance vectors and validation-receipt contracts. Rust data layout,
+conformance vectors. Rust data layout,
 debug formatting, and the pre-release public API are not wire contracts.
 
 Versioned `V1` names identify serialized or algorithm-contract generations.

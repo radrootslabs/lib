@@ -7,7 +7,7 @@ use radroots_event::{
     },
     farm::workspace::FarmWorkspaceRef,
 };
-use radroots_event_codec::farm_crdt::encode::to_wire_parts;
+use radroots_event_codec::encode::farm_crdt::to_wire_parts;
 
 const WORKSPACE_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const DOCUMENT_ID: &str = "AAAAAAAAAAAAAAAAAAAAAg";

@@ -15,15 +15,15 @@ use radroots_event::{
         TAG_SERVICE, TAG_SHA256, TAG_SIZE, TAG_SUMMARY, TAG_THUMB, TAG_URL,
     },
 };
-use radroots_event_codec::{
-    error::{EventEncodeError, EventParseError},
-    farm_file::{
-        decode::farm_file_metadata_from_event, encode::to_wire_parts as farm_file_to_wire_parts,
-    },
-    file_metadata::{
-        decode::{data_from_event, file_metadata_from_event, parsed_from_event},
-        encode::{file_metadata_build_tags, to_wire_parts, to_wire_parts_with_kind},
-    },
+use radroots_event_codec::decode::{
+    EventParseError,
+    farm_file::farm_file_metadata_from_event,
+    file_metadata::{data_from_event, file_metadata_from_event, parsed_from_event},
+};
+use radroots_event_codec::encode::{
+    EventEncodeError,
+    farm_file::to_wire_parts as farm_file_to_wire_parts,
+    file_metadata::{file_metadata_build_tags, to_wire_parts, to_wire_parts_with_kind},
 };
 
 const VALID_HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

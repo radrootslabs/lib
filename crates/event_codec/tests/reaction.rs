@@ -7,11 +7,12 @@ use radroots_event::{
     social::SocialTarget,
     tag::name::TAG_E_ROOT,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::reaction::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::reaction::{
     data_from_event, parsed_from_event, reaction_from_tags,
 };
-use radroots_event_codec::reaction::encode::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::reaction::{
     reaction_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
 

@@ -12,9 +12,8 @@ use radroots_event::{
     tag::name::{TAG_A, TAG_H, TAG_P},
 };
 use radroots_event_codec::{
-    error::{EventEncodeError, EventParseError},
-    farm_workspace::decode::farm_workspace_from_event,
-    farm_workspace::encode::to_wire_parts,
+    decode::EventParseError, decode::farm_workspace::farm_workspace_from_event,
+    encode::EventEncodeError, encode::farm_workspace::to_wire_parts,
 };
 
 const D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";

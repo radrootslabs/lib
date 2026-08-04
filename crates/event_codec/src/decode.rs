@@ -11,6 +11,18 @@ use radroots_event::{envelope::EventEnvelopeError, wire::EventWireError};
 pub use crate::error::EventParseError;
 pub use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
+pub mod event_ref {
+    pub use crate::event_ref::*;
+}
+
+pub mod parsed {
+    pub use crate::parsed::*;
+}
+
+pub mod wire {
+    pub use crate::wire::*;
+}
+
 macro_rules! decode_domain {
     ($name:ident, $source:path) => {
         pub mod $name {
@@ -45,6 +57,8 @@ decode_domain!(message_file, crate::message_file::decode);
 decode_domain!(plot, crate::plot::decode);
 decode_domain!(reaction, crate::reaction::decode);
 decode_domain!(relay_auth, crate::relay_auth::decode);
+#[cfg(feature = "json")]
+decode_domain!(relay_document, crate::relay_document::decode);
 decode_domain!(report, crate::report::decode);
 decode_domain!(repost, crate::repost::decode);
 #[cfg(feature = "json")]
@@ -74,6 +88,7 @@ pub mod food_availability {
 pub mod job {
     pub use crate::job::error::*;
     pub use crate::job::traits::*;
+    pub use crate::job::util::*;
 
     pub mod feedback {
         pub use crate::job::feedback::decode::*;

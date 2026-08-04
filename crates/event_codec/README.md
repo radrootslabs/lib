@@ -26,13 +26,9 @@ New code should enter through these modules:
 The Release V1 canonical root consists of `Codec`, `DecodeError`,
 `EncodeError`, and `VerificationError`. Domain algorithms stay beneath the
 canonical modules so each import states whether it encodes, decodes, verifies,
-or admits data. The pre-release tree still exposes temporary compatibility
-paths while first-party consumers finish migration; they are not the
-canonical interface and may be removed before Release V1. The canonical
+or admits data. Legacy top-level domain routes are not exposed. The canonical
 surface is recorded in the
-[public API baseline](../../docs/api/radroots_event_codec.txt). The hidden
-routes and their mandatory Step 313 removal are recorded in
-[`COMPATIBILITY.md`](COMPATIBILITY.md).
+[public API baseline](../../docs/api/radroots_event_codec.txt).
 
 ## Verification pipeline
 

@@ -3,8 +3,8 @@ mod common;
 mod test_fixtures;
 
 use radroots_event::envelope::kind::KIND_POST;
-use radroots_event_codec::error::EventParseError;
-use radroots_event_codec::event_ref::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::event_ref::{
     build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags,
     push_nip10_ref_tags,
 };

@@ -9,10 +9,10 @@ use radroots_event::social::job_feedback::JobFeedback;
 use radroots_event::social::job_request::{JobInput, JobParam, JobRequest};
 use radroots_event::social::job_result::JobResult;
 use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
-use radroots_event_codec::job::feedback::encode::to_wire_parts as to_feedback_wire_parts;
-use radroots_event_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
-use radroots_event_codec::job::result::encode::to_wire_parts as to_result_wire_parts;
-use radroots_event_codec::job::traits::{BorrowedEventAdapter, JobEventLike};
+use radroots_event_codec::decode::job::{BorrowedEventAdapter, JobEventLike};
+use radroots_event_codec::encode::job::feedback::to_wire_parts as to_feedback_wire_parts;
+use radroots_event_codec::encode::job::request::to_wire_parts as to_request_wire_parts;
+use radroots_event_codec::encode::job::result::to_wire_parts as to_result_wire_parts;
 use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

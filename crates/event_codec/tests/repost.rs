@@ -6,19 +6,20 @@ use radroots_event::{
     social::SocialTarget,
     tag::name::{TAG_A, TAG_E, TAG_K, TAG_P},
 };
-use radroots_event_codec::{
-    error::{EventEncodeError, EventParseError},
+use radroots_event_codec::decode::{
+    EventParseError,
     repost::{
-        decode::{
-            generic_repost_data_from_event, generic_repost_from_event,
-            generic_repost_parsed_from_event, repost_data_from_event, repost_from_event,
-            repost_parsed_from_event,
-        },
-        encode::{
-            generic_repost_build_tags, generic_repost_to_wire_parts,
-            generic_repost_to_wire_parts_with_kind, repost_build_tags, repost_to_wire_parts,
-            repost_to_wire_parts_with_kind,
-        },
+        generic_repost_data_from_event, generic_repost_from_event,
+        generic_repost_parsed_from_event, repost_data_from_event, repost_from_event,
+        repost_parsed_from_event,
+    },
+};
+use radroots_event_codec::encode::{
+    EventEncodeError,
+    repost::{
+        generic_repost_build_tags, generic_repost_to_wire_parts,
+        generic_repost_to_wire_parts_with_kind, repost_build_tags, repost_to_wire_parts,
+        repost_to_wire_parts_with_kind,
     },
 };
 

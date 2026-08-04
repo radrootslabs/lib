@@ -15,18 +15,13 @@ use radroots_event::{
     social::group::{GroupEditableMetadata, GroupMetadata},
 };
 use radroots_event_codec::{
-    article::decode::article_from_event,
-    error::EventParseError,
-    farm::decode::farm_from_event,
-    farm_file::{
-        decode::farm_file_metadata_from_event, encode::to_wire_parts as farm_file_to_wire_parts,
-    },
-    file_metadata::{
-        decode::file_metadata_from_event, encode::to_wire_parts as public_file_to_wire_parts,
-    },
-    group::{decode::group_metadata_from_event, encode::group_metadata_to_wire_parts},
-    operational_listing::decode::operational_listing_from_event,
-    post::decode::post_from_event,
+    decode::EventParseError, decode::article::article_from_event, decode::farm::farm_from_event,
+    decode::farm_file::farm_file_metadata_from_event,
+    decode::file_metadata::file_metadata_from_event, decode::group::group_metadata_from_event,
+    decode::operational_listing::operational_listing_from_event, decode::post::post_from_event,
+    encode::farm_file::to_wire_parts as farm_file_to_wire_parts,
+    encode::file_metadata::to_wire_parts as public_file_to_wire_parts,
+    encode::group::group_metadata_to_wire_parts,
 };
 
 const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

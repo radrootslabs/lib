@@ -3,23 +3,17 @@ pub mod radroots_trade::evidence
 pub enum radroots_trade::evidence::RadrootsTradeAttestationResultV1
 pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Invalid
 pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Valid
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::evidence::RadrootsTradeAttestationResultV1
-pub fn radroots_trade::evidence::RadrootsTradeAttestationResultV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::evidence::RadrootsTradeEvidenceStateV1
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Complete
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Missing
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::QueryPartial
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::UnsupportedVersion
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::evidence::RadrootsTradeEvidenceStateV1
-pub fn radroots_trade::evidence::RadrootsTradeEvidenceStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::evidence::RadrootsTradeAttestationRecordV1
 impl radroots_trade::evidence::RadrootsTradeAttestationRecordV1
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::event_id(&self) -> &radroots_event::id::EventId
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::new(radroots_event::id::EventId, radroots_event::id::MutationId, radroots_trade::evidence::RadrootsTradeAttestationResultV1) -> Self
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::result(&self) -> radroots_trade::evidence::RadrootsTradeAttestationResultV1
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::evidence::RadrootsTradeAttestationRecordV1
-pub fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::evidence::RadrootsTradeMutationRecordV1
 impl radroots_trade::evidence::RadrootsTradeMutationRecordV1
 pub const fn radroots_trade::evidence::RadrootsTradeMutationRecordV1::mutation(&self) -> &radroots_event::trade::TradeMutationEnvelopeV1
@@ -30,8 +24,6 @@ impl radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1
 pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::candidate_id(&self) -> &radroots_event::id::CandidateId
 pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::new(radroots_event::id::CandidateId, radroots_trade::model::RadrootsTradePrivateTermsStateV1) -> Self
 pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::state(&self) -> radroots_trade::model::RadrootsTradePrivateTermsStateV1
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1
-pub fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_trade::model
 pub enum radroots_trade::model::OrderIdError
 pub radroots_trade::model::OrderIdError::Empty
@@ -47,15 +39,11 @@ pub radroots_trade::model::RadrootsTradeAgreementStateV1::Agreed
 pub radroots_trade::model::RadrootsTradeAgreementStateV1::Cancelled
 pub radroots_trade::model::RadrootsTradeAgreementStateV1::Contested
 pub radroots_trade::model::RadrootsTradeAgreementStateV1::None
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradeAgreementStateV1
-pub fn radroots_trade::model::RadrootsTradeAgreementStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::model::RadrootsTradeAttestationStateV1
 pub radroots_trade::model::RadrootsTradeAttestationStateV1::Conflicting
 pub radroots_trade::model::RadrootsTradeAttestationStateV1::None
 pub radroots_trade::model::RadrootsTradeAttestationStateV1::PresentInvalid
 pub radroots_trade::model::RadrootsTradeAttestationStateV1::PresentValid
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradeAttestationStateV1
-pub fn radroots_trade::model::RadrootsTradeAttestationStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::model::RadrootsTradeConflictStateV1
 pub radroots_trade::model::RadrootsTradeConflictStateV1::CancellationConflict
 pub radroots_trade::model::RadrootsTradeConflictStateV1::ConcurrentCandidates
@@ -64,31 +52,21 @@ pub radroots_trade::model::RadrootsTradeConflictStateV1::DoubleAcceptance
 pub radroots_trade::model::RadrootsTradeConflictStateV1::InvalidCausalChain
 pub radroots_trade::model::RadrootsTradeConflictStateV1::InventoryAuthorityConflict
 pub radroots_trade::model::RadrootsTradeConflictStateV1::None
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradeConflictStateV1
-pub fn radroots_trade::model::RadrootsTradeConflictStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::model::RadrootsTradeFulfillmentStateV1
 pub radroots_trade::model::RadrootsTradeFulfillmentStateV1::NotStarted
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradeFulfillmentStateV1
-pub fn radroots_trade::model::RadrootsTradeFulfillmentStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::model::RadrootsTradeNegotiationStateV1
 pub radroots_trade::model::RadrootsTradeNegotiationStateV1::ClosedDeclined
 pub radroots_trade::model::RadrootsTradeNegotiationStateV1::ClosedExpired
 pub radroots_trade::model::RadrootsTradeNegotiationStateV1::None
 pub radroots_trade::model::RadrootsTradeNegotiationStateV1::Open
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradeNegotiationStateV1
-pub fn radroots_trade::model::RadrootsTradeNegotiationStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::model::RadrootsTradePaymentStateV1
 pub radroots_trade::model::RadrootsTradePaymentStateV1::NotTracked
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradePaymentStateV1
-pub fn radroots_trade::model::RadrootsTradePaymentStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_trade::model::RadrootsTradePrivateTermsStateV1
 pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::AvailableVerified
 pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::CommitmentMismatch
 pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::Missing
 pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::NotRequired
 pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::Undecryptable
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradePrivateTermsStateV1
-pub fn radroots_trade::model::RadrootsTradePrivateTermsStateV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::model::OrderId(_)
 impl radroots_trade::model::OrderId
 pub fn radroots_trade::model::OrderId::as_str(&self) -> &str
@@ -109,8 +87,6 @@ pub fn radroots_trade::model::OrderId::fmt(&self, &mut core::fmt::Formatter<'_>)
 impl core::str::traits::FromStr for radroots_trade::model::OrderId
 pub type radroots_trade::model::OrderId::Err = radroots_trade::model::OrderIdError
 pub fn radroots_trade::model::OrderId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::OrderId
-pub fn radroots_trade::model::OrderId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_trade::model::OrderId
 pub fn radroots_trade::model::OrderId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_trade::model::OrderId
@@ -123,8 +99,6 @@ pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::candidate_id(
 pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
 pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::proposal_mutation_id(&self) -> &radroots_event::id::MutationId
 pub fn radroots_trade::model::RadrootsTradeAgreementClaimV1::reservation_commitment(&self) -> &str
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::model::RadrootsTradeAgreementClaimV1
-pub fn radroots_trade::model::RadrootsTradeAgreementClaimV1::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::model::RadrootsTradeProjectionV1
 impl radroots_trade::Projection
 pub fn radroots_trade::Projection::active_agreement_claim_ids(&self) -> &[radroots_event::id::MutationId]
@@ -154,8 +128,6 @@ pub const fn radroots_trade::Projection::root_mutation_id(&self) -> core::option
 pub const fn radroots_trade::Projection::seller_pubkey(&self) -> core::option::Option<&radroots_identity::key::PublicKey>
 pub const fn radroots_trade::Projection::trade_id(&self) -> &radroots_event::id::TradeId
 pub fn radroots_trade::Projection::unsupported_mutation_ids(&self) -> &[radroots_event::id::MutationId]
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::Projection
-pub fn radroots_trade::Projection::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub const radroots_trade::model::ORDER_ID_MAX_LEN: usize
 pub mod radroots_trade::reducer
 pub enum radroots_trade::reducer::RadrootsTradeReducerIssueV1
@@ -204,8 +176,6 @@ pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::TradeIdentityMismatch:
 pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::UnsupportedSchema
 pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::UnsupportedSchema::mutation_id: radroots_event::id::MutationId
 pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::UnsupportedSchema::schema_version: u16
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::ReducerIssue
-pub fn radroots_trade::ReducerIssue::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::reducer::RadrootsTradeReductionInputV1
 impl radroots_trade::ReductionInput
 pub fn radroots_trade::ReductionInput::attestations(&self) -> &[radroots_trade::evidence::RadrootsTradeAttestationRecordV1]
@@ -313,8 +283,6 @@ pub radroots_trade::ReducerIssue::TradeIdentityMismatch::mutation_id: radroots_e
 pub radroots_trade::ReducerIssue::UnsupportedSchema
 pub radroots_trade::ReducerIssue::UnsupportedSchema::mutation_id: radroots_event::id::MutationId
 pub radroots_trade::ReducerIssue::UnsupportedSchema::schema_version: u16
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::ReducerIssue
-pub fn radroots_trade::ReducerIssue::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::Error
 impl radroots_trade::workflow::Error
 pub const fn radroots_trade::workflow::Error::kind(&self) -> radroots_trade::workflow::ErrorKind
@@ -352,8 +320,6 @@ pub const fn radroots_trade::Projection::root_mutation_id(&self) -> core::option
 pub const fn radroots_trade::Projection::seller_pubkey(&self) -> core::option::Option<&radroots_identity::key::PublicKey>
 pub const fn radroots_trade::Projection::trade_id(&self) -> &radroots_event::id::TradeId
 pub fn radroots_trade::Projection::unsupported_mutation_ids(&self) -> &[radroots_event::id::MutationId]
-impl dto_bindgen_core::descriptor::Dto for radroots_trade::Projection
-pub fn radroots_trade::Projection::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_trade::ReductionInput
 impl radroots_trade::ReductionInput
 pub fn radroots_trade::ReductionInput::attestations(&self) -> &[radroots_trade::evidence::RadrootsTradeAttestationRecordV1]

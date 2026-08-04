@@ -8,11 +8,12 @@ use radroots_event::{
     social::list::{List, ListEntry},
     tag::name::TAG_R,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::list::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::list::{
     data_from_event, list_entries_from_tags, list_from_tags, parsed_from_event,
 };
-use radroots_event_codec::list::encode::{list_build_tags, to_wire_parts_with_kind};
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::list::{list_build_tags, to_wire_parts_with_kind};
 
 fn sample_list() -> List {
     List {

@@ -4,9 +4,10 @@ use radroots_event::social::seal::Seal;
 mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::seal::decode::{data_from_event, parsed_from_event, seal_from_parts};
-use radroots_event_codec::seal::encode::{seal_build_tags, to_wire_parts, to_wire_parts_with_kind};
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::seal::{data_from_event, parsed_from_event, seal_from_parts};
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::seal::{seal_build_tags, to_wire_parts, to_wire_parts_with_kind};
 
 #[test]
 fn seal_to_wire_parts_requires_content() {

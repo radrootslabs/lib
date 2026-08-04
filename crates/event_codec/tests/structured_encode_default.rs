@@ -19,41 +19,41 @@ use radroots_event::listing::operational::{
 };
 use radroots_event::post::document::{Document, DocumentSubject};
 use radroots_event::social::list_set::ListSet;
-use radroots_event_codec::coop::encode::{
-    coop_build_tags, coop_ref_tags, to_wire_parts as coop_to_wire_parts,
-    to_wire_parts_with_kind as coop_to_wire_parts_with_kind,
-};
-use radroots_event_codec::coop::list_sets::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::coop::{
     coop_admins_list_set, coop_items_list_set, coop_members_farms_list_set, coop_members_list_set,
     coop_owners_list_set, member_of_coops_list_set,
 };
-use radroots_event_codec::document::encode::{
+use radroots_event_codec::encode::coop::{
+    coop_build_tags, coop_ref_tags, to_wire_parts as coop_to_wire_parts,
+    to_wire_parts_with_kind as coop_to_wire_parts_with_kind,
+};
+use radroots_event_codec::encode::document::{
     document_build_tags, to_wire_parts as document_to_wire_parts,
     to_wire_parts_with_kind as document_to_wire_parts_with_kind,
 };
-use radroots_event_codec::error::EventEncodeError;
-use radroots_event_codec::farm::encode::{
+use radroots_event_codec::encode::farm::{
     farm_build_tags, farm_ref_tags, to_wire_parts as farm_to_wire_parts,
     to_wire_parts_with_kind as farm_to_wire_parts_with_kind,
 };
-use radroots_event_codec::farm::list_sets::{
+use radroots_event_codec::encode::farm::{
     farm_members_list_set, farm_operational_listings_list_set,
     farm_operational_listings_list_set_from_listings, farm_owners_list_set, farm_plots_list_set,
     farm_plots_list_set_from_plots, farm_workers_list_set, member_of_farms_list_set,
 };
-use radroots_event_codec::plot::encode::{
+use radroots_event_codec::encode::plot::{
     plot_address, plot_build_tags, to_wire_parts as plot_to_wire_parts,
     to_wire_parts_with_kind as plot_to_wire_parts_with_kind,
 };
-use radroots_event_codec::resource_area::encode::{
+use radroots_event_codec::encode::resource_area::{
     resource_area_build_tags, resource_area_ref_tags, to_wire_parts as resource_area_to_wire_parts,
     to_wire_parts_with_kind as resource_area_to_wire_parts_with_kind,
 };
-use radroots_event_codec::resource_area::list_sets::{
+use radroots_event_codec::encode::resource_area::{
     resource_area_members_farms_list_set, resource_area_members_plots_list_set,
     resource_area_stewards_list_set,
 };
-use radroots_event_codec::resource_cap::encode::{
+use radroots_event_codec::encode::resource_cap::{
     resource_harvest_cap_build_tags, to_wire_parts as resource_cap_to_wire_parts,
     to_wire_parts_with_kind as resource_cap_to_wire_parts_with_kind,
 };

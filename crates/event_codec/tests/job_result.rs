@@ -6,10 +6,10 @@ use radroots_event::envelope::kind::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_event::social::job::{JobInputType, JobPaymentRequest};
 use radroots_event::social::job_request::JobInput;
 use radroots_event::social::job_result::JobResult;
-use radroots_event_codec::job::encode::JobEncodeError;
-use radroots_event_codec::job::error::JobParseError;
-use radroots_event_codec::job::result::decode::{job_result_from_tags, parsed_from_event};
-use radroots_event_codec::job::result::encode::to_wire_parts;
+use radroots_event_codec::decode::job::JobParseError;
+use radroots_event_codec::decode::job::result::{job_result_from_tags, parsed_from_event};
+use radroots_event_codec::encode::job::JobEncodeError;
+use radroots_event_codec::encode::job::result::to_wire_parts;
 use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 fn sample_result() -> JobResult {
@@ -192,7 +192,7 @@ fn job_result_requires_request_event_tag() {
 
 #[test]
 fn job_result_metadata_rejects_wrong_kind() {
-    let err = radroots_event_codec::job::result::decode::data_from_event(
+    let err = radroots_event_codec::decode::job::result::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -213,7 +213,7 @@ fn job_result_data_from_event_success_path() {
     let result = sample_result();
     let content = result.content.clone().unwrap();
     let parts = to_wire_parts(&result, &content).expect("wire parts");
-    let data = radroots_event_codec::job::result::decode::data_from_event(
+    let data = radroots_event_codec::decode::job::result::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -230,7 +230,7 @@ fn job_result_data_from_event_success_path() {
 
 #[test]
 fn job_result_data_from_event_propagates_decode_errors_with_valid_kind() {
-    let err = radroots_event_codec::job::result::decode::data_from_event(
+    let err = radroots_event_codec::decode::job::result::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,

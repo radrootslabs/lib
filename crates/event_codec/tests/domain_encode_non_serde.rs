@@ -19,28 +19,28 @@ use radroots_event::{
     },
     post::document::{Document, DocumentSubject},
 };
-use radroots_event_codec::coop::encode::{coop_build_tags, coop_ref_tags};
-use radroots_event_codec::coop::list_sets::{coop_members_farms_list_set, coop_members_list_set};
-use radroots_event_codec::document::encode::document_build_tags;
-use radroots_event_codec::error::EventEncodeError;
-use radroots_event_codec::farm::encode::{farm_build_tags, farm_ref_tags};
-use radroots_event_codec::farm::list_sets::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::coop::{coop_build_tags, coop_ref_tags};
+use radroots_event_codec::encode::coop::{coop_members_farms_list_set, coop_members_list_set};
+use radroots_event_codec::encode::document::document_build_tags;
+use radroots_event_codec::encode::farm::{farm_build_tags, farm_ref_tags};
+use radroots_event_codec::encode::farm::{
     farm_members_list_set, farm_operational_listings_list_set,
 };
-use radroots_event_codec::operational_listing::encode::operational_listing_build_tags;
-use radroots_event_codec::operational_listing::tags::{
+use radroots_event_codec::encode::operational_listing::operational_listing_build_tags;
+use radroots_event_codec::encode::operational_listing::{
     OperationalListingTagOptions, operational_listing_tags_full,
     operational_listing_tags_with_options,
 };
-use radroots_event_codec::plot::encode::{plot_address, plot_build_tags};
-use radroots_event_codec::resource_area::encode::{
+use radroots_event_codec::encode::plot::{plot_address, plot_build_tags};
+use radroots_event_codec::encode::resource_area::{
     resource_area_build_tags, resource_area_ref_tags,
 };
-use radroots_event_codec::resource_area::list_sets::{
+use radroots_event_codec::encode::resource_area::{
     resource_area_members_farms_list_set, resource_area_members_plots_list_set,
     resource_area_stewards_list_set,
 };
-use radroots_event_codec::resource_cap::encode::resource_harvest_cap_build_tags;
+use radroots_event_codec::encode::resource_cap::resource_harvest_cap_build_tags;
 use test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 const VALID_PUBKEY: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;

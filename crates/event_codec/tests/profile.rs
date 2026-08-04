@@ -8,8 +8,8 @@ use radroots_event::{
         RADROOTS_PROFILE_TYPE_TAG_RADROOTSD,
     },
 };
-use radroots_event_codec::error::EventParseError;
-use radroots_event_codec::profile::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::profile::{
     data_from_event, parsed_from_event, profile_from_content,
 };
 

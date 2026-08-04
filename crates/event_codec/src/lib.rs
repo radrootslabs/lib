@@ -15,101 +15,52 @@ pub mod manifest;
 mod social_helpers;
 pub mod verify;
 
-// TEMPORARY COMPATIBILITY QUARANTINE (publish = false): these legacy domain
-// paths remain source-visible only for first-party consumers scheduled for
-// migration in Steps 288-294. They are hidden from the Release V1 API and
-// must be removed at the final compatibility checkpoint, Step 313.
-#[doc(hidden)]
-pub mod app_data;
-#[doc(hidden)]
-pub mod article;
-#[doc(hidden)]
-pub mod calendar;
-#[doc(hidden)]
-pub mod comment;
-#[doc(hidden)]
-pub mod coop;
-#[doc(hidden)]
-pub mod d_tag;
-#[doc(hidden)]
-pub mod deletion;
-#[doc(hidden)]
-pub mod document;
-#[doc(hidden)]
-pub mod error;
-#[doc(hidden)]
-pub mod event_ref;
-#[doc(hidden)]
-pub mod farm;
-#[doc(hidden)]
-pub mod farm_crdt;
-#[doc(hidden)]
-pub mod farm_file;
-#[doc(hidden)]
-pub mod farm_workspace;
-#[doc(hidden)]
-pub mod file_metadata;
-#[doc(hidden)]
-pub mod follow;
-#[doc(hidden)]
-pub mod food_availability;
-#[doc(hidden)]
-pub mod geochat;
-#[doc(hidden)]
-pub mod gift_wrap;
-#[doc(hidden)]
-pub mod group;
-#[doc(hidden)]
-pub mod http_auth;
-#[doc(hidden)]
-pub mod job;
+mod app_data;
+mod article;
+mod calendar;
+mod comment;
+mod coop;
+mod d_tag;
+mod deletion;
+mod document;
+mod error;
+mod event_ref;
+mod farm;
+mod farm_crdt;
+mod farm_file;
+mod farm_workspace;
+mod file_metadata;
+mod follow;
+mod food_availability;
+mod geochat;
+mod gift_wrap;
+mod group;
+mod http_auth;
+mod job;
 #[cfg(feature = "knowledge")]
-#[doc(hidden)]
-pub mod knowledge;
-#[doc(hidden)]
-pub mod list;
-#[doc(hidden)]
-pub mod list_set;
-#[doc(hidden)]
-pub mod message;
-#[doc(hidden)]
-pub mod message_file;
-#[doc(hidden)]
-pub mod operational_listing;
-#[doc(hidden)]
-pub mod order;
-#[doc(hidden)]
-pub mod parsed;
-#[doc(hidden)]
-pub mod plot;
-#[doc(hidden)]
-pub mod post;
-#[doc(hidden)]
-pub mod profile;
-#[doc(hidden)]
-pub mod reaction;
-#[doc(hidden)]
-pub mod relay_auth;
-#[doc(hidden)]
-pub mod reply;
-#[doc(hidden)]
-pub mod report;
-#[doc(hidden)]
-pub mod repost;
-#[doc(hidden)]
-pub mod resource_area;
-#[doc(hidden)]
-pub mod resource_cap;
-#[doc(hidden)]
-pub mod seal;
-#[doc(hidden)]
-pub mod tag_builders;
-#[doc(hidden)]
-pub mod trade;
-#[doc(hidden)]
-pub mod verification;
-#[doc(hidden)]
-pub mod wire;
+mod knowledge;
+mod list;
+mod list_set;
+mod message;
+mod message_file;
+mod operational_listing;
+mod order;
+mod parsed;
+mod plot;
+mod post;
+mod profile;
+mod reaction;
+mod relay_auth;
+mod reply;
+mod report;
+mod repost;
+mod resource_area;
+mod resource_cap;
+mod seal;
+mod tag_builders;
+mod trade;
+mod verification;
+mod wire;
 
 pub use codec::Codec;
 pub use decode::DecodeError;
@@ -123,5 +74,4 @@ pub mod admission;
 mod test_fixtures;
 
 #[cfg(feature = "json")]
-#[doc(hidden)]
-pub mod relay_document;
+mod relay_document;

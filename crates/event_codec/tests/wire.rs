@@ -2,7 +2,7 @@ use radroots_event::contract::ContractValidationError;
 use radroots_event::draft::{DraftError, EventDraft};
 use radroots_event::envelope::kind::{KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE};
 use radroots_event::wire::Nip01EventWireParts;
-use radroots_event_codec::wire::{canonicalize_tags, empty_content};
+use radroots_event_codec::decode::wire::{canonicalize_tags, empty_content};
 
 #[test]
 fn wire_canonicalize_tags_trims_sorts_and_dedups() {

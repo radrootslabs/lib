@@ -13,7 +13,7 @@ documentation = "https://docs.rs/radroots_trade"
 readme = "README.md"
 keywords = ["radroots", "trade", "local-food", "workflow"]
 categories = ["algorithms", "data-structures", "no-std"]
-include = ["src/**", "tests/**", "!tests/package_boundary.rs", "examples/**", "Cargo.toml", "README.md", "COMPATIBILITY.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "!tests/package_boundary.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "json"]
@@ -23,44 +23,28 @@ name = "radroots_trade"
 
 [features]
 default = ["std", "serde", "json"]
-# TEMPORARY COMPATIBILITY QUARANTINE (publish = false): see COMPATIBILITY.md.
-dto-bindgen = [
-  "std",
-  "json",
-  "dep:dto_bindgen",
-  "dep:dto_bindgen_core",
-]
 std = [
   "radroots_core/std",
   "radroots_event/std",
-  "radroots_event_codec/std",
   "radroots_identity/std",
 ]
 serde = [
   "dep:serde",
   "radroots_core/serde",
   "radroots_event/serde",
-  "radroots_event_codec/serde",
   "radroots_identity/serde",
 ]
 json = [
   "serde",
-  "dep:base64",
   "dep:hex",
   "dep:serde_json",
   "dep:sha2",
-  "radroots_event_codec/json",
 ]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
-# Required only by the quarantined operational-listing surface.
-radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
-base64 = { workspace = true, optional = true }
-dto_bindgen = { workspace = true, optional = true }
-dto_bindgen_core = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
@@ -70,9 +54,6 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }
-
-[dev-dependencies]
-nostr = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true

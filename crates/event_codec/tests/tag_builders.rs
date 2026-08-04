@@ -35,13 +35,13 @@ use radroots_event::social::message::{Message, MessageRecipient};
 use radroots_event::social::message_file::MessageFile;
 use radroots_event::social::seal::Seal;
 use radroots_event::tag::EventPtr;
-use radroots_event_codec::error::EventEncodeError;
-use radroots_event_codec::job::encode::JobEncodeError;
-use radroots_event_codec::operational_listing::encode::operational_listing_build_tags;
-use radroots_event_codec::operational_listing::tags::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::job::JobEncodeError;
+use radroots_event_codec::encode::operational_listing::operational_listing_build_tags;
+use radroots_event_codec::encode::operational_listing::{
     OperationalListingTagOptions, operational_listing_tags_with_options,
 };
-use radroots_event_codec::tag_builders::RadrootsEventTagBuilder;
+use radroots_event_codec::encode::tag_builders::RadrootsEventTagBuilder;
 use test_fixtures::{
     CDN_PRIMARY_HTTPS, FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS,
 };
@@ -456,7 +456,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
     let operational_listing_tags_full_fn: fn(
         &OperationalListing,
     ) -> Result<Vec<Vec<String>>, EventEncodeError> =
-        radroots_event_codec::operational_listing::tags::operational_listing_tags_full;
+        radroots_event_codec::encode::operational_listing::operational_listing_tags_full;
     let full_tags = operational_listing_tags_full_fn(&listing_with_trade).unwrap();
     assert!(full_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("inventory")

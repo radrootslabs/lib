@@ -5,7 +5,7 @@ use std::{borrow::Cow, fs, path::Path};
 use radroots_event::{envelope::EventEnvelope, wire::Nip01EventWire};
 use radroots_event_codec::{
     admission::{RadrootsAdmittedEvent, RadrootsEventAdmissionError, admit_verified_event},
-    verification::verify_nip01_event,
+    verify::verify_nip01_event,
 };
 use serde::Deserialize;
 use serde_json::Value;

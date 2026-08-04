@@ -6,11 +6,12 @@ use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::envelope::kind::{KIND_GIFT_WRAP, KIND_MESSAGE};
 use radroots_event::social::gift_wrap::{GiftWrap, GiftWrapRecipient};
 
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::gift_wrap::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::gift_wrap::{
     data_from_event, gift_wrap_from_tags, parsed_from_event,
 };
-use radroots_event_codec::gift_wrap::encode::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::gift_wrap::{
     gift_wrap_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
 use test_fixtures::RELAY_PRIMARY_WSS;

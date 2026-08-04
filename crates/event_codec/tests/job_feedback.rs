@@ -5,10 +5,10 @@ use radroots_event::envelope::kind::{
 };
 use radroots_event::social::job::{JobFeedbackStatus, JobPaymentRequest};
 use radroots_event::social::job_feedback::JobFeedback;
-use radroots_event_codec::job::encode::JobEncodeError;
-use radroots_event_codec::job::error::JobParseError;
-use radroots_event_codec::job::feedback::decode::{job_feedback_from_tags, parsed_from_event};
-use radroots_event_codec::job::feedback::encode::to_wire_parts;
+use radroots_event_codec::decode::job::JobParseError;
+use radroots_event_codec::decode::job::feedback::{job_feedback_from_tags, parsed_from_event};
+use radroots_event_codec::encode::job::JobEncodeError;
+use radroots_event_codec::encode::job::feedback::to_wire_parts;
 
 fn sample_feedback() -> JobFeedback {
     JobFeedback {
@@ -116,7 +116,7 @@ fn job_feedback_data_from_event_success_path() {
         vec!["e".to_string(), "req".to_string()],
         vec!["amount".to_string(), "12000".to_string()],
     ];
-    let data = radroots_event_codec::job::feedback::decode::data_from_event(
+    let data = radroots_event_codec::decode::job::feedback::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -134,7 +134,7 @@ fn job_feedback_data_from_event_success_path() {
 
 #[test]
 fn job_feedback_data_from_event_propagates_decode_errors_with_valid_kind() {
-    let err = radroots_event_codec::job::feedback::decode::data_from_event(
+    let err = radroots_event_codec::decode::job::feedback::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -148,7 +148,7 @@ fn job_feedback_data_from_event_propagates_decode_errors_with_valid_kind() {
 
 #[test]
 fn job_feedback_metadata_rejects_wrong_kind() {
-    let err = radroots_event_codec::job::feedback::decode::data_from_event(
+    let err = radroots_event_codec::decode::job::feedback::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,

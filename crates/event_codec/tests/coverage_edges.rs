@@ -1,7 +1,7 @@
 #![cfg(feature = "json")]
 
 use radroots_event::envelope::kind::KIND_POST;
-use radroots_event_codec::error::EventParseError;
+use radroots_event_codec::decode::EventParseError;
 
 fn assert_invalid_kind<T>(result: Result<T, EventParseError>, expected: &'static str, got: u32) {
     match result {
@@ -45,7 +45,7 @@ fn event_parse_error_duplicate_tag_code_and_display_are_stable() {
 fn parsed_wrappers_propagate_invalid_kind_errors() {
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::article::decode::parsed_from_event(
+        radroots_event_codec::decode::article::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "30023",
@@ -54,7 +54,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::coop::decode::parsed_from_event(
+        radroots_event_codec::decode::coop::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "30360",
@@ -63,7 +63,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::farm_crdt::decode::parsed_from_event(
+        radroots_event_codec::decode::farm_crdt::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "78",
@@ -72,7 +72,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::farm_workspace::decode::parsed_from_event(
+        radroots_event_codec::decode::farm_workspace::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "30078",
@@ -81,7 +81,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::file_metadata::decode::parsed_from_event(
+        radroots_event_codec::decode::file_metadata::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "1063",
@@ -90,7 +90,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::http_auth::decode::parsed_from_event(
+        radroots_event_codec::decode::http_auth::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "27235",
@@ -99,7 +99,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::profile::decode::parsed_from_event(
+        radroots_event_codec::decode::profile::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "0",
@@ -108,7 +108,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::reaction::decode::parsed_from_event(
+        radroots_event_codec::decode::reaction::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "7",
@@ -117,7 +117,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::relay_auth::decode::parsed_from_event(
+        radroots_event_codec::decode::relay_auth::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "22242",
@@ -126,7 +126,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::report::decode::parsed_from_event(
+        radroots_event_codec::decode::report::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "1984",
@@ -135,7 +135,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::repost::decode::repost_parsed_from_event(
+        radroots_event_codec::decode::repost::repost_parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "6",
@@ -144,7 +144,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::repost::decode::generic_repost_parsed_from_event(
+        radroots_event_codec::decode::repost::generic_repost_parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "16",
@@ -153,7 +153,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::resource_area::decode::parsed_from_event(
+        radroots_event_codec::decode::resource_area::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "30370",
@@ -162,7 +162,7 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::resource_cap::decode::parsed_from_event(
+        radroots_event_codec::decode::resource_cap::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),
         "30371",

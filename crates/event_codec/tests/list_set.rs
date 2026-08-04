@@ -8,11 +8,12 @@ use radroots_event::{
     social::list::ListEntry,
     social::list_set::ListSet,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::list_set::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::list_set::{
     data_from_event, list_set_from_tags, parsed_from_event,
 };
-use radroots_event_codec::list_set::encode::{list_set_build_tags, to_wire_parts_with_kind};
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::list_set::{list_set_build_tags, to_wire_parts_with_kind};
 use test_fixtures::APP_PRIMARY_HTTPS;
 
 fn app_url(path: &str) -> String {

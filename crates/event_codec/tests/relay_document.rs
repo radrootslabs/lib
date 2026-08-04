@@ -1,8 +1,8 @@
 #![cfg(feature = "json")]
 
-use radroots_event_codec::error::EventParseError;
-use radroots_event_codec::relay_document::decode::from_json;
-use radroots_event_codec::relay_document::encode::to_json;
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::relay_document::from_json;
+use radroots_event_codec::encode::relay_document::to_json;
 
 #[test]
 fn relay_document_roundtrip_json() {

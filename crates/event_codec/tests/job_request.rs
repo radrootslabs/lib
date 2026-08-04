@@ -6,10 +6,10 @@ use radroots_event::envelope::kind::{
 };
 use radroots_event::social::job::JobInputType;
 use radroots_event::social::job_request::{JobInput, JobParam, JobRequest};
-use radroots_event_codec::job::encode::JobEncodeError;
-use radroots_event_codec::job::error::JobParseError;
-use radroots_event_codec::job::request::decode::{job_request_from_tags, parsed_from_event};
-use radroots_event_codec::job::request::encode::to_wire_parts;
+use radroots_event_codec::decode::job::JobParseError;
+use radroots_event_codec::decode::job::request::{job_request_from_tags, parsed_from_event};
+use radroots_event_codec::encode::job::JobEncodeError;
+use radroots_event_codec::encode::job::request::to_wire_parts;
 use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
 
 fn sample_request() -> JobRequest {
@@ -117,7 +117,7 @@ fn job_request_from_tags_rejects_invalid_bid_tag() {
 
 #[test]
 fn job_request_metadata_rejects_wrong_kind() {
-    let err = radroots_event_codec::job::request::decode::data_from_event(
+    let err = radroots_event_codec::decode::job::request::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -136,7 +136,7 @@ fn job_request_metadata_rejects_wrong_kind() {
 fn job_request_data_from_event_success_path() {
     let request = sample_request();
     let parts = to_wire_parts(&request, "payload").expect("wire parts");
-    let data = radroots_event_codec::job::request::decode::data_from_event(
+    let data = radroots_event_codec::decode::job::request::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -152,7 +152,7 @@ fn job_request_data_from_event_success_path() {
 
 #[test]
 fn job_request_data_from_event_propagates_decode_errors_with_valid_kind() {
-    let err = radroots_event_codec::job::request::decode::data_from_event(
+    let err = radroots_event_codec::decode::job::request::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,

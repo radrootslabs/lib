@@ -87,12 +87,8 @@ fn manifest_has_final_identity_feature_vocabulary_and_radroots_dependencies() {
 
 #[test]
 fn crate_root_contains_the_approved_module_skeleton() {
-    let final_root = ROOT
-        .split("/// Private migration surface")
-        .next()
-        .expect("final root declarations");
     assert_eq!(
-        declarations(final_root, "pub mod "),
+        declarations(ROOT, "pub mod "),
         BTreeSet::from([
             "client",
             "error",
@@ -104,8 +100,7 @@ fn crate_root_contains_the_approved_module_skeleton() {
         ])
     );
     assert_eq!(
-        final_root
-            .lines()
+        ROOT.lines()
             .map(str::trim)
             .filter(|line| line.starts_with("pub use "))
             .collect::<BTreeSet<_>>(),
@@ -122,9 +117,7 @@ fn crate_root_contains_the_approved_module_skeleton() {
 
     assert!(SERVER.starts_with("//! Relay- and persistence-independent NIP-46 server state."));
     assert!(ROOT.contains("pub use server::Server;"));
-    assert!(ROOT.contains("#[doc(hidden)]\npub mod prelude"));
-    assert!(ROOT.contains("Steps 271, 288, and 293"));
-    assert!(ROOT.contains("Step 313 removes the shim"));
+    assert!(!ROOT.contains("pub mod prelude"));
 }
 
 #[test]
@@ -151,11 +144,8 @@ fn approved_root_exports_and_transport_trait_compile() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         public_traits,
-        BTreeSet::from([
-            "pub trait RadrootsNostrConnectClientTransport {",
-            "pub trait Transport: Send {",
-        ]),
-        "only the final host transport SPI and private migration shim may remain"
+        BTreeSet::from(["pub trait Transport: Send {"]),
+        "only the final host transport SPI may remain"
     );
     for forbidden in [
         "Relay", "Runtime", "Session", "Storage", "Secret", "Approval",
@@ -223,7 +213,7 @@ fn client_root_and_transport_use_package_owned_state_machine_types() {
 }
 
 #[test]
-fn separate_repository_compatibility_is_hidden_unpublished_and_scheduled() {
+fn separate_repository_compatibility_surface_is_removed() {
     assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     for item in [
         "pub type RadrootsNostrConnectClientTransportFuture",
@@ -236,12 +226,9 @@ fn separate_repository_compatibility_is_hidden_unpublished_and_scheduled() {
         "pub fn parse_response_event",
         "pub async fn execute_request_with_transport",
     ] {
-        let position = CLIENT
-            .find(item)
-            .unwrap_or_else(|| panic!("missing `{item}`"));
         assert!(
-            CLIENT[position.saturating_sub(100)..position].contains("#[doc(hidden)]"),
-            "compatibility item `{item}` must remain hidden"
+            !CLIENT.contains(item),
+            "compatibility item `{item}` must be absent"
         );
     }
     for legacy in [
@@ -249,8 +236,8 @@ fn separate_repository_compatibility_is_hidden_unpublished_and_scheduled() {
         "radroots_nostr_connect::prelude",
     ] {
         assert!(
-            !PUBLIC_API.contains(legacy),
-            "compatibility identity `{legacy}` leaked into the public API baseline"
+            !PUBLIC_API.contains(legacy) && !ROOT.contains(legacy),
+            "compatibility identity `{legacy}` remains"
         );
     }
 }

@@ -11,13 +11,11 @@ use std::{
 
 use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 use radroots_event_codec::{
-    deletion::{
-        admission::{
-            RadrootsAdmittedNip09DeletionRequestEvent, admit_verified_nip09_deletion_request_event,
-        },
-        evaluator::{RadrootsNip09SuppressionDecision, evaluate_nip09_suppression},
+    admission::deletion::{
+        RadrootsAdmittedNip09DeletionRequestEvent, RadrootsNip09SuppressionDecision,
+        admit_verified_nip09_deletion_request_event, evaluate_nip09_suppression,
     },
-    verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event},
+    verify::{RadrootsSignatureVerifiedEvent, verify_nip01_event},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

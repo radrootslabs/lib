@@ -2,8 +2,8 @@
 mod test_fixtures;
 
 use radroots_event::social::job::{JobFeedbackStatus, JobInputType};
-use radroots_event_codec::job::error::JobParseError;
-use radroots_event_codec::job::util::{
+use radroots_event_codec::decode::job::JobParseError;
+use radroots_event_codec::decode::job::{
     feedback_status_from_tag, feedback_status_tag, job_input_type_from_tag, job_input_type_tag,
     parse_amount_tag_sat, parse_bid_tag_sat, parse_bool_encrypted, parse_i_tags, parse_params,
     push_amount_tag_msat, push_bid_tag_sat,

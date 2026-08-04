@@ -1,10 +1,10 @@
 #![cfg(feature = "json")]
 
 use radroots_event::social::list::ListEntry;
-use radroots_event_codec::list::decode::list_private_entries_from_json;
-use radroots_event_codec::list::encode::list_private_entries_json;
-use radroots_event_codec::list_set::decode::list_set_private_entries_from_json;
-use radroots_event_codec::list_set::encode::list_set_private_entries_json;
+use radroots_event_codec::decode::list::list_private_entries_from_json;
+use radroots_event_codec::decode::list_set::list_set_private_entries_from_json;
+use radroots_event_codec::encode::list::list_private_entries_json;
+use radroots_event_codec::encode::list_set::list_set_private_entries_json;
 
 #[test]
 fn list_private_entries_roundtrip() {

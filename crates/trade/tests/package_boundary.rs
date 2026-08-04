@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, workflow as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
-const DRAFT: &str = include_str!("../src/operational_listing/draft.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const OPERATIONS: &str = include_str!("../../../contracts/operations.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -20,7 +19,6 @@ const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_ti
 const README: &str = include_str!("../README.md");
 const EXAMPLE: &str = include_str!("../examples/reduce_trade.rs");
 const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_trade.txt");
-const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -82,16 +80,11 @@ fn protocol_trade_id_is_singular_and_business_order_id_is_distinct() {
 }
 
 #[test]
-fn trade_canonicalization_accepts_validated_identity_without_authority_or_signing() {
+fn trade_has_no_authority_or_signing_dependency() {
     let dependencies = table_keys(MANIFEST, "[dependencies]");
 
     assert!(!dependencies.contains("radroots_authority"));
     assert!(!MANIFEST.contains("radroots_authority/std"));
-    assert!(!DRAFT.contains("radroots_authority"));
-    assert!(!DRAFT.contains("RadrootsActorContext"));
-    assert!(!DRAFT.contains("ActorRoleUnsatisfied"));
-    assert!(DRAFT.contains("seller_pubkey: PublicKey"));
-    assert!(DRAFT.contains("performs no signing or authorization"));
 }
 
 #[test]
@@ -257,34 +250,24 @@ fn workflow_plan_is_root_exported_and_side_effect_free() {
 }
 
 #[test]
-fn superseded_trade_surfaces_are_removed_or_explicitly_quarantined() {
+fn superseded_trade_surfaces_are_removed() {
     assert!(!ROOT.contains("pub mod identity;"));
     assert!(!ROOT.contains("pub mod prelude;"));
     assert!(!WORKFLOW.contains("Temporary migration reexports"));
     assert!(!WORKFLOW.contains("pub use crate::trade_contract_v1"));
 
     for declaration in [
-        "#[doc(hidden)]\npub mod dto;",
-        "#[doc(hidden)]\npub mod operational_listing;",
-        "#[doc(hidden)]\npub mod validation_receipt;",
+        "pub mod dto;",
+        "pub mod operational_listing;",
+        "pub mod validation_receipt;",
     ] {
         assert!(
-            ROOT.contains(declaration),
-            "temporary surface is not documentation-hidden: {declaration}"
+            !ROOT.contains(declaration),
+            "temporary surface remains: {declaration}"
         );
     }
-    for required in [
-        "Step 238",
-        "Steps 261-262",
-        "Step 313 is the exact final-removal checkpoint",
-        "radroots_event_codec",
-        "serde_json",
-        "dto-bindgen",
-    ] {
-        assert!(
-            COMPATIBILITY.contains(required),
-            "compatibility contract is missing {required}"
-        );
+    for forbidden in ["radroots_event_codec", "dto-bindgen", "dto_bindgen"] {
+        assert!(!MANIFEST.contains(forbidden));
     }
 }
 

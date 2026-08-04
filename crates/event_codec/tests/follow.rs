@@ -8,9 +8,10 @@ use radroots_event::{
     social::follow::{Follow, FollowProfile},
 };
 
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::follow::decode::{data_from_event, follow_from_tags, parsed_from_event};
-use radroots_event_codec::follow::encode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::follow::{data_from_event, follow_from_tags, parsed_from_event};
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::follow::{
     FollowMutation, follow_apply, follow_to_wire_parts_after, to_wire_parts,
     to_wire_parts_with_kind,
 };

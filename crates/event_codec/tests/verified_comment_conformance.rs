@@ -17,16 +17,14 @@ use radroots_event::{
     },
 };
 use radroots_event_codec::{
-    comment::{
-        admission::verify_and_admit_nip22_comment_event,
-        authored::authored_nip22_comment_to_wire_parts,
-        inbound::{
-            RadrootsInboundNip22CommentPosition, RadrootsInboundNip22CommentProjection,
-            RadrootsInboundNip22CommentRoot, RadrootsInboundNip22Participant,
-            project_verified_nip22_comment_event,
-        },
+    admission::comment::verify_and_admit_nip22_comment_event,
+    decode::comment::{
+        RadrootsInboundNip22CommentPosition, RadrootsInboundNip22CommentProjection,
+        RadrootsInboundNip22CommentRoot, RadrootsInboundNip22Participant,
+        project_verified_nip22_comment_event,
     },
-    verification::verify_nip01_event,
+    encode::comment::authored_nip22_comment_to_wire_parts,
+    verify::verify_nip01_event,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

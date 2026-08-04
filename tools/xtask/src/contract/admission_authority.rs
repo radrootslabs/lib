@@ -226,8 +226,8 @@ fn validate_manifest_authority(
         &[
             "radroots_event_codec::admission::RadrootsAdmittedEvent",
             "radroots_event_codec::admission::RadrootsEventAdmissionError",
-            "radroots_event_codec::verification::RadrootsContractValidatedEvent",
-            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+            "radroots_event_codec::verify::RadrootsContractValidatedEvent",
+            "radroots_event_codec::verify::RadrootsSignatureVerifiedEvent",
         ],
     )?;
     require_scalar(

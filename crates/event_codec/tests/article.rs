@@ -10,12 +10,13 @@ use radroots_event::{
     social::{SocialFarmAnchor, SocialLocation},
     tag::name::{TAG_A, TAG_D, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_PUBLISHED_AT, TAG_T, TAG_TITLE},
 };
-use radroots_event_codec::{
-    article::{
-        decode::{article_from_event, data_from_event, parsed_from_event},
-        encode::{article_build_tags, to_wire_parts, to_wire_parts_with_kind},
-    },
-    error::{EventEncodeError, EventParseError},
+use radroots_event_codec::decode::{
+    EventParseError,
+    article::{article_from_event, data_from_event, parsed_from_event},
+};
+use radroots_event_codec::encode::{
+    EventEncodeError,
+    article::{article_build_tags, to_wire_parts, to_wire_parts_with_kind},
 };
 
 const VALID_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";

@@ -5,11 +5,12 @@ use radroots_event::{
     envelope::kind::{KIND_GEOCHAT, KIND_POST},
     social::geochat::GeoChat,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::geochat::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::geochat::{
     data_from_event, geochat_from_tags, parsed_from_event,
 };
-use radroots_event_codec::geochat::encode::{geochat_build_tags, to_wire_parts};
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::geochat::{geochat_build_tags, to_wire_parts};
 
 #[test]
 fn geochat_build_tags_requires_geohash() {

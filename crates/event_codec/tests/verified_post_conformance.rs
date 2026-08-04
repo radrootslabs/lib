@@ -15,26 +15,24 @@ use radroots_event::{
     wire::Nip01EventWire,
     wire::Nip01EventWireParts,
 };
-use radroots_event_codec::post::{
-    admission::{RadrootsPostAdmissionOutcome, verify_and_admit_post_event},
-    authored::{
-        authored_ask_to_wire_parts, authored_photo_update_to_wire_parts,
-        authored_update_to_wire_parts,
-    },
-    inbound::{RadrootsInboundPostProjection, RadrootsPostClassification, RadrootsPostDiagnostic},
+use radroots_event_codec::admission::post::{
+    RadrootsPostAdmissionOutcome, verify_and_admit_post_event,
 };
-use radroots_event_codec::reply::{
-    admission::verify_and_admit_nip10_reply_event,
-    authored::authored_nip10_reply_to_wire_parts,
-    inbound::{
-        RadrootsInboundNip10EventReference, RadrootsInboundNip10Participant,
-        RadrootsInboundNip10ReplyProjection, RadrootsNip10ReplyDiagnostic, RadrootsNip10ReplyStyle,
-        project_verified_nip10_reply_event,
-    },
+use radroots_event_codec::admission::reply::verify_and_admit_nip10_reply_event;
+use radroots_event_codec::decode::post::{
+    RadrootsInboundPostProjection, RadrootsPostClassification, RadrootsPostDiagnostic,
+    project_verified_post_event,
 };
-use radroots_event_codec::{
-    post::inbound::project_verified_post_event, verification::verify_nip01_event,
+use radroots_event_codec::decode::reply::{
+    RadrootsInboundNip10EventReference, RadrootsInboundNip10Participant,
+    RadrootsInboundNip10ReplyProjection, RadrootsNip10ReplyDiagnostic, RadrootsNip10ReplyStyle,
+    project_verified_nip10_reply_event,
 };
+use radroots_event_codec::encode::post::{
+    authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
+};
+use radroots_event_codec::encode::reply::authored_nip10_reply_to_wire_parts;
+use radroots_event_codec::verify::verify_nip01_event;
 use serde::Deserialize;
 use serde_json::{Value, json};
 

@@ -2844,14 +2844,9 @@ dependencies = [
 name = "radroots_trade"
 version = "0.1.0-alpha"
 dependencies = [
- "base64",
- "dto_bindgen",
- "dto_bindgen_core",
  "hex",
- "nostr",
  "radroots_core",
  "radroots_event",
- "radroots_event_codec",
  "radroots_identity",
  "serde",
  "serde_json",

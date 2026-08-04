@@ -18,29 +18,29 @@ use radroots_event::farm::resource_cap::{ResourceHarvestCap, ResourceHarvestProd
 use radroots_event::farm::{Farm, FarmRef};
 use radroots_event::post::document::{Document, DocumentSubject};
 use radroots_event::tag::name::TAG_D;
-use radroots_event_codec::coop::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::coop::{
     coop_from_event, data_from_event as coop_metadata_from_event,
     parsed_from_event as coop_index_from_event,
 };
-use radroots_event_codec::document::decode::{
+use radroots_event_codec::decode::document::{
     data_from_event as document_metadata_from_event, document_from_event,
     parsed_from_event as document_index_from_event,
 };
-use radroots_event_codec::error::EventParseError;
-use radroots_event_codec::farm::decode::{
+use radroots_event_codec::decode::farm::{
     data_from_event as farm_metadata_from_event, farm_from_event,
     parsed_from_event as farm_index_from_event,
 };
-use radroots_event_codec::parsed::{RadrootsParsedData, RadrootsParsedEvent};
-use radroots_event_codec::plot::decode::{
+use radroots_event_codec::decode::parsed::{RadrootsParsedData, RadrootsParsedEvent};
+use radroots_event_codec::decode::plot::{
     data_from_event as plot_metadata_from_event, parsed_from_event as plot_index_from_event,
     plot_from_event,
 };
-use radroots_event_codec::resource_area::decode::{
+use radroots_event_codec::decode::resource_area::{
     data_from_event as resource_area_metadata_from_event,
     parsed_from_event as resource_area_index_from_event, resource_area_from_event,
 };
-use radroots_event_codec::resource_cap::decode::{
+use radroots_event_codec::decode::resource_cap::{
     data_from_event as resource_cap_metadata_from_event,
     parsed_from_event as resource_cap_index_from_event, resource_harvest_cap_from_event,
 };

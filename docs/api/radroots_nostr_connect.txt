@@ -416,6 +416,7 @@ pub const fn radroots_nostr_connect::uri::ClientUri::client_public_key(&self) ->
 pub fn radroots_nostr_connect::uri::ClientUri::metadata(&self) -> &radroots_nostr_connect::uri::ClientMetadata
 pub fn radroots_nostr_connect::uri::ClientUri::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
 pub fn radroots_nostr_connect::uri::ClientUri::secret(&self) -> &str
+pub fn radroots_nostr_connect::uri::ClientUri::try_new(radroots_identity::key::PublicKey, impl core::iter::traits::collect::IntoIterator<Item = radroots_nostr_connect::uri::RelayUrl>, impl core::convert::Into<alloc::string::String>, radroots_nostr_connect::uri::ClientMetadata) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
 impl core::fmt::Debug for radroots_nostr_connect::uri::ClientUri
 pub fn radroots_nostr_connect::uri::ClientUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for radroots_nostr_connect::uri::ClientUri
@@ -626,6 +627,7 @@ pub const fn radroots_nostr_connect::uri::ClientUri::client_public_key(&self) ->
 pub fn radroots_nostr_connect::uri::ClientUri::metadata(&self) -> &radroots_nostr_connect::uri::ClientMetadata
 pub fn radroots_nostr_connect::uri::ClientUri::relays(&self) -> &[radroots_nostr_connect::uri::RelayUrl]
 pub fn radroots_nostr_connect::uri::ClientUri::secret(&self) -> &str
+pub fn radroots_nostr_connect::uri::ClientUri::try_new(radroots_identity::key::PublicKey, impl core::iter::traits::collect::IntoIterator<Item = radroots_nostr_connect::uri::RelayUrl>, impl core::convert::Into<alloc::string::String>, radroots_nostr_connect::uri::ClientMetadata) -> core::result::Result<Self, radroots_nostr_connect::error::RadrootsNostrConnectError>
 impl core::fmt::Debug for radroots_nostr_connect::uri::ClientUri
 pub fn radroots_nostr_connect::uri::ClientUri::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for radroots_nostr_connect::uri::ClientUri

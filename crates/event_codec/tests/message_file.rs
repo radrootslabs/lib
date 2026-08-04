@@ -8,11 +8,12 @@ use radroots_event::social::message::MessageRecipient;
 use radroots_event::social::message_file::{MessageFile, MessageFileDimensions};
 use radroots_event::tag::EventPtr;
 
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::message_file::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::message_file::{
     data_from_event, message_file_from_tags, parsed_from_event,
 };
-use radroots_event_codec::message_file::encode::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::message_file::{
     message_file_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
 use test_fixtures::{CDN_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};

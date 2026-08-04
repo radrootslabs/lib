@@ -14,21 +14,19 @@ use radroots_event::{
     contract::validate_event_contract_parts,
     media::AuthoredImage,
 };
-use radroots_event_codec::{
+use radroots_event_codec::decode::{
+    EventParseError,
     calendar::{
-        decode::{
-            admit_radroots_calendar, admit_radroots_calendar_date_event,
-            admit_radroots_calendar_event_rsvp, admit_radroots_calendar_time_event,
-            parse_nip52_calendar, parse_nip52_calendar_date_event, parse_nip52_calendar_event_rsvp,
-            parse_nip52_calendar_time_event,
-        },
-        encode::{
-            calendar_collection_build_tags, calendar_date_event_build_tags,
-            calendar_time_event_build_tags, calendar_to_wire_parts, date_to_wire_parts,
-            rsvp_build_tags, rsvp_to_wire_parts, time_to_wire_parts,
-        },
+        admit_radroots_calendar, admit_radroots_calendar_date_event,
+        admit_radroots_calendar_event_rsvp, admit_radroots_calendar_time_event,
+        parse_nip52_calendar, parse_nip52_calendar_date_event, parse_nip52_calendar_event_rsvp,
+        parse_nip52_calendar_time_event,
     },
-    error::EventParseError,
+};
+use radroots_event_codec::encode::calendar::{
+    calendar_collection_build_tags, calendar_date_event_build_tags, calendar_time_event_build_tags,
+    calendar_to_wire_parts, date_to_wire_parts, rsvp_build_tags, rsvp_to_wire_parts,
+    time_to_wire_parts,
 };
 use serde_json::{Map, Value};
 

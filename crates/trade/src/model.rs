@@ -23,8 +23,6 @@ pub const ORDER_ID_MAX_LEN: usize = 128;
 ///
 /// This identifier is deliberately distinct from the canonical protocol
 /// [`radroots_event::trade::TradeId`]. No conversion exists between them.
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OrderId(String);
 

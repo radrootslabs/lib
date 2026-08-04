@@ -5,13 +5,14 @@ use radroots_event::{
     envelope::kind::KIND_POST,
     social::app_data::{AppData, KIND_APP_DATA},
 };
-use radroots_event_codec::app_data::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::app_data::{
     app_data_from_tags, data_from_event, parsed_from_event,
 };
-use radroots_event_codec::app_data::encode::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::app_data::{
     app_data_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
 
 #[test]
 fn app_data_build_tags_requires_d_tag() {

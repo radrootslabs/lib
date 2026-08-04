@@ -10,8 +10,8 @@ use std::string::String;
 use radroots_event::envelope::EventEnvelope;
 
 // Domain-specific algorithms live behind the canonical encoding namespace.
-// The implementation modules remain crate-private compatibility structure
-// until their final removal checkpoint.
+// Their implementation modules remain crate-private so the public API has one
+// stable route for each operation.
 pub use crate::error::{EventEncodeError, RadrootsEncodeError};
 
 macro_rules! encode_domain {
@@ -25,7 +25,10 @@ macro_rules! encode_domain {
 encode_domain!(app_data, crate::app_data::encode);
 encode_domain!(article, crate::article::encode);
 encode_domain!(calendar, crate::calendar::encode);
-encode_domain!(coop, crate::coop::encode);
+pub mod coop {
+    pub use crate::coop::encode::*;
+    pub use crate::coop::list_sets::*;
+}
 encode_domain!(document, crate::document::encode);
 encode_domain!(farm_crdt, crate::farm_crdt::encode);
 encode_domain!(farm_file, crate::farm_file::encode);
@@ -43,9 +46,14 @@ encode_domain!(message_file, crate::message_file::encode);
 encode_domain!(plot, crate::plot::encode);
 encode_domain!(reaction, crate::reaction::encode);
 encode_domain!(relay_auth, crate::relay_auth::encode);
+#[cfg(feature = "json")]
+encode_domain!(relay_document, crate::relay_document::encode);
 encode_domain!(report, crate::report::encode);
 encode_domain!(repost, crate::repost::encode);
-encode_domain!(resource_area, crate::resource_area::encode);
+pub mod resource_area {
+    pub use crate::resource_area::encode::*;
+    pub use crate::resource_area::list_sets::*;
+}
 encode_domain!(resource_cap, crate::resource_cap::encode);
 encode_domain!(seal, crate::seal::encode);
 
@@ -67,6 +75,8 @@ pub mod food_availability {
 }
 
 pub mod job {
+    pub use crate::job::encode::*;
+
     pub mod feedback {
         pub use crate::job::feedback::encode::*;
     }
@@ -76,6 +86,10 @@ pub mod job {
     pub mod result {
         pub use crate::job::result::encode::*;
     }
+}
+
+pub mod tag_builders {
+    pub use crate::tag_builders::*;
 }
 
 #[cfg(feature = "knowledge")]

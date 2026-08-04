@@ -7,15 +7,16 @@ use radroots_event::social::group::{
     KIND_GROUP_LEAVE_REQUEST, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA, KIND_GROUP_PUT_USER,
     KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES,
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::group::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::group::{
     group_admins_from_event, group_create_group_from_event, group_create_invite_from_event,
     group_delete_event_from_event, group_delete_group_from_event, group_edit_metadata_from_event,
     group_join_request_from_event, group_leave_request_from_event, group_members_from_event,
     group_metadata_from_event, group_put_user_from_event, group_remove_user_from_event,
     group_roles_from_event,
 };
-use radroots_event_codec::group::encode::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::group::{
     group_admins_to_wire_parts, group_create_group_to_wire_parts,
     group_create_invite_to_wire_parts, group_delete_event_to_wire_parts,
     group_delete_group_to_wire_parts, group_edit_metadata_to_wire_parts,

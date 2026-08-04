@@ -20,32 +20,28 @@ use radroots_event::{
     social::http_auth::HttpAuth,
     social::relay_auth::RelayAuth,
 };
-use radroots_event_codec::{
-    error::EventParseError,
-    farm_crdt::{
-        decode::farm_crdt_change_from_event_with_author,
-        encode::{to_wire_parts as crdt_to_wire_parts, to_wire_parts_with_author},
-    },
-    farm_file::{
-        decode::farm_file_metadata_from_event, encode::to_wire_parts as file_to_wire_parts,
-    },
-    farm_workspace::{
-        decode::farm_workspace_from_event, encode::to_wire_parts as workspace_to_wire_parts,
-    },
+use radroots_event_codec::decode::{
+    EventParseError,
+    farm_crdt::farm_crdt_change_from_event_with_author,
+    farm_file::farm_file_metadata_from_event,
+    farm_workspace::farm_workspace_from_event,
     group::{
-        decode::{
-            group_admins_from_event, group_create_invite_from_event, group_metadata_from_event,
-            group_put_user_from_event,
-        },
-        encode::{
-            group_admins_to_wire_parts, group_create_invite_to_wire_parts,
-            group_metadata_to_wire_parts, group_put_user_to_wire_parts,
-        },
+        group_admins_from_event, group_create_invite_from_event, group_metadata_from_event,
+        group_put_user_from_event,
     },
-    http_auth::{decode::http_auth_from_event, encode::to_wire_parts as http_auth_to_wire_parts},
-    relay_auth::{
-        decode::relay_auth_from_event, encode::to_wire_parts as relay_auth_to_wire_parts,
+    http_auth::http_auth_from_event,
+    relay_auth::relay_auth_from_event,
+};
+use radroots_event_codec::encode::{
+    farm_crdt::{to_wire_parts as crdt_to_wire_parts, to_wire_parts_with_author},
+    farm_file::to_wire_parts as file_to_wire_parts,
+    farm_workspace::to_wire_parts as workspace_to_wire_parts,
+    group::{
+        group_admins_to_wire_parts, group_create_invite_to_wire_parts,
+        group_metadata_to_wire_parts, group_put_user_to_wire_parts,
     },
+    http_auth::to_wire_parts as http_auth_to_wire_parts,
+    relay_auth::to_wire_parts as relay_auth_to_wire_parts,
 };
 
 const WORKSPACE_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";

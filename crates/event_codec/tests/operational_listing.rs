@@ -20,18 +20,19 @@ use radroots_event::{
     },
     tag::name::{TAG_D, TAG_PUBLISHED_AT},
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::operational_listing::decode::{
+use radroots_event_codec::decode::EventParseError;
+use radroots_event_codec::decode::operational_listing::{
     data_from_event, data_from_nostr_event, operational_listing_from_event,
     operational_listing_from_event_parts, operational_listing_from_nostr_event, parsed_from_event,
     parsed_from_nostr_event,
 };
-use radroots_event_codec::operational_listing::encode::{
-    operational_listing_build_tags, to_wire_parts, to_wire_parts_with_kind,
-};
-use radroots_event_codec::operational_listing::tags::{
+use radroots_event_codec::encode::EventEncodeError;
+use radroots_event_codec::encode::operational_listing::{
     OperationalListingTagOptions, operational_listing_tags_full,
     operational_listing_tags_with_options,
+};
+use radroots_event_codec::encode::operational_listing::{
+    operational_listing_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
 use std::{borrow::Cow, collections::BTreeSet, fs, path::Path, str::FromStr};
 
