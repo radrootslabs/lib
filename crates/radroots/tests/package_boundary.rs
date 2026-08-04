@@ -8,7 +8,7 @@ const README: &str = include_str!("../README.md");
 #[test]
 fn package_has_final_identity_and_exact_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots\""));
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     assert_eq!(
         dependency_names(MANIFEST),
         BTreeSet::from([

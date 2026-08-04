@@ -17,7 +17,7 @@ const PUBLICATION: &str = include_str!("../../../contracts/releases/publication.
 #[test]
 fn manifest_has_final_identity_and_dependency_boundary() {
     assert!(MANIFEST.contains("name = \"radroots_sdk\""));
-    assert!(MANIFEST.contains("publish = false"));
+    assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
     assert!(MANIFEST.contains("version.workspace = true"));
     assert!(MANIFEST.contains("name = \"package_boundary\""));
 
