@@ -120,6 +120,7 @@ fn crate_root_declares_every_approved_module() {
         "envelope",
         "farm",
         "food",
+        "generic_draft",
         "id",
         "knowledge",
         "listing",
@@ -143,6 +144,7 @@ fn crate_root_exposes_the_curated_native_event_vocabulary() {
     type CuratedRootTypes = (
         radroots_event::Event,
         radroots_event::EventDraft,
+        radroots_event::GenericEventDraft,
         radroots_event::SignedEvent,
         radroots_event::VerifiedEvent,
         radroots_event::EventId,
@@ -154,6 +156,7 @@ fn crate_root_exposes_the_curated_native_event_vocabulary() {
     for root_export in [
         "Event",
         "EventDraft",
+        "GenericEventDraft",
         "SignedEvent",
         "VerifiedEvent",
         "EventId",

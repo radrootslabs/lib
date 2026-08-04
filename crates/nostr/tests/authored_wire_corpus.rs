@@ -8,7 +8,7 @@ use nostr::{
 };
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
-    draft::EventDraft,
+    GenericEventDraft,
     envelope::kind::KIND_CLASSIFIED_LISTING,
     food::availability::{
         FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityStatus, FoodContent,
@@ -325,7 +325,7 @@ fn generic_vector(
     content: String,
     keys: &Keys,
 ) -> WireVector {
-    let draft = EventDraft::new(
+    let draft = GenericEventDraft::new(
         contract_id,
         kind,
         created_at,
@@ -335,8 +335,8 @@ fn generic_vector(
     )
     .expect("validated generic draft");
     draft
-        .validate_for_signing()
-        .expect("signable generic draft");
+        .validate_for_authoring()
+        .expect("authorable generic draft");
     let nostr_tags = draft
         .tags_as_vec()
         .into_iter()

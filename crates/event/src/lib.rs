@@ -6,9 +6,7 @@
 //! Canonical Radroots event-domain models.
 //!
 //! Public behavior is grouped under the approved singular domain modules.
-//! The crate root intentionally exposes only [`Event`], [`EventDraft`],
-//! [`SignedEvent`], [`VerifiedEvent`], [`EventId`], [`EventKind`], [`EventTag`],
-//! and [`Error`].
+//! The crate root intentionally exposes only its curated native event types.
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -53,6 +51,7 @@ mod dto;
 pub mod envelope;
 pub mod farm;
 pub mod food;
+pub mod generic_draft;
 pub mod id;
 #[cfg(feature = "knowledge")]
 pub mod knowledge;
@@ -68,5 +67,6 @@ pub mod wire;
 
 pub use draft::{EventDraft, SignedEvent};
 pub use envelope::{EventEnvelope as Event, EventKind, EventTag};
+pub use generic_draft::GenericEventDraft;
 pub use id::EventId;
 pub use verification::{Error, SignatureVerifiedEvent as VerifiedEvent};
