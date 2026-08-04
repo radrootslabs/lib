@@ -2,7 +2,6 @@ mod api_qualification;
 mod architecture;
 mod bindings;
 mod check;
-mod cli_host;
 mod contracts;
 mod coverage;
 mod coverage_policy;

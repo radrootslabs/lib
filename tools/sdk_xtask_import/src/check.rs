@@ -11,7 +11,6 @@ use serde::Deserialize;
 use tar::Archive;
 
 use crate::{
-    cli_host,
     contracts::validate_sdk_contracts,
     fs::workspace_root,
     output::{PackageOutput, package_outputs},
@@ -159,7 +158,6 @@ pub fn check() -> Result<(), String> {
     check_binding_crate_sources(&root)?;
     check_package_source_metadata(&root)?;
     check_generated_outputs(&root)?;
-    cli_host::check_cli_host()?;
     check_package_build_artifacts(&root)?;
     check_npm_pack_payloads(&root)?;
     crate::bindings::check(&root)?;

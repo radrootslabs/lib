@@ -1,12 +1,11 @@
 use crate::{
-    cli_host, fs::workspace_root, output::package_outputs, package_matrix::validate_package_matrix,
+    fs::workspace_root, output::package_outputs, package_matrix::validate_package_matrix,
     package_metadata,
 };
 
 pub fn generate_all() -> Result<(), String> {
     generate_ts()?;
-    generate_package_metadata()?;
-    cli_host::generate_cli_host()
+    generate_package_metadata()
 }
 
 pub fn generate_ts() -> Result<(), String> {

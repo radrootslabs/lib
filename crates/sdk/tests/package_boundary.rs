@@ -158,6 +158,12 @@ fn package_contains_only_reachable_sources_and_registered_targets() {
             "farm.rs".to_owned(),
             "lib.rs".to_owned(),
             "listing.rs".to_owned(),
+            "listing/operational_listing/draft.rs".to_owned(),
+            "listing/operational_listing/mod.rs".to_owned(),
+            "listing/operational_listing/model.rs".to_owned(),
+            "listing/operational_listing/mutation.rs".to_owned(),
+            "listing/operational_listing/price_ext.rs".to_owned(),
+            "listing/operational_listing/validation.rs".to_owned(),
             "signing.rs".to_owned(),
             "storage.rs".to_owned(),
             "sync.rs".to_owned(),
@@ -184,8 +190,8 @@ fn package_contains_only_reachable_sources_and_registered_targets() {
 }
 
 #[test]
-fn remaining_compatibility_package_is_retired_and_not_publishable() {
-    assert!(PUBLICATION.contains("retired = [\"radroots_runtime_contract_v1\"]"));
+fn compatibility_packages_are_removed() {
+    assert!(PUBLICATION.contains("retired = []"));
     let approved = PUBLICATION
         .split_once("approved_packages = [")
         .expect("approved package list")
@@ -194,6 +200,12 @@ fn remaining_compatibility_package_is_retired_and_not_publishable() {
         .expect("approved package list terminator")
         .0;
     assert!(!approved.contains("radroots_runtime_contract_v1"));
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root");
+    assert!(!workspace.join("crates/runtime_contract_v1").exists());
+    assert!(!workspace.join("crates/event_index_bindings").exists());
 }
 
 #[test]

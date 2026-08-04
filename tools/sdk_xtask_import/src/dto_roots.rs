@@ -49,16 +49,10 @@ const CORE_BINDINGS_PACKAGE_NAME: &str = "@radroots/core-bindings";
 const EVENT_BINDINGS_PACKAGE_KEY: &str = "event";
 const EVENT_BINDINGS_PACKAGE_NAME: &str = "@radroots/event-bindings";
 
-pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
-    DtoPackageRootSet {
-        package_key: "core",
-        roots: core_roots,
-    },
-    DtoPackageRootSet {
-        package_key: "event_index",
-        roots: event_index_roots,
-    },
-];
+pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[DtoPackageRootSet {
+    package_key: "core",
+    roots: core_roots,
+}];
 
 pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
     ManualDescriptorFamily {
@@ -75,11 +69,6 @@ pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
         package_key: "event",
         source_family: "GeoJSON coordinate arrays",
         reason: "fixed-size Rust arrays must preserve tuple semantics in TypeScript",
-    },
-    ManualDescriptorFamily {
-        package_key: "event_index",
-        source_family: "checkpoint and index cursor fields",
-        reason: "custom deserialization and large integers require manual descriptor policy",
     },
     ManualDescriptorFamily {
         package_key: "trade",
@@ -103,11 +92,6 @@ pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
         package_key: "replica_schema",
         shape_family: "generated query argument wrappers",
         reason: "schema operation inputs are generated package shapes rather than source-owned public DTO structs",
-    },
-    SdkLocalWrapperAllowance {
-        package_key: "event_index",
-        shape_family: "RadrootsEventIndexShardId package alias",
-        reason: "source descriptors correctly describe the shard id newtype as a string, while package roots still need a stable named TypeScript alias",
     },
     SdkLocalWrapperAllowance {
         package_key: "trade",
@@ -178,14 +162,6 @@ pub fn core_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
-pub fn event_index_types_module() -> Result<DtoTypesModule, String> {
-    let root_set = package_root_set("event_index")
-        .ok_or_else(|| "missing event-index DTO roots".to_owned())?;
-    let rendered =
-        render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())?;
-    Ok(with_event_index_sdk_wrappers(rendered))
-}
-
 pub fn replica_schema_types_module() -> Result<DtoTypesModule, String> {
     render_registry_types(
         &radroots_replica_schema_bindings::dto_registry(),
@@ -195,10 +171,6 @@ pub fn replica_schema_types_module() -> Result<DtoTypesModule, String> {
 
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core_bindings::dto_roots()
-}
-
-fn event_index_roots() -> Vec<RootDescriptor> {
-    radroots_event_index::dto::dto_roots().into_iter().collect()
 }
 
 fn core_import_options(
@@ -442,37 +414,6 @@ fn declaration_name(declaration: &str) -> &str {
         .unwrap_or(declaration)
 }
 
-fn with_event_index_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
-    let mut declarations = module
-        .body_ts()
-        .split("\n\n")
-        .filter(|declaration| !declaration.trim().is_empty())
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    declarations.push(type_alias(
-        "RadrootsEventIndexShardId",
-        TypeScriptType::String,
-    ));
-    let order = [
-        "RadrootsEventIndexShardId",
-        "RadrootsEventIndexIdRange",
-        "RadrootsEventIndexShardMetadata",
-        "RadrootsEventIndexManifest",
-        "RadrootsEventIndexShardCheckpoint",
-        "RadrootsEventIndexCheckpoint",
-    ];
-    declarations.sort_by_key(|declaration| {
-        order
-            .iter()
-            .position(|name| *name == declaration_name(declaration))
-            .unwrap_or(order.len())
-    });
-    DtoTypesModule::new(
-        module.imports_ts().unwrap_or_default(),
-        declarations.join("\n\n"),
-    )
-}
-
 fn with_type_aliases_sorted(
     module: DtoTypesModule,
     aliases: impl IntoIterator<Item = String>,
@@ -518,8 +459,6 @@ mod tests {
         include_str!("../../../packages/core-bindings/src/generated/types.ts");
     const EVENT_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/event-bindings/src/generated/types.ts");
-    const EVENT_INDEX_BINDINGS_TYPES_TS: &str =
-        include_str!("../../../packages/event-index-bindings/src/generated/types.ts");
     const REPLICA_SCHEMA_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/replica-schema-bindings/src/generated/types.ts");
     const TRADE_BINDINGS_TYPES_TS: &str =
@@ -657,14 +596,6 @@ mod tests {
         "RadrootsWikiMergeRequest",
         "RadrootsWikiRedirect",
     ];
-    const EVENT_INDEX_TYPE_INVENTORY: &[&str] = &[
-        "RadrootsEventIndexShardId",
-        "RadrootsEventIndexIdRange",
-        "RadrootsEventIndexShardMetadata",
-        "RadrootsEventIndexManifest",
-        "RadrootsEventIndexShardCheckpoint",
-        "RadrootsEventIndexCheckpoint",
-    ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
         "RadrootsOperationalListingSubtotal",
         "RadrootsOperationalListingTotal",
@@ -720,7 +651,6 @@ mod tests {
     #[test]
     fn package_roots_are_explicit_not_discovered() {
         assert!(package_root_set("core").is_some());
-        assert!(package_root_set("event_index").is_some());
         assert!(package_root_set("event").is_none());
         assert!(package_root_set("trade").is_none());
     }
@@ -731,11 +661,6 @@ mod tests {
             MANUAL_DESCRIPTOR_FAMILIES
                 .iter()
                 .any(|family| family.source_family.contains("GeoJSON"))
-        );
-        assert!(
-            SDK_LOCAL_WRAPPER_ALLOWANCES
-                .iter()
-                .any(|allowance| { allowance.shape_family.contains("RadrootsEventIndexShardId") })
         );
         assert!(SDK_LOCAL_WRAPPER_ALLOWANCES.iter().any(|allowance| {
             allowance
@@ -870,13 +795,6 @@ mod tests {
             !EVENT_BINDINGS_TYPES_TS.contains("export type RadrootsEventEnvelope ="),
             "event package must not export the retired raw envelope type name"
         );
-    }
-
-    #[test]
-    fn event_index_type_inventory_matches_current_package_surface() {
-        let actual = type_inventory(EVENT_INDEX_BINDINGS_TYPES_TS);
-
-        assert_eq!(actual, EVENT_INDEX_TYPE_INVENTORY);
     }
 
     #[test]

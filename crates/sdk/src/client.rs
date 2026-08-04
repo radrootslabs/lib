@@ -930,10 +930,10 @@ fn profile_event(
     event: &radroots_event::SignedEvent,
 ) -> std::result::Result<
     ProfileEvent,
-    radroots_event_codec::profile::inbound::RadrootsProfileMetadataParseError,
+    radroots_event_codec::decode::profile::RadrootsProfileMetadataParseError,
 > {
     let profile =
-        radroots_event_codec::profile::inbound::parse_inbound_profile_metadata(event.content())?;
+        radroots_event_codec::decode::profile::parse_inbound_profile_metadata(event.content())?;
     Ok(ProfileEvent {
         event_id: event.id_hex(),
         author: event.pubkey().to_hex(),

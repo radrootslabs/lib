@@ -578,7 +578,6 @@ repository = "sdk-typescript"
 [packages]
 "radroots_core" = "@radroots/core-bindings"
 "radroots_event" = "@radroots/event-bindings"
-"radroots_event_index" = "@radroots/event-index-bindings"
 "radroots_identity" = "@radroots/identity-bindings"
 "radroots_replica_schema" = "@radroots/replica-schema-bindings"
 "radroots_trade" = "@radroots/trade-bindings"
@@ -622,13 +621,6 @@ crate_name = "radroots_event_bindings"
 crate_dir = "crates/event_bindings"
 package = "@radroots/event-bindings"
 package_dir = "packages/event-bindings"
-
-[npm_packages.event_index]
-kind = "bindings"
-crate_name = "radroots_event_index_bindings"
-crate_dir = "crates/event_index_bindings"
-package = "@radroots/event-index-bindings"
-package_dir = "packages/event-index-bindings"
 
 [npm_packages.identity]
 kind = "bindings"

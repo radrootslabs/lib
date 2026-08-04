@@ -128,13 +128,6 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             kinds_ts: Some(TsSource::Module(radroots_event_bindings::kinds_module())),
         },
         PackageOutput {
-            spec: spec_by_key("event_index"),
-            types_ts: Some(TsSource::DtoRegistry(dto_roots::event_index_types_module()?)),
-            types_imports: Vec::new(),
-            constants_ts: None,
-            kinds_ts: None,
-        },
-        PackageOutput {
             spec: spec_by_key("identity"),
             types_ts: None,
             types_imports: Vec::new(),
@@ -321,7 +314,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(package_names.contains(&"@radroots/core-bindings"));
         assert!(package_names.contains(&"@radroots/event-bindings"));
-        assert!(package_names.contains(&"@radroots/event-index-bindings"));
         assert!(package_names.contains(&"@radroots/identity-bindings"));
         assert!(package_names.contains(&"@radroots/replica-schema-bindings"));
         assert!(package_names.contains(&"@radroots/trade-bindings"));

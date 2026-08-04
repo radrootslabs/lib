@@ -20,7 +20,7 @@ pub struct WasmPackageSpec {
     pub out_dir: &'static str,
 }
 
-pub const PACKAGE_SPECS: [PackageSpec; 6] = [
+pub const PACKAGE_SPECS: [PackageSpec; 5] = [
     PackageSpec {
         key: "core",
         crate_name: "radroots_core_bindings",
@@ -34,13 +34,6 @@ pub const PACKAGE_SPECS: [PackageSpec; 6] = [
         crate_dir: "crates/event_bindings",
         package_name: "@radroots/event-bindings",
         package_dir: "packages/event-bindings",
-    },
-    PackageSpec {
-        key: "event_index",
-        crate_name: "radroots_event_index_bindings",
-        crate_dir: "crates/event_index_bindings",
-        package_name: "@radroots/event-index-bindings",
-        package_dir: "packages/event-index-bindings",
     },
     PackageSpec {
         key: "identity",
@@ -172,7 +165,7 @@ mod tests {
 
     #[test]
     fn approved_package_count_is_stable() {
-        assert_eq!(package_specs().len(), 6);
+        assert_eq!(package_specs().len(), 5);
         assert_eq!(wasm_package_specs().len(), 3);
     }
 

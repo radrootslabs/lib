@@ -163,9 +163,9 @@ surfaced, and the response must match the signed event and requested policies.
 
 ## Release posture
 
-This package remains `publish = false` until the complete package-realistic
-release qualification and separately authorized publication step. The crate is
-licensed under `MIT OR Apache-2.0`.
+This package is enabled for package-realistic validation only. Actual crates.io
+publication remains blocked pending the approval packet and a separately
+authorized operator step. The crate is licensed under `MIT OR Apache-2.0`.
 
 The reviewed all-features public API baseline is recorded at
 [`docs/api/radroots_sdk-0.1.0-alpha.txt`](../../docs/api/radroots_sdk-0.1.0-alpha.txt).

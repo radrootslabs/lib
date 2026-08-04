@@ -5,7 +5,7 @@ safe local construction, deliberate domain paths, and the common client
 boundary without exposing every lower crate or duplicating the advanced SDK
 engine.
 
-The package remains `publish = false` during release qualification. After the
+The package is enabled for validation-only release qualification. After the
 separately approved publication gate, the onboarding command is:
 
 ```sh

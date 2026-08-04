@@ -4,11 +4,22 @@ use std::{error, fmt};
 
 use radroots_event::{EventDraft, contract::AuthorRole, id::ClassifiedListingAddress};
 use radroots_signing::Actor;
-use radroots_trade::operational_listing::{
-    RadrootsOperationalListingEditDocumentV1, RadrootsOperationalListingEditError,
-    RadrootsOperationalListingLifecycleState, RadrootsOperationalListingMutation,
-    RadrootsOperationalListingMutationError, build_operational_listing_mutation_draft,
-    canonicalize_operational_listing_edit,
+
+mod operational_listing;
+
+pub use operational_listing::{
+    BinPricingTryExt, RadrootsClassifiedListingAddressParts,
+    RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditDocumentV1,
+    RadrootsOperationalListingEditError, RadrootsOperationalListingLifecycleState,
+    RadrootsOperationalListingMutation, RadrootsOperationalListingMutationError,
+    RadrootsOperationalListingSubtotal, RadrootsOperationalListingTotal,
+    RadrootsOperationalListingTradeProjection, RadrootsPublicClassifiedListingAddress,
+    parse_classified_listing_address, parse_operational_listing_event,
+    parse_public_classified_listing_address, validate_operational_listing_event,
+    validate_operational_listing_model,
+};
+use operational_listing::{
+    build_operational_listing_mutation_draft, canonicalize_operational_listing_edit,
 };
 
 /// Supported public listing mutation intent.
