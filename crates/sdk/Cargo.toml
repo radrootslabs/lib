@@ -1,6 +1,6 @@
 [package]
 name = "radroots_sdk"
-publish = false
+publish = ["crates-io"]
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

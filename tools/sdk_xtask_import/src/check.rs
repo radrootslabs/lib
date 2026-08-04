@@ -93,6 +93,13 @@ struct CargoMetadataPackage {
 struct PublicationPolicyFile {
     publication: PublicationPolicy,
     workspace_classification: WorkspacePublicationClassification,
+    #[serde(default)]
+    publish_order: PublishOrder,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PublishOrder {
+    crates: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -198,8 +205,12 @@ fn check_radroots_facade_conformance(root: &Path) -> Result<(), String> {
             ));
         }
     }
-    if package.get("publish").and_then(toml::Value::as_bool) != Some(false) {
-        return Err("radroots facade must remain publish = false during the scaffold".to_owned());
+    let publish = package
+        .get("publish")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "radroots facade must set publish = [\"crates-io\"]".to_owned())?;
+    if publish.len() != 1 || publish[0].as_str() != Some("crates-io") {
+        return Err("radroots facade must set publish = [\"crates-io\"]".to_owned());
     }
     for field in [
         "version",
@@ -408,6 +419,7 @@ fn check_publication_policy(root: &Path) -> Result<(), String> {
         .map_err(|error| format!("failed to read {}: {error}", policy_path.display()))?;
     let policy_file = toml::from_str::<PublicationPolicyFile>(&raw)
         .map_err(|error| format!("failed to parse {}: {error}", policy_path.display()))?;
+    let publish_order = policy_file.publish_order.crates.clone();
     let policy = policy_file.publication;
     if policy.registry != "crates-io" {
         return Err("publication.registry must be crates-io".to_owned());
@@ -489,6 +501,24 @@ fn check_publication_policy(root: &Path) -> Result<(), String> {
         return Err(
             "local and external package ownership must partition approved packages".to_owned(),
         );
+    }
+    if policy.frozen {
+        if !publish_order.is_empty() {
+            return Err(
+                "publish_order.crates must remain empty while publication is frozen".to_owned(),
+            );
+        }
+    } else {
+        let publish_order_set = policy_set(publish_order.iter().cloned(), "publish_order.crates")?;
+        if publish_order_set != local {
+            return Err(
+                "publish_order.crates must contain exactly the approved local packages when publication is enabled"
+                    .to_owned(),
+            );
+        }
+        if publish_order != ["radroots_sdk", "radroots"] {
+            return Err("publish_order.crates must place radroots_sdk before radroots".to_owned());
+        }
     }
 
     let mut workspace_packages = BTreeSet::new();
@@ -2526,6 +2556,11 @@ mod tests {
         private: &[&str],
         build_codegen: &[&str],
     ) -> String {
+        let publish_order = if frozen {
+            String::new()
+        } else {
+            "\n[publish_order]\ncrates = [\"radroots_sdk\", \"radroots\"]\n".to_owned()
+        };
         format!(
             r#"[publication]
 frozen = {frozen}
@@ -2542,6 +2577,7 @@ build_codegen = [{}]
 test_support = []
 preview = []
 retired = []
+{publish_order}
 "#,
             toml_strings(approved),
             toml_strings(&APPROVED_CRATES[..17]),
