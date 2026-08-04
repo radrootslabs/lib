@@ -13,7 +13,7 @@ publish = ["crates-io"]
 documentation = "https://docs.rs/radroots_sync"
 keywords = ["radroots", "synchronization", "outbox", "events"]
 categories = ["asynchronous", "data-structures", "no-std"]
-include = ["src/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = ["serde"]

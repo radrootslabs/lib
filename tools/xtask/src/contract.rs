@@ -7969,7 +7969,13 @@ fn validate_publish_package_metadata(
         }
 
         let include = package_string_array(package, crate_name, "include")?;
-        for required in ["src/**", "README.md", "LICENSE-APACHE", "LICENSE-MIT"] {
+        for required in [
+            "src/**",
+            "tests/**",
+            "README.md",
+            "LICENSE-APACHE",
+            "LICENSE-MIT",
+        ] {
             if !include.contains(&required) {
                 return Err(format!(
                     "publish crate {crate_name} package.include must contain {required}"

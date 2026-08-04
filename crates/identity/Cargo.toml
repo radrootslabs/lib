@@ -13,7 +13,7 @@ documentation = "https://docs.rs/radroots_identity"
 readme = "README.md"
 keywords = ["radroots", "identity", "nostr", "secp256k1"]
 categories = ["cryptography", "data-structures", "no-std"]
-include = ["src/**", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = ["std", "serde"]

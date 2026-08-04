@@ -13,7 +13,7 @@ publish = ["crates-io"]
 documentation = "https://docs.rs/radroots_storage_sqlite"
 keywords = ["radroots", "sqlite", "storage", "database"]
 categories = ["database"]
-include = ["src/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = []
