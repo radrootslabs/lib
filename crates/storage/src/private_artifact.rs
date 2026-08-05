@@ -19,7 +19,6 @@ pub const PRIVATE_ARTIFACT_ENVELOPE_SUBJECT_TYPE: &str = "private_artifact";
 const ENVELOPE_CONTEXT_DOMAIN: &[u8] = b"radroots.envelope_context.v1";
 const ENVELOPE_CONTEXT_VERSION: u16 = 1;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PrivateArtifactId([u8; 16]);
 
@@ -41,7 +40,6 @@ impl fmt::Debug for PrivateArtifactId {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactKind(String);
 
@@ -58,7 +56,6 @@ impl ArtifactKind {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactSchemaId(String);
 
@@ -250,7 +247,6 @@ impl<'de> serde::Deserialize<'de> for DurableSecretReference {
 }
 
 /// Minimum retention and optional automatic expiry policy.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RetentionPolicy {
     delete_not_before_unix_ms: Option<u64>,
@@ -290,7 +286,6 @@ impl RetentionPolicy {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PrivateArtifactRevision(u64);
 
@@ -315,7 +310,6 @@ impl PrivateArtifactRevision {
 }
 
 /// Host-generated idempotency identity for one reseal commit.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PrivateArtifactResealId([u8; 16]);
 
@@ -573,7 +567,6 @@ impl ArtifactTombstone {
 }
 
 /// Metadata for one protected artifact; no protected bytes are present.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrivateArtifactMetadata {
     artifact_id: PrivateArtifactId,
@@ -862,6 +855,213 @@ pub trait PrivateArtifactStore: Send + Sync {
         limit: u16,
     ) -> BoxFuture<'_, Result<Vec<PrivateArtifactMetadata>, Error>>;
     fn status(&self) -> BoxFuture<'_, Result<PrivateArtifactStatus, Error>>;
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PrivateArtifactId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PrivateArtifactId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = <[u8; 16]>::deserialize(deserializer)?;
+        Self::new(bytes).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for ArtifactKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ArtifactKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(value).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for ArtifactSchemaId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ArtifactSchemaId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(value).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for RetentionPolicy {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("RetentionPolicy", 2)?;
+        state.serialize_field("delete_not_before_unix_ms", &self.delete_not_before_unix_ms)?;
+        state.serialize_field("expires_at_unix_ms", &self.expires_at_unix_ms)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RetentionPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            delete_not_before_unix_ms: Option<u64>,
+            expires_at_unix_ms: Option<u64>,
+        }
+        let wire = Wire::deserialize(deserializer)?;
+        Self::new(wire.delete_not_before_unix_ms, wire.expires_at_unix_ms)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PrivateArtifactRevision {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PrivateArtifactRevision {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Self::new(u64::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PrivateArtifactResealId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PrivateArtifactResealId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = <[u8; 16]>::deserialize(deserializer)?;
+        Self::new(bytes).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PrivateArtifactMetadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("PrivateArtifactMetadata", 12)?;
+        state.serialize_field("artifact_id", &self.artifact_id)?;
+        state.serialize_field("kind", &self.kind)?;
+        state.serialize_field("schema_id", &self.schema_id)?;
+        state.serialize_field("commitment", &self.commitment)?;
+        state.serialize_field("protected_size_bytes", &self.protected_size_bytes)?;
+        state.serialize_field("secret_reference", &self.secret_reference)?;
+        state.serialize_field("retention", &self.retention)?;
+        state.serialize_field("revision", &self.revision)?;
+        state.serialize_field("stage", &self.stage)?;
+        state.serialize_field("created_at_unix_ms", &self.created_at_unix_ms)?;
+        state.serialize_field("updated_at_unix_ms", &self.updated_at_unix_ms)?;
+        state.serialize_field("tombstone", &self.tombstone)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PrivateArtifactMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            artifact_id: PrivateArtifactId,
+            kind: ArtifactKind,
+            schema_id: ArtifactSchemaId,
+            commitment: ArtifactCommitment,
+            protected_size_bytes: u64,
+            secret_reference: DurableSecretReference,
+            retention: RetentionPolicy,
+            revision: PrivateArtifactRevision,
+            stage: PrivateArtifactStage,
+            created_at_unix_ms: u64,
+            updated_at_unix_ms: u64,
+            tombstone: Option<ArtifactTombstone>,
+        }
+        let wire = Wire::deserialize(deserializer)?;
+        Self::from_durable_parts(
+            wire.artifact_id,
+            wire.kind,
+            wire.schema_id,
+            wire.commitment,
+            wire.protected_size_bytes,
+            wire.secret_reference,
+            wire.retention,
+            wire.revision,
+            wire.stage,
+            wire.created_at_unix_ms,
+            wire.updated_at_unix_ms,
+            wire.tombstone.map(|tombstone| {
+                (
+                    tombstone.deleted_at_unix_ms(),
+                    tombstone.reason(),
+                    tombstone.commitment(),
+                )
+            }),
+        )
+        .map_err(serde::de::Error::custom)
+    }
 }
 
 fn valid_label(value: &str, max: usize) -> bool {

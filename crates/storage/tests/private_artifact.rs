@@ -565,3 +565,29 @@ fn migration_status_is_bounded_and_overflow_safe() {
         None
     );
 }
+
+#[test]
+#[cfg(feature = "serde")]
+fn serde_cannot_bypass_private_artifact_invariants() {
+    let value = metadata(RetentionPolicy::indefinite());
+    let encoded = serde_json::to_string(&value).expect("metadata JSON");
+    let decoded: PrivateArtifactMetadata =
+        serde_json::from_str(&encoded).expect("validated metadata round trip");
+    assert_eq!(decoded, value);
+
+    assert!(serde_json::from_str::<PrivateArtifactId>(&format!("{:?}", [0_u8; 16])).is_err());
+    assert!(serde_json::from_str::<PrivateArtifactResealId>(&format!("{:?}", [0_u8; 16])).is_err());
+    assert!(serde_json::from_str::<ArtifactKind>(r#""not_namespaced""#).is_err());
+    assert!(serde_json::from_str::<ArtifactSchemaId>(r#""trade.private_terms.latest""#).is_err());
+    assert!(serde_json::from_str::<PrivateArtifactRevision>("0").is_err());
+    assert!(
+        serde_json::from_str::<RetentionPolicy>(
+            r#"{"delete_not_before_unix_ms":0,"expires_at_unix_ms":null}"#,
+        )
+        .is_err()
+    );
+
+    let mut forged = serde_json::to_value(&value).expect("metadata value");
+    forged["revision"] = serde_json::json!(2);
+    assert!(serde_json::from_value::<PrivateArtifactMetadata>(forged).is_err());
+}
