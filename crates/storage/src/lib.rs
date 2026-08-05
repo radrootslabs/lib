@@ -3,6 +3,7 @@
 
 pub mod atomic;
 pub mod authored;
+pub mod authored_delivery;
 pub mod backup;
 mod error;
 pub mod event;
