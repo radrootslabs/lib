@@ -23,6 +23,37 @@ pub enum SecretIdError {
     },
 }
 
+/// Authenticated context field rejected by validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ContextField {
+    /// Envelope use-case identifier.
+    Purpose,
+    /// Subject type discriminator.
+    SubjectType,
+    /// Canonical subject identity.
+    SubjectValue,
+    /// Plaintext schema identifier.
+    PayloadSchema,
+}
+
+/// Secret-safe reason an authenticated context field was rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ContextValueError {
+    /// The field was empty.
+    Empty,
+    /// The field exceeded its explicit bound.
+    TooLong {
+        /// Observed UTF-8 byte length.
+        actual_bytes: usize,
+        /// Maximum accepted UTF-8 byte length.
+        max_bytes: usize,
+    },
+    /// The field did not use its canonical portable representation.
+    NonCanonical,
+}
+
 /// A security property requested by a host but unsupported by a provider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -63,6 +94,13 @@ pub enum Operation {
 pub enum Error {
     /// A secret identifier failed validation.
     InvalidSecretId(SecretIdError),
+    /// An authenticated envelope context field failed validation.
+    InvalidContextValue {
+        /// Rejected semantic field without its value.
+        field: ContextField,
+        /// Secret-safe validation class.
+        reason: ContextValueError,
+    },
     /// Key versions start at one; zero is never a valid version.
     InvalidKeyVersion,
     /// Secret material was empty or exceeded the bounded input limit.
@@ -190,6 +228,9 @@ impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidSecretId(reason) => reason.fmt(formatter),
+            Self::InvalidContextValue { field, reason } => {
+                write!(formatter, "envelope context {field:?} is {reason}")
+            }
             Self::InvalidKeyVersion => formatter.write_str("secret key version must be non-zero"),
             Self::InvalidSecretLength {
                 actual_bytes,
@@ -290,6 +331,22 @@ impl fmt::Display for Error {
     }
 }
 
+impl fmt::Display for ContextValueError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => formatter.write_str("empty"),
+            Self::TooLong {
+                actual_bytes,
+                max_bytes,
+            } => write!(
+                formatter,
+                "too long ({actual_bytes} bytes; maximum is {max_bytes})"
+            ),
+            Self::NonCanonical => formatter.write_str("not canonical"),
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
@@ -312,6 +369,10 @@ mod tests {
         }
         let errors = [
             Error::InvalidSecretId(SecretIdError::Empty),
+            Error::InvalidContextValue {
+                field: ContextField::SubjectValue,
+                reason: ContextValueError::NonCanonical,
+            },
             Error::InvalidKeyVersion,
             Error::InvalidSecretLength {
                 actual_bytes: 0,

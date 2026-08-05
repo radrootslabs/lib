@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+pub mod context;
 pub mod envelope;
 pub mod error;
 #[cfg(feature = "file")]

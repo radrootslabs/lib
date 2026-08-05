@@ -88,7 +88,8 @@ fn crate_root_contains_only_the_approved_module_skeleton() {
     assert_eq!(
         declarations(ROOT, "pub mod "),
         BTreeSet::from([
-            "envelope", "error", "file", "id", "keyring", "memory", "provider", "wrapping",
+            "context", "envelope", "error", "file", "id", "keyring", "memory", "provider",
+            "wrapping",
         ])
     );
     assert_eq!(

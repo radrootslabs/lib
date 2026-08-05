@@ -11,6 +11,7 @@ const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_secrets.txt");
 #[test]
 fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
     for required in [
+        "pub mod radroots_secrets::context",
         "pub mod radroots_secrets::envelope",
         "pub mod radroots_secrets::error",
         "pub mod radroots_secrets::id",
