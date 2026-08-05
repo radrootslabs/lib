@@ -51,6 +51,29 @@ fn invalid_context_is_rejected_without_echoing_values() {
             ContextValueError::NonCanonical,
         ),
         (
+            EnvelopePurpose::parse("not_namespaced").err(),
+            ContextField::Purpose,
+            ContextValueError::NonCanonical,
+        ),
+        (
+            EnvelopePurpose::parse("a".repeat(ENVELOPE_PURPOSE_MAX_BYTES + 1)).err(),
+            ContextField::Purpose,
+            ContextValueError::TooLong {
+                actual_bytes: ENVELOPE_PURPOSE_MAX_BYTES + 1,
+                max_bytes: ENVELOPE_PURPOSE_MAX_BYTES,
+            },
+        ),
+        (
+            EnvelopePurpose::parse("radroots.café").err(),
+            ContextField::Purpose,
+            ContextValueError::NonCanonical,
+        ),
+        (
+            EnvelopePurpose::parse(" radroots.private_artifact").err(),
+            ContextField::Purpose,
+            ContextValueError::NonCanonical,
+        ),
+        (
             EnvelopeSubject::parse("private artifact", "subject").err(),
             ContextField::SubjectType,
             ContextValueError::NonCanonical,

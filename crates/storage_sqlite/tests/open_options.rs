@@ -114,4 +114,11 @@ fn options_fix_connection_invariants_and_bound_busy_timeout() {
             .with_source_generation(generation, 0),
         Err(Error::InvalidSourceGenerationTimestamp { actual: 0 })
     ));
+    let beyond_sqlite_integer = u64::try_from(i64::MAX).expect("positive i64 maximum") + 1;
+    assert!(matches!(
+        OpenOptions::new(create.paths().clone(), OpenMode::Create)
+            .with_source_generation(generation, beyond_sqlite_integer),
+        Err(Error::InvalidSourceGenerationTimestamp { actual })
+            if actual == beyond_sqlite_integer
+    ));
 }

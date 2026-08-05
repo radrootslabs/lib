@@ -492,14 +492,35 @@ fn reseal_contract_distinguishes_exact_replay_and_conflict() {
     let store = MemoryStorage::default();
     let initial = metadata(RetentionPolicy::indefinite());
     block_on(store.put_metadata(initial.clone())).unwrap();
+    let reseal_id = PrivateArtifactResealId::new([9; 16]).unwrap();
+    let next_reference = DurableSecretReference::new("keyring", "fresh-token", 4).unwrap();
+    for (next_commitment, next_size, committed_at) in [
+        (initial.commitment(), 640, 200),
+        (ArtifactCommitment::new([8; 32]), 0, 200),
+        (ArtifactCommitment::new([8; 32]), 640, 0),
+    ] {
+        assert_eq!(
+            PrivateArtifactResealRequest::new(
+                reseal_id,
+                initial.artifact_id(),
+                initial.revision(),
+                initial.commitment(),
+                next_commitment,
+                next_size,
+                next_reference.clone(),
+                committed_at,
+            ),
+            Err(Error::InvalidPrivateArtifactResealRequest)
+        );
+    }
     let request = PrivateArtifactResealRequest::new(
-        PrivateArtifactResealId::new([9; 16]).unwrap(),
+        reseal_id,
         initial.artifact_id(),
         initial.revision(),
         initial.commitment(),
         ArtifactCommitment::new([8; 32]),
         640,
-        DurableSecretReference::new("keyring", "fresh-token", 4).unwrap(),
+        next_reference,
         200,
     )
     .unwrap();
@@ -510,6 +531,86 @@ fn reseal_contract_distinguishes_exact_replay_and_conflict() {
     );
     assert_eq!(committed.committed_revision().get(), 2);
     assert_eq!(committed.request_fingerprint(), request.fingerprint());
+
+    let wrong_reseal_id = PrivateArtifactResealRequest::new(
+        PrivateArtifactResealId::new([7; 16]).unwrap(),
+        request.artifact_id(),
+        request.expected_revision(),
+        request.expected_commitment(),
+        request.next_commitment(),
+        request.next_protected_size_bytes(),
+        request.next_secret_reference().clone(),
+        request.committed_at_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        committed.replay(&wrong_reseal_id),
+        Err(Error::PrivateArtifactResealConflict)
+    );
+    let wrong_artifact = PrivateArtifactResealRequest::new(
+        request.reseal_id(),
+        PrivateArtifactId::new([7; 16]).unwrap(),
+        request.expected_revision(),
+        request.expected_commitment(),
+        request.next_commitment(),
+        request.next_protected_size_bytes(),
+        request.next_secret_reference().clone(),
+        request.committed_at_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        committed.replay(&wrong_artifact),
+        Err(Error::PrivateArtifactResealConflict)
+    );
+    assert_eq!(
+        initial.resealed(&wrong_artifact),
+        Err(Error::PrivateArtifactResealConflict)
+    );
+    let wrong_revision = PrivateArtifactResealRequest::new(
+        request.reseal_id(),
+        request.artifact_id(),
+        PrivateArtifactRevision::new(2).unwrap(),
+        request.expected_commitment(),
+        request.next_commitment(),
+        request.next_protected_size_bytes(),
+        request.next_secret_reference().clone(),
+        request.committed_at_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        initial.resealed(&wrong_revision),
+        Err(Error::PrivateArtifactResealConflict)
+    );
+    let wrong_commitment = PrivateArtifactResealRequest::new(
+        request.reseal_id(),
+        request.artifact_id(),
+        request.expected_revision(),
+        ArtifactCommitment::new([6; 32]),
+        request.next_commitment(),
+        request.next_protected_size_bytes(),
+        request.next_secret_reference().clone(),
+        request.committed_at_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        initial.resealed(&wrong_commitment),
+        Err(Error::PrivateArtifactResealConflict)
+    );
+    let stale_timestamp = PrivateArtifactResealRequest::new(
+        request.reseal_id(),
+        request.artifact_id(),
+        request.expected_revision(),
+        request.expected_commitment(),
+        request.next_commitment(),
+        request.next_protected_size_bytes(),
+        request.next_secret_reference().clone(),
+        initial.updated_at_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        initial.resealed(&stale_timestamp),
+        Err(Error::InvalidPrivateArtifactTimestamp)
+    );
 
     let replayed = block_on(store.reseal_metadata(request.clone())).unwrap();
     assert_eq!(

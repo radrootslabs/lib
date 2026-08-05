@@ -1084,7 +1084,7 @@ mod tests {
         opened.expose_secret(|bytes| assert_eq!(bytes, b"private farm coordinates"));
 
         let row = sqlx::query(
-            "SELECT key_version, envelope_version, encrypted_envelope
+            "SELECT key_version, envelope_version, encrypted_envelope, context_fingerprint
              FROM radroots_private_artifacts WHERE artifact_id = ?",
         )
         .bind(metadata.artifact_id().as_bytes().as_slice())
@@ -1099,13 +1099,88 @@ mod tests {
                 .windows(24)
                 .any(|bytes| bytes == b"private farm coordinates")
         );
+        assert!(validate_stored_envelope(&metadata, &envelope, &row).is_ok());
 
         let wrong_key_envelope =
             sealed_envelope(b"private farm coordinates", 8, 1, "farm.location").await;
         assert_eq!(
+            validate_stored_envelope(&metadata, &wrong_key_envelope, &row),
+            Err(Error::CorruptPrivateArtifactMetadata)
+        );
+        assert_eq!(
             store
-                .put_encrypted_private_artifact(metadata, &wrong_key_envelope)
+                .put_encrypted_private_artifact(metadata.clone(), &wrong_key_envelope)
                 .await,
+            Err(Error::InvalidPrivateArtifactMetadata)
+        );
+
+        let stored_validation_metadata = |commitment, protected_size, secret_reference| {
+            PrivateArtifactMetadata::new(
+                metadata.artifact_id(),
+                metadata.kind().clone(),
+                metadata.schema_id().clone(),
+                commitment,
+                protected_size,
+                secret_reference,
+                metadata.retention(),
+                metadata.created_at_unix_ms(),
+            )
+            .expect("structurally valid stored metadata")
+        };
+        for invalid in [
+            stored_validation_metadata(
+                metadata.commitment(),
+                metadata.protected_size_bytes(),
+                DurableSecretReference::new(
+                    "memory",
+                    "different-private-artifact-key",
+                    metadata.secret_reference().key_version(),
+                )
+                .expect("different reference"),
+            ),
+            stored_validation_metadata(
+                metadata.commitment(),
+                metadata.protected_size_bytes() + 1,
+                metadata.secret_reference().clone(),
+            ),
+            stored_validation_metadata(
+                ArtifactCommitment::new([0; 32]),
+                metadata.protected_size_bytes(),
+                metadata.secret_reference().clone(),
+            ),
+        ] {
+            assert_eq!(
+                validate_stored_envelope(&invalid, &envelope, &row),
+                Err(Error::CorruptPrivateArtifactMetadata)
+            );
+        }
+
+        let wrong_context_envelope =
+            sealed_envelope(b"private farm coordinates", 7, 2, "farm.location").await;
+        let wrong_context_encoded = wrong_context_envelope
+            .encode()
+            .expect("wrong context bytes");
+        let wrong_context_metadata = stored_validation_metadata(
+            ArtifactCommitment::new(Sha256::digest(wrong_context_encoded.as_slice()).into()),
+            u64::try_from(wrong_context_encoded.len()).expect("wrong context length"),
+            metadata.secret_reference().clone(),
+        );
+        assert_eq!(
+            validate_stored_envelope(&wrong_context_metadata, &wrong_context_envelope, &row),
+            Err(Error::CorruptPrivateArtifactMetadata)
+        );
+        let wrong_fingerprint_row = sqlx::query("SELECT X'00' AS context_fingerprint")
+            .fetch_one(store.private_pool())
+            .await
+            .expect("wrong fingerprint row");
+        assert_eq!(
+            validate_stored_envelope(&metadata, &envelope, &wrong_fingerprint_row),
+            Err(Error::CorruptPrivateArtifactMetadata)
+        );
+
+        let (_, legacy_metadata, legacy_envelope) = migrated_legacy_store().await;
+        assert_eq!(
+            validate_new_envelope(&legacy_metadata, &legacy_envelope),
             Err(Error::InvalidPrivateArtifactMetadata)
         );
 
