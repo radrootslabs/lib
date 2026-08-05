@@ -6,7 +6,11 @@ use radroots_event_codec::authoring::{AuthoredEventPlan, HistoricalPlanIntegrity
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, string::String, vec::Vec};
 
-use crate::{Error, journal::OperationInstanceId};
+use crate::{
+    Error,
+    authored_delivery::{AuthoredDeliveryPlan, AuthoredDeliveryState},
+    journal::OperationInstanceId,
+};
 
 pub const AUTHORED_OPERATION_ARTIFACTS_MAX: usize = 256;
 pub const WORK_CLAIM_OWNER_MAX_BYTES: usize = 128;
@@ -1214,12 +1218,27 @@ pub struct OperationSettlement {
     indeterminate: u16,
     failed_terminal: u16,
     cancelled: u16,
+    delivery_plans: u16,
+    delivery_satisfied: u16,
+    delivery_pending: u16,
+    delivery_retryable: u16,
+    delivery_exhausted: u16,
+    delivery_failed_terminal: u16,
+    delivery_cancelled: u16,
 }
 
 impl OperationSettlement {
     pub fn evaluate(
         operation: &AuthoredOperation,
         artifacts: &[AuthoredArtifact],
+    ) -> Result<Self, Error> {
+        Self::evaluate_complete(operation, artifacts, &[])
+    }
+
+    pub fn evaluate_complete(
+        operation: &AuthoredOperation,
+        artifacts: &[AuthoredArtifact],
+        delivery_plans: &[AuthoredDeliveryPlan],
     ) -> Result<Self, Error> {
         if artifacts.len() != operation.artifact_ids.len()
             || artifacts.iter().enumerate().any(|(ordinal, artifact)| {
@@ -1228,6 +1247,22 @@ impl OperationSettlement {
                     || usize::from(artifact.ordinal) != ordinal
                     || artifact.validate().is_err()
             })
+        {
+            return Err(Error::InvalidAuthoredOperation);
+        }
+        let artifact_ids = artifacts
+            .iter()
+            .map(AuthoredArtifact::artifact_id)
+            .collect::<BTreeSet<_>>();
+        if delivery_plans
+            .iter()
+            .map(AuthoredDeliveryPlan::plan_id)
+            .collect::<BTreeSet<_>>()
+            .len()
+            != delivery_plans.len()
+            || delivery_plans
+                .iter()
+                .any(|plan| !artifact_ids.contains(&plan.artifact_id()) || plan.validate().is_err())
         {
             return Err(Error::InvalidAuthoredOperation);
         }
@@ -1241,6 +1276,14 @@ impl OperationSettlement {
             indeterminate: 0,
             failed_terminal: 0,
             cancelled: 0,
+            delivery_plans: u16::try_from(delivery_plans.len())
+                .map_err(|_| Error::InvalidAuthoredOperation)?,
+            delivery_satisfied: 0,
+            delivery_pending: 0,
+            delivery_retryable: 0,
+            delivery_exhausted: 0,
+            delivery_failed_terminal: 0,
+            delivery_cancelled: 0,
         };
         for artifact in artifacts {
             if artifact.signed.is_some() {
@@ -1262,6 +1305,18 @@ impl OperationSettlement {
                     AdmissionState::Cancelled => settlement.cancelled += 1,
                     AdmissionState::Inserted | AdmissionState::Duplicate => {}
                 },
+            }
+        }
+        for plan in delivery_plans {
+            match plan.state() {
+                AuthoredDeliveryState::Pending => settlement.delivery_pending += 1,
+                AuthoredDeliveryState::Retryable => settlement.delivery_retryable += 1,
+                AuthoredDeliveryState::Satisfied => settlement.delivery_satisfied += 1,
+                AuthoredDeliveryState::Exhausted => settlement.delivery_exhausted += 1,
+                AuthoredDeliveryState::FailedTerminal => {
+                    settlement.delivery_failed_terminal += 1;
+                }
+                AuthoredDeliveryState::Cancelled => settlement.delivery_cancelled += 1,
             }
         }
         Ok(settlement)
@@ -1291,8 +1346,48 @@ impl OperationSettlement {
     pub const fn cancelled(self) -> u16 {
         self.cancelled
     }
+    pub const fn delivery_plans(self) -> u16 {
+        self.delivery_plans
+    }
+    pub const fn delivery_satisfied(self) -> u16 {
+        self.delivery_satisfied
+    }
+    pub const fn delivery_pending(self) -> u16 {
+        self.delivery_pending
+    }
+    pub const fn delivery_retryable(self) -> u16 {
+        self.delivery_retryable
+    }
+    pub const fn delivery_exhausted(self) -> u16 {
+        self.delivery_exhausted
+    }
+    pub const fn delivery_failed_terminal(self) -> u16 {
+        self.delivery_failed_terminal
+    }
+    pub const fn delivery_cancelled(self) -> u16 {
+        self.delivery_cancelled
+    }
     pub const fn is_settled(self) -> bool {
-        self.pending == 0 && self.retryable == 0 && self.indeterminate == 0
+        self.pending == 0
+            && self.retryable == 0
+            && self.indeterminate == 0
+            && self.delivery_pending == 0
+            && self.delivery_retryable == 0
+    }
+    pub const fn has_failures(self) -> bool {
+        self.indeterminate != 0
+            || self.failed_terminal != 0
+            || self.cancelled != 0
+            || self.delivery_exhausted != 0
+            || self.delivery_failed_terminal != 0
+            || self.delivery_cancelled != 0
+    }
+    pub const fn is_successful(self) -> bool {
+        self.is_settled()
+            && !self.has_failures()
+            && self.signed == self.artifacts
+            && self.admitted == self.artifacts
+            && self.delivery_satisfied == self.delivery_plans
     }
 }
 

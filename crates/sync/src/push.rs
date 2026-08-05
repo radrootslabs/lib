@@ -20,14 +20,18 @@ use radroots_storage::{
     },
     authored::{
         AdmissionState, AuthoredArtifact, AuthoredArtifactId, AuthoredOperation, FailureClass,
-        RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
+        OperationSettlement, RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
     },
     authored_atomic::{
-        ApplyAdmissionResult, ApplySignedArtifact, ApplyWorkFailure, AuthoredAtomicCommand,
-        AuthoredAtomicOutcome, AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork,
-        ClaimAuthoredTarget, ClaimAuthoredWork, PrepareAuthoredOperation, WorkFence,
+        ApplyAdmissionResult, ApplyDeliveryAttempt, ApplySignedArtifact, ApplyWorkFailure,
+        AuthoredAtomicCommand, AuthoredAtomicOutcome, AuthoredWorkTarget, CancelAuthoredTarget,
+        CancelAuthoredWork, ClaimAuthoredTarget, ClaimAuthoredWork, PrepareAuthoredOperation,
+        WorkFence,
     },
-    authored_delivery::{AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId},
+    authored_delivery::{
+        AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId,
+        DELIVERY_PLAN_ATTEMPTS_MAX, DeliveryAttemptOutcome,
+    },
     event::{AdmissionDisposition, EventAdmission, EventStore},
     journal::{
         IdempotencyDigest, IdempotencyKey, JournalStage, JournalState, OperationInstanceId,
@@ -39,9 +43,9 @@ use radroots_storage::{
     },
 };
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, Target, TransportId,
+    DeliveryReceipt, DeliveryRequest, SinkFailure, Target, TransportId,
     outcome::{DeliveryOutcome, DeliveryOutcomeKind, Retryability},
-    policy::SatisfactionPolicy,
+    policy::{SatisfactionPolicy, SatisfactionState},
     sink::{DeliveryPayload, DeliveryTargetReceipt},
     source::{EventProvenance, ObservedEvent},
     target::TargetSet,
@@ -59,6 +63,7 @@ const SIGNING_CLAIM_OWNER_EXACT: &str = "radroots-sync-signing-exact";
 const SIGNING_CLAIM_OWNER_LOCAL: &str = "radroots-sync-signing-local";
 const SIGNING_CLAIM_OWNER_NON_REPLAYABLE: &str = "radroots-sync-signing-non-replayable";
 const ADMISSION_CLAIM_OWNER: &str = "radroots-sync-admission";
+const DELIVERY_CLAIM_OWNER: &str = "radroots-sync-delivery";
 const WORK_RETRY_DELAY_MS: u64 = 1_000;
 
 /// Caller-owned, replay-stable inputs for one outbound operation.
@@ -176,6 +181,7 @@ pub struct PushStatus {
     operation: AuthoredOperation,
     artifact: AuthoredArtifact,
     delivery_plan: AuthoredDeliveryPlan,
+    settlement: OperationSettlement,
 }
 
 impl PushStatus {
@@ -187,6 +193,9 @@ impl PushStatus {
     }
     pub const fn delivery_plan(&self) -> &AuthoredDeliveryPlan {
         &self.delivery_plan
+    }
+    pub const fn settlement(&self) -> OperationSettlement {
+        self.settlement
     }
 }
 
@@ -211,6 +220,22 @@ impl SigningRunReceipt {
 pub struct AdmissionRunReceipt {
     artifact: AuthoredArtifact,
     replay: bool,
+}
+
+/// Durable result of one bounded authored-delivery execution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeliveryExecutionReceipt {
+    plan: AuthoredDeliveryPlan,
+    replay: bool,
+}
+
+impl DeliveryExecutionReceipt {
+    pub const fn plan(&self) -> &AuthoredDeliveryPlan {
+        &self.plan
+    }
+    pub const fn is_replay(&self) -> bool {
+        self.replay
+    }
 }
 
 impl AdmissionRunReceipt {
@@ -394,10 +419,17 @@ impl Engine {
         {
             return Err(Error::StorageFailed);
         }
+        let settlement = OperationSettlement::evaluate_complete(
+            &operation,
+            core::slice::from_ref(&artifact),
+            core::slice::from_ref(&delivery_plan),
+        )
+        .map_err(map_storage_error)?;
         Ok(Some(PushStatus {
             operation,
             artifact,
             delivery_plan,
+            settlement,
         }))
     }
 
@@ -693,6 +725,141 @@ impl Engine {
             artifact: artifact.clone(),
             replay: false,
         })
+    }
+
+    /// Claims and executes one durable authored delivery plan.
+    ///
+    /// Terminal plans replay without invoking the sink. Retry timing and the
+    /// request deadline are enforced from durable intent before any adapter
+    /// call, and every adapter result is fenced into the plan as evidence.
+    pub async fn deliver_push(
+        &self,
+        operation_id: SyncId,
+    ) -> Result<DeliveryExecutionReceipt, Error> {
+        let sink = self.sink.as_deref().ok_or(Error::MissingSink)?;
+        let status = self
+            .push_status(operation_id)
+            .await?
+            .ok_or(Error::StorageFailed)?;
+        if status.artifact.signing_state() != SigningState::Signed {
+            return Err(Error::InvalidSignerOutput);
+        }
+        if !status.artifact.admission_state().is_admitted() {
+            return Err(Error::AdmissionFailed);
+        }
+        let plan = status.delivery_plan;
+        if plan.state().is_terminal() {
+            return Ok(DeliveryExecutionReceipt { plan, replay: true });
+        }
+        let request = plan.request().cloned().ok_or(Error::InvalidSignerOutput)?;
+        let now = self.clock.now_unix_ms()?.max(plan.updated_at_unix_ms());
+        if plan
+            .claim_evidence()
+            .is_some_and(|claim| now < claim.expires_at_unix_ms())
+        {
+            return Err(Error::WorkClaimConflict);
+        }
+        if plan
+            .retry()
+            .is_some_and(|retry| now < retry.not_before_unix_ms())
+        {
+            return Err(Error::DeliveryDeferred);
+        }
+        let (claimed, fence) = self.claim_delivery_plan(plan, now).await?;
+        let execution_started_at = self.clock.now_unix_ms()?.max(claimed.updated_at_unix_ms());
+        let result = if execution_started_at >= request.deadline_unix_ms() {
+            DeliveryAttemptOutcome::SinkFailure(
+                SinkFailure::for_request(
+                    &request,
+                    "delivery_deadline_exceeded",
+                    Retryability::Terminal,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .map_err(|_| Error::InvalidDeliveryRequest)?,
+            )
+        } else {
+            match sink.deliver(request.clone()).await {
+                Ok(receipt) if receipt.validate_for_request(&request).is_ok() => {
+                    DeliveryAttemptOutcome::Receipt(receipt)
+                }
+                Ok(_) => {
+                    DeliveryAttemptOutcome::SinkFailure(SinkFailure::invalid_contract(&request))
+                }
+                Err(failure) if failure.validate_for_request(&request).is_ok() => {
+                    DeliveryAttemptOutcome::SinkFailure(failure)
+                }
+                Err(_) => {
+                    DeliveryAttemptOutcome::SinkFailure(SinkFailure::invalid_contract(&request))
+                }
+            }
+        };
+        let attempted_at = self.clock.now_unix_ms()?.max(execution_started_at);
+        let outcome = match result {
+            DeliveryAttemptOutcome::SinkFailure(failure) => DeliveryAttemptOutcome::SinkFailure(
+                normalize_sink_failure(&request, failure, attempted_at)?,
+            ),
+            outcome => outcome,
+        };
+        let satisfaction = claimed
+            .evaluate_next_attempt(&outcome)
+            .map_err(map_storage_error)?;
+        let retry = delivery_retry_schedule(&claimed, &outcome, satisfaction, attempted_at)?;
+        let command = AuthoredAtomicCommand::ApplyDelivery(
+            ApplyDeliveryAttempt::new(claimed.plan_id(), fence, outcome, retry, attempted_at)
+                .map_err(map_storage_error)?,
+        );
+        let receipt = self
+            .storage
+            .execute_authored(command)
+            .await
+            .map_err(map_claim_error)?;
+        let AuthoredAtomicOutcome::DeliveryPlan(plan) = receipt.outcome() else {
+            return Err(Error::StorageFailed);
+        };
+        Ok(DeliveryExecutionReceipt {
+            plan: plan.clone(),
+            replay: false,
+        })
+    }
+
+    async fn claim_delivery_plan(
+        &self,
+        plan: AuthoredDeliveryPlan,
+        acquired_at: u64,
+    ) -> Result<(AuthoredDeliveryPlan, WorkFence), Error> {
+        let generation = plan
+            .claim_evidence()
+            .map_or(1, |claim| claim.generation().get().saturating_add(1));
+        let generation = NonZeroU64::new(generation).ok_or(Error::StorageFailed)?;
+        let expires_at = acquired_at
+            .checked_add(self.deadlines.timeout_ms(OperationKind::Deliver))
+            .ok_or(Error::DeadlineOverflow)?;
+        let claim = WorkClaim::new(
+            *self.ids.next_id(OperationKind::Deliver)?.as_bytes(),
+            DELIVERY_CLAIM_OWNER,
+            generation,
+            acquired_at,
+            expires_at,
+            plan.revision(),
+        )
+        .map_err(map_storage_error)?;
+        let fence = WorkFence::new(*claim.token(), claim.generation(), claim.row_revision())
+            .map_err(map_storage_error)?;
+        let command = AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+            ClaimAuthoredTarget::DeliveryPlan(plan.plan_id()),
+            claim,
+        ));
+        let receipt = self
+            .storage
+            .execute_authored(command)
+            .await
+            .map_err(map_claim_error)?;
+        let AuthoredAtomicOutcome::DeliveryPlan(claimed) = receipt.outcome() else {
+            return Err(Error::StorageFailed);
+        };
+        Ok((claimed.clone(), fence))
     }
 
     async fn claim_artifact(
@@ -1063,6 +1230,91 @@ fn retry_schedule(
     }
     .map_err(map_storage_error)?;
     Ok(Some(schedule))
+}
+
+fn normalize_sink_failure(
+    request: &DeliveryRequest,
+    failure: SinkFailure,
+    attempted_at_unix_ms: u64,
+) -> Result<SinkFailure, Error> {
+    if failure.retryability() != Retryability::Retryable {
+        return Ok(failure);
+    }
+    let default_retry_at = attempted_at_unix_ms
+        .checked_add(WORK_RETRY_DELAY_MS)
+        .ok_or(Error::DeadlineOverflow)?;
+    let retry_at = failure
+        .retry_after_unix_ms()
+        .unwrap_or(default_retry_at)
+        .max(
+            attempted_at_unix_ms
+                .checked_add(1)
+                .ok_or(Error::DeadlineOverflow)?,
+        );
+    if failure.retry_after_unix_ms() == Some(retry_at) {
+        return Ok(failure);
+    }
+    SinkFailure::for_request(
+        request,
+        failure.code(),
+        failure.retryability(),
+        Some(retry_at),
+        failure.message().map(str::to_owned),
+        failure.partial_evidence().to_vec(),
+    )
+    .map_err(|_| Error::InvalidDeliveryRequest)
+}
+
+fn delivery_retry_schedule(
+    plan: &AuthoredDeliveryPlan,
+    outcome: &DeliveryAttemptOutcome,
+    satisfaction: SatisfactionState,
+    attempted_at_unix_ms: u64,
+) -> Result<Option<RetrySchedule>, Error> {
+    let attempt = plan
+        .attempt_count()
+        .checked_add(1)
+        .and_then(NonZeroU32::new)
+        .ok_or(Error::StorageFailed)?;
+    if satisfaction != SatisfactionState::Pending || attempt.get() >= DELIVERY_PLAN_ATTEMPTS_MAX {
+        return Ok(None);
+    }
+    let failure = match outcome {
+        DeliveryAttemptOutcome::Receipt(_) => {
+            let retry_at = attempted_at_unix_ms
+                .checked_add(WORK_RETRY_DELAY_MS)
+                .ok_or(Error::DeadlineOverflow)?;
+            WorkFailure::new(
+                "delivery_pending",
+                WorkPhase::Delivery,
+                FailureClass::Retryable,
+                Some(retry_at),
+                None,
+            )
+            .map_err(map_storage_error)?
+        }
+        DeliveryAttemptOutcome::SinkFailure(failure)
+            if failure.retryability() == Retryability::Retryable =>
+        {
+            WorkFailure::new(
+                failure.code(),
+                WorkPhase::Delivery,
+                FailureClass::Retryable,
+                failure.retry_after_unix_ms(),
+                failure.message().map(str::to_owned),
+            )
+            .map_err(map_storage_error)?
+        }
+        DeliveryAttemptOutcome::SinkFailure(_) => return Ok(None),
+    };
+    let retry_at = failure.retry_after_unix_ms().unwrap_or(
+        attempted_at_unix_ms
+            .checked_add(WORK_RETRY_DELAY_MS)
+            .ok_or(Error::DeadlineOverflow)?,
+    );
+    RetrySchedule::new(attempt, retry_at, failure)
+        .map(Some)
+        .map_err(map_storage_error)
 }
 
 fn delivery_evidence_digest(evidence: &DeliveryAttemptEvidence) -> AtomicCommitDigest {

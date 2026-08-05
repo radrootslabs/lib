@@ -239,6 +239,7 @@ pub enum Error {
     InvalidSignerOutput,
     AdmissionFailed,
     InvalidDeliveryRequest,
+    DeliveryDeferred,
     MissingSink,
     InvalidStatusRequest,
 }
@@ -278,6 +279,7 @@ impl core::fmt::Display for Error {
             Self::InvalidSignerOutput => "sync signer output failed canonical verification",
             Self::AdmissionFailed => "sync local admission did not complete",
             Self::InvalidDeliveryRequest => "sync delivery request is invalid",
+            Self::DeliveryDeferred => "sync delivery retry is not yet eligible",
             Self::MissingSink => "sync engine has no event sink",
             Self::InvalidStatusRequest => "sync status request is invalid",
         })

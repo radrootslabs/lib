@@ -429,6 +429,10 @@ impl AuthoredDeliveryPlan {
             .validate_for_request(request)
             .map_err(|_| Error::InvalidAuthoredDeliveryPlan)?;
         let satisfaction = self.evaluate_with(DeliveryAttemptOutcome::Receipt(receipt.clone()))?;
+        let at_attempt_limit = self.attempt_count.saturating_add(1) == DELIVERY_PLAN_ATTEMPTS_MAX;
+        if satisfaction == SatisfactionState::Pending && at_attempt_limit && retry.is_some() {
+            return Err(Error::InvalidRetrySchedule);
+        }
         let (state, last_failure) = match satisfaction {
             SatisfactionState::Satisfied if retry.is_none() => {
                 (AuthoredDeliveryState::Satisfied, None)
@@ -436,6 +440,16 @@ impl AuthoredDeliveryPlan {
             SatisfactionState::Exhausted if retry.is_none() => {
                 (AuthoredDeliveryState::Exhausted, None)
             }
+            SatisfactionState::Pending if at_attempt_limit && retry.is_none() => (
+                AuthoredDeliveryState::Exhausted,
+                Some(WorkFailure::new(
+                    "delivery_attempt_limit",
+                    WorkPhase::Delivery,
+                    FailureClass::Terminal,
+                    None,
+                    None,
+                )?),
+            ),
             SatisfactionState::Pending => {
                 let schedule = retry.as_ref().ok_or(Error::InvalidRetrySchedule)?;
                 if schedule.failure().phase() != WorkPhase::Delivery {
@@ -479,6 +493,10 @@ impl AuthoredDeliveryPlan {
             .map_err(|_| Error::InvalidAuthoredDeliveryPlan)?;
         let outcome = DeliveryAttemptOutcome::SinkFailure(failure.clone());
         let satisfaction = self.evaluate_with(outcome.clone())?;
+        let at_attempt_limit = self.attempt_count.saturating_add(1) == DELIVERY_PLAN_ATTEMPTS_MAX;
+        if satisfaction == SatisfactionState::Pending && at_attempt_limit && retry.is_some() {
+            return Err(Error::InvalidRetrySchedule);
+        }
         let typed = WorkFailure::new(
             failure.code(),
             WorkPhase::Delivery,
@@ -499,6 +517,18 @@ impl AuthoredDeliveryPlan {
                 return Err(Error::InvalidRetrySchedule);
             }
             (AuthoredDeliveryState::Exhausted, None, Some(typed))
+        } else if at_attempt_limit && retry.is_none() {
+            (
+                AuthoredDeliveryState::Exhausted,
+                None,
+                Some(WorkFailure::new(
+                    "delivery_attempt_limit",
+                    WorkPhase::Delivery,
+                    FailureClass::Terminal,
+                    None,
+                    None,
+                )?),
+            )
         } else if failure.retryability() == Retryability::Retryable {
             let schedule = retry.ok_or(Error::InvalidRetrySchedule)?;
             if schedule.failure() != &typed {
@@ -697,6 +727,19 @@ impl AuthoredDeliveryPlan {
     }
     pub const fn revision(&self) -> NonZeroU64 {
         self.revision
+    }
+
+    /// Evaluates one prospective attempt against all durable prior evidence.
+    pub fn evaluate_next_attempt(
+        &self,
+        outcome: &DeliveryAttemptOutcome,
+    ) -> Result<SatisfactionState, Error> {
+        let request = self
+            .request
+            .as_ref()
+            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
+        outcome.validate_for(request)?;
+        self.evaluate_with(outcome.clone())
     }
 }
 

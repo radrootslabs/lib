@@ -24,6 +24,7 @@ use radroots_signing::{
 };
 use radroots_storage::{
     EventStore, Journal, Outbox,
+    authored_delivery::AuthoredDeliveryState,
     event::{EventQuery, EventQueryBounds, SourceGeneration},
     journal::{IdempotencyKey, OperationInstanceId},
     memory::MemoryStorage,
@@ -64,6 +65,7 @@ enum DeliveryBehavior {
     Outcomes(Vec<DeliveryOutcome>),
     AdapterError,
     MismatchedRequest,
+    Pending,
 }
 
 struct ScriptedSink {
@@ -128,6 +130,7 @@ impl EventSink for ScriptedSink {
                     )
                     .expect("mismatched receipt"))
                 }
+                DeliveryBehavior::Pending => std::future::pending().await,
             }
         })
     }
@@ -767,6 +770,10 @@ async fn sqlite_signing_and_admission_recover_across_every_reopen_boundary() {
         );
         assert!(signed.artifact().signed().is_some());
         assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            engine.deliver_push(push.operation_id()).await,
+            Err(Error::AdmissionFailed)
+        );
     }
 
     {
@@ -833,6 +840,249 @@ async fn sqlite_signing_and_admission_recover_across_every_reopen_boundary() {
     );
     assert!(final_status.artifact().admission_state().is_admitted());
     assert!(final_status.delivery_plan().request().is_some());
+}
+
+#[test]
+fn authored_delivery_persists_retry_evidence_and_complete_settlement() {
+    let sink = Arc::new(ScriptedSink::new([
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::unavailable(),
+        ]),
+        DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::accepted(),
+        ]),
+    ]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_500,
+    }));
+    let ((engine, _), clock) = setup_engine_with_sink(signer, sink.clone());
+    let push = request_with_policy(
+        73,
+        &["wss://one.example", "wss://two.example"],
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    );
+    block_on(engine.sign_and_enqueue(push.clone())).expect("prepare authored delivery");
+
+    let first = block_on(engine.deliver_push(push.operation_id())).expect("first attempt");
+    assert!(!first.is_replay());
+    assert_eq!(first.plan().state(), AuthoredDeliveryState::Retryable);
+    assert_eq!(first.plan().attempt_count(), 1);
+    let retry_at = first
+        .plan()
+        .retry()
+        .expect("durable retry")
+        .not_before_unix_ms();
+    assert_eq!(
+        block_on(engine.deliver_push(push.operation_id())),
+        Err(Error::DeliveryDeferred)
+    );
+    let pending = block_on(engine.push_status(push.operation_id()))
+        .expect("pending status")
+        .expect("pending operation");
+    assert_eq!(pending.settlement().artifacts(), 1);
+    assert_eq!(pending.settlement().signed(), 1);
+    assert_eq!(pending.settlement().admitted(), 1);
+    assert_eq!(pending.settlement().delivery_plans(), 1);
+    assert_eq!(pending.settlement().delivery_retryable(), 1);
+    assert!(!pending.settlement().is_settled());
+
+    clock.0.store(retry_at, Ordering::Relaxed);
+    let second = block_on(engine.deliver_push(push.operation_id())).expect("retry attempt");
+    assert_eq!(second.plan().state(), AuthoredDeliveryState::Satisfied);
+    assert_eq!(second.plan().attempt_count(), 2);
+    assert_eq!(second.plan().attempts().len(), 2);
+    let replay = block_on(engine.deliver_push(push.operation_id())).expect("terminal replay");
+    assert!(replay.is_replay());
+    assert_eq!(replay.plan(), second.plan());
+    let settled = block_on(engine.push_status(push.operation_id()))
+        .expect("settled status")
+        .expect("settled operation");
+    assert_eq!(settled.settlement().delivery_satisfied(), 1);
+    assert!(settled.settlement().is_settled());
+    assert!(!settled.settlement().has_failures());
+    assert!(settled.settlement().is_successful());
+    let requests = sink.requests.lock().expect("request log");
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0], requests[1]);
+}
+
+#[test]
+fn invalid_authored_delivery_receipt_terminalizes_without_hot_loop() {
+    let sink = Arc::new(ScriptedSink::new([DeliveryBehavior::MismatchedRequest]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_500,
+    }));
+    let ((engine, _), _) = setup_engine_with_sink(signer, sink.clone());
+    let push = request(74, "wss://one.example");
+    block_on(engine.sign_and_enqueue(push.clone())).expect("prepare authored delivery");
+
+    let failed = block_on(engine.deliver_push(push.operation_id())).expect("durable failure");
+    assert_eq!(failed.plan().state(), AuthoredDeliveryState::FailedTerminal);
+    assert_eq!(failed.plan().attempt_count(), 1);
+    assert_eq!(
+        failed.plan().last_failure().expect("failure").code(),
+        "invalid_transport_contract"
+    );
+    let replay = block_on(engine.deliver_push(push.operation_id())).expect("failure replay");
+    assert!(replay.is_replay());
+    assert_eq!(replay.plan(), failed.plan());
+    assert_eq!(sink.requests.lock().expect("request log").len(), 1);
+    let status = block_on(engine.push_status(push.operation_id()))
+        .expect("failed status")
+        .expect("failed operation");
+    assert_eq!(status.settlement().delivery_failed_terminal(), 1);
+    assert!(status.settlement().is_settled());
+    assert!(status.settlement().has_failures());
+    assert!(!status.settlement().is_successful());
+}
+
+#[test]
+fn authored_delivery_claims_fence_concurrent_and_stale_workers() {
+    let pending_sink = Arc::new(ScriptedSink::new([DeliveryBehavior::Pending]));
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_500,
+    }));
+    let ((engine, storage), clock) = setup_engine_with_sink(signer, pending_sink.clone());
+    let push = request(75, "wss://one.example");
+    block_on(engine.sign_and_enqueue(push.clone())).expect("prepare authored delivery");
+
+    let mut pending = Box::pin(engine.deliver_push(push.operation_id())).fuse();
+    let mut context = std::task::Context::from_waker(noop_waker_ref());
+    assert!(pending.poll_unpin(&mut context).is_pending());
+    let claimed = block_on(engine.push_status(push.operation_id()))
+        .expect("claimed status")
+        .expect("claimed operation");
+    let expires_at = claimed
+        .delivery_plan()
+        .claim_evidence()
+        .expect("delivery claim")
+        .expires_at_unix_ms();
+    assert_eq!(
+        block_on(engine.deliver_push(push.operation_id())),
+        Err(Error::WorkClaimConflict)
+    );
+    drop(pending);
+
+    clock.0.store(expires_at + 1, Ordering::Relaxed);
+    let recovery_sink = Arc::new(ScriptedSink::new([DeliveryBehavior::Outcomes(vec![
+        DeliveryOutcome::accepted(),
+    ])]));
+    let capability: Arc<dyn SyncStorage> = storage;
+    let recovery = Engine::builder(
+        capability,
+        clock,
+        Arc::new(TestIds(AtomicU64::new(220))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(recovery_sink.clone())
+    .build()
+    .expect("recovery engine");
+    let recovered = block_on(recovery.deliver_push(push.operation_id())).expect("stale recovery");
+    assert_eq!(recovered.plan().state(), AuthoredDeliveryState::Satisfied);
+    assert_eq!(
+        recovered.plan().claim_evidence(),
+        None,
+        "settlement clears the claim"
+    );
+    assert_eq!(recovery_sink.requests.lock().expect("request log").len(), 1);
+}
+
+#[tokio::test]
+async fn sqlite_authored_delivery_retry_survives_reopen() {
+    let directory = tempfile::tempdir().expect("database directory");
+    let paths = Paths::from_directory(directory.path()).expect("paths");
+    let push = request_with_policy(
+        76,
+        &["wss://one.example", "wss://two.example"],
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    );
+    let retry_at = {
+        let store = Arc::new(
+            SqliteStorage::open(
+                OpenOptions::new(paths.clone(), OpenMode::Create)
+                    .with_source_generation(SourceGeneration::new([76; 32]).expect("generation"), 1)
+                    .expect("source generation"),
+            )
+            .await
+            .expect("open SQLite"),
+        );
+        let sink = Arc::new(ScriptedSink::new([DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+            DeliveryOutcome::unavailable(),
+        ])]));
+        let engine = Engine::builder(
+            store,
+            Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+            Arc::new(TestIds(AtomicU64::new(230))),
+            DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+        )
+        .sink(sink)
+        .signer(Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        })))
+        .build()
+        .expect("engine");
+        engine
+            .sign_and_enqueue(push.clone())
+            .await
+            .expect("prepare authored delivery");
+        let first = engine
+            .deliver_push(push.operation_id())
+            .await
+            .expect("first attempt");
+        assert_eq!(first.plan().attempt_count(), 1);
+        first
+            .plan()
+            .retry()
+            .expect("retry schedule")
+            .not_before_unix_ms()
+    };
+
+    let store = Arc::new(
+        SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadWriteExisting))
+            .await
+            .expect("reopen SQLite"),
+    );
+    let sink = Arc::new(ScriptedSink::new([DeliveryBehavior::Outcomes(vec![
+        DeliveryOutcome::accepted(),
+        DeliveryOutcome::accepted(),
+    ])]));
+    let clock = Arc::new(TestClock(AtomicU64::new(retry_at - 1)));
+    let engine = Engine::builder(
+        store,
+        clock.clone(),
+        Arc::new(TestIds(AtomicU64::new(240))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(sink.clone())
+    .build()
+    .expect("reopen engine");
+    let reopened = engine
+        .push_status(push.operation_id())
+        .await
+        .expect("reopened status")
+        .expect("reopened operation");
+    assert_eq!(reopened.delivery_plan().attempt_count(), 1);
+    assert_eq!(
+        reopened.delivery_plan().state(),
+        AuthoredDeliveryState::Retryable
+    );
+    assert_eq!(
+        engine.deliver_push(push.operation_id()).await,
+        Err(Error::DeliveryDeferred)
+    );
+    clock.0.store(retry_at, Ordering::Relaxed);
+    let completed = engine
+        .deliver_push(push.operation_id())
+        .await
+        .expect("retry after reopen");
+    assert_eq!(completed.plan().attempt_count(), 2);
+    assert_eq!(completed.plan().state(), AuthoredDeliveryState::Satisfied);
+    assert_eq!(sink.requests.lock().expect("request log").len(), 1);
 }
 
 #[test]

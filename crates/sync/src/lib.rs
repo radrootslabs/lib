@@ -13,6 +13,7 @@ pub use engine::Engine;
 pub use policy::Error;
 pub use pull::{PullReceipt, PullRequest};
 pub use push::{
-    AdmissionRunReceipt, PushPreparation, PushReceipt, PushRequest, PushStatus, SigningRunReceipt,
+    AdmissionRunReceipt, DeliveryExecutionReceipt, PushPreparation, PushReceipt, PushRequest,
+    PushStatus, SigningRunReceipt,
 };
 pub use status::SyncStatus;
