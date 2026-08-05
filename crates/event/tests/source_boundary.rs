@@ -137,6 +137,30 @@ fn public_api_has_no_redundant_radroots_type_prefixes() {
     );
 }
 
+#[test]
+fn typed_authoring_mapping_is_not_implemented_in_the_generic_event_draft() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("lib repo root");
+    let draft = fs::read_to_string(repo_root.join("crates/event/src/draft.rs"))
+        .expect("read generic event draft source");
+
+    for retired in [
+        "from_authored_update",
+        "from_authored_reply",
+        "from_authored_profile",
+        "from_typed_parts",
+        "TypedAuthoringKind",
+        "typed_authoring",
+    ] {
+        assert!(
+            !draft.contains(retired),
+            "generic EventDraft retains codec-owned typed mapping `{retired}`"
+        );
+    }
+}
+
 fn source_boundary_guard_files(repo_root: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for relative_root in ["crates", "contracts"] {

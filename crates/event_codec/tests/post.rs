@@ -86,7 +86,7 @@ fn authored_ask_precedes_optional_media_with_one_exact_marker() {
 }
 
 #[test]
-fn authored_photo_rejects_missing_and_duplicate_content_urls() {
+fn authored_photo_requires_exact_disjoint_content_url_occurrences() {
     let image = authored_image(b"leaf", "image/jpeg", "jpg");
     assert_eq!(
         AuthoredPhotoUpdate::new("photo", Vec::new()).unwrap_err(),
@@ -96,12 +96,39 @@ fn authored_photo_rejects_missing_and_duplicate_content_urls() {
         AuthoredPhotoUpdate::new("photo", vec![image.clone()])
             .unwrap_err()
             .code(),
-        "imeta_url_missing_from_content"
+        "imeta_url_occurrence_count"
     );
     let content = image.url().to_string();
     assert_eq!(
         AuthoredPhotoUpdate::new(content, vec![image.clone(), image]).unwrap_err(),
         AuthoredPostError::DuplicateImageUrl
+    );
+
+    let repeated = authored_image(b"repeated", "image/jpeg", "jpg");
+    assert_eq!(
+        AuthoredPhotoUpdate::new(
+            format!("{} then {}", repeated.url(), repeated.url()),
+            vec![repeated],
+        )
+        .unwrap_err(),
+        AuthoredPostError::ImageUrlOccurrenceCount {
+            expected: 1,
+            actual: 2,
+        }
+    );
+
+    let unicode = authored_image(b"unicode", "image/webp", "webp");
+    assert!(AuthoredPhotoUpdate::new(format!("収穫 {} 🍓", unicode.url()), vec![unicode]).is_ok());
+
+    let bytes = b"prefix";
+    let hash = Sha256::digest(bytes);
+    let short_url = format!("https://media.example/{hash}.webp");
+    let long_url = format!("{short_url}2");
+    let short = authored_image_with_url(bytes, "image/webp", &short_url);
+    let long = authored_image_with_url(bytes, "image/webp", &long_url);
+    assert_eq!(
+        AuthoredPhotoUpdate::new(long_url, vec![short, long]).unwrap_err(),
+        AuthoredPostError::ImageUrlOverlap
     );
 }
 
@@ -402,6 +429,29 @@ fn authored_update_counts_json_control_character_expansion() {
 fn authored_image(bytes: &[u8], media_type: &str, extension: &str) -> AuthoredPostImage {
     AuthoredPostImage::new(
         AuthoredImage::try_from(verified_descriptor(bytes, media_type, extension)).unwrap(),
+        PostImageDimensions::new(1200, 900).unwrap(),
+        "Harvest",
+    )
+    .unwrap()
+}
+
+fn authored_image_with_url(bytes: &[u8], media_type: &str, url: &str) -> AuthoredPostImage {
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse(media_type).unwrap();
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(url).unwrap(),
+        hash,
+        bytes.len() as u64,
+        media_type.clone(),
+        1_784_347_200,
+    )
+    .unwrap()
+    .approve_reference()
+    .unwrap()
+    .verify_bytes(bytes, &media_type)
+    .unwrap();
+    AuthoredPostImage::new(
+        AuthoredImage::try_from(descriptor).unwrap(),
         PostImageDimensions::new(1200, 900).unwrap(),
         "Harvest",
     )

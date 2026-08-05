@@ -41,7 +41,8 @@ pub enum AuthoredPostError {
     ContentTooLarge { max: usize, actual: usize },
     ImageMissing,
     ImageCountExceeded { max: usize, actual: usize },
-    ImageUrlMissingFromContent,
+    ImageUrlOccurrenceCount { expected: usize, actual: usize },
+    ImageUrlOverlap,
     DuplicateImageUrl,
     ImageMediaTypeInvalid,
     ImageSizeInvalid,
@@ -61,7 +62,8 @@ impl AuthoredPostError {
             Self::ContentTooLarge { .. } => "post_content_too_large",
             Self::ImageMissing => "photo_imeta_missing",
             Self::ImageCountExceeded { .. } => "imeta_count_exceeded",
-            Self::ImageUrlMissingFromContent => "imeta_url_missing_from_content",
+            Self::ImageUrlOccurrenceCount { .. } => "imeta_url_occurrence_count",
+            Self::ImageUrlOverlap => "imeta_url_overlap",
             Self::DuplicateImageUrl => "duplicate_imeta_url",
             Self::ImageMediaTypeInvalid => "imeta_mime_invalid",
             Self::ImageSizeInvalid => "imeta_size_invalid",
@@ -94,9 +96,13 @@ impl fmt::Display for AuthoredPostError {
             Self::ImageCountExceeded { max, actual } => {
                 write!(formatter, "authored post has {actual} images; max is {max}")
             }
-            Self::ImageUrlMissingFromContent => {
-                formatter.write_str("each authored image URL must occur exactly in post content")
-            }
+            Self::ImageUrlOccurrenceCount { expected, actual } => write!(
+                formatter,
+                "authored image URL occurrence count is {actual}; expected {expected}"
+            ),
+            Self::ImageUrlOverlap => formatter.write_str(
+                "authored image URL occurrences must not overlap another image URL occurrence",
+            ),
             Self::DuplicateImageUrl => {
                 formatter.write_str("authored post image URLs must be unique")
             }
@@ -380,16 +386,29 @@ fn validate_authored_images(
             actual: images.len(),
         });
     }
+    let mut occurrences = Vec::with_capacity(images.len());
     for (index, image) in images.iter().enumerate() {
-        if !content.contains(image.url()) {
-            return Err(AuthoredPostError::ImageUrlMissingFromContent);
-        }
         if images[..index]
             .iter()
             .any(|candidate| candidate.url() == image.url())
         {
             return Err(AuthoredPostError::DuplicateImageUrl);
         }
+        let mut matches = content.match_indices(image.url());
+        let first = matches.next();
+        let actual = usize::from(first.is_some()).saturating_add(matches.count());
+        if actual != 1 {
+            return Err(AuthoredPostError::ImageUrlOccurrenceCount {
+                expected: 1,
+                actual,
+            });
+        }
+        let (start, matched) = first.expect("exactly one occurrence was established");
+        occurrences.push((start, start.saturating_add(matched.len())));
+    }
+    occurrences.sort_unstable();
+    if occurrences.windows(2).any(|pair| pair[0].1 > pair[1].0) {
+        return Err(AuthoredPostError::ImageUrlOverlap);
     }
     let total_tag_bytes = images.iter().fold(initial_tag_bytes, |total, image| {
         total.saturating_add(imeta_tag_bytes(image.imeta_tag()))
@@ -685,12 +704,58 @@ mod tests {
         .unwrap();
         assert_eq!(
             AuthoredPhotoUpdate::new("missing URL", vec![image.clone()]).unwrap_err(),
-            AuthoredPostError::ImageUrlMissingFromContent
+            AuthoredPostError::ImageUrlOccurrenceCount {
+                expected: 1,
+                actual: 0,
+            }
         );
         let content = image.url().to_owned();
         assert_eq!(
             AuthoredPhotoUpdate::new(content, vec![image.clone(), image]).unwrap_err(),
             AuthoredPostError::DuplicateImageUrl
+        );
+    }
+
+    #[test]
+    fn authored_post_requires_one_non_overlapping_utf8_url_occurrence() {
+        let image = AuthoredPostImage::new(
+            authored_image(b"photo", "image/png", "png", "media.example"),
+            PostImageDimensions::new(1, 1).unwrap(),
+            "photo",
+        )
+        .unwrap();
+        let repeated = format!("{} 🍓 {}", image.url(), image.url());
+        assert_eq!(
+            AuthoredPhotoUpdate::new(repeated, vec![image.clone()]).unwrap_err(),
+            AuthoredPostError::ImageUrlOccurrenceCount {
+                expected: 1,
+                actual: 2,
+            }
+        );
+        assert!(
+            AuthoredPhotoUpdate::new(format!("苗 {} 🍓", image.url()), vec![image]).is_ok(),
+            "UTF-8 surrounding text must not disturb byte-boundary occurrence counting"
+        );
+
+        let bytes = b"shared-prefix";
+        let hash = Sha256::digest(bytes);
+        let short_url = format!("https://media.example/{hash}.webp");
+        let long_url = format!("{short_url}2");
+        let short = AuthoredPostImage::new(
+            authored_image_at_url(bytes, "image/webp", &short_url),
+            PostImageDimensions::new(1, 1).unwrap(),
+            "short",
+        )
+        .unwrap();
+        let long = AuthoredPostImage::new(
+            authored_image_at_url(bytes, "image/webp", &long_url),
+            PostImageDimensions::new(1, 1).unwrap(),
+            "long",
+        )
+        .unwrap();
+        assert_eq!(
+            AuthoredPhotoUpdate::new(long_url, vec![short, long]).unwrap_err(),
+            AuthoredPostError::ImageUrlOverlap
         );
     }
 
@@ -796,7 +861,11 @@ mod tests {
             AuthoredPostError::ContentTooLarge { max: 1, actual: 2 },
             AuthoredPostError::ImageMissing,
             AuthoredPostError::ImageCountExceeded { max: 1, actual: 2 },
-            AuthoredPostError::ImageUrlMissingFromContent,
+            AuthoredPostError::ImageUrlOccurrenceCount {
+                expected: 1,
+                actual: 0,
+            },
+            AuthoredPostError::ImageUrlOverlap,
             AuthoredPostError::DuplicateImageUrl,
             AuthoredPostError::ImageMediaTypeInvalid,
             AuthoredPostError::ImageSizeInvalid,
@@ -855,6 +924,24 @@ mod tests {
         host: &str,
     ) -> AuthoredImage {
         AuthoredImage::try_from(verified_descriptor(bytes, media_type, extension, host)).unwrap()
+    }
+
+    fn authored_image_at_url(bytes: &[u8], media_type: &str, url: &str) -> AuthoredImage {
+        let hash = Sha256::digest(bytes);
+        let media_type = MediaType::parse(media_type).unwrap();
+        let descriptor = BlobDescriptor::new(
+            BlobUrl::parse(url).unwrap(),
+            hash,
+            bytes.len() as u64,
+            media_type.clone(),
+            1_784_347_200,
+        )
+        .unwrap()
+        .approve_reference()
+        .unwrap()
+        .verify_bytes(bytes, &media_type)
+        .unwrap();
+        AuthoredImage::try_from(descriptor).unwrap()
     }
 
     fn verified_descriptor(

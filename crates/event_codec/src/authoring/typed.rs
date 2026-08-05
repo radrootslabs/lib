@@ -427,6 +427,14 @@ fn validate_post_profile(
             return Err("imeta_noncanonical".to_string());
         }
     }
+    validate_exact_url_occurrences(
+        content,
+        images.iter().map(|tag| {
+            tag[1]
+                .strip_prefix("url ")
+                .expect("canonical imeta establishes a URL field")
+        }),
+    )?;
     if tags.len() != images.len() + usize::from(expected == RadrootsPostClassification::Ask) {
         return Err("post_extra_tags".to_string());
     }
@@ -446,6 +454,29 @@ fn canonical_imeta_tag(tag: &[String]) -> bool {
         && tag[7..]
             .iter()
             .all(|field| field.starts_with("fallback ") && field.len() > "fallback ".len())
+}
+
+#[cfg(feature = "json")]
+fn validate_exact_url_occurrences<'a>(
+    content: &str,
+    urls: impl IntoIterator<Item = &'a str>,
+) -> Result<(), String> {
+    let mut occurrences = Vec::new();
+    for url in urls {
+        let mut matches = content.match_indices(url);
+        let first = matches.next();
+        let actual = usize::from(first.is_some()).saturating_add(matches.count());
+        if actual != 1 {
+            return Err("imeta_url_occurrence_count".to_string());
+        }
+        let (start, matched) = first.expect("exactly one occurrence was established");
+        occurrences.push((start, start.saturating_add(matched.len())));
+    }
+    occurrences.sort_unstable();
+    if occurrences.windows(2).any(|pair| pair[0].1 > pair[1].0) {
+        return Err("imeta_url_overlap".to_string());
+    }
+    Ok(())
 }
 
 #[cfg(feature = "json")]
@@ -680,4 +711,28 @@ fn decimal_digits(mut value: u64) -> usize {
         digits += 1;
     }
     digits
+}
+
+#[cfg(all(test, feature = "json"))]
+mod tests {
+    use super::validate_exact_url_occurrences;
+
+    #[test]
+    fn historical_typed_photo_urls_are_exact_disjoint_and_utf8_safe() {
+        let short = "https://media.example/abc";
+        let long = "https://media.example/abc.webp";
+        assert_eq!(
+            validate_exact_url_occurrences("missing", [short]),
+            Err("imeta_url_occurrence_count".to_owned())
+        );
+        assert_eq!(
+            validate_exact_url_occurrences(&format!("{short} then {short}"), [short]),
+            Err("imeta_url_occurrence_count".to_owned())
+        );
+        assert_eq!(
+            validate_exact_url_occurrences(long, [short, long]),
+            Err("imeta_url_overlap".to_owned())
+        );
+        assert!(validate_exact_url_occurrences(&format!("苗 {long} 🍓"), [long]).is_ok());
+    }
 }
