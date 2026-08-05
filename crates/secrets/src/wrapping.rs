@@ -213,6 +213,7 @@ mod tests {
     use super::{
         SECRET_MATERIAL_MAX_BYTES, SecretMaterial, WRAPPED_SECRET_MAX_BYTES, WrappedSecret,
     };
+    use alloc::vec;
     use alloc::vec::Vec;
     use zeroize::Zeroize;
 

@@ -566,6 +566,7 @@ impl<'a> Decoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     fn context() -> EnvelopeContext {
         EnvelopeContext::new(

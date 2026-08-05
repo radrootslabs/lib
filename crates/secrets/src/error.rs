@@ -372,6 +372,8 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
 
     #[test]
     fn every_normalized_error_has_a_secret_safe_message() {

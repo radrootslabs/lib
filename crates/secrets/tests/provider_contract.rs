@@ -29,9 +29,10 @@ impl KeyWrapping for MockProvider {
                     operation: Operation::Wrap,
                 });
             }
-            let encoded = request.plaintext().expose_secret(|plaintext| {
+            let mut encoded = Vec::from(request.context().authentication_digest());
+            encoded.extend(request.plaintext().expose_secret(|plaintext| {
                 plaintext.iter().map(|byte| byte ^ 0xA5).collect::<Vec<_>>()
-            });
+            }));
             WrappedSecret::from_bytes(encoded)
         })
     }
@@ -48,12 +49,22 @@ impl KeyWrapping for MockProvider {
                     operation: Operation::Unwrap,
                 });
             }
-            let decoded = request
+            let (context_digest, wrapped) = request
                 .wrapped()
                 .as_bytes()
-                .iter()
-                .map(|byte| byte ^ 0xA5)
-                .collect::<Vec<_>>();
+                .split_at_checked(32)
+                .ok_or(Error::BackendFailure {
+                    backend: self.backend,
+                    operation: Operation::Unwrap,
+                })?;
+            let expected_digest = request.context().authentication_digest();
+            if context_digest != expected_digest {
+                return Err(Error::BackendFailure {
+                    backend: self.backend,
+                    operation: Operation::Unwrap,
+                });
+            }
+            let decoded = wrapped.iter().map(|byte| byte ^ 0xA5).collect::<Vec<_>>();
             SecretMaterial::from_slice(decoded.as_slice())
         })
     }
@@ -262,4 +273,32 @@ fn reference_backend_mismatch_fails_before_wrapping() {
             reference: BackendKind::File,
         })
     );
+}
+
+#[test]
+fn external_wrapping_contract_rejects_cross_context_copy() {
+    let provider = provider(
+        BackendKind::Memory,
+        SecretCapabilities::available(
+            ResidencySupport::Volatile,
+            CapabilitySupport::Unavailable,
+            CapabilitySupport::Unavailable,
+        ),
+    );
+    let reference = reference(BackendKind::Memory);
+    let plaintext = SecretMaterial::from_slice(b"data-key").expect("material");
+    let wrapped = block_on(provider.wrap(WrapRequest::new(&reference, &context(), &plaintext)))
+        .expect("wrap");
+    let different = EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.provider_test").expect("purpose"),
+        EnvelopeSubject::parse("provider_test", "different").expect("subject"),
+        PayloadSchemaId::parse("radroots.provider_test.v1").expect("schema"),
+    );
+    assert!(matches!(
+        block_on(provider.unwrap(UnwrapRequest::new(&reference, &different, &wrapped,))),
+        Err(Error::BackendFailure {
+            backend: BackendKind::Memory,
+            operation: Operation::Unwrap,
+        })
+    ));
 }

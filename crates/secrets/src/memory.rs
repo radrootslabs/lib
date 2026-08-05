@@ -102,14 +102,18 @@ impl MemoryProvider {
             .map_err(|_| backend_failure(Operation::Unwrap))
     }
 
-    fn wrapped_token(reference: &SecretRef) -> Result<WrappedSecret, Error> {
+    fn wrapped_token(
+        reference: &SecretRef,
+        context: &crate::context::EnvelopeContext,
+    ) -> Result<WrappedSecret, Error> {
         let id = reference.id().as_str().as_bytes();
-        let mut token = Vec::with_capacity(TOKEN_MAGIC.len() + 4 + 2 + id.len());
+        let mut token = Vec::with_capacity(TOKEN_MAGIC.len() + 4 + 2 + id.len() + 32);
         token.extend_from_slice(TOKEN_MAGIC);
         token.extend_from_slice(&reference.key_version().get().to_be_bytes());
         let id_len = u16::try_from(id.len()).map_err(|_| backend_failure(Operation::Wrap))?;
         token.extend_from_slice(&id_len.to_be_bytes());
         token.extend_from_slice(id);
+        token.extend_from_slice(&context.authentication_digest());
         WrappedSecret::from_bytes(token)
     }
 
@@ -148,7 +152,7 @@ impl KeyWrapping for MemoryProvider {
             if !matches {
                 return Err(backend_failure(Operation::Wrap));
             }
-            Self::wrapped_token(request.reference())
+            Self::wrapped_token(request.reference(), request.context())
         })
     }
 
@@ -158,7 +162,7 @@ impl KeyWrapping for MemoryProvider {
     ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
         Box::pin(async move {
             validate_memory_reference(request.reference())?;
-            let expected = Self::wrapped_token(request.reference())?;
+            let expected = Self::wrapped_token(request.reference(), request.context())?;
             if expected.as_bytes() != request.wrapped().as_bytes() {
                 return Err(backend_failure(Operation::Unwrap));
             }

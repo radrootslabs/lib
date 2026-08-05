@@ -147,7 +147,7 @@ impl KeyWrapping for KeyringProvider {
             if !matches {
                 return Err(backend_failure(Operation::Wrap));
             }
-            WrappedSecret::from_bytes(reference_token(request.reference()))
+            WrappedSecret::from_bytes(wrapping_token(request.reference(), request.context()))
         })
     }
 
@@ -157,12 +157,20 @@ impl KeyWrapping for KeyringProvider {
     ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
         Box::pin(async move {
             validate_keyring_reference(request.reference())?;
-            if request.wrapped().as_bytes() != reference_token(request.reference()).as_slice() {
+            if request.wrapped().as_bytes()
+                != wrapping_token(request.reference(), request.context()).as_slice()
+            {
                 return Err(backend_failure(Operation::Unwrap));
             }
             self.read_material(request.reference())
         })
     }
+}
+
+fn wrapping_token(reference: &SecretRef, context: &crate::context::EnvelopeContext) -> Vec<u8> {
+    let mut token = reference_token(reference);
+    token.extend_from_slice(&context.authentication_digest());
+    token
 }
 
 impl SecretProvider for KeyringProvider {
@@ -397,6 +405,14 @@ mod tests {
         )
     }
 
+    fn different_context() -> EnvelopeContext {
+        EnvelopeContext::new(
+            EnvelopePurpose::parse("radroots.keyring_test").expect("purpose"),
+            EnvelopeSubject::parse("keyring_test", "different").expect("subject"),
+            PayloadSchemaId::parse("radroots.keyring_test.v1").expect("schema"),
+        )
+    }
+
     #[test]
     fn construction_has_no_store_side_effect() {
         let store = MockStore::default();
@@ -441,6 +457,17 @@ mod tests {
         )
         .expect("unwrap");
         opened.expose_secret(|bytes| assert_eq!(bytes, &[0x11; 32]));
+        assert!(matches!(
+            futures_executor::block_on(provider.unwrap(UnwrapRequest::new(
+                &current,
+                &different_context(),
+                &wrapped,
+            ))),
+            Err(Error::BackendFailure {
+                backend: BackendKind::Keyring,
+                operation: Operation::Unwrap,
+            })
+        ));
 
         provider
             .rotate(&current, &next, &next_material)

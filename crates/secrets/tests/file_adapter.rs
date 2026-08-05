@@ -27,6 +27,14 @@ fn context() -> EnvelopeContext {
     )
 }
 
+fn different_context() -> EnvelopeContext {
+    EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.file_test").expect("purpose"),
+        EnvelopeSubject::parse("file_test", "different").expect("subject"),
+        PayloadSchemaId::parse("radroots.file_test.v1").expect("schema"),
+    )
+}
+
 fn provider(root: &std::path::Path, mode: FileOpenMode) -> FileProvider {
     FileProvider::open(
         root,
@@ -120,6 +128,30 @@ fn rotation_resumes_after_new_version_commit_and_removes_old_version() {
     let wrapped =
         block_on(provider.wrap(WrapRequest::new(&next, &context, &next_material))).expect("wrap");
     assert!(block_on(provider.unwrap(UnwrapRequest::new(&next, &context, &wrapped))).is_ok());
+}
+
+#[test]
+fn wrapped_tokens_are_bound_to_the_exact_context() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let provider = provider(&temp.path().join("vault"), FileOpenMode::CreateNew);
+    let reference = reference("context-key", 1);
+    let material = SecretMaterial::from_slice(&[0x41; 32]).expect("material");
+    provider
+        .provision(&reference, &material, Nonce::new([0x11; 24]))
+        .expect("provision");
+    let wrapped =
+        block_on(provider.wrap(WrapRequest::new(&reference, &context(), &material))).expect("wrap");
+    assert!(matches!(
+        block_on(provider.unwrap(UnwrapRequest::new(
+            &reference,
+            &different_context(),
+            &wrapped,
+        ))),
+        Err(Error::BackendFailure {
+            backend: BackendKind::File,
+            ..
+        })
+    ));
 }
 
 #[cfg(unix)]

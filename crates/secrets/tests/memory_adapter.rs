@@ -25,6 +25,14 @@ fn context() -> EnvelopeContext {
     )
 }
 
+fn different_context() -> EnvelopeContext {
+    EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.memory_test").expect("purpose"),
+        EnvelopeSubject::parse("memory_test", "different").expect("subject"),
+        PayloadSchemaId::parse("radroots.memory_test.v1").expect("schema"),
+    )
+}
+
 #[test]
 fn memory_provider_has_explicit_lifecycle_and_round_trips() {
     let provider = MemoryProvider::new();
@@ -129,4 +137,30 @@ fn provider_capabilities_and_diagnostics_are_explicit() {
     assert_eq!(provider.backend_kind(), BackendKind::Memory);
     assert!(provider.capabilities().is_available());
     assert_eq!(format!("{provider:?}"), "MemoryProvider(<redacted>)");
+}
+
+#[test]
+fn wrapped_tokens_are_bound_to_the_exact_context() {
+    let provider = MemoryProvider::new();
+    let reference = reference("context-key", 1);
+    let material = SecretMaterial::from_slice(&[0x41; 32]).expect("material");
+    provider
+        .provision(
+            &reference,
+            SecretMaterial::from_slice(&[0x41; 32]).expect("material"),
+        )
+        .expect("provision");
+    let wrapped =
+        block_on(provider.wrap(WrapRequest::new(&reference, &context(), &material))).expect("wrap");
+    assert!(matches!(
+        block_on(provider.unwrap(UnwrapRequest::new(
+            &reference,
+            &different_context(),
+            &wrapped,
+        ))),
+        Err(Error::BackendFailure {
+            backend: BackendKind::Memory,
+            ..
+        })
+    ));
 }

@@ -293,7 +293,7 @@ impl KeyWrapping for FileProvider {
             if !matches {
                 return Err(backend_failure(Operation::Wrap));
             }
-            WrappedSecret::from_bytes(entry_token(request.reference()))
+            WrappedSecret::from_bytes(wrapping_token(request.reference(), request.context()))
         })
     }
 
@@ -303,7 +303,9 @@ impl KeyWrapping for FileProvider {
     ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
         Box::pin(async move {
             validate_file_reference(request.reference())?;
-            if request.wrapped().as_bytes() != entry_token(request.reference()).as_slice() {
+            if request.wrapped().as_bytes()
+                != wrapping_token(request.reference(), request.context()).as_slice()
+            {
                 return Err(backend_failure(Operation::Unwrap));
             }
             self.read_entry(request.reference())
@@ -411,6 +413,12 @@ fn entry_token(reference: &SecretRef) -> Vec<u8> {
     let mut token = Vec::from(b"radroots-file-key-v1\0".as_slice());
     token.extend_from_slice(&reference.key_version().get().to_be_bytes());
     token.extend_from_slice(reference.id().as_str().as_bytes());
+    token
+}
+
+fn wrapping_token(reference: &SecretRef, context: &crate::context::EnvelopeContext) -> Vec<u8> {
+    let mut token = entry_token(reference);
+    token.extend_from_slice(&context.authentication_digest());
     token
 }
 
