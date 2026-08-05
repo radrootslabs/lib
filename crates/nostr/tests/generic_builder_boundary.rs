@@ -59,6 +59,47 @@ fn public_source_does_not_expose_the_upstream_event_builder() {
     );
 }
 
+#[test]
+fn every_strict_builder_is_plan_backed_and_has_no_unchecked_mapping_path() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (module, expected_body_conversions) in [
+        ("metadata.rs", 1),
+        ("post.rs", 3),
+        ("reply.rs", 1),
+        ("deletion.rs", 1),
+        ("comment.rs", 1),
+        ("food_availability.rs", 1),
+    ] {
+        let source = fs::read_to_string(crate_root.join("src/events").join(module))
+            .unwrap_or_else(|error| panic!("read {module}: {error}"));
+        assert!(
+            source.contains("SealedBuilderCore"),
+            "strict builder module {module} does not use the shared plan core"
+        );
+        assert_eq!(
+            source.matches("AuthoredEventBody::from_").count(),
+            expected_body_conversions,
+            "strict builder module {module} has an incomplete body-conversion inventory"
+        );
+        for forbidden in [
+            "build_event_unchecked",
+            "RadrootsNostrEventBuilderUnchecked",
+            "_to_wire_parts",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "strict builder module {module} retains unchecked mapping `{forbidden}`"
+            );
+        }
+        for required in ["sign_with_keys", "into_external_signing_request"] {
+            assert!(
+                source.contains(required),
+                "strict builder module {module} is missing `{required}`"
+            );
+        }
+    }
+}
+
 fn rust_source_files(root: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     collect_rust_source_files(root, &mut paths);

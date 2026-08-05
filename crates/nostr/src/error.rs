@@ -62,6 +62,9 @@ pub enum Error {
     #[error("External signing event is invalid: {0}")]
     ExternalSigningEventInvalid(#[cfg_attr(feature = "std", source)] nostr::event::Error),
 
+    #[error("External signing result does not match authored plan field `{field}`")]
+    ExternalSigningPlanMismatch { field: &'static str },
+
     #[error("Event error: {0}")]
     EventError(#[cfg_attr(feature = "std", source)] nostr::event::Error),
 
@@ -88,6 +91,10 @@ pub enum Error {
     ProfileEncode(
         #[from] radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError,
     ),
+
+    #[cfg(feature = "events")]
+    #[error("Authored plan error: {0}")]
+    AuthoredPlan(#[from] radroots_event_codec::authoring::AuthoredPlanError),
 
     #[cfg(feature = "events")]
     #[error("Signed event error: {0}")]

@@ -2,13 +2,14 @@
 
 use crate::{
     error::Error,
+    events::sealed::SealedBuilderCore,
     types::{
-        RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys,
+        ExternalSigningRequest, RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey,
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{post::deletion::AuthoredNip09DeletionRequest, wire::Nip01EventWireParts};
-use radroots_event_codec::encode::deletion::authored_nip09_deletion_request_to_wire_parts;
+use radroots_event::post::deletion::AuthoredNip09DeletionRequest;
+use radroots_event_codec::authoring::AuthoredEventBody;
 
 /// A sealed builder for a validated NIP-09 deletion request.
 ///
@@ -36,7 +37,7 @@ use radroots_event_codec::encode::deletion::authored_nip09_deletion_request_to_w
 /// ```
 #[must_use = "NIP-09 deletion request builders must be signed or published"]
 pub struct Nip09DeletionRequestBuilder {
-    inner: RadrootsNostrEventBuilderUnchecked,
+    inner: SealedBuilderCore,
 }
 
 impl Nip09DeletionRequestBuilder {
@@ -46,19 +47,21 @@ impl Nip09DeletionRequestBuilder {
     }
 
     pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
-        Ok(self.inner.sign_with_keys(keys)?)
+        self.inner.sign_with_keys(keys)
+    }
+
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<ExternalSigningRequest, Error> {
+        self.inner.into_external_signing_request(public_key)
     }
 }
 
 pub fn build_nip09_deletion_request_event(
     request: &AuthoredNip09DeletionRequest,
 ) -> Result<Nip09DeletionRequestBuilder, Error> {
-    builder_from_wire_parts(authored_nip09_deletion_request_to_wire_parts(request))
-}
-
-fn builder_from_wire_parts(
-    parts: Nip01EventWireParts,
-) -> Result<Nip09DeletionRequestBuilder, Error> {
-    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
-    Ok(Nip09DeletionRequestBuilder { inner })
+    Ok(Nip09DeletionRequestBuilder {
+        inner: SealedBuilderCore::new(AuthoredEventBody::from_nip09_deletion_request(request)?),
+    })
 }

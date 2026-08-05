@@ -47,3 +47,5 @@ mod draft_signing;
 mod event_convert;
 #[cfg(feature = "events")]
 mod event_verify;
+#[cfg(feature = "events")]
+mod plan_signing;

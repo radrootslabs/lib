@@ -17,6 +17,8 @@ pub mod metadata;
 pub mod post;
 #[cfg(feature = "events")]
 pub mod reply;
+#[cfg(feature = "events")]
+mod sealed;
 
 extern crate alloc;
 #[cfg(any(feature = "events", test))]

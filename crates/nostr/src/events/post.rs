@@ -3,19 +3,17 @@
 #[cfg(feature = "events")]
 use crate::error::Error;
 #[cfg(feature = "events")]
-use crate::types::RadrootsNostrEventBuilderUnchecked;
+use crate::events::sealed::SealedBuilderCore;
 #[cfg(feature = "events")]
-use crate::types::{RadrootsNostrEvent, RadrootsNostrKeys};
+use crate::types::{
+    ExternalSigningRequest, RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey,
+};
 use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrTimestamp};
 
 #[cfg(feature = "events")]
 use radroots_event::post::{AuthoredAsk, AuthoredPhotoUpdate, AuthoredUpdate};
 #[cfg(feature = "events")]
-use radroots_event::wire::Nip01EventWireParts;
-#[cfg(feature = "events")]
-use radroots_event_codec::encode::post::{
-    authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
-};
+use radroots_event_codec::authoring::AuthoredEventBody;
 
 /// A sealed builder for a validated Radroots root post profile.
 ///
@@ -24,7 +22,7 @@ use radroots_event_codec::encode::post::{
 #[cfg(feature = "events")]
 #[must_use = "post event builders must be signed or published"]
 pub struct PostBuilder {
-    inner: RadrootsNostrEventBuilderUnchecked,
+    inner: SealedBuilderCore,
 }
 
 #[cfg(feature = "events")]
@@ -37,23 +35,33 @@ impl PostBuilder {
 
     /// Signs the validated post directly with local keys.
     pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
-        Ok(self.inner.sign_with_keys(keys)?)
+        self.inner.sign_with_keys(keys)
+    }
+
+    /// Finalizes the exact authored plan for an external signer.
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<ExternalSigningRequest, Error> {
+        self.inner.into_external_signing_request(public_key)
     }
 }
 
 #[cfg(feature = "events")]
 pub fn build_update_event(update: &AuthoredUpdate) -> Result<PostBuilder, Error> {
-    builder_from_wire_parts(authored_update_to_wire_parts(update))
+    Ok(builder_from_body(AuthoredEventBody::from_update(update)?))
 }
 
 #[cfg(feature = "events")]
 pub fn build_photo_update_event(photo: &AuthoredPhotoUpdate) -> Result<PostBuilder, Error> {
-    builder_from_wire_parts(authored_photo_update_to_wire_parts(photo))
+    Ok(builder_from_body(AuthoredEventBody::from_photo_update(
+        photo,
+    )?))
 }
 
 #[cfg(feature = "events")]
 pub fn build_ask_event(ask: &AuthoredAsk) -> Result<PostBuilder, Error> {
-    builder_from_wire_parts(authored_ask_to_wire_parts(ask))
+    Ok(builder_from_body(AuthoredEventBody::from_ask(ask)?))
 }
 
 pub fn post_events_filter(limit: Option<u16>, since_unix: Option<u64>) -> RadrootsNostrFilter {
@@ -68,7 +76,8 @@ pub fn post_events_filter(limit: Option<u16>, since_unix: Option<u64>) -> Radroo
 }
 
 #[cfg(feature = "events")]
-fn builder_from_wire_parts(parts: Nip01EventWireParts) -> Result<PostBuilder, Error> {
-    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
-    Ok(PostBuilder { inner })
+fn builder_from_body(body: AuthoredEventBody) -> PostBuilder {
+    PostBuilder {
+        inner: SealedBuilderCore::new(body),
+    }
 }

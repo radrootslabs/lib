@@ -2,13 +2,14 @@
 
 use crate::{
     error::Error,
+    events::sealed::SealedBuilderCore,
     types::{
-        RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys,
+        ExternalSigningRequest, RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey,
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{post::reply::AuthoredNip10Reply, wire::Nip01EventWireParts};
-use radroots_event_codec::encode::reply::authored_nip10_reply_to_wire_parts;
+use radroots_event::post::reply::AuthoredNip10Reply;
+use radroots_event_codec::authoring::AuthoredEventBody;
 
 /// A sealed builder for a validated strict marked NIP-10 Reply.
 ///
@@ -23,7 +24,7 @@ use radroots_event_codec::encode::reply::authored_nip10_reply_to_wire_parts;
 /// ```
 #[must_use = "NIP-10 Reply builders must be signed or published"]
 pub struct Nip10ReplyBuilder {
-    inner: RadrootsNostrEventBuilderUnchecked,
+    inner: SealedBuilderCore,
 }
 
 impl Nip10ReplyBuilder {
@@ -33,16 +34,19 @@ impl Nip10ReplyBuilder {
     }
 
     pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
-        Ok(self.inner.sign_with_keys(keys)?)
+        self.inner.sign_with_keys(keys)
+    }
+
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<ExternalSigningRequest, Error> {
+        self.inner.into_external_signing_request(public_key)
     }
 }
 
 pub fn build_nip10_reply_event(reply: &AuthoredNip10Reply) -> Result<Nip10ReplyBuilder, Error> {
-    let parts = authored_nip10_reply_to_wire_parts(reply);
-    builder_from_wire_parts(parts)
-}
-
-fn builder_from_wire_parts(parts: Nip01EventWireParts) -> Result<Nip10ReplyBuilder, Error> {
-    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
-    Ok(Nip10ReplyBuilder { inner })
+    Ok(Nip10ReplyBuilder {
+        inner: SealedBuilderCore::new(AuthoredEventBody::from_nip10_reply(reply)?),
+    })
 }

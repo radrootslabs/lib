@@ -141,19 +141,98 @@ impl fmt::Display for AuthoredPlanError {
 #[cfg(feature = "std")]
 impl std::error::Error for AuthoredPlanError {}
 
+impl AuthoredEventBody {
+    #[cfg(feature = "json")]
+    pub fn from_profile(profile: &AuthoredProfile) -> Result<Self, AuthoredPlanError> {
+        let wire = authored_profile_to_wire_parts(profile).map_err(AuthoredPlanError::Profile)?;
+        build_typed_body("radroots.profile.metadata.v1", wire)
+    }
+
+    pub fn from_update(update: &AuthoredUpdate) -> Result<Self, AuthoredPlanError> {
+        build_typed_body(
+            "radroots.social.update.v1",
+            authored_update_to_wire_parts(update),
+        )
+    }
+
+    pub fn from_photo_update(photo: &AuthoredPhotoUpdate) -> Result<Self, AuthoredPlanError> {
+        build_typed_body(
+            "radroots.social.photo_update.v1",
+            authored_photo_update_to_wire_parts(photo),
+        )
+    }
+
+    pub fn from_ask(ask: &AuthoredAsk) -> Result<Self, AuthoredPlanError> {
+        build_typed_body("radroots.social.ask.v1", authored_ask_to_wire_parts(ask))
+    }
+
+    pub fn from_nip10_reply(reply: &AuthoredNip10Reply) -> Result<Self, AuthoredPlanError> {
+        build_typed_body(
+            "radroots.social.reply.v1",
+            authored_nip10_reply_to_wire_parts(reply),
+        )
+    }
+
+    pub fn from_nip09_deletion_request(
+        request: &AuthoredNip09DeletionRequest,
+    ) -> Result<Self, AuthoredPlanError> {
+        build_typed_body(
+            "radroots.social.deletion_request.v1",
+            authored_nip09_deletion_request_to_wire_parts(request),
+        )
+    }
+
+    pub fn from_nip22_comment(comment: &AuthoredNip22Comment) -> Result<Self, AuthoredPlanError> {
+        build_typed_body(
+            "radroots.social.comment.v1",
+            authored_nip22_comment_to_wire_parts(comment),
+        )
+    }
+
+    pub fn from_food_availability(
+        details: &FoodAvailabilityDetails,
+        created_at: u64,
+    ) -> Result<Self, AuthoredPlanError> {
+        let wire = authored_food_availability_to_wire_parts(details, created_at)
+            .map_err(AuthoredPlanError::FoodAvailability)?;
+        build_typed_body("radroots.food.availability.v1", wire)
+    }
+}
+
 impl AuthoredEventPlan {
+    pub fn bind(
+        body: AuthoredEventBody,
+        created_at: u64,
+        expected_author: impl AsRef<str>,
+    ) -> Result<Self, AuthoredPlanError> {
+        let author = PublicKey::from_hex(expected_author.as_ref())
+            .map_err(AuthoredPlanError::InvalidAuthor)?;
+        let expected_event_id = compute_canonical_nip01_event_id(
+            &author.to_hex(),
+            created_at,
+            body.kind,
+            &body.tags,
+            &body.content,
+        )
+        .map_err(AuthoredPlanError::CanonicalEventId)?;
+        Ok(Self::from_validated_parts(
+            body,
+            author,
+            created_at,
+            expected_event_id,
+        ))
+    }
+
     #[cfg(feature = "json")]
     pub fn from_profile(
         profile: &AuthoredProfile,
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        let wire = authored_profile_to_wire_parts(profile).map_err(AuthoredPlanError::Profile)?;
-        build_typed_plan(
-            "radroots.profile.metadata.v1",
-            wire,
+        Self::bind(
+            AuthoredEventBody::from_profile(profile)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -162,11 +241,10 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        build_typed_plan(
-            "radroots.social.update.v1",
-            authored_update_to_wire_parts(update),
+        Self::bind(
+            AuthoredEventBody::from_update(update)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -175,11 +253,10 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        build_typed_plan(
-            "radroots.social.photo_update.v1",
-            authored_photo_update_to_wire_parts(photo),
+        Self::bind(
+            AuthoredEventBody::from_photo_update(photo)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -188,11 +265,10 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        build_typed_plan(
-            "radroots.social.ask.v1",
-            authored_ask_to_wire_parts(ask),
+        Self::bind(
+            AuthoredEventBody::from_ask(ask)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -201,11 +277,10 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        build_typed_plan(
-            "radroots.social.reply.v1",
-            authored_nip10_reply_to_wire_parts(reply),
+        Self::bind(
+            AuthoredEventBody::from_nip10_reply(reply)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -214,11 +289,10 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        build_typed_plan(
-            "radroots.social.deletion_request.v1",
-            authored_nip09_deletion_request_to_wire_parts(request),
+        Self::bind(
+            AuthoredEventBody::from_nip09_deletion_request(request)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -227,11 +301,10 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        build_typed_plan(
-            "radroots.social.comment.v1",
-            authored_nip22_comment_to_wire_parts(comment),
+        Self::bind(
+            AuthoredEventBody::from_nip22_comment(comment)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 
@@ -240,23 +313,18 @@ impl AuthoredEventPlan {
         created_at: u64,
         expected_author: impl AsRef<str>,
     ) -> Result<Self, AuthoredPlanError> {
-        let wire = authored_food_availability_to_wire_parts(details, created_at)
-            .map_err(AuthoredPlanError::FoodAvailability)?;
-        build_typed_plan(
-            "radroots.food.availability.v1",
-            wire,
+        Self::bind(
+            AuthoredEventBody::from_food_availability(details, created_at)?,
             created_at,
-            expected_author.as_ref(),
+            expected_author,
         )
     }
 }
 
-fn build_typed_plan(
+fn build_typed_body(
     contract_id: &str,
     wire: Nip01EventWireParts,
-    created_at: u64,
-    expected_author: &str,
-) -> Result<AuthoredEventPlan, AuthoredPlanError> {
+) -> Result<AuthoredEventBody, AuthoredPlanError> {
     let contract =
         ContractKey::current(contract_id).map_err(AuthoredPlanError::ContractIdentity)?;
     let definition = contract.contract();
@@ -278,27 +346,12 @@ fn build_typed_plan(
         });
     }
     EventTags::new(wire.tags.clone()).map_err(AuthoredPlanError::Envelope)?;
-    let author = PublicKey::from_hex(expected_author).map_err(AuthoredPlanError::InvalidAuthor)?;
-    let expected_event_id = compute_canonical_nip01_event_id(
-        &author.to_hex(),
-        created_at,
-        wire.kind,
-        &wire.tags,
-        &wire.content,
-    )
-    .map_err(AuthoredPlanError::CanonicalEventId)?;
-    let body = AuthoredEventBody {
+    Ok(AuthoredEventBody {
         contract,
         kind: wire.kind,
         tags: wire.tags,
         content: wire.content,
-    };
-    Ok(AuthoredEventPlan::from_validated_parts(
-        body,
-        author,
-        created_at,
-        expected_event_id,
-    ))
+    })
 }
 
 #[cfg(feature = "json")]

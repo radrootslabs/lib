@@ -2,13 +2,14 @@
 
 use crate::{
     error::Error,
+    events::sealed::SealedBuilderCore,
     types::{
-        RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys,
+        ExternalSigningRequest, RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey,
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{post::comment::AuthoredNip22Comment, wire::Nip01EventWireParts};
-use radroots_event_codec::encode::comment::authored_nip22_comment_to_wire_parts;
+use radroots_event::post::comment::AuthoredNip22Comment;
+use radroots_event_codec::authoring::AuthoredEventBody;
 
 /// A sealed builder for a validated strict NIP-22 Comment.
 ///
@@ -23,7 +24,7 @@ use radroots_event_codec::encode::comment::authored_nip22_comment_to_wire_parts;
 /// ```
 #[must_use = "NIP-22 Comment builders must be signed or published"]
 pub struct Nip22CommentBuilder {
-    inner: RadrootsNostrEventBuilderUnchecked,
+    inner: SealedBuilderCore,
 }
 
 impl Nip22CommentBuilder {
@@ -33,19 +34,23 @@ impl Nip22CommentBuilder {
     }
 
     pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
-        Ok(self.inner.sign_with_keys(keys)?)
+        self.inner.sign_with_keys(keys)
+    }
+
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<ExternalSigningRequest, Error> {
+        self.inner.into_external_signing_request(public_key)
     }
 }
 
 pub fn build_nip22_comment_event(
     comment: &AuthoredNip22Comment,
 ) -> Result<Nip22CommentBuilder, Error> {
-    builder_from_wire_parts(authored_nip22_comment_to_wire_parts(comment))
-}
-
-fn builder_from_wire_parts(parts: Nip01EventWireParts) -> Result<Nip22CommentBuilder, Error> {
-    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
-    Ok(Nip22CommentBuilder { inner })
+    Ok(Nip22CommentBuilder {
+        inner: SealedBuilderCore::new(AuthoredEventBody::from_nip22_comment(comment)?),
+    })
 }
 
 #[cfg(test)]

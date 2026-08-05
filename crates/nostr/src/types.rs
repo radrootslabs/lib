@@ -12,6 +12,8 @@ use crate::error::Error;
 use radroots_event::listing::classified::{
     ClassifiedListingPartition, classify_classified_listing_marker_names,
 };
+#[cfg(feature = "events")]
+use radroots_event_codec::authoring::AuthoredEventPlan;
 
 #[cfg(feature = "events")]
 pub(crate) use crate::event::Event as RadrootsNostrEvent;
@@ -35,12 +37,12 @@ pub(crate) type RadrootsNostrKeys = nostr::Keys;
 pub(crate) type RadrootsNostrPublicKey = nostr::PublicKey;
 pub(crate) type RadrootsNostrRelayUrl = nostr::RelayUrl;
 
-/// A checked generic event prepared for an external signer.
+/// A checked event prepared for an external signer.
 ///
-/// The request is created only after generic authoring policy succeeds. It
-/// serializes as the standard Nostr unsigned-event object expected by signer
-/// helpers, but it exposes no raw unsigned event, mutation, or unchecked
-/// deserialization boundary.
+/// Generic requests are created only after generic authoring policy succeeds;
+/// authored requests retain their immutable plan. Both serialize as the
+/// standard Nostr unsigned-event object expected by signer helpers, but expose
+/// no raw unsigned event, mutation, or unchecked deserialization boundary.
 ///
 /// ```compile_fail
 /// use radroots_nostr::event::ExternalSigningRequest;
@@ -54,16 +56,42 @@ pub struct ExternalSigningRequest {
     unsigned_event: nostr::UnsignedEvent,
     expected_event_id: RadrootsNostrEventId,
     expected_public_key: RadrootsNostrPublicKey,
+    authored_plan: Option<AuthoredEventPlan>,
 }
 
 #[cfg(feature = "events")]
 impl ExternalSigningRequest {
+    /// Creates the exact standard unsigned request committed by an authored plan.
+    pub fn from_authored_plan(plan: AuthoredEventPlan) -> Result<Self, Error> {
+        let unsigned_event = crate::plan_signing::unsigned_event_from_plan(&plan)?;
+        let expected_event_id = unsigned_event
+            .id
+            .ok_or(Error::ExternalSigningPlanMismatch {
+                field: "expected_event_id",
+            })?;
+        let expected_public_key = unsigned_event.pubkey;
+        Ok(Self {
+            unsigned_event,
+            expected_event_id,
+            expected_public_key,
+            authored_plan: Some(plan),
+        })
+    }
+
     pub fn expected_event_id(&self) -> RadrootsNostrEventId {
         self.expected_event_id
     }
 
     pub fn expected_public_key(&self) -> RadrootsNostrPublicKey {
         self.expected_public_key
+    }
+
+    /// Returns the immutable authored plan for typed requests.
+    ///
+    /// Low-level generic interoperability requests have no product plan and
+    /// therefore return `None`.
+    pub const fn authored_plan(&self) -> Option<&AuthoredEventPlan> {
+        self.authored_plan.as_ref()
     }
 
     /// Accepts an external signing result only when it is the exact requested
@@ -82,12 +110,18 @@ impl ExternalSigningRequest {
                 actual: event.id,
             });
         }
+        if let Some(plan) = &self.authored_plan {
+            crate::plan_signing::validate_signed_event_matches_plan(&event, plan)?;
+        }
         event.verify().map_err(Error::ExternalSigningEventInvalid)?;
         Ok(event)
     }
 
     #[cfg(feature = "std")]
-    fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
+    pub(crate) fn sign_with_keys(
+        self,
+        keys: &RadrootsNostrKeys,
+    ) -> Result<RadrootsNostrEvent, Error> {
         let event = self.unsigned_event.clone().sign_with_keys(keys)?;
         self.complete(event)
     }
@@ -215,6 +249,7 @@ impl GenericBuilder {
             unsigned_event,
             expected_event_id,
             expected_public_key: public_key,
+            authored_plan: None,
         })
     }
 
@@ -448,5 +483,78 @@ mod tests {
             request.complete(invalid_signature),
             Err(Error::ExternalSigningEventInvalid(_))
         ));
+    }
+
+    #[test]
+    fn authored_plan_external_signing_preserves_and_checks_every_exact_field() {
+        use radroots_event::{GenericEventDraft, envelope::kind::KIND_GEOCHAT};
+        use radroots_event_codec::authoring::AuthoredEventPlan;
+
+        let keys = keys();
+        let author = keys.public_key().to_hex();
+        let plan = AuthoredEventPlan::from_generic(
+            GenericEventDraft::new(
+                "radroots.social.geochat.v1",
+                KIND_GEOCHAT,
+                1_700_000_123,
+                vec![
+                    vec!["g".to_owned(), "u4pru".to_owned()],
+                    vec!["p".to_owned(), author.clone()],
+                ],
+                " exact content\n🍓 ",
+                &author,
+            )
+            .expect("generic authored input"),
+        )
+        .expect("authored plan");
+        let request = ExternalSigningRequest::from_authored_plan(plan.clone())
+            .expect("plan-backed signing request");
+        assert_eq!(request.authored_plan(), Some(&plan));
+
+        let unsigned: nostr::UnsignedEvent =
+            serde_json::from_value(serde_json::to_value(&request).expect("request JSON"))
+                .expect("standard unsigned request");
+        assert_eq!(unsigned.id, Some(request.expected_event_id()));
+        assert_eq!(unsigned.pubkey, request.expected_public_key());
+        assert_eq!(unsigned.created_at.as_secs(), plan.created_at());
+        assert_eq!(u32::from(unsigned.kind.as_u16()), plan.body().kind());
+        assert_eq!(
+            unsigned
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect::<Vec<_>>(),
+            plan.body().tags()
+        );
+        assert_eq!(unsigned.content, plan.body().content());
+
+        let valid = unsigned
+            .sign_with_keys(&keys)
+            .expect("external signer result");
+        request.complete(valid.clone()).expect("exact completion");
+
+        type PlanMutation = (&'static str, fn(&mut RadrootsNostrEvent));
+        let mutations: [PlanMutation; 4] = [
+            ("created_at", |event| {
+                event.created_at = RadrootsNostrTimestamp::from_secs(1_700_000_124);
+            }),
+            ("kind", |event| {
+                event.kind = RadrootsNostrKind::Custom(KIND_GEOCHAT as u16 + 1);
+            }),
+            ("tags", |event| {
+                event.tags = nostr::Tags::from_list(event.tags.iter().rev().cloned().collect());
+            }),
+            ("content", |event| event.content.push_str("changed")),
+        ];
+        for (field, mutate) in mutations {
+            let request = ExternalSigningRequest::from_authored_plan(plan.clone())
+                .expect("plan-backed signing request");
+            let mut tampered = valid.clone();
+            mutate(&mut tampered);
+            assert!(matches!(
+                request.complete(tampered),
+                Err(Error::ExternalSigningPlanMismatch { field: actual }) if actual == field
+            ));
+        }
     }
 }

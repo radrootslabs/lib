@@ -3,13 +3,16 @@
 #[cfg(feature = "events")]
 use crate::error::Error;
 #[cfg(feature = "events")]
-use crate::types::RadrootsNostrEvent;
+use crate::events::sealed::SealedBuilderCore;
 #[cfg(feature = "events")]
-use crate::types::{RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys, RadrootsNostrTimestamp};
+use crate::types::{
+    ExternalSigningRequest, RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey,
+    RadrootsNostrTimestamp,
+};
 #[cfg(feature = "events")]
 use radroots_event::profile::AuthoredProfile;
 #[cfg(feature = "events")]
-use radroots_event_codec::encode::profile::authored_profile_to_wire_parts;
+use radroots_event_codec::authoring::{AuthoredEventBody, AuthoredPlanError};
 
 /// A sealed builder for a validated kind-0 Profile replacement snapshot.
 ///
@@ -19,7 +22,7 @@ use radroots_event_codec::encode::profile::authored_profile_to_wire_parts;
 #[cfg(feature = "events")]
 #[must_use = "Profile event builders must be signed or published"]
 pub struct ProfileBuilder {
-    inner: RadrootsNostrEventBuilderUnchecked,
+    inner: SealedBuilderCore,
 }
 
 #[cfg(feature = "events")]
@@ -32,14 +35,25 @@ impl ProfileBuilder {
 
     /// Signs the validated Profile directly with local keys.
     pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
-        Ok(self.inner.sign_with_keys(keys)?)
+        self.inner.sign_with_keys(keys)
+    }
+
+    /// Finalizes the exact authored plan for an external signer.
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<ExternalSigningRequest, Error> {
+        self.inner.into_external_signing_request(public_key)
     }
 }
 
 /// Builds a sealed kind-0 event from the strict authored Profile contract.
 #[cfg(feature = "events")]
 pub fn build_profile_event(profile: &AuthoredProfile) -> Result<ProfileBuilder, Error> {
-    let parts = authored_profile_to_wire_parts(profile)?;
-    let inner = crate::events::build_event_unchecked(parts.kind, parts.content, parts.tags)?;
+    let body = AuthoredEventBody::from_profile(profile).map_err(|error| match error {
+        AuthoredPlanError::Profile(error) => Error::ProfileEncode(error),
+        error => Error::AuthoredPlan(error),
+    })?;
+    let inner = SealedBuilderCore::new(body);
     Ok(ProfileBuilder { inner })
 }

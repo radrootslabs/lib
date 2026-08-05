@@ -2,13 +2,14 @@
 
 use crate::{
     error::Error,
+    events::sealed::SealedBuilderCore,
     types::{
-        RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrKeys,
+        ExternalSigningRequest, RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey,
         RadrootsNostrTimestamp,
     },
 };
 use radroots_event::food::availability::FoodAvailabilityDetails;
-use radroots_event_codec::encode::food_availability::authored_food_availability_to_wire_parts;
+use radroots_event_codec::authoring::{AuthoredEventBody, AuthoredPlanError};
 
 /// A sealed builder for a validated focused FoodAvailability event.
 ///
@@ -34,7 +35,7 @@ use radroots_event_codec::encode::food_availability::authored_food_availability_
 /// ```
 #[must_use = "FoodAvailability event builders must be signed or published"]
 pub struct FoodAvailabilityBuilder {
-    inner: RadrootsNostrEventBuilderUnchecked,
+    inner: SealedBuilderCore,
 }
 
 impl FoodAvailabilityBuilder {
@@ -42,7 +43,14 @@ impl FoodAvailabilityBuilder {
     ///
     /// Media-bearing callers must prove successful BUD-02 upload first.
     pub fn sign_with_keys(self, keys: &RadrootsNostrKeys) -> Result<RadrootsNostrEvent, Error> {
-        Ok(self.inner.sign_with_keys(keys)?)
+        self.inner.sign_with_keys(keys)
+    }
+
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<ExternalSigningRequest, Error> {
+        self.inner.into_external_signing_request(public_key)
     }
 }
 
@@ -53,8 +61,12 @@ pub fn build_food_availability_event(
     details: &FoodAvailabilityDetails,
     created_at: RadrootsNostrTimestamp,
 ) -> Result<FoodAvailabilityBuilder, Error> {
-    let parts = authored_food_availability_to_wire_parts(details, created_at.as_secs())?;
-    let inner = super::build_event_unchecked(parts.kind, parts.content, parts.tags)?
-        .custom_created_at(created_at);
+    let body = AuthoredEventBody::from_food_availability(details, created_at.as_secs()).map_err(
+        |error| match error {
+            AuthoredPlanError::FoodAvailability(error) => Error::FoodAvailabilityEncode(error),
+            error => Error::AuthoredPlan(error),
+        },
+    )?;
+    let inner = SealedBuilderCore::at(body, created_at);
     Ok(FoodAvailabilityBuilder { inner })
 }
