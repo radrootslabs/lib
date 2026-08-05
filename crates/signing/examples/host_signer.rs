@@ -1,8 +1,10 @@
-use radroots_event::{EventDraft, contract::AuthorRole};
+use radroots_event::{GenericEventDraft, contract::AuthorRole};
+use radroots_event_codec::authoring::AuthoredEventPlan;
 use radroots_identity::PublicKey;
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
-    Actor, Error, SignReceipt, SignRequest, Signer, SignerStatus,
+    Actor, AuthoredArtifactId, Error, SignReceipt, SignRequest, Signer, SignerStatus,
+    SigningIntentId, SigningOperationId,
     actor::ActorSource,
     error::Kind,
     request::{CancellationPolicy, SignPolicy},
@@ -31,7 +33,7 @@ fn main() {
         [AuthorRole::Any],
     )
     .expect("validated actor");
-    let draft = EventDraft::new(
+    let draft = GenericEventDraft::new(
         "radroots.social.geochat.v1",
         20_000,
         1_700_000_000,
@@ -39,11 +41,19 @@ fn main() {
         "host-composed signing",
         public_key.to_hex(),
     )
-    .expect("frozen draft");
-    let policy = SignPolicy::new(1_700_000_030, CancellationPolicy::PreservePublishedRequest)
-        .expect("bounded policy");
-    let request =
-        SignRequest::new(OperationId::SyncPush, actor, draft, policy).expect("authorized request");
+    .expect("validated generic draft");
+    let plan = AuthoredEventPlan::from_generic(draft).expect("exact authored plan");
+    let intent_id = SigningIntentId::new(
+        SigningOperationId::new([1; 16]).expect("operation ID"),
+        AuthoredArtifactId::new([2; 16]).expect("artifact ID"),
+    );
+    let policy = SignPolicy::new(
+        1_700_000_030_000,
+        CancellationPolicy::PreservePublishedRequest,
+    )
+    .expect("bounded policy");
+    let request = SignRequest::new(OperationId::SyncPush, intent_id, actor, plan, policy)
+        .expect("authorized request");
 
     let signer: &dyn Signer = &HostSigner;
     let future = signer.sign(request);

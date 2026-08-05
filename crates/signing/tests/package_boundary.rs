@@ -2,8 +2,9 @@ use std::{collections::BTreeSet, fs, path::Path};
 
 #[allow(unused_imports)]
 use radroots_signing::{
-    Actor, Error, SignReceipt, SignRequest, Signer, SignerStatus, actor as _, capability as _,
-    error as _, receipt as _, request as _, signer as _, status as _,
+    Actor, Error, SignReceipt, SignRequest, Signer, SignerStatus, actor as _, authorization as _,
+    capability as _, error as _, identity as _, receipt as _, recovery as _, request as _,
+    signer as _, status as _,
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
@@ -20,6 +21,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
         "publish = [\"crates-io\"]",
         "default = [\"std\", \"serde\"]",
         "radroots_event = { workspace = true, default-features = false }",
+        "radroots_event_codec = { workspace = true, default-features = false }",
         "radroots_identity = { workspace = true, default-features = false }",
         "radroots_protocol = { workspace = true, default-features = false }",
     ] {
@@ -35,15 +37,18 @@ fn manifest_has_final_identity_features_and_dependencies() {
     assert_eq!(
         table_keys(MANIFEST, "[dependencies]"),
         BTreeSet::from([
+            "hex",
             "radroots_event",
+            "radroots_event_codec",
             "radroots_identity",
             "radroots_protocol",
             "serde",
+            "sha2",
         ])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dev-dependencies]"),
-        BTreeSet::from(["serde_json"])
+        BTreeSet::from(["nostr", "serde_json"])
     );
     for forbidden in [
         "async-trait",
@@ -66,8 +71,11 @@ fn crate_root_declares_the_approved_module_skeleton() {
     assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
     for module in [
         "actor",
+        "authorization",
         "capability",
         "error",
+        "identity",
+        "recovery",
         "request",
         "receipt",
         "signer",
@@ -83,9 +91,12 @@ fn crate_root_declares_the_approved_module_skeleton() {
         root_declarations("pub mod "),
         BTreeSet::from([
             "actor",
+            "authorization",
             "capability",
             "error",
+            "identity",
             "receipt",
+            "recovery",
             "request",
             "signer",
             "status",
@@ -100,7 +111,9 @@ fn crate_root_declares_the_approved_module_skeleton() {
     let _ = assert_object_safe;
     for root_export in [
         "pub use actor::Actor;",
+        "pub use authorization::{CurrentAuthoringAuthority, CurrentAuthoringDecision};",
         "pub use error::Error;",
+        "pub use identity::{AuthoredArtifactId, SignerRequestId, SigningIntentId, SigningOperationId};",
         "pub use receipt::SignReceipt;",
         "pub use request::SignRequest;",
         "pub use signer::Signer;",
@@ -115,7 +128,9 @@ fn crate_root_declares_the_approved_module_skeleton() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
             "pub use actor::Actor;",
+            "pub use authorization::{CurrentAuthoringAuthority, CurrentAuthoringDecision};",
             "pub use error::Error;",
+            "pub use identity::{AuthoredArtifactId, SignerRequestId, SigningIntentId, SigningOperationId};",
             "pub use receipt::SignReceipt;",
             "pub use request::SignRequest;",
             "pub use signer::Signer;",
@@ -171,8 +186,11 @@ fn every_public_module_has_crate_level_documentation() {
     let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     for module in [
         "actor",
+        "authorization",
         "capability",
         "error",
+        "identity",
+        "recovery",
         "request",
         "receipt",
         "signer",
@@ -229,7 +247,7 @@ fn production_sources_publish_only_the_approved_traits_and_no_host_stack() {
 
     assert_eq!(
         public_traits,
-        ["ProgressObserver", "Signer"]
+        ["CurrentAuthoringAuthority", "ProgressObserver", "Signer"]
             .into_iter()
             .map(str::to_owned)
             .collect()

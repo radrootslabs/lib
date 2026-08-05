@@ -7,6 +7,8 @@ use radroots_protocol::{
     runtime::v1::OperationId,
 };
 
+use crate::recovery::RemoteEffect;
+
 #[cfg(feature = "std")]
 use std::boxed::Box;
 
@@ -129,6 +131,7 @@ signing_error_catalog! {
 /// diagnostics; protocol conversion always discards it.
 pub struct Error {
     kind: Kind,
+    remote_effect: RemoteEffect,
     #[cfg(feature = "std")]
     source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
 }
@@ -139,6 +142,7 @@ impl Error {
     pub const fn new(kind: Kind) -> Self {
         Self {
             kind,
+            remote_effect: RemoteEffect::None,
             #[cfg(feature = "std")]
             source: None,
         }
@@ -153,13 +157,26 @@ impl Error {
     {
         Self {
             kind,
+            remote_effect: RemoteEffect::None,
             source: Some(Box::new(source)),
         }
+    }
+
+    /// Marks that a failed remote invocation may already have taken effect.
+    #[must_use]
+    pub const fn with_possible_remote_effect(mut self) -> Self {
+        self.remote_effect = RemoteEffect::MayHaveOccurred;
+        self
     }
 
     #[must_use]
     pub const fn kind(&self) -> Kind {
         self.kind
+    }
+
+    #[must_use]
+    pub const fn remote_effect(&self) -> RemoteEffect {
+        self.remote_effect
     }
 
     #[must_use]
@@ -198,6 +215,7 @@ impl fmt::Debug for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut value = formatter.debug_struct("Error");
         value.field("kind", &self.kind);
+        value.field("remote_effect", &self.remote_effect);
         #[cfg(feature = "std")]
         value.field("source", &self.source.as_ref().map(|_| "[redacted]"));
         value.finish()

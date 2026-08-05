@@ -2691,11 +2691,15 @@ dependencies = [
 name = "radroots_signing"
 version = "0.1.0-alpha"
 dependencies = [
+ "hex",
+ "nostr",
  "radroots_event",
+ "radroots_event_codec",
  "radroots_identity",
  "radroots_protocol",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

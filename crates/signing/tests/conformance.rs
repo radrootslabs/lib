@@ -2,6 +2,7 @@ use radroots_signing::{
     Error, Signer,
     capability::{CancellationSupport, SignerCapability, SignerKind},
     error::{CATALOG, Kind},
+    recovery::ReplayCapability,
     request::{CancellationPolicy, SignPolicy},
 };
 
@@ -32,7 +33,7 @@ fn deadline_and_cancellation_contracts_are_explicit() {
     let local = SignPolicy::new(42, CancellationPolicy::LocalCooperative).expect("local policy");
     let remote =
         SignPolicy::new(42, CancellationPolicy::PreservePublishedRequest).expect("remote policy");
-    assert_eq!(local.deadline_unix(), 42);
+    assert_eq!(local.deadline_unix_ms(), 42);
     assert_eq!(local.cancellation(), CancellationPolicy::LocalCooperative);
     assert_eq!(
         remote.cancellation(),
@@ -41,11 +42,16 @@ fn deadline_and_cancellation_contracts_are_explicit() {
 
     let capability = SignerCapability::new(
         SignerKind::Remote,
+        ReplayCapability::ExactReplayByRequestId,
         CancellationSupport::BeforeAndAfterPublication,
         true,
         true,
     );
     assert_eq!(capability.kind(), SignerKind::Remote);
+    assert_eq!(
+        capability.replay(),
+        ReplayCapability::ExactReplayByRequestId
+    );
     assert_eq!(
         capability.cancellation(),
         CancellationSupport::BeforeAndAfterPublication
@@ -65,6 +71,10 @@ fn policy_wire_labels_are_stable_and_round_trip() {
         serde_json::from_str::<SignPolicy>(&json).expect("deserialize policy"),
         policy
     );
+    assert!(serde_json::from_str::<SignPolicy>(
+        r#"{"deadline_unix_ms":0,"cancellation":"local_cooperative","deprecated_plan":"deny","managed_signing":"any_validated_source"}"#
+    )
+    .is_err());
 }
 
 #[test]

@@ -1,5 +1,7 @@
 //! Signer capability declarations.
 
+use crate::recovery::ReplayCapability;
+
 /// How a signer implementation obtains signatures.
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -34,6 +36,7 @@ pub enum CancellationSupport {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SignerCapability {
     kind: SignerKind,
+    replay: ReplayCapability,
     cancellation: CancellationSupport,
     reports_progress: bool,
     may_require_authentication: bool,
@@ -44,12 +47,14 @@ impl SignerCapability {
     #[must_use]
     pub const fn new(
         kind: SignerKind,
+        replay: ReplayCapability,
         cancellation: CancellationSupport,
         reports_progress: bool,
         may_require_authentication: bool,
     ) -> Self {
         Self {
             kind,
+            replay,
             cancellation,
             reports_progress,
             may_require_authentication,
@@ -60,6 +65,12 @@ impl SignerCapability {
     #[must_use]
     pub const fn kind(self) -> SignerKind {
         self.kind
+    }
+
+    /// Returns the exact replay contract.
+    #[must_use]
+    pub const fn replay(self) -> ReplayCapability {
+        self.replay
     }
 
     /// Returns the advertised cancellation contract.
@@ -89,6 +100,7 @@ mod tests {
     fn capability_round_trips_with_stable_wire_labels() {
         let capability = SignerCapability::new(
             SignerKind::Remote,
+            ReplayCapability::ExactReplayByRequestId,
             CancellationSupport::BeforeAndAfterPublication,
             true,
             true,

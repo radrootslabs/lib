@@ -254,6 +254,8 @@ mod tests {
     use super::*;
     #[cfg(feature = "serde")]
     use crate::capability::{CancellationSupport, SignerKind};
+    #[cfg(feature = "serde")]
+    use crate::recovery::ReplayCapability;
 
     #[cfg(not(feature = "std"))]
     use alloc::format;
@@ -337,6 +339,7 @@ mod tests {
     fn status_round_trips_and_invalid_progress_fails_closed() {
         let capability = SignerCapability::new(
             SignerKind::Remote,
+            ReplayCapability::ExactReplayByRequestId,
             CancellationSupport::BeforePublication,
             true,
             true,

@@ -1,242 +1,99 @@
-//! Signing receipts.
+//! Cryptographically verified exact-plan signing receipts.
 
 use core::fmt;
-use radroots_event::{SignedEvent, draft::validate_signed_nostr_event_matches_draft};
+use radroots_event::SignedEvent;
+use radroots_event_codec::verify::{self, Nip01SignatureVerifier, RawEvent};
 use radroots_protocol::runtime::v1::OperationId;
 
-use crate::{Error, SignRequest, error::Kind};
+use crate::{Error, SignRequest, SignerRequestId, SigningIntentId, error::Kind};
 
-/// Successful signer output with portable operation provenance.
-///
-/// Native receipts cannot be deserialized without the originating request;
-/// adapters must use [`SignReceipt::from_signed_event`] so exact-draft
-/// verification cannot be bypassed.
-///
-/// ```compile_fail
-/// use radroots_signing::SignReceipt;
-///
-/// let _: SignReceipt = serde_json::from_str("{}").unwrap();
-/// ```
+/// Successful signer output with exact request and artifact provenance.
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SignReceipt {
-    operation_id: OperationId,
+    operation_kind: OperationId,
+    intent_id: SigningIntentId,
+    signer_request_id: SignerRequestId,
     signed_event: SignedEvent,
-    completed_at_unix: u64,
+    completed_at_unix_ms: u64,
 }
 
 impl fmt::Debug for SignReceipt {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("SignReceipt")
-            .field("operation_id", &self.operation_id)
+            .field("operation_kind", &self.operation_kind)
+            .field("intent_id", &self.intent_id)
+            .field("signer_request_id", &self.signer_request_id)
             .field("signed_event_id", &self.signed_event.id_str())
-            .field("completed_at_unix", &self.completed_at_unix)
+            .field("completed_at_unix_ms", &self.completed_at_unix_ms)
             .finish()
     }
 }
 
 impl SignReceipt {
-    /// Validates signer output against the exact request draft and creates its
-    /// receipt. This is the only public receipt constructor.
+    /// Verifies exact plan fields, raw/wire coherence, event ID, signature,
+    /// deadline, cancellation, and request identity before success exists.
     pub fn from_signed_event(
         request: &SignRequest,
         signed_event: SignedEvent,
-        completed_at_unix: u64,
+        completed_at_unix_ms: u64,
     ) -> Result<Self, Error> {
-        validate_signed_nostr_event_matches_draft(&signed_event, request.draft()).map_err(
-            |source| {
-                #[cfg(feature = "std")]
-                {
-                    Error::with_source(Kind::SignerOutputInvalid, source)
-                }
-                #[cfg(not(feature = "std"))]
-                {
-                    let _ = source;
-                    Error::new(Kind::SignerOutputInvalid)
-                }
-            },
-        )?;
+        request.ensure_active(completed_at_unix_ms)?;
+        verify_exact_plan(&signed_event, request)?;
+        let id_verified = verify::id(RawEvent::new(signed_event.envelope().clone()))
+            .map_err(|_| Error::new(Kind::SignerOutputInvalid))?;
+        verify::signature(id_verified, &Nip01SignatureVerifier)
+            .map_err(|_| Error::new(Kind::SignerOutputInvalid))?;
         Ok(Self {
-            operation_id: request.operation_id(),
+            operation_kind: request.operation_kind(),
+            intent_id: request.intent_id(),
+            signer_request_id: request.signer_request_id(),
             signed_event,
-            completed_at_unix,
+            completed_at_unix_ms,
         })
     }
 
-    /// Returns the originating runtime operation identity.
     #[must_use]
-    pub const fn operation_id(&self) -> OperationId {
-        self.operation_id
+    pub const fn operation_kind(&self) -> OperationId {
+        self.operation_kind
     }
 
-    /// Borrows the invariant-checked signed event.
+    #[must_use]
+    pub const fn intent_id(&self) -> SigningIntentId {
+        self.intent_id
+    }
+
+    #[must_use]
+    pub const fn signer_request_id(&self) -> SignerRequestId {
+        self.signer_request_id
+    }
+
     #[must_use]
     pub const fn signed_event(&self) -> &SignedEvent {
         &self.signed_event
     }
 
-    /// Returns the host-supplied completion timestamp.
     #[must_use]
-    pub const fn completed_at_unix(&self) -> u64 {
-        self.completed_at_unix
+    pub const fn completed_at_unix_ms(&self) -> u64 {
+        self.completed_at_unix_ms
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        Actor,
-        actor::ActorSource,
-        request::{CancellationPolicy, SignPolicy},
-    };
-    use radroots_event::{EventDraft, contract::AuthorRole, wire::Nip01EventWire};
-    use radroots_identity::PublicKey;
-
-    #[cfg(not(feature = "std"))]
-    use alloc::{
-        borrow::ToOwned,
-        format,
-        string::{String, ToString},
-        vec,
-        vec::Vec,
-    };
-    #[cfg(feature = "std")]
-    use std::{borrow::ToOwned, string::String, vec, vec::Vec};
-
-    const PUBLIC_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const OTHER_PUBLIC_KEY: &str =
-        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
-
-    fn request() -> SignRequest {
-        let actor = Actor::new(
-            PublicKey::from_hex(PUBLIC_KEY).expect("public key"),
-            ActorSource::ExplicitPublicKey,
-            [AuthorRole::Any],
-        )
-        .expect("actor");
-        let draft = EventDraft::new(
-            "radroots.social.geochat.v1",
-            20_000,
-            1_700_000_000,
-            Vec::new(),
-            "frozen-content",
-            PUBLIC_KEY,
-        )
-        .expect("draft");
-        SignRequest::new(
-            OperationId::SyncPush,
-            actor,
-            draft,
-            SignPolicy::new(1_700_000_100, CancellationPolicy::PreservePublishedRequest)
-                .expect("policy"),
-        )
-        .expect("request")
+fn verify_exact_plan(event: &SignedEvent, request: &SignRequest) -> Result<(), Error> {
+    let plan = request.plan();
+    if event.pubkey() != plan.author()
+        || event.created_at() != plan.created_at()
+        || event.kind() != plan.body().kind()
+        || event.tags_as_vec() != plan.body().tags()
+        || event.content() != plan.body().content()
+        || event.id() != plan.expected_event_id()
+    {
+        return Err(Error::new(Kind::SignerOutputInvalid));
     }
-
-    fn signed_event(
-        pubkey: &str,
-        created_at: u64,
-        kind: u32,
-        tags: Vec<Vec<String>>,
-        content: &str,
-    ) -> SignedEvent {
-        let mut wire = Nip01EventWire {
-            id: String::new(),
-            pubkey: pubkey.to_owned(),
-            created_at,
-            kind,
-            tags,
-            content: content.to_owned(),
-            sig: core::iter::repeat_n('f', 128).collect(),
-            extra: Default::default(),
-        };
-        wire.id = wire.computed_event_id().expect("event id").into_string();
-        let raw_json = serde_json::json!({
-            "id": wire.id,
-            "pubkey": wire.pubkey,
-            "created_at": wire.created_at,
-            "kind": wire.kind,
-            "tags": wire.tags,
-            "content": wire.content,
-            "sig": wire.sig,
-        })
-        .to_string();
-        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
-    }
-
-    fn matching_event(request: &SignRequest) -> SignedEvent {
-        let draft = request.draft();
-        signed_event(
-            PUBLIC_KEY,
-            draft.created_at_u64(),
-            draft.kind_u32(),
-            draft.tags_as_vec(),
-            draft.content(),
-        )
-    }
-
-    #[test]
-    fn exact_signed_event_creates_receipt_with_request_operation() {
-        let request = request();
-        let receipt = SignReceipt::from_signed_event(&request, matching_event(&request), 42)
-            .expect("receipt");
-
-        assert_eq!(receipt.operation_id(), OperationId::SyncPush);
-        assert_eq!(receipt.completed_at_unix(), 42);
-        assert_eq!(receipt.signed_event().content(), "frozen-content");
-        assert!(!format!("{receipt:?}").contains("frozen-content"));
-    }
-
-    #[test]
-    fn every_publicly_constructible_signed_event_drift_is_rejected() {
-        let request = request();
-        let draft = request.draft();
-        let cases = [
-            signed_event(
-                OTHER_PUBLIC_KEY,
-                draft.created_at_u64(),
-                draft.kind_u32(),
-                draft.tags_as_vec(),
-                draft.content(),
-            ),
-            signed_event(
-                PUBLIC_KEY,
-                draft.created_at_u64() + 1,
-                draft.kind_u32(),
-                draft.tags_as_vec(),
-                draft.content(),
-            ),
-            signed_event(
-                PUBLIC_KEY,
-                draft.created_at_u64(),
-                draft.kind_u32() + 1,
-                draft.tags_as_vec(),
-                draft.content(),
-            ),
-            signed_event(
-                PUBLIC_KEY,
-                draft.created_at_u64(),
-                draft.kind_u32(),
-                vec![vec!["changed".to_owned()]],
-                draft.content(),
-            ),
-            signed_event(
-                PUBLIC_KEY,
-                draft.created_at_u64(),
-                draft.kind_u32(),
-                draft.tags_as_vec(),
-                "changed-content",
-            ),
-        ];
-
-        for event in cases {
-            let error =
-                SignReceipt::from_signed_event(&request, event, 42).expect_err("drift must fail");
-            assert_eq!(error.kind(), Kind::SignerOutputInvalid);
-        }
-    }
+    // `SignedEvent` construction proves its retained raw JSON parses to this
+    // exact wire value; the checks above bind that wire to the request plan.
+    Ok(())
 }

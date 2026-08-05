@@ -57,11 +57,11 @@ pub enum ActorSelector {
     Account(AccountId),
     /// Use one explicit canonical public key.
     PublicKey(PublicKey),
-    /// Resolve the public key frozen into the event draft.
-    DraftExpectedPublicKey,
+    /// Resolve the public key frozen into the authored event plan.
+    PlanAuthorPublicKey,
 }
 
-/// Inputs a host must satisfy when resolving an actor for a draft.
+/// Inputs a host must satisfy when resolving an actor for an authored plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ActorResolutionRequest {
     selector: ActorSelector,
@@ -96,7 +96,7 @@ impl ActorResolutionRequest {
         self.required_role
     }
 
-    /// Returns the exact public key frozen into the draft.
+    /// Returns the exact public key frozen into the plan.
     #[must_use]
     pub const fn expected_public_key(&self) -> PublicKey {
         self.expected_public_key

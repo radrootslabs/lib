@@ -1,7 +1,7 @@
 //! Concrete local Nostr implementation of the generic signing SPI.
 //!
-//! Signing is local and in-memory. Success returns a verified receipt without
-//! persisting or publishing it; dropping the future creates no durable effect.
+//! Signing is local and in-memory. Success returns a cryptographically verified
+//! exact-plan receipt without persistence or publication.
 
 use core::fmt;
 use std::{
@@ -9,25 +9,23 @@ use std::{
     vec,
 };
 
+use radroots_identity::PublicKey;
 use radroots_signing::{
     Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus,
     capability::{CancellationSupport, SignerCapability, SignerKind},
     error::Kind,
+    recovery::ReplayCapability,
     signer::BoxFuture,
     status::{SignProgress, SignProgressStage, SignerAvailability},
 };
 
 use crate::{Error as NostrError, key::SecretKey};
-use radroots_identity::PublicKey;
 
 pub use crate::draft_signing::sign_frozen_draft;
 
 type Clock = fn() -> Result<u64, SigningError>;
 
 /// A local Nostr key-backed signer adapter.
-///
-/// Key material remains private to this adapter. Debug output reports only the
-/// public key and never delegates to the upstream key container.
 pub struct LocalSigner {
     keys: nostr::Keys,
     public_key: PublicKey,
@@ -35,17 +33,14 @@ pub struct LocalSigner {
 }
 
 impl LocalSigner {
-    /// Consumes one opaque local secret and creates its signer adapter.
     pub fn new(secret_key: SecretKey) -> Result<Self, crate::Error> {
-        Self::with_clock(secret_key, system_time_unix)
+        Self::with_clock(secret_key, system_time_unix_ms)
     }
 
-    /// Generates a fresh opaque secret and creates its signer adapter.
     pub fn generate() -> Result<Self, crate::Error> {
         Self::new(SecretKey::generate())
     }
 
-    /// Returns the canonical public identity controlled by this signer.
     #[must_use]
     pub const fn public_key(&self) -> PublicKey {
         self.public_key
@@ -78,6 +73,7 @@ impl Signer for LocalSigner {
                 SignerAvailability::Ready,
                 vec![SignerCapability::new(
                     SignerKind::Local,
+                    ReplayCapability::LocalReplaySafe,
                     CancellationSupport::BeforePublication,
                     true,
                     false,
@@ -89,46 +85,51 @@ impl Signer for LocalSigner {
 
     fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, SigningError>> {
         Box::pin(async move {
-            let started_at_unix = (self.clock)()?;
-            if started_at_unix >= request.policy().deadline_unix() {
-                return Err(SigningError::new(Kind::DeadlineExceeded));
-            }
+            request.ensure_active((self.clock)()?)?;
             request.report_progress(
                 &SignProgress::stage(SignProgressStage::Validating)
-                    .expect("validating progress never requires a challenge"),
+                    .expect("validating has no challenge"),
             );
-            let signed_event =
-                sign_frozen_draft(&self.keys, request.draft()).map_err(normalize_nostr_error)?;
+            if request.plan().author() != &self.public_key {
+                return Err(SigningError::new(Kind::AuthorizationDenied));
+            }
+            let signed_event = crate::plan_signing::sign_authored_plan(&self.keys, request.plan())
+                .map_err(normalize_nostr_error)?;
             request.report_progress(
                 &SignProgress::stage(SignProgressStage::VerifyingOutput)
-                    .expect("verification progress never requires a challenge"),
+                    .expect("verification has no challenge"),
             );
-            let completed_at_unix = (self.clock)()?;
-            if completed_at_unix >= request.policy().deadline_unix() {
-                return Err(SigningError::new(Kind::DeadlineExceeded));
-            }
+            let completed_at_unix_ms = (self.clock)()?;
+            request.ensure_active(completed_at_unix_ms)?;
             let receipt =
-                SignReceipt::from_signed_event(&request, signed_event, completed_at_unix)?;
+                SignReceipt::from_signed_event(&request, signed_event, completed_at_unix_ms)?;
             request.report_progress(
                 &SignProgress::stage(SignProgressStage::Complete)
-                    .expect("completion progress never requires a challenge"),
+                    .expect("completion has no challenge"),
             );
             Ok(receipt)
         })
     }
 }
 
-fn system_time_unix() -> Result<u64, SigningError> {
+fn system_time_unix_ms() -> Result<u64, SigningError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
         .map_err(|source| SigningError::with_source(Kind::InternalError, source))
+        .and_then(|duration| {
+            u64::try_from(duration.as_millis())
+                .map_err(|source| SigningError::with_source(Kind::InternalError, source))
+        })
 }
 
 fn normalize_nostr_error(source: NostrError) -> SigningError {
     let kind = match &source {
-        NostrError::FrozenDraftPubkeyMismatch { .. } => Kind::AuthorizationDenied,
-        NostrError::FrozenDraftEventIdMismatch { .. } => Kind::SignerOutputInvalid,
+        NostrError::FrozenDraftPubkeyMismatch { .. }
+        | NostrError::ExternalSigningAuthorMismatch { .. } => Kind::AuthorizationDenied,
+        NostrError::FrozenDraftEventIdMismatch { .. }
+        | NostrError::ExternalSigningEventIdMismatch { .. }
+        | NostrError::ExternalSigningEventInvalid(_)
+        | NostrError::ExternalSigningPlanMismatch { .. } => Kind::SignerOutputInvalid,
         _ => Kind::InternalError,
     };
     SigningError::with_source(kind, source)
@@ -137,16 +138,13 @@ fn normalize_nostr_error(source: NostrError) -> SigningError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::{EventDraft, contract::AuthorRole, envelope::kind::KIND_GEOCHAT};
+    use radroots_event::{GenericEventDraft, contract::AuthorRole};
+    use radroots_event_codec::authoring::AuthoredEventPlan;
     use radroots_protocol::runtime::v1::OperationId;
     use radroots_signing::{
-        Actor,
+        Actor, AuthoredArtifactId, SigningIntentId, SigningOperationId,
         actor::ActorSource,
-        request::{CancellationPolicy, ProgressObserver, SignPolicy},
-    };
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        request::{CancellationPolicy, CancellationSignal, SignPolicy},
     };
 
     use crate::{
@@ -154,38 +152,19 @@ mod tests {
         test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB},
     };
 
-    const DEADLINE: u64 = 1_700_000_100;
-    static CROSSING_DEADLINE_CALLS: AtomicUsize = AtomicUsize::new(0);
-
-    struct RecordingObserver(Mutex<Vec<SignProgressStage>>);
-
-    impl ProgressObserver for RecordingObserver {
-        fn on_progress(&self, progress: &SignProgress) {
-            self.0
-                .lock()
-                .expect("progress lock")
-                .push(progress.stage_value());
-        }
-    }
+    const CREATED_AT: u64 = 1_700_000_000;
+    const DEADLINE_MS: u64 = 1_700_000_100_000;
 
     fn before_deadline() -> Result<u64, SigningError> {
-        Ok(1_700_000_050)
+        Ok(DEADLINE_MS - 1)
     }
 
     fn at_deadline() -> Result<u64, SigningError> {
-        Ok(DEADLINE)
+        Ok(DEADLINE_MS)
     }
 
-    fn crossing_deadline() -> Result<u64, SigningError> {
-        if CROSSING_DEADLINE_CALLS.fetch_add(1, Ordering::SeqCst) == 0 {
-            before_deadline()
-        } else {
-            at_deadline()
-        }
-    }
-
-    fn fixture_secret(secret_key_hex: &str) -> SecretKey {
-        parse_secret_key(secret_key_hex).expect("secret key fixture")
+    fn fixture_secret(value: &str) -> SecretKey {
+        parse_secret_key(value).expect("secret fixture")
     }
 
     fn request() -> SignRequest {
@@ -194,130 +173,90 @@ mod tests {
             ActorSource::ExplicitPublicKey,
             [AuthorRole::Any],
         )
-        .expect("actor");
-        let draft = EventDraft::new(
+        .unwrap();
+        let draft = GenericEventDraft::new(
             "radroots.social.geochat.v1",
-            KIND_GEOCHAT,
-            1_700_000_000,
+            20_000,
+            CREATED_AT,
             Vec::new(),
             "private-fixture-content",
             FIXTURE_ALICE.public_key_hex,
         )
-        .expect("draft");
+        .unwrap();
         SignRequest::new(
             OperationId::SyncPush,
+            SigningIntentId::new(
+                SigningOperationId::new([1; 16]).unwrap(),
+                AuthoredArtifactId::new([2; 16]).unwrap(),
+            ),
             actor,
-            draft,
-            SignPolicy::new(DEADLINE, CancellationPolicy::LocalCooperative).expect("policy"),
+            AuthoredEventPlan::from_generic(draft).unwrap(),
+            SignPolicy::new(DEADLINE_MS, CancellationPolicy::LocalCooperative).unwrap(),
         )
-        .expect("request")
+        .unwrap()
     }
 
     #[tokio::test]
-    async fn local_adapter_reports_capability_and_signs_the_exact_draft() {
+    async fn local_signer_reports_safe_replay_and_returns_verified_exact_plan() {
         let signer = LocalSigner::with_clock(
             fixture_secret(FIXTURE_ALICE.secret_key_hex),
             before_deadline,
         )
-        .expect("local signer");
-        let status = signer.status().await.expect("status");
-        assert_eq!(status.availability(), SignerAvailability::Ready);
-        assert_eq!(status.capabilities().len(), 1);
-        let capability = status.capabilities()[0];
-        assert_eq!(capability.kind(), SignerKind::Local);
+        .unwrap();
+        let status = signer.status().await.unwrap();
         assert_eq!(
-            capability.cancellation(),
-            CancellationSupport::BeforePublication
+            status.capabilities()[0].replay(),
+            ReplayCapability::LocalReplaySafe
         );
-        assert!(capability.reports_progress());
-        assert!(!capability.may_require_authentication());
-        assert_eq!(signer.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
-
-        let observer = Arc::new(RecordingObserver(Mutex::new(Vec::new())));
-        let request = request().with_progress_observer(observer.clone());
-        let expected_id = request.draft().expected_event_id_hex();
-        let receipt = signer.sign(request).await.expect("receipt");
-
-        assert_eq!(receipt.operation_id(), OperationId::SyncPush);
-        assert_eq!(receipt.completed_at_unix(), 1_700_000_050);
+        let request = request();
+        let expected_id = request.plan().expected_event_id().to_hex();
+        let receipt = signer.sign(request).await.unwrap();
         assert_eq!(receipt.signed_event().id_str(), expected_id);
-        assert_eq!(
-            receipt.signed_event().pubkey().to_hex(),
-            FIXTURE_ALICE.public_key_hex
-        );
-        assert_eq!(
-            observer.0.lock().expect("progress lock").as_slice(),
-            &[
-                SignProgressStage::Validating,
-                SignProgressStage::VerifyingOutput,
-                SignProgressStage::Complete,
-            ]
-        );
+        assert_eq!(receipt.completed_at_unix_ms(), DEADLINE_MS - 1);
     }
 
     #[tokio::test]
-    async fn wrong_local_key_is_normalized_without_leaking_secret_material() {
-        let signer =
+    async fn wrong_key_deadline_and_cancellation_fail_closed() {
+        let wrong =
             LocalSigner::with_clock(fixture_secret(FIXTURE_BOB.secret_key_hex), before_deadline)
-                .expect("local signer");
-        let error = signer
-            .sign(request())
+                .unwrap();
+        assert_eq!(
+            wrong.sign(request()).await.unwrap_err().kind(),
+            Kind::AuthorizationDenied
+        );
+        let expired =
+            LocalSigner::with_clock(fixture_secret(FIXTURE_ALICE.secret_key_hex), at_deadline)
+                .unwrap();
+        assert_eq!(
+            expired.sign(request()).await.unwrap_err().kind(),
+            Kind::DeadlineExceeded
+        );
+        let signal = CancellationSignal::new();
+        let cancelled = request().with_cancellation_signal(signal.clone());
+        signal.cancel();
+        assert_eq!(
+            LocalSigner::with_clock(
+                fixture_secret(FIXTURE_ALICE.secret_key_hex),
+                before_deadline,
+            )
+            .unwrap()
+            .sign(cancelled)
             .await
-            .expect_err("wrong key must fail");
-
-        assert_eq!(error.kind(), Kind::AuthorizationDenied);
-        assert!(!error.to_string().contains(FIXTURE_BOB.secret_key_hex));
-        assert!(!format!("{error:?}").contains(FIXTURE_BOB.secret_key_hex));
-        assert!(!format!("{signer:?}").contains(FIXTURE_BOB.secret_key_hex));
-        assert!(!format!("{signer:?}").contains(FIXTURE_BOB.nsec));
+            .unwrap_err()
+            .kind(),
+            Kind::SignerCancelled
+        );
     }
 
     #[test]
-    fn generated_local_signer_exposes_only_its_public_identity() {
-        let signer = LocalSigner::generate().expect("generated local signer");
-        let rendered = format!("{signer:?}");
-
-        assert_eq!(signer.public_key().to_hex().len(), 64);
-        assert!(rendered.contains("[redacted]"));
-        assert!(rendered.contains(&signer.public_key().to_hex()));
-    }
-
-    #[tokio::test]
-    async fn expired_deadline_fails_before_local_signing() {
-        let signer =
-            LocalSigner::with_clock(fixture_secret(FIXTURE_ALICE.secret_key_hex), at_deadline)
-                .expect("local signer");
-        let observer = Arc::new(RecordingObserver(Mutex::new(Vec::new())));
-        let error = signer
-            .sign(request().with_progress_observer(observer.clone()))
-            .await
-            .expect_err("deadline must fail");
-
-        assert_eq!(error.kind(), Kind::DeadlineExceeded);
-        assert!(observer.0.lock().expect("progress lock").is_empty());
-    }
-
-    #[tokio::test]
-    async fn deadline_crossing_discards_output_before_receipt_completion() {
-        CROSSING_DEADLINE_CALLS.store(0, Ordering::SeqCst);
+    fn debug_never_exposes_local_secret_material() {
         let signer = LocalSigner::with_clock(
             fixture_secret(FIXTURE_ALICE.secret_key_hex),
-            crossing_deadline,
+            before_deadline,
         )
-        .expect("local signer");
-        let observer = Arc::new(RecordingObserver(Mutex::new(Vec::new())));
-        let error = signer
-            .sign(request().with_progress_observer(observer.clone()))
-            .await
-            .expect_err("crossed deadline must fail");
-
-        assert_eq!(error.kind(), Kind::DeadlineExceeded);
-        assert_eq!(
-            observer.0.lock().expect("progress lock").as_slice(),
-            &[
-                SignProgressStage::Validating,
-                SignProgressStage::VerifyingOutput,
-            ]
-        );
+        .unwrap();
+        let debug = format!("{signer:?}");
+        assert!(!debug.contains(FIXTURE_ALICE.secret_key_hex));
+        assert!(!debug.contains(FIXTURE_ALICE.nsec));
     }
 }

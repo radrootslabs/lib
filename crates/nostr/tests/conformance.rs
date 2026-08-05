@@ -35,12 +35,13 @@ fn public_protocol_conversions_are_canonical_and_typed() {
 
 #[cfg(feature = "signing")]
 #[tokio::test]
-async fn public_local_signer_signs_only_the_exact_authorized_draft() {
-    use radroots_event::{EventDraft, contract::AuthorRole, envelope::kind::KIND_GEOCHAT};
+async fn public_local_signer_signs_only_the_exact_authorized_plan() {
+    use radroots_event::{GenericEventDraft, contract::AuthorRole, envelope::kind::KIND_GEOCHAT};
+    use radroots_event_codec::authoring::AuthoredEventPlan;
     use radroots_nostr::{key::SecretKey, signing::LocalSigner};
     use radroots_protocol::runtime::v1::OperationId;
     use radroots_signing::{
-        Actor, SignRequest, Signer,
+        Actor, AuthoredArtifactId, SignRequest, Signer, SigningIntentId, SigningOperationId,
         actor::ActorSource,
         request::{CancellationPolicy, SignPolicy},
     };
@@ -51,7 +52,7 @@ async fn public_local_signer_signs_only_the_exact_authorized_draft() {
     let public_key = secret_key.public_key().expect("public key");
     assert_eq!(public_key.to_hex(), PUBLIC_KEY);
 
-    let draft = EventDraft::new(
+    let draft = GenericEventDraft::new(
         "radroots.social.geochat.v1",
         KIND_GEOCHAT,
         1_700_000_000,
@@ -59,8 +60,9 @@ async fn public_local_signer_signs_only_the_exact_authorized_draft() {
         "package-conformance-message",
         PUBLIC_KEY,
     )
-    .expect("frozen event draft");
-    let expected_id = draft.expected_event_id_hex();
+    .expect("generic event draft");
+    let plan = AuthoredEventPlan::from_generic(draft).expect("authored plan");
+    let expected_id = plan.expected_event_id().to_hex();
     let actor = Actor::new(
         public_key,
         ActorSource::ExplicitPublicKey,
@@ -69,8 +71,12 @@ async fn public_local_signer_signs_only_the_exact_authorized_draft() {
     .expect("authorized actor");
     let request = SignRequest::new(
         OperationId::SyncPush,
+        SigningIntentId::new(
+            SigningOperationId::new([1; 16]).expect("operation ID"),
+            AuthoredArtifactId::new([2; 16]).expect("artifact ID"),
+        ),
         actor,
-        draft,
+        plan,
         SignPolicy::new(u64::MAX, CancellationPolicy::LocalCooperative)
             .expect("bounded signing policy"),
     )

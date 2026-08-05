@@ -1,7 +1,11 @@
-//! Validated signing requests.
+//! Validated authored-plan signing requests.
 
-use core::fmt;
-use radroots_event::{EventDraft, contract::event_contract};
+use core::{
+    fmt,
+    sync::atomic::{AtomicBool, Ordering},
+};
+use radroots_event::contract::event_contract;
+use radroots_event_codec::authoring::AuthoredEventPlan;
 use radroots_protocol::runtime::v1::OperationId;
 
 #[cfg(not(feature = "std"))]
@@ -9,7 +13,15 @@ use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 
-use crate::{Actor, Error, error::Kind, status::SignProgress};
+use crate::{
+    Actor, Error, SignerRequestId, SigningIntentId,
+    authorization::{
+        CurrentAuthoringAuthority, CurrentAuthoringDecision, CurrentRegistryAuthority,
+        DeprecatedPlanPolicy, ManagedSigningPolicy,
+    },
+    error::Kind,
+    status::SignProgress,
+};
 
 /// How a signer must interpret cancellation around remote publication.
 #[non_exhaustive]
@@ -17,129 +29,238 @@ use crate::{Actor, Error, error::Kind, status::SignProgress};
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CancellationPolicy {
-    /// Stop if cancellation is observed before publication; report the final
-    /// remote state explicitly when observed after publication.
     PreservePublishedRequest,
-    /// A local-only operation may stop whenever cancellation is observed.
     LocalCooperative,
 }
 
-/// Explicit deadline and cancellation policy for one signing operation.
+/// Runtime-local cooperative cancellation shared by caller and signer.
+#[derive(Clone, Debug, Default)]
+pub struct CancellationSignal(Arc<AtomicBool>);
+
+impl CancellationSignal {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+
+/// Explicit millisecond deadline and authorization/cancellation policy.
 #[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SignPolicy {
-    deadline_unix: u64,
+    deadline_unix_ms: u64,
     cancellation: CancellationPolicy,
+    deprecated_plan: DeprecatedPlanPolicy,
+    managed_signing: ManagedSigningPolicy,
 }
 
 impl SignPolicy {
-    /// Creates a bounded policy. Unix timestamp zero is never a valid deadline.
-    pub const fn new(deadline_unix: u64, cancellation: CancellationPolicy) -> Result<Self, Error> {
-        if deadline_unix == 0 {
+    pub const fn new(
+        deadline_unix_ms: u64,
+        cancellation: CancellationPolicy,
+    ) -> Result<Self, Error> {
+        if deadline_unix_ms == 0 {
             return Err(Error::new(Kind::InvalidArgument));
         }
         Ok(Self {
-            deadline_unix,
+            deadline_unix_ms,
             cancellation,
+            deprecated_plan: DeprecatedPlanPolicy::Deny,
+            managed_signing: ManagedSigningPolicy::AnyValidatedSource,
         })
     }
 
-    /// Returns the absolute Unix deadline.
     #[must_use]
-    pub const fn deadline_unix(self) -> u64 {
-        self.deadline_unix
+    pub const fn allowing_deprecated(mut self) -> Self {
+        self.deprecated_plan = DeprecatedPlanPolicy::Allow;
+        self
     }
 
-    /// Returns the explicit cancellation contract.
+    #[must_use]
+    pub const fn with_managed_signing_policy(mut self, policy: ManagedSigningPolicy) -> Self {
+        self.managed_signing = policy;
+        self
+    }
+
+    #[must_use]
+    pub const fn deadline_unix_ms(self) -> u64 {
+        self.deadline_unix_ms
+    }
+
     #[must_use]
     pub const fn cancellation(self) -> CancellationPolicy {
         self.cancellation
     }
+
+    #[must_use]
+    pub const fn deprecated_plan(self) -> DeprecatedPlanPolicy {
+        self.deprecated_plan
+    }
+
+    #[must_use]
+    pub const fn managed_signing(self) -> ManagedSigningPolicy {
+        self.managed_signing
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for SignPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Repr {
+            deadline_unix_ms: u64,
+            cancellation: CancellationPolicy,
+            deprecated_plan: DeprecatedPlanPolicy,
+            managed_signing: ManagedSigningPolicy,
+        }
+
+        let value = Repr::deserialize(deserializer)?;
+        let mut policy = Self::new(value.deadline_unix_ms, value.cancellation)
+            .map_err(serde::de::Error::custom)?;
+        policy.deprecated_plan = value.deprecated_plan;
+        policy.managed_signing = value.managed_signing;
+        Ok(policy)
+    }
 }
 
 /// Runtime-local observer for signing progress.
-///
-/// Observers are not serialized, persisted, or invoked by hidden workers.
-/// Implementations call them synchronously from the active signing future.
 pub trait ProgressObserver: Send + Sync {
-    /// Observes one immutable progress value.
     fn on_progress(&self, progress: &SignProgress);
 }
 
-/// One authorized actor, frozen draft, and bounded signer invocation.
-///
-/// Runtime-local observers intentionally prevent native requests from becoming
-/// passive wire DTOs. Versioned protocol types own serialized boundaries.
-///
-/// ```compile_fail
-/// use radroots_signing::SignRequest;
-///
-/// fn serialize(request: &SignRequest) {
-///     let _ = serde_json::to_string(request).unwrap();
-/// }
-/// ```
+/// One currently authorized exact plan and bounded signer invocation.
 #[derive(Clone)]
 pub struct SignRequest {
-    operation_id: OperationId,
+    operation_kind: OperationId,
+    intent_id: SigningIntentId,
+    signer_request_id: SignerRequestId,
     actor: Actor,
-    draft: EventDraft,
+    plan: AuthoredEventPlan,
+    authorization: CurrentAuthoringDecision,
     policy: SignPolicy,
+    cancellation_signal: CancellationSignal,
     progress_observer: Option<Arc<dyn ProgressObserver>>,
 }
 
 impl SignRequest {
-    /// Validates the current draft, then the actor role, then the expected
-    /// public key, and creates a request without a progress observer.
     pub fn new(
-        operation_id: OperationId,
+        operation_kind: OperationId,
+        intent_id: SigningIntentId,
         actor: Actor,
-        draft: EventDraft,
+        plan: AuthoredEventPlan,
         policy: SignPolicy,
     ) -> Result<Self, Error> {
-        authorize_actor_for_draft(&actor, &draft).map_err(authorization_error)?;
-        Ok(Self {
-            operation_id,
+        Self::new_with_authority(
+            operation_kind,
+            intent_id,
             actor,
-            draft,
+            plan,
             policy,
+            &CurrentRegistryAuthority,
+        )
+    }
+
+    pub fn new_with_authority(
+        operation_kind: OperationId,
+        intent_id: SigningIntentId,
+        actor: Actor,
+        plan: AuthoredEventPlan,
+        policy: SignPolicy,
+        authority: &dyn CurrentAuthoringAuthority,
+    ) -> Result<Self, Error> {
+        let authorization = authority.evaluate(&plan);
+        authorize(&actor, &plan, policy, authorization)?;
+        let signer_request_id = SignerRequestId::derive(intent_id.artifact_id(), plan.digest());
+        Ok(Self {
+            operation_kind,
+            intent_id,
+            signer_request_id,
+            actor,
+            plan,
+            authorization,
+            policy,
+            cancellation_signal: CancellationSignal::new(),
             progress_observer: None,
         })
     }
 
-    /// Installs a runtime-local progress observer.
+    #[must_use]
+    pub fn with_cancellation_signal(mut self, signal: CancellationSignal) -> Self {
+        self.cancellation_signal = signal;
+        self
+    }
+
     #[must_use]
     pub fn with_progress_observer(mut self, observer: Arc<dyn ProgressObserver>) -> Self {
         self.progress_observer = Some(observer);
         self
     }
 
-    /// Returns the versioned runtime operation identity.
     #[must_use]
-    pub const fn operation_id(&self) -> OperationId {
-        self.operation_id
+    pub const fn operation_kind(&self) -> OperationId {
+        self.operation_kind
     }
 
-    /// Borrows the actor provenance and role claim.
+    #[must_use]
+    pub const fn intent_id(&self) -> SigningIntentId {
+        self.intent_id
+    }
+
+    #[must_use]
+    pub const fn signer_request_id(&self) -> SignerRequestId {
+        self.signer_request_id
+    }
+
     #[must_use]
     pub const fn actor(&self) -> &Actor {
         &self.actor
     }
 
-    /// Borrows the exact canonical draft to sign.
     #[must_use]
-    pub const fn draft(&self) -> &EventDraft {
-        &self.draft
+    pub const fn plan(&self) -> &AuthoredEventPlan {
+        &self.plan
     }
 
-    /// Returns the deadline and cancellation policy.
+    #[must_use]
+    pub const fn authorization(&self) -> CurrentAuthoringDecision {
+        self.authorization
+    }
+
     #[must_use]
     pub const fn policy(&self) -> SignPolicy {
         self.policy
     }
 
-    /// Reports progress to the request-local observer, when present.
+    #[must_use]
+    pub const fn cancellation_signal(&self) -> &CancellationSignal {
+        &self.cancellation_signal
+    }
+
+    pub fn ensure_active(&self, now_unix_ms: u64) -> Result<(), Error> {
+        if self.cancellation_signal.is_cancelled() {
+            return Err(Error::new(Kind::SignerCancelled));
+        }
+        if now_unix_ms >= self.policy.deadline_unix_ms {
+            return Err(Error::new(Kind::DeadlineExceeded));
+        }
+        Ok(())
+    }
+
     pub fn report_progress(&self, progress: &SignProgress) {
         if let Some(observer) = &self.progress_observer {
             observer.on_progress(progress);
@@ -147,192 +268,44 @@ impl SignRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AuthorizationFailure {
-    InvalidDraft,
-    ActorRoleUnsatisfied,
-    ActorPublicKeyMismatch,
-}
-
-fn authorize_actor_for_draft(
+fn authorize(
     actor: &Actor,
-    draft: &EventDraft,
-) -> Result<(), AuthorizationFailure> {
-    // This order is part of the authorization contract: no actor decision is
-    // made for an invalid/stale draft, and role rejection precedes key drift.
-    draft
-        .validate_for_signing()
-        .map_err(|_| AuthorizationFailure::InvalidDraft)?;
-    let contract = event_contract(draft.contract_id()).ok_or(AuthorizationFailure::InvalidDraft)?;
-    if !actor.satisfies(contract.required_author_role()) {
-        return Err(AuthorizationFailure::ActorRoleUnsatisfied);
+    plan: &AuthoredEventPlan,
+    policy: SignPolicy,
+    decision: CurrentAuthoringDecision,
+) -> Result<(), Error> {
+    match decision {
+        CurrentAuthoringDecision::Allowed => {}
+        CurrentAuthoringDecision::AllowedDeprecated { .. }
+            if policy.deprecated_plan() == DeprecatedPlanPolicy::Allow => {}
+        CurrentAuthoringDecision::AllowedDeprecated { .. }
+        | CurrentAuthoringDecision::Blocked { .. }
+        | CurrentAuthoringDecision::Revoked { .. } => {
+            return Err(Error::new(Kind::AuthorizationDenied));
+        }
     }
-    if actor.public_key() != *draft.expected_pubkey() {
-        return Err(AuthorizationFailure::ActorPublicKeyMismatch);
+    let contract = event_contract(plan.body().contract().contract_id().as_str())
+        .ok_or_else(|| Error::new(Kind::AuthorizationDenied))?;
+    if !actor.satisfies(contract.required_author_role())
+        || actor.public_key() != *plan.author()
+        || !policy.managed_signing().permits(actor)
+    {
+        return Err(Error::new(Kind::AuthorizationDenied));
     }
     Ok(())
-}
-
-fn authorization_error(failure: AuthorizationFailure) -> Error {
-    match failure {
-        AuthorizationFailure::InvalidDraft => Error::new(Kind::InvalidArgument),
-        AuthorizationFailure::ActorRoleUnsatisfied
-        | AuthorizationFailure::ActorPublicKeyMismatch => Error::new(Kind::AuthorizationDenied),
-    }
 }
 
 impl fmt::Debug for SignRequest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("SignRequest")
-            .field("operation_id", &self.operation_id)
+            .field("operation_kind", &self.operation_kind)
+            .field("intent_id", &self.intent_id)
+            .field("signer_request_id", &self.signer_request_id)
             .field("actor", &self.actor)
-            .field("draft", &"[redacted frozen event draft]")
+            .field("plan", &"[redacted authored event plan]")
+            .field("authorization", &self.authorization)
             .field("policy", &self.policy)
-            .field(
-                "progress_observer",
-                &self.progress_observer.as_ref().map(|_| "[installed]"),
-            )
-            .finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        actor::ActorSource,
-        status::{SignProgress, SignProgressStage},
-    };
-    use core::sync::atomic::{AtomicUsize, Ordering};
-    use radroots_event::contract::AuthorRole;
-    use radroots_event::envelope::kind::KIND_TRADE_PROPOSAL;
-    use radroots_identity::PublicKey;
-
-    #[cfg(not(feature = "std"))]
-    use alloc::{borrow::ToOwned, string::String, sync::Arc, vec, vec::Vec};
-    #[cfg(feature = "std")]
-    use std::{string::String, sync::Arc, vec, vec::Vec};
-
-    const PUBLIC_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const OTHER_PUBLIC_KEY: &str =
-        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
-
-    struct CountingObserver(AtomicUsize);
-
-    impl ProgressObserver for CountingObserver {
-        fn on_progress(&self, _progress: &SignProgress) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    fn request() -> SignRequest {
-        let public_key = PublicKey::from_hex(PUBLIC_KEY).expect("public key");
-        let actor = Actor::new(
-            public_key,
-            ActorSource::ExplicitPublicKey,
-            [AuthorRole::Any],
-        )
-        .expect("actor");
-        let draft = EventDraft::new(
-            "radroots.social.geochat.v1",
-            20_000,
-            1_700_000_000,
-            Vec::new(),
-            "private-draft-content",
-            PUBLIC_KEY,
-        )
-        .expect("draft");
-        SignRequest::new(
-            OperationId::SyncPush,
-            actor,
-            draft,
-            SignPolicy::new(1_700_000_100, CancellationPolicy::PreservePublishedRequest)
-                .expect("policy"),
-        )
-        .expect("authorized request")
-    }
-
-    #[test]
-    fn policy_requires_a_real_deadline() {
-        let error = SignPolicy::new(0, CancellationPolicy::LocalCooperative)
-            .expect_err("zero deadline must fail");
-        assert_eq!(error.kind(), Kind::InvalidArgument);
-    }
-
-    #[test]
-    fn request_preserves_inputs_reports_progress_and_redacts_draft_debug() {
-        let observer = Arc::new(CountingObserver(AtomicUsize::new(0)));
-        let request = request().with_progress_observer(observer.clone());
-        let progress = SignProgress::stage(SignProgressStage::Queued).expect("progress");
-
-        request.report_progress(&progress);
-
-        assert_eq!(request.operation_id(), OperationId::SyncPush);
-        assert_eq!(request.policy().deadline_unix(), 1_700_000_100);
-        assert_eq!(request.draft().content(), "private-draft-content");
-        assert_eq!(observer.0.load(Ordering::Relaxed), 1);
-        let debug = alloc_or_std_format(&request);
-        assert!(!debug.contains("private-draft-content"));
-        assert!(debug.contains("redacted frozen event draft"));
-    }
-
-    #[test]
-    fn authorization_rejects_role_before_public_key_drift() {
-        let draft = EventDraft::new(
-            "radroots.trade.proposal.v1",
-            KIND_TRADE_PROPOSAL,
-            1_700_000_000,
-            vec![
-                vec![
-                    "contract".to_owned(),
-                    "radroots.trade.proposal.v1".to_owned(),
-                ],
-                vec![
-                    "d".to_owned(),
-                    "11111111111111111111111111111111".to_owned(),
-                ],
-                vec!["p".to_owned(), PUBLIC_KEY.to_owned()],
-            ],
-            r#"{"contract_id":"radroots.trade.proposal.v1"}"#,
-            PUBLIC_KEY,
-        )
-        .expect("draft");
-        let wrong_key = PublicKey::from_hex(OTHER_PUBLIC_KEY).expect("public key");
-        let actor = Actor::new(
-            wrong_key,
-            ActorSource::ExplicitPublicKey,
-            [AuthorRole::Seller],
-        )
-        .expect("actor");
-
-        assert_eq!(
-            authorize_actor_for_draft(&actor, &draft),
-            Err(AuthorizationFailure::ActorRoleUnsatisfied)
-        );
-    }
-
-    #[test]
-    fn authorization_rejects_actor_public_key_drift() {
-        let draft = request().draft().clone();
-        let wrong_key = PublicKey::from_hex(OTHER_PUBLIC_KEY).expect("public key");
-        let actor = Actor::new(wrong_key, ActorSource::ExplicitPublicKey, [AuthorRole::Any])
-            .expect("actor");
-
-        assert_eq!(
-            authorize_actor_for_draft(&actor, &draft),
-            Err(AuthorizationFailure::ActorPublicKeyMismatch)
-        );
-    }
-
-    fn alloc_or_std_format(value: &SignRequest) -> String {
-        value_to_string(format_args!("{value:?}"))
-    }
-
-    fn value_to_string(arguments: fmt::Arguments<'_>) -> String {
-        use core::fmt::Write as _;
-        let mut output = String::new();
-        output.write_fmt(arguments).expect("string formatting");
-        output
+            .finish_non_exhaustive()
     }
 }

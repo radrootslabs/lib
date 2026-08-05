@@ -1,8 +1,8 @@
 # radroots_signing
 
 `radroots_signing` is the protocol-neutral host SPI for authorizing and signing
-frozen Radroots event drafts. It owns actor provenance, signer capabilities and
-status, bounded signing requests, exact-draft receipts, progress, and normalized
+exact Radroots authored-event plans. It owns actor provenance, signer capabilities and
+status, bounded signing requests, verified receipts, progress, and normalized
 secret-safe errors.
 
 The crate is `no_std` with `alloc`. It does not own secret keys, keyrings,
@@ -17,14 +17,14 @@ The authoritative package charter is the
 ## Typical flow
 
 1. A host resolves public actor provenance and roles into an [`Actor`].
-2. Event-domain code freezes a canonical `radroots_event::EventDraft`.
-3. The host combines the actor, draft, typed operation ID, deadline, and
+2. Event-codec code creates an immutable `AuthoredEventPlan`.
+3. The host combines stable operation/artifact identity, actor, plan, deadline, and
    cancellation policy into a [`SignRequest`]. Construction validates the
-   draft, required author role, and expected public key before a signer runs.
+   current authorization, required author role, public key, and provenance.
 4. A dyn-compatible [`Signer`] implementation signs locally, delegates to a
    remote device/service, or mediates explicit host interaction.
 5. The implementation creates a [`SignReceipt`] from the originating request.
-   Receipt construction rejects any signed-event drift from the frozen draft.
+   Receipt construction rejects plan drift and invalid Schnorr signatures.
 
 [`Actor`]: crate::Actor
 [`Signer`]: crate::Signer
@@ -32,11 +32,12 @@ The authoritative package charter is the
 [`SignReceipt`]: crate::SignReceipt
 
 ```rust
-use radroots_event::{EventDraft, contract::AuthorRole};
+use radroots_event::{GenericEventDraft, contract::AuthorRole};
+use radroots_event_codec::authoring::AuthoredEventPlan;
 use radroots_identity::PublicKey;
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
-    Actor, SignRequest,
+    Actor, AuthoredArtifactId, SignRequest, SigningIntentId, SigningOperationId,
     actor::ActorSource,
     request::{CancellationPolicy, SignPolicy},
 };
@@ -51,7 +52,7 @@ let actor = Actor::new(
     [AuthorRole::Any],
 )
 .expect("validated actor");
-let draft = EventDraft::new(
+let draft = GenericEventDraft::new(
     "radroots.social.geochat.v1",
     20_000,
     1_700_000_000,
@@ -59,16 +60,21 @@ let draft = EventDraft::new(
     "hello from Radroots",
     public_key.to_hex(),
 )
-.expect("frozen draft");
+.expect("validated generic draft");
+let plan = AuthoredEventPlan::from_generic(draft).expect("exact plan");
+let intent_id = SigningIntentId::new(
+    SigningOperationId::new([1; 16]).expect("operation ID"),
+    AuthoredArtifactId::new([2; 16]).expect("artifact ID"),
+);
 let policy = SignPolicy::new(
-    1_700_000_030,
+    1_700_000_030_000,
     CancellationPolicy::PreservePublishedRequest,
 )
 .expect("bounded policy");
-let request = SignRequest::new(OperationId::SyncPush, actor, draft, policy)
+let request = SignRequest::new(OperationId::SyncPush, intent_id, actor, plan, policy)
     .expect("authorized signing request");
 
-assert_eq!(request.operation_id(), OperationId::SyncPush);
+assert_eq!(request.operation_kind(), OperationId::SyncPush);
 ```
 
 The complete externally implementable SPI example is
@@ -96,7 +102,7 @@ select an async runtime or require an async-trait macro.
 
 ## Deadlines, cancellation, and commit points
 
-`SignPolicy` carries an absolute Unix deadline. A signer must reject work once
+`SignPolicy` carries an absolute Unix-millisecond deadline. A signer must reject work once
 that deadline is reached; request construction does not read a clock.
 
 `CancellationPolicy::LocalCooperative` is for local-only work that may stop
@@ -126,10 +132,10 @@ secret material in it.
 
 ## Security and side effects
 
-- Request construction validates the current draft before role and key
+- Request construction separates current authorization from historical plan integrity before role, key, and provenance
   authorization and never invokes a signer on failure.
 - A successful receipt proves exact equality of author, timestamp, kind, tags,
-  content, and event ID with the frozen request draft.
+  content, and event ID with the exact request plan, plus a valid signature.
 - `Error` display/debug output and protocol reports are redacted. Under `std`,
   a caller may explicitly inspect a preserved native error source locally.
 - `AuthChallenge` debug output redacts its URI; the value accepts only bounded

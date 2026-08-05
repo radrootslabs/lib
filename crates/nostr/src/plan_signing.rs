@@ -11,6 +11,11 @@ use crate::{
 };
 use radroots_event_codec::authoring::AuthoredEventPlan;
 
+#[cfg(feature = "signing")]
+use nostr::JsonUtil;
+#[cfg(feature = "signing")]
+use radroots_event::{SignedEvent, wire::Nip01EventWire};
+
 pub(crate) fn unsigned_event_from_plan(
     plan: &AuthoredEventPlan,
 ) -> Result<nostr::UnsignedEvent, Error> {
@@ -43,6 +48,18 @@ pub(crate) fn unsigned_event_from_plan(
     };
     validate_unsigned_event_matches_plan(&unsigned, plan)?;
     Ok(unsigned)
+}
+
+#[cfg(feature = "signing")]
+pub(crate) fn sign_authored_plan(
+    keys: &nostr::Keys,
+    plan: &AuthoredEventPlan,
+) -> Result<SignedEvent, Error> {
+    let event = unsigned_event_from_plan(plan)?.sign_with_keys(keys)?;
+    validate_signed_event_matches_plan(&event, plan)?;
+    let raw_json = event.as_json();
+    let wire = Nip01EventWire::parse_json(&raw_json)?;
+    SignedEvent::from_wire_verified_id(wire, raw_json).map_err(Into::into)
 }
 
 pub(crate) fn validate_signed_event_matches_plan(

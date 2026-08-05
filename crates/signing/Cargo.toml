@@ -25,20 +25,25 @@ name = "radroots_signing"
 default = ["std", "serde"]
 std = [
   "radroots_event/std",
+  "radroots_event_codec/std",
   "radroots_identity/std",
   "radroots_protocol/std",
 ]
 serde = [
   "dep:serde",
   "radroots_event/serde",
+  "radroots_event_codec/json",
   "radroots_identity/serde",
   "radroots_protocol/serde",
 ]
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false }
+radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
 radroots_protocol = { workspace = true, default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+sha2 = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
@@ -46,6 +51,7 @@ serde = { workspace = true, default-features = false, features = [
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }
+nostr = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true
