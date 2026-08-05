@@ -11,6 +11,12 @@ use crate::{
         AtomicCommit, AtomicCommitDisposition, AtomicCommitId, AtomicCommitOutcome,
         AtomicCommitReceipt, AtomicStorage, AtomicWorkflow,
     },
+    authored::{AdmissionState, FailureClass, WorkFailure, WorkPhase},
+    authored_atomic::{
+        AuthoredAtomicCommand, AuthoredAtomicOutcome, AuthoredAtomicReceipt, AuthoredAtomicStorage,
+        AuthoredWorkTarget, CancelAuthoredTarget, ClaimAuthoredTarget,
+    },
+    authored_delivery::DeliveryAttemptOutcome,
     backup::{
         BackupId, BackupOperation, BackupPlan, BackupTransition, ReliabilityRevision,
         RestoreOperation, RestorePlan, RestoreTransition, StorageReliability,
@@ -67,6 +73,10 @@ struct State {
     backups: Vec<BackupOperation>,
     restores: Vec<RestoreOperation>,
     atomic_receipts: Vec<AtomicCommitReceipt>,
+    authored_operations: Vec<crate::authored::AuthoredOperation>,
+    authored_artifacts: Vec<crate::authored::AuthoredArtifact>,
+    authored_delivery_plans: Vec<crate::authored_delivery::AuthoredDeliveryPlan>,
+    authored_atomic_receipts: Vec<AuthoredAtomicReceipt>,
     closed: bool,
 }
 
@@ -93,6 +103,10 @@ impl MemoryStorage {
                 backups: Vec::new(),
                 restores: Vec::new(),
                 atomic_receipts: Vec::new(),
+                authored_operations: Vec::new(),
+                authored_artifacts: Vec::new(),
+                authored_delivery_plans: Vec::new(),
+                authored_atomic_receipts: Vec::new(),
                 closed: false,
             }),
         }
@@ -1292,4 +1306,386 @@ impl AtomicStorage for MemoryStorage {
                 .cloned())
         })
     }
+}
+
+impl AuthoredAtomicStorage for MemoryStorage {
+    fn execute_authored(
+        &self,
+        command: AuthoredAtomicCommand,
+    ) -> BoxFuture<'_, Result<AuthoredAtomicReceipt, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state
+                .authored_atomic_receipts
+                .iter()
+                .find(|receipt| receipt.commit_id() == command.commit_id())
+            {
+                if existing.digest() != command.digest() {
+                    return Err(Error::AtomicCommitConflict);
+                }
+                return AuthoredAtomicReceipt::new(
+                    &command,
+                    AtomicCommitDisposition::Replay,
+                    existing.committed_at_unix_ms(),
+                    existing.outcome().clone(),
+                );
+            }
+
+            let mut candidate = state.clone();
+            let outcome = match command.clone() {
+                AuthoredAtomicCommand::Prepare(value) => {
+                    if candidate.authored_operations.iter().any(|operation| {
+                        operation.operation_id() == value.operation().operation_id()
+                    }) || value.artifacts().iter().any(|artifact| {
+                        candidate
+                            .authored_artifacts
+                            .iter()
+                            .any(|existing| existing.artifact_id() == artifact.artifact_id())
+                    }) || value.delivery_plans().iter().any(|plan| {
+                        candidate
+                            .authored_delivery_plans
+                            .iter()
+                            .any(|existing| existing.plan_id() == plan.plan_id())
+                    }) {
+                        return Err(Error::AtomicCommitConflict);
+                    }
+                    candidate
+                        .authored_operations
+                        .push(value.operation().clone());
+                    candidate
+                        .authored_artifacts
+                        .extend(value.artifacts().iter().cloned());
+                    candidate
+                        .authored_delivery_plans
+                        .extend(value.delivery_plans().iter().cloned());
+                    AuthoredAtomicOutcome::Prepared {
+                        operation: value.operation().clone(),
+                        artifacts: value.artifacts().to_vec(),
+                        delivery_plans: value.delivery_plans().to_vec(),
+                    }
+                }
+                AuthoredAtomicCommand::Claim(value) => match value.target() {
+                    ClaimAuthoredTarget::ArtifactSigning(artifact_id) => {
+                        let artifact = candidate
+                            .authored_artifacts
+                            .iter_mut()
+                            .find(|artifact| artifact.artifact_id() == *artifact_id)
+                            .ok_or(Error::InvalidAuthoredArtifact)?;
+                        artifact.set_signing_claim(
+                            value.claim().clone(),
+                            value.claim().acquired_at_unix_ms(),
+                        )?;
+                        AuthoredAtomicOutcome::Artifact(artifact.clone())
+                    }
+                    ClaimAuthoredTarget::ArtifactAdmission(artifact_id) => {
+                        let artifact = candidate
+                            .authored_artifacts
+                            .iter_mut()
+                            .find(|artifact| artifact.artifact_id() == *artifact_id)
+                            .ok_or(Error::InvalidAuthoredArtifact)?;
+                        artifact.set_admission_claim(
+                            value.claim().clone(),
+                            value.claim().acquired_at_unix_ms(),
+                        )?;
+                        AuthoredAtomicOutcome::Artifact(artifact.clone())
+                    }
+                    ClaimAuthoredTarget::DeliveryPlan(plan_id) => {
+                        let plan = candidate
+                            .authored_delivery_plans
+                            .iter_mut()
+                            .find(|plan| plan.plan_id() == *plan_id)
+                            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
+                        plan.claim(value.claim().clone(), value.claim().acquired_at_unix_ms())?;
+                        AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
+                    }
+                },
+                AuthoredAtomicCommand::ApplySigned(value) => {
+                    let artifact = candidate
+                        .authored_artifacts
+                        .iter_mut()
+                        .find(|artifact| artifact.artifact_id() == value.artifact_id())
+                        .ok_or(Error::InvalidAuthoredArtifact)?;
+                    require_artifact_claim(
+                        artifact.signing_claim(),
+                        value.fence(),
+                        value.applied_at_unix_ms(),
+                    )?;
+                    artifact.record_signed(value.event().clone(), value.applied_at_unix_ms())?;
+                    let artifact = artifact.clone();
+                    for plan in candidate
+                        .authored_delivery_plans
+                        .iter_mut()
+                        .filter(|plan| plan.artifact_id() == value.artifact_id())
+                    {
+                        plan.bind_signed_event(value.event().clone(), value.applied_at_unix_ms())?;
+                    }
+                    AuthoredAtomicOutcome::Artifact(artifact)
+                }
+                AuthoredAtomicCommand::ApplyAdmission(value) => {
+                    let artifact = candidate
+                        .authored_artifacts
+                        .iter_mut()
+                        .find(|artifact| artifact.artifact_id() == value.artifact_id())
+                        .ok_or(Error::InvalidAuthoredArtifact)?;
+                    require_artifact_claim(
+                        artifact.admission_claim(),
+                        value.fence(),
+                        value.applied_at_unix_ms(),
+                    )?;
+                    artifact.record_admission(
+                        value.state(),
+                        value.failure().cloned(),
+                        value.retry().cloned(),
+                        value.applied_at_unix_ms(),
+                    )?;
+                    AuthoredAtomicOutcome::Artifact(artifact.clone())
+                }
+                AuthoredAtomicCommand::ApplyDelivery(value) => {
+                    let plan = candidate
+                        .authored_delivery_plans
+                        .iter_mut()
+                        .find(|plan| plan.plan_id() == value.plan_id())
+                        .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
+                    match value.outcome().clone() {
+                        DeliveryAttemptOutcome::Receipt(receipt) => plan.apply_receipt(
+                            value.fence().token(),
+                            value.fence().generation(),
+                            value.fence().row_revision(),
+                            receipt,
+                            value.retry().cloned(),
+                            value.applied_at_unix_ms(),
+                        )?,
+                        DeliveryAttemptOutcome::SinkFailure(failure) => plan.apply_sink_failure(
+                            value.fence().token(),
+                            value.fence().generation(),
+                            value.fence().row_revision(),
+                            failure,
+                            value.retry().cloned(),
+                            value.applied_at_unix_ms(),
+                        )?,
+                    }
+                    AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
+                }
+                AuthoredAtomicCommand::ApplyFailure(value) => match value.target() {
+                    AuthoredWorkTarget::Artifact(artifact_id) => {
+                        let artifact = candidate
+                            .authored_artifacts
+                            .iter_mut()
+                            .find(|artifact| artifact.artifact_id() == *artifact_id)
+                            .ok_or(Error::InvalidAuthoredArtifact)?;
+                        match value.failure().phase() {
+                            WorkPhase::Signing => {
+                                require_artifact_claim(
+                                    artifact.signing_claim(),
+                                    value.fence(),
+                                    value.applied_at_unix_ms(),
+                                )?;
+                                artifact.record_signing_failure(
+                                    value.failure().clone(),
+                                    value.retry().cloned(),
+                                    value.applied_at_unix_ms(),
+                                )?;
+                            }
+                            WorkPhase::Admission => {
+                                require_artifact_claim(
+                                    artifact.admission_claim(),
+                                    value.fence(),
+                                    value.applied_at_unix_ms(),
+                                )?;
+                                let state = match value.failure().class() {
+                                    FailureClass::Retryable => AdmissionState::Retryable,
+                                    FailureClass::Terminal => AdmissionState::Rejected,
+                                    FailureClass::Indeterminate => {
+                                        return Err(Error::InvalidAuthoredTransition);
+                                    }
+                                };
+                                artifact.record_admission(
+                                    state,
+                                    Some(value.failure().clone()),
+                                    value.retry().cloned(),
+                                    value.applied_at_unix_ms(),
+                                )?;
+                            }
+                            WorkPhase::Delivery => {
+                                return Err(Error::AtomicWorkflowMismatch);
+                            }
+                        }
+                        AuthoredAtomicOutcome::Artifact(artifact.clone())
+                    }
+                    AuthoredWorkTarget::DeliveryPlan(plan_id) => {
+                        let plan = candidate
+                            .authored_delivery_plans
+                            .iter_mut()
+                            .find(|plan| plan.plan_id() == *plan_id)
+                            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
+                        if value.failure().phase() != WorkPhase::Delivery
+                            || value.failure().class() == FailureClass::Indeterminate
+                        {
+                            return Err(Error::AtomicWorkflowMismatch);
+                        }
+                        let retryability = match value.failure().class() {
+                            FailureClass::Retryable => {
+                                radroots_transport::outcome::Retryability::Retryable
+                            }
+                            FailureClass::Terminal => {
+                                radroots_transport::outcome::Retryability::Terminal
+                            }
+                            FailureClass::Indeterminate => unreachable!(),
+                        };
+                        let failure = radroots_transport::SinkFailure::for_request(
+                            plan.request().ok_or(Error::InvalidAuthoredDeliveryPlan)?,
+                            value.failure().code(),
+                            retryability,
+                            value.failure().retry_after_unix_ms(),
+                            value.failure().diagnostic().map(str::to_owned),
+                            Vec::new(),
+                        )
+                        .map_err(|_| Error::AtomicWorkflowMismatch)?;
+                        plan.apply_sink_failure(
+                            value.fence().token(),
+                            value.fence().generation(),
+                            value.fence().row_revision(),
+                            failure,
+                            value.retry().cloned(),
+                            value.applied_at_unix_ms(),
+                        )?;
+                        AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
+                    }
+                },
+                AuthoredAtomicCommand::Cancel(value) => match value.target() {
+                    CancelAuthoredTarget::ArtifactSigning(artifact_id) => {
+                        let artifact = candidate
+                            .authored_artifacts
+                            .iter_mut()
+                            .find(|artifact| artifact.artifact_id() == *artifact_id)
+                            .ok_or(Error::InvalidAuthoredArtifact)?;
+                        if artifact.revision() != value.expected_revision() {
+                            return Err(Error::InvalidAuthoredTransition);
+                        }
+                        artifact.cancel_signing(value.cancelled_at_unix_ms())?;
+                        AuthoredAtomicOutcome::Artifact(artifact.clone())
+                    }
+                    CancelAuthoredTarget::ArtifactAdmission(artifact_id) => {
+                        let artifact = candidate
+                            .authored_artifacts
+                            .iter_mut()
+                            .find(|artifact| artifact.artifact_id() == *artifact_id)
+                            .ok_or(Error::InvalidAuthoredArtifact)?;
+                        if artifact.revision() != value.expected_revision() {
+                            return Err(Error::InvalidAuthoredTransition);
+                        }
+                        let failure = WorkFailure::new(
+                            "cancelled",
+                            WorkPhase::Admission,
+                            FailureClass::Terminal,
+                            None,
+                            None,
+                        )?;
+                        artifact.record_admission(
+                            AdmissionState::Cancelled,
+                            Some(failure),
+                            None,
+                            value.cancelled_at_unix_ms(),
+                        )?;
+                        AuthoredAtomicOutcome::Artifact(artifact.clone())
+                    }
+                    CancelAuthoredTarget::DeliveryPlan(plan_id) => {
+                        let plan = candidate
+                            .authored_delivery_plans
+                            .iter_mut()
+                            .find(|plan| plan.plan_id() == *plan_id)
+                            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
+                        if plan.revision() != value.expected_revision() {
+                            return Err(Error::InvalidAuthoredDeliveryPlan);
+                        }
+                        plan.cancel(value.cancelled_at_unix_ms())?;
+                        AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
+                    }
+                },
+            };
+            let receipt = AuthoredAtomicReceipt::new(
+                &command,
+                AtomicCommitDisposition::Committed,
+                command.requested_at_unix_ms(),
+                outcome,
+            )?;
+            candidate.authored_atomic_receipts.push(receipt.clone());
+            *state = candidate;
+            Ok(receipt)
+        })
+    }
+
+    fn authored_receipt(
+        &self,
+        commit_id: AtomicCommitId,
+    ) -> BoxFuture<'_, Result<Option<AuthoredAtomicReceipt>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .authored_atomic_receipts
+                .iter()
+                .find(|receipt| receipt.commit_id() == commit_id)
+                .cloned())
+        })
+    }
+
+    fn authored_operation(
+        &self,
+        operation_id: OperationInstanceId,
+    ) -> BoxFuture<'_, Result<Option<crate::authored::AuthoredOperation>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .authored_operations
+                .iter()
+                .find(|operation| operation.operation_id() == operation_id)
+                .cloned())
+        })
+    }
+
+    fn authored_artifact(
+        &self,
+        artifact_id: crate::authored::AuthoredArtifactId,
+    ) -> BoxFuture<'_, Result<Option<crate::authored::AuthoredArtifact>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .authored_artifacts
+                .iter()
+                .find(|artifact| artifact.artifact_id() == artifact_id)
+                .cloned())
+        })
+    }
+
+    fn authored_delivery_plan(
+        &self,
+        plan_id: crate::authored_delivery::AuthoredDeliveryPlanId,
+    ) -> BoxFuture<'_, Result<Option<crate::authored_delivery::AuthoredDeliveryPlan>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .authored_delivery_plans
+                .iter()
+                .find(|plan| plan.plan_id() == plan_id)
+                .cloned())
+        })
+    }
+}
+
+fn require_artifact_claim(
+    claim: Option<&crate::authored::WorkClaim>,
+    fence: &crate::authored_atomic::WorkFence,
+    now_unix_ms: u64,
+) -> Result<(), Error> {
+    if !claim.is_some_and(|claim| {
+        claim.matches_fence(
+            fence.token(),
+            fence.generation(),
+            fence.row_revision(),
+            now_unix_ms,
+        )
+    }) {
+        return Err(Error::DeliveryPlanClaimConflict);
+    }
+    Ok(())
 }

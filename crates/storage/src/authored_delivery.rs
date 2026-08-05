@@ -5,6 +5,8 @@ use radroots_transport::{
     DeliveryReceipt, DeliveryRequest, SinkFailure,
     outcome::Retryability,
     policy::{SatisfactionClass, SatisfactionPolicy, SatisfactionState, evaluate_satisfaction},
+    sink::{DeliveryPayload, DeliveryRequestId},
+    target::TargetSet,
 };
 use sha2::{Digest, Sha256};
 use std::vec::Vec;
@@ -47,6 +49,69 @@ impl TryFrom<[u8; 16]> for AuthoredDeliveryPlanId {
 impl From<AuthoredDeliveryPlanId> for [u8; 16] {
     fn from(value: AuthoredDeliveryPlanId) -> Self {
         value.0
+    }
+}
+
+/// Exact delivery intent persisted before a signed payload exists.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredDeliveryIntent {
+    request_id: DeliveryRequestId,
+    target_set: TargetSet,
+    satisfaction: SatisfactionPolicy,
+    deadline_unix_ms: u64,
+}
+
+impl AuthoredDeliveryIntent {
+    pub fn new(
+        request_id: impl Into<String>,
+        target_set: TargetSet,
+        satisfaction: SatisfactionPolicy,
+        deadline_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        if deadline_unix_ms == 0 || satisfaction.validate_for(&target_set).is_err() {
+            return Err(Error::InvalidAuthoredDeliveryPlan);
+        }
+        Ok(Self {
+            request_id: DeliveryRequestId::parse(request_id)
+                .map_err(|_| Error::InvalidAuthoredDeliveryPlan)?,
+            target_set,
+            satisfaction,
+            deadline_unix_ms,
+        })
+    }
+
+    pub fn from_request(request: &DeliveryRequest) -> Self {
+        Self {
+            request_id: request.request_id().clone(),
+            target_set: request.target_set().clone(),
+            satisfaction: request.satisfaction().clone(),
+            deadline_unix_ms: request.deadline_unix_ms(),
+        }
+    }
+
+    pub fn materialize(&self, payload: DeliveryPayload) -> Result<DeliveryRequest, Error> {
+        DeliveryRequest::new(
+            self.request_id.as_str(),
+            payload,
+            self.target_set.clone(),
+            self.satisfaction.clone(),
+            self.deadline_unix_ms,
+        )
+        .map_err(|_| Error::InvalidAuthoredDeliveryPlan)
+    }
+
+    pub const fn request_id(&self) -> &DeliveryRequestId {
+        &self.request_id
+    }
+    pub const fn target_set(&self) -> &TargetSet {
+        &self.target_set
+    }
+    pub const fn satisfaction(&self) -> &SatisfactionPolicy {
+        &self.satisfaction
+    }
+    pub const fn deadline_unix_ms(&self) -> u64 {
+        self.deadline_unix_ms
     }
 }
 
@@ -146,7 +211,8 @@ pub struct AuthoredDeliveryPlan {
     plan_id: AuthoredDeliveryPlanId,
     artifact_id: AuthoredArtifactId,
     request_digest: [u8; 32],
-    request: DeliveryRequest,
+    intent: AuthoredDeliveryIntent,
+    request: Option<DeliveryRequest>,
     state: AuthoredDeliveryState,
     attempts: Vec<AuthoredDeliveryAttempt>,
     attempt_count: u32,
@@ -162,15 +228,16 @@ impl AuthoredDeliveryPlan {
     pub fn new(
         plan_id: AuthoredDeliveryPlanId,
         artifact_id: AuthoredArtifactId,
-        request: DeliveryRequest,
+        intent: AuthoredDeliveryIntent,
         created_at_unix_ms: u64,
     ) -> Result<Self, Error> {
-        let request_digest = delivery_request_digest(&request);
+        let request_digest = delivery_intent_digest(&intent);
         Self::reconstruct(Self {
             plan_id,
             artifact_id,
             request_digest,
-            request,
+            intent,
+            request: None,
             state: AuthoredDeliveryState::Pending,
             attempts: Vec::new(),
             attempt_count: 0,
@@ -183,6 +250,19 @@ impl AuthoredDeliveryPlan {
         })
     }
 
+    pub fn new_bound(
+        plan_id: AuthoredDeliveryPlanId,
+        artifact_id: AuthoredArtifactId,
+        request: DeliveryRequest,
+        created_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        let intent = AuthoredDeliveryIntent::from_request(&request);
+        let mut plan = Self::new(plan_id, artifact_id, intent, created_at_unix_ms)?;
+        plan.request = Some(request);
+        plan.validate()?;
+        Ok(plan)
+    }
+
     pub fn reconstruct(value: Self) -> Result<Self, Error> {
         value.validate()?;
         Ok(value)
@@ -191,7 +271,7 @@ impl AuthoredDeliveryPlan {
     pub fn validate(&self) -> Result<(), Error> {
         if self.created_at_unix_ms == 0
             || self.updated_at_unix_ms < self.created_at_unix_ms
-            || self.request_digest != delivery_request_digest(&self.request)
+            || self.request_digest != delivery_intent_digest(&self.intent)
             || self.attempt_count > DELIVERY_PLAN_ATTEMPTS_MAX
             || usize::try_from(self.attempt_count).ok() != Some(self.attempts.len())
             || (matches!(self.state, AuthoredDeliveryState::Retryable) != self.retry.is_some())
@@ -199,10 +279,21 @@ impl AuthoredDeliveryPlan {
         {
             return Err(Error::InvalidAuthoredDeliveryPlan);
         }
+        if self
+            .request
+            .as_ref()
+            .is_some_and(|request| AuthoredDeliveryIntent::from_request(request) != self.intent)
+            || (!self.attempts.is_empty() && self.request.is_none())
+        {
+            return Err(Error::InvalidAuthoredDeliveryPlan);
+        }
         for (index, attempt) in self.attempts.iter().enumerate() {
             if attempt.attempt.get() != u32::try_from(index + 1).unwrap_or(u32::MAX)
                 || attempt.recorded_at_unix_ms < self.created_at_unix_ms
-                || attempt.outcome.validate_for(&self.request).is_err()
+                || self
+                    .request
+                    .as_ref()
+                    .is_none_or(|request| attempt.outcome.validate_for(request).is_err())
                 || self
                     .evaluate_outcomes(self.attempts[..=index].iter().map(|value| &value.outcome))
                     .ok()
@@ -270,6 +361,7 @@ impl AuthoredDeliveryPlan {
 
     pub fn claim(&mut self, claim: WorkClaim, now_unix_ms: u64) -> Result<(), Error> {
         if self.state.is_terminal()
+            || self.request.is_none()
             || self.claim.is_some()
             || claim.row_revision() != self.revision
             || claim.acquired_at_unix_ms() != now_unix_ms
@@ -294,6 +386,27 @@ impl AuthoredDeliveryPlan {
         Ok(())
     }
 
+    pub fn bind_signed_event(
+        &mut self,
+        event: radroots_event::SignedEvent,
+        bound_at_unix_ms: u64,
+    ) -> Result<(), Error> {
+        if self.request.is_some() || self.attempt_count != 0 || self.state.is_terminal() {
+            return Err(Error::InvalidAuthoredDeliveryPlan);
+        }
+        let previous = self.clone();
+        self.request = Some(self.intent.materialize(DeliveryPayload::new(event))?);
+        if let Err(error) = self.advance(bound_at_unix_ms) {
+            *self = previous;
+            return Err(error);
+        }
+        if let Err(error) = self.validate() {
+            *self = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     pub fn apply_receipt(
         &mut self,
         token: &[u8; 16],
@@ -304,8 +417,12 @@ impl AuthoredDeliveryPlan {
         recorded_at_unix_ms: u64,
     ) -> Result<(), Error> {
         self.require_claim(token, generation, claim_revision, recorded_at_unix_ms)?;
+        let request = self
+            .request
+            .as_ref()
+            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
         receipt
-            .validate_for_request(&self.request)
+            .validate_for_request(request)
             .map_err(|_| Error::InvalidAuthoredDeliveryPlan)?;
         let satisfaction = self.evaluate_with(DeliveryAttemptOutcome::Receipt(receipt.clone()))?;
         let (state, last_failure) = match satisfaction {
@@ -349,8 +466,12 @@ impl AuthoredDeliveryPlan {
         recorded_at_unix_ms: u64,
     ) -> Result<(), Error> {
         self.require_claim(token, generation, claim_revision, recorded_at_unix_ms)?;
+        let request = self
+            .request
+            .as_ref()
+            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
         failure
-            .validate_for_request(&self.request)
+            .validate_for_request(request)
             .map_err(|_| Error::InvalidAuthoredDeliveryPlan)?;
         let outcome = DeliveryAttemptOutcome::SinkFailure(failure.clone());
         let satisfaction = self.evaluate_with(outcome.clone())?;
@@ -489,8 +610,14 @@ impl AuthoredDeliveryPlan {
             }
         }
         evaluate_satisfaction(
-            self.request.satisfaction(),
-            self.request.target_set(),
+            self.request
+                .as_ref()
+                .ok_or(Error::InvalidAuthoredDeliveryPlan)?
+                .satisfaction(),
+            self.request
+                .as_ref()
+                .ok_or(Error::InvalidAuthoredDeliveryPlan)?
+                .target_set(),
             evidence,
         )
         .map_err(|_| Error::InvalidAuthoredDeliveryPlan)
@@ -534,8 +661,11 @@ impl AuthoredDeliveryPlan {
     pub const fn request_digest(&self) -> &[u8; 32] {
         &self.request_digest
     }
-    pub const fn request(&self) -> &DeliveryRequest {
-        &self.request
+    pub const fn intent(&self) -> &AuthoredDeliveryIntent {
+        &self.intent
+    }
+    pub const fn request(&self) -> Option<&DeliveryRequest> {
+        self.request.as_ref()
     }
     pub const fn state(&self) -> AuthoredDeliveryState {
         self.state
@@ -566,7 +696,8 @@ struct AuthoredDeliveryPlanWire {
     plan_id: AuthoredDeliveryPlanId,
     artifact_id: AuthoredArtifactId,
     request_digest: [u8; 32],
-    request: DeliveryRequest,
+    intent: AuthoredDeliveryIntent,
+    request: Option<DeliveryRequest>,
     state: AuthoredDeliveryState,
     attempts: Vec<AuthoredDeliveryAttempt>,
     attempt_count: u32,
@@ -586,6 +717,7 @@ impl TryFrom<AuthoredDeliveryPlanWire> for AuthoredDeliveryPlan {
             plan_id: value.plan_id,
             artifact_id: value.artifact_id,
             request_digest: value.request_digest,
+            intent: value.intent,
             request: value.request,
             state: value.state,
             attempts: value.attempts,
@@ -607,6 +739,7 @@ impl From<AuthoredDeliveryPlan> for AuthoredDeliveryPlanWire {
             plan_id: value.plan_id,
             artifact_id: value.artifact_id,
             request_digest: value.request_digest,
+            intent: value.intent,
             request: value.request,
             state: value.state,
             attempts: value.attempts,
@@ -621,21 +754,20 @@ impl From<AuthoredDeliveryPlan> for AuthoredDeliveryPlanWire {
     }
 }
 
-fn delivery_request_digest(request: &DeliveryRequest) -> [u8; 32] {
+fn delivery_intent_digest(intent: &AuthoredDeliveryIntent) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hash_field(&mut hasher, b"radroots.authored.delivery.v2");
-    hash_field(&mut hasher, request.request_id().as_str().as_bytes());
-    hash_field(&mut hasher, request.payload().event().raw_json().as_bytes());
-    for target in request.target_set().targets() {
+    hash_field(&mut hasher, intent.request_id().as_str().as_bytes());
+    for target in intent.target_set().targets() {
         hash_field(&mut hasher, target.fingerprint().as_str().as_bytes());
     }
-    let policy = request.satisfaction();
+    let policy = intent.satisfaction();
     hasher.update([match policy.class() {
         SatisfactionClass::Accepted => 0,
         SatisfactionClass::Delivered => 1,
     }]);
     hash_policy(&mut hasher, policy);
-    hasher.update(request.deadline_unix_ms().to_be_bytes());
+    hasher.update(intent.deadline_unix_ms().to_be_bytes());
     hasher.finalize().into()
 }
 

@@ -53,13 +53,17 @@ fn request(policy: TargetPolicy) -> DeliveryRequest {
 }
 
 fn plan(value: u8, policy: TargetPolicy) -> AuthoredDeliveryPlan {
-    AuthoredDeliveryPlan::new(
+    AuthoredDeliveryPlan::new_bound(
         AuthoredDeliveryPlanId::new([value; 16]).expect("plan ID"),
         AuthoredArtifactId::new([9; 16]).expect("artifact ID"),
         request(policy),
         10,
     )
     .expect("plan")
+}
+
+fn bound_request(plan: &AuthoredDeliveryPlan) -> &DeliveryRequest {
+    plan.request().expect("bound request")
 }
 
 fn claim(plan: &AuthoredDeliveryPlan, token: u8, acquired: u64) -> WorkClaim {
@@ -118,7 +122,7 @@ fn independent_plans_claim_and_progress_without_cross_blocking() {
         .expect("second claim");
 
     let first_receipt = receipt(
-        first.request(),
+        bound_request(&first),
         vec![DeliveryOutcome::accepted(), DeliveryOutcome::unavailable()],
     );
     first
@@ -135,7 +139,7 @@ fn independent_plans_claim_and_progress_without_cross_blocking() {
     assert!(second.claim_evidence().is_some());
 
     let second_receipt = receipt(
-        second.request(),
+        bound_request(&second),
         vec![DeliveryOutcome::accepted(), DeliveryOutcome::unavailable()],
     );
     second
@@ -165,11 +169,11 @@ fn retry_schedule_and_partial_evidence_survive_reconstruction() {
     let active = claim(&delivery, 3, 11);
     delivery.claim(active.clone(), 11).expect("claim");
     let partial = DeliveryTargetReceipt::attempted(
-        delivery.request().target_set().targets()[0].clone(),
+        bound_request(&delivery).target_set().targets()[0].clone(),
         DeliveryOutcome::accepted(),
     );
     let sink_failure = SinkFailure::for_request(
-        delivery.request(),
+        bound_request(&delivery),
         "relay_batch_unavailable",
         Retryability::Retryable,
         Some(20),
@@ -209,11 +213,11 @@ fn terminal_partial_success_stale_claim_and_invalid_receipt_fail_closed() {
     let active = claim(&any, 4, 11);
     any.claim(active.clone(), 11).expect("claim");
     let partial = DeliveryTargetReceipt::attempted(
-        any.request().target_set().targets()[0].clone(),
+        bound_request(&any).target_set().targets()[0].clone(),
         DeliveryOutcome::accepted(),
     );
     let failure = SinkFailure::for_request(
-        any.request(),
+        bound_request(&any),
         "terminal_batch_failure",
         Retryability::Terminal,
         None,
@@ -223,10 +227,10 @@ fn terminal_partial_success_stale_claim_and_invalid_receipt_fail_closed() {
     .expect("terminal failure");
     let other_request = DeliveryRequest::new(
         "other-request",
-        any.request().payload().clone(),
-        any.request().target_set().clone(),
-        any.request().satisfaction().clone(),
-        any.request().deadline_unix_ms(),
+        bound_request(&any).payload().clone(),
+        bound_request(&any).target_set().clone(),
+        bound_request(&any).satisfaction().clone(),
+        bound_request(&any).deadline_unix_ms(),
     )
     .expect("other request");
     let invalid_receipt = receipt(
@@ -273,7 +277,7 @@ fn terminal_partial_success_stale_claim_and_invalid_receipt_fail_closed() {
     let all_claim = claim(&all, 5, 11);
     all.claim(all_claim.clone(), 11).expect("claim");
     let terminal = SinkFailure::for_request(
-        all.request(),
+        bound_request(&all),
         "terminal_batch_failure",
         Retryability::Terminal,
         None,
@@ -297,7 +301,7 @@ fn terminal_partial_success_stale_claim_and_invalid_receipt_fail_closed() {
 fn attempt_limit_is_checked_without_mutating_claimed_state() {
     let base = plan(6, TargetPolicy::all());
     let pending_receipt = receipt(
-        base.request(),
+        bound_request(&base),
         vec![
             DeliveryOutcome::unavailable(),
             DeliveryOutcome::unavailable(),
