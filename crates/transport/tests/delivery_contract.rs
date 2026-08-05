@@ -1,8 +1,11 @@
 use radroots_event::{SignedEvent, wire::v1::Nip01EventWire};
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, Error, Target, TargetSet,
+    DeliveryReceipt, DeliveryRequest, Error, SinkFailure, Target, TargetSet,
     outcome::{DeliveryOutcome, DeliveryOutcomeKind, Retryability},
-    policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    policy::{
+        SatisfactionClass, SatisfactionPolicy, SatisfactionState, TargetPolicy,
+        evaluate_satisfaction,
+    },
     sink::{DeliveryPayload, DeliveryTargetReceipt},
 };
 
@@ -255,6 +258,115 @@ fn retryability_and_terminality_are_explicit_normalized_data() {
 }
 
 #[test]
+fn canonical_evaluator_covers_pending_exhausted_and_historical_evidence() {
+    let set = targets();
+    let policy = SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all());
+    assert_eq!(
+        evaluate_satisfaction(&policy, &set, core::iter::empty()).expect("empty evidence"),
+        SatisfactionState::Pending
+    );
+
+    let first = set.targets()[0].fingerprint();
+    let second = set.targets()[1].fingerprint();
+    let third = set.targets()[2].fingerprint();
+    let accepted = DeliveryOutcome::accepted();
+    let terminal = DeliveryOutcome::rejected();
+    let retryable = DeliveryOutcome::unavailable();
+    assert_eq!(
+        evaluate_satisfaction(
+            &policy,
+            &set,
+            [(first, &accepted), (second, &terminal), (third, &retryable),],
+        )
+        .expect("mixed evidence"),
+        SatisfactionState::Exhausted
+    );
+    assert_eq!(
+        evaluate_satisfaction(
+            &policy,
+            &set,
+            [
+                (first, &accepted),
+                (second, &accepted),
+                (third, &accepted),
+                (first, &terminal),
+            ],
+        )
+        .expect("historical success"),
+        SatisfactionState::Satisfied
+    );
+
+    let foreign = Target::nostr_relay("wss://foreign.example").expect("foreign");
+    assert_eq!(
+        evaluate_satisfaction(&policy, &set, [(foreign.fingerprint(), &accepted)])
+            .expect_err("foreign evidence"),
+        Error::UnexpectedDeliveryTargetReceipt
+    );
+}
+
+#[test]
+fn sink_failures_retain_validated_retry_timing_and_partial_evidence() {
+    let request = request(SatisfactionPolicy::new(
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    ));
+    let partial = DeliveryTargetReceipt::attempted(
+        request.target_set().targets()[0].clone(),
+        DeliveryOutcome::accepted(),
+    );
+    let failure = SinkFailure::for_request(
+        &request,
+        "relay_batch_unavailable",
+        Retryability::Retryable,
+        Some(1_700_000_200_000),
+        Some("relay batch unavailable".to_owned()),
+        vec![partial.clone()],
+    )
+    .expect("sink failure");
+    assert_eq!(failure.code(), "relay_batch_unavailable");
+    assert_eq!(failure.retryability(), Retryability::Retryable);
+    assert_eq!(failure.retry_after_unix_ms(), Some(1_700_000_200_000));
+    assert_eq!(failure.message(), Some("relay batch unavailable"));
+    assert_eq!(failure.partial_evidence(), core::slice::from_ref(&partial));
+    assert_eq!(
+        SinkFailure::for_request(
+            &request,
+            "terminal_failure",
+            Retryability::Terminal,
+            Some(1),
+            None,
+            Vec::new(),
+        )
+        .expect_err("terminal retry timing"),
+        Error::InvalidDeliveryOutcome
+    );
+    assert_eq!(
+        SinkFailure::for_request(
+            &request,
+            "invalid_retry_time",
+            Retryability::Retryable,
+            Some(0),
+            None,
+            Vec::new(),
+        )
+        .expect_err("zero retry timing"),
+        Error::InvalidDeliveryOutcome
+    );
+    assert_eq!(
+        SinkFailure::for_request(
+            &request,
+            "duplicate_evidence",
+            Retryability::Retryable,
+            None,
+            None,
+            vec![partial.clone(), partial],
+        )
+        .expect_err("duplicate evidence"),
+        Error::DuplicateDeliveryTargetReceipt
+    );
+}
+
+#[test]
 #[cfg(feature = "serde")]
 fn serde_revalidates_policy_outcome_and_receipt_invariants() {
     let request = request(SatisfactionPolicy::new(
@@ -288,4 +400,19 @@ fn serde_revalidates_policy_outcome_and_receipt_invariants() {
         .expect("receipts array")
         .pop();
     assert!(serde_json::from_value::<DeliveryReceipt>(missing).is_err());
+
+    let failure = SinkFailure::for_request(
+        &request,
+        "relay_unavailable",
+        Retryability::Retryable,
+        Some(1_700_000_200_000),
+        None,
+        vec![receipt.target_receipts()[0].clone()],
+    )
+    .expect("sink failure");
+    let encoded_failure = serde_json::to_string(&failure).expect("failure json");
+    assert_eq!(
+        serde_json::from_str::<SinkFailure>(&encoded_failure).expect("failure round trip"),
+        failure
+    );
 }

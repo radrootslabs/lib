@@ -6,7 +6,7 @@ use std::sync::{
 use futures::future;
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, Error, EventSink, EventSource, FetchPage,
-    FetchRequest, SinkStatus, SourceStatus, TransportId,
+    FetchRequest, SinkFailure, SinkStatus, SourceStatus, TransportId,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
     outcome::{DeliveryOutcome, FetchTargetOutcome, FetchTargetState},
     sink::DeliveryTargetReceipt,
@@ -184,16 +184,19 @@ impl EventSink for MockSink {
         Box::pin(async { Ok(sink_status()) })
     }
 
-    fn deliver(&self, request: DeliveryRequest) -> BoxFuture<'_, Result<DeliveryReceipt, Error>> {
+    fn deliver(
+        &self,
+        request: DeliveryRequest,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         let state = Arc::clone(&self.state);
         let mode = self.mode.clone();
         Box::pin(async move {
             *state.request.lock().expect("sink request lock") = Some(request.clone());
             if request.deadline_unix_ms() <= NOW_UNIX_MS {
-                return Err(Error::InvalidDeliveryDeadline);
+                return Err(SinkFailure::invalid_contract(&request));
             }
             match mode {
-                Mode::Fail(error) => Err(error),
+                Mode::Fail(_) => Err(SinkFailure::invalid_contract(&request)),
                 Mode::Pending => {
                     state.published.store(true, Ordering::SeqCst);
                     let state_for_drop = Arc::clone(&state);
@@ -222,6 +225,7 @@ impl EventSink for MockSink {
                         })
                         .collect();
                     DeliveryReceipt::for_request(&request, receipts)
+                        .map_err(|_| SinkFailure::invalid_contract(&request))
                 }
             }
         })
@@ -303,7 +307,10 @@ impl EventSink for CombinedAdapter {
         EventSink::status(&self.sink)
     }
 
-    fn deliver(&self, request: DeliveryRequest) -> BoxFuture<'_, Result<DeliveryReceipt, Error>> {
+    fn deliver(
+        &self,
+        request: DeliveryRequest,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         self.sink.deliver(request)
     }
 }

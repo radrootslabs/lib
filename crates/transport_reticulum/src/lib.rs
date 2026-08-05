@@ -343,20 +343,24 @@ impl EventSink for RadrootsReticulumTransport {
     fn deliver(
         &self,
         request: DeliveryRequest,
-    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, RadrootsTransportError>> {
+    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::SinkFailure>>
+    {
         Box::pin(async move {
             ensure_reticulum_targets(request.target_set().targets())
-                .map_err(reticulum_error_to_transport_error)?;
+                .map_err(|_| radroots_transport::SinkFailure::invalid_contract(&request))?;
             let outcome = DeliveryOutcome::unavailable()
-                .with_detail(UNAVAILABLE_CODE, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)?;
+                .with_detail(UNAVAILABLE_CODE, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
+                .map_err(|_| radroots_transport::SinkFailure::invalid_contract(&request))?;
             let receipts = request
                 .target_set()
                 .targets()
                 .iter()
                 .cloned()
                 .map(|target| DeliveryTargetReceipt::skipped(target, outcome.clone()))
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| radroots_transport::SinkFailure::invalid_contract(&request))?;
             DeliveryReceipt::for_request(&request, receipts)
+                .map_err(|_| radroots_transport::SinkFailure::invalid_contract(&request))
         })
     }
 }

@@ -32,7 +32,7 @@ pub use kind::{
     RadrootsTransportImplementationState,
 };
 pub use payload::RadrootsTransportPayload;
-pub use sink::{DeliveryReceipt, DeliveryRequest, EventSink, SinkStatus};
+pub use sink::{DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure, SinkStatus};
 pub use source::{BoxFuture, EventSource, FetchPage, FetchRequest, SourceStatus};
 pub use status::{
     RadrootsTransportCapabilities, RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,

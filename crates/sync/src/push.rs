@@ -64,7 +64,7 @@ impl PushRequest {
         satisfaction: SatisfactionPolicy,
         cancellation: CancellationPolicy,
     ) -> Result<Self, Error> {
-        if !valid_satisfaction(&satisfaction, &targets) {
+        if satisfaction.validate_for(&targets).is_err() {
             return Err(Error::InvalidPushRequest);
         }
         Ok(Self {
@@ -607,22 +607,6 @@ fn hash_satisfaction(hasher: &mut Sha256, policy: &SatisfactionPolicy) {
             hash_field(hasher, target.as_str().as_bytes());
         }
     }
-}
-
-fn valid_satisfaction(policy: &SatisfactionPolicy, targets: &TargetSet) -> bool {
-    let selection = policy.targets();
-    if let Some(threshold) = selection.quorum_threshold() {
-        return usize::from(threshold) <= targets.len();
-    }
-    if let Some(required) = selection.required_targets() {
-        return required.iter().all(|required| {
-            targets
-                .targets()
-                .iter()
-                .any(|target| target.fingerprint() == required)
-        });
-    }
-    selection.is_any() || selection.is_all()
 }
 
 fn atomic_digest(domain: &[u8], input: &[u8]) -> AtomicCommitDigest {

@@ -469,6 +469,13 @@ impl TargetSet {
         &self.targets
     }
 
+    /// Returns whether this set contains the exact target fingerprint.
+    pub fn contains(&self, fingerprint: &TargetFingerprint) -> bool {
+        self.targets
+            .iter()
+            .any(|target| target.fingerprint() == fingerprint)
+    }
+
     pub fn len(&self) -> usize {
         self.targets.len()
     }

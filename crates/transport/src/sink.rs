@@ -2,8 +2,8 @@
 
 use crate::{
     Error,
-    outcome::DeliveryOutcome,
-    policy::SatisfactionPolicy,
+    outcome::{DeliveryOutcome, Retryability, validate_delivery_code, validate_delivery_message},
+    policy::{SatisfactionPolicy, SatisfactionState, evaluate_satisfaction},
     source::BoxFuture,
     target::{Target, TargetSet},
 };
@@ -18,6 +18,19 @@ pub use crate::status::SinkStatus;
 
 /// Maximum encoded delivery request identity length.
 pub const DELIVERY_REQUEST_ID_MAX_BYTES: usize = 256;
+
+/// Sink-wide typed failure retaining safe retry and partial-target evidence.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SinkFailure {
+    request_id: DeliveryRequestId,
+    target_set: TargetSet,
+    code: String,
+    retryability: Retryability,
+    retry_after_unix_ms: Option<u64>,
+    message: Option<String>,
+    partial_evidence: Vec<DeliveryTargetReceipt>,
+}
 
 /// Validated caller identity for one delivery operation.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -257,17 +270,22 @@ impl DeliveryReceipt {
 
     /// Returns whether the receipt satisfies the request's exact policy.
     pub fn is_satisfied(&self, request: &DeliveryRequest) -> Result<bool, Error> {
+        Ok(matches!(
+            self.satisfaction(request)?,
+            SatisfactionState::Satisfied
+        ))
+    }
+
+    /// Evaluates this receipt as satisfied, pending, or exhausted.
+    pub fn satisfaction(&self, request: &DeliveryRequest) -> Result<SatisfactionState, Error> {
         self.validate_for_request(request)?;
-        let satisfied: BTreeSet<&str> = self
-            .target_receipts
-            .iter()
-            .filter(|receipt| receipt.outcome().satisfies(request.satisfaction().class()))
-            .map(|receipt| receipt.target().fingerprint().as_str())
-            .collect();
-        Ok(request
-            .satisfaction()
-            .targets()
-            .is_satisfied(self.target_set.len(), &satisfied))
+        evaluate_satisfaction(
+            request.satisfaction(),
+            request.target_set(),
+            self.target_receipts
+                .iter()
+                .map(|receipt| (receipt.target().fingerprint(), receipt.outcome())),
+        )
     }
 
     /// Returns the request identity.
@@ -278,6 +296,103 @@ impl DeliveryReceipt {
     /// Returns per-target results in request order.
     pub fn target_receipts(&self) -> &[DeliveryTargetReceipt] {
         self.target_receipts.as_slice()
+    }
+}
+
+impl SinkFailure {
+    /// Creates a request-bound sink-wide failure with validated partial evidence.
+    pub fn for_request(
+        request: &DeliveryRequest,
+        code: impl Into<String>,
+        retryability: Retryability,
+        retry_after_unix_ms: Option<u64>,
+        message: Option<String>,
+        partial_evidence: Vec<DeliveryTargetReceipt>,
+    ) -> Result<Self, Error> {
+        let failure = Self {
+            request_id: request.request_id.clone(),
+            target_set: request.target_set.clone(),
+            code: code.into(),
+            retryability,
+            retry_after_unix_ms,
+            message,
+            partial_evidence,
+        };
+        failure.validate_for_request(request)?;
+        Ok(failure)
+    }
+
+    /// Returns a terminal adapter-contract failure for an exact request.
+    pub fn invalid_contract(request: &DeliveryRequest) -> Self {
+        Self::for_request(
+            request,
+            "invalid_transport_contract",
+            Retryability::Terminal,
+            None,
+            Some("transport adapter returned invalid evidence".to_string()),
+            Vec::new(),
+        )
+        .expect("static sink failure is valid")
+    }
+
+    /// Validates identity, retry timing, and bounded partial evidence.
+    pub fn validate_for_request(&self, request: &DeliveryRequest) -> Result<(), Error> {
+        if self.request_id != *request.request_id() {
+            return Err(Error::DeliveryReceiptRequestIdMismatch);
+        }
+        if self.target_set != *request.target_set() {
+            return Err(Error::DeliveryReceiptTargetSetMismatch);
+        }
+        validate_delivery_code(self.code.as_str())?;
+        if matches!(self.retryability, Retryability::NotApplicable)
+            || matches!(self.retry_after_unix_ms, Some(0))
+            || (self.retry_after_unix_ms.is_some()
+                && !matches!(self.retryability, Retryability::Retryable))
+        {
+            return Err(Error::InvalidDeliveryOutcome);
+        }
+        if let Some(message) = &self.message {
+            validate_delivery_message(message)?;
+        }
+        let mut observed = BTreeSet::new();
+        for receipt in &self.partial_evidence {
+            receipt.validate()?;
+            if !request
+                .target_set()
+                .contains(receipt.target().fingerprint())
+            {
+                return Err(Error::UnexpectedDeliveryTargetReceipt);
+            }
+            if !observed.insert(receipt.target().fingerprint().as_str()) {
+                return Err(Error::DuplicateDeliveryTargetReceipt);
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the stable normalized failure code.
+    pub fn code(&self) -> &str {
+        self.code.as_str()
+    }
+
+    /// Returns whether retrying the same request may be useful.
+    pub const fn retryability(&self) -> Retryability {
+        self.retryability
+    }
+
+    /// Returns the earliest absolute Unix millisecond retry time, when supplied.
+    pub const fn retry_after_unix_ms(&self) -> Option<u64> {
+        self.retry_after_unix_ms
+    }
+
+    /// Returns bounded caller-safe diagnostic detail.
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+
+    /// Returns safe target evidence collected before the sink-wide failure.
+    pub fn partial_evidence(&self) -> &[DeliveryTargetReceipt] {
+        self.partial_evidence.as_slice()
     }
 }
 
@@ -299,7 +414,10 @@ pub trait EventSink: Send + Sync {
     fn status(&self) -> BoxFuture<'_, Result<SinkStatus, Error>>;
 
     /// Delivers an event according to the request's bounded target policy.
-    fn deliver(&self, request: DeliveryRequest) -> BoxFuture<'_, Result<DeliveryReceipt, Error>>;
+    fn deliver(
+        &self,
+        request: DeliveryRequest,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>>;
 }
 
 #[cfg(feature = "serde")]
@@ -392,6 +510,62 @@ mod serde_impl {
             let wire = DeliveryReceiptWire::deserialize(deserializer)?;
             Self::new(wire.request_id, wire.target_set, wire.target_receipts)
                 .map_err(serde::de::Error::custom)
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct SinkFailureWire {
+        request_id: DeliveryRequestId,
+        target_set: TargetSet,
+        code: String,
+        retryability: Retryability,
+        retry_after_unix_ms: Option<u64>,
+        message: Option<String>,
+        partial_evidence: Vec<DeliveryTargetReceipt>,
+    }
+
+    impl<'de> serde::Deserialize<'de> for SinkFailure {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            let wire = SinkFailureWire::deserialize(deserializer)?;
+            let failure = Self {
+                request_id: wire.request_id,
+                target_set: wire.target_set,
+                code: wire.code,
+                retryability: wire.retryability,
+                retry_after_unix_ms: wire.retry_after_unix_ms,
+                message: wire.message,
+                partial_evidence: wire.partial_evidence,
+            };
+            validate_delivery_code(failure.code.as_str()).map_err(serde::de::Error::custom)?;
+            if matches!(failure.retryability, Retryability::NotApplicable)
+                || matches!(failure.retry_after_unix_ms, Some(0))
+                || (failure.retry_after_unix_ms.is_some()
+                    && !matches!(failure.retryability, Retryability::Retryable))
+            {
+                return Err(serde::de::Error::custom(Error::InvalidDeliveryOutcome));
+            }
+            if let Some(message) = &failure.message {
+                validate_delivery_message(message).map_err(serde::de::Error::custom)?;
+            }
+            let mut observed = BTreeSet::new();
+            for receipt in &failure.partial_evidence {
+                receipt.validate().map_err(serde::de::Error::custom)?;
+                if !failure.target_set.contains(receipt.target().fingerprint()) {
+                    return Err(serde::de::Error::custom(
+                        Error::UnexpectedDeliveryTargetReceipt,
+                    ));
+                }
+                if !observed.insert(receipt.target().fingerprint().as_str()) {
+                    return Err(serde::de::Error::custom(
+                        Error::DuplicateDeliveryTargetReceipt,
+                    ));
+                }
+            }
+            Ok(failure)
         }
     }
 }

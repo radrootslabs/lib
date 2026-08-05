@@ -253,21 +253,34 @@ impl DeliveryOutcome {
     }
 }
 
-fn validate_delivery_detail(code: &str, message: &str) -> Result<(), crate::Error> {
-    let valid_code = !code.is_empty()
+pub(crate) fn validate_delivery_code(code: &str) -> Result<(), crate::Error> {
+    let valid = !code.is_empty()
         && code.len() <= DELIVERY_OUTCOME_CODE_MAX_BYTES
         && code.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         });
-    let valid_message = !message.is_empty()
-        && message.len() <= DELIVERY_OUTCOME_MESSAGE_MAX_BYTES
-        && message == message.trim()
-        && !message.chars().any(char::is_control);
-    if valid_code && valid_message {
+    if valid {
         Ok(())
     } else {
         Err(crate::Error::InvalidDeliveryOutcome)
     }
+}
+
+pub(crate) fn validate_delivery_message(message: &str) -> Result<(), crate::Error> {
+    let valid_message = !message.is_empty()
+        && message.len() <= DELIVERY_OUTCOME_MESSAGE_MAX_BYTES
+        && message == message.trim()
+        && !message.chars().any(char::is_control);
+    if valid_message {
+        Ok(())
+    } else {
+        Err(crate::Error::InvalidDeliveryOutcome)
+    }
+}
+
+fn validate_delivery_detail(code: &str, message: &str) -> Result<(), crate::Error> {
+    validate_delivery_code(code)?;
+    validate_delivery_message(message)
 }
 
 #[cfg(feature = "serde")]

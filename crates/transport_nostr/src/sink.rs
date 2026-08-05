@@ -4,7 +4,7 @@ use crate::{NostrTransport, RelayUrl, status};
 use core::time::Duration;
 use radroots_nostr::event::Event;
 use radroots_transport::{
-    BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink,
+    BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure,
     outcome::DeliveryOutcome,
     sink::{DeliveryTargetReceipt, SinkStatus},
 };
@@ -98,7 +98,7 @@ impl EventSink for NostrTransport {
     fn deliver(
         &self,
         request: DeliveryRequest,
-    ) -> BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::Error>> {
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         Box::pin(async move {
             let mut requested = Vec::new();
             let mut skipped = Vec::new();
@@ -107,20 +107,25 @@ impl EventSink for NostrTransport {
                     Ok(relay) if self.config().relays().contains(&relay) => {
                         requested.push((relay, target.clone()));
                     }
-                    _ => skipped.push(DeliveryTargetReceipt::skipped(
-                        target.clone(),
-                        DeliveryOutcome::rejected().with_detail(
-                            "target_denied",
-                            "target is not configured for this sink",
-                        )?,
-                    )?),
+                    _ => skipped.push(
+                        DeliveryTargetReceipt::skipped(
+                            target.clone(),
+                            DeliveryOutcome::rejected()
+                                .with_detail(
+                                    "target_denied",
+                                    "target is not configured for this sink",
+                                )
+                                .map_err(|_| SinkFailure::invalid_contract(&request))?,
+                        )
+                        .map_err(|_| SinkFailure::invalid_contract(&request))?,
+                    ),
                 }
             }
 
             let event = match radroots_nostr::event::to_nostr(request.payload().event().envelope())
             {
                 Ok(event) => event,
-                Err(_) => return Err(radroots_transport::Error::InvalidDeliveryOutcome),
+                Err(_) => return Err(SinkFailure::invalid_contract(&request)),
             };
             let remaining_ms = request.deadline_unix_ms().saturating_sub(unix_time_ms());
             let operation_timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
@@ -131,7 +136,8 @@ impl EventSink for NostrTransport {
                         .expect("normalized timeout cannot satisfy delivery")
                 }));
                 self.status.record_sink(0, skipped.len(), Some("timeout"));
-                return DeliveryReceipt::for_request(&request, skipped);
+                return DeliveryReceipt::for_request(&request, skipped)
+                    .map_err(|_| SinkFailure::invalid_contract(&request));
             }
             let expected: BTreeSet<_> = requested.iter().map(|(relay, _)| relay.clone()).collect();
             let results = self
@@ -150,7 +156,7 @@ impl EventSink for NostrTransport {
                 {
                     continue;
                 }
-                return Err(radroots_transport::Error::InvalidDeliveryOutcome);
+                return Err(SinkFailure::invalid_contract(&request));
             }
 
             let mut receipts = skipped;
@@ -172,6 +178,7 @@ impl EventSink for NostrTransport {
                 .find_map(|receipt| receipt.outcome().message());
             self.status.record_sink(accepted, failed, diagnostic);
             DeliveryReceipt::for_request(&request, receipts)
+                .map_err(|_| SinkFailure::invalid_contract(&request))
         })
     }
 }
@@ -411,8 +418,10 @@ mod tests {
             },
         ]);
         assert_eq!(
-            futures::executor::block_on(duplicate.deliver(request())),
-            Err(radroots_transport::Error::InvalidDeliveryOutcome)
+            futures::executor::block_on(duplicate.deliver(request()))
+                .expect_err("duplicate relay evidence")
+                .code(),
+            "invalid_transport_contract"
         );
 
         let other = RelayUrl::parse("wss://other.example", RelayUrlPolicy::Public).expect("other");
@@ -421,8 +430,10 @@ mod tests {
             outcome: DeliveryOutcome::accepted(),
         }]);
         assert_eq!(
-            futures::executor::block_on(unexpected.deliver(request())),
-            Err(radroots_transport::Error::InvalidDeliveryOutcome)
+            futures::executor::block_on(unexpected.deliver(request()))
+                .expect_err("unexpected relay evidence")
+                .code(),
+            "invalid_transport_contract"
         );
 
         let denied_request = DeliveryRequest::new(

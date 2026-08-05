@@ -2,9 +2,23 @@
 
 use crate::{
     Error,
+    outcome::DeliveryOutcome,
     target::{TargetFingerprint, TargetSet},
 };
-use alloc::{collections::BTreeSet, vec::Vec};
+use alloc::{collections::BTreeMap, vec::Vec};
+
+/// Current result of evaluating delivery evidence against one exact policy.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SatisfactionState {
+    /// The evidence already satisfies the policy.
+    Satisfied,
+    /// The policy is not satisfied, but unattempted or retryable work can satisfy it.
+    Pending,
+    /// The available evidence proves that the policy can no longer be satisfied.
+    Exhausted,
+}
 
 /// Success level a caller requires from selected targets.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -111,14 +125,9 @@ impl TargetPolicy {
                 }
             }
             TargetPolicyKind::Required(required) => {
-                let requested: BTreeSet<&str> = targets
-                    .targets()
-                    .iter()
-                    .map(|target| target.fingerprint().as_str())
-                    .collect();
                 if required
                     .iter()
-                    .any(|fingerprint| !requested.contains(fingerprint.as_str()))
+                    .any(|fingerprint| !targets.contains(fingerprint))
                 {
                     Err(Error::RequiredTargetNotRequested)
                 } else {
@@ -128,14 +137,14 @@ impl TargetPolicy {
         }
     }
 
-    pub(crate) fn is_satisfied(&self, total_targets: usize, satisfied: &BTreeSet<&str>) -> bool {
+    fn is_satisfied(&self, total_targets: usize, satisfied: usize, fingerprints: &[&str]) -> bool {
         match &self.kind {
-            TargetPolicyKind::Any => !satisfied.is_empty(),
-            TargetPolicyKind::All => satisfied.len() == total_targets,
-            TargetPolicyKind::Quorum(threshold) => satisfied.len() >= usize::from(*threshold),
+            TargetPolicyKind::Any => satisfied != 0,
+            TargetPolicyKind::All => satisfied == total_targets,
+            TargetPolicyKind::Quorum(threshold) => satisfied >= usize::from(*threshold),
             TargetPolicyKind::Required(required) => required
                 .iter()
-                .all(|fingerprint| satisfied.contains(fingerprint.as_str())),
+                .all(|fingerprint| fingerprints.contains(&fingerprint.as_str())),
         }
     }
 }
@@ -172,6 +181,69 @@ impl SatisfactionPolicy {
     /// request, without reproducing transport policy law.
     pub fn validate_for(&self, targets: &TargetSet) -> Result<(), Error> {
         self.targets.validate_for(targets)
+    }
+}
+
+/// Evaluates target evidence using the transport-owned satisfaction law.
+///
+/// Evidence is ordered from oldest to newest when a target occurs more than
+/// once. A prior success remains authoritative; otherwise the newest outcome
+/// determines whether the target can be retried. Targets without evidence are
+/// pending. Evidence for a target outside `targets` is rejected.
+pub fn evaluate_satisfaction<'a, I>(
+    policy: &SatisfactionPolicy,
+    targets: &TargetSet,
+    evidence: I,
+) -> Result<SatisfactionState, Error>
+where
+    I: IntoIterator<Item = (&'a TargetFingerprint, &'a DeliveryOutcome)>,
+{
+    policy.validate_for(targets)?;
+    let mut states: BTreeMap<&str, (bool, bool)> = targets
+        .targets()
+        .iter()
+        .map(|target| (target.fingerprint().as_str(), (false, true)))
+        .collect();
+
+    for (target, outcome) in evidence {
+        outcome.validate()?;
+        let Some((satisfied, retryable)) = states.get_mut(target.as_str()) else {
+            return Err(Error::UnexpectedDeliveryTargetReceipt);
+        };
+        if outcome.satisfies(policy.class()) {
+            *satisfied = true;
+            *retryable = false;
+        } else if !*satisfied {
+            *retryable = outcome.is_retryable();
+        }
+    }
+
+    let satisfied_targets: Vec<&str> = states
+        .iter()
+        .filter_map(|(target, (satisfied, _))| satisfied.then_some(*target))
+        .collect();
+    if policy.targets.is_satisfied(
+        targets.len(),
+        satisfied_targets.len(),
+        satisfied_targets.as_slice(),
+    ) {
+        return Ok(SatisfactionState::Satisfied);
+    }
+
+    let possible_targets: Vec<&str> = states
+        .iter()
+        .filter_map(|(target, (satisfied, retryable))| {
+            (*satisfied || *retryable).then_some(*target)
+        })
+        .collect();
+    if policy.targets.is_satisfied(
+        targets.len(),
+        possible_targets.len(),
+        possible_targets.as_slice(),
+    ) {
+        Ok(SatisfactionState::Pending)
+    } else {
+        Ok(SatisfactionState::Exhausted)
     }
 }
 

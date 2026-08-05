@@ -37,7 +37,7 @@ impl EventSink for SinkOnly {
     fn deliver(
         &self,
         request: DeliveryRequest,
-    ) -> BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::Error>> {
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::SinkFailure>> {
         Box::pin(async move {
             let receipts = request
                 .target_set()
@@ -49,6 +49,7 @@ impl EventSink for SinkOnly {
                 })
                 .collect();
             DeliveryReceipt::for_request(&request, receipts)
+                .map_err(|_| radroots_transport::SinkFailure::invalid_contract(&request))
         })
     }
 }
@@ -79,7 +80,7 @@ impl EventSink for Bidirectional {
     fn deliver(
         &self,
         request: DeliveryRequest,
-    ) -> BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::Error>> {
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::SinkFailure>> {
         self.sink.deliver(request)
     }
 }

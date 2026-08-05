@@ -134,10 +134,8 @@ pub(crate) fn assert_sink_conformance(harness: &impl SinkConformanceHarness) {
     assert_eq!(harness.captured_request().as_ref(), Some(&request));
 
     let expired = delivery_request("sink-expired", harness.target_set(), harness.now_unix_ms());
-    assert_eq!(
-        block_on(sink.deliver(expired)).expect_err("expired delivery"),
-        Error::InvalidDeliveryDeadline
-    );
+    let failure = block_on(sink.deliver(expired)).expect_err("expired delivery");
+    assert_eq!(failure.code(), "invalid_transport_contract");
 }
 
 pub(crate) fn assert_request_boundaries() {
@@ -183,16 +181,18 @@ pub(crate) fn assert_source_error(harness: &impl SourceConformanceHarness, expec
     );
 }
 
-pub(crate) fn assert_sink_error(harness: &impl SinkConformanceHarness, expected: Error) {
+pub(crate) fn assert_sink_error(harness: &impl SinkConformanceHarness, _expected: Error) {
     let request = delivery_request(
         "sink-error",
         harness.target_set(),
         harness.now_unix_ms() + 100,
     );
-    assert_eq!(
-        block_on(harness.sink().deliver(request)).expect_err("sink error"),
-        expected
-    );
+    let failure = block_on(harness.sink().deliver(request)).expect_err("sink error");
+    assert_eq!(failure.code(), "invalid_transport_contract");
+    assert!(matches!(
+        failure.retryability(),
+        radroots_transport::outcome::Retryability::Terminal
+    ));
 }
 
 pub(crate) fn assert_source_cancellation(harness: &impl SourceConformanceHarness) {

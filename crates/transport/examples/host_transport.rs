@@ -41,8 +41,11 @@ impl EventSink for HostTransport {
         })
     }
 
-    fn deliver(&self, _request: DeliveryRequest) -> BoxFuture<'_, Result<DeliveryReceipt, Error>> {
-        Box::pin(async { Err(Error::UnsupportedOperation) })
+    fn deliver(
+        &self,
+        _request: DeliveryRequest,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, radroots_transport::SinkFailure>> {
+        Box::pin(async move { Err(radroots_transport::SinkFailure::invalid_contract(&_request)) })
     }
 }
 

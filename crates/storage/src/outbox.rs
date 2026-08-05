@@ -7,7 +7,10 @@ use core::fmt;
 pub use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, TransportId,
     outcome::{DeliveryOutcome, DeliveryOutcomeKind, Retryability},
-    policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    policy::{
+        SatisfactionClass, SatisfactionPolicy, SatisfactionState, TargetPolicy,
+        evaluate_satisfaction as evaluate_transport_satisfaction,
+    },
     sink::{DeliveryPayload, DeliveryTargetReceipt},
     target::{
         TARGET_SET_MAX_ITEMS, Target, TargetFingerprint, TargetLabel, TargetScope, TargetSet,
@@ -921,56 +924,16 @@ fn evaluate_satisfaction(
     request: &DeliveryRequest,
     evidence: &[TargetDeliveryEvidence],
 ) -> SatisfactionResult {
-    let class = request.satisfaction().class();
-    let targets = request.target_set().targets();
-    let is_successful = |target: &TargetFingerprint| {
+    match evaluate_transport_satisfaction(
+        request.satisfaction(),
+        request.target_set(),
         evidence
             .iter()
-            .any(|entry| entry.target() == target && entry.outcome().satisfies(class))
-    };
-    let is_retryable = |target: &TargetFingerprint| {
-        evidence
-            .iter()
-            .rev()
-            .find(|entry| entry.target() == target)
-            .is_some_and(|entry| entry.outcome().is_retryable())
-    };
-    let successful = targets
-        .iter()
-        .filter(|target| is_successful(target.fingerprint()))
-        .count();
-    let retryable = targets
-        .iter()
-        .filter(|target| !is_successful(target.fingerprint()) && is_retryable(target.fingerprint()))
-        .count();
-    let policy = request.satisfaction().targets();
-    let (satisfied, possible) = if policy.is_any() {
-        (successful != 0, successful + retryable != 0)
-    } else if policy.is_all() {
-        (
-            successful == targets.len(),
-            successful + retryable == targets.len(),
-        )
-    } else if let Some(threshold) = policy.quorum_threshold() {
-        let threshold = usize::from(threshold);
-        (successful >= threshold, successful + retryable >= threshold)
-    } else {
-        // `TargetPolicy` is closed over any/all/quorum/required; after the
-        // preceding branches, the required-target slice is necessarily set.
-        let required = policy.required_targets().unwrap_or_default();
-        (
-            required.iter().all(&is_successful),
-            required
-                .iter()
-                .all(|target| is_successful(target) || is_retryable(target)),
-        )
-    };
-    if satisfied {
-        SatisfactionResult::Satisfied
-    } else if possible {
-        SatisfactionResult::Pending
-    } else {
-        SatisfactionResult::Exhausted
+            .map(|entry| (entry.target(), entry.outcome())),
+    ) {
+        Ok(SatisfactionState::Satisfied) => SatisfactionResult::Satisfied,
+        Ok(SatisfactionState::Pending) => SatisfactionResult::Pending,
+        Ok(SatisfactionState::Exhausted) | Err(_) => SatisfactionResult::Exhausted,
     }
 }
 
@@ -1787,7 +1750,7 @@ mod tests {
         let any_request = request_with(TargetPolicy::any());
         assert_eq!(
             evaluate_satisfaction(&any_request, &[]),
-            SatisfactionResult::Exhausted
+            SatisfactionResult::Pending
         );
         assert_eq!(
             evaluate_satisfaction(&any_request, &retryable),
@@ -1800,7 +1763,7 @@ mod tests {
         let quorum_request = request_with(TargetPolicy::quorum(2).unwrap());
         assert_eq!(
             evaluate_satisfaction(&quorum_request, &one_accepted),
-            SatisfactionResult::Exhausted
+            SatisfactionResult::Pending
         );
         let required_request =
             request_with(TargetPolicy::required(vec![targets[0].fingerprint().clone()]).unwrap());
