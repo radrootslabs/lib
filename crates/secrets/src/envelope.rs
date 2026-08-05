@@ -7,13 +7,17 @@ use crate::context::{
 };
 use crate::error::Error;
 use crate::id::{BackendKind, KeyVersion};
-use crate::wrapping::{KeyWrapping, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret};
+use crate::wrapping::{
+    KeyWrapping, LegacyV1UnwrapRequest, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret,
+};
 use crate::{SecretId, SecretRef};
 use alloc::string::String;
 use alloc::vec::Vec;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use core::fmt;
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 const MAGIC: [u8; 4] = *b"RRS1";
 const DATA_KEY_BYTES: usize = 32;
@@ -114,6 +118,62 @@ impl SealMaterial {
 impl fmt::Debug for SealMaterial {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SealMaterial(<redacted>)")
+    }
+}
+
+/// Explicit capability required to read and reseal a decoded v1 envelope.
+///
+/// Hosts must construct this value only inside their authorized migration
+/// boundary. It cannot be derived from envelope bytes and is intentionally not
+/// cloneable or serializable.
+pub struct LegacyV1ResealAuthority {
+    _private: (),
+}
+
+#[allow(clippy::new_without_default)]
+impl LegacyV1ResealAuthority {
+    /// Grants one explicitly scoped host migration boundary v1 access.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+impl fmt::Debug for LegacyV1ResealAuthority {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("LegacyV1ResealAuthority(<redacted>)")
+    }
+}
+
+/// Result of an authenticated v1 read and fresh-material v2 reseal.
+pub struct LegacyV1ResealResult {
+    envelope: EncryptedEnvelope,
+    plaintext_commitment: [u8; 32],
+}
+
+impl LegacyV1ResealResult {
+    /// Returns the new context-bound v2 envelope.
+    #[must_use]
+    pub const fn envelope(&self) -> &EncryptedEnvelope {
+        &self.envelope
+    }
+
+    /// Consumes the result and returns the new v2 envelope.
+    #[must_use]
+    pub fn into_envelope(self) -> EncryptedEnvelope {
+        self.envelope
+    }
+
+    /// Returns the SHA-256 commitment to the authenticated plaintext.
+    #[must_use]
+    pub const fn plaintext_commitment(&self) -> &[u8; 32] {
+        &self.plaintext_commitment
+    }
+}
+
+impl fmt::Debug for LegacyV1ResealResult {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("LegacyV1ResealResult(<redacted>)")
     }
 }
 
@@ -258,6 +318,71 @@ impl EncryptedEnvelope {
         SecretMaterial::from_owned(plaintext)
     }
 
+    /// Authenticates and opens v1 only under explicit migration authority.
+    pub async fn open_legacy_v1(
+        &self,
+        wrapping: &dyn KeyWrapping,
+        authority: &LegacyV1ResealAuthority,
+        expected_reference: &SecretRef,
+        _destination_context: &EnvelopeContext,
+    ) -> Result<SecretMaterial, Error> {
+        let (plaintext, _) = self
+            .open_legacy_parts(wrapping, authority, expected_reference)
+            .await?;
+        Ok(plaintext)
+    }
+
+    /// Authenticates v1, validates its payload, and reseals as v2 with fresh material.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn reseal_legacy_v1<V>(
+        &self,
+        wrapping: &dyn KeyWrapping,
+        authority: &LegacyV1ResealAuthority,
+        expected_reference: &SecretRef,
+        new_reference: SecretRef,
+        new_context: EnvelopeContext,
+        validator: &V,
+        material: SealMaterial,
+    ) -> Result<LegacyV1ResealResult, Error>
+    where
+        V: Fn(&[u8]) -> bool + Send + Sync,
+    {
+        if material.nonce == self.nonce {
+            return Err(Error::LegacyEntropyReuse);
+        }
+        validate_data_key(&material.data_key)?;
+        let (plaintext, legacy_data_key) = self
+            .open_legacy_parts(wrapping, authority, expected_reference)
+            .await?;
+        let reused_key = legacy_data_key.expose_secret(|legacy| {
+            material
+                .data_key
+                .expose_secret(|fresh| bool::from(legacy.ct_eq(fresh)))
+        });
+        if reused_key {
+            return Err(Error::LegacyEntropyReuse);
+        }
+        if !plaintext.expose_secret(validator) {
+            return Err(Error::LegacyPayloadValidationFailed);
+        }
+        let plaintext_commitment =
+            plaintext.expose_secret(|bytes| <[u8; 32]>::from(Sha256::digest(bytes)));
+        let envelope = Self::seal(
+            wrapping,
+            SealRequest::new(new_reference, new_context, &plaintext, material),
+        )
+        .await?;
+        let resealed_commitment =
+            plaintext.expose_secret(|bytes| <[u8; 32]>::from(Sha256::digest(bytes)));
+        if plaintext_commitment.ct_eq(&resealed_commitment).unwrap_u8() != 1 {
+            return Err(Error::EncryptFailed);
+        }
+        Ok(LegacyV1ResealResult {
+            envelope,
+            plaintext_commitment,
+        })
+    }
+
     /// Returns the authenticated provider reference.
     #[must_use]
     pub const fn reference(&self) -> &SecretRef {
@@ -384,6 +509,43 @@ impl EncryptedEnvelope {
         }
         Ok(())
     }
+
+    async fn open_legacy_parts(
+        &self,
+        wrapping: &dyn KeyWrapping,
+        authority: &LegacyV1ResealAuthority,
+        expected_reference: &SecretRef,
+    ) -> Result<(SecretMaterial, SecretMaterial), Error> {
+        self.validate()?;
+        if self.version != LEGACY_ENVELOPE_VERSION {
+            return Err(Error::LegacyEnvelopeDenied);
+        }
+        if !references_match(&self.reference, expected_reference) {
+            return Err(Error::ProviderReferenceMismatch);
+        }
+        let data_key = wrapping
+            .unwrap_legacy_v1(LegacyV1UnwrapRequest::new(
+                &self.reference,
+                &self.wrapped_key,
+                authority,
+            ))
+            .await?;
+        validate_data_key(&data_key)?;
+        let aad = self.encoded_header()?;
+        let plaintext = data_key.expose_secret(|data_key| {
+            let cipher = XChaCha20Poly1305::new(Key::from_slice(data_key));
+            cipher
+                .decrypt(
+                    XNonce::from_slice(self.nonce.as_bytes()),
+                    Payload {
+                        msg: self.ciphertext.as_slice(),
+                        aad: aad.as_slice(),
+                    },
+                )
+                .map_err(|_| Error::DecryptFailed)
+        })?;
+        Ok((SecretMaterial::from_owned(plaintext)?, data_key))
+    }
 }
 
 impl fmt::Debug for EncryptedEnvelope {
@@ -447,6 +609,12 @@ fn validate_data_key(data_key: &SecretMaterial) -> Result<(), Error> {
         });
     }
     Ok(())
+}
+
+fn references_match(left: &SecretRef, right: &SecretRef) -> bool {
+    left.backend() == right.backend()
+        && left.key_version() == right.key_version()
+        && left.id().as_str() == right.id().as_str()
 }
 
 #[allow(clippy::too_many_arguments)]

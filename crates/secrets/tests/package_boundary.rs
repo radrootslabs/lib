@@ -43,6 +43,7 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
             "keyring",
             "serde",
             "sha2",
+            "subtle",
             "tempfile",
             "zeroize"
         ])

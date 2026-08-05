@@ -2,6 +2,7 @@
 
 use crate::SecretRef;
 use crate::context::EnvelopeContext;
+use crate::envelope::LegacyV1ResealAuthority;
 use crate::error::Error;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -162,6 +163,45 @@ pub struct UnwrapRequest<'a> {
     wrapped: &'a WrappedSecret,
 }
 
+/// Capability-gated input for migration-only v1 key unwrapping.
+pub struct LegacyV1UnwrapRequest<'a> {
+    reference: &'a SecretRef,
+    wrapped: &'a WrappedSecret,
+    _authority: &'a LegacyV1ResealAuthority,
+}
+
+impl<'a> LegacyV1UnwrapRequest<'a> {
+    pub(crate) const fn new(
+        reference: &'a SecretRef,
+        wrapped: &'a WrappedSecret,
+        authority: &'a LegacyV1ResealAuthority,
+    ) -> Self {
+        Self {
+            reference,
+            wrapped,
+            _authority: authority,
+        }
+    }
+
+    /// Returns the exact legacy provider capability reference.
+    #[must_use]
+    pub const fn reference(&self) -> &'a SecretRef {
+        self.reference
+    }
+
+    /// Returns the exact provider-wrapped v1 value.
+    #[must_use]
+    pub const fn wrapped(&self) -> &'a WrappedSecret {
+        self.wrapped
+    }
+}
+
+impl fmt::Debug for LegacyV1UnwrapRequest<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("LegacyV1UnwrapRequest(<redacted>)")
+    }
+}
+
 impl<'a> UnwrapRequest<'a> {
     /// Creates an explicit unwrapping request.
     #[must_use]
@@ -206,6 +246,14 @@ pub trait KeyWrapping: Send + Sync {
         &'a self,
         request: UnwrapRequest<'a>,
     ) -> BoxFuture<'a, Result<SecretMaterial, Error>>;
+
+    /// Unwraps v1 material only when the envelope migration boundary grants authority.
+    fn unwrap_legacy_v1<'a>(
+        &'a self,
+        _request: LegacyV1UnwrapRequest<'a>,
+    ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
+        Box::pin(async { Err(Error::LegacyEnvelopeDenied) })
+    }
 }
 
 #[cfg(test)]

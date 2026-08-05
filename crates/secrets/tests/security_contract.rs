@@ -36,6 +36,8 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
         "radroots_secrets::id::SecretRef",
         "radroots_secrets::envelope::SealMaterial",
         "radroots_secrets::envelope::SealRequest",
+        "radroots_secrets::envelope::LegacyV1ResealAuthority",
+        "radroots_secrets::wrapping::LegacyV1UnwrapRequest",
     ] {
         for forbidden_trait in ["core::clone::Clone", "serde_core::ser::Serialize"] {
             let forbidden = format!("impl {forbidden_trait} for {secret_bearing_type}");

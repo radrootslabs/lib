@@ -122,6 +122,14 @@ a persistence contract; Rust layout and debug output are not. Unknown versions,
 ciphers, key sources, malformed lengths, context mismatches, backend mismatches,
 and authentication failures fail closed.
 
+Legacy v1 bytes remain decodeable for migration inventory, but normal open
+always rejects them. An authorized host migration boundary must explicitly
+construct `LegacyV1ResealAuthority`, supply the independently derived v2
+context and expected provider reference, validate the owning payload schema,
+and provide a fresh data key and nonce. The migration primitive rejects key or
+nonce reuse and returns only a new v2 envelope plus a plaintext commitment;
+transient plaintext and key material remain single-owner zeroizing values.
+
 Provider-native error strings are normalized before crossing the public
 boundary. Callers must still avoid logging plaintext, serialized identifiers,
 encoded envelopes, or provider configuration.

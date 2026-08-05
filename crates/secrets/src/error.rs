@@ -188,6 +188,12 @@ pub enum Error {
     },
     /// A v1 envelope was presented to the normal v2-only open API.
     LegacyEnvelopeDenied,
+    /// The expected legacy provider reference did not match authenticated v1 metadata.
+    ProviderReferenceMismatch,
+    /// A legacy payload failed its owning schema validator.
+    LegacyPayloadValidationFailed,
+    /// Legacy key or nonce material was reused for a v2 reseal.
+    LegacyEntropyReuse,
     /// The encoded cipher identifier is not supported.
     UnsupportedCipher {
         /// Observed cipher identifier.
@@ -324,6 +330,15 @@ impl fmt::Display for Error {
             Self::LegacyEnvelopeDenied => {
                 formatter.write_str("legacy encrypted envelope requires migration authority")
             }
+            Self::ProviderReferenceMismatch => {
+                formatter.write_str("encrypted envelope provider reference mismatch")
+            }
+            Self::LegacyPayloadValidationFailed => {
+                formatter.write_str("legacy encrypted payload failed schema validation")
+            }
+            Self::LegacyEntropyReuse => {
+                formatter.write_str("legacy envelope cryptographic material cannot be reused")
+            }
             Self::UnsupportedCipher { cipher } => {
                 write!(
                     formatter,
@@ -439,6 +454,9 @@ mod tests {
             Error::UnsupportedEnvelopeVersion { version: 2 },
             Error::UnsupportedContextVersion { version: 2 },
             Error::LegacyEnvelopeDenied,
+            Error::ProviderReferenceMismatch,
+            Error::LegacyPayloadValidationFailed,
+            Error::LegacyEntropyReuse,
             Error::UnsupportedCipher { cipher: 9 },
             Error::UnsupportedKeySource { key_source: 9 },
             Error::UnsupportedBackend { backend: 9 },

@@ -5,7 +5,8 @@ use crate::error::{Error, Operation};
 use crate::id::BackendKind;
 use crate::provider::{CapabilitySupport, ResidencySupport, SecretCapabilities, SecretProvider};
 use crate::wrapping::{
-    BoxFuture, KeyWrapping, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret,
+    BoxFuture, KeyWrapping, LegacyV1UnwrapRequest, SecretMaterial, UnwrapRequest, WrapRequest,
+    WrappedSecret,
 };
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
@@ -160,6 +161,19 @@ impl KeyWrapping for KeyringProvider {
             if request.wrapped().as_bytes()
                 != wrapping_token(request.reference(), request.context()).as_slice()
             {
+                return Err(backend_failure(Operation::Unwrap));
+            }
+            self.read_material(request.reference())
+        })
+    }
+
+    fn unwrap_legacy_v1<'a>(
+        &'a self,
+        request: LegacyV1UnwrapRequest<'a>,
+    ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
+        Box::pin(async move {
+            validate_keyring_reference(request.reference())?;
+            if request.wrapped().as_bytes() != reference_token(request.reference()).as_slice() {
                 return Err(backend_failure(Operation::Unwrap));
             }
             self.read_material(request.reference())

@@ -3,12 +3,12 @@ use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
 };
 use radroots_secrets::envelope::{
-    Cipher, ENVELOPE_VERSION, KeySource, Nonce, SealMaterial, SealRequest,
+    Cipher, ENVELOPE_VERSION, KeySource, LegacyV1ResealAuthority, Nonce, SealMaterial, SealRequest,
 };
 use radroots_secrets::error::Operation;
 use radroots_secrets::id::{BackendKind, KeyVersion};
 use radroots_secrets::wrapping::{
-    BoxFuture, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret,
+    BoxFuture, LegacyV1UnwrapRequest, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret,
 };
 use radroots_secrets::{EncryptedEnvelope, Error, KeyWrapping, SecretId, SecretRef};
 
@@ -33,6 +33,27 @@ impl KeyWrapping for VectorWrapping {
     fn unwrap<'a>(
         &'a self,
         request: UnwrapRequest<'a>,
+    ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
+        Box::pin(async move {
+            if request.reference().id().as_str() != "envelope-key" {
+                return Err(Error::BackendFailure {
+                    backend: BackendKind::Memory,
+                    operation: Operation::Unwrap,
+                });
+            }
+            let plaintext = request
+                .wrapped()
+                .as_bytes()
+                .iter()
+                .map(|byte| byte ^ 0x5A)
+                .collect::<Vec<_>>();
+            SecretMaterial::from_slice(plaintext.as_slice())
+        })
+    }
+
+    fn unwrap_legacy_v1<'a>(
+        &'a self,
+        request: LegacyV1UnwrapRequest<'a>,
     ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
         Box::pin(async move {
             if request.reference().id().as_str() != "envelope-key" {
@@ -166,6 +187,106 @@ fn normal_open_denies_the_frozen_v1_corpus() {
         block_on(envelope.open(&VectorWrapping, &context())).err(),
         Some(Error::LegacyEnvelopeDenied)
     );
+}
+
+#[test]
+fn explicit_legacy_open_and_fresh_reseal_preserve_plaintext() {
+    let legacy = hex::decode("52525331000101010100000007000c656e76656c6f70652d6b6579222222222222222222222222222222222222222222222222000000204b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b00000028f106837e33d690e7c5287abdd815ce9257b7b5b176ea9596abf3b7fe745aec5a8c2487a553d4659d").expect("legacy hex");
+    let envelope = EncryptedEnvelope::decode(&legacy).expect("legacy decode");
+    let authority = LegacyV1ResealAuthority::new();
+    let expected_reference = reference();
+    let opened = block_on(envelope.open_legacy_v1(
+        &VectorWrapping,
+        &authority,
+        &expected_reference,
+        &context(),
+    ))
+    .expect("legacy open");
+    opened.expose_secret(|bytes| assert_eq!(bytes, b"radroots envelope vector"));
+
+    let result = block_on(envelope.reseal_legacy_v1(
+        &VectorWrapping,
+        &authority,
+        &expected_reference,
+        reference(),
+        context(),
+        &|bytes: &[u8]| bytes == b"radroots envelope vector",
+        SealMaterial::new(
+            SecretMaterial::from_slice(&[0x33; 32]).expect("fresh key"),
+            Nonce::new([0x44; 24]),
+        ),
+    ))
+    .expect("legacy reseal");
+    assert_eq!(result.envelope().version(), ENVELOPE_VERSION);
+    assert_ne!(result.plaintext_commitment(), &[0; 32]);
+    let resealed = result.into_envelope();
+    let opened = block_on(resealed.open(&VectorWrapping, &context())).expect("open reseal");
+    opened.expose_secret(|bytes| assert_eq!(bytes, b"radroots envelope vector"));
+}
+
+#[test]
+fn legacy_reseal_rejects_wrong_authority_inputs_validation_and_entropy_reuse() {
+    let legacy = hex::decode("52525331000101010100000007000c656e76656c6f70652d6b6579222222222222222222222222222222222222222222222222000000204b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b00000028f106837e33d690e7c5287abdd815ce9257b7b5b176ea9596abf3b7fe745aec5a8c2487a553d4659d").expect("legacy hex");
+    let envelope = EncryptedEnvelope::decode(&legacy).expect("legacy decode");
+    let authority = LegacyV1ResealAuthority::new();
+    let wrong_reference = SecretRef::new(
+        SecretId::parse("wrong-key").expect("id"),
+        BackendKind::Memory,
+        KeyVersion::new(7).expect("version"),
+    );
+    assert_eq!(
+        block_on(envelope.open_legacy_v1(
+            &VectorWrapping,
+            &authority,
+            &wrong_reference,
+            &context(),
+        ))
+        .err(),
+        Some(Error::ProviderReferenceMismatch)
+    );
+
+    let expected_reference = reference();
+    let invalid = block_on(envelope.reseal_legacy_v1(
+        &VectorWrapping,
+        &authority,
+        &expected_reference,
+        reference(),
+        context(),
+        &|_: &[u8]| false,
+        SealMaterial::new(
+            SecretMaterial::from_slice(&[0x33; 32]).expect("fresh key"),
+            Nonce::new([0x44; 24]),
+        ),
+    ));
+    assert!(matches!(invalid, Err(Error::LegacyPayloadValidationFailed)));
+
+    let reused_nonce = block_on(envelope.reseal_legacy_v1(
+        &VectorWrapping,
+        &authority,
+        &expected_reference,
+        reference(),
+        context(),
+        &|_: &[u8]| true,
+        SealMaterial::new(
+            SecretMaterial::from_slice(&[0x33; 32]).expect("fresh key"),
+            Nonce::new([0x22; 24]),
+        ),
+    ));
+    assert!(matches!(reused_nonce, Err(Error::LegacyEntropyReuse)));
+
+    let reused_key = block_on(envelope.reseal_legacy_v1(
+        &VectorWrapping,
+        &authority,
+        &expected_reference,
+        reference(),
+        context(),
+        &|_: &[u8]| true,
+        SealMaterial::new(
+            SecretMaterial::from_slice(&[0x11; 32]).expect("legacy key"),
+            Nonce::new([0x44; 24]),
+        ),
+    ));
+    assert!(matches!(reused_key, Err(Error::LegacyEntropyReuse)));
 }
 
 #[test]

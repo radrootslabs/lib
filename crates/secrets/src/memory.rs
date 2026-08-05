@@ -5,7 +5,8 @@ use crate::error::{Error, Operation};
 use crate::id::BackendKind;
 use crate::provider::{CapabilitySupport, ResidencySupport, SecretCapabilities, SecretProvider};
 use crate::wrapping::{
-    BoxFuture, KeyWrapping, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret,
+    BoxFuture, KeyWrapping, LegacyV1UnwrapRequest, SecretMaterial, UnwrapRequest, WrapRequest,
+    WrappedSecret,
 };
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
@@ -106,15 +107,20 @@ impl MemoryProvider {
         reference: &SecretRef,
         context: &crate::context::EnvelopeContext,
     ) -> Result<WrappedSecret, Error> {
+        let mut token = Self::legacy_wrapped_token(reference)?;
+        token.extend_from_slice(&context.authentication_digest());
+        WrappedSecret::from_bytes(token)
+    }
+
+    fn legacy_wrapped_token(reference: &SecretRef) -> Result<Vec<u8>, Error> {
         let id = reference.id().as_str().as_bytes();
-        let mut token = Vec::with_capacity(TOKEN_MAGIC.len() + 4 + 2 + id.len() + 32);
+        let mut token = Vec::with_capacity(TOKEN_MAGIC.len() + 4 + 2 + id.len());
         token.extend_from_slice(TOKEN_MAGIC);
         token.extend_from_slice(&reference.key_version().get().to_be_bytes());
         let id_len = u16::try_from(id.len()).map_err(|_| backend_failure(Operation::Wrap))?;
         token.extend_from_slice(&id_len.to_be_bytes());
         token.extend_from_slice(id);
-        token.extend_from_slice(&context.authentication_digest());
-        WrappedSecret::from_bytes(token)
+        Ok(token)
     }
 
     fn clone_material(
@@ -164,6 +170,21 @@ impl KeyWrapping for MemoryProvider {
             validate_memory_reference(request.reference())?;
             let expected = Self::wrapped_token(request.reference(), request.context())?;
             if expected.as_bytes() != request.wrapped().as_bytes() {
+                return Err(backend_failure(Operation::Unwrap));
+            }
+            self.clone_material(request.reference(), Operation::Unwrap)
+        })
+    }
+
+    fn unwrap_legacy_v1<'a>(
+        &'a self,
+        request: LegacyV1UnwrapRequest<'a>,
+    ) -> BoxFuture<'a, Result<SecretMaterial, Error>> {
+        Box::pin(async move {
+            validate_memory_reference(request.reference())?;
+            if request.wrapped().as_bytes()
+                != Self::legacy_wrapped_token(request.reference())?.as_slice()
+            {
                 return Err(backend_failure(Operation::Unwrap));
             }
             self.clone_material(request.reference(), Operation::Unwrap)
