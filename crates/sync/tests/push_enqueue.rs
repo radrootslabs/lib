@@ -15,12 +15,17 @@ use radroots_event_codec::authoring::AuthoredEventPlan;
 use radroots_protocol::runtime::v1::SyncRetryDecision;
 use radroots_signing::{
     Actor, Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus,
-    actor::ActorSource, error::Kind as SigningErrorKind, request::CancellationPolicy,
+    actor::ActorSource,
+    capability::{CancellationSupport, SignerCapability, SignerKind},
+    error::Kind as SigningErrorKind,
+    recovery::ReplayCapability,
+    request::CancellationPolicy,
+    status::SignerAvailability,
 };
 use radroots_storage::{
     EventStore, Journal, Outbox,
     event::{EventQuery, EventQueryBounds, SourceGeneration},
-    journal::{IdempotencyKey, JournalStage, OperationInstanceId},
+    journal::{IdempotencyKey, OperationInstanceId},
     memory::MemoryStorage,
     outbox::{ClaimOutboxItems, LeaseId, LeaseOwner, OutboxStage, SatisfactionResult},
 };
@@ -150,11 +155,13 @@ impl IdSource for TestIds {
 enum SignBehavior {
     Success { completed_at_unix_ms: u64 },
     Error(SigningErrorKind),
+    Uncertain(SigningErrorKind),
     Pending,
 }
 
 struct MockSigner {
     behavior: SignBehavior,
+    replay: ReplayCapability,
     calls: AtomicUsize,
 }
 
@@ -162,6 +169,15 @@ impl MockSigner {
     fn new(behavior: SignBehavior) -> Self {
         Self {
             behavior,
+            replay: ReplayCapability::LocalReplaySafe,
+            calls: AtomicUsize::new(0),
+        }
+    }
+
+    fn with_replay(behavior: SignBehavior, replay: ReplayCapability) -> Self {
+        Self {
+            behavior,
+            replay,
             calls: AtomicUsize::new(0),
         }
     }
@@ -171,7 +187,24 @@ impl Signer for MockSigner {
     fn status(
         &self,
     ) -> radroots_signing::signer::BoxFuture<'_, Result<SignerStatus, SigningError>> {
-        Box::pin(async { unreachable!("enqueue does not inspect signer status") })
+        let replay = self.replay;
+        Box::pin(async move {
+            Ok(SignerStatus::new(
+                SignerAvailability::Ready,
+                vec![SignerCapability::new(
+                    if replay == ReplayCapability::LocalReplaySafe {
+                        SignerKind::Local
+                    } else {
+                        SignerKind::Remote
+                    },
+                    replay,
+                    CancellationSupport::BeforePublication,
+                    false,
+                    false,
+                )],
+                None,
+            ))
+        })
     }
 
     fn sign(
@@ -189,6 +222,9 @@ impl Signer for MockSigner {
                     completed_at_unix_ms,
                 ),
                 SignBehavior::Error(kind) => Err(SigningError::new(kind)),
+                SignBehavior::Uncertain(kind) => {
+                    Err(SigningError::new(kind).with_possible_remote_effect())
+                }
                 SignBehavior::Pending => std::future::pending().await,
             }
         })
@@ -436,8 +472,222 @@ fn preparation_is_atomic_status_visible_and_replays_without_external_effects() {
     assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
 }
 
+#[test]
+fn signing_claim_recovery_respects_exact_and_non_replayable_capabilities() {
+    let exact_storage = Arc::new(MemoryStorage::new(
+        SourceGeneration::new([8; 32]).expect("generation"),
+    ));
+    let exact_pending = Arc::new(MockSigner::with_replay(
+        SignBehavior::Pending,
+        ReplayCapability::ExactReplayByRequestId,
+    ));
+    let exact_engine = Engine::builder(
+        exact_storage.clone(),
+        Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+        Arc::new(TestIds(AtomicU64::new(100))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(Arc::new(MockSink))
+    .signer(exact_pending.clone())
+    .build()
+    .expect("exact engine");
+    let exact_push = request(8, "wss://relay.example");
+    let mut exact_future = Box::pin(exact_engine.sign_prepared(exact_push.clone())).fuse();
+    let mut context = std::task::Context::from_waker(noop_waker_ref());
+    assert!(exact_future.poll_unpin(&mut context).is_pending());
+    drop(exact_future);
+    let claimed = block_on(exact_engine.push_status(exact_push.operation_id()))
+        .expect("status")
+        .expect("claimed status");
+    assert!(claimed.artifact().signing_claim().is_some());
+
+    let exact_success = Arc::new(MockSigner::with_replay(
+        SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_220_000,
+        },
+        ReplayCapability::ExactReplayByRequestId,
+    ));
+    let exact_recovery = Engine::builder(
+        exact_storage,
+        Arc::new(TestClock(AtomicU64::new(1_800_000_211_000))),
+        Arc::new(TestIds(AtomicU64::new(110))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(Arc::new(MockSink))
+    .signer(exact_success.clone())
+    .build()
+    .expect("recovery engine");
+    let recovered =
+        block_on(exact_recovery.sign_prepared(exact_push.clone())).expect("exact replay recovery");
+    assert_eq!(
+        recovered.artifact().signing_state(),
+        radroots_storage::authored::SigningState::Signed
+    );
+    assert_eq!(exact_success.calls.load(Ordering::Relaxed), 1);
+    let replay = block_on(exact_recovery.sign_prepared(exact_push)).expect("signed replay");
+    assert!(replay.is_replay());
+    assert_eq!(exact_success.calls.load(Ordering::Relaxed), 1);
+
+    let unsafe_storage = Arc::new(MemoryStorage::new(
+        SourceGeneration::new([9; 32]).expect("generation"),
+    ));
+    let unsafe_pending = Arc::new(MockSigner::with_replay(
+        SignBehavior::Pending,
+        ReplayCapability::NonReplayable,
+    ));
+    let unsafe_engine = Engine::builder(
+        unsafe_storage.clone(),
+        Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+        Arc::new(TestIds(AtomicU64::new(120))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(Arc::new(MockSink))
+    .signer(unsafe_pending)
+    .build()
+    .expect("unsafe engine");
+    let unsafe_push = request(9, "wss://relay.example");
+    let mut unsafe_future = Box::pin(unsafe_engine.sign_prepared(unsafe_push.clone())).fuse();
+    let mut context = std::task::Context::from_waker(noop_waker_ref());
+    assert!(unsafe_future.poll_unpin(&mut context).is_pending());
+    drop(unsafe_future);
+
+    let unsafe_success = Arc::new(MockSigner::with_replay(
+        SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_220_000,
+        },
+        ReplayCapability::NonReplayable,
+    ));
+    let unsafe_recovery = Engine::builder(
+        unsafe_storage,
+        Arc::new(TestClock(AtomicU64::new(1_800_000_211_000))),
+        Arc::new(TestIds(AtomicU64::new(130))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(Arc::new(MockSink))
+    .signer(unsafe_success.clone())
+    .build()
+    .expect("unsafe recovery engine");
+    assert_eq!(
+        block_on(unsafe_recovery.sign_prepared(unsafe_push.clone())),
+        Err(Error::SigningIndeterminate)
+    );
+    assert_eq!(unsafe_success.calls.load(Ordering::Relaxed), 0);
+    let unsafe_status = block_on(unsafe_recovery.push_status(unsafe_push.operation_id()))
+        .expect("unsafe status")
+        .expect("unsafe operation");
+    assert_eq!(
+        unsafe_status.artifact().signing_state(),
+        radroots_storage::authored::SigningState::Indeterminate
+    );
+}
+
+#[test]
+fn signing_failures_persist_retry_indeterminate_terminal_and_cancelled_states() {
+    let exact = Arc::new(MockSigner::with_replay(
+        SignBehavior::Uncertain(SigningErrorKind::SignerTimeout),
+        ReplayCapability::ExactReplayByRequestId,
+    ));
+    let (engine, storage) = setup_engine(exact);
+    let retryable = request(10, "wss://relay.example");
+    assert_eq!(
+        block_on(engine.sign_prepared(retryable.clone())),
+        Err(Error::SignerFailed)
+    );
+    let retryable_status = block_on(engine.push_status(retryable.operation_id()))
+        .expect("retryable status")
+        .expect("retryable operation");
+    assert_eq!(
+        retryable_status.artifact().signing_state(),
+        radroots_storage::authored::SigningState::Retryable
+    );
+    let retry_at = retryable_status
+        .artifact()
+        .signing_retry()
+        .expect("retry schedule")
+        .not_before_unix_ms();
+    let success = Arc::new(MockSigner::with_replay(
+        SignBehavior::Success {
+            completed_at_unix_ms: retry_at + 2,
+        },
+        ReplayCapability::ExactReplayByRequestId,
+    ));
+    let recovery = Engine::builder(
+        storage,
+        Arc::new(TestClock(AtomicU64::new(retry_at + 1))),
+        Arc::new(TestIds(AtomicU64::new(140))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+    )
+    .sink(Arc::new(MockSink))
+    .signer(success.clone())
+    .build()
+    .expect("recovery engine");
+    assert_eq!(
+        block_on(recovery.sign_prepared(retryable))
+            .expect("retry exact request")
+            .artifact()
+            .signing_state(),
+        radroots_storage::authored::SigningState::Signed
+    );
+    assert_eq!(success.calls.load(Ordering::Relaxed), 1);
+
+    let non_replayable = Arc::new(MockSigner::with_replay(
+        SignBehavior::Uncertain(SigningErrorKind::SignerTimeout),
+        ReplayCapability::NonReplayable,
+    ));
+    let (engine, _) = setup_engine(non_replayable);
+    let uncertain = request(11, "wss://relay.example");
+    assert_eq!(
+        block_on(engine.sign_prepared(uncertain.clone())),
+        Err(Error::SigningIndeterminate)
+    );
+    assert_eq!(
+        block_on(engine.push_status(uncertain.operation_id()))
+            .expect("indeterminate status")
+            .expect("indeterminate operation")
+            .artifact()
+            .signing_state(),
+        radroots_storage::authored::SigningState::Indeterminate
+    );
+
+    let cancelled = Arc::new(MockSigner::new(SignBehavior::Error(
+        SigningErrorKind::SignerCancelled,
+    )));
+    let (engine, _) = setup_engine(cancelled);
+    let cancelled_push = request(12, "wss://relay.example");
+    assert_eq!(
+        block_on(engine.sign_prepared(cancelled_push.clone())),
+        Err(Error::SigningCancelled)
+    );
+    assert_eq!(
+        block_on(engine.push_status(cancelled_push.operation_id()))
+            .expect("cancelled status")
+            .expect("cancelled operation")
+            .artifact()
+            .signing_state(),
+        radroots_storage::authored::SigningState::Cancelled
+    );
+
+    let terminal = Arc::new(MockSigner::new(SignBehavior::Error(
+        SigningErrorKind::SignerRejected,
+    )));
+    let (engine, _) = setup_engine(terminal);
+    let terminal_push = request(13, "wss://relay.example");
+    assert_eq!(
+        block_on(engine.sign_prepared(terminal_push.clone())),
+        Err(Error::SignerFailed)
+    );
+    assert_eq!(
+        block_on(engine.push_status(terminal_push.operation_id()))
+            .expect("terminal status")
+            .expect("terminal operation")
+            .artifact()
+            .signing_state(),
+        radroots_storage::authored::SigningState::FailedTerminal
+    );
+}
+
 #[tokio::test]
-async fn sqlite_preparation_reopens_and_replays_the_original_complete_intent() {
+async fn sqlite_signing_and_admission_recover_across_every_reopen_boundary() {
     let directory = tempfile::tempdir().expect("database directory");
     let paths = Paths::from_directory(directory.path()).expect("paths");
     let push = request(7, "wss://relay.example");
@@ -469,37 +719,120 @@ async fn sqlite_preparation_reopens_and_replays_the_original_complete_intent() {
         prepared
     };
 
-    let store = Arc::new(
-        SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadWriteExisting))
+    {
+        let store = Arc::new(
+            SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen for signing"),
+        );
+        let capability: Arc<dyn SyncStorage> = store;
+        let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_210_500,
+        }));
+        let engine = Engine::builder(
+            capability,
+            Arc::new(TestClock(AtomicU64::new(1_800_000_210_000))),
+            Arc::new(TestIds(AtomicU64::new(90))),
+            DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+        )
+        .sink(Arc::new(MockSink))
+        .signer(signer.clone())
+        .build()
+        .expect("engine");
+        let status = engine
+            .push_status(push.operation_id())
             .await
-            .expect("reopen SQLite"),
+            .expect("status")
+            .expect("durable preparation");
+        assert_eq!(status.operation(), original.operation());
+        assert_eq!(status.artifact(), original.artifact());
+        assert_eq!(status.delivery_plan(), original.delivery_plan());
+        let replay = engine
+            .prepare_push(push.clone())
+            .await
+            .expect("prepare replay");
+        assert!(replay.is_replay());
+        assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
+        let signed = engine
+            .sign_prepared(push.clone())
+            .await
+            .expect("sign after reopen");
+        assert_eq!(
+            signed.artifact().signing_state(),
+            radroots_storage::authored::SigningState::Signed
+        );
+        assert_eq!(
+            signed.artifact().admission_state(),
+            radroots_storage::authored::AdmissionState::Pending
+        );
+        assert!(signed.artifact().signed().is_some());
+        assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
+    }
+
+    {
+        let store = Arc::new(
+            SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting))
+                .await
+                .expect("reopen for admission"),
+        );
+        let capability: Arc<dyn SyncStorage> = store.clone();
+        let signer = Arc::new(MockSigner::new(SignBehavior::Pending));
+        let engine = Engine::builder(
+            capability,
+            Arc::new(TestClock(AtomicU64::new(1_800_000_211_000))),
+            Arc::new(TestIds(AtomicU64::new(100))),
+            DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+        )
+        .sink(Arc::new(MockSink))
+        .signer(signer.clone())
+        .build()
+        .expect("engine");
+        let admitted = engine
+            .admit_signed(push.operation_id())
+            .await
+            .expect("admit after reopen");
+        assert!(!admitted.is_replay());
+        assert!(admitted.artifact().admission_state().is_admitted());
+        let replay = engine
+            .admit_signed(push.operation_id())
+            .await
+            .expect("admission replay");
+        assert!(replay.is_replay());
+        assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
+        let visible = store
+            .query_visible(EventQuery::all(
+                EventQueryBounds::first(10).expect("bounds"),
+            ))
+            .await
+            .expect("visible events");
+        assert_eq!(visible.items().len(), 1);
+    }
+
+    let store = Arc::new(
+        SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadOnly))
+            .await
+            .expect("final read-only reopen"),
     );
-    let capability: Arc<dyn SyncStorage> = store;
-    let signer = Arc::new(MockSigner::new(SignBehavior::Pending));
     let engine = Engine::builder(
-        capability,
-        Arc::new(TestClock(AtomicU64::new(1_800_000_210_000))),
-        Arc::new(TestIds(AtomicU64::new(90))),
+        store,
+        Arc::new(TestClock(AtomicU64::new(1_800_000_212_000))),
+        Arc::new(TestIds(AtomicU64::new(110))),
         DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
     )
     .sink(Arc::new(MockSink))
-    .signer(signer.clone())
     .build()
-    .expect("engine");
-    let status = engine
+    .expect("read-only engine");
+    let final_status = engine
         .push_status(push.operation_id())
         .await
-        .expect("status")
-        .expect("durable preparation");
-    assert_eq!(status.operation(), original.operation());
-    assert_eq!(status.artifact(), original.artifact());
-    assert_eq!(status.delivery_plan(), original.delivery_plan());
-    let replay = engine.prepare_push(push).await.expect("replay");
-    assert!(replay.is_replay());
-    assert_eq!(replay.operation(), original.operation());
-    assert_eq!(replay.artifact(), original.artifact());
-    assert_eq!(replay.delivery_plan(), original.delivery_plan());
-    assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
+        .expect("final status")
+        .expect("durable operation");
+    assert_eq!(
+        final_status.artifact().signing_state(),
+        radroots_storage::authored::SigningState::Signed
+    );
+    assert!(final_status.artifact().admission_state().is_admitted());
+    assert!(final_status.delivery_plan().request().is_some());
 }
 
 #[test]
@@ -551,17 +884,27 @@ fn idempotency_conflict_and_cancellation_before_commit_fail_closed() {
 
     let pending = Arc::new(MockSigner::new(SignBehavior::Pending));
     let (engine, storage) = setup_engine(pending);
-    let mut future = Box::pin(engine.sign_and_enqueue(request(5, "wss://relay.example"))).fuse();
+    let pending_push = request(5, "wss://relay.example");
+    let mut future = Box::pin(engine.sign_and_enqueue(pending_push.clone())).fuse();
     let mut context = std::task::Context::from_waker(noop_waker_ref());
     assert!(future.poll_unpin(&mut context).is_pending());
     drop(future);
-    let record = block_on(Journal::operation(
-        &*storage,
-        OperationInstanceId::new([5; 16]).expect("instance id"),
-    ))
-    .expect("journal lookup")
-    .expect("prepared record");
-    assert_eq!(record.state().stage(), JournalStage::Prepared);
+    let status = block_on(engine.push_status(SyncId::new([5; 16]).expect("operation")))
+        .expect("authored status")
+        .expect("prepared operation");
+    assert!(status.artifact().signing_claim().is_some());
+    assert_eq!(
+        block_on(engine.sign_prepared(pending_push)),
+        Err(Error::WorkClaimConflict)
+    );
+    assert!(
+        block_on(Journal::operation(
+            &*storage,
+            OperationInstanceId::new([5; 16]).expect("instance id"),
+        ))
+        .expect("legacy journal lookup")
+        .is_none()
+    );
     assert!(
         block_on(Outbox::item(
             &*storage,

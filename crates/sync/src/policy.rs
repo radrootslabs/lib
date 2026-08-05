@@ -230,9 +230,14 @@ pub enum Error {
     InvalidReducerOutput,
     InvalidPushRequest,
     MissingSigner,
+    SignerCapabilityUnavailable,
     SignerFailed,
     SignerDeadlineExceeded,
+    SigningCancelled,
+    SigningIndeterminate,
+    WorkClaimConflict,
     InvalidSignerOutput,
+    AdmissionFailed,
     InvalidDeliveryRequest,
     MissingSink,
     InvalidStatusRequest,
@@ -260,9 +265,18 @@ impl core::fmt::Display for Error {
             Self::InvalidReducerOutput => "sync projection reducer returned invalid progress",
             Self::InvalidPushRequest => "sync push request is invalid",
             Self::MissingSigner => "sync engine has no signer",
+            Self::SignerCapabilityUnavailable => {
+                "sync signer did not declare one usable replay capability"
+            }
             Self::SignerFailed => "sync signer did not produce an event",
             Self::SignerDeadlineExceeded => "sync signer exceeded its deadline",
+            Self::SigningCancelled => "sync signing was durably cancelled",
+            Self::SigningIndeterminate => {
+                "sync signing may have produced a non-replayable remote effect"
+            }
+            Self::WorkClaimConflict => "sync authored work is claimed by another execution",
             Self::InvalidSignerOutput => "sync signer output failed canonical verification",
+            Self::AdmissionFailed => "sync local admission did not complete",
             Self::InvalidDeliveryRequest => "sync delivery request is invalid",
             Self::MissingSink => "sync engine has no event sink",
             Self::InvalidStatusRequest => "sync status request is invalid",

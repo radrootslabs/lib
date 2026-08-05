@@ -360,9 +360,13 @@ impl AuthoredDeliveryPlan {
     }
 
     pub fn claim(&mut self, claim: WorkClaim, now_unix_ms: u64) -> Result<(), Error> {
+        let existing_blocks = self.claim.as_ref().is_some_and(|existing| {
+            now_unix_ms < existing.expires_at_unix_ms()
+                || claim.generation() <= existing.generation()
+        });
         if self.state.is_terminal()
             || self.request.is_none()
-            || self.claim.is_some()
+            || existing_blocks
             || claim.row_revision() != self.revision
             || claim.acquired_at_unix_ms() != now_unix_ms
             || self

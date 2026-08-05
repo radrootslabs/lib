@@ -104,7 +104,7 @@ fn planned_artifacts_enforce_exact_signing_and_admission_transitions() {
         [3; 16],
         "signer",
         NonZeroU64::MIN,
-        10,
+        11,
         20,
         artifact.revision(),
     )

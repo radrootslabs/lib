@@ -1,5 +1,6 @@
 //! Signing, durable enqueue, delivery, and satisfaction orchestration.
 
+use core::num::{NonZeroU32, NonZeroU64};
 use radroots_event::admission::RawEvent;
 use radroots_event_codec::{
     authoring::AuthoredEventPlan,
@@ -8,6 +9,7 @@ use radroots_event_codec::{
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
     Actor, AuthoredArtifactId as SigningArtifactId, SigningIntentId, SigningOperationId,
+    recovery::{RecoveryDisposition, ReplayCapability, recovery_disposition},
     request::{CancellationPolicy, SignPolicy},
 };
 use radroots_storage::{
@@ -16,10 +18,17 @@ use radroots_storage::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId,
         AtomicCommitOutcome, AtomicWorkflow, CommitEnqueued, CommitSigned,
     },
-    authored::{AuthoredArtifact, AuthoredArtifactId, AuthoredOperation},
-    authored_atomic::{AuthoredAtomicCommand, AuthoredAtomicOutcome, PrepareAuthoredOperation},
+    authored::{
+        AdmissionState, AuthoredArtifact, AuthoredArtifactId, AuthoredOperation, FailureClass,
+        RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
+    },
+    authored_atomic::{
+        ApplyAdmissionResult, ApplySignedArtifact, ApplyWorkFailure, AuthoredAtomicCommand,
+        AuthoredAtomicOutcome, AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork,
+        ClaimAuthoredTarget, ClaimAuthoredWork, PrepareAuthoredOperation, WorkFence,
+    },
     authored_delivery::{AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId},
-    event::EventAdmission,
+    event::{AdmissionDisposition, EventAdmission, EventStore},
     journal::{
         IdempotencyDigest, IdempotencyKey, JournalStage, JournalState, OperationInstanceId,
         PrepareOperation,
@@ -46,6 +55,11 @@ use crate::{
 };
 
 const MAX_DELIVERY_LEASE_MS: u64 = 86_400_000;
+const SIGNING_CLAIM_OWNER_EXACT: &str = "radroots-sync-signing-exact";
+const SIGNING_CLAIM_OWNER_LOCAL: &str = "radroots-sync-signing-local";
+const SIGNING_CLAIM_OWNER_NON_REPLAYABLE: &str = "radroots-sync-signing-non-replayable";
+const ADMISSION_CLAIM_OWNER: &str = "radroots-sync-admission";
+const WORK_RETRY_DELAY_MS: u64 = 1_000;
 
 /// Caller-owned, replay-stable inputs for one outbound operation.
 #[derive(Clone)]
@@ -173,6 +187,38 @@ impl PushStatus {
     }
     pub const fn delivery_plan(&self) -> &AuthoredDeliveryPlan {
         &self.delivery_plan
+    }
+}
+
+/// Durable result of one bounded signing execution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SigningRunReceipt {
+    artifact: AuthoredArtifact,
+    replay: bool,
+}
+
+impl SigningRunReceipt {
+    pub const fn artifact(&self) -> &AuthoredArtifact {
+        &self.artifact
+    }
+    pub const fn is_replay(&self) -> bool {
+        self.replay
+    }
+}
+
+/// Durable result of one bounded local-admission execution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdmissionRunReceipt {
+    artifact: AuthoredArtifact,
+    replay: bool,
+}
+
+impl AdmissionRunReceipt {
+    pub const fn artifact(&self) -> &AuthoredArtifact {
+        &self.artifact
+    }
+    pub const fn is_replay(&self) -> bool {
+        self.replay
     }
 }
 
@@ -355,14 +401,378 @@ impl Engine {
         }))
     }
 
+    /// Claims and executes one prepared signing artifact.
+    pub async fn sign_prepared(&self, request: PushRequest) -> Result<SigningRunReceipt, Error> {
+        let signer = self.signer.as_deref().ok_or(Error::MissingSigner)?;
+        self.prepare_push(request.clone()).await?;
+        let status = self
+            .push_status(request.operation_id)
+            .await?
+            .ok_or(Error::StorageFailed)?;
+        let artifact = status.artifact;
+        match artifact.signing_state() {
+            SigningState::Signed => {
+                return Ok(SigningRunReceipt {
+                    artifact,
+                    replay: true,
+                });
+            }
+            SigningState::Indeterminate => return Err(Error::SigningIndeterminate),
+            SigningState::FailedTerminal | SigningState::Cancelled => {
+                return Err(Error::SignerFailed);
+            }
+            SigningState::Planned | SigningState::Retryable => {}
+        }
+
+        let now = self.clock.now_unix_ms()?.max(artifact.updated_at_unix_ms());
+        if let Some(existing) = artifact.signing_claim() {
+            if now < existing.expires_at_unix_ms() {
+                return Err(Error::WorkClaimConflict);
+            }
+            if existing.owner() == SIGNING_CLAIM_OWNER_NON_REPLAYABLE {
+                let (claimed, fence) = self
+                    .claim_artifact(
+                        artifact,
+                        ClaimAuthoredTarget::ArtifactSigning,
+                        SIGNING_CLAIM_OWNER_NON_REPLAYABLE,
+                        now,
+                    )
+                    .await?;
+                let failure = WorkFailure::new(
+                    "signing_effect_unknown_after_restart",
+                    WorkPhase::Signing,
+                    FailureClass::Indeterminate,
+                    None,
+                    None,
+                )
+                .map_err(map_storage_error)?;
+                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, None)
+                    .await?;
+                return Err(Error::SigningIndeterminate);
+            }
+        }
+
+        let signer_status = signer.status().await.map_err(|_| Error::SignerFailed)?;
+        let replay_capability = signer_replay_capability(&signer_status)?;
+        let (claimed, fence) = self
+            .claim_artifact(
+                artifact,
+                ClaimAuthoredTarget::ArtifactSigning,
+                signing_claim_owner(replay_capability),
+                now,
+            )
+            .await?;
+        let persisted_plan = claimed
+            .plan()
+            .ok_or(Error::StorageFailed)?
+            .decode()
+            .map_err(map_storage_error)?
+            .into_plan();
+        if persisted_plan != request.plan {
+            return Err(Error::StorageConflict);
+        }
+        let deadline = self.deadlines.deadline_unix_ms(OperationKind::Sign, now)?;
+        let signing_operation = SigningOperationId::new(*request.operation_id.as_bytes())
+            .map_err(|_| Error::InvalidPushRequest)?;
+        let signing_artifact = SigningArtifactId::new(*claimed.artifact_id().as_bytes())
+            .map_err(|_| Error::InvalidPushRequest)?;
+        let sign_request = radroots_signing::SignRequest::new(
+            OperationId::SyncPush,
+            SigningIntentId::new(signing_operation, signing_artifact),
+            request.actor,
+            persisted_plan,
+            SignPolicy::new(deadline, request.cancellation)
+                .map_err(|_| Error::InvalidPushRequest)?,
+        )
+        .map_err(|_| Error::InvalidPushRequest)?;
+
+        match signer.sign(sign_request).await {
+            Ok(receipt) => {
+                let command = AuthoredAtomicCommand::ApplySigned(
+                    ApplySignedArtifact::new(
+                        claimed.artifact_id(),
+                        fence,
+                        receipt.signed_event().clone(),
+                        receipt.completed_at_unix_ms(),
+                    )
+                    .map_err(map_storage_error)?,
+                );
+                let applied = self
+                    .storage
+                    .execute_authored(command)
+                    .await
+                    .map_err(map_storage_error)?;
+                let AuthoredAtomicOutcome::Artifact(artifact) = applied.outcome() else {
+                    return Err(Error::StorageFailed);
+                };
+                Ok(SigningRunReceipt {
+                    artifact: artifact.clone(),
+                    replay: false,
+                })
+            }
+            Err(error) => {
+                let applied_at = self.clock.now_unix_ms()?;
+                if error.kind() == radroots_signing::error::Kind::SignerCancelled {
+                    let command = AuthoredAtomicCommand::Cancel(
+                        CancelAuthoredWork::new(
+                            CancelAuthoredTarget::ArtifactSigning(claimed.artifact_id()),
+                            claimed.revision(),
+                            applied_at,
+                        )
+                        .map_err(map_storage_error)?,
+                    );
+                    self.storage
+                        .execute_authored(command)
+                        .await
+                        .map_err(map_storage_error)?;
+                    return Err(Error::SigningCancelled);
+                }
+                let disposition = recovery_disposition(
+                    replay_capability,
+                    error.remote_effect(),
+                    error.retryable(),
+                );
+                let class = match disposition {
+                    RecoveryDisposition::RetryExactRequest | RecoveryDisposition::RetryLocal => {
+                        FailureClass::Retryable
+                    }
+                    RecoveryDisposition::Indeterminate => FailureClass::Indeterminate,
+                    RecoveryDisposition::Failed => FailureClass::Terminal,
+                    _ => FailureClass::Indeterminate,
+                };
+                let retry_at = if class == FailureClass::Retryable {
+                    Some(
+                        applied_at
+                            .checked_add(WORK_RETRY_DELAY_MS)
+                            .ok_or(Error::DeadlineOverflow)?,
+                    )
+                } else {
+                    None
+                };
+                let failure =
+                    WorkFailure::new(error.code(), WorkPhase::Signing, class, retry_at, None)
+                        .map_err(map_storage_error)?;
+                let retry = retry_schedule(claimed.signing_retry(), &failure, retry_at)?;
+                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, retry)
+                    .await?;
+                match disposition {
+                    RecoveryDisposition::Indeterminate => Err(Error::SigningIndeterminate),
+                    RecoveryDisposition::RetryExactRequest
+                    | RecoveryDisposition::RetryLocal
+                    | RecoveryDisposition::Failed => {
+                        if error.kind() == radroots_signing::error::Kind::DeadlineExceeded {
+                            Err(Error::SignerDeadlineExceeded)
+                        } else {
+                            Err(Error::SignerFailed)
+                        }
+                    }
+                    _ => Err(Error::SigningIndeterminate),
+                }
+            }
+        }
+    }
+
+    /// Claims and executes local admission for one durably signed artifact.
+    pub async fn admit_signed(&self, operation_id: SyncId) -> Result<AdmissionRunReceipt, Error> {
+        let status = self
+            .push_status(operation_id)
+            .await?
+            .ok_or(Error::StorageFailed)?;
+        let artifact = status.artifact;
+        if artifact.signing_state() != SigningState::Signed {
+            return Err(Error::InvalidSignerOutput);
+        }
+        if artifact.admission_state().is_admitted() {
+            return Ok(AdmissionRunReceipt {
+                artifact,
+                replay: true,
+            });
+        }
+        if matches!(
+            artifact.admission_state(),
+            AdmissionState::Rejected | AdmissionState::Cancelled
+        ) {
+            return Err(Error::AdmissionFailed);
+        }
+        let now = self.clock.now_unix_ms()?.max(artifact.updated_at_unix_ms());
+        if artifact
+            .admission_claim()
+            .is_some_and(|claim| now < claim.expires_at_unix_ms())
+        {
+            return Err(Error::WorkClaimConflict);
+        }
+        let (claimed, fence) = self
+            .claim_artifact(
+                artifact,
+                ClaimAuthoredTarget::ArtifactAdmission,
+                ADMISSION_CLAIM_OWNER,
+                now,
+            )
+            .await?;
+        let event = claimed
+            .signed()
+            .ok_or(Error::InvalidSignerOutput)?
+            .event()
+            .clone();
+        let admission = match outbound_admission(&event, now) {
+            Ok(admission) => admission,
+            Err(error) => {
+                let failure = WorkFailure::new(
+                    "invalid_signed_artifact",
+                    WorkPhase::Admission,
+                    FailureClass::Terminal,
+                    None,
+                    None,
+                )
+                .map_err(map_storage_error)?;
+                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, None)
+                    .await?;
+                return Err(error);
+            }
+        };
+        let admission_receipt = match EventStore::admit(self.storage.as_ref(), admission).await {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                let applied_at = self.clock.now_unix_ms()?;
+                let terminal = matches!(
+                    error,
+                    radroots_storage::Error::EventConflict
+                        | radroots_storage::Error::AdmissionRegression
+                );
+                let retry_at = if terminal {
+                    None
+                } else {
+                    Some(
+                        applied_at
+                            .checked_add(WORK_RETRY_DELAY_MS)
+                            .ok_or(Error::DeadlineOverflow)?,
+                    )
+                };
+                let failure = WorkFailure::new(
+                    if terminal {
+                        "admission_conflict"
+                    } else {
+                        "admission_storage_unavailable"
+                    },
+                    WorkPhase::Admission,
+                    if terminal {
+                        FailureClass::Terminal
+                    } else {
+                        FailureClass::Retryable
+                    },
+                    retry_at,
+                    None,
+                )
+                .map_err(map_storage_error)?;
+                let retry = retry_schedule(claimed.admission_retry(), &failure, retry_at)?;
+                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, retry)
+                    .await?;
+                return Err(Error::AdmissionFailed);
+            }
+        };
+        let state = match admission_receipt.disposition() {
+            AdmissionDisposition::Duplicate => AdmissionState::Duplicate,
+            AdmissionDisposition::Inserted | AdmissionDisposition::Advanced => {
+                AdmissionState::Inserted
+            }
+        };
+        let applied_at = self.clock.now_unix_ms()?.max(claimed.updated_at_unix_ms());
+        let command = AuthoredAtomicCommand::ApplyAdmission(
+            ApplyAdmissionResult::new(claimed.artifact_id(), fence, state, None, None, applied_at)
+                .map_err(map_storage_error)?,
+        );
+        let applied = self
+            .storage
+            .execute_authored(command)
+            .await
+            .map_err(map_storage_error)?;
+        let AuthoredAtomicOutcome::Artifact(artifact) = applied.outcome() else {
+            return Err(Error::StorageFailed);
+        };
+        Ok(AdmissionRunReceipt {
+            artifact: artifact.clone(),
+            replay: false,
+        })
+    }
+
+    async fn claim_artifact(
+        &self,
+        artifact: AuthoredArtifact,
+        target: fn(AuthoredArtifactId) -> ClaimAuthoredTarget,
+        owner: &'static str,
+        acquired_at: u64,
+    ) -> Result<(AuthoredArtifact, WorkFence), Error> {
+        let existing = match target(artifact.artifact_id()) {
+            ClaimAuthoredTarget::ArtifactSigning(_) => artifact.signing_claim(),
+            ClaimAuthoredTarget::ArtifactAdmission(_) => artifact.admission_claim(),
+            ClaimAuthoredTarget::DeliveryPlan(_) => return Err(Error::StorageFailed),
+        };
+        let generation = existing.map_or(1, |claim| claim.generation().get().saturating_add(1));
+        let generation = NonZeroU64::new(generation).ok_or(Error::StorageFailed)?;
+        let expires_at = acquired_at
+            .checked_add(self.deadlines.timeout_ms(OperationKind::Sign))
+            .ok_or(Error::DeadlineOverflow)?;
+        let claim = WorkClaim::new(
+            *self.ids.next_id(OperationKind::Sign)?.as_bytes(),
+            owner,
+            generation,
+            acquired_at,
+            expires_at,
+            artifact.revision(),
+        )
+        .map_err(map_storage_error)?;
+        let fence = WorkFence::new(*claim.token(), claim.generation(), claim.row_revision())
+            .map_err(map_storage_error)?;
+        let command = AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+            target(artifact.artifact_id()),
+            claim,
+        ));
+        let receipt = self
+            .storage
+            .execute_authored(command)
+            .await
+            .map_err(map_claim_error)?;
+        let AuthoredAtomicOutcome::Artifact(claimed) = receipt.outcome() else {
+            return Err(Error::StorageFailed);
+        };
+        Ok((claimed.clone(), fence))
+    }
+
+    async fn apply_artifact_failure(
+        &self,
+        artifact_id: AuthoredArtifactId,
+        fence: WorkFence,
+        failure: WorkFailure,
+        retry: Option<RetrySchedule>,
+    ) -> Result<AuthoredArtifact, Error> {
+        let applied_at = self.clock.now_unix_ms()?;
+        let command = AuthoredAtomicCommand::ApplyFailure(
+            ApplyWorkFailure::new(
+                AuthoredWorkTarget::Artifact(artifact_id),
+                fence,
+                failure,
+                retry,
+                applied_at,
+            )
+            .map_err(map_storage_error)?,
+        );
+        let receipt = self
+            .storage
+            .execute_authored(command)
+            .await
+            .map_err(map_storage_error)?;
+        let AuthoredAtomicOutcome::Artifact(artifact) = receipt.outcome() else {
+            return Err(Error::StorageFailed);
+        };
+        Ok(artifact.clone())
+    }
+
     /// Authorizes, signs, verifies, and durably enqueues one outbound event.
     ///
     /// Dropping the future before the final atomic enqueue leaves either a
     /// prepared or signed recoverable journal record. Once that commit returns,
     /// cancellation cannot claim rollback; replay returns the durable outbox.
     pub async fn sign_and_enqueue(&self, request: PushRequest) -> Result<PushReceipt, Error> {
-        let signer = self.signer.as_deref().ok_or(Error::MissingSigner)?;
-        let preparation = self.prepare_push(request.clone()).await?;
         let instance_id = OperationInstanceId::new(*request.operation_id.as_bytes())
             .map_err(map_storage_error)?;
         let item_id =
@@ -395,6 +805,15 @@ impl Engine {
             }
         }
 
+        let signed = self.sign_prepared(request.clone()).await?;
+        self.admit_signed(request.operation_id).await?;
+        let event = signed
+            .artifact()
+            .signed()
+            .ok_or(Error::InvalidSignerOutput)?
+            .event()
+            .clone();
+
         let prepared_at = self.clock.now_unix_ms()?;
         let prepare = PrepareOperation::new(
             instance_id,
@@ -419,35 +838,6 @@ impl Engine {
         let AtomicCommitOutcome::Prepared { journal: prepared } = prepared_receipt.outcome() else {
             return Err(Error::StorageFailed);
         };
-
-        let sign_deadline_ms = self
-            .deadlines
-            .deadline_unix_ms(OperationKind::Sign, self.clock.now_unix_ms()?)?;
-        let signing_operation = SigningOperationId::new(*request.operation_id.as_bytes())
-            .map_err(|_| Error::InvalidPushRequest)?;
-        let signing_artifact =
-            SigningArtifactId::new(*preparation.artifact().artifact_id().as_bytes())
-                .map_err(|_| Error::InvalidPushRequest)?;
-        let sign_request = radroots_signing::SignRequest::new(
-            OperationId::SyncPush,
-            SigningIntentId::new(signing_operation, signing_artifact),
-            request.actor.clone(),
-            request.plan.clone(),
-            SignPolicy::new(sign_deadline_ms, request.cancellation)
-                .map_err(|_| Error::InvalidPushRequest)?,
-        )
-        .map_err(|_| Error::InvalidPushRequest)?;
-        let signed = signer.sign(sign_request).await.map_err(|error| {
-            if error.kind() == radroots_signing::error::Kind::DeadlineExceeded {
-                Error::SignerDeadlineExceeded
-            } else {
-                Error::SignerFailed
-            }
-        })?;
-        if signed.completed_at_unix_ms() > sign_deadline_ms {
-            return Err(Error::SignerDeadlineExceeded);
-        }
-        let event = signed.signed_event().clone();
 
         let signed_record = if prepared.state().stage() == JournalStage::Signed {
             if !matches!(
@@ -633,6 +1023,46 @@ fn synthetic_receipt(request: &DeliveryRequest, retryable: bool) -> Result<Deliv
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| Error::InvalidDeliveryRequest)?;
     DeliveryReceipt::for_request(request, targets).map_err(|_| Error::InvalidDeliveryRequest)
+}
+
+fn signer_replay_capability(
+    status: &radroots_signing::SignerStatus,
+) -> Result<ReplayCapability, Error> {
+    let mut capabilities = status.capabilities().iter();
+    let first = capabilities
+        .next()
+        .ok_or(Error::SignerCapabilityUnavailable)?
+        .replay();
+    if capabilities.all(|capability| capability.replay() == first) {
+        Ok(first)
+    } else {
+        Ok(ReplayCapability::NonReplayable)
+    }
+}
+
+fn signing_claim_owner(replay: ReplayCapability) -> &'static str {
+    match replay {
+        ReplayCapability::ExactReplayByRequestId => SIGNING_CLAIM_OWNER_EXACT,
+        ReplayCapability::LocalReplaySafe => SIGNING_CLAIM_OWNER_LOCAL,
+        ReplayCapability::NonReplayable => SIGNING_CLAIM_OWNER_NON_REPLAYABLE,
+        _ => SIGNING_CLAIM_OWNER_NON_REPLAYABLE,
+    }
+}
+
+fn retry_schedule(
+    previous: Option<&RetrySchedule>,
+    failure: &WorkFailure,
+    retry_at: Option<u64>,
+) -> Result<Option<RetrySchedule>, Error> {
+    let Some(retry_at) = retry_at else {
+        return Ok(None);
+    };
+    let schedule = match previous {
+        Some(previous) => previous.next_attempt(retry_at, failure.clone()),
+        None => RetrySchedule::new(NonZeroU32::MIN, retry_at, failure.clone()),
+    }
+    .map_err(map_storage_error)?;
+    Ok(Some(schedule))
 }
 
 fn delivery_evidence_digest(evidence: &DeliveryAttemptEvidence) -> AtomicCommitDigest {
@@ -875,5 +1305,15 @@ fn map_storage_error(error: radroots_storage::Error) -> Error {
         | radroots_storage::Error::OutboxPlanConflict
         | radroots_storage::Error::AtomicCommitConflict => Error::StorageConflict,
         _ => Error::StorageFailed,
+    }
+}
+
+fn map_claim_error(error: radroots_storage::Error) -> Error {
+    match error {
+        radroots_storage::Error::AtomicCommitConflict
+        | radroots_storage::Error::InvalidAuthoredTransition
+        | radroots_storage::Error::InvalidWorkClaim
+        | radroots_storage::Error::DeliveryPlanClaimConflict => Error::WorkClaimConflict,
+        other => map_storage_error(other),
     }
 }

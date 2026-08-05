@@ -737,6 +737,8 @@ impl AuthoredArtifact {
                     self.signing_state,
                     SigningState::Planned | SigningState::Retryable
                 )
+                || claim.row_revision().get().checked_add(1) != Some(self.revision.get())
+                || claim.acquired_at_unix_ms() != self.updated_at_unix_ms
         }) || self.admission_claim.as_ref().is_some_and(|claim| {
             claim.validate().is_err()
                 || self.signed.is_none()
@@ -744,6 +746,8 @@ impl AuthoredArtifact {
                     self.admission_state,
                     AdmissionState::Pending | AdmissionState::Retryable
                 )
+                || claim.row_revision().get().checked_add(1) != Some(self.revision.get())
+                || claim.acquired_at_unix_ms() != self.updated_at_unix_ms
         }) {
             return Err(Error::InvalidAuthoredArtifact);
         }
@@ -852,13 +856,22 @@ impl AuthoredArtifact {
     }
 
     pub fn set_signing_claim(&mut self, claim: WorkClaim, at_unix_ms: u64) -> Result<(), Error> {
+        let existing_blocks = self.signing_claim.as_ref().is_some_and(|existing| {
+            at_unix_ms < existing.expires_at_unix_ms()
+                || claim.generation() <= existing.generation()
+        });
         if !self.origin.is_resignable()
             || !matches!(
                 self.signing_state,
                 SigningState::Planned | SigningState::Retryable
             )
-            || self.signing_claim.is_some()
+            || existing_blocks
             || claim.row_revision() != self.revision
+            || claim.acquired_at_unix_ms() != at_unix_ms
+            || self
+                .signing_retry
+                .as_ref()
+                .is_some_and(|retry| at_unix_ms < retry.not_before_unix_ms())
         {
             return Err(Error::InvalidAuthoredTransition);
         }
@@ -939,13 +952,22 @@ impl AuthoredArtifact {
     }
 
     pub fn set_admission_claim(&mut self, claim: WorkClaim, at_unix_ms: u64) -> Result<(), Error> {
+        let existing_blocks = self.admission_claim.as_ref().is_some_and(|existing| {
+            at_unix_ms < existing.expires_at_unix_ms()
+                || claim.generation() <= existing.generation()
+        });
         if self.signing_state != SigningState::Signed
             || !matches!(
                 self.admission_state,
                 AdmissionState::Pending | AdmissionState::Retryable
             )
-            || self.admission_claim.is_some()
+            || existing_blocks
             || claim.row_revision() != self.revision
+            || claim.acquired_at_unix_ms() != at_unix_ms
+            || self
+                .admission_retry
+                .as_ref()
+                .is_some_and(|retry| at_unix_ms < retry.not_before_unix_ms())
         {
             return Err(Error::InvalidAuthoredTransition);
         }
