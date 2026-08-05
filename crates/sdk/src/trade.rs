@@ -783,7 +783,7 @@ mod tests {
             let artifact_id = PrivateArtifactId::new([7; 16]).expect("artifact id");
             let metadata = PrivateArtifactMetadata::new(
                 artifact_id,
-                ArtifactKind::parse("trade_private_terms").expect("kind"),
+                ArtifactKind::parse("trade.private_terms").expect("kind"),
                 ArtifactSchemaId::parse("radroots.private.fulfillment.v1").expect("schema"),
                 ArtifactCommitment::new([0xee; 32]),
                 64,

@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn exact_cross_repository_git_sources_require_the_requested_commit() {
-        const REVISION: &str = "5537bf0e1c36a94958a4c6eceb7722845b9a4efa";
+        const REVISION: &str = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9";
         let source =
             format!("git+https://github.com/radrootslabs/lib.git?rev={REVISION}#{REVISION}");
         validate_exact_git_source(&source, "https://github.com/radrootslabs/lib")
