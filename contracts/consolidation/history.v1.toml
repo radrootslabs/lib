@@ -1,0 +1,304 @@
+schema_version = 1
+history_id = "radroots.rust.consolidation.history.v1"
+retention_locator = "external://radroots-rust-consolidation-v1-20260805"
+hash_algorithm = "sha256"
+bundle_hash_algorithm = "sha1"
+required_commit_map_fields = [
+  "source_commit",
+  "target_commit",
+  "source_parents",
+  "target_parents",
+  "source_subject",
+  "target_subject",
+  "source_author",
+  "target_author",
+  "source_author_time",
+  "target_author_time",
+  "source_committer_time",
+  "target_committer_time",
+  "source_paths",
+  "normalized_patch_sha256",
+  "empty_commit_disposition",
+]
+required_verifications = [
+  "archive_restore",
+  "git_fsck",
+  "mapped_parent_closure",
+  "commit_count",
+  "path_coverage",
+  "normalized_patch_equivalence",
+  "final_tree_digest",
+  "authorship",
+  "timestamps",
+  "message_scope_only",
+  "git_log_follow",
+  "secret_scan",
+  "license_scan",
+  "bot_identity_scan",
+  "github_workflow_exclusion",
+  "context_firewall",
+]
+
+[dual_source]
+state = "pre_import"
+canonical_owner_before_import = "frozen_donor_commit"
+canonical_owner_after_import = "verified_lib_import_merge"
+emergency_fix_flow = "fix canonical owner, qualify, then replay the normalized patch into the overlap copy"
+divergence_policy = "forbidden"
+exit_condition = "all consumers use one qualified lib revision and rollback evidence is green"
+
+[[archive]]
+source_id = "sdk"
+kind = "git_bundle"
+frozen_commit = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+artifact = "sdk-170ecf2b620107fadca85fcb11fbf3798b4ca1ef.bundle"
+sha256 = "9d2b015bbcd5d516994eeb72064b1e938a04acd0c21eb2e22134b99599fdd2f0"
+bytes = 2020833
+source_commit_count = 427
+source_path_commit_count = 397
+rewritten_commit_count = 395
+topology_support_commit_count = 0
+omitted_empty_commit_count = 2
+source_object_count = 6077
+refname = "refs/heads/master"
+bot_identity_scan = true
+
+[[archive]]
+source_id = "app_rt"
+kind = "git_bundle"
+frozen_commit = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+artifact = "app_rt-7ab1a8624d50890d6d18545ffb47d8083afa8c67.bundle"
+sha256 = "9a9ba8e6002ee3d6fcb232e18fb84dbc2885bb37e7bdba736b44a1e5bb6489b0"
+bytes = 167343
+source_commit_count = 60
+source_path_commit_count = 49
+rewritten_commit_count = 56
+topology_support_commit_count = 7
+omitted_empty_commit_count = 0
+source_object_count = 508
+refname = "refs/heads/master"
+bot_identity_scan = true
+
+[[archive]]
+source_id = "studio_app"
+kind = "git_bundle"
+frozen_commit = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+artifact = "studio_app-2b5fe5d8321fd0e248a9d304651b1ba54ee6a180.bundle"
+sha256 = "27917b71b12392cb005d7125726853c51e56aa615d014a6caa087d4cbd261849"
+bytes = 8772591
+source_commit_count = 1230
+source_path_commit_count = 95
+rewritten_commit_count = 93
+topology_support_commit_count = 0
+omitted_empty_commit_count = 2
+source_object_count = 16143
+refname = "refs/heads/master"
+bot_identity_scan = true
+
+[[archive]]
+source_id = "studio_mpl_legacy_core"
+kind = "path_fast_export"
+frozen_commit = "6074a4745be361f21bb47d4778c74a14b2d57954"
+artifact = "studio_mpl_legacy_core-6074a4745be361f21bb47d4778c74a14b2d57954.fast-export"
+sha256 = "55152f9f2b29fe902c85909f1c9147e5cf0a852f7e23e4ad781638be06389f89"
+bytes = 31305
+source_commit_count = 1
+source_path_commit_count = 1
+rewritten_commit_count = 1
+topology_support_commit_count = 0
+omitted_empty_commit_count = 0
+source_object_count = 10
+refname = "refs/heads/master"
+bot_identity_scan = true
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/sdk"
+target = "crates/sdk"
+package = "radroots_sdk"
+license = "MIT OR Apache-2.0"
+disposition = "retain"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/radroots"
+target = "crates/radroots"
+package = "radroots"
+license = "MIT OR Apache-2.0"
+disposition = "retain"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/core_bindings"
+target = "crates/core_bindings"
+package = "radroots_core_bindings"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/event_bindings"
+target = "crates/event_bindings"
+package = "radroots_event_bindings"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/identity_bindings"
+target = "crates/identity_bindings"
+package = "radroots_identity_bindings"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/trade_bindings"
+target = "crates/trade_bindings"
+package = "radroots_trade_bindings"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/replica_schema_bindings"
+target = "crates/replica_schema_bindings"
+package = "radroots_replica_schema_bindings"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/event_codec_wasm"
+target = "crates/event_codec_wasm"
+package = "radroots_event_codec_wasm"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/replica_store_wasm"
+target = "crates/replica_store_wasm"
+package = "radroots_replica_store_wasm"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/replica_sync_wasm"
+target = "crates/replica_sync_wasm"
+package = "radroots_replica_sync_wasm"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/ffi"
+target = "crates/sdk_ffi"
+package = "radroots_sdk_ffi"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "crates/sql_wasm_runtime"
+target = "crates/sdk_sql_wasm_runtime"
+package = "radroots_sdk_sql_wasm_runtime"
+license = "MIT OR Apache-2.0"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "sdk"
+source = "tools/xtask"
+target = "tools/sdk_xtask_import"
+package = "xtask"
+license = "MIT OR Apache-2.0"
+disposition = "merge_then_retire"
+
+[[path_map]]
+source_id = "app_rt"
+source = "crates/core"
+target = "crates/mobile_core"
+package = "radroots_mobile_core"
+license = "GPL-3.0-or-later"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "app_rt"
+source = "crates/ffi"
+target = "crates/mobile_ffi"
+package = "radroots_mobile_ffi"
+license = "GPL-3.0-or-later"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "app_rt"
+source = "crates/wasm"
+target = "crates/mobile_wasm"
+package = "radroots_mobile_wasm"
+license = "GPL-3.0-or-later"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "app_rt"
+source = "crates/bindgen"
+target = "crates/mobile_bindgen"
+package = "radroots_mobile_bindgen"
+license = "GPL-3.0-or-later"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/crates/domain"
+target = "crates/studio_domain"
+package = "radroots_studio_domain"
+license = "GPL-3.0-only"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/crates/application"
+target = "crates/studio_application"
+package = "radroots_studio_application"
+license = "GPL-3.0-only"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/crates/nostr"
+target = "crates/studio_nostr"
+package = "radroots_studio_nostr"
+license = "GPL-3.0-only"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/crates/storage"
+target = "crates/studio_storage"
+package = "radroots_studio_storage"
+license = "GPL-3.0-only"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/crates/ffi"
+target = "crates/studio_ffi"
+package = "radroots_studio_ffi"
+license = "GPL-3.0-only"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/tools/uniffi-bindgen"
+target = "crates/studio_uniffi_bindgen"
+package = "radroots_studio_uniffi_bindgen"
+license = "GPL-3.0-only"
+disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_mpl_legacy_core"
+source = "studio_app/studio_app_core"
+target = "imports/studio_mpl_legacy_core"
+package = "studio_app_core"
+license = "MPL-2.0"
+disposition = "import_unique_behavior_then_retire"
