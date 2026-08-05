@@ -8,6 +8,7 @@ Build local food networks that help farms and communities organize and communica
 | [Docs](https://radroots.dev/docs)
 | [Examples](https://radroots.dev/docs/examples)
 | [Releases](https://radroots.dev/downloads/)
+| [License](#license)
 
 ### Use cases
 - Farmers post what they are growing and receive orders for upcoming harvests
