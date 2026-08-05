@@ -345,6 +345,9 @@ const RUNTIME_V11_OBJECTS: &[&str] = &[
     "radroots_runtime_authored_delivery_plans",
     "radroots_runtime_authored_delivery_ready_idx",
     "radroots_runtime_authored_delivery_targets",
+    "radroots_runtime_authored_migration_evidence",
+    "radroots_runtime_authored_migration_evidence_delete_guard",
+    "radroots_runtime_authored_migration_evidence_update_guard",
     "radroots_runtime_authored_operations",
     "radroots_runtime_delivery_evidence",
     "radroots_runtime_delivery_evidence_item_idx",
@@ -464,7 +467,7 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
         version: 11,
         name: "authored_operations",
-        up_sha256: "fa461e3977594a364850d8639539ca902a93b715f8ce6629182dbc536266499f",
+        up_sha256: "f07fe6695e611caa1ff2de87ee9d20356960346298f3df4158d63021fe0f9327",
         owned_objects: RUNTIME_V11_OBJECTS,
     },
 ];

@@ -348,7 +348,7 @@ async fn update_record(
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-async fn load_record(
+pub(crate) async fn load_record(
     connection: &mut SqliteConnection,
     item_id: OutboxItemId,
 ) -> Result<Option<OutboxRecord>, Error> {

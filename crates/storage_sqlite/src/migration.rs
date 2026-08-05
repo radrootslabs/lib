@@ -1,7 +1,68 @@
 //! Governed SQLite schema migration boundary.
 
 use crate::{Error, OpenMode};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
+
+mod authored_v10;
+pub use authored_v10::AuthoredV10Preflight;
+
+/// Inspects an exact V10 runtime database without mutating it.
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub async fn preflight_authored_v10(paths: &crate::Paths) -> Result<AuthoredV10Preflight, Error> {
+    paths.validate_filesystem(OpenMode::ReadOnly)?;
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(paths.runtime())
+            .read_only(true),
+    )
+    .await
+    .map_err(|_| Error::DatabaseOpenFailed {
+        database: RUNTIME_DATABASE,
+    })?;
+    sqlx::raw_sql("PRAGMA query_only = ON")
+        .execute(&mut connection)
+        .await
+        .map_err(|_| Error::SchemaMetadataUnavailable {
+            database: RUNTIME_DATABASE,
+        })?;
+    let current = metadata(&mut connection, RUNTIME_DATABASE).await?;
+    if current.application_id != RUNTIME_APPLICATION_ID {
+        return Err(Error::SchemaIdentityMismatch {
+            database: RUNTIME_DATABASE,
+            expected: RUNTIME_APPLICATION_ID,
+            actual: current.application_id,
+        });
+    }
+    if current.version < 10 {
+        return Err(Error::SchemaMigrationRequired {
+            database: RUNTIME_DATABASE,
+            current: 10,
+            actual: current.version,
+        });
+    }
+    if current.version > 10 {
+        return Err(Error::SchemaTooNew {
+            database: RUNTIME_DATABASE,
+            supported: 10,
+            actual: current.version,
+        });
+    }
+    validate_exact_catalog(
+        &mut connection,
+        RUNTIME_DATABASE,
+        10,
+        runtime::MIGRATIONS[9].owned_objects(),
+    )
+    .await?;
+    let report = authored_v10::inspect(&mut connection).await?.report;
+    connection
+        .close()
+        .await
+        .map_err(|_| Error::DatabaseCloseFailed {
+            database: RUNTIME_DATABASE,
+        })?;
+    Ok(report)
+}
 
 /// Versioned schema authority for `private.sqlite`.
 pub mod private;
@@ -145,6 +206,12 @@ async fn migrate(
         });
     }
     if !mode.is_writable() {
+        if plan.database == RUNTIME_DATABASE && initial.version == 10 {
+            let inspected = authored_v10::inspect(connection).await?;
+            if !inspected.report.is_eligible() {
+                return Err(inspected.report.blocked_error());
+            }
+        }
         return Err(Error::SchemaMigrationRequired {
             database: plan.database,
             current: plan.current_version,
@@ -193,6 +260,22 @@ async fn migrate(
         .iter()
         .filter(|step| step.version > initial.version)
     {
+        let inspected_v10 = if plan.database == RUNTIME_DATABASE && step.version == 11 {
+            match authored_v10::inspect(&mut transaction).await {
+                Ok(inspected) if inspected.report.is_eligible() => Some(inspected),
+                Ok(inspected) => {
+                    let error = inspected.report.blocked_error();
+                    let _rollback = transaction.rollback().await;
+                    return Err(error);
+                }
+                Err(error) => {
+                    let _rollback = transaction.rollback().await;
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
         let version_sql =
             set_user_version_sql(step.version).ok_or(Error::SchemaMigrationFailed {
                 database: plan.database,
@@ -207,6 +290,12 @@ async fn migrate(
                 database: plan.database,
                 target_version: step.version,
             };
+            let _rollback = transaction.rollback().await;
+            return Err(error);
+        }
+        if let Some(inspected) = inspected_v10.as_ref()
+            && let Err(error) = authored_v10::apply(&mut transaction, inspected).await
+        {
             let _rollback = transaction.rollback().await;
             return Err(error);
         }

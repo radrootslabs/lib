@@ -220,7 +220,7 @@ async fn insert_record(
     Ok(())
 }
 
-fn decode_record(row: &sqlx::sqlite::SqliteRow) -> Result<OperationRecord, Error> {
+pub(crate) fn decode_record(row: &sqlx::sqlite::SqliteRow) -> Result<OperationRecord, Error> {
     let instance_id = OperationInstanceId::new(array(
         row.try_get::<Vec<u8>, _>("instance_id")
             .map_err(map_corrupt)?,

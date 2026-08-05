@@ -161,6 +161,32 @@ BEGIN
   SELECT RAISE(ABORT, 'authored atomic receipts are immutable');
 END;
 
+CREATE TABLE radroots_runtime_authored_migration_evidence (
+  source_version INTEGER PRIMARY KEY CHECK(source_version = 10),
+  operation_count INTEGER NOT NULL CHECK(operation_count >= 0),
+  event_count INTEGER NOT NULL CHECK(event_count >= 0),
+  outbox_count INTEGER NOT NULL CHECK(outbox_count >= 0),
+  target_count INTEGER NOT NULL CHECK(target_count >= 0),
+  attempt_count INTEGER NOT NULL CHECK(attempt_count >= 0),
+  imported_count INTEGER NOT NULL CHECK(imported_count >= 0),
+  source_digest BLOB NOT NULL CHECK(length(source_digest) = 32),
+  completed_at_unix_ms INTEGER NOT NULL CHECK(completed_at_unix_ms > 0),
+  CHECK(imported_count <= operation_count),
+  CHECK(imported_count <= outbox_count)
+) STRICT;
+
+CREATE TRIGGER radroots_runtime_authored_migration_evidence_update_guard
+BEFORE UPDATE ON radroots_runtime_authored_migration_evidence
+BEGIN
+  SELECT RAISE(ABORT, 'authored migration evidence is immutable');
+END;
+
+CREATE TRIGGER radroots_runtime_authored_migration_evidence_delete_guard
+BEFORE DELETE ON radroots_runtime_authored_migration_evidence
+BEGIN
+  SELECT RAISE(ABORT, 'authored migration evidence is retained');
+END;
+
 CREATE TRIGGER radroots_runtime_authored_atomic_commits_delete_guard
 BEFORE DELETE ON radroots_runtime_authored_atomic_commits
 BEGIN

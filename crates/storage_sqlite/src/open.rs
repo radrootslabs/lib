@@ -228,6 +228,11 @@ pub enum Error {
         database: &'static str,
         target_version: u32,
     },
+    AuthoredMigrationBlocked {
+        prepared_or_recoverable: u64,
+        signed_without_complete_event: u64,
+        invalid_or_unsupported: u64,
+    },
     DatabaseOpenFailed {
         database: &'static str,
     },
@@ -432,6 +437,14 @@ impl fmt::Display for Error {
             } => write!(
                 formatter,
                 "{database} migration to schema version {target_version} failed"
+            ),
+            Self::AuthoredMigrationBlocked {
+                prepared_or_recoverable,
+                signed_without_complete_event,
+                invalid_or_unsupported,
+            } => write!(
+                formatter,
+                "SQLite authored-operation migration is blocked: {prepared_or_recoverable} incomplete, {signed_without_complete_event} missing exact signed output, {invalid_or_unsupported} invalid or unsupported"
             ),
             Self::DatabaseOpenFailed { database } => {
                 write!(

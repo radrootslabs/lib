@@ -459,7 +459,7 @@ fn apply_artifact_failure(
     }
 }
 
-async fn persist_operation(
+pub(crate) async fn persist_operation(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     operation: &AuthoredOperation,
 ) -> Result<(), Error> {
@@ -481,7 +481,7 @@ async fn persist_operation(
     Ok(())
 }
 
-async fn persist_artifact(
+pub(crate) async fn persist_artifact(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     artifact: &AuthoredArtifact,
 ) -> Result<(), Error> {
@@ -580,7 +580,7 @@ async fn persist_artifact(
     Ok(())
 }
 
-async fn persist_plan(
+pub(crate) async fn persist_plan(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     plan: &AuthoredDeliveryPlan,
 ) -> Result<(), Error> {
