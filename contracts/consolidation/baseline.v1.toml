@@ -1,0 +1,336 @@
+schema_version = 1
+baseline_id = "radroots.rust.consolidation.baseline.v1"
+architecture_target = "radroots.crates.release.v2"
+captured_date = "2026-08-05"
+public_package_version = "0.1.0-alpha"
+expected_public_packages = 19
+expected_handoff_steps = 275
+
+[[repository]]
+id = "lib"
+canonical_url = "https://github.com/radrootslabs/lib"
+commit = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+tree = "58b76af0611f0851b43d0d42f74194641846d989"
+branch = "master"
+clean = true
+origin_synchronized = true
+worktree_count = 1
+rust_version = "1.97.1"
+resolver = "3"
+package_version = "0.1.0-alpha"
+commands = [
+  "nix flake check",
+  "nix run .#contract",
+  "nix run .#release-preflight",
+  "cargo xtask architecture-ci",
+]
+
+[[repository]]
+id = "sdk"
+canonical_url = "https://github.com/radrootslabs/sdk"
+commit = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+tree = "26239851ebeda25e27a03f93720ca2f7c9170b0b"
+branch = "master"
+clean = true
+origin_synchronized = true
+worktree_count = 1
+rust_version = "1.97.1"
+resolver = "3"
+package_version = "0.1.0-alpha"
+commands = [
+  "cargo xtask check",
+  "cargo test --workspace --locked",
+  "pnpm check",
+]
+
+[[repository]]
+id = "app_rt"
+canonical_url = "https://github.com/radrootslabs/app_rt"
+commit = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+tree = "7450d695ad285f4b30f151529236019765dd8f08"
+branch = "master"
+clean = true
+origin_synchronized = true
+worktree_count = 1
+rust_version = "1.97.1"
+resolver = "2"
+package_version = "0.1.0-alpha.1"
+commands = [
+  "cargo fmt --all -- --check",
+  "cargo check --workspace --all-targets --locked",
+  "cargo test --workspace --locked",
+]
+
+[[repository]]
+id = "studio_app"
+canonical_url = "https://github.com/radrootslabs/studio_app"
+commit = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+tree = "81d222e691c4d3d138edba45550c402e0fba1a84"
+branch = "master"
+clean = true
+origin_synchronized = true
+worktree_count = 1
+rust_version = "1.97.1"
+resolver = "3"
+package_version = "0.1.0-alpha"
+commands = [
+  "make format",
+  "make check",
+  "make bindings",
+  "make audit",
+]
+
+[[surface]]
+repository = "lib"
+path = "docs/api"
+tree = "c8ab68354fd72857372ca9b66386319ac78ab4b4"
+authority = "public_rust_api"
+
+[[surface]]
+repository = "lib"
+path = "contracts"
+tree = "12b282ec60ca33359ed7346f717355c159f3ff13"
+authority = "public_contracts"
+
+[[surface]]
+repository = "sdk"
+path = "crates/sdk"
+tree = "673008e55dff4dc31fdfb040a5ff1ef5cca80f84"
+authority = "sdk_public_api"
+
+[[surface]]
+repository = "sdk"
+path = "crates/radroots"
+tree = "f91e1bcab7b926eb4ae78c19460092c4feee6092"
+authority = "facade_public_api"
+
+[[surface]]
+repository = "sdk"
+path = "crates/core_bindings"
+tree = "2a63164be43ecc7ce8a219c557174920fa3d62b0"
+authority = "core_bindings"
+
+[[surface]]
+repository = "sdk"
+path = "crates/event_bindings"
+tree = "bd4109562147075a276027be0c2c1d228d4507c1"
+authority = "event_bindings"
+
+[[surface]]
+repository = "sdk"
+path = "crates/identity_bindings"
+tree = "1a56a964b0c950d2a7940220548d8390ff7c37b7"
+authority = "identity_bindings"
+
+[[surface]]
+repository = "sdk"
+path = "crates/trade_bindings"
+tree = "7eaed407b9332b14cd47df5c25925428eeff7c68"
+authority = "trade_bindings"
+
+[[surface]]
+repository = "sdk"
+path = "crates/replica_schema_bindings"
+tree = "723ec9da7e442c8d34fc309d28e75a135f897c40"
+authority = "replica_schema_bindings"
+
+[[surface]]
+repository = "sdk"
+path = "crates/event_codec_wasm"
+tree = "5bd41a7a90341217111535082511058e3347f182"
+authority = "event_codec_wasm"
+
+[[surface]]
+repository = "sdk"
+path = "crates/replica_store_wasm"
+tree = "791d1e4ffe3fe453f62aa659490332bb00fc2abc"
+authority = "replica_store_wasm"
+
+[[surface]]
+repository = "sdk"
+path = "crates/replica_sync_wasm"
+tree = "c697807c0178466ecf820b7a397cf294035ba9f5"
+authority = "replica_sync_wasm"
+
+[[surface]]
+repository = "sdk"
+path = "crates/ffi"
+tree = "28d795421fbfd8951118936f8ed376ae9a87a18e"
+authority = "sdk_ffi"
+
+[[surface]]
+repository = "sdk"
+path = "crates/sql_wasm_runtime"
+tree = "b885695fc544de1e4fa8acddcc7d988761389fc7"
+authority = "sdk_sql_wasm_runtime"
+
+[[surface]]
+repository = "sdk"
+path = "tools/xtask"
+tree = "04ed873470d7e727a2cbfe7c07a4cc49406f070a"
+authority = "sdk_generation_commands"
+
+[[surface]]
+repository = "sdk"
+path = "generated"
+tree = "ca2de806ea6276cec9d72c5631fcaa27bf44979c"
+authority = "sdk_generated_outputs"
+
+[[surface]]
+repository = "sdk"
+path = "packages"
+tree = "cd946b9cec8eae673f49d1a61b264b35bae5d828"
+authority = "sdk_product_packages"
+
+[[surface]]
+repository = "app_rt"
+path = "crates/core"
+tree = "4a27d80a13aebf1d6743050e699ea41badd0a415"
+authority = "mobile_core"
+
+[[surface]]
+repository = "app_rt"
+path = "crates/ffi"
+tree = "11ef7426c97ede13bcbaec9c80b4534422f33441"
+authority = "mobile_ffi_abi"
+
+[[surface]]
+repository = "app_rt"
+path = "crates/wasm"
+tree = "41548eae2c71e472596be1dd6450d4e08cac9e91"
+authority = "mobile_wasm"
+
+[[surface]]
+repository = "app_rt"
+path = "crates/bindgen"
+tree = "5b1a4ecd9b6da35d836dc58a1de1853bcf01d09e"
+authority = "mobile_bindgen"
+
+[[surface]]
+repository = "studio_app"
+path = "core/compatibility"
+tree = "0bbbcae4256c895ea085a187427838b7634c7484"
+authority = "studio_product_compatibility"
+
+[[surface]]
+repository = "studio_app"
+path = "core/crates/domain"
+tree = "ec2d055c1f7cc10c83aa8885a5354459412f998f"
+authority = "studio_domain"
+
+[[surface]]
+repository = "studio_app"
+path = "core/crates/application"
+tree = "601d88bfd14f7aeacafc77aede4576d338d47428"
+authority = "studio_application"
+
+[[surface]]
+repository = "studio_app"
+path = "core/crates/nostr"
+tree = "a1bbc8cb99680d2436e2b20deb2f262e88b64036"
+authority = "studio_nostr"
+
+[[surface]]
+repository = "studio_app"
+path = "core/crates/storage"
+tree = "395ff2552630e4ba28203c684e987249295e3ca4"
+authority = "studio_storage_database_keyring"
+
+[[surface]]
+repository = "studio_app"
+path = "core/crates/ffi"
+tree = "5715cae8aba53dfff2cd5191762fde5a06977ddb"
+authority = "studio_ffi_abi"
+
+[[surface]]
+repository = "studio_app"
+path = "core/tools/uniffi-bindgen"
+tree = "39c456eab936a6849c5761abd3be4ddfc46ca0c6"
+authority = "studio_bindgen"
+
+[[consumer]]
+id = "sdk_product"
+repository = "https://github.com/radrootslabs/sdk"
+current_source = "lib"
+current_revision = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "mobile_runtime"
+repository = "https://github.com/radrootslabs/app_rt"
+current_source = "sdk"
+current_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "studio_product"
+repository = "https://github.com/radrootslabs/studio_app"
+current_source = "studio_app"
+current_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "cli"
+repository = "https://github.com/radrootslabs/cli"
+current_source = "sdk"
+current_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "ios_app"
+repository = "https://github.com/radrootslabs/ios_app"
+current_source = "app_rt"
+current_revision = "b770841d2d2ea1cafc1d4a644d596cb8727624d9"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "myc"
+repository = "https://github.com/radrootslabs/myc"
+current_source = "lib"
+current_revision = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "radrootsd"
+repository = "https://github.com/radrootslabs/radrootsd"
+current_source = "lib"
+current_revision = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "rhi"
+repository = "https://github.com/radrootslabs/rhi"
+current_source = "lib"
+current_revision = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "event_indexer"
+repository = "https://github.com/radrootslabs/tangle_indexer"
+current_source = "lib"
+current_revision = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+target_source = "lib"
+target_acquisition = "exact_git_rev"
+
+[[consumer]]
+id = "integration_parent"
+repository = "integration_parent"
+current_source = "lib_and_sdk_gitlinks"
+current_revision = "f7f456d906d91aadbb9fac4850afaa8c5723c3e9"
+target_source = "lib"
+target_acquisition = "exact_registered_gitlink"
+
+[[additional_source]]
+id = "studio_mpl_legacy_core"
+commit = "6074a4745be361f21bb47d4778c74a14b2d57954"
+tree = "acb0b7d0eeaf798caed5850ae53748bc0b6643f9"
+license = "MPL-2.0"
+disposition = "import_unique_behavior_then_zero_logic_capsule"

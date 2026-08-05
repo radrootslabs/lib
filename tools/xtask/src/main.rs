@@ -12,6 +12,8 @@ mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod consolidation;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -45,6 +47,7 @@ fn usage() {
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
+    eprintln!("  cargo xtask consolidation baseline");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");
@@ -177,6 +180,11 @@ fn run(args: &[String]) -> Result<(), String> {
             architecture::validate_dependency_boundaries(&workspace_root())
         }
         Some("contract") => run_contract(&args[1..]),
+        Some("consolidation")
+            if args.get(1).map(String::as_str) == Some("baseline") && args.len() == 2 =>
+        {
+            consolidation::validate(&workspace_root())
+        }
         Some("coverage") => coverage::run(&args[1..]),
         Some("dto-roots") => dto_roots::run(&args[1..], &workspace_root()),
         Some("generate") => generate::run(&args[1..], &workspace_root()),

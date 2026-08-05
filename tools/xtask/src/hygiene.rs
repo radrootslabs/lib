@@ -239,7 +239,10 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         ],
         &["tangle"],
         "removed identifier 'tangle' must not reappear",
-        &["tools/xtask/src/hygiene.rs"],
+        &[
+            "contracts/consolidation/baseline.v1.toml",
+            "tools/xtask/src/hygiene.rs",
+        ],
         &mut failures,
     );
     reject_retired_listing_aliases(root, &mut failures);

@@ -1,0 +1,235 @@
+schema_version = 1
+map_id = "radroots.rust.consolidation.handoff-steps.v1"
+source_step_count = 275
+source_sequence = "radroots_lib_consolidation_handoff/implementation/COMMIT_SEQUENCE.md"
+
+[[range]]
+start = 1
+end = 3
+owners = ["rcld-rlc-010"]
+disposition = "execute"
+reason = "current repository and command baseline"
+
+[[range]]
+start = 4
+end = 4
+owners = ["rcld-rlc-040"]
+disposition = "reassigned"
+reason = "catalog-driven Nix repair belongs to canonical build controls"
+
+[[range]]
+start = 5
+end = 5
+owners = ["rcld-rlc-010"]
+disposition = "already_satisfied"
+reason = "Studio master pins Rust 1.97.1 before source freeze"
+
+[[range]]
+start = 6
+end = 6
+owners = ["rcld-rlc-010"]
+disposition = "already_satisfied"
+reason = "app_rt already consumes the reviewed final SDK revision"
+
+[[range]]
+start = 7
+end = 12
+owners = ["rcld-rlc-010"]
+disposition = "execute"
+reason = "tree-pinned API, generated, ABI, database, and keyring baselines"
+
+[[range]]
+start = 13
+end = 14
+owners = ["rcld-rlc-020"]
+disposition = "reassigned"
+reason = "source ledger and dual-source controls depend on history tooling"
+
+[[range]]
+start = 15
+end = 15
+owners = ["rcld-rlc-010"]
+disposition = "execute"
+reason = "baseline qualification closure"
+
+[[range]]
+start = 16
+end = 27
+owners = ["rcld-rlc-030"]
+disposition = "execute"
+reason = "v2 contracts and canonical catalog"
+
+[[range]]
+start = 28
+end = 28
+owners = ["rcld-rlc-140"]
+disposition = "reassigned"
+reason = "SDK repository instructions are consumer-owned"
+
+[[range]]
+start = 29
+end = 29
+owners = ["rcld-rlc-150", "rcld-rlc-160"]
+disposition = "reassigned"
+reason = "mobile and Studio instructions are updated by their product owners"
+
+[[range]]
+start = 30
+end = 55
+owners = ["rcld-rlc-030"]
+disposition = "execute"
+reason = "v2 contract synchronization and catalog enforcement"
+
+[[range]]
+start = 56
+end = 80
+owners = ["rcld-rlc-040"]
+disposition = "execute"
+reason = "canonical command, path, generation, and artifact controls"
+
+[[range]]
+start = 81
+end = 92
+owners = ["rcld-rlc-050"]
+disposition = "execute"
+reason = "history-preserving SDK move-only import"
+
+[[range]]
+start = 93
+end = 100
+owners = ["rcld-rlc-060"]
+disposition = "execute"
+reason = "canonical SDK generation and qualification"
+
+[[range]]
+start = 101
+end = 112
+owners = ["rcld-rlc-140"]
+disposition = "reassigned"
+reason = "final SDK source lock follows the qualified lib candidate"
+
+[[range]]
+start = 113
+end = 131
+owners = ["rcld-rlc-070"]
+disposition = "execute"
+reason = "history-preserving mobile move-only import"
+
+[[range]]
+start = 132
+end = 133
+owners = ["rcld-rlc-150"]
+disposition = "reassigned"
+reason = "final mobile source locks follow the qualified lib candidate"
+
+[[range]]
+start = 134
+end = 134
+owners = ["rcld-rlc-070"]
+disposition = "execute"
+reason = "mobile move-only closure"
+
+[[range]]
+start = 135
+end = 146
+owners = ["rcld-rlc-080"]
+disposition = "execute"
+reason = "mobile boundary and filesystem hardening"
+
+[[range]]
+start = 147
+end = 160
+owners = ["rcld-rlc-090"]
+disposition = "execute"
+reason = "history-preserving Studio move-only import"
+
+[[range]]
+start = 161
+end = 163
+owners = ["rcld-rlc-160"]
+disposition = "reassigned"
+reason = "final Studio source lock and product commands follow the lib candidate"
+
+[[range]]
+start = 164
+end = 170
+owners = ["rcld-rlc-090"]
+disposition = "execute"
+reason = "Studio compatibility baselines belong to move-only import"
+
+[[range]]
+start = 171
+end = 175
+owners = ["rcld-rlc-160"]
+disposition = "reassigned"
+reason = "desktop platform and duplicate-source cutover are product-owned"
+
+[[range]]
+start = 176
+end = 176
+owners = ["rcld-rlc-090"]
+disposition = "execute"
+reason = "Studio move-only closure"
+
+[[range]]
+start = 177
+end = 210
+owners = ["rcld-rlc-100"]
+disposition = "execute"
+reason = "Studio runtime, networking, and concurrency architecture"
+
+[[range]]
+start = 211
+end = 230
+owners = ["rcld-rlc-110"]
+disposition = "execute"
+reason = "Studio data, secret, filesystem, and FFI security"
+
+[[range]]
+start = 231
+end = 254
+owners = ["rcld-rlc-120"]
+disposition = "execute"
+reason = "supply-chain, quality, and compatibility qualification"
+
+[[range]]
+start = 255
+end = 258
+owners = ["rcld-rlc-130"]
+disposition = "execute"
+reason = "canonical lib desktop and WASM platform matrix"
+
+[[range]]
+start = 259
+end = 260
+owners = ["rcld-rlc-150"]
+disposition = "reassigned"
+reason = "Android and iOS artifacts are qualified with mobile consumers"
+
+[[range]]
+start = 261
+end = 261
+owners = ["rcld-rlc-140"]
+disposition = "reassigned"
+reason = "SDK product qualification is consumer-owned"
+
+[[range]]
+start = 262
+end = 262
+owners = ["rcld-rlc-150"]
+disposition = "reassigned"
+reason = "mobile product qualification is consumer-owned"
+
+[[range]]
+start = 263
+end = 263
+owners = ["rcld-rlc-160"]
+disposition = "reassigned"
+reason = "Studio product qualification is consumer-owned"
+
+[[range]]
+start = 264
+end = 275
+owners = ["rcld-rlc-180"]
+disposition = "execute"
+reason = "rollback, gated retirement, cleanup, and final acceptance"
