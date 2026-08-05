@@ -37,8 +37,8 @@ use crate::{
     },
     private_artifact::{
         DeletionReason, EXPIRED_ARTIFACT_QUERY_LIMIT_MAX, PrivateArtifactId,
-        PrivateArtifactMetadata, PrivateArtifactRevision, PrivateArtifactStage,
-        PrivateArtifactStatus, PrivateArtifactStore,
+        PrivateArtifactMetadata, PrivateArtifactResealReceipt, PrivateArtifactResealRequest,
+        PrivateArtifactRevision, PrivateArtifactStage, PrivateArtifactStatus, PrivateArtifactStore,
     },
     projection::{
         EventIndexCheckpoint, EventIndexManifest, ProjectionCheckpoint, ProjectionGeneration,
@@ -70,6 +70,7 @@ struct State {
     event_index_manifests: Vec<EventIndexManifest>,
     event_index_checkpoints: Vec<EventIndexCheckpoint>,
     private_artifacts: Vec<PrivateArtifactMetadata>,
+    private_artifact_reseals: Vec<PrivateArtifactResealReceipt>,
     backups: Vec<BackupOperation>,
     restores: Vec<RestoreOperation>,
     atomic_receipts: Vec<AtomicCommitReceipt>,
@@ -100,6 +101,7 @@ impl MemoryStorage {
                 event_index_manifests: Vec::new(),
                 event_index_checkpoints: Vec::new(),
                 private_artifacts: Vec::new(),
+                private_artifact_reseals: Vec::new(),
                 backups: Vec::new(),
                 restores: Vec::new(),
                 atomic_receipts: Vec::new(),
@@ -992,6 +994,32 @@ impl PrivateArtifactStore for MemoryStorage {
                 .iter()
                 .find(|metadata| metadata.artifact_id() == artifact_id)
                 .cloned())
+        })
+    }
+
+    fn reseal_metadata(
+        &self,
+        request: PrivateArtifactResealRequest,
+    ) -> BoxFuture<'_, Result<PrivateArtifactResealReceipt, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(receipt) = state
+                .private_artifact_reseals
+                .iter()
+                .find(|receipt| receipt.reseal_id() == request.reseal_id())
+            {
+                return receipt.replay(&request);
+            }
+            let metadata = state
+                .private_artifacts
+                .iter_mut()
+                .find(|metadata| metadata.artifact_id() == request.artifact_id())
+                .ok_or(Error::PrivateArtifactNotFound)?;
+            let next = metadata.resealed(&request)?;
+            let receipt = PrivateArtifactResealReceipt::committed(&request, next.revision());
+            *metadata = next;
+            state.private_artifact_reseals.push(receipt);
+            Ok(receipt)
         })
     }
 

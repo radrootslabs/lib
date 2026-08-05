@@ -2,10 +2,16 @@ use radroots_storage::{
     Error,
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DeletionReason, DurableSecretReference,
-        PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactRevision, PrivateArtifactStage,
-        PrivateArtifactStore, RetentionPolicy,
+        PrivateArtifactEnvelopeMigrationStatus, PrivateArtifactId, PrivateArtifactMetadata,
+        PrivateArtifactResealDisposition, PrivateArtifactResealId, PrivateArtifactResealRequest,
+        PrivateArtifactRevision, PrivateArtifactStage, PrivateArtifactStore, RetentionPolicy,
     },
 };
+
+#[cfg(feature = "memory")]
+use futures_executor::block_on;
+#[cfg(feature = "memory")]
+use radroots_storage::memory::MemoryStorage;
 
 fn metadata(retention: RetentionPolicy) -> PrivateArtifactMetadata {
     PrivateArtifactMetadata::new(
@@ -412,6 +418,148 @@ fn transition_and_status_edge_matrix_is_complete() {
             active: 0,
             expired: u64::MAX,
             tombstoned: 1,
+        }
+        .total(),
+        None
+    );
+}
+
+#[test]
+fn envelope_context_is_derived_and_transplant_resistant() {
+    let original = metadata(RetentionPolicy::indefinite());
+    let context = original.envelope_context();
+    assert_eq!(
+        context.purpose(),
+        "radroots.private_artifact.trade.private_terms"
+    );
+    assert_eq!(context.subject_type(), "private_artifact");
+    assert_eq!(context.subject(), "01010101010101010101010101010101");
+    assert_eq!(context.payload_schema(), "trade.private_terms.v1");
+
+    let with_id = |id, kind, schema| {
+        PrivateArtifactMetadata::new(
+            PrivateArtifactId::new(id).unwrap(),
+            ArtifactKind::parse(kind).unwrap(),
+            ArtifactSchemaId::parse(schema).unwrap(),
+            ArtifactCommitment::new([2; 32]),
+            512,
+            DurableSecretReference::new("keyring", "opaque-key-token", 3).unwrap(),
+            RetentionPolicy::indefinite(),
+            100,
+        )
+        .unwrap()
+        .envelope_context()
+        .fingerprint()
+    };
+    let fingerprint = context.fingerprint();
+    assert_ne!(
+        fingerprint,
+        with_id([3; 16], "trade.private_terms", "trade.private_terms.v1")
+    );
+    assert_ne!(
+        fingerprint,
+        with_id([1; 16], "trade.other_terms", "trade.private_terms.v1")
+    );
+    assert_ne!(
+        fingerprint,
+        with_id([1; 16], "trade.private_terms", "trade.private_terms.v2")
+    );
+
+    for invalid in ["trade..terms", ".trade.terms", "trade.1terms", "trade"] {
+        assert_eq!(
+            ArtifactKind::parse(invalid),
+            Err(Error::InvalidPrivateArtifactKind)
+        );
+    }
+    for invalid in [
+        "trade..terms.v1",
+        "trade.terms",
+        "trade.terms.latest",
+        "trade.terms.v",
+    ] {
+        assert_eq!(
+            ArtifactSchemaId::parse(invalid),
+            Err(Error::InvalidPrivateArtifactSchema)
+        );
+    }
+    let diagnostic = format!("{context:?} {original:?}");
+    assert!(!diagnostic.contains("01010101010101010101010101010101"));
+}
+
+#[test]
+#[cfg(feature = "memory")]
+fn reseal_contract_distinguishes_exact_replay_and_conflict() {
+    let store = MemoryStorage::default();
+    let initial = metadata(RetentionPolicy::indefinite());
+    block_on(store.put_metadata(initial.clone())).unwrap();
+    let request = PrivateArtifactResealRequest::new(
+        PrivateArtifactResealId::new([9; 16]).unwrap(),
+        initial.artifact_id(),
+        initial.revision(),
+        initial.commitment(),
+        ArtifactCommitment::new([8; 32]),
+        640,
+        DurableSecretReference::new("keyring", "fresh-token", 4).unwrap(),
+        200,
+    )
+    .unwrap();
+    let committed = block_on(store.reseal_metadata(request.clone())).unwrap();
+    assert_eq!(
+        committed.disposition(),
+        PrivateArtifactResealDisposition::Committed
+    );
+    assert_eq!(committed.committed_revision().get(), 2);
+    assert_eq!(committed.request_fingerprint(), request.fingerprint());
+
+    let replayed = block_on(store.reseal_metadata(request.clone())).unwrap();
+    assert_eq!(
+        replayed.disposition(),
+        PrivateArtifactResealDisposition::Replayed
+    );
+    assert_eq!(
+        replayed.committed_revision(),
+        committed.committed_revision()
+    );
+
+    let conflicting = PrivateArtifactResealRequest::new(
+        request.reseal_id(),
+        request.artifact_id(),
+        request.expected_revision(),
+        request.expected_commitment(),
+        ArtifactCommitment::new([7; 32]),
+        request.next_protected_size_bytes(),
+        request.next_secret_reference().clone(),
+        request.committed_at_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.reseal_metadata(conflicting)),
+        Err(Error::PrivateArtifactResealConflict)
+    );
+    assert_eq!(
+        PrivateArtifactResealId::new([0; 16]),
+        Err(Error::InvalidPrivateArtifactResealId)
+    );
+}
+
+#[test]
+fn migration_status_is_bounded_and_overflow_safe() {
+    assert_eq!(
+        PrivateArtifactEnvelopeMigrationStatus {
+            v1_pending: 1,
+            v2_current: 2,
+            corrupt: 3,
+            blocked_provider: 4,
+            conflicted: 5,
+        }
+        .total(),
+        Some(15)
+    );
+    assert_eq!(
+        PrivateArtifactEnvelopeMigrationStatus {
+            v1_pending: u64::MAX,
+            v2_current: 1,
+            ..PrivateArtifactEnvelopeMigrationStatus::default()
         }
         .total(),
         None

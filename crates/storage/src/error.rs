@@ -87,11 +87,15 @@ pub enum Error {
     InvalidPrivateArtifactSecretReference,
     InvalidPrivateArtifactRetention,
     InvalidPrivateArtifactRevision,
+    InvalidPrivateArtifactResealId,
+    InvalidPrivateArtifactResealRequest,
     InvalidPrivateArtifactTimestamp,
     InvalidPrivateArtifactMetadata,
     PrivateArtifactNotFound,
     PrivateArtifactConflict,
     PrivateArtifactRevisionConflict,
+    PrivateArtifactResealConflict,
+    PrivateArtifactPersistenceIndeterminate,
     PrivateArtifactRetentionActive,
     PrivateArtifactNotExpired,
     PrivateArtifactTombstoned,
@@ -217,6 +221,10 @@ impl fmt::Display for Error {
                 "storage private-artifact retention is invalid"
             }
             Self::InvalidPrivateArtifactRevision => "storage private-artifact revision is invalid",
+            Self::InvalidPrivateArtifactResealId => "storage private-artifact reseal id is invalid",
+            Self::InvalidPrivateArtifactResealRequest => {
+                "storage private-artifact reseal request is invalid"
+            }
             Self::InvalidPrivateArtifactTimestamp => {
                 "storage private-artifact timestamp is invalid"
             }
@@ -227,6 +235,12 @@ impl fmt::Display for Error {
             }
             Self::PrivateArtifactRevisionConflict => {
                 "storage private-artifact revision conflicts with durable state"
+            }
+            Self::PrivateArtifactResealConflict => {
+                "storage private-artifact reseal conflicts with durable state"
+            }
+            Self::PrivateArtifactPersistenceIndeterminate => {
+                "storage private-artifact persistence outcome is indeterminate"
             }
             Self::PrivateArtifactRetentionActive => "storage private-artifact retention is active",
             Self::PrivateArtifactNotExpired => "storage private artifact has not expired",
@@ -355,11 +369,15 @@ mod tests {
             InvalidPrivateArtifactSecretReference,
             InvalidPrivateArtifactRetention,
             InvalidPrivateArtifactRevision,
+            InvalidPrivateArtifactResealId,
+            InvalidPrivateArtifactResealRequest,
             InvalidPrivateArtifactTimestamp,
             InvalidPrivateArtifactMetadata,
             PrivateArtifactNotFound,
             PrivateArtifactConflict,
             PrivateArtifactRevisionConflict,
+            PrivateArtifactResealConflict,
+            PrivateArtifactPersistenceIndeterminate,
             PrivateArtifactRetentionActive,
             PrivateArtifactNotExpired,
             PrivateArtifactTombstoned,

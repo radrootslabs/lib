@@ -769,6 +769,7 @@ pub fn radroots_storage::memory::MemoryStorage::expired(&self, u64, u16) -> radr
 pub fn radroots_storage::memory::MemoryStorage::mark_expired(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::metadata(&self, radroots_storage::private_artifact::PrivateArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::private_artifact::PrivateArtifactMetadata>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_metadata(&self, radroots_storage::private_artifact::PrivateArtifactMetadata) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::reseal_metadata(&self, radroots_storage::private_artifact::PrivateArtifactResealRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactResealReceipt, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 impl radroots_storage::projection::ProjectionStore for radroots_storage::memory::MemoryStorage
@@ -957,6 +958,9 @@ pub radroots_storage::private_artifact::DeletionReason::KeyRevoked
 pub radroots_storage::private_artifact::DeletionReason::OperatorRequested
 pub radroots_storage::private_artifact::DeletionReason::RetentionExpired
 pub radroots_storage::private_artifact::DeletionReason::UserRequested
+pub enum radroots_storage::private_artifact::PrivateArtifactResealDisposition
+pub radroots_storage::private_artifact::PrivateArtifactResealDisposition::Committed
+pub radroots_storage::private_artifact::PrivateArtifactResealDisposition::Replayed
 pub enum radroots_storage::private_artifact::PrivateArtifactStage
 pub radroots_storage::private_artifact::PrivateArtifactStage::Active
 pub radroots_storage::private_artifact::PrivateArtifactStage::Expired
@@ -990,20 +994,41 @@ impl serde_core::ser::Serialize for radroots_storage::private_artifact::DurableS
 pub fn radroots_storage::private_artifact::DurableSecretReference::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::DurableSecretReference
 pub fn radroots_storage::private_artifact::DurableSecretReference::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_storage::private_artifact::PrivateArtifactEnvelopeContext
+impl radroots_storage::private_artifact::PrivateArtifactEnvelopeContext
+pub fn radroots_storage::private_artifact::PrivateArtifactEnvelopeContext::fingerprint(&self) -> [u8; 32]
+pub fn radroots_storage::private_artifact::PrivateArtifactEnvelopeContext::payload_schema(&self) -> &str
+pub fn radroots_storage::private_artifact::PrivateArtifactEnvelopeContext::purpose(&self) -> &str
+pub fn radroots_storage::private_artifact::PrivateArtifactEnvelopeContext::subject(&self) -> &str
+pub const fn radroots_storage::private_artifact::PrivateArtifactEnvelopeContext::subject_type(&self) -> &'static str
+impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactEnvelopeContext
+pub fn radroots_storage::private_artifact::PrivateArtifactEnvelopeContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus
+pub radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus::blocked_provider: u64
+pub radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus::conflicted: u64
+pub radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus::corrupt: u64
+pub radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus::v1_pending: u64
+pub radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus::v2_current: u64
+impl radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus
+pub fn radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus::total(self) -> core::option::Option<u64>
 pub struct radroots_storage::private_artifact::PrivateArtifactId(_)
 impl radroots_storage::private_artifact::PrivateArtifactId
 pub const fn radroots_storage::private_artifact::PrivateArtifactId::as_bytes(&self) -> &[u8; 16]
 pub const fn radroots_storage::private_artifact::PrivateArtifactId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
+impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactId
+pub fn radroots_storage::private_artifact::PrivateArtifactId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::private_artifact::PrivateArtifactMetadata
 impl radroots_storage::private_artifact::PrivateArtifactMetadata
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::artifact_id(&self) -> radroots_storage::private_artifact::PrivateArtifactId
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::commitment(&self) -> radroots_storage::private_artifact::ArtifactCommitment
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::created_at_unix_ms(&self) -> u64
+pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::envelope_context(&self) -> radroots_storage::private_artifact::PrivateArtifactEnvelopeContext
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::from_durable_parts(radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::ArtifactKind, radroots_storage::private_artifact::ArtifactSchemaId, radroots_storage::private_artifact::ArtifactCommitment, u64, radroots_storage::private_artifact::DurableSecretReference, radroots_storage::private_artifact::RetentionPolicy, radroots_storage::private_artifact::PrivateArtifactRevision, radroots_storage::private_artifact::PrivateArtifactStage, u64, u64, core::option::Option<(u64, radroots_storage::private_artifact::DeletionReason, radroots_storage::private_artifact::ArtifactCommitment)>) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::kind(&self) -> &radroots_storage::private_artifact::ArtifactKind
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::mark_expired(&self, radroots_storage::private_artifact::PrivateArtifactRevision, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::new(radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::ArtifactKind, radroots_storage::private_artifact::ArtifactSchemaId, radroots_storage::private_artifact::ArtifactCommitment, u64, radroots_storage::private_artifact::DurableSecretReference, radroots_storage::private_artifact::RetentionPolicy, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::protected_size_bytes(&self) -> u64
+pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::resealed(&self, &radroots_storage::private_artifact::PrivateArtifactResealRequest) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::retention(&self) -> radroots_storage::private_artifact::RetentionPolicy
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::revision(&self) -> radroots_storage::private_artifact::PrivateArtifactRevision
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::schema_id(&self) -> &radroots_storage::private_artifact::ArtifactSchemaId
@@ -1012,6 +1037,37 @@ pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::stage(
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::tombstone_record(&self) -> core::option::Option<radroots_storage::private_artifact::ArtifactTombstone>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::updated_at_unix_ms(&self) -> u64
+pub struct radroots_storage::private_artifact::PrivateArtifactResealId(_)
+impl radroots_storage::private_artifact::PrivateArtifactResealId
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
+impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactResealId
+pub fn radroots_storage::private_artifact::PrivateArtifactResealId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::private_artifact::PrivateArtifactResealReceipt
+impl radroots_storage::private_artifact::PrivateArtifactResealReceipt
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::artifact_id(self) -> radroots_storage::private_artifact::PrivateArtifactId
+pub fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::committed(&radroots_storage::private_artifact::PrivateArtifactResealRequest, radroots_storage::private_artifact::PrivateArtifactRevision) -> Self
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::committed_revision(self) -> radroots_storage::private_artifact::PrivateArtifactRevision
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::disposition(self) -> radroots_storage::private_artifact::PrivateArtifactResealDisposition
+pub fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::replay(&self, &radroots_storage::private_artifact::PrivateArtifactResealRequest) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::request_fingerprint(self) -> [u8; 32]
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::reseal_id(self) -> radroots_storage::private_artifact::PrivateArtifactResealId
+impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactResealReceipt
+pub fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::private_artifact::PrivateArtifactResealRequest
+impl radroots_storage::private_artifact::PrivateArtifactResealRequest
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::artifact_id(&self) -> radroots_storage::private_artifact::PrivateArtifactId
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::committed_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::expected_commitment(&self) -> radroots_storage::private_artifact::ArtifactCommitment
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::expected_revision(&self) -> radroots_storage::private_artifact::PrivateArtifactRevision
+pub fn radroots_storage::private_artifact::PrivateArtifactResealRequest::fingerprint(&self) -> [u8; 32]
+pub fn radroots_storage::private_artifact::PrivateArtifactResealRequest::new(radroots_storage::private_artifact::PrivateArtifactResealId, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, radroots_storage::private_artifact::ArtifactCommitment, radroots_storage::private_artifact::ArtifactCommitment, u64, radroots_storage::private_artifact::DurableSecretReference, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::next_commitment(&self) -> radroots_storage::private_artifact::ArtifactCommitment
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::next_protected_size_bytes(&self) -> u64
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::next_secret_reference(&self) -> &radroots_storage::private_artifact::DurableSecretReference
+pub const fn radroots_storage::private_artifact::PrivateArtifactResealRequest::reseal_id(&self) -> radroots_storage::private_artifact::PrivateArtifactResealId
+impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactResealRequest
+pub fn radroots_storage::private_artifact::PrivateArtifactResealRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::private_artifact::PrivateArtifactRevision(_)
 impl radroots_storage::private_artifact::PrivateArtifactRevision
 pub const radroots_storage::private_artifact::PrivateArtifactRevision::INITIAL: Self
@@ -1034,6 +1090,8 @@ pub const fn radroots_storage::private_artifact::RetentionPolicy::permits_deleti
 pub const radroots_storage::private_artifact::ARTIFACT_KIND_MAX_BYTES: usize
 pub const radroots_storage::private_artifact::ARTIFACT_SCHEMA_MAX_BYTES: usize
 pub const radroots_storage::private_artifact::EXPIRED_ARTIFACT_QUERY_LIMIT_MAX: u16
+pub const radroots_storage::private_artifact::PRIVATE_ARTIFACT_ENVELOPE_PURPOSE_PREFIX: &str
+pub const radroots_storage::private_artifact::PRIVATE_ARTIFACT_ENVELOPE_SUBJECT_TYPE: &str
 pub const radroots_storage::private_artifact::SECRET_PROVIDER_MAX_BYTES: usize
 pub const radroots_storage::private_artifact::SECRET_REFERENCE_MAX_BYTES: usize
 pub trait radroots_storage::private_artifact::PrivateArtifactStore: core::marker::Send + core::marker::Sync
@@ -1041,6 +1099,7 @@ pub fn radroots_storage::private_artifact::PrivateArtifactStore::expired(&self, 
 pub fn radroots_storage::private_artifact::PrivateArtifactStore::mark_expired(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 pub fn radroots_storage::private_artifact::PrivateArtifactStore::metadata(&self, radroots_storage::private_artifact::PrivateArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::private_artifact::PrivateArtifactMetadata>, radroots_storage::Error>>
 pub fn radroots_storage::private_artifact::PrivateArtifactStore::put_metadata(&self, radroots_storage::private_artifact::PrivateArtifactMetadata) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
+pub fn radroots_storage::private_artifact::PrivateArtifactStore::reseal_metadata(&self, radroots_storage::private_artifact::PrivateArtifactResealRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactResealReceipt, radroots_storage::Error>>
 pub fn radroots_storage::private_artifact::PrivateArtifactStore::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactStatus, radroots_storage::Error>>
 pub fn radroots_storage::private_artifact::PrivateArtifactStore::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 impl radroots_storage::private_artifact::PrivateArtifactStore for radroots_storage::memory::MemoryStorage
@@ -1048,6 +1107,7 @@ pub fn radroots_storage::memory::MemoryStorage::expired(&self, u64, u16) -> radr
 pub fn radroots_storage::memory::MemoryStorage::mark_expired(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::metadata(&self, radroots_storage::private_artifact::PrivateArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::private_artifact::PrivateArtifactMetadata>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_metadata(&self, radroots_storage::private_artifact::PrivateArtifactMetadata) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::reseal_metadata(&self, radroots_storage::private_artifact::PrivateArtifactResealRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactResealReceipt, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 pub mod radroots_storage::projection
@@ -1343,6 +1403,8 @@ pub radroots_storage::Error::InvalidOutboxTimestamp
 pub radroots_storage::Error::InvalidPrivateArtifactId
 pub radroots_storage::Error::InvalidPrivateArtifactKind
 pub radroots_storage::Error::InvalidPrivateArtifactMetadata
+pub radroots_storage::Error::InvalidPrivateArtifactResealId
+pub radroots_storage::Error::InvalidPrivateArtifactResealRequest
 pub radroots_storage::Error::InvalidPrivateArtifactRetention
 pub radroots_storage::Error::InvalidPrivateArtifactRevision
 pub radroots_storage::Error::InvalidPrivateArtifactSchema
@@ -1379,6 +1441,8 @@ pub radroots_storage::Error::OutboxRevisionConflict
 pub radroots_storage::Error::PrivateArtifactConflict
 pub radroots_storage::Error::PrivateArtifactNotExpired
 pub radroots_storage::Error::PrivateArtifactNotFound
+pub radroots_storage::Error::PrivateArtifactPersistenceIndeterminate
+pub radroots_storage::Error::PrivateArtifactResealConflict
 pub radroots_storage::Error::PrivateArtifactRetentionActive
 pub radroots_storage::Error::PrivateArtifactRevisionConflict
 pub radroots_storage::Error::PrivateArtifactTombstoned

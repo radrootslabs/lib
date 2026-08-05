@@ -5,17 +5,22 @@
 
 use core::fmt;
 use radroots_transport::BoxFuture;
+use sha2::{Digest, Sha256};
 
 use crate::Error;
 
-pub const ARTIFACT_KIND_MAX_BYTES: usize = 128;
+pub const ARTIFACT_KIND_MAX_BYTES: usize = 96;
 pub const ARTIFACT_SCHEMA_MAX_BYTES: usize = 128;
 pub const SECRET_PROVIDER_MAX_BYTES: usize = 64;
 pub const SECRET_REFERENCE_MAX_BYTES: usize = 512;
 pub const EXPIRED_ARTIFACT_QUERY_LIMIT_MAX: u16 = 256;
+pub const PRIVATE_ARTIFACT_ENVELOPE_PURPOSE_PREFIX: &str = "radroots.private_artifact.";
+pub const PRIVATE_ARTIFACT_ENVELOPE_SUBJECT_TYPE: &str = "private_artifact";
+const ENVELOPE_CONTEXT_DOMAIN: &[u8] = b"radroots.envelope_context.v1";
+const ENVELOPE_CONTEXT_VERSION: u16 = 1;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PrivateArtifactId([u8; 16]);
 
 impl PrivateArtifactId {
@@ -30,6 +35,12 @@ impl PrivateArtifactId {
     }
 }
 
+impl fmt::Debug for PrivateArtifactId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PrivateArtifactId(<redacted>)")
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactKind(String);
@@ -37,7 +48,7 @@ pub struct ArtifactKind(String);
 impl ArtifactKind {
     pub fn parse(value: impl Into<String>) -> Result<Self, Error> {
         let value = value.into();
-        if !valid_label(value.as_str(), ARTIFACT_KIND_MAX_BYTES) {
+        if !valid_namespaced(value.as_str(), ARTIFACT_KIND_MAX_BYTES, 2) {
             return Err(Error::InvalidPrivateArtifactKind);
         }
         Ok(Self(value))
@@ -54,13 +65,86 @@ pub struct ArtifactSchemaId(String);
 impl ArtifactSchemaId {
     pub fn parse(value: impl Into<String>) -> Result<Self, Error> {
         let value = value.into();
-        if !valid_label(value.as_str(), ARTIFACT_SCHEMA_MAX_BYTES) {
+        if !valid_schema(value.as_str()) {
             return Err(Error::InvalidPrivateArtifactSchema);
         }
         Ok(Self(value))
     }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+}
+
+/// Opaque envelope context derived only from immutable artifact metadata.
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PrivateArtifactEnvelopeContext {
+    purpose: String,
+    subject_type: &'static str,
+    subject: String,
+    payload_schema: String,
+}
+
+impl PrivateArtifactEnvelopeContext {
+    fn derive(
+        artifact_id: PrivateArtifactId,
+        kind: &ArtifactKind,
+        schema_id: &ArtifactSchemaId,
+    ) -> Self {
+        Self {
+            purpose: format!(
+                "{PRIVATE_ARTIFACT_ENVELOPE_PURPOSE_PREFIX}{}",
+                kind.as_str()
+            ),
+            subject_type: PRIVATE_ARTIFACT_ENVELOPE_SUBJECT_TYPE,
+            subject: hex_artifact_id(artifact_id),
+            payload_schema: schema_id.as_str().to_owned(),
+        }
+    }
+
+    pub fn purpose(&self) -> &str {
+        self.purpose.as_str()
+    }
+    pub const fn subject_type(&self) -> &'static str {
+        self.subject_type
+    }
+    pub fn subject(&self) -> &str {
+        self.subject.as_str()
+    }
+    pub fn payload_schema(&self) -> &str {
+        self.payload_schema.as_str()
+    }
+    pub fn fingerprint(&self) -> [u8; 32] {
+        Sha256::digest(self.canonical_bytes()).into()
+    }
+
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&ENVELOPE_CONTEXT_VERSION.to_be_bytes());
+        encoded.extend_from_slice(ENVELOPE_CONTEXT_DOMAIN);
+        for value in [
+            self.purpose.as_bytes(),
+            self.subject_type.as_bytes(),
+            self.subject.as_bytes(),
+            self.payload_schema.as_bytes(),
+        ] {
+            let length = u16::try_from(value.len())
+                .expect("validated private-artifact envelope context fits u16");
+            encoded.extend_from_slice(&length.to_be_bytes());
+            encoded.extend_from_slice(value);
+        }
+        encoded
+    }
+}
+
+impl fmt::Debug for PrivateArtifactEnvelopeContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PrivateArtifactEnvelopeContext")
+            .field("purpose", &"<derived>")
+            .field("subject_type", &self.subject_type)
+            .field("subject", &"<redacted>")
+            .field("payload_schema", &"<derived>")
+            .finish()
     }
 }
 
@@ -230,6 +314,224 @@ impl PrivateArtifactRevision {
     }
 }
 
+/// Host-generated idempotency identity for one reseal commit.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PrivateArtifactResealId([u8; 16]);
+
+impl PrivateArtifactResealId {
+    pub const fn new(bytes: [u8; 16]) -> Result<Self, Error> {
+        if bytes_are_zero(&bytes) {
+            return Err(Error::InvalidPrivateArtifactResealId);
+        }
+        Ok(Self(bytes))
+    }
+    pub const fn as_bytes(&self) -> &[u8; 16] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for PrivateArtifactResealId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PrivateArtifactResealId(<redacted>)")
+    }
+}
+
+/// Backend-neutral metadata fence for one atomic envelope reseal.
+#[derive(Clone, Eq, PartialEq)]
+pub struct PrivateArtifactResealRequest {
+    reseal_id: PrivateArtifactResealId,
+    artifact_id: PrivateArtifactId,
+    expected_revision: PrivateArtifactRevision,
+    expected_commitment: ArtifactCommitment,
+    next_commitment: ArtifactCommitment,
+    next_protected_size_bytes: u64,
+    next_secret_reference: DurableSecretReference,
+    committed_at_unix_ms: u64,
+}
+
+impl fmt::Debug for PrivateArtifactResealRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PrivateArtifactResealRequest")
+            .field("reseal_id", &self.reseal_id)
+            .field("artifact_id", &self.artifact_id)
+            .field("expected_revision", &self.expected_revision)
+            .field("expected_commitment", &"<commitment>")
+            .field("next_commitment", &"<commitment>")
+            .field("next_protected_size_bytes", &self.next_protected_size_bytes)
+            .field("next_secret_reference", &self.next_secret_reference)
+            .field("committed_at_unix_ms", &self.committed_at_unix_ms)
+            .finish()
+    }
+}
+
+impl PrivateArtifactResealRequest {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        reseal_id: PrivateArtifactResealId,
+        artifact_id: PrivateArtifactId,
+        expected_revision: PrivateArtifactRevision,
+        expected_commitment: ArtifactCommitment,
+        next_commitment: ArtifactCommitment,
+        next_protected_size_bytes: u64,
+        next_secret_reference: DurableSecretReference,
+        committed_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
+        if expected_commitment == next_commitment
+            || next_protected_size_bytes == 0
+            || committed_at_unix_ms == 0
+        {
+            return Err(Error::InvalidPrivateArtifactResealRequest);
+        }
+        Ok(Self {
+            reseal_id,
+            artifact_id,
+            expected_revision,
+            expected_commitment,
+            next_commitment,
+            next_protected_size_bytes,
+            next_secret_reference,
+            committed_at_unix_ms,
+        })
+    }
+
+    pub const fn reseal_id(&self) -> PrivateArtifactResealId {
+        self.reseal_id
+    }
+    pub const fn artifact_id(&self) -> PrivateArtifactId {
+        self.artifact_id
+    }
+    pub const fn expected_revision(&self) -> PrivateArtifactRevision {
+        self.expected_revision
+    }
+    pub const fn expected_commitment(&self) -> ArtifactCommitment {
+        self.expected_commitment
+    }
+    pub const fn next_commitment(&self) -> ArtifactCommitment {
+        self.next_commitment
+    }
+    pub const fn next_protected_size_bytes(&self) -> u64 {
+        self.next_protected_size_bytes
+    }
+    pub const fn next_secret_reference(&self) -> &DurableSecretReference {
+        &self.next_secret_reference
+    }
+    pub const fn committed_at_unix_ms(&self) -> u64 {
+        self.committed_at_unix_ms
+    }
+    pub fn fingerprint(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(self.reseal_id.as_bytes());
+        hasher.update(self.artifact_id.as_bytes());
+        hasher.update(self.expected_revision.get().to_be_bytes());
+        hasher.update(self.expected_commitment.as_bytes());
+        hasher.update(self.next_commitment.as_bytes());
+        hasher.update(self.next_protected_size_bytes.to_be_bytes());
+        hash_string(&mut hasher, self.next_secret_reference.provider());
+        hash_string(&mut hasher, self.next_secret_reference.opaque_reference());
+        hasher.update(self.next_secret_reference.key_version().to_be_bytes());
+        hasher.update(self.committed_at_unix_ms.to_be_bytes());
+        hasher.finalize().into()
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrivateArtifactResealDisposition {
+    Committed,
+    Replayed,
+}
+
+/// Durable receipt used to distinguish exact replay from conflicting reuse.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct PrivateArtifactResealReceipt {
+    reseal_id: PrivateArtifactResealId,
+    artifact_id: PrivateArtifactId,
+    committed_revision: PrivateArtifactRevision,
+    request_fingerprint: [u8; 32],
+    disposition: PrivateArtifactResealDisposition,
+}
+
+impl PrivateArtifactResealReceipt {
+    pub fn committed(
+        request: &PrivateArtifactResealRequest,
+        committed_revision: PrivateArtifactRevision,
+    ) -> Self {
+        Self {
+            reseal_id: request.reseal_id,
+            artifact_id: request.artifact_id,
+            committed_revision,
+            request_fingerprint: request.fingerprint(),
+            disposition: PrivateArtifactResealDisposition::Committed,
+        }
+    }
+
+    pub fn replay(&self, request: &PrivateArtifactResealRequest) -> Result<Self, Error> {
+        if self.reseal_id != request.reseal_id
+            || self.artifact_id != request.artifact_id
+            || self.request_fingerprint != request.fingerprint()
+        {
+            return Err(Error::PrivateArtifactResealConflict);
+        }
+        Ok(Self {
+            disposition: PrivateArtifactResealDisposition::Replayed,
+            ..*self
+        })
+    }
+
+    pub const fn reseal_id(self) -> PrivateArtifactResealId {
+        self.reseal_id
+    }
+    pub const fn artifact_id(self) -> PrivateArtifactId {
+        self.artifact_id
+    }
+    pub const fn committed_revision(self) -> PrivateArtifactRevision {
+        self.committed_revision
+    }
+    pub const fn disposition(self) -> PrivateArtifactResealDisposition {
+        self.disposition
+    }
+
+    pub const fn request_fingerprint(self) -> [u8; 32] {
+        self.request_fingerprint
+    }
+}
+
+impl fmt::Debug for PrivateArtifactResealReceipt {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PrivateArtifactResealReceipt")
+            .field("reseal_id", &self.reseal_id)
+            .field("artifact_id", &self.artifact_id)
+            .field("committed_revision", &self.committed_revision)
+            .field("request_fingerprint", &"<commitment>")
+            .field("disposition", &self.disposition)
+            .finish()
+    }
+}
+
+/// Bounded migration inventory without artifact or user identity.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PrivateArtifactEnvelopeMigrationStatus {
+    pub v1_pending: u64,
+    pub v2_current: u64,
+    pub corrupt: u64,
+    pub blocked_provider: u64,
+    pub conflicted: u64,
+}
+
+impl PrivateArtifactEnvelopeMigrationStatus {
+    pub fn total(self) -> Option<u64> {
+        self.v1_pending
+            .checked_add(self.v2_current)?
+            .checked_add(self.corrupt)?
+            .checked_add(self.blocked_provider)?
+            .checked_add(self.conflicted)
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -361,10 +663,16 @@ impl PrivateArtifactMetadata {
                 },
             );
         let valid = match (stage, revision.get(), tombstone) {
-            (PrivateArtifactStage::Active, 1, None) => updated_at_unix_ms == created_at_unix_ms,
-            (PrivateArtifactStage::Expired, 2, None) => retention.is_expired_at(updated_at_unix_ms),
-            (PrivateArtifactStage::Tombstoned, 2 | 3, Some(tombstone)) => {
-                tombstone.deleted_at_unix_ms == updated_at_unix_ms
+            (PrivateArtifactStage::Active, revision, None) => {
+                (revision == 1 && updated_at_unix_ms == created_at_unix_ms)
+                    || (revision > 1 && updated_at_unix_ms > created_at_unix_ms)
+            }
+            (PrivateArtifactStage::Expired, revision, None) => {
+                revision >= 2 && retention.is_expired_at(updated_at_unix_ms)
+            }
+            (PrivateArtifactStage::Tombstoned, revision, Some(tombstone)) => {
+                revision >= 2
+                    && tombstone.deleted_at_unix_ms == updated_at_unix_ms
                     && tombstone.commitment == commitment
                     && retention.permits_deletion_at(updated_at_unix_ms)
                     && (tombstone.reason != DeletionReason::RetentionExpired
@@ -418,6 +726,32 @@ impl PrivateArtifactMetadata {
     }
     pub const fn tombstone_record(&self) -> Option<ArtifactTombstone> {
         self.tombstone
+    }
+
+    /// Derives the only valid envelope context for this artifact.
+    pub fn envelope_context(&self) -> PrivateArtifactEnvelopeContext {
+        PrivateArtifactEnvelopeContext::derive(self.artifact_id, &self.kind, &self.schema_id)
+    }
+
+    /// Applies the metadata half of a fenced envelope reseal.
+    pub fn resealed(&self, request: &PrivateArtifactResealRequest) -> Result<Self, Error> {
+        if self.stage != PrivateArtifactStage::Active
+            || request.artifact_id != self.artifact_id
+            || request.expected_revision != self.revision
+            || request.expected_commitment != self.commitment
+        {
+            return Err(Error::PrivateArtifactResealConflict);
+        }
+        if request.committed_at_unix_ms <= self.updated_at_unix_ms {
+            return Err(Error::InvalidPrivateArtifactTimestamp);
+        }
+        let mut next = self.clone();
+        next.commitment = request.next_commitment;
+        next.protected_size_bytes = request.next_protected_size_bytes;
+        next.secret_reference = request.next_secret_reference.clone();
+        next.revision = self.revision.next()?;
+        next.updated_at_unix_ms = request.committed_at_unix_ms;
+        Ok(next)
     }
 
     pub fn mark_expired(
@@ -505,6 +839,10 @@ pub trait PrivateArtifactStore: Send + Sync {
         &self,
         artifact_id: PrivateArtifactId,
     ) -> BoxFuture<'_, Result<Option<PrivateArtifactMetadata>, Error>>;
+    fn reseal_metadata(
+        &self,
+        request: PrivateArtifactResealRequest,
+    ) -> BoxFuture<'_, Result<PrivateArtifactResealReceipt, Error>>;
     fn mark_expired(
         &self,
         artifact_id: PrivateArtifactId,
@@ -533,6 +871,47 @@ fn valid_label(value: &str, max: usize) -> bool {
         && value.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         })
+}
+
+fn valid_schema(value: &str) -> bool {
+    if !valid_namespaced(value, ARTIFACT_SCHEMA_MAX_BYTES, 3) {
+        return false;
+    }
+    value.rsplit('.').next().is_some_and(|last| {
+        last.strip_prefix('v').is_some_and(|version| {
+            !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
+        })
+    })
+}
+
+fn valid_namespaced(value: &str, max: usize, minimum_segments: usize) -> bool {
+    valid_label(value, max)
+        && value.split('.').count() >= minimum_segments
+        && value.split('.').all(|segment| {
+            let mut bytes = segment.bytes();
+            bytes.next().is_some_and(|byte| byte.is_ascii_lowercase())
+                && bytes.all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'_' | b'-')
+                })
+        })
+}
+
+fn hex_artifact_id(artifact_id: PrivateArtifactId) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(32);
+    for byte in artifact_id.as_bytes() {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
+
+fn hash_string(hasher: &mut Sha256, value: &str) {
+    let length = u32::try_from(value.len()).expect("validated private-artifact field fits u32");
+    hasher.update(length.to_be_bytes());
+    hasher.update(value.as_bytes());
 }
 
 const fn bytes_are_zero(bytes: &[u8; 16]) -> bool {
