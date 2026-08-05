@@ -1,6 +1,7 @@
 //! Data-key wrapping contracts.
 
 use crate::SecretRef;
+use crate::context::EnvelopeContext;
 use crate::error::Error;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -115,15 +116,21 @@ impl fmt::Debug for WrappedSecret {
 #[derive(Debug, Clone, Copy)]
 pub struct WrapRequest<'a> {
     reference: &'a SecretRef,
+    context: &'a EnvelopeContext,
     plaintext: &'a SecretMaterial,
 }
 
 impl<'a> WrapRequest<'a> {
     /// Creates an explicit wrapping request.
     #[must_use]
-    pub const fn new(reference: &'a SecretRef, plaintext: &'a SecretMaterial) -> Self {
+    pub const fn new(
+        reference: &'a SecretRef,
+        context: &'a EnvelopeContext,
+        plaintext: &'a SecretMaterial,
+    ) -> Self {
         Self {
             reference,
+            context,
             plaintext,
         }
     }
@@ -132,6 +139,12 @@ impl<'a> WrapRequest<'a> {
     #[must_use]
     pub const fn reference(&self) -> &'a SecretRef {
         self.reference
+    }
+
+    /// Returns the independently validated semantic wrapping authority.
+    #[must_use]
+    pub const fn context(&self) -> &'a EnvelopeContext {
+        self.context
     }
 
     /// Returns the single-owner plaintext wrapper.
@@ -145,20 +158,35 @@ impl<'a> WrapRequest<'a> {
 #[derive(Debug, Clone, Copy)]
 pub struct UnwrapRequest<'a> {
     reference: &'a SecretRef,
+    context: &'a EnvelopeContext,
     wrapped: &'a WrappedSecret,
 }
 
 impl<'a> UnwrapRequest<'a> {
     /// Creates an explicit unwrapping request.
     #[must_use]
-    pub const fn new(reference: &'a SecretRef, wrapped: &'a WrappedSecret) -> Self {
-        Self { reference, wrapped }
+    pub const fn new(
+        reference: &'a SecretRef,
+        context: &'a EnvelopeContext,
+        wrapped: &'a WrappedSecret,
+    ) -> Self {
+        Self {
+            reference,
+            context,
+            wrapped,
+        }
     }
 
     /// Returns the provider capability reference.
     #[must_use]
     pub const fn reference(&self) -> &'a SecretRef {
         self.reference
+    }
+
+    /// Returns the independently validated semantic unwrapping authority.
+    #[must_use]
+    pub const fn context(&self) -> &'a EnvelopeContext {
+        self.context
     }
 
     /// Returns the provider-wrapped value.

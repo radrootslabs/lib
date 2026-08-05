@@ -1,6 +1,9 @@
 #![cfg(feature = "file")]
 
 use futures_executor::block_on;
+use radroots_secrets::context::{
+    EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
+};
 use radroots_secrets::envelope::Nonce;
 use radroots_secrets::file::{FileOpenMode, FileProvider};
 use radroots_secrets::id::{BackendKind, KeyVersion};
@@ -13,6 +16,14 @@ fn reference(id: &str, version: u32) -> SecretRef {
         SecretId::parse(id).expect("valid id"),
         BackendKind::File,
         KeyVersion::new(version).expect("valid version"),
+    )
+}
+
+fn context() -> EnvelopeContext {
+    EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.file_test").expect("purpose"),
+        EnvelopeSubject::parse("file_test", "fixture").expect("subject"),
+        PayloadSchemaId::parse("radroots.file_test.v1").expect("schema"),
     )
 }
 
@@ -40,9 +51,11 @@ fn file_provider_round_trips_encrypted_material_with_atomic_creation() {
     assert!(!persisted.windows(32).any(|window| window == [0x41; 32]));
     assert_eq!(fs::read_dir(&root).expect("read root").count(), 1);
 
-    let wrapped = block_on(provider.wrap(WrapRequest::new(&reference, &material))).expect("wrap");
-    let opened =
-        block_on(provider.unwrap(UnwrapRequest::new(&reference, &wrapped))).expect("unwrap");
+    let context = context();
+    let wrapped =
+        block_on(provider.wrap(WrapRequest::new(&reference, &context, &material))).expect("wrap");
+    let opened = block_on(provider.unwrap(UnwrapRequest::new(&reference, &context, &wrapped)))
+        .expect("unwrap");
     opened.expose_secret(|bytes| assert_eq!(bytes, &[0x41; 32]));
     assert_eq!(provider.backend_kind(), BackendKind::File);
     assert_eq!(format!("{provider:?}"), "FileProvider(<redacted>)");
@@ -75,7 +88,7 @@ fn traversal_existing_replacement_and_truncated_files_fail_closed() {
 
     fs::write(root.join("66696c652d6b6579.v1.rrk"), b"truncated").expect("truncate");
     assert!(matches!(
-        block_on(provider.wrap(WrapRequest::new(&reference, &material))),
+        block_on(provider.wrap(WrapRequest::new(&reference, &context(), &material))),
         Err(Error::EnvelopeMalformed)
     ));
 }
@@ -103,8 +116,10 @@ fn rotation_resumes_after_new_version_commit_and_removes_old_version() {
     assert!(!provider.contains(&current).expect("old contains"));
     assert!(provider.contains(&next).expect("new contains"));
 
-    let wrapped = block_on(provider.wrap(WrapRequest::new(&next, &next_material))).expect("wrap");
-    assert!(block_on(provider.unwrap(UnwrapRequest::new(&next, &wrapped))).is_ok());
+    let context = context();
+    let wrapped =
+        block_on(provider.wrap(WrapRequest::new(&next, &context, &next_material))).expect("wrap");
+    assert!(block_on(provider.unwrap(UnwrapRequest::new(&next, &context, &wrapped))).is_ok());
 }
 
 #[cfg(unix)]

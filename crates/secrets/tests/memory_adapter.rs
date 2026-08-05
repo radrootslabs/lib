@@ -1,6 +1,9 @@
 #![cfg(feature = "memory")]
 
 use futures_executor::block_on;
+use radroots_secrets::context::{
+    EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
+};
 use radroots_secrets::id::{BackendKind, KeyVersion};
 use radroots_secrets::memory::MemoryProvider;
 use radroots_secrets::wrapping::{SecretMaterial, UnwrapRequest, WrapRequest};
@@ -11,6 +14,14 @@ fn reference(id: &str, version: u32) -> SecretRef {
         SecretId::parse(id).expect("valid id"),
         BackendKind::Memory,
         KeyVersion::new(version).expect("valid version"),
+    )
+}
+
+fn context() -> EnvelopeContext {
+    EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.memory_test").expect("purpose"),
+        EnvelopeSubject::parse("memory_test", "fixture").expect("subject"),
+        PayloadSchemaId::parse("radroots.memory_test.v1").expect("schema"),
     )
 }
 
@@ -29,9 +40,11 @@ fn memory_provider_has_explicit_lifecycle_and_round_trips() {
     assert!(provider.contains(&reference).expect("contains"));
 
     let plaintext = SecretMaterial::from_slice(&[0x41; 32]).expect("material");
-    let wrapped = block_on(provider.wrap(WrapRequest::new(&reference, &plaintext))).expect("wrap");
-    let opened =
-        block_on(provider.unwrap(UnwrapRequest::new(&reference, &wrapped))).expect("unwrap");
+    let context = context();
+    let wrapped =
+        block_on(provider.wrap(WrapRequest::new(&reference, &context, &plaintext))).expect("wrap");
+    let opened = block_on(provider.unwrap(UnwrapRequest::new(&reference, &context, &wrapped)))
+        .expect("unwrap");
     opened.expose_secret(|bytes| assert_eq!(bytes, &[0x41; 32]));
 
     assert!(provider.remove(&reference).expect("remove"));
@@ -45,7 +58,7 @@ fn missing_and_mismatched_material_fail_closed() {
     let reference = reference("missing-key", 1);
     let plaintext = SecretMaterial::from_slice(&[0x11; 32]).expect("material");
     assert!(matches!(
-        block_on(provider.wrap(WrapRequest::new(&reference, &plaintext))),
+        block_on(provider.wrap(WrapRequest::new(&reference, &context(), &plaintext))),
         Err(Error::SecretNotFound {
             backend: BackendKind::Memory,
             key_version: 1,
@@ -59,7 +72,7 @@ fn missing_and_mismatched_material_fail_closed() {
         )
         .expect("provision");
     assert!(matches!(
-        block_on(provider.wrap(WrapRequest::new(&reference, &plaintext))),
+        block_on(provider.wrap(WrapRequest::new(&reference, &context(), &plaintext))),
         Err(Error::BackendFailure { .. })
     ));
     assert!(matches!(
@@ -96,7 +109,7 @@ fn rotation_is_monotonic_atomic_and_invalidates_the_old_version() {
     assert!(!provider.contains(&current).expect("old contains"));
     assert!(provider.contains(&next).expect("new contains"));
     let new_material = SecretMaterial::from_slice(&[0x22; 32]).expect("material");
-    assert!(block_on(provider.wrap(WrapRequest::new(&next, &new_material))).is_ok());
+    assert!(block_on(provider.wrap(WrapRequest::new(&next, &context(), &new_material))).is_ok());
 
     let invalid = reference("different-key", 3);
     assert_eq!(

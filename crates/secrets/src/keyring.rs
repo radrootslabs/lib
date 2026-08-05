@@ -323,6 +323,7 @@ const fn backend_failure(operation: Operation) -> Error {
 mod tests {
     use super::*;
     use crate::SecretId;
+    use crate::context::{EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId};
     use crate::id::KeyVersion;
     use alloc::collections::BTreeMap;
     use std::sync::Arc;
@@ -388,6 +389,14 @@ mod tests {
         )
     }
 
+    fn context() -> EnvelopeContext {
+        EnvelopeContext::new(
+            EnvelopePurpose::parse("radroots.keyring_test").expect("purpose"),
+            EnvelopeSubject::parse("keyring_test", "fixture").expect("subject"),
+            PayloadSchemaId::parse("radroots.keyring_test.v1").expect("schema"),
+        )
+    }
+
     #[test]
     fn construction_has_no_store_side_effect() {
         let store = MockStore::default();
@@ -408,23 +417,29 @@ mod tests {
         let next = reference("keyring-key", 2);
         let current_material = SecretMaterial::from_slice(&[0x11; 32]).expect("material");
         let next_material = SecretMaterial::from_slice(&[0x22; 32]).expect("material");
+        let context = context();
 
         assert!(matches!(
-            futures_executor::block_on(
-                provider.wrap(WrapRequest::new(&current, &current_material))
-            ),
+            futures_executor::block_on(provider.wrap(WrapRequest::new(
+                &current,
+                &context,
+                &current_material
+            ))),
             Err(Error::SecretNotFound { .. })
         ));
         provider
             .provision(&current, &current_material)
             .expect("provision");
-        let wrapped = futures_executor::block_on(
-            provider.wrap(WrapRequest::new(&current, &current_material)),
-        )
+        let wrapped = futures_executor::block_on(provider.wrap(WrapRequest::new(
+            &current,
+            &context,
+            &current_material,
+        )))
         .expect("wrap");
-        let opened =
-            futures_executor::block_on(provider.unwrap(UnwrapRequest::new(&current, &wrapped)))
-                .expect("unwrap");
+        let opened = futures_executor::block_on(
+            provider.unwrap(UnwrapRequest::new(&current, &context, &wrapped)),
+        )
+        .expect("unwrap");
         opened.expose_secret(|bytes| assert_eq!(bytes, &[0x11; 32]));
 
         provider

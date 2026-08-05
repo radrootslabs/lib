@@ -39,6 +39,9 @@ serializes the envelope, and opens it again:
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 use futures_executor::block_on;
 use radroots_secrets::EncryptedEnvelope;
+use radroots_secrets::context::{
+    EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
+};
 use radroots_secrets::envelope::{Nonce, SealMaterial, SealRequest};
 use radroots_secrets::id::{BackendKind, KeyVersion};
 use radroots_secrets::memory::MemoryProvider;
@@ -58,14 +61,20 @@ provider.provision(
 
 let plaintext = SecretMaterial::from_slice(b"private profile value")?;
 let data_key = SecretMaterial::from_slice(&[0x41; 32])?;
+let context = EnvelopeContext::new(
+    EnvelopePurpose::parse("radroots.private_profile")?,
+    EnvelopeSubject::parse("profile", "example-profile")?,
+    PayloadSchemaId::parse("radroots.private_profile.v1")?,
+);
 let request = SealRequest::new(
     reference,
+    context.clone(),
     &plaintext,
     SealMaterial::new(data_key, Nonce::new([0x24; 24])),
 );
 let encoded = block_on(EncryptedEnvelope::seal(&provider, request))?.encode()?;
 let decoded = EncryptedEnvelope::decode(&encoded)?;
-let opened = block_on(decoded.open(&provider))?;
+let opened = block_on(decoded.open(&provider, &context))?;
 
 opened.expose_secret(|bytes| assert_eq!(bytes, b"private profile value"));
 # Ok(())
@@ -104,12 +113,14 @@ cloneable or serializable. Secret identifiers are serialized only where a
 documented wire or storage format requires them; their ordinary diagnostics
 remain redacted.
 
-`EncryptedEnvelope` authenticates its format version, cipher, key source,
-backend, key version, secret identifier, nonce, wrapped data key, and
-ciphertext length. Decode validates all lengths and enum values before provider
-access. Envelope serialization is a persistence contract; Rust layout and
-debug output are not. Unknown versions, ciphers, key sources, malformed
-lengths, backend mismatches, and authentication failures fail closed.
+`EncryptedEnvelope` v2 authenticates its format version, cipher, key source,
+backend, key version, secret identifier, purpose, typed subject, payload
+schema, nonce, wrapped data key, and ciphertext length. Normal open requires an
+independently derived expected context and rejects legacy v1. Decode validates
+all lengths and enum values before provider access. Envelope serialization is
+a persistence contract; Rust layout and debug output are not. Unknown versions,
+ciphers, key sources, malformed lengths, context mismatches, backend mismatches,
+and authentication failures fail closed.
 
 Provider-native error strings are normalized before crossing the public
 boundary. Callers must still avoid logging plaintext, serialized identifiers,

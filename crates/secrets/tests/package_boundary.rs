@@ -42,6 +42,7 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
             "chacha20poly1305",
             "keyring",
             "serde",
+            "sha2",
             "tempfile",
             "zeroize"
         ])
@@ -129,7 +130,7 @@ fn package_documentation_covers_the_security_and_host_contract() {
         "provider.provision(",
         "EncryptedEnvelope::seal",
         "EncryptedEnvelope::decode",
-        "decoded.open(&provider)",
+        "decoded.open(&provider, &context)",
     ] {
         assert!(
             EXAMPLE.contains(required),

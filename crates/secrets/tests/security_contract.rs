@@ -1,3 +1,6 @@
+use radroots_secrets::context::{
+    EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
+};
 use radroots_secrets::envelope::{Nonce, SealMaterial, SealRequest};
 use radroots_secrets::error::{Operation, SecretIdError};
 use radroots_secrets::id::{BackendKind, KeyVersion};
@@ -49,6 +52,8 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
         "SecretMaterial::into_bytes",
         "SecretMaterial::to_vec",
         "SecretRef::clone",
+        "EncryptedEnvelope::open(&self, &dyn radroots_secrets::wrapping::KeyWrapping) ->",
+        "SealRequest<'a>::new(radroots_secrets::id::SecretRef, &'a radroots_secrets::wrapping::SecretMaterial",
     ] {
         assert!(
             !PUBLIC_API.contains(forbidden),
@@ -98,8 +103,14 @@ fn diagnostics_snapshot_is_redacted_and_plaintext_free() {
     let wrapped = WrappedSecret::from_bytes(b"wrapped-material-sentinel".to_vec())
         .expect("valid wrapped material");
     let sealing_key = SecretMaterial::from_slice(&[0x42; 32]).expect("valid sealing key");
+    let context = EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.security_test").expect("purpose"),
+        EnvelopeSubject::parse("security_test", "plaintext-secret-id-sentinel").expect("subject"),
+        PayloadSchemaId::parse("radroots.security_test.v1").expect("schema"),
+    );
     let request = SealRequest::new(
         reference,
+        context,
         &plaintext,
         SealMaterial::new(sealing_key, Nonce::new([0x24; 24])),
     );

@@ -1,4 +1,7 @@
 use futures_executor::block_on;
+use radroots_secrets::context::{
+    EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
+};
 use radroots_secrets::error::{Operation, PolicyRequirement};
 use radroots_secrets::id::{BackendKind, KeyVersion};
 use radroots_secrets::provider::{
@@ -94,6 +97,14 @@ fn reference(backend: BackendKind) -> SecretRef {
     )
 }
 
+fn context() -> EnvelopeContext {
+    EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.provider_test").expect("purpose"),
+        EnvelopeSubject::parse("provider_test", "fixture").expect("subject"),
+        PayloadSchemaId::parse("radroots.provider_test.v1").expect("schema"),
+    )
+}
+
 #[test]
 fn provider_traits_are_dyn_compatible_and_round_trip_opaque_material() {
     fn accept_dyn(_: &dyn SecretProvider) {}
@@ -110,9 +121,11 @@ fn provider_traits_are_dyn_compatible_and_round_trip_opaque_material() {
 
     let reference = reference(BackendKind::Memory);
     let plaintext = SecretMaterial::from_slice(b"caller-owned-data-key").expect("material");
-    let wrapped = block_on(provider.wrap(WrapRequest::new(&reference, &plaintext))).expect("wrap");
-    let opened =
-        block_on(provider.unwrap(UnwrapRequest::new(&reference, &wrapped))).expect("unwrap");
+    let context = context();
+    let wrapped =
+        block_on(provider.wrap(WrapRequest::new(&reference, &context, &plaintext))).expect("wrap");
+    let opened = block_on(provider.unwrap(UnwrapRequest::new(&reference, &context, &wrapped)))
+        .expect("unwrap");
     opened.expose_secret(|bytes| assert_eq!(bytes, b"caller-owned-data-key"));
 
     assert_eq!(format!("{plaintext:?}"), "SecretMaterial(<redacted>)");
@@ -217,7 +230,7 @@ fn provider_errors_are_normalized_and_secret_safe() {
     };
     let reference = reference(BackendKind::External);
     let plaintext = SecretMaterial::from_slice(b"must-not-appear").expect("material");
-    let error = block_on(provider.wrap(WrapRequest::new(&reference, &plaintext)))
+    let error = block_on(provider.wrap(WrapRequest::new(&reference, &context(), &plaintext)))
         .expect_err("backend failure");
     assert_eq!(
         error,
@@ -243,7 +256,7 @@ fn reference_backend_mismatch_fails_before_wrapping() {
     let reference = reference(BackendKind::File);
     let plaintext = SecretMaterial::from_slice(b"data-key").expect("material");
     assert_eq!(
-        block_on(provider.wrap(WrapRequest::new(&reference, &plaintext))),
+        block_on(provider.wrap(WrapRequest::new(&reference, &context(), &plaintext))),
         Err(Error::BackendMismatch {
             provider: BackendKind::Memory,
             reference: BackendKind::File,

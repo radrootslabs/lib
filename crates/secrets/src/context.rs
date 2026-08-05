@@ -4,6 +4,7 @@ use crate::error::{ContextField, ContextValueError, Error};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use sha2::{Digest, Sha256};
 
 /// Version of the canonical authenticated context encoding.
 pub const ENVELOPE_CONTEXT_VERSION: u16 = 1;
@@ -207,6 +208,12 @@ impl EnvelopeContext {
         push_bounded(&mut encoded, subject_value);
         push_bounded(&mut encoded, payload_schema);
         encoded
+    }
+
+    /// Returns the SHA-256 identity used to bind provider wrapping requests.
+    #[must_use]
+    pub fn authentication_digest(&self) -> [u8; 32] {
+        Sha256::digest(self.to_canonical_bytes()).into()
     }
 }
 

@@ -101,6 +101,8 @@ pub enum Error {
         /// Secret-safe validation class.
         reason: ContextValueError,
     },
+    /// The independently expected context did not match authenticated metadata.
+    ContextMismatch,
     /// Key versions start at one; zero is never a valid version.
     InvalidKeyVersion,
     /// Secret material was empty or exceeded the bounded input limit.
@@ -179,6 +181,13 @@ pub enum Error {
         /// Observed version number.
         version: u16,
     },
+    /// The authenticated context encoding version is unsupported.
+    UnsupportedContextVersion {
+        /// Observed context encoding version.
+        version: u16,
+    },
+    /// A v1 envelope was presented to the normal v2-only open API.
+    LegacyEnvelopeDenied,
     /// The encoded cipher identifier is not supported.
     UnsupportedCipher {
         /// Observed cipher identifier.
@@ -231,6 +240,7 @@ impl fmt::Display for Error {
             Self::InvalidContextValue { field, reason } => {
                 write!(formatter, "envelope context {field:?} is {reason}")
             }
+            Self::ContextMismatch => formatter.write_str("encrypted envelope context mismatch"),
             Self::InvalidKeyVersion => formatter.write_str("secret key version must be non-zero"),
             Self::InvalidSecretLength {
                 actual_bytes,
@@ -305,6 +315,15 @@ impl fmt::Display for Error {
                     "encrypted envelope version {version} is unsupported"
                 )
             }
+            Self::UnsupportedContextVersion { version } => {
+                write!(
+                    formatter,
+                    "envelope context version {version} is unsupported"
+                )
+            }
+            Self::LegacyEnvelopeDenied => {
+                formatter.write_str("legacy encrypted envelope requires migration authority")
+            }
             Self::UnsupportedCipher { cipher } => {
                 write!(
                     formatter,
@@ -373,6 +392,7 @@ mod tests {
                 field: ContextField::SubjectValue,
                 reason: ContextValueError::NonCanonical,
             },
+            Error::ContextMismatch,
             Error::InvalidKeyVersion,
             Error::InvalidSecretLength {
                 actual_bytes: 0,
@@ -415,6 +435,8 @@ mod tests {
             },
             Error::EnvelopeMalformed,
             Error::UnsupportedEnvelopeVersion { version: 2 },
+            Error::UnsupportedContextVersion { version: 2 },
+            Error::LegacyEnvelopeDenied,
             Error::UnsupportedCipher { cipher: 9 },
             Error::UnsupportedKeySource { key_source: 9 },
             Error::UnsupportedBackend { backend: 9 },
