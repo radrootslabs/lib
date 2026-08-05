@@ -34,6 +34,7 @@ serde = [
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false }
+radroots_event_codec = { workspace = true, default-features = false, features = ["json"] }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
@@ -41,6 +42,7 @@ serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ], optional = true }
+sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
 futures-executor = { workspace = true }

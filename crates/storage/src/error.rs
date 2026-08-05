@@ -6,6 +6,12 @@ use core::fmt;
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
+    InvalidAuthoredOperation,
+    InvalidAuthoredArtifact,
+    InvalidAuthoredTransition,
+    InvalidWorkClaim,
+    InvalidWorkFailure,
+    InvalidRetrySchedule,
     InvalidSourceGeneration,
     InvalidEventSequence,
     InvalidEventQueryLimit,
@@ -117,6 +123,12 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::InvalidAuthoredOperation => "storage authored operation is invalid",
+            Self::InvalidAuthoredArtifact => "storage authored artifact is invalid",
+            Self::InvalidAuthoredTransition => "storage authored transition is invalid",
+            Self::InvalidWorkClaim => "storage authored work claim is invalid",
+            Self::InvalidWorkFailure => "storage authored work failure is invalid",
+            Self::InvalidRetrySchedule => "storage authored retry schedule is invalid",
             Self::InvalidSourceGeneration => "storage source generation is invalid",
             Self::InvalidEventSequence => "storage event sequence is invalid",
             Self::InvalidEventQueryLimit => "storage event query limit is invalid",
@@ -256,6 +268,12 @@ mod tests {
     #[test]
     fn every_storage_error_has_a_stable_nonempty_message() {
         let errors = [
+            InvalidAuthoredOperation,
+            InvalidAuthoredArtifact,
+            InvalidAuthoredTransition,
+            InvalidWorkClaim,
+            InvalidWorkFailure,
+            InvalidRetrySchedule,
             InvalidSourceGeneration,
             InvalidEventSequence,
             InvalidEventQueryLimit,

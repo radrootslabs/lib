@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod atomic;
+pub mod authored;
 pub mod backup;
 mod error;
 pub mod event;
