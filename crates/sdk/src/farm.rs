@@ -3,13 +3,15 @@
 use std::{error, fmt};
 
 use radroots_event::{
-    EventDraft,
+    GenericEventDraft,
     contract::AuthorRole,
     envelope::kind::KIND_FARM,
     farm::Farm,
     id::{AddressableCoordinate, ParseError},
 };
-use radroots_event_codec::{encode::EventEncodeError, encode::farm::to_wire_parts};
+use radroots_event_codec::{
+    authoring::AuthoredEventPlan, encode::EventEncodeError, encode::farm::to_wire_parts,
+};
 use radroots_signing::Actor;
 
 const FARM_PROFILE_CONTRACT_ID: &str = "radroots.farm.profile.v1";
@@ -39,7 +41,7 @@ impl PrepareRequest {
 pub struct Plan {
     actor: Actor,
     coordinate: AddressableCoordinate,
-    draft: EventDraft,
+    authored_event: AuthoredEventPlan,
 }
 
 impl Plan {
@@ -55,10 +57,10 @@ impl Plan {
         &self.coordinate
     }
 
-    /// Returns the frozen canonical event draft.
+    /// Returns the immutable canonical authored event plan.
     #[must_use]
-    pub const fn draft(&self) -> &EventDraft {
-        &self.draft
+    pub const fn authored_event(&self) -> &AuthoredEventPlan {
+        &self.authored_event
     }
 }
 
@@ -164,19 +166,22 @@ pub fn prepare(request: PrepareRequest) -> Result<Plan, PrepareError> {
         request.farm.d_tag
     ))
     .map_err(PrepareError::coordinate)?;
-    let draft = EventDraft::new(
-        FARM_PROFILE_CONTRACT_ID,
-        parts.kind,
-        request.created_at_unix,
-        parts.tags,
-        parts.content,
-        request.actor.public_key().to_hex(),
+    let authored_event = AuthoredEventPlan::from_generic(
+        GenericEventDraft::new(
+            FARM_PROFILE_CONTRACT_ID,
+            parts.kind,
+            request.created_at_unix,
+            parts.tags,
+            parts.content,
+            request.actor.public_key().to_hex(),
+        )
+        .map_err(PrepareError::draft)?,
     )
     .map_err(PrepareError::draft)?;
     Ok(Plan {
         actor: request.actor,
         coordinate,
-        draft,
+        authored_event,
     })
 }
 
@@ -186,8 +191,8 @@ use radroots_signing::request::CancellationPolicy;
 use radroots_storage::journal::IdempotencyKey;
 #[cfg(feature = "sync")]
 use radroots_sync::{
-    PushReceipt,
     policy::{Error as SyncError, SyncId},
+    push::PushStatus,
 };
 
 /// Explicit commit inputs for one prepared farm publication.
@@ -198,6 +203,7 @@ pub struct EnqueueRequest {
     idempotency_key: IdempotencyKey,
     plan: Plan,
     profile: crate::transport::Profile,
+    delivery_deadline_unix_ms: u64,
     cancellation: CancellationPolicy,
 }
 
@@ -210,6 +216,7 @@ impl EnqueueRequest {
         idempotency_key: IdempotencyKey,
         plan: Plan,
         profile: crate::transport::Profile,
+        delivery_deadline_unix_ms: u64,
         cancellation: CancellationPolicy,
     ) -> Self {
         Self {
@@ -217,6 +224,7 @@ impl EnqueueRequest {
             idempotency_key,
             plan,
             profile,
+            delivery_deadline_unix_ms,
             cancellation,
         }
     }
@@ -235,13 +243,12 @@ impl<'a> Operations<'a> {
         Self { sync }
     }
 
-    /// Signs and atomically enqueues a prepared farm publication.
+    /// Durably prepares, signs, and locally admits a farm publication.
     ///
-    /// Before the lower atomic enqueue commit, cancellation may leave only
-    /// recoverable prepared/signed journal state. After commit, cancellation
-    /// cannot claim rollback; replay with the same idempotency input returns
-    /// the durable outbox record.
-    pub async fn enqueue(&self, request: EnqueueRequest) -> Result<PushReceipt, SyncError> {
+    /// Once preparation commits, cancellation cannot erase the authored
+    /// intent. Replay with identical operation and idempotency inputs resumes
+    /// from its durable signing or admission phase.
+    pub async fn enqueue(&self, request: EnqueueRequest) -> Result<PushStatus, SyncError> {
         let targets = request
             .profile
             .targets()
@@ -253,13 +260,14 @@ impl<'a> Operations<'a> {
             .cloned()
             .ok_or(SyncError::InvalidPushRequest)?;
         self.sync
-            .sign_and_enqueue(radroots_sync::PushRequest::new(
+            .submit_push(radroots_sync::PushRequest::new(
                 request.operation_id,
                 request.idempotency_key,
                 request.plan.actor,
-                request.plan.draft,
+                request.plan.authored_event,
                 targets,
                 satisfaction,
+                request.delivery_deadline_unix_ms,
                 request.cancellation,
             )?)
             .await
@@ -306,20 +314,40 @@ mod tests {
         let second = prepare(request).expect("second plan");
 
         assert_eq!(first, second);
-        assert_eq!(first.draft().contract_id(), FARM_PROFILE_CONTRACT_ID);
-        assert_eq!(first.draft().kind_u32(), KIND_FARM);
-        assert_eq!(first.draft().created_at_u64(), 1_800_000_000);
         assert_eq!(
-            first.draft().expected_pubkey(),
+            first
+                .authored_event()
+                .body()
+                .contract()
+                .contract_id()
+                .as_str(),
+            FARM_PROFILE_CONTRACT_ID
+        );
+        assert_eq!(first.authored_event().body().kind(), KIND_FARM);
+        assert_eq!(first.authored_event().created_at(), 1_800_000_000);
+        assert_eq!(
+            first.authored_event().author(),
             &actor(AuthorRole::Farmer).public_key()
         );
         assert_eq!(
             first.coordinate().as_str(),
             format!("{KIND_FARM}:{PUBLIC_KEY}:AAAAAAAAAAAAAAAAAAAAAA")
         );
-        assert!(first.draft().content().contains("Moss Street Farm"));
-        assert!(!first.draft().content().contains("latitude"));
-        assert!(!first.draft().content().contains("longitude"));
+        assert!(
+            first
+                .authored_event()
+                .body()
+                .content()
+                .contains("Moss Street Farm")
+        );
+        assert!(!first.authored_event().body().content().contains("latitude"));
+        assert!(
+            !first
+                .authored_event()
+                .body()
+                .content()
+                .contains("longitude")
+        );
     }
 
     #[test]
@@ -362,9 +390,10 @@ mod tests {
             policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
         };
         use radroots_transport::{
-            DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkStatus,
-            Target, TargetSet, TransportId,
+            DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkFailure,
+            SinkStatus, Target, TargetSet, TransportId,
             capability::{Availability, Maturity, SinkCapabilities},
+            outcome::Retryability,
             policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
         };
 
@@ -372,13 +401,18 @@ mod tests {
 
         use super::*;
 
-        struct FixedClock;
+        struct HostClock;
         struct SequenceIds(AtomicU8);
         struct NoopSink;
 
-        impl Clock for FixedClock {
+        impl Clock for HostClock {
             fn now_unix_ms(&self) -> Result<u64, Error> {
-                Ok(2_000_000_000_000)
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+                    .filter(|value| *value != 0)
+                    .ok_or(Error::ClockUnavailable)
             }
         }
 
@@ -406,10 +440,20 @@ mod tests {
 
             fn deliver(
                 &self,
-                _request: DeliveryRequest,
-            ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>>
+                request: DeliveryRequest,
+            ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>>
             {
-                Box::pin(async { Err(TransportError::UnsupportedOperation) })
+                Box::pin(async move {
+                    Err(SinkFailure::for_request(
+                        &request,
+                        "test_sink_unavailable",
+                        Retryability::Terminal,
+                        None,
+                        None,
+                        Vec::new(),
+                    )
+                    .expect("test sink failure"))
+                })
             }
         }
 
@@ -439,9 +483,9 @@ mod tests {
             let capability: Arc<dyn SyncStorage> = storage.clone();
             let engine = Engine::builder(
                 capability,
-                Arc::new(FixedClock),
+                Arc::new(HostClock),
                 Arc::new(SequenceIds(AtomicU8::new(1))),
-                DeadlinePolicy::new(1_000, 1_000, 1_000).expect("deadlines"),
+                DeadlinePolicy::new(30_000, 30_000, 30_000).expect("deadlines"),
             )
             .sink(Arc::new(NoopSink))
             .signer(signer)
@@ -458,6 +502,7 @@ mod tests {
                 IdempotencyKey::parse("farm-publish-a").expect("idempotency key"),
                 plan,
                 profile,
+                2_000_000_001_000,
                 CancellationPolicy::PreservePublishedRequest,
             );
 
@@ -474,12 +519,13 @@ mod tests {
                 .enqueue(request.clone())
                 .await
                 .expect("committed enqueue");
-            assert!(!committed.is_replay());
-            assert_eq!(committed.outbox().request().target_set(), &targets);
-            assert_eq!(committed.outbox().request().satisfaction(), &satisfaction);
+            assert_eq!(committed.delivery_plan().intent().target_set(), &targets);
+            assert_eq!(
+                committed.delivery_plan().intent().satisfaction(),
+                &satisfaction
+            );
             let replay = operations.enqueue(request).await.expect("replay");
-            assert!(replay.is_replay());
-            assert_eq!(replay.outbox().item_id(), committed.outbox().item_id());
+            assert_eq!(replay, committed);
 
             let unavailable = EnqueueRequest::new(
                 SyncId::new([8; 16]).expect("operation id"),
@@ -491,6 +537,7 @@ mod tests {
                 ))
                 .expect("plan"),
                 Profile::unavailable_preview(TransportId::RETICULUM),
+                2_000_000_001_000,
                 CancellationPolicy::PreservePublishedRequest,
             );
             assert_eq!(

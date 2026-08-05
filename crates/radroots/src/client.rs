@@ -84,7 +84,8 @@ mod tests {
     };
     use radroots_transport::{
         DeliveryReceipt, DeliveryRequest, Error as TransportError, FetchPage, FetchRequest,
-        SinkStatus, SourceStatus, source::BoxFuture as TransportFuture,
+        SinkFailure, SinkStatus, SourceStatus, outcome::Retryability,
+        source::BoxFuture as TransportFuture,
     };
 
     struct TestSource;
@@ -110,9 +111,19 @@ mod tests {
 
         fn deliver(
             &self,
-            _request: DeliveryRequest,
-        ) -> TransportFuture<'_, Result<DeliveryReceipt, TransportError>> {
-            Box::pin(async { Err(TransportError::UnsupportedOperation) })
+            request: DeliveryRequest,
+        ) -> TransportFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+            Box::pin(async move {
+                Err(SinkFailure::for_request(
+                    &request,
+                    "test_sink_unavailable",
+                    Retryability::Terminal,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .expect("test sink failure"))
+            })
         }
     }
 

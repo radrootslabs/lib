@@ -274,6 +274,20 @@ fn validate_exceptions(root: &Path, contract: &Contract) -> Result<(), String> {
     if ignored != expected_ignored {
         return Err("deny.toml advisory ignores differ from the governed exceptions".to_owned());
     }
+    let allowed_git = deny
+        .get("sources")
+        .and_then(|value| value.get("allow-git"))
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "deny.toml sources.allow-git is missing".to_owned())?
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if allowed_git != BTreeSet::from(["https://github.com/radrootslabs/lib.git"]) {
+        return Err(
+            "deny.toml Git sources must allow only the allocated Radroots lib repository"
+                .to_owned(),
+        );
+    }
 
     let relay_source = root.join("crates/transport_nostr/src/relay.rs");
     if relay_source.exists() {

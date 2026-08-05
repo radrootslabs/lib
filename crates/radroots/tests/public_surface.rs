@@ -23,7 +23,7 @@ fn root_exports_only_the_client_boundary() {
 fn canonical_domain_paths_compile() {
     #[allow(unused_imports)]
     use radroots::{
-        event::{Event, EventDraft, EventId},
+        event::{Event, EventId, GenericEventDraft},
         farm::{Farm, FarmPublicLocation, Plan as FarmPlan, PrepareRequest as FarmRequest},
         identity::{AccountId, PublicKey, Username},
         listing::{EditV1, OperationalListing, Plan as ListingPlan},
@@ -49,8 +49,8 @@ fn explicit_transport_composition_is_inert() {
 
     use radroots::transport::{EventSink, EventSource};
     use radroots_transport::{
-        DeliveryReceipt, DeliveryRequest, Error, FetchPage, FetchRequest, SinkStatus, SourceStatus,
-        source::BoxFuture,
+        DeliveryReceipt, DeliveryRequest, Error, FetchPage, FetchRequest, SinkFailure, SinkStatus,
+        SourceStatus, outcome::Retryability, source::BoxFuture,
     };
 
     struct Source;
@@ -73,9 +73,19 @@ fn explicit_transport_composition_is_inert() {
 
         fn deliver(
             &self,
-            _request: DeliveryRequest,
-        ) -> BoxFuture<'_, Result<DeliveryReceipt, Error>> {
-            Box::pin(async { Err(Error::UnsupportedOperation) })
+            request: DeliveryRequest,
+        ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+            Box::pin(async move {
+                Err(SinkFailure::for_request(
+                    &request,
+                    "test_sink_unavailable",
+                    Retryability::Terminal,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .expect("test sink failure"))
+            })
         }
     }
 

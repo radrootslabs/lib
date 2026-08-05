@@ -3,11 +3,14 @@
 use std::{error, fmt};
 
 use radroots_event::{
-    EventDraft,
+    GenericEventDraft,
     contract::AuthorRole,
     trade::{TradeMutationEnvelopeV1, TradeProtocolError, canonical_trade_mutation_content},
 };
-use radroots_event_codec::{encode::EventEncodeError, encode::trade::trade_mutation_event_build};
+use radroots_event_codec::{
+    authoring::AuthoredEventPlan, encode::EventEncodeError,
+    encode::trade::trade_mutation_event_build,
+};
 use radroots_signing::Actor;
 use radroots_trade::{Projection, ReductionInput, WorkflowPlan, reducer::reduce_trade_records};
 
@@ -32,7 +35,7 @@ impl PrepareRequest {
 pub struct Plan {
     actor: Actor,
     workflow: WorkflowPlan,
-    draft: EventDraft,
+    authored_event: AuthoredEventPlan,
 }
 
 impl Plan {
@@ -47,10 +50,10 @@ impl Plan {
         &self.workflow
     }
 
-    /// Returns the frozen canonical event draft.
+    /// Returns the immutable canonical authored event plan.
     #[must_use]
-    pub const fn draft(&self) -> &EventDraft {
-        &self.draft
+    pub const fn authored_event(&self) -> &AuthoredEventPlan {
+        &self.authored_event
     }
 }
 
@@ -172,19 +175,22 @@ pub fn prepare(request: PrepareRequest) -> Result<Plan, PrepareError> {
     }
     let workflow = WorkflowPlan::prepare(canonical.clone()).map_err(PrepareError::workflow)?;
     let parts = trade_mutation_event_build(canonical.clone()).map_err(PrepareError::encode)?;
-    let draft = EventDraft::new(
-        canonical.contract_id.clone(),
-        parts.kind,
-        canonical.authored_at_unix_s,
-        parts.tags,
-        parts.content,
-        canonical.author_pubkey.to_hex(),
+    let authored_event = AuthoredEventPlan::from_generic(
+        GenericEventDraft::new(
+            canonical.contract_id.clone(),
+            parts.kind,
+            canonical.authored_at_unix_s,
+            parts.tags,
+            parts.content,
+            canonical.author_pubkey.to_hex(),
+        )
+        .map_err(PrepareError::draft)?,
     )
     .map_err(PrepareError::draft)?;
     Ok(Plan {
         actor: request.actor,
         workflow,
-        draft,
+        authored_event,
     })
 }
 
@@ -204,8 +210,8 @@ use radroots_storage::{
 };
 #[cfg(feature = "sync")]
 use radroots_sync::{
-    PushReceipt,
     policy::{Error as SyncError, SyncId},
+    push::PushStatus,
 };
 
 /// Explicit commit inputs for one prepared trade command.
@@ -216,6 +222,7 @@ pub struct EnqueueRequest {
     idempotency_key: IdempotencyKey,
     plan: Plan,
     profile: crate::transport::Profile,
+    delivery_deadline_unix_ms: u64,
     cancellation: CancellationPolicy,
 }
 
@@ -228,6 +235,7 @@ impl EnqueueRequest {
         idempotency_key: IdempotencyKey,
         plan: Plan,
         profile: crate::transport::Profile,
+        delivery_deadline_unix_ms: u64,
         cancellation: CancellationPolicy,
     ) -> Self {
         Self {
@@ -235,6 +243,7 @@ impl EnqueueRequest {
             idempotency_key,
             plan,
             profile,
+            delivery_deadline_unix_ms,
             cancellation,
         }
     }
@@ -281,9 +290,9 @@ impl<'a> Operations<'a> {
         Self { storage, sync }
     }
 
-    /// Signs and atomically enqueues a prepared command. Reusing the same
+    /// Durably prepares, signs, and locally admits a command. Reusing the same
     /// idempotency input is the canonical resume/replay operation.
-    pub async fn enqueue(&self, request: EnqueueRequest) -> Result<PushReceipt, SyncError> {
+    pub async fn enqueue(&self, request: EnqueueRequest) -> Result<PushStatus, SyncError> {
         let targets = request
             .profile
             .targets()
@@ -295,13 +304,14 @@ impl<'a> Operations<'a> {
             .cloned()
             .ok_or(SyncError::InvalidPushRequest)?;
         self.sync
-            .sign_and_enqueue(radroots_sync::PushRequest::new(
+            .submit_push(radroots_sync::PushRequest::new(
                 request.operation_id,
                 request.idempotency_key,
                 request.plan.actor,
-                request.plan.draft,
+                request.plan.authored_event,
                 targets,
                 satisfaction,
+                request.delivery_deadline_unix_ms,
                 request.cancellation,
             )?)
             .await
@@ -594,10 +604,17 @@ mod tests {
         );
         for plan in plans {
             assert_eq!(
-                plan.draft().contract_id(),
+                plan.authored_event()
+                    .body()
+                    .contract()
+                    .contract_id()
+                    .as_str(),
                 plan.workflow().kind().contract_id()
             );
-            assert_eq!(plan.draft().kind_u32(), plan.workflow().kind().nostr_kind());
+            assert_eq!(
+                plan.authored_event().body().kind(),
+                plan.workflow().kind().nostr_kind()
+            );
         }
     }
 
@@ -692,9 +709,10 @@ mod tests {
             policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
         };
         use radroots_transport::{
-            DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkStatus,
-            Target, TargetSet, TransportId,
+            DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkFailure,
+            SinkStatus, Target, TargetSet, TransportId,
             capability::{Availability, Maturity, SinkCapabilities},
+            outcome::Retryability,
             policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
         };
 
@@ -704,13 +722,18 @@ mod tests {
         const BUYER_SECRET: &str =
             "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
 
-        struct FixedClock;
+        struct HostClock;
         struct SequenceIds(AtomicU8);
         struct NoopSink;
 
-        impl Clock for FixedClock {
+        impl Clock for HostClock {
             fn now_unix_ms(&self) -> Result<u64, Error> {
-                Ok(2_000_000_000_000)
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+                    .filter(|value| *value != 0)
+                    .ok_or(Error::ClockUnavailable)
             }
         }
         impl IdSource for SequenceIds {
@@ -735,10 +758,20 @@ mod tests {
             }
             fn deliver(
                 &self,
-                _request: DeliveryRequest,
-            ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>>
+                request: DeliveryRequest,
+            ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>>
             {
-                Box::pin(async { Err(TransportError::UnsupportedOperation) })
+                Box::pin(async move {
+                    Err(SinkFailure::for_request(
+                        &request,
+                        "test_sink_unavailable",
+                        Retryability::Terminal,
+                        None,
+                        None,
+                        Vec::new(),
+                    )
+                    .expect("test sink failure"))
+                })
             }
         }
 
@@ -772,9 +805,9 @@ mod tests {
             let capability: Arc<dyn SyncStorage> = storage.clone();
             let engine = Engine::builder(
                 capability,
-                Arc::new(FixedClock),
+                Arc::new(HostClock),
                 Arc::new(SequenceIds(AtomicU8::new(1))),
-                DeadlinePolicy::new(1_000, 1_000, 1_000).expect("deadlines"),
+                DeadlinePolicy::new(30_000, 30_000, 30_000).expect("deadlines"),
             )
             .sink(Arc::new(NoopSink))
             .signer(signer)
@@ -815,6 +848,7 @@ mod tests {
                 IdempotencyKey::parse("trade-proposal-a").expect("idempotency"),
                 plan,
                 Profile::delivery(targets.clone(), satisfaction.clone()).expect("profile"),
+                2_000_000_001_000,
                 CancellationPolicy::PreservePublishedRequest,
             );
             drop(operations.enqueue(request.clone()));
@@ -826,11 +860,9 @@ mod tests {
                 0
             );
             let committed = operations.enqueue(request.clone()).await.expect("commit");
-            assert!(!committed.is_replay());
-            assert_eq!(committed.outbox().request().target_set(), &targets);
+            assert_eq!(committed.delivery_plan().intent().target_set(), &targets);
             let replay = operations.enqueue(request).await.expect("resume replay");
-            assert!(replay.is_replay());
-            assert_eq!(replay.outbox().item_id(), committed.outbox().item_id());
+            assert_eq!(replay, committed);
         }
     }
 }

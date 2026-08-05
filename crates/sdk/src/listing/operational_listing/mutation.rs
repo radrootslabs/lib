@@ -1,4 +1,4 @@
-//! Mutation draft preparation for Radroots Listing v1.
+//! Mutation plan preparation for Radroots Listing v1.
 
 #![forbid(unsafe_code)]
 
@@ -8,10 +8,11 @@ use std::string::{String, ToString};
 
 use radroots_event::id::ClassifiedListingAddress;
 use radroots_event::{
-    draft::{DraftError, EventDraft},
-    envelope::kind::KIND_CLASSIFIED_LISTING,
+    GenericEventDraft, draft::DraftError, envelope::kind::KIND_CLASSIFIED_LISTING,
 };
-use radroots_event_codec::encode::operational_listing::to_wire_parts_with_kind;
+use radroots_event_codec::{
+    authoring::AuthoredEventPlan, encode::operational_listing::to_wire_parts_with_kind,
+};
 
 use crate::listing::operational_listing::draft::RadrootsOperationalListingCanonicalEdit;
 
@@ -45,7 +46,7 @@ pub enum RadrootsOperationalListingLifecycleState {
 pub enum RadrootsOperationalListingMutationError {
     UnsupportedMutation,
     EncodeListing(String),
-    FrozenDraft(DraftError),
+    AuthoredPlan(DraftError),
 }
 
 impl fmt::Display for RadrootsOperationalListingMutationError {
@@ -55,8 +56,8 @@ impl fmt::Display for RadrootsOperationalListingMutationError {
             Self::EncodeListing(error) => {
                 write!(f, "failed to encode listing mutation: {error}")
             }
-            Self::FrozenDraft(error) => {
-                write!(f, "failed to build listing mutation draft: {error}")
+            Self::AuthoredPlan(error) => {
+                write!(f, "failed to build listing authored plan: {error}")
             }
         }
     }
@@ -125,10 +126,10 @@ impl RadrootsOperationalListingMutation {
     }
 }
 
-pub fn build_operational_listing_mutation_draft(
+pub fn build_operational_listing_mutation_plan(
     mutation: &RadrootsOperationalListingMutation,
     created_at: u64,
-) -> Result<EventDraft, RadrootsOperationalListingMutationError> {
+) -> Result<AuthoredEventPlan, RadrootsOperationalListingMutationError> {
     let (draft, kind, contract_id) = match mutation {
         RadrootsOperationalListingMutation::Publish { draft }
         | RadrootsOperationalListingMutation::Update { draft } => (
@@ -144,15 +145,18 @@ pub fn build_operational_listing_mutation_draft(
     let parts = to_wire_parts_with_kind(draft.listing(), kind).map_err(|error| {
         RadrootsOperationalListingMutationError::EncodeListing(error.to_string())
     })?;
-    EventDraft::new(
-        contract_id,
-        parts.kind,
-        created_at,
-        parts.tags,
-        parts.content,
-        draft.seller_pubkey().to_hex(),
+    AuthoredEventPlan::from_generic(
+        GenericEventDraft::new(
+            contract_id,
+            parts.kind,
+            created_at,
+            parts.tags,
+            parts.content,
+            draft.seller_pubkey().to_hex(),
+        )
+        .map_err(RadrootsOperationalListingMutationError::AuthoredPlan)?,
     )
-    .map_err(RadrootsOperationalListingMutationError::FrozenDraft)
+    .map_err(RadrootsOperationalListingMutationError::AuthoredPlan)
 }
 
 #[cfg(all(test, feature = "local-signing"))]
@@ -165,7 +169,6 @@ mod tests {
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::validate_event_contract_shape,
-        draft::EventDraft,
         envelope::kind::KIND_CLASSIFIED_LISTING,
         farm::FarmRef,
         farm::resource_area::ResourceAreaRef,
@@ -177,7 +180,7 @@ mod tests {
         },
         wire::Nip01EventWire,
     };
-    use radroots_event_codec::verify::verify_nip01_event;
+    use radroots_event_codec::{authoring::AuthoredEventPlan, verify::verify_nip01_event};
     use radroots_identity::PublicKey;
 
     use crate::listing::operational_listing::draft::RadrootsOperationalListingCanonicalEdit;
@@ -186,7 +189,7 @@ mod tests {
     use super::{
         OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID, RadrootsOperationalListingLifecycleState,
         RadrootsOperationalListingMutation, RadrootsOperationalListingMutationError,
-        build_operational_listing_mutation_draft,
+        build_operational_listing_mutation_plan,
     };
 
     const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
@@ -199,24 +202,26 @@ mod tests {
         InventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn sign_draft(draft: &EventDraft) -> radroots_event::envelope::EventEnvelope {
+    fn sign_plan(plan: &AuthoredEventPlan) -> radroots_event::envelope::EventEnvelope {
         let keys = Keys::parse(FIXTURE_ALICE_SECRET_KEY_HEX).expect("fixture signing key");
-        assert_eq!(keys.public_key().to_hex(), draft.expected_pubkey().to_hex());
-        let tags = draft
-            .tags_as_vec()
-            .into_iter()
-            .map(|tag| Tag::parse(tag).expect("draft tag"))
+        assert_eq!(keys.public_key().to_hex(), plan.author().to_hex());
+        let tags = plan
+            .body()
+            .tags()
+            .iter()
+            .cloned()
+            .map(|tag| Tag::parse(tag).expect("plan tag"))
             .collect::<Vec<_>>();
         let event = EventBuilder::new(
-            Kind::Custom(u16::try_from(draft.kind_u32()).expect("NIP-01 kind")),
-            draft.content(),
+            Kind::Custom(u16::try_from(plan.body().kind()).expect("NIP-01 kind")),
+            plan.body().content(),
         )
         .tags(tags)
         .allow_self_tagging()
-        .custom_created_at(Timestamp::from_secs(draft.created_at_u64()))
+        .custom_created_at(Timestamp::from_secs(plan.created_at()))
         .sign_with_keys(&keys)
         .expect("signed listing event");
-        assert_eq!(event.id.to_hex(), draft.expected_event_id_hex());
+        assert_eq!(event.id.to_hex(), plan.expected_event_id().to_hex());
         let raw_json = event.as_json();
         Nip01EventWire::parse_json(raw_json.as_str())
             .expect("canonical event wire")
@@ -392,43 +397,46 @@ mod tests {
     }
 
     #[test]
-    fn build_operational_listing_mutation_draft_maps_publish_and_update_to_published_listing() {
+    fn build_operational_listing_mutation_plan_maps_publish_and_update_to_published_listing() {
         let publish = RadrootsOperationalListingMutation::publish(canonical_draft());
         let update = RadrootsOperationalListingMutation::update(canonical_draft());
 
         let publish_draft =
-            build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
+            build_operational_listing_mutation_plan(&publish, 1_700_000_000).expect("draft");
         let update_draft =
-            build_operational_listing_mutation_draft(&update, 1_700_000_000).expect("draft");
+            build_operational_listing_mutation_plan(&update, 1_700_000_000).expect("draft");
 
-        assert_eq!(publish_draft.kind_u32(), KIND_CLASSIFIED_LISTING);
+        assert_eq!(publish_draft.body().kind(), KIND_CLASSIFIED_LISTING);
         assert_eq!(
-            publish_draft.contract_id(),
+            publish_draft.body().contract().contract_id().as_str(),
             OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID
         );
-        assert_eq!(publish_draft.expected_pubkey().to_hex(), SELLER);
-        assert_eq!(publish_draft.created_at_u64(), 1_700_000_000);
-        assert_eq!(publish_draft.content(), "# Coffee\n\nSingle origin coffee");
-        assert_eq!(update_draft.kind_u32(), KIND_CLASSIFIED_LISTING);
+        assert_eq!(publish_draft.author().to_hex(), SELLER);
+        assert_eq!(publish_draft.created_at(), 1_700_000_000);
         assert_eq!(
-            update_draft.contract_id(),
+            publish_draft.body().content(),
+            "# Coffee\n\nSingle origin coffee"
+        );
+        assert_eq!(update_draft.body().kind(), KIND_CLASSIFIED_LISTING);
+        assert_eq!(
+            update_draft.body().contract().contract_id().as_str(),
             OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID
         );
-        assert_eq!(update_draft.expected_pubkey().to_hex(), SELLER);
+        assert_eq!(update_draft.author().to_hex(), SELLER);
     }
 
     #[test]
-    fn build_operational_listing_mutation_draft_rejects_save_draft() {
+    fn build_operational_listing_mutation_plan_rejects_save_draft() {
         let save_draft = RadrootsOperationalListingMutation::save_draft(canonical_draft());
 
         assert_eq!(
-            build_operational_listing_mutation_draft(&save_draft, 1_700_000_000).unwrap_err(),
+            build_operational_listing_mutation_plan(&save_draft, 1_700_000_000).unwrap_err(),
             RadrootsOperationalListingMutationError::UnsupportedMutation
         );
     }
 
     #[test]
-    fn build_operational_listing_mutation_draft_rejects_archive() {
+    fn build_operational_listing_mutation_plan_rejects_archive() {
         let archive = RadrootsOperationalListingMutation::archive(
             ClassifiedListingAddress::parse(format!(
                 "{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
@@ -437,13 +445,13 @@ mod tests {
         );
 
         assert_eq!(
-            build_operational_listing_mutation_draft(&archive, 1_700_000_000).unwrap_err(),
+            build_operational_listing_mutation_plan(&archive, 1_700_000_000).unwrap_err(),
             RadrootsOperationalListingMutationError::UnsupportedMutation
         );
     }
 
     #[test]
-    fn build_operational_listing_mutation_draft_reports_encode_errors() {
+    fn build_operational_listing_mutation_plan_reports_encode_errors() {
         let mut listing = listing();
         listing.resource_area = Some(ResourceAreaRef {
             pubkey: SELLER.to_string(),
@@ -456,7 +464,7 @@ mod tests {
         .expect("canonical listing edit");
         let publish = RadrootsOperationalListingMutation::publish(draft);
 
-        let err = build_operational_listing_mutation_draft(&publish, 1_700_000_000).unwrap_err();
+        let err = build_operational_listing_mutation_plan(&publish, 1_700_000_000).unwrap_err();
 
         assert!(matches!(
             err,
@@ -465,30 +473,27 @@ mod tests {
     }
 
     #[test]
-    fn build_operational_listing_mutation_draft_event_id_is_stable_for_fixed_input() {
+    fn build_operational_listing_mutation_plan_event_id_is_stable_for_fixed_input() {
         let publish = RadrootsOperationalListingMutation::publish(canonical_draft());
 
         let first =
-            build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
+            build_operational_listing_mutation_plan(&publish, 1_700_000_000).expect("draft");
         let second =
-            build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
+            build_operational_listing_mutation_plan(&publish, 1_700_000_000).expect("draft");
 
-        assert_eq!(
-            first.expected_event_id_hex(),
-            second.expected_event_id_hex()
-        );
-        assert_eq!(first.expected_event_id_hex().len(), 64);
-        assert_eq!(first.tags_as_vec(), second.tags_as_vec());
-        assert_eq!(first.content(), second.content());
+        assert_eq!(first.expected_event_id(), second.expected_event_id());
+        assert_eq!(first.expected_event_id().to_hex().len(), 64);
+        assert_eq!(first.body().tags(), second.body().tags());
+        assert_eq!(first.body().content(), second.body().content());
     }
 
     #[test]
-    fn build_operational_listing_mutation_draft_output_validates_as_operational_listing() {
+    fn build_operational_listing_mutation_plan_output_validates_as_operational_listing() {
         let publish = RadrootsOperationalListingMutation::publish(canonical_draft());
         let draft =
-            build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
+            build_operational_listing_mutation_plan(&publish, 1_700_000_000).expect("draft");
 
-        let signed = sign_draft(&draft);
+        let signed = sign_plan(&draft);
         validate_event_contract_shape(&signed, OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID)
             .expect("operational listing contract");
         let verified = verify_nip01_event(signed).expect("verified listing");

@@ -311,10 +311,13 @@ fn sync_operations_only_delegate_to_the_canonical_engine() {
         "self.engine.ingest(observed, admission).await",
         "self.engine.ingest_batch(observed, admission).await",
         "self.engine.refresh_projection(request, reducer).await",
-        "self.engine.sign_and_enqueue(request).await",
-        "self.engine.deliver_pending(request).await",
+        "self.engine.prepare_push(request).await",
+        "self.engine.push_status(operation_id).await",
+        "self.engine.sign_prepared(request).await",
+        "self.engine.admit_signed(operation_id).await",
+        "self.engine.deliver_push(operation_id).await",
         "self.engine.status(projections).await",
-        "self.engine.retry_decision(record, now_unix_ms)",
+        "self.engine.retry_decision(plan, now_unix_ms)",
     ] {
         assert!(
             SYNC.contains(delegation),
@@ -341,14 +344,31 @@ fn sync_operations_only_delegate_to_the_canonical_engine() {
 }
 
 #[test]
+fn authored_submission_is_one_protocol_neutral_boundary_for_all_typed_contracts() {
+    use radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS;
+
+    assert_eq!(REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS.len(), 8);
+    assert!(SYNC.contains("pub async fn submit_push"));
+    assert!(SYNC.contains("request: PushRequest"));
+    assert!(SYNC.contains("Result<PushStatus, Error>"));
+    for contract_id in REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS {
+        assert!(
+            !SYNC.contains(contract_id),
+            "SDK submission must not branch on typed contract `{contract_id}`"
+        );
+    }
+}
+
+#[test]
 fn farm_operations_preserve_pure_planning_commit_and_privacy_boundaries() {
     for required in [
         "encode::farm::to_wire_parts",
         "AddressableCoordinate",
-        "EventDraft",
+        "GenericEventDraft",
+        "AuthoredEventPlan",
         "radroots_sync::PushRequest::new",
         "self.sync",
-        ".sign_and_enqueue(",
+        ".submit_push(",
         "PrivateArtifactStore",
     ] {
         assert!(
@@ -380,7 +400,7 @@ fn listing_operations_reuse_trade_event_sync_and_privacy_boundaries() {
         "canonicalize_operational_listing_edit",
         "RadrootsOperationalListingMutation",
         "RadrootsOperationalListingLifecycleState",
-        "build_operational_listing_mutation_draft",
+        "build_operational_listing_mutation_plan",
         "radroots_sync::PushRequest::new",
         "PrivateArtifactStore",
     ] {

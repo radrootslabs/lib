@@ -17,7 +17,20 @@ const ALL_KINDS: &[&str] = &["build", "dev", "normal"];
 struct Architecture {
     spec_id: String,
     package_count: usize,
+    repositories: ArchitectureRepositories,
     package: Vec<ArchitecturePackage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchitectureRepositories {
+    lib: ArchitectureRepository,
+    sdk: ArchitectureRepository,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchitectureRepository {
+    url: String,
+    packages: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,12 +194,7 @@ fn validate(architecture: &Architecture, metadata: &CargoMetadata) -> Result<Vec
                 package.version
             ));
         }
-        if package.source.is_some() {
-            return Err(format!(
-                "release package {name} must resolve from the staged source graph; source={:?}",
-                package.source
-            ));
-        }
+        validate_package_source(architecture, package, &workspace_members)?;
         if !nodes.contains_key(package.id.as_str()) {
             return Err(format!(
                 "release package {name} has no Cargo resolve node; manifest={}",
@@ -283,6 +291,72 @@ fn validate(architecture: &Architecture, metadata: &CargoMetadata) -> Result<Vec
         ));
     }
     Ok(order.into_iter().map(str::to_owned).collect())
+}
+
+fn validate_package_source(
+    architecture: &Architecture,
+    package: &CargoPackage,
+    workspace_members: &BTreeSet<&str>,
+) -> Result<(), String> {
+    if workspace_members.contains(package.id.as_str()) {
+        return if package.source.is_none() {
+            Ok(())
+        } else {
+            Err(format!(
+                "workspace release package {} must resolve locally; source={:?}",
+                package.name, package.source
+            ))
+        };
+    }
+
+    let repository = [
+        &architecture.repositories.lib,
+        &architecture.repositories.sdk,
+    ]
+    .into_iter()
+    .find(|repository| repository.packages.iter().any(|name| name == &package.name))
+    .ok_or_else(|| {
+        format!(
+            "release package {} has no repository allocation",
+            package.name
+        )
+    })?;
+    let source = package.source.as_deref().ok_or_else(|| {
+        format!(
+            "external release package {} must resolve from an exact Git revision",
+            package.name
+        )
+    })?;
+    validate_exact_git_source(source, &repository.url).map_err(|reason| {
+        format!(
+            "external release package {} has invalid source {source}: {reason}",
+            package.name
+        )
+    })
+}
+
+fn validate_exact_git_source(source: &str, repository_url: &str) -> Result<(), &'static str> {
+    let canonical_url = repository_url
+        .trim_end_matches('/')
+        .trim_end_matches(".git");
+    let prefix = format!("git+{canonical_url}.git?rev=");
+    let revision_and_commit = source
+        .strip_prefix(&prefix)
+        .ok_or("repository URL or exact-revision query does not match its allocation")?;
+    let (revision, commit) = revision_and_commit
+        .split_once('#')
+        .ok_or("resolved commit fragment is absent")?;
+    if revision.len() != 40
+        || commit.len() != 40
+        || !revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || !commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("revision and resolved commit must be full hexadecimal object IDs");
+    }
+    if revision != commit {
+        return Err("resolved commit does not equal the requested exact revision");
+    }
+    Ok(())
 }
 
 fn validate_architecture(architecture: &Architecture) -> Result<BTreeMap<&str, usize>, String> {
@@ -487,7 +561,7 @@ fn target_label(target: Option<&str>) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{Architecture, CargoMetadata, validate};
+    use super::{Architecture, CargoMetadata, validate, validate_exact_git_source};
 
     const ARCHITECTURE: &str = include_str!("../../../docs/specs/radroots_crates_release_v1.toml");
 
@@ -498,6 +572,30 @@ mod tests {
         assert_eq!(hints.len(), 19);
         assert_eq!(hints["radroots_core"], 1);
         assert_eq!(hints["radroots"], 19);
+    }
+
+    #[test]
+    fn exact_cross_repository_git_sources_require_the_requested_commit() {
+        const REVISION: &str = "691b3c844bb8824fd16b2ff4fb37b8c09bac208d";
+        let source =
+            format!("git+https://github.com/radrootslabs/lib.git?rev={REVISION}#{REVISION}");
+        validate_exact_git_source(&source, "https://github.com/radrootslabs/lib")
+            .expect("exact source");
+
+        let drifted = format!(
+            "git+https://github.com/radrootslabs/lib.git?rev={REVISION}#{}",
+            "1".repeat(40)
+        );
+        assert!(
+            validate_exact_git_source(&drifted, "https://github.com/radrootslabs/lib").is_err()
+        );
+        assert!(
+            validate_exact_git_source(
+                "registry+https://github.com/rust-lang/crates.io-index",
+                "https://github.com/radrootslabs/lib"
+            )
+            .is_err()
+        );
     }
 
     #[test]

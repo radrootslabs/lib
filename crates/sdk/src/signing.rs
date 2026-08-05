@@ -144,6 +144,7 @@ impl LocalIdentity {
         self.npub.as_str()
     }
 
+    #[cfg(any(test, all(feature = "sync", feature = "nostr")))]
     pub(crate) const fn public_key(&self) -> radroots_identity::PublicKey {
         self.public_key
     }
@@ -305,11 +306,13 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
 
-    use radroots_event::{EventDraft, contract::AuthorRole};
+    use radroots_event::{GenericEventDraft, contract::AuthorRole};
+    use radroots_event_codec::authoring::AuthoredEventPlan;
     use radroots_identity::PublicKey;
     use radroots_protocol::runtime::v1::OperationId;
     use radroots_signing::{
-        Actor, Error, SignReceipt, SignRequest, SignerStatus,
+        Actor, AuthoredArtifactId, Error, SignReceipt, SignRequest, SignerStatus, SigningIntentId,
+        SigningOperationId,
         actor::ActorSource,
         error::Kind,
         request::{CancellationPolicy, SignPolicy},
@@ -320,6 +323,7 @@ mod tests {
     #[cfg(feature = "nip46")]
     use radroots_signing::{
         capability::{CancellationSupport, SignerCapability},
+        recovery::ReplayCapability,
         status::{AuthChallenge, SignProgress},
     };
 
@@ -356,19 +360,26 @@ mod tests {
             [AuthorRole::Any],
         )
         .expect("actor");
-        let draft = EventDraft::new(
-            "radroots.social.geochat.v1",
-            20_000,
-            1_700_000_000,
-            Vec::new(),
-            "frozen-content",
-            PUBLIC_KEY,
+        let plan = AuthoredEventPlan::from_generic(
+            GenericEventDraft::new(
+                "radroots.social.geochat.v1",
+                20_000,
+                1_700_000_000,
+                Vec::new(),
+                "frozen-content",
+                PUBLIC_KEY,
+            )
+            .expect("draft"),
         )
-        .expect("draft");
+        .expect("authored plan");
         SignRequest::new(
             OperationId::SyncPush,
+            SigningIntentId::new(
+                SigningOperationId::new([1; 16]).expect("operation id"),
+                AuthoredArtifactId::new([2; 16]).expect("artifact id"),
+            ),
             actor,
-            draft,
+            plan,
             SignPolicy::new(1_700_000_100, CancellationPolicy::PreservePublishedRequest)
                 .expect("policy"),
         )
@@ -381,6 +392,7 @@ mod tests {
             SignerAvailability::AwaitingAuthentication,
             vec![SignerCapability::new(
                 SignerKind::Remote,
+                ReplayCapability::ExactReplayByRequestId,
                 CancellationSupport::BeforeAndAfterPublication,
                 true,
                 true,

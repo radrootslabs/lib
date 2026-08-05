@@ -17,7 +17,7 @@ pub use self::draft::{
     RadrootsOperationalListingEditError, canonicalize_operational_listing_edit,
 };
 pub use self::model::{RadrootsOperationalListingSubtotal, RadrootsOperationalListingTotal};
-pub use self::mutation::build_operational_listing_mutation_draft;
+pub use self::mutation::build_operational_listing_mutation_plan;
 pub use self::mutation::{
     RadrootsOperationalListingLifecycleState, RadrootsOperationalListingMutation,
     RadrootsOperationalListingMutationError,

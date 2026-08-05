@@ -2,7 +2,8 @@
 
 use std::{error, fmt};
 
-use radroots_event::{EventDraft, contract::AuthorRole, id::ClassifiedListingAddress};
+use radroots_event::{contract::AuthorRole, id::ClassifiedListingAddress};
+use radroots_event_codec::authoring::AuthoredEventPlan;
 use radroots_signing::Actor;
 
 mod operational_listing;
@@ -19,7 +20,7 @@ pub use operational_listing::{
     validate_operational_listing_model,
 };
 use operational_listing::{
-    build_operational_listing_mutation_draft, canonicalize_operational_listing_edit,
+    build_operational_listing_mutation_plan, canonicalize_operational_listing_edit,
 };
 
 /// Supported public listing mutation intent.
@@ -80,7 +81,7 @@ pub struct Plan {
     action: Action,
     address: ClassifiedListingAddress,
     lifecycle: RadrootsOperationalListingLifecycleState,
-    draft: EventDraft,
+    authored_event: AuthoredEventPlan,
 }
 
 impl Plan {
@@ -108,10 +109,10 @@ impl Plan {
         self.lifecycle
     }
 
-    /// Returns the frozen canonical event draft.
+    /// Returns the immutable canonical authored event plan.
     #[must_use]
-    pub const fn draft(&self) -> &EventDraft {
-        &self.draft
+    pub const fn authored_event(&self) -> &AuthoredEventPlan {
+        &self.authored_event
     }
 }
 
@@ -211,14 +212,15 @@ pub fn prepare(request: PrepareRequest) -> Result<Plan, PrepareError> {
         Action::Update => RadrootsOperationalListingMutation::update(canonical),
     };
     let lifecycle = mutation.lifecycle_state().map_err(PrepareError::mutation)?;
-    let draft = build_operational_listing_mutation_draft(&mutation, request.created_at_unix)
-        .map_err(PrepareError::mutation)?;
+    let authored_event =
+        build_operational_listing_mutation_plan(&mutation, request.created_at_unix)
+            .map_err(PrepareError::mutation)?;
     Ok(Plan {
         actor: request.actor,
         action: request.action,
         address,
         lifecycle,
-        draft,
+        authored_event,
     })
 }
 
@@ -228,8 +230,8 @@ use radroots_signing::request::CancellationPolicy;
 use radroots_storage::journal::IdempotencyKey;
 #[cfg(feature = "sync")]
 use radroots_sync::{
-    PushReceipt,
     policy::{Error as SyncError, SyncId},
+    push::PushStatus,
 };
 
 /// Explicit commit inputs for one prepared public listing mutation.
@@ -240,6 +242,7 @@ pub struct EnqueueRequest {
     idempotency_key: IdempotencyKey,
     plan: Plan,
     profile: crate::transport::Profile,
+    delivery_deadline_unix_ms: u64,
     cancellation: CancellationPolicy,
 }
 
@@ -252,6 +255,7 @@ impl EnqueueRequest {
         idempotency_key: IdempotencyKey,
         plan: Plan,
         profile: crate::transport::Profile,
+        delivery_deadline_unix_ms: u64,
         cancellation: CancellationPolicy,
     ) -> Self {
         Self {
@@ -259,6 +263,7 @@ impl EnqueueRequest {
             idempotency_key,
             plan,
             profile,
+            delivery_deadline_unix_ms,
             cancellation,
         }
     }
@@ -277,8 +282,8 @@ impl<'a> Operations<'a> {
         Self { sync }
     }
 
-    /// Signs and atomically enqueues a prepared public listing mutation.
-    pub async fn enqueue(&self, request: EnqueueRequest) -> Result<PushReceipt, SyncError> {
+    /// Durably prepares, signs, and locally admits a public listing mutation.
+    pub async fn enqueue(&self, request: EnqueueRequest) -> Result<PushStatus, SyncError> {
         let targets = request
             .profile
             .targets()
@@ -290,13 +295,14 @@ impl<'a> Operations<'a> {
             .cloned()
             .ok_or(SyncError::InvalidPushRequest)?;
         self.sync
-            .sign_and_enqueue(radroots_sync::PushRequest::new(
+            .submit_push(radroots_sync::PushRequest::new(
                 request.operation_id,
                 request.idempotency_key,
                 request.plan.actor,
-                request.plan.draft,
+                request.plan.authored_event,
                 targets,
                 satisfaction,
+                request.delivery_deadline_unix_ms,
                 request.cancellation,
             )?)
             .await
@@ -412,12 +418,21 @@ mod tests {
             RadrootsOperationalListingLifecycleState::Published
         );
         assert_eq!(first.address(), replay.address());
-        assert_eq!(first.draft(), replay.draft());
+        assert_eq!(first.authored_event(), replay.authored_event());
         assert_eq!(first.address(), update.address());
-        assert_eq!(first.draft().kind_u32(), KIND_CLASSIFIED_LISTING);
-        assert_eq!(first.draft().created_at_u64(), 1_800_000_000);
-        assert!(!first.draft().content().contains("latitude"));
-        assert!(!first.draft().content().contains("longitude"));
+        assert_eq!(
+            first.authored_event().body().kind(),
+            KIND_CLASSIFIED_LISTING
+        );
+        assert_eq!(first.authored_event().created_at(), 1_800_000_000);
+        assert!(!first.authored_event().body().content().contains("latitude"));
+        assert!(
+            !first
+                .authored_event()
+                .body()
+                .content()
+                .contains("longitude")
+        );
     }
 
     #[test]
@@ -468,22 +483,28 @@ mod tests {
             policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
         };
         use radroots_transport::{
-            DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkStatus,
-            Target, TargetSet, TransportId,
+            DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkFailure,
+            SinkStatus, Target, TargetSet, TransportId,
             capability::{Availability, Maturity, SinkCapabilities},
+            outcome::Retryability,
             policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
         };
 
         use super::*;
         use crate::{ClientBuilder, transport::Profile};
 
-        struct FixedClock;
+        struct HostClock;
         struct SequenceIds(AtomicU8);
         struct NoopSink;
 
-        impl Clock for FixedClock {
+        impl Clock for HostClock {
             fn now_unix_ms(&self) -> Result<u64, Error> {
-                Ok(2_000_000_000_000)
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+                    .filter(|value| *value != 0)
+                    .ok_or(Error::ClockUnavailable)
             }
         }
         impl IdSource for SequenceIds {
@@ -508,10 +529,20 @@ mod tests {
             }
             fn deliver(
                 &self,
-                _request: DeliveryRequest,
-            ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>>
+                request: DeliveryRequest,
+            ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>>
             {
-                Box::pin(async { Err(TransportError::UnsupportedOperation) })
+                Box::pin(async move {
+                    Err(SinkFailure::for_request(
+                        &request,
+                        "test_sink_unavailable",
+                        Retryability::Terminal,
+                        None,
+                        None,
+                        Vec::new(),
+                    )
+                    .expect("test sink failure"))
+                })
             }
         }
 
@@ -545,9 +576,9 @@ mod tests {
             let capability: Arc<dyn SyncStorage> = storage.clone();
             let engine = Engine::builder(
                 capability,
-                Arc::new(FixedClock),
+                Arc::new(HostClock),
                 Arc::new(SequenceIds(AtomicU8::new(1))),
-                DeadlinePolicy::new(1_000, 1_000, 1_000).expect("deadlines"),
+                DeadlinePolicy::new(30_000, 30_000, 30_000).expect("deadlines"),
             )
             .sink(Arc::new(NoopSink))
             .signer(signer)
@@ -564,6 +595,7 @@ mod tests {
                 IdempotencyKey::parse("listing-publish-a").expect("idempotency key"),
                 plan,
                 profile,
+                2_000_000_001_000,
                 CancellationPolicy::PreservePublishedRequest,
             );
 
@@ -579,12 +611,13 @@ mod tests {
                 .enqueue(request.clone())
                 .await
                 .expect("committed enqueue");
-            assert!(!committed.is_replay());
-            assert_eq!(committed.outbox().request().target_set(), &targets);
-            assert_eq!(committed.outbox().request().satisfaction(), &satisfaction);
+            assert_eq!(committed.delivery_plan().intent().target_set(), &targets);
+            assert_eq!(
+                committed.delivery_plan().intent().satisfaction(),
+                &satisfaction
+            );
             let replay = operations.enqueue(request).await.expect("replay");
-            assert!(replay.is_replay());
-            assert_eq!(replay.outbox().item_id(), committed.outbox().item_id());
+            assert_eq!(replay, committed);
 
             let unavailable = EnqueueRequest::new(
                 SyncId::new([10; 16]).expect("operation id"),
@@ -596,6 +629,7 @@ mod tests {
                 ))
                 .expect("plan"),
                 Profile::unavailable_preview(TransportId::RETICULUM),
+                2_000_000_001_000,
                 CancellationPolicy::PreservePublishedRequest,
             );
             assert_eq!(

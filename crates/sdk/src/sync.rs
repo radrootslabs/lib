@@ -4,14 +4,17 @@
 use std::sync::Arc;
 
 #[cfg(feature = "sync")]
-use radroots_storage::{outbox::OutboxRecord, projection::ProjectionId};
+use radroots_storage::{authored_delivery::AuthoredDeliveryPlan, projection::ProjectionId};
 #[cfg(feature = "sync")]
 use radroots_sync::{
-    Engine, PullReceipt, PullRequest, PushReceipt, PushRequest, SyncStatus,
+    Engine, PullReceipt, PullRequest, PushRequest, SyncStatus,
     ingest::{AdmissionPolicy, IngestBatchReceipt, IngestReceipt},
     policy::Error,
     projection::{Reducer, RefreshReceipt, RefreshRequest},
-    push::{DeliveryRunReceipt, DeliveryRunRequest},
+    push::{
+        AdmissionRunReceipt, DeliveryExecutionReceipt, PushPreparation, PushStatus,
+        SigningRunReceipt,
+    },
 };
 #[cfg(feature = "sync")]
 use radroots_transport::source::ObservedEvent;
@@ -148,17 +151,51 @@ impl<'a> Operations<'a> {
         self.engine.refresh_projection(request, reducer).await
     }
 
-    /// Signs, verifies, and durably enqueues one outbound operation.
-    pub async fn sign_and_enqueue(&self, request: PushRequest) -> Result<PushReceipt, Error> {
-        self.engine.sign_and_enqueue(request).await
+    /// Atomically persists one complete authored operation before any side effect.
+    pub async fn prepare_push(&self, request: PushRequest) -> Result<PushPreparation, Error> {
+        self.engine.prepare_push(request).await
     }
 
-    /// Runs one bounded delivery pass and retains every independent outcome.
-    pub async fn deliver_pending(
+    /// Returns the complete durable state of one prepared push operation.
+    pub async fn push_status(
         &self,
-        request: DeliveryRunRequest,
-    ) -> Result<DeliveryRunReceipt, Error> {
-        self.engine.deliver_pending(request).await
+        operation_id: radroots_sync::policy::SyncId,
+    ) -> Result<Option<PushStatus>, Error> {
+        self.engine.push_status(operation_id).await
+    }
+
+    /// Runs one bounded signing phase for an exactly prepared operation.
+    pub async fn sign_prepared(&self, request: PushRequest) -> Result<SigningRunReceipt, Error> {
+        self.engine.sign_prepared(request).await
+    }
+
+    /// Runs one bounded local-admission phase for a durably signed artifact.
+    pub async fn admit_signed(
+        &self,
+        operation_id: radroots_sync::policy::SyncId,
+    ) -> Result<AdmissionRunReceipt, Error> {
+        self.engine.admit_signed(operation_id).await
+    }
+
+    /// Prepares, signs, and locally admits one authored operation.
+    ///
+    /// Preparation commits the complete recoverable intent before the signer
+    /// can be invoked. Delivery remains an explicit caller-driven phase.
+    pub async fn submit_push(&self, request: PushRequest) -> Result<PushStatus, Error> {
+        let operation_id = request.operation_id();
+        self.sign_prepared(request).await?;
+        self.admit_signed(operation_id).await?;
+        self.push_status(operation_id)
+            .await?
+            .ok_or(Error::StorageFailed)
+    }
+
+    /// Runs one bounded delivery attempt for one durable authored plan.
+    pub async fn deliver_push(
+        &self,
+        operation_id: radroots_sync::policy::SyncId,
+    ) -> Result<DeliveryExecutionReceipt, Error> {
+        self.engine.deliver_push(operation_id).await
     }
 
     /// Returns the native passive sync status without starting recovery work.
@@ -169,10 +206,10 @@ impl<'a> Operations<'a> {
     /// Returns the native host scheduling decision for one durable plan.
     pub fn retry_decision(
         &self,
-        record: &OutboxRecord,
+        plan: &AuthoredDeliveryPlan,
         now_unix_ms: u64,
     ) -> Result<radroots_protocol::runtime::v1::SyncRetryDecision, Error> {
-        self.engine.retry_decision(record, now_unix_ms)
+        self.engine.retry_decision(plan, now_unix_ms)
     }
 }
 
@@ -193,7 +230,10 @@ mod tests {
         atomic::{AtomicU8, Ordering},
     };
 
-    use radroots_event::{EventDraft, SignedEvent, contract::AuthorRole, wire::Nip01EventWire};
+    use radroots_event::{
+        GenericEventDraft, SignedEvent, contract::AuthorRole, wire::Nip01EventWire,
+    };
+    use radroots_event_codec::authoring::AuthoredEventPlan;
     use radroots_identity::PublicKey;
     use radroots_protocol::runtime::v1::SyncCapabilityState;
     use radroots_signing::{Actor, actor::ActorSource, request::CancellationPolicy};
@@ -201,7 +241,6 @@ mod tests {
         event::{SourceGeneration, StoredVisibleEvent},
         journal::IdempotencyKey,
         memory::MemoryStorage,
-        outbox::LeaseOwner,
         projection::{
             ProjectionGeneration, ProjectionId, RawSourceDigest, RebuildFailure, RebuildTicketId,
         },
@@ -212,7 +251,6 @@ mod tests {
         policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
         projection::{Reducer, ReducerError, RefreshRequest, RefreshState},
         pull::PullTermination,
-        push::DeliveryRunRequest,
     };
     use radroots_transport::{
         Error as TransportError, EventSource, FetchPage, FetchRequest, SourceStatus, Target,
@@ -367,22 +405,26 @@ mod tests {
             [AuthorRole::Any],
         )
         .expect("actor");
-        let draft = EventDraft::new(
-            "radroots.social.geochat.v1",
-            20_000,
-            1_700_000_000,
-            Vec::new(),
-            "content",
-            PUBLIC_KEY,
+        let plan = AuthoredEventPlan::from_generic(
+            GenericEventDraft::new(
+                "radroots.social.geochat.v1",
+                20_000,
+                1_700_000_000,
+                Vec::new(),
+                "content",
+                PUBLIC_KEY,
+            )
+            .expect("draft"),
         )
-        .expect("draft");
+        .expect("authored plan");
         PushRequest::new(
             SyncId::new([8; 16]).expect("operation id"),
             IdempotencyKey::parse("sdk-sync-wrapper").expect("idempotency key"),
             actor,
-            draft,
+            plan,
             TargetSet::new(vec![target()]).expect("targets"),
             SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1_700_000_001_000,
             CancellationPolicy::PreservePublishedRequest,
         )
         .expect("push request")
@@ -438,19 +480,26 @@ mod tests {
             .expect("projection");
         assert_eq!(projection.state(), RefreshState::Complete);
 
+        let push = push_request();
+        let operation_id = push.operation_id();
+        let preparation = operations
+            .prepare_push(push.clone())
+            .await
+            .expect("durable preparation");
+        assert!(!preparation.is_replay());
         assert_eq!(
-            operations.sign_and_enqueue(push_request()).await,
+            operations.sign_prepared(push).await,
             Err(Error::MissingSigner)
         );
-        let delivery = DeliveryRunRequest::new(
-            LeaseOwner::parse("sdk-sync-test").expect("owner"),
-            SyncId::new([9; 16]).expect("lease seed"),
-            100,
-            1,
-        )
-        .expect("delivery request");
+        assert!(
+            operations
+                .push_status(operation_id)
+                .await
+                .expect("push status")
+                .is_some()
+        );
         assert_eq!(
-            operations.deliver_pending(delivery).await,
+            operations.deliver_push(operation_id).await,
             Err(Error::MissingSink)
         );
 

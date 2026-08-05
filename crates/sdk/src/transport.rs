@@ -279,12 +279,20 @@ impl radroots_transport::EventSink for NostrSlot {
         request: radroots_transport::DeliveryRequest,
     ) -> radroots_transport::BoxFuture<
         '_,
-        Result<radroots_transport::DeliveryReceipt, radroots_transport::Error>,
+        Result<radroots_transport::DeliveryReceipt, radroots_transport::SinkFailure>,
     > {
         Box::pin(async move {
-            let state = self
-                .snapshot()
-                .ok_or(radroots_transport::Error::UnsupportedOperation)?;
+            let Some(state) = self.snapshot() else {
+                return Err(radroots_transport::SinkFailure::for_request(
+                    &request,
+                    "nostr_transport_not_configured",
+                    radroots_transport::outcome::Retryability::Terminal,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .expect("static unconfigured sink failure is valid"));
+            };
             radroots_transport::EventSink::deliver(state.transport.as_ref(), request).await
         })
     }
@@ -728,9 +736,7 @@ mod tests {
             1,
         )
         .expect("delivery");
-        assert_eq!(
-            slot.deliver(deliver).await,
-            Err(Error::UnsupportedOperation)
-        );
+        let failure = slot.deliver(deliver).await.expect_err("unconfigured sink");
+        assert_eq!(failure.code(), "nostr_transport_not_configured");
     }
 }

@@ -10,6 +10,8 @@ use std::{
 
 use radroots_signing::Signer;
 use radroots_storage::Storage;
+#[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
+use radroots_storage::authored_delivery::AuthoredDeliveryState;
 #[cfg(feature = "memory")]
 use radroots_storage::{event::SourceGeneration, memory::MemoryStorage};
 use radroots_transport::{EventSink, EventSource};
@@ -53,9 +55,9 @@ struct ClientInner {
     sink: Option<Arc<dyn EventSink>>,
     #[cfg(feature = "sync")]
     sync: Option<radroots_sync::Engine>,
-    #[cfg(feature = "local-signing")]
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
     signing_slot: Option<crate::signing::Slot>,
-    #[cfg(feature = "nostr")]
+    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
     nostr_slot: Option<crate::transport::NostrSlot>,
     capability_availability: BTreeMap<CapabilityId, Availability>,
     explicitly_configured_capabilities: BTreeSet<CapabilityId>,
@@ -217,7 +219,7 @@ impl PostEvent {
 pub struct PublishReceipt {
     event_id: String,
     replay: bool,
-    delivered: bool,
+    delivery_state: AuthoredDeliveryState,
 }
 
 #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
@@ -226,17 +228,24 @@ impl PublishReceipt {
     pub fn event_id(&self) -> &str {
         self.event_id.as_str()
     }
-    /// Returns whether the durable enqueue replayed an identical operation.
+    /// Returns whether preparation replayed an identical durable operation.
     pub const fn is_replay(&self) -> bool {
         self.replay
     }
-    /// Returns whether this explicit pass recorded at least one success.
-    pub const fn is_delivered(&self) -> bool {
-        self.delivered
+    /// Returns the complete durable delivery state after this explicit pass.
+    pub const fn delivery_state(&self) -> AuthoredDeliveryState {
+        self.delivery_state
     }
-    /// Returns whether durable local intent remains pending delivery.
+    /// Returns whether this explicit pass satisfied the delivery policy.
+    pub const fn is_delivered(&self) -> bool {
+        matches!(self.delivery_state, AuthoredDeliveryState::Satisfied)
+    }
+    /// Returns whether durable local intent remains eligible for delivery.
     pub const fn is_delivery_pending(&self) -> bool {
-        !self.delivered
+        matches!(
+            self.delivery_state,
+            AuthoredDeliveryState::Pending | AuthoredDeliveryState::Retryable
+        )
     }
 }
 
@@ -332,13 +341,16 @@ impl ClientBuilder {
             .await
             .map_err(Error::storage_open_failed)?;
         let storage = Arc::new(storage);
-        let mut builder = Self::new()
+        let builder = Self::new()
             .storage(storage.clone())
             .capability_availability(CapabilityId::PERSISTENT_STORAGE, Availability::Available);
         #[cfg(feature = "sync")]
         {
+            let mut builder = builder;
             builder.sync_storage = Some(storage);
+            Ok(builder)
         }
+        #[cfg(not(feature = "sync"))]
         Ok(builder)
     }
 
@@ -472,9 +484,9 @@ impl ClientBuilder {
                 sink: self.sink,
                 #[cfg(feature = "sync")]
                 sync: self.sync,
-                #[cfg(feature = "local-signing")]
+                #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
                 signing_slot: self.signing_slot,
-                #[cfg(feature = "nostr")]
+                #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
                 nostr_slot: self.nostr_slot,
                 capability_availability: self.capability_availability,
                 explicitly_configured_capabilities: self.explicitly_configured_capabilities,
@@ -810,9 +822,10 @@ impl SocialOperations<'_> {
 
     async fn publish(&self, authored: SocialDraft) -> Result<PublishReceipt> {
         use radroots_event::contract::AuthorRole;
+        use radroots_event_codec::authoring::AuthoredEventPlan;
         use radroots_signing::{Actor, actor::ActorSource, request::CancellationPolicy};
-        use radroots_storage::{journal::IdempotencyKey, outbox::LeaseOwner};
-        use radroots_sync::{PushRequest, policy::SyncId, push::DeliveryRunRequest};
+        use radroots_storage::journal::IdempotencyKey;
+        use radroots_sync::{PushRequest, policy::SyncId};
         use radroots_transport::policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy};
 
         let identity = self.identity()?;
@@ -823,23 +836,18 @@ impl SocialOperations<'_> {
         let operation_uuid = uuid::Uuid::new_v4();
         let operation_id =
             SyncId::new(*operation_uuid.as_bytes()).map_err(Error::invalid_host_configuration)?;
-        let created_at = now_unix_ms()? / 1_000;
-        let draft = match authored {
-            SocialDraft::Profile(profile) => radroots_event::EventDraft::from_authored_profile(
-                &profile,
-                created_at,
-                identity.public_key_hex(),
-            ),
-            SocialDraft::Update(update) => radroots_event::EventDraft::from_authored_update(
-                &update,
-                created_at,
-                identity.public_key_hex(),
-            ),
-            SocialDraft::Reply(reply) => radroots_event::EventDraft::from_authored_reply(
-                &reply,
-                created_at,
-                identity.public_key_hex(),
-            ),
+        let now = now_unix_ms()?;
+        let created_at = now / 1_000;
+        let plan = match authored {
+            SocialDraft::Profile(profile) => {
+                AuthoredEventPlan::from_profile(&profile, created_at, identity.public_key_hex())
+            }
+            SocialDraft::Update(update) => {
+                AuthoredEventPlan::from_update(&update, created_at, identity.public_key_hex())
+            }
+            SocialDraft::Reply(reply) => {
+                AuthoredEventPlan::from_nip10_reply(&reply, created_at, identity.public_key_hex())
+            }
         }
         .map_err(Error::invalid_host_configuration)?;
         let actor = Actor::new(
@@ -853,9 +861,11 @@ impl SocialOperations<'_> {
             IdempotencyKey::parse(format!("sdk-{operation_uuid}"))
                 .map_err(Error::invalid_host_configuration)?,
             actor,
-            draft,
+            plan,
             targets,
             SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::any()),
+            now.checked_add(30_000)
+                .ok_or_else(Error::invalid_host_configuration_without_source)?,
             CancellationPolicy::PreservePublishedRequest,
         )
         .map_err(Error::invalid_host_configuration)?;
@@ -863,37 +873,35 @@ impl SocialOperations<'_> {
             .client
             .sync()?
             .ok_or_else(Error::shared_operation_unavailable)?;
-        let push = sync
-            .sign_and_enqueue(request)
+        let preparation = sync
+            .prepare_push(request.clone())
             .await
             .map_err(Error::shared_operation_failed)?;
-        let event_id = push.outbox().request().payload().event().id_hex();
+        sync.sign_prepared(request)
+            .await
+            .map_err(Error::shared_operation_failed)?;
+        sync.admit_signed(operation_id)
+            .await
+            .map_err(Error::shared_operation_failed)?;
+        let status = sync
+            .push_status(operation_id)
+            .await
+            .map_err(Error::shared_operation_failed)?
+            .ok_or_else(Error::shared_operation_failed_without_source)?;
+        let event_id = status
+            .artifact()
+            .signed()
+            .ok_or_else(Error::shared_operation_failed_without_source)?
+            .event()
+            .id_hex();
         let delivery = sync
-            .deliver_pending(
-                DeliveryRunRequest::new(
-                    LeaseOwner::parse("radroots-sdk-host")
-                        .map_err(Error::invalid_host_configuration)?,
-                    SyncId::new(*uuid::Uuid::new_v4().as_bytes())
-                        .map_err(Error::invalid_host_configuration)?,
-                    30_000,
-                    radroots_storage::outbox::OUTBOX_CLAIM_LIMIT_MAX,
-                )
-                .map_err(Error::invalid_host_configuration)?,
-            )
+            .deliver_push(operation_id)
             .await
             .map_err(Error::shared_operation_failed)?;
         Ok(PublishReceipt {
             event_id,
-            replay: push.is_replay(),
-            delivered: delivery.outcomes().iter().any(|outcome| {
-                outcome.as_ref().is_ok_and(|record| {
-                    (
-                        record.item_id() == push.outbox().item_id(),
-                        record.satisfaction()
-                            != radroots_storage::outbox::SatisfactionResult::Pending,
-                    ) == (true, true)
-                })
-            }),
+            replay: preparation.is_replay(),
+            delivery_state: delivery.plan().state(),
         })
     }
 
@@ -1010,7 +1018,8 @@ mod tests {
     };
     use radroots_transport::{
         DeliveryReceipt, DeliveryRequest, Error as TransportError, FetchPage, FetchRequest,
-        SinkStatus, SourceStatus, source::BoxFuture as TransportFuture,
+        SinkFailure, SinkStatus, SourceStatus, outcome::Retryability,
+        source::BoxFuture as TransportFuture,
     };
     use std::{
         future::Future,
@@ -1042,9 +1051,19 @@ mod tests {
 
         fn deliver(
             &self,
-            _request: DeliveryRequest,
-        ) -> TransportFuture<'_, std::result::Result<DeliveryReceipt, TransportError>> {
-            Box::pin(async { Err(TransportError::UnsupportedOperation) })
+            request: DeliveryRequest,
+        ) -> TransportFuture<'_, std::result::Result<DeliveryReceipt, SinkFailure>> {
+            Box::pin(async move {
+                Err(SinkFailure::for_request(
+                    &request,
+                    "test_sink_unavailable",
+                    Retryability::Terminal,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .expect("test sink failure"))
+            })
         }
     }
 
@@ -1168,14 +1187,22 @@ mod tests {
         assert_eq!(post.created_at(), 8);
         assert_eq!(post.content(), "content");
 
-        for (delivered, pending) in [(true, false), (false, true)] {
+        for (delivery_state, delivered, pending) in [
+            (AuthoredDeliveryState::Pending, false, true),
+            (AuthoredDeliveryState::Retryable, false, true),
+            (AuthoredDeliveryState::Satisfied, true, false),
+            (AuthoredDeliveryState::Exhausted, false, false),
+            (AuthoredDeliveryState::FailedTerminal, false, false),
+            (AuthoredDeliveryState::Cancelled, false, false),
+        ] {
             let receipt = PublishReceipt {
                 event_id: "published".to_owned(),
                 replay: true,
-                delivered,
+                delivery_state,
             };
             assert_eq!(receipt.event_id(), "published");
             assert!(receipt.is_replay());
+            assert_eq!(receipt.delivery_state(), delivery_state);
             assert_eq!(receipt.is_delivered(), delivered);
             assert_eq!(receipt.is_delivery_pending(), pending);
         }

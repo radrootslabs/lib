@@ -6,9 +6,10 @@ use serde::Deserialize;
 struct Contract {
     schema_version: u16,
     baseline_revision: String,
+    package_version: String,
     tool: String,
     minimum_tool_version: String,
-    release_type: String,
+    policy: String,
     feature_policy: String,
     packages: Vec<String>,
 }
@@ -19,15 +20,32 @@ pub fn run(root: &Path) -> Result<(), String> {
     verify_tool(&contract)?;
     verify_revision(root, &contract.baseline_revision)?;
     for package in &contract.packages {
-        let args = invocation(&contract, package);
+        let args = invocation(package);
         eprintln!("cargo {}", args.join(" "));
-        let status = Command::new("cargo")
+        let output = Command::new("cargo")
             .args(&args)
             .current_dir(root)
-            .status()
-            .map_err(|error| format!("failed to start cargo-semver-checks: {error}"))?;
-        if !status.success() {
-            return Err(format!("public API qualification failed for {package}"));
+            .output()
+            .map_err(|error| format!("failed to start cargo-public-api: {error}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "public API extraction failed for {package}: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        let actual = String::from_utf8(output.stdout)
+            .map_err(|error| format!("public API output for {package} was not UTF-8: {error}"))?;
+        let snapshot_path = root.join(format!(
+            "docs/api/{package}-{}.txt",
+            contract.package_version
+        ));
+        let expected = fs::read_to_string(&snapshot_path)
+            .map_err(|error| format!("read {}: {error}", snapshot_path.display()))?;
+        if actual != expected {
+            return Err(format!(
+                "reviewed public API snapshot drifted for {package}: {}",
+                snapshot_path.display()
+            ));
         }
     }
     Ok(())
@@ -42,9 +60,10 @@ fn load(root: &Path) -> Result<Contract, String> {
 
 fn validate(contract: &Contract) -> Result<(), String> {
     let unique = contract.packages.iter().collect::<BTreeSet<_>>();
-    if contract.schema_version != 1
-        || contract.tool != "cargo-semver-checks"
-        || contract.release_type != "minor"
+    if contract.schema_version != 2
+        || contract.package_version != "0.1.0-alpha"
+        || contract.tool != "cargo-public-api"
+        || contract.policy != "reviewed-breaking-snapshot"
         || contract.feature_policy != "all"
         || contract.baseline_revision.len() < 7
         || unique.len() != 2
@@ -57,22 +76,22 @@ fn validate(contract: &Contract) -> Result<(), String> {
 
 fn verify_tool(contract: &Contract) -> Result<(), String> {
     let output = Command::new("cargo")
-        .args(["semver-checks", "--version"])
+        .args(["public-api", "--version"])
         .output()
-        .map_err(|error| format!("failed to start cargo-semver-checks: {error}"))?;
+        .map_err(|error| format!("failed to start cargo-public-api: {error}"))?;
     if !output.status.success() {
-        return Err("cargo-semver-checks is required".to_owned());
+        return Err("cargo-public-api is required".to_owned());
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let installed = stdout
         .split_whitespace()
         .find_map(|value| semver::Version::parse(value).ok())
-        .ok_or_else(|| format!("could not parse cargo-semver-checks version: {stdout}"))?;
+        .ok_or_else(|| format!("could not parse cargo-public-api version: {stdout}"))?;
     let minimum = semver::Version::parse(&contract.minimum_tool_version)
         .map_err(|error| format!("invalid minimum tool version: {error}"))?;
     if installed < minimum {
         return Err(format!(
-            "cargo-semver-checks {} or newer is required, found {installed}",
+            "cargo-public-api {} or newer is required, found {installed}",
             contract.minimum_tool_version
         ));
     }
@@ -92,17 +111,15 @@ fn verify_revision(root: &Path, revision: &str) -> Result<(), String> {
     }
 }
 
-fn invocation(contract: &Contract, package: &str) -> Vec<String> {
+fn invocation(package: &str) -> Vec<String> {
     vec![
-        "semver-checks".to_owned(),
-        "check-release".to_owned(),
-        "--package".to_owned(),
+        "public-api".to_owned(),
+        "-p".to_owned(),
         package.to_owned(),
-        "--baseline-rev".to_owned(),
-        contract.baseline_revision.clone(),
         "--all-features".to_owned(),
-        "--release-type".to_owned(),
-        contract.release_type.clone(),
+        "-sss".to_owned(),
+        "--color".to_owned(),
+        "never".to_owned(),
     ]
 }
 
@@ -115,6 +132,8 @@ mod tests {
         let root = crate::fs::workspace_root().expect("workspace root");
         let contract = load(&root).expect("contract");
         validate(&contract).expect("valid contract");
-        assert!(invocation(&contract, "radroots").contains(&"--all-features".to_owned()));
+        let invocation = invocation("radroots");
+        assert!(invocation.contains(&"--all-features".to_owned()));
+        assert!(invocation.contains(&"-sss".to_owned()));
     }
 }
