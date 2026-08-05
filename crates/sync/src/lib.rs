@@ -12,5 +12,5 @@ pub mod status;
 pub use engine::Engine;
 pub use policy::Error;
 pub use pull::{PullReceipt, PullRequest};
-pub use push::{PushReceipt, PushRequest};
+pub use push::{PushPreparation, PushReceipt, PushRequest, PushStatus};
 pub use status::SyncStatus;

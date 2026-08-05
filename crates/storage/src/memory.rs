@@ -1323,8 +1323,9 @@ impl AuthoredAtomicStorage for MemoryStorage {
                 if existing.digest() != command.digest() {
                     return Err(Error::AtomicCommitConflict);
                 }
-                return AuthoredAtomicReceipt::new(
-                    &command,
+                return AuthoredAtomicReceipt::from_durable_parts(
+                    existing.commit_id(),
+                    existing.digest(),
                     AtomicCommitDisposition::Replay,
                     existing.committed_at_unix_ms(),
                     existing.outcome().clone(),

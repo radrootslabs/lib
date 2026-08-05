@@ -20,8 +20,8 @@ use radroots_sync::{
     push::DeliveryRunRequest,
 };
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkStatus, Target,
-    TargetSet, TransportId,
+    DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkFailure, SinkStatus,
+    Target, TargetSet, TransportId,
     capability::{Availability, Maturity, SinkCapabilities},
     outcome::DeliveryOutcome,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
@@ -65,13 +65,21 @@ impl EventSink for RecoverySink {
     fn deliver(
         &self,
         request: DeliveryRequest,
-    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>> {
+    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         let call = self.0.fetch_add(1, Ordering::Relaxed);
         Box::pin(async move {
             if call == 0 {
-                return Err(TransportError::UnsupportedOperation);
+                return Err(SinkFailure::for_request(
+                    &request,
+                    "recovery_unavailable",
+                    radroots_transport::outcome::Retryability::Retryable,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .expect("valid recovery failure"));
             }
-            DeliveryReceipt::for_request(
+            Ok(DeliveryReceipt::for_request(
                 &request,
                 request
                     .target_set()
@@ -83,6 +91,7 @@ impl EventSink for RecoverySink {
                     })
                     .collect(),
             )
+            .expect("valid recovery receipt"))
         })
     }
 }

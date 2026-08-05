@@ -5,7 +5,7 @@ use std::sync::Arc;
 use radroots_signing::Signer;
 use radroots_storage::{
     EventStore, Journal, Outbox, ProjectionStore, atomic::AtomicStorage,
-    status::StorageStatusProvider,
+    authored_atomic::AuthoredAtomicStorage, status::StorageStatusProvider,
 };
 use radroots_transport::{EventSink, EventSource};
 
@@ -15,12 +15,24 @@ const MAX_OPERATION_TIMEOUT_MS: u64 = 86_400_000;
 
 /// Exact backend-neutral storage capability required by sync orchestration.
 pub trait SyncStorage:
-    EventStore + Journal + Outbox + ProjectionStore + AtomicStorage + StorageStatusProvider
+    EventStore
+    + Journal
+    + Outbox
+    + ProjectionStore
+    + AtomicStorage
+    + AuthoredAtomicStorage
+    + StorageStatusProvider
 {
 }
 
 impl<T> SyncStorage for T where
-    T: EventStore + Journal + Outbox + ProjectionStore + AtomicStorage + StorageStatusProvider
+    T: EventStore
+        + Journal
+        + Outbox
+        + ProjectionStore
+        + AtomicStorage
+        + AuthoredAtomicStorage
+        + StorageStatusProvider
 {
 }
 

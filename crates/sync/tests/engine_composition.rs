@@ -10,7 +10,7 @@ use radroots_sync::{
 };
 use radroots_transport::{
     DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, EventSource, FetchPage,
-    FetchRequest, SinkStatus, SourceStatus,
+    FetchRequest, SinkFailure, SinkStatus, SourceStatus,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
 };
 
@@ -89,7 +89,7 @@ impl EventSink for MockSink {
     fn deliver(
         &self,
         _request: DeliveryRequest,
-    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, TransportError>> {
+    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         Box::pin(async { unreachable!("composition does not deliver") })
     }
 }

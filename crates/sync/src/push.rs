@@ -1,18 +1,24 @@
 //! Signing, durable enqueue, delivery, and satisfaction orchestration.
 
-use radroots_event::{EventDraft, admission::RawEvent};
-use radroots_event_codec::verify::{self, Nip01SignatureVerifier};
+use radroots_event::admission::RawEvent;
+use radroots_event_codec::{
+    authoring::AuthoredEventPlan,
+    verify::{self, Nip01SignatureVerifier},
+};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
-    Actor,
+    Actor, AuthoredArtifactId as SigningArtifactId, SigningIntentId, SigningOperationId,
     request::{CancellationPolicy, SignPolicy},
 };
 use radroots_storage::{
     Journal, Outbox,
     atomic::{
-        AtomicCommit, AtomicCommitDigest, AtomicCommitId, AtomicCommitOutcome, AtomicWorkflow,
-        CommitEnqueued, CommitSigned,
+        AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId,
+        AtomicCommitOutcome, AtomicWorkflow, CommitEnqueued, CommitSigned,
     },
+    authored::{AuthoredArtifact, AuthoredArtifactId, AuthoredOperation},
+    authored_atomic::{AuthoredAtomicCommand, AuthoredAtomicOutcome, PrepareAuthoredOperation},
+    authored_delivery::{AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId},
     event::EventAdmission,
     journal::{
         IdempotencyDigest, IdempotencyKey, JournalStage, JournalState, OperationInstanceId,
@@ -47,9 +53,10 @@ pub struct PushRequest {
     operation_id: SyncId,
     idempotency_key: IdempotencyKey,
     actor: Actor,
-    draft: EventDraft,
+    plan: AuthoredEventPlan,
     targets: TargetSet,
     satisfaction: SatisfactionPolicy,
+    delivery_deadline_unix_ms: u64,
     cancellation: CancellationPolicy,
 }
 
@@ -59,21 +66,26 @@ impl PushRequest {
         operation_id: SyncId,
         idempotency_key: IdempotencyKey,
         actor: Actor,
-        draft: EventDraft,
+        plan: AuthoredEventPlan,
         targets: TargetSet,
         satisfaction: SatisfactionPolicy,
+        delivery_deadline_unix_ms: u64,
         cancellation: CancellationPolicy,
     ) -> Result<Self, Error> {
-        if satisfaction.validate_for(&targets).is_err() {
+        if satisfaction.validate_for(&targets).is_err()
+            || delivery_deadline_unix_ms == 0
+            || actor.public_key() != *plan.author()
+        {
             return Err(Error::InvalidPushRequest);
         }
         Ok(Self {
             operation_id,
             idempotency_key,
             actor,
-            draft,
+            plan,
             targets,
             satisfaction,
+            delivery_deadline_unix_ms,
             cancellation,
         })
     }
@@ -87,14 +99,17 @@ impl PushRequest {
     pub const fn actor(&self) -> &Actor {
         &self.actor
     }
-    pub const fn draft(&self) -> &EventDraft {
-        &self.draft
+    pub const fn plan(&self) -> &AuthoredEventPlan {
+        &self.plan
     }
     pub const fn targets(&self) -> &TargetSet {
         &self.targets
     }
     pub const fn satisfaction(&self) -> &SatisfactionPolicy {
         &self.satisfaction
+    }
+    pub const fn delivery_deadline_unix_ms(&self) -> u64 {
+        self.delivery_deadline_unix_ms
     }
     pub const fn cancellation(&self) -> CancellationPolicy {
         self.cancellation
@@ -108,11 +123,56 @@ impl core::fmt::Debug for PushRequest {
             .field("operation_id", &self.operation_id)
             .field("idempotency_key", &self.idempotency_key)
             .field("actor", &self.actor)
-            .field("draft", &"[redacted frozen event draft]")
+            .field("plan", &"[redacted exact authored plan]")
             .field("targets", &self.targets)
             .field("satisfaction", &self.satisfaction)
+            .field("delivery_deadline_unix_ms", &self.delivery_deadline_unix_ms)
             .field("cancellation", &self.cancellation)
             .finish()
+    }
+}
+
+/// Complete durable intent created before any signer or transport effect.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PushPreparation {
+    operation: AuthoredOperation,
+    artifact: AuthoredArtifact,
+    delivery_plan: AuthoredDeliveryPlan,
+    replay: bool,
+}
+
+impl PushPreparation {
+    pub const fn operation(&self) -> &AuthoredOperation {
+        &self.operation
+    }
+    pub const fn artifact(&self) -> &AuthoredArtifact {
+        &self.artifact
+    }
+    pub const fn delivery_plan(&self) -> &AuthoredDeliveryPlan {
+        &self.delivery_plan
+    }
+    pub const fn is_replay(&self) -> bool {
+        self.replay
+    }
+}
+
+/// Current durable authored state for one push operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PushStatus {
+    operation: AuthoredOperation,
+    artifact: AuthoredArtifact,
+    delivery_plan: AuthoredDeliveryPlan,
+}
+
+impl PushStatus {
+    pub const fn operation(&self) -> &AuthoredOperation {
+        &self.operation
+    }
+    pub const fn artifact(&self) -> &AuthoredArtifact {
+        &self.artifact
+    }
+    pub const fn delivery_plan(&self) -> &AuthoredDeliveryPlan {
+        &self.delivery_plan
     }
 }
 
@@ -191,6 +251,110 @@ impl DeliveryRunReceipt {
 }
 
 impl Engine {
+    /// Atomically persists the complete parent, exact plan, and delivery intent.
+    ///
+    /// This method invokes neither a signer nor a transport. Exact request
+    /// replay returns the original durable preparation; conflicting reuse of
+    /// the operation identity fails closed.
+    pub async fn prepare_push(&self, request: PushRequest) -> Result<PushPreparation, Error> {
+        let prepared_at = self.clock.now_unix_ms()?;
+        let (operation_id, artifact_id, delivery_plan_id) = authored_ids(request.operation_id)?;
+        let operation = AuthoredOperation::new(operation_id, vec![artifact_id], prepared_at)
+            .map_err(map_storage_error)?;
+        let artifact =
+            AuthoredArtifact::planned(artifact_id, operation_id, 0, request.plan(), prepared_at)
+                .map_err(map_storage_error)?;
+        let intent = AuthoredDeliveryIntent::new(
+            delivery_request_id(request.operation_id),
+            request.targets.clone(),
+            request.satisfaction.clone(),
+            request.delivery_deadline_unix_ms,
+        )
+        .map_err(map_storage_error)?;
+        let delivery_plan =
+            AuthoredDeliveryPlan::new(delivery_plan_id, artifact_id, intent, prepared_at)
+                .map_err(map_storage_error)?;
+        let command = AuthoredAtomicCommand::Prepare(
+            PrepareAuthoredOperation::new(
+                operation,
+                vec![artifact],
+                vec![delivery_plan],
+                authored_push_input_digest(&request)?,
+                prepared_at,
+            )
+            .map_err(map_storage_error)?,
+        );
+        let receipt = self
+            .storage
+            .execute_authored(command)
+            .await
+            .map_err(map_storage_error)?;
+        let AuthoredAtomicOutcome::Prepared {
+            operation,
+            artifacts,
+            delivery_plans,
+        } = receipt.outcome()
+        else {
+            return Err(Error::StorageFailed);
+        };
+        let [artifact] = artifacts.as_slice() else {
+            return Err(Error::StorageFailed);
+        };
+        let [delivery_plan] = delivery_plans.as_slice() else {
+            return Err(Error::StorageFailed);
+        };
+        if operation.operation_id() != operation_id
+            || artifact.artifact_id() != artifact_id
+            || delivery_plan.plan_id() != delivery_plan_id
+        {
+            return Err(Error::StorageFailed);
+        }
+        Ok(PushPreparation {
+            operation: operation.clone(),
+            artifact: artifact.clone(),
+            delivery_plan: delivery_plan.clone(),
+            replay: receipt.disposition() == AtomicCommitDisposition::Replay,
+        })
+    }
+
+    /// Loads the complete durable state for one prepared push operation.
+    pub async fn push_status(&self, operation_id: SyncId) -> Result<Option<PushStatus>, Error> {
+        let (operation_id, expected_artifact_id, expected_plan_id) = authored_ids(operation_id)?;
+        let Some(operation) = self
+            .storage
+            .authored_operation(operation_id)
+            .await
+            .map_err(map_storage_error)?
+        else {
+            return Ok(None);
+        };
+        if operation.artifact_ids() != [expected_artifact_id] {
+            return Err(Error::StorageFailed);
+        }
+        let artifact = self
+            .storage
+            .authored_artifact(expected_artifact_id)
+            .await
+            .map_err(map_storage_error)?
+            .ok_or(Error::StorageFailed)?;
+        let delivery_plan = self
+            .storage
+            .authored_delivery_plan(expected_plan_id)
+            .await
+            .map_err(map_storage_error)?
+            .ok_or(Error::StorageFailed)?;
+        if artifact.operation_id() != operation.operation_id()
+            || delivery_plan.artifact_id() != artifact.artifact_id()
+        {
+            return Err(Error::StorageFailed);
+        }
+        Ok(Some(PushStatus {
+            operation,
+            artifact,
+            delivery_plan,
+        }))
+    }
+
     /// Authorizes, signs, verifies, and durably enqueues one outbound event.
     ///
     /// Dropping the future before the final atomic enqueue leaves either a
@@ -198,11 +362,12 @@ impl Engine {
     /// cancellation cannot claim rollback; replay returns the durable outbox.
     pub async fn sign_and_enqueue(&self, request: PushRequest) -> Result<PushReceipt, Error> {
         let signer = self.signer.as_deref().ok_or(Error::MissingSigner)?;
+        let preparation = self.prepare_push(request.clone()).await?;
         let instance_id = OperationInstanceId::new(*request.operation_id.as_bytes())
             .map_err(map_storage_error)?;
         let item_id =
             OutboxItemId::new(*request.operation_id.as_bytes()).map_err(map_storage_error)?;
-        let input_digest = push_input_digest(&request);
+        let input_digest = push_input_digest(&request)?;
 
         if let Some(existing) = Journal::operation(self.storage.as_ref(), instance_id)
             .await
@@ -258,23 +423,28 @@ impl Engine {
         let sign_deadline_ms = self
             .deadlines
             .deadline_unix_ms(OperationKind::Sign, self.clock.now_unix_ms()?)?;
-        let sign_deadline_seconds = sign_deadline_ms
-            .checked_add(999)
-            .ok_or(Error::DeadlineOverflow)?
-            / 1_000;
+        let signing_operation = SigningOperationId::new(*request.operation_id.as_bytes())
+            .map_err(|_| Error::InvalidPushRequest)?;
+        let signing_artifact =
+            SigningArtifactId::new(*preparation.artifact().artifact_id().as_bytes())
+                .map_err(|_| Error::InvalidPushRequest)?;
         let sign_request = radroots_signing::SignRequest::new(
             OperationId::SyncPush,
+            SigningIntentId::new(signing_operation, signing_artifact),
             request.actor.clone(),
-            request.draft.clone(),
-            SignPolicy::new(sign_deadline_seconds, request.cancellation)
+            request.plan.clone(),
+            SignPolicy::new(sign_deadline_ms, request.cancellation)
                 .map_err(|_| Error::InvalidPushRequest)?,
         )
         .map_err(|_| Error::InvalidPushRequest)?;
-        let signed = signer
-            .sign(sign_request)
-            .await
-            .map_err(|_| Error::SignerFailed)?;
-        if signed.completed_at_unix() > sign_deadline_seconds {
+        let signed = signer.sign(sign_request).await.map_err(|error| {
+            if error.kind() == radroots_signing::error::Kind::DeadlineExceeded {
+                Error::SignerDeadlineExceeded
+            } else {
+                Error::SignerFailed
+            }
+        })?;
+        if signed.completed_at_unix_ms() > sign_deadline_ms {
             return Err(Error::SignerDeadlineExceeded);
         }
         let event = signed.signed_event().clone();
@@ -311,15 +481,12 @@ impl Engine {
         };
 
         let admission = outbound_admission(&event, self.clock.now_unix_ms()?)?;
-        let delivery_deadline = self
-            .deadlines
-            .deadline_unix_ms(OperationKind::Deliver, self.clock.now_unix_ms()?)?;
         let delivery = DeliveryRequest::new(
             delivery_request_id(request.operation_id),
             DeliveryPayload::new(event),
             request.targets,
             request.satisfaction,
-            delivery_deadline,
+            request.delivery_deadline_unix_ms,
         )
         .map_err(|_| Error::InvalidPushRequest)?;
         let plan_digest = delivery_plan_digest(&delivery);
@@ -566,15 +733,45 @@ fn outbound_admission(
         .map_err(map_storage_error)
 }
 
-fn push_input_digest(request: &PushRequest) -> IdempotencyDigest {
+fn push_input_digest(request: &PushRequest) -> Result<IdempotencyDigest, Error> {
+    Ok(IdempotencyDigest::new(
+        *authored_push_input_digest(request)?.as_bytes(),
+    ))
+}
+
+fn authored_push_input_digest(request: &PushRequest) -> Result<AtomicCommitDigest, Error> {
     let mut hasher = Sha256::new();
-    hash_field(&mut hasher, b"radroots.sync.push.v1");
-    hash_field(&mut hasher, request.draft.expected_event_id().as_bytes());
+    hash_field(&mut hasher, b"radroots.sync.authored-push.v2");
+    hash_field(&mut hasher, request.operation_id.as_bytes());
+    hash_field(&mut hasher, request.idempotency_key.as_str().as_bytes());
+    hash_field(&mut hasher, request.plan.digest().as_bytes());
+    hash_field(&mut hasher, request.actor.public_key().as_bytes());
+    let source = match request.actor.source() {
+        radroots_signing::actor::ActorSource::LocalAccount(_) => 0,
+        radroots_signing::actor::ActorSource::ExplicitPublicKey => 1,
+        radroots_signing::actor::ActorSource::RemoteSigner(_) => 2,
+        radroots_signing::actor::ActorSource::Service(_) => 3,
+        _ => return Err(Error::InvalidPushRequest),
+    };
+    hasher.update([source]);
+    if let Some(account_id) = request.actor.account_id() {
+        hash_field(&mut hasher, account_id.as_bytes());
+    }
+    for role in request.actor.roles() {
+        hash_field(&mut hasher, role.as_str().as_bytes());
+    }
     for target in request.targets.targets() {
         hash_field(&mut hasher, target.fingerprint().as_str().as_bytes());
     }
     hash_satisfaction(&mut hasher, &request.satisfaction);
-    IdempotencyDigest::new(hasher.finalize().into())
+    hasher.update(request.delivery_deadline_unix_ms.to_be_bytes());
+    let cancellation = match request.cancellation {
+        CancellationPolicy::PreservePublishedRequest => 0,
+        CancellationPolicy::LocalCooperative => 1,
+        _ => return Err(Error::InvalidPushRequest),
+    };
+    hasher.update([cancellation]);
+    Ok(AtomicCommitDigest::new(hasher.finalize().into()))
 }
 
 fn delivery_plan_digest(request: &DeliveryRequest) -> DeliveryPlanDigest {
@@ -614,6 +811,41 @@ fn atomic_digest(domain: &[u8], input: &[u8]) -> AtomicCommitDigest {
     hash_field(&mut hasher, domain);
     hash_field(&mut hasher, input);
     AtomicCommitDigest::new(hasher.finalize().into())
+}
+
+fn authored_ids(
+    operation_id: SyncId,
+) -> Result<
+    (
+        OperationInstanceId,
+        AuthoredArtifactId,
+        AuthoredDeliveryPlanId,
+    ),
+    Error,
+> {
+    let operation =
+        OperationInstanceId::new(*operation_id.as_bytes()).map_err(map_storage_error)?;
+    let artifact = AuthoredArtifactId::new(derive_child_id(
+        b"radroots.sync.authored-artifact.v2",
+        operation_id.as_bytes(),
+    ))
+    .map_err(map_storage_error)?;
+    let delivery = AuthoredDeliveryPlanId::new(derive_child_id(
+        b"radroots.sync.authored-delivery.v2",
+        artifact.as_bytes(),
+    ))
+    .map_err(map_storage_error)?;
+    Ok((operation, artifact, delivery))
+}
+
+fn derive_child_id(domain: &[u8], parent: &[u8; 16]) -> [u8; 16] {
+    let mut hasher = Sha256::new();
+    hash_field(&mut hasher, domain);
+    hash_field(&mut hasher, parent);
+    let digest: [u8; 32] = hasher.finalize().into();
+    let mut child = [0_u8; 16];
+    child.copy_from_slice(&digest[..16]);
+    child
 }
 
 fn hash_field(hasher: &mut Sha256, value: &[u8]) {
