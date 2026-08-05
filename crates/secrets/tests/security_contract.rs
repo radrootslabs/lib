@@ -146,19 +146,23 @@ fn diagnostics_snapshot_is_redacted_and_plaintext_free() {
 }
 
 #[test]
-fn production_sources_have_no_plaintext_logging_surface() {
-    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+fn envelope_and_private_artifact_sources_have_no_plaintext_logging_surface() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("secrets crate has a crates directory parent");
     let mut paths = Vec::new();
-    collect_rust_sources(&source_root, &mut paths);
-    assert!(!paths.is_empty());
+    for crate_name in ["secrets", "storage", "storage_sqlite"] {
+        collect_rust_sources(&crates_root.join(crate_name).join("src"), &mut paths);
+    }
+    assert!(!paths.is_empty(), "audited production sources must exist");
 
     for path in paths {
-        let source = fs::read_to_string(&path).expect("read secret source");
+        let source = fs::read_to_string(&path).expect("read audited source");
         let production = source.split("\n#[cfg(test)]").next().unwrap_or(&source);
         for forbidden in ["tracing::", "log::", "println!(", "eprintln!(", "dbg!("] {
             assert!(
                 !production.contains(forbidden),
-                "secret production source contains logging surface `{forbidden}`: {}",
+                "envelope or private-artifact source contains logging surface `{forbidden}`: {}",
                 path.display()
             );
         }

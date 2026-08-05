@@ -12,4 +12,5 @@ targets = [
   "nip46_messages_and_uris",
   "protocol_identifiers",
   "restore_plan",
+  "secrets_envelope_and_artifact",
 ]

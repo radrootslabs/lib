@@ -14,7 +14,7 @@ use crate::{SecretId, SecretRef};
 use alloc::string::String;
 use alloc::vec::Vec;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
-use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use core::fmt;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -254,10 +254,12 @@ impl EncryptedEnvelope {
         )?;
         let ciphertext = material.data_key.expose_secret(|data_key| {
             plaintext.expose_secret(|plaintext| {
-                let cipher = XChaCha20Poly1305::new(Key::from_slice(data_key));
+                let cipher = XChaCha20Poly1305::new_from_slice(data_key)
+                    .map_err(|_| Error::EncryptFailed)?;
+                let nonce = XNonce::from(*material.nonce.as_bytes());
                 cipher
                     .encrypt(
-                        XNonce::from_slice(material.nonce.as_bytes()),
+                        &nonce,
                         Payload {
                             msg: plaintext,
                             aad: aad.as_slice(),
@@ -304,10 +306,12 @@ impl EncryptedEnvelope {
         validate_data_key(&data_key)?;
         let aad = self.encoded_header()?;
         let plaintext = data_key.expose_secret(|data_key| {
-            let cipher = XChaCha20Poly1305::new(Key::from_slice(data_key));
+            let cipher =
+                XChaCha20Poly1305::new_from_slice(data_key).map_err(|_| Error::DecryptFailed)?;
+            let nonce = XNonce::from(*self.nonce.as_bytes());
             cipher
                 .decrypt(
-                    XNonce::from_slice(self.nonce.as_bytes()),
+                    &nonce,
                     Payload {
                         msg: self.ciphertext.as_slice(),
                         aad: aad.as_slice(),
@@ -533,10 +537,12 @@ impl EncryptedEnvelope {
         validate_data_key(&data_key)?;
         let aad = self.encoded_header()?;
         let plaintext = data_key.expose_secret(|data_key| {
-            let cipher = XChaCha20Poly1305::new(Key::from_slice(data_key));
+            let cipher =
+                XChaCha20Poly1305::new_from_slice(data_key).map_err(|_| Error::DecryptFailed)?;
+            let nonce = XNonce::from(*self.nonce.as_bytes());
             cipher
                 .decrypt(
-                    XNonce::from_slice(self.nonce.as_bytes()),
+                    &nonce,
                     Payload {
                         msg: self.ciphertext.as_slice(),
                         aad: aad.as_slice(),

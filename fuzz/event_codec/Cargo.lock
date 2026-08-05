@@ -845,6 +845,7 @@ dependencies = [
  "radroots_event_codec",
  "radroots_nostr_connect",
  "radroots_protocol",
+ "radroots_secrets",
  "radroots_storage",
  "serde_json",
 ]
@@ -854,6 +855,16 @@ name = "radroots_protocol"
 version = "0.1.0-alpha"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "radroots_secrets"
+version = "0.1.0-alpha"
+dependencies = [
+ "chacha20poly1305",
+ "sha2",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -1433,10 +1444,6 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[patch.unused]]
 name = "radroots_geonames"
-version = "0.1.0-alpha"
-
-[[patch.unused]]
-name = "radroots_secrets"
 version = "0.1.0-alpha"
 
 [[patch.unused]]

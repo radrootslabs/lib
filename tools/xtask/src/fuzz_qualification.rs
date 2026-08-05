@@ -60,8 +60,8 @@ fn validate(root: &Path, contract: &Contract) -> Result<(), String> {
         return Err("invalid fuzz qualification contract".to_owned());
     }
     let expected = contract.targets.iter().collect::<BTreeSet<_>>();
-    if expected.len() != 7 || expected.len() != contract.targets.len() {
-        return Err("fuzz matrix requires exactly seven unique parser targets".to_owned());
+    if expected.len() != 8 || expected.len() != contract.targets.len() {
+        return Err("fuzz matrix requires exactly eight unique parser targets".to_owned());
     }
     let path = root.join(&contract.harness).join("Cargo.toml");
     let raw = fs::read_to_string(&path)

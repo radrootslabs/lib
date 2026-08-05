@@ -1415,14 +1415,17 @@ mod tests {
             200,
         )
         .expect("reseal request");
-        let committed = store
-            .commit_private_artifact_reseal(request.clone(), resealed.envelope())
-            .await
-            .expect("atomic commit");
-        assert_eq!(
-            committed.disposition(),
-            PrivateArtifactResealDisposition::Committed
+        let contender = store.clone();
+        let (left, right) = tokio::join!(
+            store.commit_private_artifact_reseal(request.clone(), resealed.envelope()),
+            contender.commit_private_artifact_reseal(request.clone(), resealed.envelope()),
         );
+        let dispositions = [
+            left.expect("first concurrent outcome").disposition(),
+            right.expect("second concurrent outcome").disposition(),
+        ];
+        assert!(dispositions.contains(&PrivateArtifactResealDisposition::Committed));
+        assert!(dispositions.contains(&PrivateArtifactResealDisposition::Replayed));
         let replayed = store
             .commit_private_artifact_reseal(request.clone(), resealed.envelope())
             .await
