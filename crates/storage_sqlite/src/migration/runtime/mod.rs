@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 10;
+pub const CURRENT_VERSION: u32 = 11;
 
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
@@ -19,6 +19,7 @@ const LEGACY_OUTBOX_STAGING_V8_SQL: &str = include_str!("0008_legacy_outbox_stag
 const LEGACY_IMPORT_COMMITS_V9_SQL: &str = include_str!("0009_legacy_import_commits.up.sql");
 const PROJECTION_REBUILD_SOURCE_BINDING_V10_SQL: &str =
     include_str!("0010_projection_rebuild_source_binding.up.sql");
+const AUTHORED_OPERATIONS_V11_SQL: &str = include_str!("0011_authored_operations.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -332,6 +333,72 @@ const RUNTIME_V9_OBJECTS: &[&str] = &[
     "radroots_runtime_source_generations_sequence_guard",
 ];
 
+const RUNTIME_V11_OBJECTS: &[&str] = &[
+    "radroots_runtime_atomic_commits",
+    "radroots_runtime_authored_artifacts",
+    "radroots_runtime_authored_artifacts_admission_ready_idx",
+    "radroots_runtime_authored_artifacts_signing_ready_idx",
+    "radroots_runtime_authored_atomic_commits",
+    "radroots_runtime_authored_atomic_commits_delete_guard",
+    "radroots_runtime_authored_atomic_commits_update_guard",
+    "radroots_runtime_authored_delivery_attempts",
+    "radroots_runtime_authored_delivery_plans",
+    "radroots_runtime_authored_delivery_ready_idx",
+    "radroots_runtime_authored_delivery_targets",
+    "radroots_runtime_authored_operations",
+    "radroots_runtime_delivery_evidence",
+    "radroots_runtime_delivery_evidence_item_idx",
+    "radroots_runtime_event_index_checkpoints",
+    "radroots_runtime_event_index_manifests",
+    "radroots_runtime_event_index_shards",
+    "radroots_runtime_event_provenance",
+    "radroots_runtime_event_provenance_observed_idx",
+    "radroots_runtime_events",
+    "radroots_runtime_events_admission_idx",
+    "radroots_runtime_events_contract_metadata_guard",
+    "radroots_runtime_events_contract_metadata_insert_guard",
+    "radroots_runtime_events_delete_guard",
+    "radroots_runtime_events_event_id_idx",
+    "radroots_runtime_events_raw_update_guard",
+    "radroots_runtime_journal_idempotency_idx",
+    "radroots_runtime_journal_operations",
+    "radroots_runtime_journal_recovery_idx",
+    "radroots_runtime_legacy_event_staging",
+    "radroots_runtime_legacy_event_staging_delete_guard",
+    "radroots_runtime_legacy_event_staging_insert_guard",
+    "radroots_runtime_legacy_event_staging_update_guard",
+    "radroots_runtime_legacy_import_commit_delete_guard",
+    "radroots_runtime_legacy_import_commit_update_guard",
+    "radroots_runtime_legacy_import_commits",
+    "radroots_runtime_legacy_import_delete_guard",
+    "radroots_runtime_legacy_import_identity_guard",
+    "radroots_runtime_legacy_import_member_delete_guard",
+    "radroots_runtime_legacy_import_member_identity_guard",
+    "radroots_runtime_legacy_import_member_state_guard",
+    "radroots_runtime_legacy_import_members",
+    "radroots_runtime_legacy_import_state_guard",
+    "radroots_runtime_legacy_import_state_idx",
+    "radroots_runtime_legacy_imports",
+    "radroots_runtime_legacy_outbox_staging",
+    "radroots_runtime_legacy_outbox_staging_delete_guard",
+    "radroots_runtime_legacy_outbox_staging_insert_guard",
+    "radroots_runtime_legacy_outbox_staging_parent_idx",
+    "radroots_runtime_legacy_outbox_staging_update_guard",
+    "radroots_runtime_outbox_items",
+    "radroots_runtime_outbox_operation_idx",
+    "radroots_runtime_outbox_ready_idx",
+    "radroots_runtime_outbox_targets",
+    "radroots_runtime_projection_checkpoints",
+    "radroots_runtime_projection_invalidations",
+    "radroots_runtime_projection_rebuilds",
+    "radroots_runtime_projection_rebuilds_stage_idx",
+    "radroots_runtime_source_generations",
+    "radroots_runtime_source_generations_active_idx",
+    "radroots_runtime_source_generations_delete_guard",
+    "radroots_runtime_source_generations_identity_guard",
+    "radroots_runtime_source_generations_sequence_guard",
+];
+
 /// Ordered, immutable runtime migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -394,6 +461,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "8dfe0f83058f51e3edf9bdac16b408c6abdc88dd84a53f8e893aaf06fe89f7c7",
         owned_objects: RUNTIME_V9_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 11,
+        name: "authored_operations",
+        up_sha256: "fa461e3977594a364850d8639539ca902a93b715f8ce6629182dbc536266499f",
+        owned_objects: RUNTIME_V11_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
@@ -408,6 +481,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         8 => Some(LEGACY_OUTBOX_STAGING_V8_SQL),
         9 => Some(LEGACY_IMPORT_COMMITS_V9_SQL),
         10 => Some(PROJECTION_REBUILD_SOURCE_BINDING_V10_SQL),
+        11 => Some(AUTHORED_OPERATIONS_V11_SQL),
         _ => None,
     }
 }
@@ -451,8 +525,8 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 10);
-        assert_eq!(MIGRATIONS.len(), 10);
+        assert_eq!(CURRENT_VERSION, 11);
+        assert_eq!(MIGRATIONS.len(), 11);
         let migration = MIGRATIONS[8];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
@@ -480,7 +554,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(11), None);
+        assert_eq!(migration_sql(12), None);
     }
 
     #[tokio::test]

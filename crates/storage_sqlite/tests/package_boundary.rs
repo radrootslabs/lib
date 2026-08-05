@@ -24,9 +24,13 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
         dependency_keys(MANIFEST),
         BTreeSet::from([
             "fs2",
+            "radroots_event",
             "radroots_event_codec",
             "radroots_secrets",
             "radroots_storage",
+            "radroots_transport",
+            "serde",
+            "serde_json",
             "sha2",
             "sqlx",
         ])

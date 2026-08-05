@@ -484,6 +484,8 @@ impl AuthoredAtomicCommand {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredAtomicOutcome {
     Prepared {
@@ -522,6 +524,25 @@ impl AuthoredAtomicReceipt {
             outcome,
         })
     }
+
+    pub fn from_durable_parts(
+        commit_id: AtomicCommitId,
+        digest: AtomicCommitDigest,
+        disposition: AtomicCommitDisposition,
+        committed_at_unix_ms: u64,
+        outcome: AuthoredAtomicOutcome,
+    ) -> Result<Self, Error> {
+        if committed_at_unix_ms == 0 || !outcome.is_valid() {
+            return Err(Error::AtomicWorkflowMismatch);
+        }
+        Ok(Self {
+            commit_id,
+            digest,
+            disposition,
+            committed_at_unix_ms,
+            outcome,
+        })
+    }
     pub const fn commit_id(&self) -> AtomicCommitId {
         self.commit_id
     }
@@ -536,6 +557,34 @@ impl AuthoredAtomicReceipt {
     }
     pub const fn outcome(&self) -> &AuthoredAtomicOutcome {
         &self.outcome
+    }
+}
+
+impl AuthoredAtomicOutcome {
+    fn is_valid(&self) -> bool {
+        match self {
+            Self::Prepared {
+                operation,
+                artifacts,
+                delivery_plans,
+            } => {
+                operation.artifact_ids().len() == artifacts.len()
+                    && artifacts.iter().enumerate().all(|(ordinal, artifact)| {
+                        artifact.operation_id() == operation.operation_id()
+                            && operation.artifact_ids().get(ordinal)
+                                == Some(&artifact.artifact_id())
+                            && artifact.validate().is_ok()
+                    })
+                    && delivery_plans.iter().all(|plan| {
+                        artifacts
+                            .iter()
+                            .any(|artifact| artifact.artifact_id() == plan.artifact_id())
+                            && plan.validate().is_ok()
+                    })
+            }
+            Self::Artifact(artifact) => artifact.validate().is_ok(),
+            Self::DeliveryPlan(plan) => plan.validate().is_ok(),
+        }
     }
 }
 

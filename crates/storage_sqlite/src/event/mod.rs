@@ -128,7 +128,8 @@ impl SqliteStorage {
             .map_or(0, |cursor| cursor.sequence().get());
         let fetch_limit = u64::from(query.bounds().limit()) + 1;
         let mut builder = QueryBuilder::<Sqlite>::new(
-            "SELECT source_generation, source_sequence, signed_event, admission_stage \
+            "SELECT source_generation, source_sequence, signed_event, admission_stage, \
+                    admitted_contract_id, admitted_registry_version \
              FROM radroots_runtime_events WHERE source_sequence > ",
         );
         builder.push_bind(i64_from_u64(after)?);
@@ -185,8 +186,26 @@ impl SqliteStorage {
         let sequence = event_sequence(row.try_get("source_sequence").map_err(map_corrupt)?)?;
         let raw_json = String::from_utf8(row.try_get("signed_event").map_err(map_corrupt)?)
             .map_err(|_| Error::CorruptStoredEvent)?;
-        Codec::decode_signed_event(raw_json.as_str()).map_err(|_| Error::CorruptStoredEvent)?;
+        let event =
+            Codec::decode_signed_event(raw_json.as_str()).map_err(|_| Error::CorruptStoredEvent)?;
         let stage = admission_stage(row.try_get("admission_stage").map_err(map_corrupt)?)?;
+        let contract_id = row
+            .try_get::<Option<String>, _>("admitted_contract_id")
+            .map_err(map_corrupt)?;
+        let registry_version = row
+            .try_get::<Option<i64>, _>("admitted_registry_version")
+            .map_err(map_corrupt)?
+            .map(|value| u32::try_from(value).map_err(|_| Error::CorruptStoredEvent))
+            .transpose()?;
+        if contract_id.is_some() != registry_version.is_some()
+            || contract_id.as_deref().is_some_and(|stored| {
+                contract_metadata(&event).is_none_or(|(contract, version)| {
+                    stored != contract || Some(version) != registry_version
+                })
+            })
+        {
+            return Err(Error::CorruptStoredEvent);
+        }
         Ok(StoredEventRow {
             position: EventPosition::new(generation, sequence),
             raw_json,
@@ -222,7 +241,8 @@ impl SqliteStorage {
         admission: EventAdmission,
     ) -> Result<AdmissionReceipt, Error> {
         let existing = sqlx::query(
-            "SELECT source_generation, source_sequence, signed_event, admission_stage
+            "SELECT source_generation, source_sequence, signed_event, admission_stage,
+                    admitted_contract_id, admitted_registry_version
              FROM radroots_runtime_events WHERE event_id = ?",
         )
         .bind(admission.event_id().as_bytes().as_slice())
@@ -232,6 +252,7 @@ impl SqliteStorage {
 
         let (position, disposition) = if let Some(row) = existing {
             let stored = self.decode_event_row(&row)?;
+            let metadata = contract_metadata(admission.event());
             if stored.raw_json.as_bytes() != admission.event().raw_json().as_bytes() {
                 return Err(Error::EventConflict);
             }
@@ -243,11 +264,15 @@ impl SqliteStorage {
             } else {
                 sqlx::query(
                     "UPDATE radroots_runtime_events
-                     SET admission_stage = ?, updated_at_unix_ms = MAX(updated_at_unix_ms, ?)
+                     SET admission_stage = ?, updated_at_unix_ms = MAX(updated_at_unix_ms, ?),
+                         admitted_contract_id = COALESCE(admitted_contract_id, ?),
+                         admitted_registry_version = COALESCE(admitted_registry_version, ?)
                      WHERE event_id = ?",
                 )
                 .bind(stage_name(admission.stage()))
                 .bind(i64_from_u64(admission.provenance().observed_at_unix_ms())?)
+                .bind(metadata.map(|value| value.0))
+                .bind(metadata.map(|value| i64::from(value.1)))
                 .bind(admission.event_id().as_bytes().as_slice())
                 .execute(&mut **transaction)
                 .await
@@ -256,6 +281,7 @@ impl SqliteStorage {
             };
             (stored.position, disposition)
         } else {
+            let metadata = contract_metadata(admission.event());
             let next = sqlx::query_scalar::<_, i64>(
                 "UPDATE radroots_runtime_source_generations
                  SET sequence_head = sequence_head + 1
@@ -272,8 +298,9 @@ impl SqliteStorage {
             sqlx::query(
                 "INSERT INTO radroots_runtime_events (
                    source_generation, source_sequence, event_id, admission_stage,
-                   signed_event, admitted_at_unix_ms, updated_at_unix_ms
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   signed_event, admitted_at_unix_ms, updated_at_unix_ms,
+                   admitted_contract_id, admitted_registry_version
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(self.generation.as_bytes().as_slice())
             .bind(next)
@@ -282,6 +309,8 @@ impl SqliteStorage {
             .bind(admission.event().raw_json().as_bytes())
             .bind(observed_at)
             .bind(observed_at)
+            .bind(metadata.map(|value| value.0))
+            .bind(metadata.map(|value| i64::from(value.1)))
             .execute(&mut **transaction)
             .await
             .map_err(map_backend)?;
@@ -298,6 +327,17 @@ impl SqliteStorage {
             disposition,
         ))
     }
+}
+
+fn contract_metadata(event: &radroots_event::SignedEvent) -> Option<(&'static str, u32)> {
+    radroots_event::contract::registry_v7::validate_event_contract_registry_v7(event.envelope())
+        .ok()
+        .map(|contract| {
+            (
+                contract.id,
+                radroots_event::contract::RegistryVersion::CURRENT.get(),
+            )
+        })
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -686,6 +726,19 @@ mod tests {
             .expect("advance visible");
         assert_eq!(advanced.disposition(), AdmissionDisposition::Advanced);
         assert_eq!(advanced.position(), inserted.position());
+        let metadata = sqlx::query(
+            "SELECT admitted_contract_id, admitted_registry_version
+             FROM radroots_runtime_events WHERE event_id = ?",
+        )
+        .bind(event.id().as_bytes().as_slice())
+        .fetch_one(&store.pool)
+        .await
+        .expect("event contract metadata");
+        assert_eq!(
+            metadata.get::<String, _>("admitted_contract_id"),
+            "radroots.profile.metadata.v1"
+        );
+        assert_eq!(metadata.get::<i64, _>("admitted_registry_version"), 7);
 
         let duplicate = store
             .admit(
@@ -826,7 +879,10 @@ mod tests {
     async fn corrupt_rows_fail_closed_and_source_history_is_immutable() {
         let generation = SourceGeneration::new([10; 32]).expect("generation");
         let store = store(generation).await;
-        let event = signed_event("corruption", false);
+        let event = signed_event(
+            "{\"display_name\":\"Corruption Probe\",\"bot\":false}",
+            false,
+        );
         store
             .admit(EventAdmission::raw(observed(event, 30, None)))
             .await
@@ -843,6 +899,23 @@ mod tests {
                 .execute(&store.pool)
                 .await
                 .is_err()
+        );
+        sqlx::query("DROP TRIGGER radroots_runtime_events_contract_metadata_guard")
+            .execute(&store.pool)
+            .await
+            .expect("drop metadata guard for corruption probe");
+        sqlx::query(
+            "UPDATE radroots_runtime_events
+             SET admitted_contract_id = 'radroots.social.geochat.v1'",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("forge contract metadata");
+        assert_eq!(
+            store
+                .query_raw(EventQuery::all(EventQueryBounds::first(1).expect("bounds"),))
+                .await,
+            Err(Error::CorruptStoredEvent)
         );
         sqlx::query("PRAGMA ignore_check_constraints = ON")
             .execute(&store.pool)

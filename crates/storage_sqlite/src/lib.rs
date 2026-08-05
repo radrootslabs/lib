@@ -12,6 +12,7 @@ pub mod open;
 pub mod status;
 
 mod atomic;
+mod authored;
 mod event;
 mod journal;
 mod outbox;

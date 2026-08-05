@@ -685,6 +685,12 @@ impl AuthoredDeliveryPlan {
     pub const fn last_failure(&self) -> Option<&WorkFailure> {
         self.last_failure.as_ref()
     }
+    pub const fn created_at_unix_ms(&self) -> u64 {
+        self.created_at_unix_ms
+    }
+    pub const fn updated_at_unix_ms(&self) -> u64 {
+        self.updated_at_unix_ms
+    }
     pub const fn revision(&self) -> NonZeroU64 {
         self.revision
     }
