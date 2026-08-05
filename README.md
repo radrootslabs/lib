@@ -118,3 +118,14 @@ Run proof generation in release mode. CUDA proving is supported on compatible Li
 ## Status
 
 Radroots is under active development. The API is not yet stable and will change quite often.
+
+## License
+
+This repository is licensed under either:
+
+- [Apache License 2.0](LICENSE-APACHE), or
+- [MIT License](LICENSE-MIT),
+
+at your option. 
+
+Vendored or third-party material retains its own notices and license.
