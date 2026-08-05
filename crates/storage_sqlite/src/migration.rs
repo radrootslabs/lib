@@ -540,6 +540,25 @@ mod tests {
             .expect("runtime user version");
     }
 
+    async fn establish_private_version(connection: &mut SqliteConnection, version: u32) {
+        for migration_version in 1..=version {
+            sqlx::raw_sql(
+                private::migration_sql(migration_version).expect("registered private SQL"),
+            )
+            .execute(&mut *connection)
+            .await
+            .expect("private migration");
+        }
+        sqlx::raw_sql(SET_PRIVATE_APPLICATION_ID)
+            .execute(&mut *connection)
+            .await
+            .expect("private application id");
+        sqlx::raw_sql(set_user_version_sql(version).expect("version pragma"))
+            .execute(&mut *connection)
+            .await
+            .expect("private user version");
+    }
+
     #[tokio::test]
     async fn fresh_runtime_and_private_schemas_migrate_to_exact_current_versions() {
         let mut runtime_connection = connection().await;
@@ -657,6 +676,20 @@ mod tests {
             assert_eq!(report.initial_version(), initial_version);
             assert_eq!(report.final_version(), runtime::CURRENT_VERSION);
             assert_eq!(report.applied(), runtime::CURRENT_VERSION - initial_version);
+        }
+    }
+
+    #[tokio::test]
+    async fn every_recognized_private_version_applies_exactly_the_pending_suffix() {
+        for initial_version in 1..=private::CURRENT_VERSION {
+            let mut connection = connection().await;
+            establish_private_version(&mut connection, initial_version).await;
+            let report = migrate_private(&mut connection, OpenMode::ReadWriteExisting)
+                .await
+                .expect("recognized private forward migration");
+            assert_eq!(report.initial_version(), initial_version);
+            assert_eq!(report.final_version(), private::CURRENT_VERSION);
+            assert_eq!(report.applied(), private::CURRENT_VERSION - initial_version);
         }
     }
 

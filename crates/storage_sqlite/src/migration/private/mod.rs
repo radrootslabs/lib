@@ -6,11 +6,12 @@
 /// Lowest private schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current private schema version created by this package.
-pub const CURRENT_VERSION: u32 = 3;
+pub const CURRENT_VERSION: u32 = 4;
 
 const PRIVATE_V1_SQL: &str = include_str!("0001_private.up.sql");
 const LEGACY_PRIVATE_STAGING_V2_SQL: &str = include_str!("0002_legacy_private_staging.up.sql");
 const LEGACY_IMPORT_COMMITS_V3_SQL: &str = include_str!("0003_legacy_import_commits.up.sql");
+const CONTEXT_BOUND_ENVELOPES_V4_SQL: &str = include_str!("0004_context_bound_envelopes.up.sql");
 
 /// Stable, non-SQL description of one forward private migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,6 +83,30 @@ const PRIVATE_V3_OBJECTS: &[&str] = &[
     "radroots_private_legacy_import_staging_update_guard",
 ];
 
+const PRIVATE_V4_OBJECTS: &[&str] = &[
+    "radroots_private_artifacts",
+    "radroots_private_artifacts_delete_guard",
+    "radroots_private_artifacts_envelope_guard",
+    "radroots_private_artifacts_expiry_idx",
+    "radroots_private_artifacts_identity_guard",
+    "radroots_private_artifacts_insert_envelope_guard",
+    "radroots_private_artifacts_key_version_idx",
+    "radroots_private_artifacts_kind_idx",
+    "radroots_private_artifacts_reseal_audit",
+    "radroots_private_envelope_reseals",
+    "radroots_private_envelope_reseals_artifact_idx",
+    "radroots_private_envelope_reseals_delete_guard",
+    "radroots_private_envelope_reseals_update_guard",
+    "radroots_private_legacy_import_commit_delete_guard",
+    "radroots_private_legacy_import_commit_update_guard",
+    "radroots_private_legacy_import_commits",
+    "radroots_private_legacy_import_staging",
+    "radroots_private_legacy_import_staging_delete_guard",
+    "radroots_private_legacy_import_staging_insert_guard",
+    "radroots_private_legacy_import_staging_parent_idx",
+    "radroots_private_legacy_import_staging_update_guard",
+];
+
 /// Ordered, immutable private migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -102,6 +127,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "9377f0af8f070d977a5237e2a1294e6977f5b704e7a8434d97a3dc5f4ae75e86",
         owned_objects: PRIVATE_V3_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 4,
+        name: "context_bound_envelopes",
+        up_sha256: "dd6bb42471db47fcd9c62f8d59b66ddba381776d879cfbffd94993f7ef7409de",
+        owned_objects: PRIVATE_V4_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
@@ -109,6 +140,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         1 => Some(PRIVATE_V1_SQL),
         2 => Some(LEGACY_PRIVATE_STAGING_V2_SQL),
         3 => Some(LEGACY_IMPORT_COMMITS_V3_SQL),
+        4 => Some(CONTEXT_BOUND_ENVELOPES_V4_SQL),
         _ => None,
     }
 }
@@ -152,7 +184,7 @@ mod tests {
     #[test]
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
-        let migration = MIGRATIONS[2];
+        let migration = MIGRATIONS[3];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "private.sqlite");
         assert_eq!(snapshot.application_id, 1_380_208_722);
@@ -163,7 +195,7 @@ mod tests {
         assert!(snapshot.forward_only);
         assert!(!snapshot.raw_sql_public);
         assert!(snapshot.encrypted_envelopes);
-        assert_eq!(snapshot.authorities.len(), 6);
+        assert_eq!(snapshot.authorities.len(), 7);
         assert_eq!(snapshot.forbidden_tables, ["studio", "ui_state"]);
         assert_eq!(snapshot.migrations.len(), MIGRATIONS.len());
         for (expected, actual) in snapshot.migrations.iter().zip(MIGRATIONS) {
@@ -180,7 +212,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(4), None);
+        assert_eq!(migration_sql(5), None);
     }
 
     #[tokio::test]
@@ -206,7 +238,7 @@ mod tests {
             .iter()
             .map(|row| row.get::<String, _>("name"))
             .collect::<Vec<_>>();
-        assert_eq!(actual, MIGRATIONS[2].owned_objects());
+        assert_eq!(actual, MIGRATIONS[3].owned_objects());
         let forbidden = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_schema
              WHERE lower(name) LIKE '%studio%' OR lower(name) LIKE '%ui_state%'",
@@ -226,5 +258,57 @@ mod tests {
             .await
             .expect("inspect integrity");
         assert_eq!(integrity, "ok");
+    }
+
+    #[tokio::test]
+    async fn v4_preflight_rejects_unfingerprinted_v2_without_partial_schema() {
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("open memory SQLite");
+        for migration in &MIGRATIONS[..3] {
+            sqlx::raw_sql(migration_sql(migration.version()).expect("registered SQL"))
+                .execute(&mut connection)
+                .await
+                .expect("apply private schema");
+        }
+        sqlx::query(
+            "INSERT INTO radroots_private_artifacts (
+               artifact_id, artifact_kind, schema_id, commitment, protected_size_bytes,
+               secret_provider, secret_reference, key_version, envelope_version,
+               encrypted_envelope, revision, stage, created_at_unix_ms, updated_at_unix_ms
+             ) VALUES (?, 'trade.private_terms', 'trade.private_terms.v1', ?, 1,
+               'memory', 'key', 1, 2, ?, 1, 'active', 1, 1)",
+        )
+        .bind([1_u8; 16].as_slice())
+        .bind([2_u8; 32].as_slice())
+        .bind([3_u8].as_slice())
+        .execute(&mut connection)
+        .await
+        .expect("unfingerprinted v2 fixture");
+
+        let mut transaction = connection.begin().await.expect("migration transaction");
+        assert!(
+            sqlx::raw_sql(migration_sql(4).expect("v4 SQL"))
+                .execute(&mut *transaction)
+                .await
+                .is_err()
+        );
+        transaction.rollback().await.expect("rollback preflight");
+        let context_column = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM pragma_table_info('radroots_private_artifacts')
+             WHERE name = 'context_fingerprint'",
+        )
+        .fetch_one(&mut connection)
+        .await
+        .expect("inspect columns");
+        let preflight_table = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM sqlite_schema
+             WHERE name = 'radroots_private_envelope_v2_preflight'",
+        )
+        .fetch_one(&mut connection)
+        .await
+        .expect("inspect catalog");
+        assert_eq!(context_column, 0);
+        assert_eq!(preflight_table, 0);
     }
 }

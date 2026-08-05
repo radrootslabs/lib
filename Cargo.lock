@@ -2804,6 +2804,7 @@ name = "radroots_storage_sqlite"
 version = "0.1.0-alpha"
 dependencies = [
  "fs2",
+ "hex",
  "radroots_event",
  "radroots_event_codec",
  "radroots_secrets",

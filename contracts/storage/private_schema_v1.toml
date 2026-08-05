@@ -2,9 +2,9 @@ schema_version = 1
 database = "private.sqlite"
 application_id = 1380208722 # ASCII "RDPR"
 minimum_version = 1
-current_version = 3
-migration_name = "legacy_import_commits"
-migration_sha256 = "9377f0af8f070d977a5237e2a1294e6977f5b704e7a8434d97a3dc5f4ae75e86"
+current_version = 4
+migration_name = "context_bound_envelopes"
+migration_sha256 = "dd6bb42471db47fcd9c62f8d59b66ddba381776d879cfbffd94993f7ef7409de"
 forward_only = true
 raw_sql_public = false
 encrypted_envelopes = true
@@ -16,6 +16,7 @@ authorities = [
   "permitted_nip46_sessions",
   "legacy_private_import_staging",
   "legacy_import_commits",
+  "context_bound_envelopes",
 ]
 
 forbidden_tables = [
@@ -68,6 +69,34 @@ owned_objects = [
     "radroots_private_artifacts_identity_guard",
     "radroots_private_artifacts_key_version_idx",
     "radroots_private_artifacts_kind_idx",
+    "radroots_private_legacy_import_commit_delete_guard",
+    "radroots_private_legacy_import_commit_update_guard",
+    "radroots_private_legacy_import_commits",
+    "radroots_private_legacy_import_staging",
+    "radroots_private_legacy_import_staging_delete_guard",
+    "radroots_private_legacy_import_staging_insert_guard",
+    "radroots_private_legacy_import_staging_parent_idx",
+    "radroots_private_legacy_import_staging_update_guard",
+]
+
+[[migrations]]
+version = 4
+name = "context_bound_envelopes"
+sha256 = "dd6bb42471db47fcd9c62f8d59b66ddba381776d879cfbffd94993f7ef7409de"
+owned_objects = [
+    "radroots_private_artifacts",
+    "radroots_private_artifacts_delete_guard",
+    "radroots_private_artifacts_envelope_guard",
+    "radroots_private_artifacts_expiry_idx",
+    "radroots_private_artifacts_identity_guard",
+    "radroots_private_artifacts_insert_envelope_guard",
+    "radroots_private_artifacts_key_version_idx",
+    "radroots_private_artifacts_kind_idx",
+    "radroots_private_artifacts_reseal_audit",
+    "radroots_private_envelope_reseals",
+    "radroots_private_envelope_reseals_artifact_idx",
+    "radroots_private_envelope_reseals_delete_guard",
+    "radroots_private_envelope_reseals_update_guard",
     "radroots_private_legacy_import_commit_delete_guard",
     "radroots_private_legacy_import_commit_update_guard",
     "radroots_private_legacy_import_commits",

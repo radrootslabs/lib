@@ -1,13 +1,17 @@
 use crate::SqliteStorage;
-use radroots_secrets::EncryptedEnvelope;
+use radroots_secrets::{
+    EncryptedEnvelope,
+    context::{EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId},
+};
 use radroots_storage::{
     Error,
     event::BoxFuture,
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DeletionReason, DurableSecretReference,
-        EXPIRED_ARTIFACT_QUERY_LIMIT_MAX, PrivateArtifactId, PrivateArtifactMetadata,
-        PrivateArtifactRevision, PrivateArtifactStage, PrivateArtifactStatus, PrivateArtifactStore,
-        RetentionPolicy,
+        EXPIRED_ARTIFACT_QUERY_LIMIT_MAX, PrivateArtifactEnvelopeMigrationStatus,
+        PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactResealReceipt,
+        PrivateArtifactResealRequest, PrivateArtifactRevision, PrivateArtifactStage,
+        PrivateArtifactStatus, PrivateArtifactStore, RetentionPolicy,
     },
 };
 use sha2::{Digest, Sha256};
@@ -45,6 +49,59 @@ impl PrivateArtifactStore for SqliteStorage {
                 .as_ref()
                 .map(decode_metadata)
                 .transpose()
+        })
+    }
+
+    fn reseal_metadata(
+        &self,
+        request: PrivateArtifactResealRequest,
+    ) -> BoxFuture<'_, Result<PrivateArtifactResealReceipt, Error>> {
+        Box::pin(async move {
+            self.require_private_writer()?;
+            let mut transaction = self
+                .private_pool()
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .map_err(map_backend)?;
+            if let Some(receipt) = load_reseal_receipt(&mut transaction, &request).await? {
+                transaction.commit().await.map_err(map_backend)?;
+                return receipt.replay(&request);
+            }
+            let current = load_metadata(&mut transaction, request.artifact_id())
+                .await?
+                .ok_or(Error::PrivateArtifactNotFound)?;
+            let next = current.resealed(&request)?;
+            let result = sqlx::query(
+                "UPDATE radroots_private_artifacts SET
+                   commitment = ?, protected_size_bytes = ?, secret_provider = ?,
+                   secret_reference = ?, key_version = ?, revision = ?,
+                   updated_at_unix_ms = ?, last_reseal_id = ?, last_reseal_fingerprint = ?
+                 WHERE artifact_id = ? AND revision = ? AND commitment = ?
+                   AND encrypted_envelope IS NULL AND envelope_version IS NULL",
+            )
+            .bind(next.commitment().as_bytes().as_slice())
+            .bind(i64_from_u64(next.protected_size_bytes())?)
+            .bind(next.secret_reference().provider())
+            .bind(next.secret_reference().opaque_reference())
+            .bind(i64::from(next.secret_reference().key_version()))
+            .bind(i64_from_u64(next.revision().get())?)
+            .bind(i64_from_u64(next.updated_at_unix_ms())?)
+            .bind(request.reseal_id().as_bytes().as_slice())
+            .bind(request.fingerprint().as_slice())
+            .bind(request.artifact_id().as_bytes().as_slice())
+            .bind(i64_from_u64(request.expected_revision().get())?)
+            .bind(request.expected_commitment().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_reseal)?;
+            if result.rows_affected() != 1 {
+                return Err(Error::PrivateArtifactResealConflict);
+            }
+            let receipt = load_reseal_receipt(&mut transaction, &request)
+                .await?
+                .ok_or(Error::PrivateArtifactPersistenceIndeterminate)?;
+            transaction.commit().await.map_err(map_indeterminate)?;
+            Ok(receipt)
         })
     }
 
@@ -150,7 +207,8 @@ impl SqliteStorage {
         envelope: &EncryptedEnvelope,
     ) -> Result<PrivateArtifactMetadata, Error> {
         self.require_private_writer()?;
-        let encoded = validate_envelope(&metadata, envelope)?;
+        let encoded = validate_new_envelope(&metadata, envelope)?;
+        let context_fingerprint = metadata.envelope_context().fingerprint();
         let mut transaction = self
             .private_pool()
             .begin_with("BEGIN IMMEDIATE")
@@ -159,7 +217,11 @@ impl SqliteStorage {
         let stored = put_metadata_transaction(
             &mut transaction,
             metadata,
-            Some((envelope.version(), encoded.as_slice())),
+            Some((
+                envelope.version(),
+                encoded.as_slice(),
+                context_fingerprint.as_slice(),
+            )),
         )
         .await?;
         transaction.commit().await.map_err(map_backend)?;
@@ -196,12 +258,102 @@ impl SqliteStorage {
                 if u64_from_i64(version)? != u64::from(envelope.version()) {
                     return Err(Error::CorruptPrivateArtifactMetadata);
                 }
-                validate_envelope(&metadata, &envelope)
+                validate_stored_envelope(&metadata, &envelope, &row)
                     .map_err(|_| Error::CorruptPrivateArtifactMetadata)?;
                 Ok(Some(envelope))
             }
             _ => Err(Error::CorruptPrivateArtifactMetadata),
         }
+    }
+
+    /// Returns an identity-free inventory of private-envelope migration state.
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    pub async fn private_artifact_envelope_migration_status(
+        &self,
+    ) -> Result<PrivateArtifactEnvelopeMigrationStatus, Error> {
+        let row = sqlx::query(
+            "SELECT
+               COALESCE(SUM(CASE WHEN envelope_version = 1
+                 AND context_fingerprint IS NULL THEN 1 ELSE 0 END), 0) AS v1_pending,
+               COALESCE(SUM(CASE WHEN envelope_version = 2
+                 AND context_fingerprint IS NOT NULL THEN 1 ELSE 0 END), 0) AS v2_current,
+               COALESCE(SUM(CASE WHEN envelope_version IS NOT NULL AND (
+                 envelope_version NOT IN (1, 2)
+                 OR (envelope_version = 1 AND context_fingerprint IS NOT NULL)
+                 OR (envelope_version = 2 AND context_fingerprint IS NULL)
+               ) THEN 1 ELSE 0 END), 0) AS corrupt
+             FROM radroots_private_artifacts",
+        )
+        .fetch_one(self.private_pool())
+        .await
+        .map_err(map_backend)?;
+        Ok(PrivateArtifactEnvelopeMigrationStatus {
+            v1_pending: count(&row, "v1_pending")?,
+            v2_current: count(&row, "v2_current")?,
+            corrupt: count(&row, "corrupt")?,
+            blocked_provider: 0,
+            conflicted: 0,
+        })
+    }
+
+    /// Atomically replaces one authenticated v1 envelope with an independently
+    /// produced context-bound v2 envelope.
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    pub async fn commit_private_artifact_reseal(
+        &self,
+        request: PrivateArtifactResealRequest,
+        envelope: &EncryptedEnvelope,
+    ) -> Result<PrivateArtifactResealReceipt, Error> {
+        self.require_private_writer()?;
+        let mut transaction = self
+            .private_pool()
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(map_backend)?;
+        if let Some(receipt) = load_reseal_receipt(&mut transaction, &request).await? {
+            transaction.commit().await.map_err(map_backend)?;
+            return receipt.replay(&request);
+        }
+        let current = load_metadata(&mut transaction, request.artifact_id())
+            .await?
+            .ok_or(Error::PrivateArtifactNotFound)?;
+        let next = current.resealed(&request)?;
+        let encoded = validate_new_envelope(&next, envelope)?;
+        let context_fingerprint = next.envelope_context().fingerprint();
+        let result = sqlx::query(
+            "UPDATE radroots_private_artifacts SET
+               commitment = ?, protected_size_bytes = ?, secret_provider = ?,
+               secret_reference = ?, key_version = ?, envelope_version = 2,
+               encrypted_envelope = ?, context_fingerprint = ?, revision = ?,
+               updated_at_unix_ms = ?, last_reseal_id = ?, last_reseal_fingerprint = ?
+             WHERE artifact_id = ? AND revision = ? AND commitment = ?
+               AND envelope_version = 1 AND context_fingerprint IS NULL",
+        )
+        .bind(next.commitment().as_bytes().as_slice())
+        .bind(i64_from_u64(next.protected_size_bytes())?)
+        .bind(next.secret_reference().provider())
+        .bind(next.secret_reference().opaque_reference())
+        .bind(i64::from(next.secret_reference().key_version()))
+        .bind(encoded.as_slice())
+        .bind(context_fingerprint.as_slice())
+        .bind(i64_from_u64(next.revision().get())?)
+        .bind(i64_from_u64(next.updated_at_unix_ms())?)
+        .bind(request.reseal_id().as_bytes().as_slice())
+        .bind(request.fingerprint().as_slice())
+        .bind(request.artifact_id().as_bytes().as_slice())
+        .bind(i64_from_u64(request.expected_revision().get())?)
+        .bind(request.expected_commitment().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_reseal)?;
+        if result.rows_affected() != 1 {
+            return Err(Error::PrivateArtifactResealConflict);
+        }
+        let receipt = load_reseal_receipt(&mut transaction, &request)
+            .await?
+            .ok_or(Error::PrivateArtifactPersistenceIndeterminate)?;
+        transaction.commit().await.map_err(map_indeterminate)?;
+        Ok(receipt)
     }
 
     fn require_private_writer(&self) -> Result<(), Error> {
@@ -216,7 +368,7 @@ impl SqliteStorage {
 async fn put_metadata_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     metadata: PrivateArtifactMetadata,
-    envelope: Option<(u16, &[u8])>,
+    envelope: Option<(u16, &[u8], &[u8])>,
 ) -> Result<PrivateArtifactMetadata, Error> {
     if metadata.stage() != PrivateArtifactStage::Active
         || metadata.revision() != PrivateArtifactRevision::INITIAL
@@ -237,14 +389,15 @@ async fn put_metadata_transaction(
             .try_get::<Option<Vec<u8>>, _>("encrypted_envelope")
             .map_err(map_corrupt)?;
         return match (stored_envelope, envelope) {
-            (None, Some((version, encoded))) => {
+            (None, Some((version, encoded, context_fingerprint))) => {
                 let result = sqlx::query(
                     "UPDATE radroots_private_artifacts
-                     SET envelope_version = ?, encrypted_envelope = ?
+                     SET envelope_version = ?, encrypted_envelope = ?, context_fingerprint = ?
                      WHERE artifact_id = ? AND encrypted_envelope IS NULL",
                 )
                 .bind(i64::from(version))
                 .bind(encoded)
+                .bind(context_fingerprint)
                 .bind(metadata.artifact_id().as_bytes().as_slice())
                 .execute(&mut **transaction)
                 .await
@@ -254,7 +407,7 @@ async fn put_metadata_transaction(
                 }
                 Ok(metadata)
             }
-            (Some(stored), Some((_, encoded))) if stored.as_slice() == encoded => Ok(metadata),
+            (Some(stored), Some((_, encoded, _))) if stored.as_slice() == encoded => Ok(metadata),
             (Some(_), Some(_)) => Err(Error::PrivateArtifactConflict),
             (_, None) => Ok(metadata),
         };
@@ -267,17 +420,17 @@ async fn put_metadata_transaction(
 async fn insert_metadata(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     metadata: &PrivateArtifactMetadata,
-    envelope: Option<(u16, &[u8])>,
+    envelope: Option<(u16, &[u8], &[u8])>,
 ) -> Result<(), Error> {
     let tombstone = metadata.tombstone_record();
     sqlx::query(
         "INSERT INTO radroots_private_artifacts (
            artifact_id, artifact_kind, schema_id, commitment, protected_size_bytes,
            secret_provider, secret_reference, key_version, envelope_version,
-           encrypted_envelope, delete_not_before_unix_ms, expires_at_unix_ms,
+           encrypted_envelope, context_fingerprint, delete_not_before_unix_ms, expires_at_unix_ms,
            revision, stage, created_at_unix_ms, updated_at_unix_ms,
            deleted_at_unix_ms, deletion_reason, tombstone_commitment
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(metadata.artifact_id().as_bytes().as_slice())
     .bind(metadata.kind().as_str())
@@ -287,8 +440,9 @@ async fn insert_metadata(
     .bind(metadata.secret_reference().provider())
     .bind(metadata.secret_reference().opaque_reference())
     .bind(i64::from(metadata.secret_reference().key_version()))
-    .bind(envelope.map(|(version, _)| i64::from(version)))
-    .bind(envelope.map(|(_, encoded)| encoded))
+    .bind(envelope.map(|(version, _, _)| i64::from(version)))
+    .bind(envelope.map(|(_, encoded, _)| encoded))
+    .bind(envelope.map(|(_, _, context_fingerprint)| context_fingerprint))
     .bind(
         metadata
             .retention()
@@ -453,11 +607,14 @@ fn decode_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<PrivateArtifactMetad
     .map_err(|_| Error::CorruptPrivateArtifactMetadata)
 }
 
-fn validate_envelope(
+fn validate_new_envelope(
     metadata: &PrivateArtifactMetadata,
     envelope: &EncryptedEnvelope,
 ) -> Result<Vec<u8>, Error> {
-    if metadata.stage() != PrivateArtifactStage::Active
+    let expected_context = secrets_context(metadata)?;
+    if envelope.version() != 2
+        || envelope.context() != Some(&expected_context)
+        || metadata.stage() != PrivateArtifactStage::Active
         || metadata.secret_reference().opaque_reference() != envelope.reference().id().as_str()
         || metadata.secret_reference().key_version() != envelope.reference().key_version().get()
     {
@@ -473,6 +630,91 @@ fn validate_envelope(
         return Err(Error::InvalidPrivateArtifactMetadata);
     }
     Ok(encoded)
+}
+
+fn validate_stored_envelope(
+    metadata: &PrivateArtifactMetadata,
+    envelope: &EncryptedEnvelope,
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<(), Error> {
+    let encoded = envelope
+        .encode()
+        .map_err(|_| Error::CorruptPrivateArtifactMetadata)?;
+    if metadata.secret_reference().opaque_reference() != envelope.reference().id().as_str()
+        || metadata.secret_reference().key_version() != envelope.reference().key_version().get()
+        || metadata.protected_size_bytes()
+            != u64::try_from(encoded.len()).map_err(|_| Error::CorruptPrivateArtifactMetadata)?
+        || metadata.commitment().as_bytes() != Sha256::digest(encoded.as_slice()).as_slice()
+    {
+        return Err(Error::CorruptPrivateArtifactMetadata);
+    }
+    let stored_fingerprint = row
+        .try_get::<Option<Vec<u8>>, _>("context_fingerprint")
+        .map_err(map_corrupt)?;
+    match envelope.version() {
+        1 if envelope.context().is_none() && stored_fingerprint.is_none() => Ok(()),
+        2 => {
+            let expected = secrets_context(metadata)?;
+            let expected_fingerprint = metadata.envelope_context().fingerprint();
+            if envelope.context() == Some(&expected)
+                && stored_fingerprint.as_deref() == Some(expected_fingerprint.as_slice())
+            {
+                Ok(())
+            } else {
+                Err(Error::CorruptPrivateArtifactMetadata)
+            }
+        }
+        _ => Err(Error::CorruptPrivateArtifactMetadata),
+    }
+}
+
+fn secrets_context(metadata: &PrivateArtifactMetadata) -> Result<EnvelopeContext, Error> {
+    let derived = metadata.envelope_context();
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse(derived.purpose())
+            .map_err(|_| Error::CorruptPrivateArtifactMetadata)?,
+        EnvelopeSubject::parse(derived.subject_type(), derived.subject())
+            .map_err(|_| Error::CorruptPrivateArtifactMetadata)?,
+        PayloadSchemaId::parse(derived.payload_schema())
+            .map_err(|_| Error::CorruptPrivateArtifactMetadata)?,
+    ))
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn load_reseal_receipt(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    request: &PrivateArtifactResealRequest,
+) -> Result<Option<PrivateArtifactResealReceipt>, Error> {
+    let Some(row) = sqlx::query(
+        "SELECT artifact_id, request_fingerprint, committed_revision
+         FROM radroots_private_envelope_reseals WHERE reseal_id = ?",
+    )
+    .bind(request.reseal_id().as_bytes().as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_backend)?
+    else {
+        return Ok(None);
+    };
+    let artifact_id = row
+        .try_get::<Vec<u8>, _>("artifact_id")
+        .map_err(map_corrupt)?;
+    let fingerprint = row
+        .try_get::<Vec<u8>, _>("request_fingerprint")
+        .map_err(map_corrupt)?;
+    if artifact_id.as_slice() != request.artifact_id().as_bytes()
+        || fingerprint.as_slice() != request.fingerprint()
+    {
+        return Err(Error::PrivateArtifactResealConflict);
+    }
+    let revision = PrivateArtifactRevision::new(u64_from_i64(
+        row.try_get::<i64, _>("committed_revision")
+            .map_err(map_corrupt)?,
+    )?)
+    .map_err(|_| Error::CorruptPrivateArtifactMetadata)?;
+    Ok(Some(PrivateArtifactResealReceipt::committed(
+        request, revision,
+    )))
 }
 
 fn optional_u64(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<Option<u64>, Error> {
@@ -542,6 +784,14 @@ fn map_backend(_: sqlx::Error) -> Error {
     Error::BackendUnavailable
 }
 
+fn map_reseal(_: sqlx::Error) -> Error {
+    Error::PrivateArtifactResealConflict
+}
+
+fn map_indeterminate(_: sqlx::Error) -> Error {
+    Error::PrivateArtifactPersistenceIndeterminate
+}
+
 fn map_corrupt(_: sqlx::Error) -> Error {
     Error::CorruptPrivateArtifactMetadata
 }
@@ -556,12 +806,16 @@ mod tests {
     };
     use radroots_secrets::{
         Error as SecretError, KeyWrapping, SecretId, SecretRef,
-        envelope::{Nonce, SealMaterial, SealRequest},
+        envelope::{LegacyV1ResealAuthority, Nonce, SealMaterial, SealRequest},
         error::Operation,
         id::{BackendKind, KeyVersion},
         wrapping::{
-            BoxFuture as SecretFuture, SecretMaterial, UnwrapRequest, WrapRequest, WrappedSecret,
+            BoxFuture as SecretFuture, LegacyV1UnwrapRequest, SecretMaterial, UnwrapRequest,
+            WrapRequest, WrappedSecret,
         },
+    };
+    use radroots_storage::private_artifact::{
+        PrivateArtifactResealDisposition, PrivateArtifactResealId,
     };
     use radroots_storage::status::EventStoreMode;
     use sqlx::sqlite::SqlitePoolOptions;
@@ -574,7 +828,10 @@ mod tests {
             request: WrapRequest<'a>,
         ) -> SecretFuture<'a, Result<WrappedSecret, SecretError>> {
             Box::pin(async move {
-                if request.reference().id().as_str() != "private-artifact-key" {
+                if !matches!(
+                    request.reference().id().as_str(),
+                    "private-artifact-key" | "envelope-key"
+                ) {
                     return Err(SecretError::BackendFailure {
                         backend: BackendKind::Memory,
                         operation: Operation::Wrap,
@@ -591,19 +848,43 @@ mod tests {
             request: UnwrapRequest<'a>,
         ) -> SecretFuture<'a, Result<SecretMaterial, SecretError>> {
             Box::pin(async move {
-                if request.reference().id().as_str() != "private-artifact-key" {
+                if !matches!(
+                    request.reference().id().as_str(),
+                    "private-artifact-key" | "envelope-key"
+                ) {
                     return Err(SecretError::BackendFailure {
                         backend: BackendKind::Memory,
                         operation: Operation::Unwrap,
                     });
                 }
-                let plaintext = request
-                    .wrapped()
-                    .as_bytes()
-                    .iter()
-                    .map(|byte| byte ^ 0xA5)
-                    .collect::<Vec<_>>();
+                let plaintext = if request.wrapped().as_bytes() == [0x4b; 32] {
+                    vec![0x11; 32]
+                } else {
+                    request
+                        .wrapped()
+                        .as_bytes()
+                        .iter()
+                        .map(|byte| byte ^ 0xA5)
+                        .collect::<Vec<_>>()
+                };
                 SecretMaterial::from_slice(plaintext.as_slice())
+            })
+        }
+
+        fn unwrap_legacy_v1<'a>(
+            &'a self,
+            request: LegacyV1UnwrapRequest<'a>,
+        ) -> SecretFuture<'a, Result<SecretMaterial, SecretError>> {
+            Box::pin(async move {
+                if request.reference().id().as_str() != "envelope-key"
+                    || request.wrapped().as_bytes() != [0x4b; 32]
+                {
+                    return Err(SecretError::BackendFailure {
+                        backend: BackendKind::Memory,
+                        operation: Operation::Unwrap,
+                    });
+                }
+                SecretMaterial::from_slice(&[0x11; 32])
             })
         }
     }
@@ -647,13 +928,31 @@ mod tests {
         )
     }
 
-    async fn sealed_envelope(plaintext: &[u8], version: u32) -> EncryptedEnvelope {
+    fn test_context(id: u8, kind: &str) -> EnvelopeContext {
+        let subject = [id; 16]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        EnvelopeContext::new(
+            EnvelopePurpose::parse(format!("radroots.private_artifact.{kind}")).expect("purpose"),
+            EnvelopeSubject::parse("private_artifact", subject).expect("subject"),
+            PayloadSchemaId::parse(format!("{kind}.v1")).expect("schema"),
+        )
+    }
+
+    async fn sealed_envelope(
+        plaintext: &[u8],
+        version: u32,
+        id: u8,
+        kind: &str,
+    ) -> EncryptedEnvelope {
         let plaintext = SecretMaterial::from_slice(plaintext).expect("plaintext");
         let data_key = SecretMaterial::from_slice(&[0x31; 32]).expect("data key");
         EncryptedEnvelope::seal(
             &VectorWrapping,
             SealRequest::new(
                 reference(version),
+                test_context(id, kind),
                 &plaintext,
                 SealMaterial::new(data_key, Nonce::new([0x42; 24])),
             ),
@@ -687,11 +986,79 @@ mod tests {
         .expect("metadata")
     }
 
+    async fn migrated_legacy_store() -> (SqliteStorage, PrivateArtifactMetadata, EncryptedEnvelope)
+    {
+        const V1_ENVELOPE_HEX: &str = "52525331000101010100000007000c656e76656c6f70652d6b6579222222222222222222222222222222222222222222222222000000204b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b00000028f106837e33d690e7c5287abdd815ce9257b7b5b176ea9596abf3b7fe745aec5a8c2487a553d4659d";
+        let runtime_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("runtime SQLite");
+        for migration in RUNTIME_MIGRATIONS {
+            sqlx::raw_sql(runtime_migration_sql(migration.version()).expect("runtime SQL"))
+                .execute(&runtime_pool)
+                .await
+                .expect("runtime migration");
+        }
+        let private_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("private SQLite");
+        for migration in &PRIVATE_MIGRATIONS[..3] {
+            sqlx::raw_sql(private_migration_sql(migration.version()).expect("private SQL"))
+                .execute(&private_pool)
+                .await
+                .expect("private migration");
+        }
+        let encoded = hex::decode(V1_ENVELOPE_HEX).expect("legacy vector");
+        let envelope = EncryptedEnvelope::decode(encoded.as_slice()).expect("legacy envelope");
+        let metadata = metadata(
+            1,
+            "trade.private_terms",
+            &envelope,
+            RetentionPolicy::indefinite(),
+        );
+        sqlx::query(
+            "INSERT INTO radroots_private_artifacts (
+               artifact_id, artifact_kind, schema_id, commitment, protected_size_bytes,
+               secret_provider, secret_reference, key_version, envelope_version,
+               encrypted_envelope, revision, stage, created_at_unix_ms, updated_at_unix_ms
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1, 'active', 100, 100)",
+        )
+        .bind(metadata.artifact_id().as_bytes().as_slice())
+        .bind(metadata.kind().as_str())
+        .bind(metadata.schema_id().as_str())
+        .bind(metadata.commitment().as_bytes().as_slice())
+        .bind(i64_from_u64(metadata.protected_size_bytes()).unwrap())
+        .bind(metadata.secret_reference().provider())
+        .bind(metadata.secret_reference().opaque_reference())
+        .bind(i64::from(metadata.secret_reference().key_version()))
+        .bind(encoded)
+        .execute(&private_pool)
+        .await
+        .expect("legacy row");
+        sqlx::raw_sql(private_migration_sql(4).expect("v4 SQL"))
+            .execute(&private_pool)
+            .await
+            .expect("v4 migration");
+        (
+            SqliteStorage::with_private_pool(
+                runtime_pool,
+                private_pool,
+                radroots_storage::event::SourceGeneration::new([91; 32]).expect("generation"),
+                EventStoreMode::ReadWrite,
+            ),
+            metadata,
+            envelope,
+        )
+    }
+
     #[tokio::test]
     async fn encrypted_envelopes_round_trip_with_exact_commitment_and_key_version() {
         let store = store(EventStoreMode::ReadWrite).await;
-        let envelope = sealed_envelope(b"private farm coordinates", 7).await;
-        let metadata = metadata(1, "farm_location", &envelope, RetentionPolicy::indefinite());
+        let envelope = sealed_envelope(b"private farm coordinates", 7, 1, "farm.location").await;
+        let metadata = metadata(1, "farm.location", &envelope, RetentionPolicy::indefinite());
         let stored = store
             .put_encrypted_private_artifact(metadata.clone(), &envelope)
             .await
@@ -710,7 +1077,10 @@ mod tests {
             loaded.encode().expect("loaded bytes"),
             envelope.encode().expect("expected bytes")
         );
-        let opened = loaded.open(&VectorWrapping).await.expect("open envelope");
+        let opened = loaded
+            .open(&VectorWrapping, &test_context(1, "farm.location"))
+            .await
+            .expect("open envelope");
         opened.expose_secret(|bytes| assert_eq!(bytes, b"private farm coordinates"));
 
         let row = sqlx::query(
@@ -722,7 +1092,7 @@ mod tests {
         .await
         .expect("private row");
         assert_eq!(row.get::<i64, _>("key_version"), 7);
-        assert_eq!(row.get::<i64, _>("envelope_version"), 1);
+        assert_eq!(row.get::<i64, _>("envelope_version"), 2);
         let encrypted = row.get::<Vec<u8>, _>("encrypted_envelope");
         assert!(
             !encrypted
@@ -730,7 +1100,8 @@ mod tests {
                 .any(|bytes| bytes == b"private farm coordinates")
         );
 
-        let wrong_key_envelope = sealed_envelope(b"private farm coordinates", 8).await;
+        let wrong_key_envelope =
+            sealed_envelope(b"private farm coordinates", 8, 1, "farm.location").await;
         assert_eq!(
             store
                 .put_encrypted_private_artifact(metadata, &wrong_key_envelope)
@@ -738,19 +1109,19 @@ mod tests {
             Err(Error::InvalidPrivateArtifactMetadata)
         );
 
-        let envelope = sealed_envelope(b"validation matrix", 9).await;
+        let envelope = sealed_envelope(b"validation matrix", 9, 9, "test.validation_matrix").await;
         let valid = self::metadata(
             9,
-            "validation_matrix",
+            "test.validation_matrix",
             &envelope,
             RetentionPolicy::new(Some(100), Some(100)).expect("retention"),
         );
-        assert!(validate_envelope(&valid, &envelope).is_ok());
+        assert!(validate_new_envelope(&valid, &envelope).is_ok());
         let expired = valid
             .mark_expired(valid.revision(), 100)
             .expect("expired metadata");
         assert_eq!(
-            validate_envelope(&expired, &envelope),
+            validate_new_envelope(&expired, &envelope),
             Err(Error::InvalidPrivateArtifactMetadata)
         );
         for (commitment, protected_size, secret_reference) in [
@@ -787,7 +1158,7 @@ mod tests {
             )
             .expect("structurally valid metadata");
             assert_eq!(
-                validate_envelope(&invalid, &envelope),
+                validate_new_envelope(&invalid, &envelope),
                 Err(Error::InvalidPrivateArtifactMetadata)
             );
         }
@@ -796,10 +1167,10 @@ mod tests {
     #[tokio::test]
     async fn expiry_and_tombstone_delete_envelope_but_preserve_commitment() {
         let store = store(EventStoreMode::ReadWrite).await;
-        let envelope = sealed_envelope(b"private trade artifact", 3).await;
+        let envelope = sealed_envelope(b"private trade artifact", 3, 2, "trade.artifact").await;
         let metadata = metadata(
             2,
-            "trade_artifact",
+            "trade.artifact",
             &envelope,
             RetentionPolicy::new(Some(400), Some(300)).expect("retention"),
         );
@@ -873,12 +1244,12 @@ mod tests {
     async fn all_private_authorities_are_metadata_only_without_an_envelope() {
         let store = store(EventStoreMode::ReadWrite).await;
         for (id, kind) in [
-            (10, "signing_reference"),
-            (11, "farm_location"),
-            (12, "trade_artifact"),
-            (13, "nip46_session"),
+            (10, "signing.reference"),
+            (11, "farm.location"),
+            (12, "trade.artifact"),
+            (13, "nip46.session"),
         ] {
-            let envelope = sealed_envelope(kind.as_bytes(), 1).await;
+            let envelope = sealed_envelope(kind.as_bytes(), 1, id, kind).await;
             let metadata = metadata(id, kind, &envelope, RetentionPolicy::indefinite());
             store
                 .put_metadata(metadata.clone())
@@ -917,10 +1288,10 @@ mod tests {
     #[tokio::test]
     async fn conflicts_corruption_and_read_only_mode_fail_closed() {
         let writable_store = store(EventStoreMode::ReadWrite).await;
-        let envelope = sealed_envelope(b"signing reference", 5).await;
+        let envelope = sealed_envelope(b"signing reference", 5, 20, "signing.reference").await;
         let stored_metadata = metadata(
             20,
-            "signing_reference",
+            "signing.reference",
             &envelope,
             RetentionPolicy::indefinite(),
         );
@@ -928,10 +1299,11 @@ mod tests {
             .put_encrypted_private_artifact(stored_metadata.clone(), &envelope)
             .await
             .expect("store artifact");
-        let other_envelope = sealed_envelope(b"another signing reference", 5).await;
+        let other_envelope =
+            sealed_envelope(b"another signing reference", 5, 20, "signing.reference").await;
         let conflicting = metadata(
             20,
-            "signing_reference",
+            "signing.reference",
             &other_envelope,
             RetentionPolicy::indefinite(),
         );
@@ -953,10 +1325,10 @@ mod tests {
         );
 
         let read_only = store(EventStoreMode::ReadOnly).await;
-        let envelope = sealed_envelope(b"read only", 1).await;
+        let envelope = sealed_envelope(b"read only", 1, 21, "nip46.session").await;
         let metadata = metadata(
             21,
-            "nip46_session",
+            "nip46.session",
             &envelope,
             RetentionPolicy::indefinite(),
         );
@@ -965,6 +1337,157 @@ mod tests {
                 .put_encrypted_private_artifact(metadata, &envelope)
                 .await,
             Err(Error::BackendUnavailable)
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_reseal_is_atomic_idempotent_and_context_bound() {
+        let (store, metadata, legacy) = migrated_legacy_store().await;
+        assert_eq!(legacy.version(), 1);
+        assert_eq!(
+            store
+                .private_artifact_envelope_migration_status()
+                .await
+                .expect("migration status"),
+            PrivateArtifactEnvelopeMigrationStatus {
+                v1_pending: 1,
+                v2_current: 0,
+                corrupt: 0,
+                blocked_provider: 0,
+                conflicted: 0,
+            }
+        );
+
+        let context = test_context(1, "trade.private_terms");
+        let authority = LegacyV1ResealAuthority::new();
+        assert!(matches!(
+            legacy
+                .reseal_legacy_v1(
+                    &VectorWrapping,
+                    &authority,
+                    legacy.reference(),
+                    reference(8),
+                    context.clone(),
+                    &|_| false,
+                    SealMaterial::new(
+                        SecretMaterial::from_slice(&[0x33; 32]).expect("fresh key"),
+                        Nonce::new([0x44; 24]),
+                    ),
+                )
+                .await,
+            Err(SecretError::LegacyPayloadValidationFailed)
+        ));
+        assert_eq!(
+            store
+                .encrypted_private_artifact(metadata.artifact_id())
+                .await
+                .expect("unchanged legacy")
+                .expect("legacy envelope")
+                .version(),
+            1
+        );
+
+        let resealed = legacy
+            .reseal_legacy_v1(
+                &VectorWrapping,
+                &authority,
+                legacy.reference(),
+                reference(8),
+                context.clone(),
+                &|plaintext| plaintext == b"radroots envelope vector",
+                SealMaterial::new(
+                    SecretMaterial::from_slice(&[0x33; 32]).expect("fresh key"),
+                    Nonce::new([0x44; 24]),
+                ),
+            )
+            .await
+            .expect("authorized reseal");
+        let encoded = resealed.envelope().encode().expect("v2 bytes");
+        let request = PrivateArtifactResealRequest::new(
+            PrivateArtifactResealId::new([0x55; 16]).expect("reseal id"),
+            metadata.artifact_id(),
+            metadata.revision(),
+            metadata.commitment(),
+            ArtifactCommitment::new(Sha256::digest(encoded.as_slice()).into()),
+            u64::try_from(encoded.len()).expect("v2 length"),
+            DurableSecretReference::new("memory", "private-artifact-key", 8)
+                .expect("next reference"),
+            200,
+        )
+        .expect("reseal request");
+        let committed = store
+            .commit_private_artifact_reseal(request.clone(), resealed.envelope())
+            .await
+            .expect("atomic commit");
+        assert_eq!(
+            committed.disposition(),
+            PrivateArtifactResealDisposition::Committed
+        );
+        let replayed = store
+            .commit_private_artifact_reseal(request.clone(), resealed.envelope())
+            .await
+            .expect("lost-response replay");
+        assert_eq!(
+            replayed.disposition(),
+            PrivateArtifactResealDisposition::Replayed
+        );
+        let current = store
+            .encrypted_private_artifact(metadata.artifact_id())
+            .await
+            .expect("current envelope")
+            .expect("v2 envelope");
+        assert_eq!(current.version(), 2);
+        current
+            .open(&VectorWrapping, &context)
+            .await
+            .expect("context-bound open")
+            .expose_secret(|plaintext| assert_eq!(plaintext, b"radroots envelope vector"));
+        assert_eq!(
+            store
+                .private_artifact_envelope_migration_status()
+                .await
+                .expect("migration status"),
+            PrivateArtifactEnvelopeMigrationStatus {
+                v1_pending: 0,
+                v2_current: 1,
+                corrupt: 0,
+                blocked_provider: 0,
+                conflicted: 0,
+            }
+        );
+
+        let conflict = PrivateArtifactResealRequest::new(
+            request.reseal_id(),
+            request.artifact_id(),
+            request.expected_revision(),
+            request.expected_commitment(),
+            ArtifactCommitment::new([0x66; 32]),
+            request.next_protected_size_bytes(),
+            request.next_secret_reference().clone(),
+            request.committed_at_unix_ms(),
+        )
+        .expect("conflicting request");
+        assert_eq!(
+            store
+                .commit_private_artifact_reseal(conflict, resealed.envelope())
+                .await,
+            Err(Error::PrivateArtifactResealConflict)
+        );
+        assert!(
+            sqlx::query(
+                "UPDATE radroots_private_artifacts SET encrypted_envelope = encrypted_envelope
+                 WHERE artifact_id = ?",
+            )
+            .bind(metadata.artifact_id().as_bytes().as_slice())
+            .execute(store.private_pool())
+            .await
+            .is_err()
+        );
+        assert!(
+            sqlx::query("DELETE FROM radroots_private_envelope_reseals")
+                .execute(store.private_pool())
+                .await
+                .is_err()
         );
     }
 }
