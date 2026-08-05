@@ -305,6 +305,87 @@ fn canonical_evaluator_covers_pending_exhausted_and_historical_evidence() {
 }
 
 #[test]
+fn policy_introspection_validation_and_wire_variants_are_complete() {
+    let set = targets();
+    let any = TargetPolicy::any();
+    assert!(any.is_any());
+    assert!(!any.is_all());
+    assert_eq!(any.quorum_threshold(), None);
+    assert_eq!(any.required_targets(), None);
+
+    let all = TargetPolicy::all();
+    assert!(!all.is_any());
+    assert!(all.is_all());
+    assert_eq!(all.quorum_threshold(), None);
+    assert_eq!(all.required_targets(), None);
+
+    let quorum = TargetPolicy::quorum(2).expect("quorum");
+    assert!(!quorum.is_any());
+    assert!(!quorum.is_all());
+    assert_eq!(quorum.quorum_threshold(), Some(2));
+    assert_eq!(quorum.required_targets(), None);
+
+    let fingerprint = set.targets()[0].fingerprint().clone();
+    let required = TargetPolicy::required(vec![fingerprint.clone()]).expect("required");
+    assert!(!required.is_any());
+    assert!(!required.is_all());
+    assert_eq!(required.quorum_threshold(), None);
+    assert_eq!(
+        required.required_targets(),
+        Some(core::slice::from_ref(&fingerprint))
+    );
+
+    let policy = SatisfactionPolicy::new(SatisfactionClass::Delivered, required);
+    assert_eq!(policy.class(), SatisfactionClass::Delivered);
+    assert_eq!(
+        policy.targets().required_targets(),
+        Some(core::slice::from_ref(&fingerprint))
+    );
+    policy
+        .validate_for(&set)
+        .expect("required target is requested");
+
+    let foreign = Target::nostr_relay("wss://foreign.example").expect("foreign");
+    let impossible = SatisfactionPolicy::new(
+        SatisfactionClass::Accepted,
+        TargetPolicy::required(vec![foreign.fingerprint().clone()]).expect("required"),
+    );
+    assert_eq!(
+        impossible.validate_for(&set).unwrap_err(),
+        Error::RequiredTargetNotRequested
+    );
+
+    #[cfg(feature = "serde")]
+    for (wire, assertion) in [
+        (serde_json::json!("any"), 0_u8),
+        (serde_json::json!("all"), 1),
+        (serde_json::json!({"quorum": 2}), 2),
+        (serde_json::json!({"required": [fingerprint.as_str()]}), 3),
+    ] {
+        let decoded: TargetPolicy = serde_json::from_value(wire).expect("target policy");
+        match assertion {
+            0 => assert!(decoded.is_any()),
+            1 => assert!(decoded.is_all()),
+            2 => assert_eq!(decoded.quorum_threshold(), Some(2)),
+            3 => assert_eq!(
+                decoded.required_targets(),
+                Some(core::slice::from_ref(&fingerprint))
+            ),
+            _ => unreachable!(),
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    for invalid in [
+        serde_json::json!({"quorum": 0}),
+        serde_json::json!({"required": []}),
+        serde_json::json!({"required": [fingerprint.as_str(), fingerprint.as_str()]}),
+    ] {
+        assert!(serde_json::from_value::<TargetPolicy>(invalid).is_err());
+    }
+}
+
+#[test]
 fn sink_failures_retain_validated_retry_timing_and_partial_evidence() {
     let request = request(SatisfactionPolicy::new(
         SatisfactionClass::Accepted,

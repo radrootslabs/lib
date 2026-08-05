@@ -42,7 +42,6 @@ pub enum AuthoredPostError {
     ImageMissing,
     ImageCountExceeded { max: usize, actual: usize },
     ImageUrlOccurrenceCount { expected: usize, actual: usize },
-    ImageUrlOverlap,
     DuplicateImageUrl,
     ImageMediaTypeInvalid,
     ImageSizeInvalid,
@@ -53,6 +52,7 @@ pub enum AuthoredPostError {
     TagElementTooLarge { max: usize, actual: usize },
     TagBytesExceeded { max: usize, actual: usize },
     EventWireTooLarge { max: usize, actual: usize },
+    ImageUrlOverlap,
 }
 
 impl AuthoredPostError {
@@ -599,6 +599,7 @@ mod tests {
         for valid in [
             "image/png",
             "image/1",
+            "image/a0",
             "image/vnd.radroots+png",
             "image/x-radroots.photo",
         ] {
@@ -767,6 +768,11 @@ mod tests {
             AuthoredPostImage::new(empty, dimensions, "empty").unwrap_err(),
             AuthoredPostError::ImageSizeInvalid
         );
+        let noncanonical_media = authored_image(b"x", "image/p_ng", "png", "media.example");
+        assert_eq!(
+            AuthoredPostImage::new(noncanonical_media, dimensions, "photo").unwrap_err(),
+            AuthoredPostError::ImageMediaTypeInvalid
+        );
         let valid = authored_image(b"x", "image/png", "png", "media.example");
         assert_eq!(
             AuthoredPostImage::new(valid.clone(), dimensions, " \t").unwrap_err(),
@@ -807,6 +813,13 @@ mod tests {
         )
         .unwrap();
         let too_many = vec![image.clone(); RADROOTS_POST_IMETA_MAX_COUNT + 1];
+        assert_eq!(
+            AuthoredPhotoUpdate::new("photo", too_many.clone()).unwrap_err(),
+            AuthoredPostError::ImageCountExceeded {
+                max: RADROOTS_POST_IMETA_MAX_COUNT,
+                actual: RADROOTS_POST_IMETA_MAX_COUNT + 1,
+            }
+        );
         assert_eq!(
             AuthoredAsk::new("ask", too_many).unwrap_err(),
             AuthoredPostError::ImageCountExceeded {
@@ -895,12 +908,14 @@ mod tests {
         for invalid in [
             "",
             " https://media.example/path",
+            "\nhttps://media.example/path",
             "media.example/path",
             "ftp://media.example/path",
             "https://user@media.example/path",
             "https://user:password@media.example/path",
             "https://media.example",
             "https:///path",
+            "https://[invalid]/path",
             "not a URL://media.example/path",
         ] {
             assert!(!post_media_http_url_is_valid(invalid), "{invalid}");

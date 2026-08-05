@@ -14,7 +14,7 @@ models, kinds, and tag conventions for the `radroots` core libraries.
  * portable event model semantics for both `std` and `no_std` builds;
  * optional integration with `serde` for serialization.
 
-The crate root is intentionally limited to `Event`, `EventDraft`,
+The crate root is intentionally limited to `Event`, `GenericEventDraft`,
 `SignedEvent`, `VerifiedEvent`, `EventId`, `EventKind`, `EventTag`, and `Error`.
 Domain-specific values live under their owning module. Existing focused models
 are nested below that authority, including `food::availability`,

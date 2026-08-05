@@ -9,7 +9,8 @@ use radroots_protocol::runtime::v1::{
 use radroots_signing::{SignerStatus, status::SignerAvailability};
 use radroots_storage::{
     EventStore, Outbox, ProjectionStore,
-    outbox::{OutboxRecord, OutboxStage, OutboxStatus},
+    authored_delivery::{AuthoredDeliveryPlan, AuthoredDeliveryState},
+    outbox::OutboxStatus,
     projection::{ProjectionHealth, ProjectionId, ProjectionStatus},
     status::{
         EventStoreHealth, EventStoreStatus, IntegrityHealth, ShutdownState, StorageStatus,
@@ -215,31 +216,35 @@ impl Engine {
     /// Classifies host action for one durable plan without mutating it.
     pub fn retry_decision(
         &self,
-        record: &OutboxRecord,
+        plan: &AuthoredDeliveryPlan,
         now_unix_ms: u64,
     ) -> Result<SyncRetryDecision, Error> {
         if now_unix_ms == 0 {
             return Err(Error::ClockUnavailable);
         }
-        match record.stage() {
-            OutboxStage::Satisfied => return Ok(SyncRetryDecision::Satisfied),
-            OutboxStage::Exhausted => return Ok(SyncRetryDecision::Exhausted),
-            OutboxStage::Pending | OutboxStage::Leased | OutboxStage::Retryable => {}
+        match plan.state() {
+            AuthoredDeliveryState::Satisfied => return Ok(SyncRetryDecision::Satisfied),
+            AuthoredDeliveryState::Exhausted
+            | AuthoredDeliveryState::FailedTerminal
+            | AuthoredDeliveryState::Cancelled => return Ok(SyncRetryDecision::Exhausted),
+            AuthoredDeliveryState::Pending | AuthoredDeliveryState::Retryable => {}
         }
-        if now_unix_ms >= record.request().deadline_unix_ms() {
+        if now_unix_ms >= plan.intent().deadline_unix_ms() {
             return Ok(SyncRetryDecision::Expired);
         }
-        if let Some(lease) = record.lease()
-            && lease.is_active_at(now_unix_ms)
+        if let Some(claim) = plan.claim_evidence()
+            && now_unix_ms < claim.expires_at_unix_ms()
         {
             return Ok(SyncRetryDecision::InFlightUntil {
-                unix_ms: lease.expires_at_unix_ms(),
+                unix_ms: claim.expires_at_unix_ms(),
             });
         }
-        if let Some(unix_ms) = record.retry_not_before_unix_ms()
-            && now_unix_ms < unix_ms
+        if let Some(retry) = plan.retry()
+            && now_unix_ms < retry.not_before_unix_ms()
         {
-            return Ok(SyncRetryDecision::DeferredUntil { unix_ms });
+            return Ok(SyncRetryDecision::DeferredUntil {
+                unix_ms: retry.not_before_unix_ms(),
+            });
         }
         Ok(SyncRetryDecision::Ready)
     }
@@ -368,5 +373,130 @@ const fn storage_state(
         SyncCapabilityState::Available
     } else {
         SyncCapabilityState::Degraded
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+    use radroots_storage::{
+        event::SourceGeneration,
+        status::{EventStoreMode, IntegrityStatus, StorageBackend, StorageOpenMode, WriterPolicy},
+    };
+
+    fn storage(health: IntegrityHealth, shutdown: ShutdownState) -> StorageStatus {
+        let failed = u32::from(health == IntegrityHealth::Corrupt);
+        let checked = if health == IntegrityHealth::Unknown {
+            None
+        } else {
+            Some(1)
+        };
+        StorageStatus::new(
+            StorageBackend::Memory,
+            StorageOpenMode::ReadWriteExisting,
+            WriterPolicy::NoWriter,
+            shutdown,
+            IntegrityStatus::new(health, checked, 1, failed).unwrap(),
+            false,
+            0,
+        )
+        .unwrap()
+    }
+
+    fn events(health: EventStoreHealth) -> EventStoreStatus {
+        EventStoreStatus::new(
+            SourceGeneration::new([21; 32]).unwrap(),
+            EventStoreMode::ReadWrite,
+            health,
+            0,
+            0,
+            0,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn health_and_protocol_classification_cover_every_state() {
+        assert_eq!(
+            availability_state(Availability::Available),
+            SyncCapabilityState::Available
+        );
+        assert_eq!(
+            availability_state(Availability::Degraded),
+            SyncCapabilityState::Degraded
+        );
+        assert_eq!(
+            availability_state(Availability::Unavailable),
+            SyncCapabilityState::Configured
+        );
+        let source = CapabilityReport::<SourceStatus>::unsupported();
+        let sink = CapabilityReport::<SinkStatus>::unsupported();
+        let signer = CapabilityReport::<SignerStatus>::unsupported();
+        for (storage, events, expected) in [
+            (
+                storage(IntegrityHealth::Healthy, ShutdownState::Open),
+                events(EventStoreHealth::Available),
+                SyncHealth::Healthy,
+            ),
+            (
+                storage(IntegrityHealth::Corrupt, ShutdownState::Open),
+                events(EventStoreHealth::Available),
+                SyncHealth::Unavailable,
+            ),
+            (
+                storage(IntegrityHealth::Healthy, ShutdownState::Closing),
+                events(EventStoreHealth::Available),
+                SyncHealth::Unavailable,
+            ),
+            (
+                storage(IntegrityHealth::Healthy, ShutdownState::Open),
+                events(EventStoreHealth::Unavailable),
+                SyncHealth::Unavailable,
+            ),
+            (
+                storage(IntegrityHealth::Degraded, ShutdownState::Open),
+                events(EventStoreHealth::Available),
+                SyncHealth::Degraded,
+            ),
+        ] {
+            assert_eq!(
+                aggregate_health(storage, &events, &source, &sink, &signer, &[]),
+                expected
+            );
+        }
+        let compiled = CapabilityReport::<SourceStatus>::compiled(None);
+        assert_eq!(
+            aggregate_health(
+                storage(IntegrityHealth::Healthy, ShutdownState::Open),
+                &events(EventStoreHealth::Available),
+                &compiled,
+                &sink,
+                &signer,
+                &[],
+            ),
+            SyncHealth::Degraded
+        );
+        assert_eq!(
+            storage_state(
+                storage(IntegrityHealth::Healthy, ShutdownState::Open),
+                EventStoreHealth::Available,
+            ),
+            SyncCapabilityState::Available
+        );
+        assert_eq!(
+            storage_state(
+                storage(IntegrityHealth::Degraded, ShutdownState::Open),
+                EventStoreHealth::Degraded,
+            ),
+            SyncCapabilityState::Degraded
+        );
+        assert_eq!(
+            storage_state(
+                storage(IntegrityHealth::Healthy, ShutdownState::Closed),
+                EventStoreHealth::Available,
+            ),
+            SyncCapabilityState::Configured
+        );
     }
 }

@@ -13,11 +13,7 @@ use radroots_signing::{
     request::{CancellationPolicy, SignPolicy},
 };
 use radroots_storage::{
-    Journal, Outbox,
-    atomic::{
-        AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId,
-        AtomicCommitOutcome, AtomicWorkflow, CommitEnqueued, CommitSigned,
-    },
+    atomic::{AtomicCommitDigest, AtomicCommitDisposition},
     authored::{
         AdmissionState, AuthoredArtifact, AuthoredArtifactId, AuthoredOperation, FailureClass,
         OperationSettlement, RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
@@ -33,20 +29,12 @@ use radroots_storage::{
         DELIVERY_PLAN_ATTEMPTS_MAX, DeliveryAttemptOutcome,
     },
     event::{AdmissionDisposition, EventAdmission, EventStore},
-    journal::{
-        IdempotencyDigest, IdempotencyKey, JournalStage, JournalState, OperationInstanceId,
-        PrepareOperation,
-    },
-    outbox::{
-        ClaimOutboxItems, DeliveryAttempt, DeliveryAttemptEvidence, DeliveryPlanDigest,
-        EnqueueOutboxItem, LeaseId, LeaseOwner, OUTBOX_CLAIM_LIMIT_MAX, OutboxItemId, OutboxRecord,
-    },
+    journal::{IdempotencyKey, OperationInstanceId},
 };
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, SinkFailure, Target, TransportId,
-    outcome::{DeliveryOutcome, DeliveryOutcomeKind, Retryability},
+    DeliveryRequest, SinkFailure, Target, TransportId,
+    outcome::Retryability,
     policy::{SatisfactionPolicy, SatisfactionState},
-    sink::{DeliveryPayload, DeliveryTargetReceipt},
     source::{EventProvenance, ObservedEvent},
     target::TargetSet,
 };
@@ -58,7 +46,6 @@ use crate::{
     policy::{Error, OperationKind, SyncId},
 };
 
-const MAX_DELIVERY_LEASE_MS: u64 = 86_400_000;
 const SIGNING_CLAIM_OWNER_EXACT: &str = "radroots-sync-signing-exact";
 const SIGNING_CLAIM_OWNER_LOCAL: &str = "radroots-sync-signing-local";
 const SIGNING_CLAIM_OWNER_NON_REPLAYABLE: &str = "radroots-sync-signing-non-replayable";
@@ -247,80 +234,6 @@ impl AdmissionRunReceipt {
     }
 }
 
-/// Durable result after signing and atomic outbox enqueue.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PushReceipt {
-    operation_id: SyncId,
-    outbox: OutboxRecord,
-    replay: bool,
-}
-
-impl PushReceipt {
-    pub const fn operation_id(&self) -> SyncId {
-        self.operation_id
-    }
-    pub const fn outbox(&self) -> &OutboxRecord {
-        &self.outbox
-    }
-    pub const fn is_replay(&self) -> bool {
-        self.replay
-    }
-}
-
-/// Bounds and lease authority for one explicit outbox delivery pass.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeliveryRunRequest {
-    owner: LeaseOwner,
-    lease_seed: SyncId,
-    lease_duration_ms: u64,
-    limit: u16,
-}
-
-impl DeliveryRunRequest {
-    pub fn new(
-        owner: LeaseOwner,
-        lease_seed: SyncId,
-        lease_duration_ms: u64,
-        limit: u16,
-    ) -> Result<Self, Error> {
-        if lease_duration_ms == 0
-            || lease_duration_ms > MAX_DELIVERY_LEASE_MS
-            || limit == 0
-            || limit > OUTBOX_CLAIM_LIMIT_MAX
-        {
-            return Err(Error::InvalidDeliveryRequest);
-        }
-        Ok(Self {
-            owner,
-            lease_seed,
-            lease_duration_ms,
-            limit,
-        })
-    }
-}
-
-/// Independent durable outcomes from one bounded delivery pass.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeliveryRunReceipt {
-    outcomes: Vec<Result<OutboxRecord, Error>>,
-}
-
-impl DeliveryRunReceipt {
-    pub fn outcomes(&self) -> &[Result<OutboxRecord, Error>] {
-        self.outcomes.as_slice()
-    }
-    pub fn succeeded(&self) -> usize {
-        self.outcomes
-            .iter()
-            .filter(|outcome| outcome.is_ok())
-            .count()
-    }
-    pub fn failed(&self) -> usize {
-        self.outcomes.len() - self.succeeded()
-    }
-}
-
 impl Engine {
     /// Atomically persists the complete parent, exact plan, and delivery intent.
     ///
@@ -478,7 +391,7 @@ impl Engine {
                     None,
                 )
                 .map_err(map_storage_error)?;
-                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, None)
+                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, None, now)
                     .await?;
                 return Err(Error::SigningIndeterminate);
             }
@@ -585,8 +498,14 @@ impl Engine {
                     WorkFailure::new(error.code(), WorkPhase::Signing, class, retry_at, None)
                         .map_err(map_storage_error)?;
                 let retry = retry_schedule(claimed.signing_retry(), &failure, retry_at)?;
-                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, retry)
-                    .await?;
+                self.apply_artifact_failure(
+                    claimed.artifact_id(),
+                    fence,
+                    failure,
+                    retry,
+                    applied_at,
+                )
+                .await?;
                 match disposition {
                     RecoveryDisposition::Indeterminate => Err(Error::SigningIndeterminate),
                     RecoveryDisposition::RetryExactRequest
@@ -657,7 +576,7 @@ impl Engine {
                     None,
                 )
                 .map_err(map_storage_error)?;
-                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, None)
+                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, None, now)
                     .await?;
                 return Err(error);
             }
@@ -665,7 +584,7 @@ impl Engine {
         let admission_receipt = match EventStore::admit(self.storage.as_ref(), admission).await {
             Ok(receipt) => receipt,
             Err(error) => {
-                let applied_at = self.clock.now_unix_ms()?;
+                let applied_at = self.clock.now_unix_ms()?.max(claimed.updated_at_unix_ms());
                 let terminal = matches!(
                     error,
                     radroots_storage::Error::EventConflict
@@ -697,8 +616,14 @@ impl Engine {
                 )
                 .map_err(map_storage_error)?;
                 let retry = retry_schedule(claimed.admission_retry(), &failure, retry_at)?;
-                self.apply_artifact_failure(claimed.artifact_id(), fence, failure, retry)
-                    .await?;
+                self.apply_artifact_failure(
+                    claimed.artifact_id(),
+                    fence,
+                    failure,
+                    retry,
+                    applied_at,
+                )
+                .await?;
                 return Err(Error::AdmissionFailed);
             }
         };
@@ -911,8 +836,8 @@ impl Engine {
         fence: WorkFence,
         failure: WorkFailure,
         retry: Option<RetrySchedule>,
+        applied_at: u64,
     ) -> Result<AuthoredArtifact, Error> {
-        let applied_at = self.clock.now_unix_ms()?;
         let command = AuthoredAtomicCommand::ApplyFailure(
             ApplyWorkFailure::new(
                 AuthoredWorkTarget::Artifact(artifact_id),
@@ -933,263 +858,6 @@ impl Engine {
         };
         Ok(artifact.clone())
     }
-
-    /// Authorizes, signs, verifies, and durably enqueues one outbound event.
-    ///
-    /// Dropping the future before the final atomic enqueue leaves either a
-    /// prepared or signed recoverable journal record. Once that commit returns,
-    /// cancellation cannot claim rollback; replay returns the durable outbox.
-    pub async fn sign_and_enqueue(&self, request: PushRequest) -> Result<PushReceipt, Error> {
-        let instance_id = OperationInstanceId::new(*request.operation_id.as_bytes())
-            .map_err(map_storage_error)?;
-        let item_id =
-            OutboxItemId::new(*request.operation_id.as_bytes()).map_err(map_storage_error)?;
-        let input_digest = push_input_digest(&request)?;
-
-        if let Some(existing) = Journal::operation(self.storage.as_ref(), instance_id)
-            .await
-            .map_err(map_storage_error)?
-        {
-            if [
-                existing.operation_id() != OperationId::SyncPush,
-                existing.idempotency_key() != request.idempotency_key(),
-                existing.input_digest() != input_digest,
-            ]
-            .contains(&true)
-            {
-                return Err(Error::StorageConflict);
-            }
-            if existing.state().stage() == JournalStage::Committed {
-                let outbox = Outbox::item(self.storage.as_ref(), item_id)
-                    .await
-                    .map_err(map_storage_error)?
-                    .ok_or(Error::StorageFailed)?;
-                return Ok(PushReceipt {
-                    operation_id: request.operation_id,
-                    outbox,
-                    replay: true,
-                });
-            }
-        }
-
-        let signed = self.sign_prepared(request.clone()).await?;
-        self.admit_signed(request.operation_id).await?;
-        let event = signed
-            .artifact()
-            .signed()
-            .ok_or(Error::InvalidSignerOutput)?
-            .event()
-            .clone();
-
-        let prepared_at = self.clock.now_unix_ms()?;
-        let prepare = PrepareOperation::new(
-            instance_id,
-            OperationId::SyncPush,
-            request.idempotency_key.clone(),
-            input_digest,
-            prepared_at,
-        )
-        .map_err(map_storage_error)?;
-        let prepare_commit = AtomicCommit::new(
-            next_commit_id(self, OperationKind::Sign)?,
-            AtomicCommitDigest::new(*input_digest.as_bytes()),
-            prepared_at,
-            AtomicWorkflow::Prepared(prepare),
-        )
-        .map_err(map_storage_error)?;
-        let prepared_receipt = self
-            .storage
-            .commit(prepare_commit)
-            .await
-            .map_err(map_storage_error)?;
-        let AtomicCommitOutcome::Prepared { journal: prepared } = prepared_receipt.outcome() else {
-            return Err(Error::StorageFailed);
-        };
-
-        let signed_record = if prepared.state().stage() == JournalStage::Signed {
-            if !matches!(
-                prepared.state(),
-                JournalState::Signed { event_id } if event_id == event.id()
-            ) {
-                return Err(Error::InvalidSignerOutput);
-            }
-            prepared.clone()
-        } else {
-            let signed_commit = AtomicCommit::new(
-                next_commit_id(self, OperationKind::Sign)?,
-                atomic_digest(b"radroots.sync.signed.v1", event.raw_json().as_bytes()),
-                self.clock.now_unix_ms()?,
-                AtomicWorkflow::Signed(Box::new(CommitSigned::new(
-                    instance_id,
-                    prepared.revision(),
-                    event.clone(),
-                ))),
-            )
-            .map_err(map_storage_error)?;
-            let receipt = self
-                .storage
-                .commit(signed_commit)
-                .await
-                .map_err(map_storage_error)?;
-            let AtomicCommitOutcome::Signed { journal, .. } = receipt.outcome() else {
-                return Err(Error::StorageFailed);
-            };
-            journal.clone()
-        };
-
-        let admission = outbound_admission(&event, self.clock.now_unix_ms()?)?;
-        let delivery = DeliveryRequest::new(
-            delivery_request_id(request.operation_id),
-            DeliveryPayload::new(event),
-            request.targets,
-            request.satisfaction,
-            request.delivery_deadline_unix_ms,
-        )
-        .map_err(|_| Error::InvalidPushRequest)?;
-        let plan_digest = delivery_plan_digest(&delivery);
-        let committed_at = self.clock.now_unix_ms()?;
-        let outbox =
-            EnqueueOutboxItem::new(item_id, instance_id, plan_digest, delivery, committed_at)
-                .map_err(map_storage_error)?;
-        let enqueued = CommitEnqueued::new(
-            instance_id,
-            signed_record.revision(),
-            admission,
-            outbox,
-            committed_at,
-        )
-        .map_err(map_storage_error)?;
-        let receipt = self
-            .storage
-            .commit(
-                AtomicCommit::new(
-                    next_commit_id(self, OperationKind::Sign)?,
-                    AtomicCommitDigest::new(*plan_digest.as_bytes()),
-                    committed_at,
-                    AtomicWorkflow::Enqueued(Box::new(enqueued)),
-                )
-                .map_err(map_storage_error)?,
-            )
-            .await
-            .map_err(map_storage_error)?;
-        let AtomicCommitOutcome::Enqueued { outbox, .. } = receipt.outcome() else {
-            return Err(Error::StorageFailed);
-        };
-        Ok(PushReceipt {
-            operation_id: request.operation_id,
-            outbox: (**outbox).clone(),
-            replay: false,
-        })
-    }
-
-    /// Claims and delivers at most the caller-bounded number of outbox items.
-    pub async fn deliver_pending(
-        &self,
-        request: DeliveryRunRequest,
-    ) -> Result<DeliveryRunReceipt, Error> {
-        if request.lease_duration_ms > self.deadlines.timeout_ms(OperationKind::Deliver) {
-            return Err(Error::InvalidDeliveryRequest);
-        }
-        let sink = self.sink.as_deref().ok_or(Error::MissingSink)?;
-        let now = self.clock.now_unix_ms()?;
-        let expires = now
-            .checked_add(request.lease_duration_ms)
-            .ok_or(Error::DeadlineOverflow)?;
-        let claimed = Outbox::claim(
-            self.storage.as_ref(),
-            ClaimOutboxItems::new(
-                request.owner,
-                LeaseId::new(*request.lease_seed.as_bytes()).map_err(map_storage_error)?,
-                now,
-                expires,
-                request.limit,
-            )
-            .map_err(map_storage_error)?,
-        )
-        .await
-        .map_err(map_storage_error)?;
-        let mut outcomes = Vec::with_capacity(claimed.len());
-        for item in claimed {
-            let delivery_request = item.record().request().clone();
-            let attempted_at = self.clock.now_unix_ms()?;
-            let receipt = if attempted_at >= delivery_request.deadline_unix_ms() {
-                synthetic_receipt(&delivery_request, false)?
-            } else {
-                match sink.deliver(delivery_request.clone()).await {
-                    Ok(receipt) => receipt,
-                    Err(_) => synthetic_receipt(&delivery_request, true)?,
-                }
-            };
-            if receipt.validate_for_request(&delivery_request).is_err() {
-                let released_at = self.clock.now_unix_ms()?;
-                let released = Outbox::release(
-                    self.storage.as_ref(),
-                    item.record().item_id(),
-                    item.lease().id(),
-                    item.record().revision(),
-                    released_at,
-                    None,
-                )
-                .await
-                .map_err(map_storage_error);
-                outcomes.push(match released {
-                    Ok(_) => Err(Error::InvalidDeliveryRequest),
-                    Err(error) => Err(error),
-                });
-                continue;
-            }
-            let attempt = DeliveryAttempt::new(
-                item.record()
-                    .last_attempt()
-                    .map_or(1, |attempt| attempt.get().saturating_add(1)),
-            )
-            .map_err(map_storage_error)?;
-            let evidence = DeliveryAttemptEvidence::new(
-                item.record().item_id(),
-                item.lease().id(),
-                item.record().revision(),
-                attempt,
-                receipt,
-                attempted_at,
-            )
-            .map_err(map_storage_error)?;
-            let digest = delivery_evidence_digest(&evidence);
-            let commit = AtomicCommit::new(
-                next_commit_id(self, OperationKind::Deliver)?,
-                digest,
-                attempted_at,
-                AtomicWorkflow::Delivered(Box::new(evidence)),
-            )
-            .map_err(map_storage_error)?;
-            let outcome = match self.storage.commit(commit).await {
-                Ok(receipt) => match receipt.outcome() {
-                    AtomicCommitOutcome::Delivered { outbox } => Ok((**outbox).clone()),
-                    _ => Err(Error::StorageFailed),
-                },
-                Err(error) => Err(map_storage_error(error)),
-            };
-            outcomes.push(outcome);
-        }
-        Ok(DeliveryRunReceipt { outcomes })
-    }
-}
-
-fn synthetic_receipt(request: &DeliveryRequest, retryable: bool) -> Result<DeliveryReceipt, Error> {
-    let outcome = if retryable {
-        DeliveryOutcome::unavailable()
-    } else {
-        DeliveryOutcome::failed(Retryability::Terminal)
-            .map_err(|_| Error::InvalidDeliveryRequest)?
-    };
-    let targets = request
-        .target_set()
-        .targets()
-        .iter()
-        .cloned()
-        .map(|target| DeliveryTargetReceipt::skipped(target, outcome.clone()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| Error::InvalidDeliveryRequest)?;
-    DeliveryReceipt::for_request(request, targets).map_err(|_| Error::InvalidDeliveryRequest)
 }
 
 fn signer_replay_capability(
@@ -1317,48 +985,6 @@ fn delivery_retry_schedule(
         .map_err(map_storage_error)
 }
 
-fn delivery_evidence_digest(evidence: &DeliveryAttemptEvidence) -> AtomicCommitDigest {
-    let mut hasher = Sha256::new();
-    hash_field(&mut hasher, b"radroots.sync.delivery-evidence.v1");
-    hash_field(&mut hasher, evidence.item_id().as_bytes());
-    hash_field(&mut hasher, evidence.lease_id().as_bytes());
-    hasher.update(evidence.expected_revision().get().to_be_bytes());
-    hasher.update(evidence.attempt().get().to_be_bytes());
-    hasher.update(evidence.recorded_at_unix_ms().to_be_bytes());
-    hash_field(
-        &mut hasher,
-        evidence.receipt().request_id().as_str().as_bytes(),
-    );
-    for target in evidence.receipt().target_receipts() {
-        hash_field(
-            &mut hasher,
-            target.target().fingerprint().as_str().as_bytes(),
-        );
-        hasher.update([u8::from(target.was_attempted())]);
-        hasher.update([match target.outcome().kind() {
-            DeliveryOutcomeKind::Accepted => 0,
-            DeliveryOutcomeKind::Delivered => 1,
-            DeliveryOutcomeKind::Rejected => 2,
-            DeliveryOutcomeKind::Unavailable => 3,
-            DeliveryOutcomeKind::Failed => 4,
-        }]);
-        hasher.update([match target.outcome().retryability() {
-            Retryability::NotApplicable => 0,
-            Retryability::Retryable => 1,
-            Retryability::Terminal => 2,
-        }]);
-        hash_field(
-            &mut hasher,
-            target.outcome().code().unwrap_or_default().as_bytes(),
-        );
-        hash_field(
-            &mut hasher,
-            target.outcome().message().unwrap_or_default().as_bytes(),
-        );
-    }
-    AtomicCommitDigest::new(hasher.finalize().into())
-}
-
 fn outbound_admission(
     event: &radroots_event::SignedEvent,
     observed_at_unix_ms: u64,
@@ -1415,12 +1041,6 @@ fn outbound_admission(
         .map_err(map_storage_error)
 }
 
-fn push_input_digest(request: &PushRequest) -> Result<IdempotencyDigest, Error> {
-    Ok(IdempotencyDigest::new(
-        *authored_push_input_digest(request)?.as_bytes(),
-    ))
-}
-
 fn authored_push_input_digest(request: &PushRequest) -> Result<AtomicCommitDigest, Error> {
     let mut hasher = Sha256::new();
     hash_field(&mut hasher, b"radroots.sync.authored-push.v2");
@@ -1456,17 +1076,6 @@ fn authored_push_input_digest(request: &PushRequest) -> Result<AtomicCommitDiges
     Ok(AtomicCommitDigest::new(hasher.finalize().into()))
 }
 
-fn delivery_plan_digest(request: &DeliveryRequest) -> DeliveryPlanDigest {
-    let mut hasher = Sha256::new();
-    hash_field(&mut hasher, b"radroots.sync.delivery.v1");
-    hash_field(&mut hasher, request.payload().event().raw_json().as_bytes());
-    for target in request.target_set().targets() {
-        hash_field(&mut hasher, target.fingerprint().as_str().as_bytes());
-    }
-    hash_satisfaction(&mut hasher, request.satisfaction());
-    DeliveryPlanDigest::new(hasher.finalize().into())
-}
-
 fn hash_satisfaction(hasher: &mut Sha256, policy: &SatisfactionPolicy) {
     hasher.update([match policy.class() {
         radroots_transport::policy::SatisfactionClass::Accepted => 0,
@@ -1486,13 +1095,6 @@ fn hash_satisfaction(hasher: &mut Sha256, policy: &SatisfactionPolicy) {
             hash_field(hasher, target.as_str().as_bytes());
         }
     }
-}
-
-fn atomic_digest(domain: &[u8], input: &[u8]) -> AtomicCommitDigest {
-    let mut hasher = Sha256::new();
-    hash_field(&mut hasher, domain);
-    hash_field(&mut hasher, input);
-    AtomicCommitDigest::new(hasher.finalize().into())
 }
 
 fn authored_ids(
@@ -1535,10 +1137,6 @@ fn hash_field(hasher: &mut Sha256, value: &[u8]) {
     hasher.update(value);
 }
 
-fn next_commit_id(engine: &Engine, operation: OperationKind) -> Result<AtomicCommitId, Error> {
-    AtomicCommitId::new(*engine.ids.next_id(operation)?.as_bytes()).map_err(map_storage_error)
-}
-
 fn delivery_request_id(id: SyncId) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut value = String::from("push-");
@@ -1567,5 +1165,370 @@ fn map_claim_error(error: radroots_storage::Error) -> Error {
         | radroots_storage::Error::InvalidWorkClaim
         | radroots_storage::Error::DeliveryPlanClaimConflict => Error::WorkClaimConflict,
         other => map_storage_error(other),
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+    use radroots_event::{GenericEventDraft, contract::AuthorRole};
+    use radroots_signing::{
+        SignerStatus,
+        actor::ActorSource,
+        capability::{CancellationSupport, SignerCapability, SignerKind},
+        status::SignerAvailability,
+    };
+    use radroots_transport::{
+        DeliveryReceipt,
+        outcome::DeliveryOutcome,
+        policy::{SatisfactionClass, TargetPolicy},
+        sink::{DeliveryPayload, DeliveryTargetReceipt},
+    };
+
+    const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+    const OTHER_AUTHOR: &str = "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
+
+    fn request_with(
+        target_policy: TargetPolicy,
+        deadline: u64,
+        cancellation: CancellationPolicy,
+    ) -> PushRequest {
+        let plan = AuthoredEventPlan::from_generic(
+            GenericEventDraft::new(
+                "radroots.social.geochat.v1",
+                20_000,
+                1_800_000_100,
+                Vec::new(),
+                "push helper coverage",
+                AUTHOR,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let actor =
+            Actor::from_public_key_hex(AUTHOR, ActorSource::ExplicitPublicKey, [AuthorRole::Any])
+                .unwrap();
+        PushRequest::new(
+            SyncId::new([31; 16]).unwrap(),
+            IdempotencyKey::parse("push-helper-coverage").unwrap(),
+            actor,
+            plan,
+            TargetSet::new(vec![Target::nostr_relay("wss://helper.example").unwrap()]).unwrap(),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, target_policy),
+            deadline,
+            cancellation,
+        )
+        .unwrap()
+    }
+
+    fn delivery_plan(request: &PushRequest) -> AuthoredDeliveryPlan {
+        let (_, artifact_id, plan_id) = authored_ids(request.operation_id()).unwrap();
+        let delivery_request = DeliveryRequest::new(
+            delivery_request_id(request.operation_id()),
+            DeliveryPayload::new(
+                radroots_event_codec::Codec::decode_signed_event(
+                    r#"{"id":"762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1800000100,"kind":0,"tags":[],"content":"{\"display_name\":\"Moss Street Farm\",\"bot\":false,\"website\":\"https://mossstreet.example\",\"picture\":42}","sig":"4290da0bb6422986647bc8cd5f63bd52d49f41e7b665d3b47105b8109183e8d596f322c531d4061df53e1d2b70fda12d5d1c14f3720d7a56d9d0a03746af5109"}"#,
+                )
+                .unwrap(),
+            ),
+            request.targets().clone(),
+            request.satisfaction().clone(),
+            request.delivery_deadline_unix_ms(),
+        )
+        .unwrap();
+        AuthoredDeliveryPlan::new_bound(plan_id, artifact_id, delivery_request, 10).unwrap()
+    }
+
+    fn capability(replay: ReplayCapability) -> SignerCapability {
+        SignerCapability::new(
+            SignerKind::Local,
+            replay,
+            CancellationSupport::BeforePublication,
+            false,
+            false,
+        )
+    }
+
+    #[test]
+    fn push_request_validates_every_binding_and_exposes_redacted_accessors() {
+        let request = request_with(
+            TargetPolicy::any(),
+            1_800_000_300_000,
+            CancellationPolicy::LocalCooperative,
+        );
+        assert_eq!(request.idempotency_key().as_str(), "push-helper-coverage");
+        assert_eq!(request.actor().public_key(), *request.plan().author());
+        assert_eq!(request.targets().len(), 1);
+        assert!(request.satisfaction().targets().is_any());
+        assert_eq!(request.delivery_deadline_unix_ms(), 1_800_000_300_000);
+        assert_eq!(request.cancellation(), CancellationPolicy::LocalCooperative);
+        let debug = format!("{request:?}");
+        assert!(debug.contains("[redacted exact authored plan]"));
+        assert!(!debug.contains("push helper coverage"));
+
+        let invalid_policy = TargetPolicy::required(vec![
+            Target::nostr_relay("wss://absent.example")
+                .unwrap()
+                .fingerprint()
+                .clone(),
+        ])
+        .unwrap();
+        let mut invalid = request.clone();
+        invalid.satisfaction = SatisfactionPolicy::new(SatisfactionClass::Accepted, invalid_policy);
+        assert!(matches!(
+            PushRequest::new(
+                invalid.operation_id,
+                invalid.idempotency_key,
+                invalid.actor,
+                invalid.plan,
+                invalid.targets,
+                invalid.satisfaction,
+                invalid.delivery_deadline_unix_ms,
+                invalid.cancellation,
+            ),
+            Err(Error::InvalidPushRequest)
+        ));
+
+        let valid = request_with(
+            TargetPolicy::any(),
+            1_800_000_300_000,
+            CancellationPolicy::PreservePublishedRequest,
+        );
+        assert!(matches!(
+            PushRequest::new(
+                valid.operation_id,
+                valid.idempotency_key.clone(),
+                valid.actor.clone(),
+                valid.plan.clone(),
+                valid.targets.clone(),
+                valid.satisfaction.clone(),
+                0,
+                valid.cancellation,
+            ),
+            Err(Error::InvalidPushRequest)
+        ));
+        let wrong_actor = Actor::from_public_key_hex(
+            OTHER_AUTHOR,
+            ActorSource::ExplicitPublicKey,
+            [AuthorRole::Any],
+        )
+        .unwrap();
+        assert!(matches!(
+            PushRequest::new(
+                valid.operation_id,
+                valid.idempotency_key,
+                wrong_actor,
+                valid.plan,
+                valid.targets,
+                valid.satisfaction,
+                valid.delivery_deadline_unix_ms,
+                valid.cancellation,
+            ),
+            Err(Error::InvalidPushRequest)
+        ));
+    }
+
+    #[test]
+    fn signer_and_retry_helpers_cover_every_stable_policy_variant() {
+        let empty = SignerStatus::new(SignerAvailability::Ready, Vec::new(), None);
+        assert_eq!(
+            signer_replay_capability(&empty),
+            Err(Error::SignerCapabilityUnavailable)
+        );
+        let exact = SignerStatus::new(
+            SignerAvailability::Ready,
+            vec![capability(ReplayCapability::ExactReplayByRequestId)],
+            None,
+        );
+        assert_eq!(
+            signer_replay_capability(&exact).unwrap(),
+            ReplayCapability::ExactReplayByRequestId
+        );
+        let mixed = SignerStatus::new(
+            SignerAvailability::Ready,
+            vec![
+                capability(ReplayCapability::ExactReplayByRequestId),
+                capability(ReplayCapability::LocalReplaySafe),
+            ],
+            None,
+        );
+        assert_eq!(
+            signer_replay_capability(&mixed).unwrap(),
+            ReplayCapability::NonReplayable
+        );
+        assert_eq!(
+            signing_claim_owner(ReplayCapability::ExactReplayByRequestId),
+            SIGNING_CLAIM_OWNER_EXACT
+        );
+        assert_eq!(
+            signing_claim_owner(ReplayCapability::LocalReplaySafe),
+            SIGNING_CLAIM_OWNER_LOCAL
+        );
+        assert_eq!(
+            signing_claim_owner(ReplayCapability::NonReplayable),
+            SIGNING_CLAIM_OWNER_NON_REPLAYABLE
+        );
+
+        let failure = WorkFailure::new(
+            "retry",
+            WorkPhase::Signing,
+            FailureClass::Retryable,
+            Some(20),
+            None,
+        )
+        .unwrap();
+        assert!(retry_schedule(None, &failure, None).unwrap().is_none());
+        let first = retry_schedule(None, &failure, Some(20)).unwrap().unwrap();
+        assert_eq!(first.attempt(), NonZeroU32::MIN);
+        let next_failure = WorkFailure::new(
+            "retry",
+            WorkPhase::Signing,
+            FailureClass::Retryable,
+            Some(21),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            retry_schedule(Some(&first), &next_failure, Some(21))
+                .unwrap()
+                .unwrap()
+                .attempt()
+                .get(),
+            2
+        );
+    }
+
+    #[test]
+    fn delivery_failure_and_retry_helpers_normalize_all_outcome_classes() {
+        let request = request_with(
+            TargetPolicy::any(),
+            1_800_000_300_000,
+            CancellationPolicy::PreservePublishedRequest,
+        );
+        let plan = delivery_plan(&request);
+        let delivery_request = plan.request().unwrap();
+        let terminal = SinkFailure::for_request(
+            delivery_request,
+            "terminal",
+            Retryability::Terminal,
+            None,
+            None,
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            normalize_sink_failure(delivery_request, terminal.clone(), 100).unwrap(),
+            terminal
+        );
+        let retryable = SinkFailure::for_request(
+            delivery_request,
+            "retryable",
+            Retryability::Retryable,
+            None,
+            Some("retry".to_owned()),
+            Vec::new(),
+        )
+        .unwrap();
+        let normalized = normalize_sink_failure(delivery_request, retryable, 100).unwrap();
+        assert_eq!(normalized.retry_after_unix_ms(), Some(1_100));
+        assert_eq!(
+            normalize_sink_failure(delivery_request, normalized.clone(), 100).unwrap(),
+            normalized
+        );
+        let past = SinkFailure::for_request(
+            delivery_request,
+            "past",
+            Retryability::Retryable,
+            Some(99),
+            None,
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            normalize_sink_failure(delivery_request, past, 100)
+                .unwrap()
+                .retry_after_unix_ms(),
+            Some(101)
+        );
+
+        let receipt = DeliveryReceipt::for_request(
+            delivery_request,
+            delivery_request
+                .target_set()
+                .targets()
+                .iter()
+                .cloned()
+                .map(|target| {
+                    DeliveryTargetReceipt::attempted(target, DeliveryOutcome::unavailable())
+                })
+                .collect(),
+        )
+        .unwrap();
+        let receipt_outcome = DeliveryAttemptOutcome::Receipt(receipt);
+        assert!(
+            delivery_retry_schedule(&plan, &receipt_outcome, SatisfactionState::Satisfied, 100)
+                .unwrap()
+                .is_none()
+        );
+        let schedule =
+            delivery_retry_schedule(&plan, &receipt_outcome, SatisfactionState::Pending, 100)
+                .unwrap()
+                .unwrap();
+        assert_eq!(schedule.not_before_unix_ms(), 1_100);
+        let retry_outcome = DeliveryAttemptOutcome::SinkFailure(normalized);
+        assert!(
+            delivery_retry_schedule(&plan, &retry_outcome, SatisfactionState::Pending, 100)
+                .unwrap()
+                .is_some()
+        );
+        let terminal_outcome = DeliveryAttemptOutcome::SinkFailure(terminal);
+        assert!(
+            delivery_retry_schedule(&plan, &terminal_outcome, SatisfactionState::Pending, 100)
+                .unwrap()
+                .is_none()
+        );
+
+        for policy in [
+            TargetPolicy::any(),
+            TargetPolicy::all(),
+            TargetPolicy::quorum(1).unwrap(),
+            TargetPolicy::required(vec![request.targets().targets()[0].fingerprint().clone()])
+                .unwrap(),
+        ] {
+            let request = request_with(
+                policy,
+                1_800_000_300_000,
+                CancellationPolicy::LocalCooperative,
+            );
+            assert_ne!(
+                authored_push_input_digest(&request).unwrap().as_bytes(),
+                &[0; 32]
+            );
+        }
+    }
+
+    #[test]
+    fn storage_error_maps_are_explicit_and_fail_closed() {
+        assert_eq!(
+            map_storage_error(radroots_storage::Error::AtomicCommitConflict),
+            Error::StorageConflict
+        );
+        assert_eq!(
+            map_storage_error(radroots_storage::Error::BackendUnavailable),
+            Error::StorageFailed
+        );
+        assert_eq!(
+            map_claim_error(radroots_storage::Error::DeliveryPlanClaimConflict),
+            Error::WorkClaimConflict
+        );
+        assert_eq!(
+            map_claim_error(radroots_storage::Error::BackendUnavailable),
+            Error::StorageFailed
+        );
+        assert_eq!(
+            delivery_request_id(SyncId::new([0xab; 16]).unwrap()).len(),
+            37
+        );
     }
 }

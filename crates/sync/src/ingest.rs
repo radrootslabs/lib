@@ -181,9 +181,7 @@ impl Engine {
             .commit(request)
             .await
             .map_err(map_storage_error)?;
-        let AtomicCommitOutcome::Ingested { admission, .. } = receipt.outcome() else {
-            return Err(Error::InvalidIngestReceipt);
-        };
+        let AtomicCommitOutcome::Ingested { admission, .. } = receipt.outcome();
         if admission.event_id() != observed.event().id() {
             return Err(Error::InvalidIngestReceipt);
         }

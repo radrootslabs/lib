@@ -174,12 +174,12 @@ contract. Strict Profile, Update, PhotoUpdate, Ask, NIP-10 Reply, NIP-22
 Comment, and NIP-09 Deletion Request contracts are `TypedOnly`;
 `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft contracts
 remain `GenericDraft`.
-`EventDraft::new` therefore rejects the strict Profile contract and
+`GenericEventDraft::new` therefore rejects the strict Profile contract and
 every governed kind-1, kind-5, or kind-1111 contract with
 `contract_not_draft_authorable`. Serialized drafts record registry version `7`
 and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
-frozen-draft signing boundary repeats that validation, so stale version-`1`
+authored-plan signing boundary repeats that validation, so stale version-`1`
 through version-`6` drafts must be rebuilt. Typed root posts, Replies,
 Comments, and Deletion Requests enter Nostr signing only through opaque typed
 builders that expose timestamp selection and signing, but no raw tag/content

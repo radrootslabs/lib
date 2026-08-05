@@ -493,7 +493,19 @@ fn replay_evidence(plan: &mut AuthoredDeliveryPlan, legacy: &OutboxRecord) -> Re
                 .find(|entry| entry.attempt().get() == attempt_number.saturating_add(1))
                 .map(|entry| entry.recorded_at_unix_ms())
                 .or(legacy.retry_not_before_unix_ms())
-                .unwrap_or_else(|| legacy.updated_at_unix_ms().max(recorded_at));
+                .map_or_else(
+                    || {
+                        legacy
+                            .updated_at_unix_ms()
+                            .max(recorded_at)
+                            .checked_add(1)
+                            .ok_or_else(metadata_error)
+                    },
+                    Ok,
+                )?;
+            if next_at <= recorded_at {
+                return Err(metadata_error());
+            }
             let failure = WorkFailure::new(
                 "migrated_delivery_pending",
                 WorkPhase::Delivery,
@@ -716,7 +728,10 @@ mod tests {
             IdempotencyDigest, IdempotencyKey, JournalTransition, OperationId, OperationInstanceId,
             PrepareOperation,
         },
-        outbox::{DeliveryPlanDigest, EnqueueOutboxItem, OutboxItemId},
+        outbox::{
+            ClaimOutboxItems, DeliveryAttempt, DeliveryAttemptEvidence, DeliveryOutcome,
+            DeliveryPlanDigest, EnqueueOutboxItem, LeaseId, LeaseOwner, OutboxItemId,
+        },
         status::EventStoreMode,
     };
     use radroots_transport::{
@@ -850,6 +865,51 @@ mod tests {
             ))
             .await
             .expect("committed transition");
+    }
+
+    async fn record_legacy_attempt(
+        store: &SqliteStorage,
+        outcome: DeliveryOutcome,
+        attempted: bool,
+    ) -> OutboxRecord {
+        let claimed = store
+            .claim(
+                ClaimOutboxItems::new(
+                    LeaseOwner::parse("migration-worker").expect("lease owner"),
+                    LeaseId::new([91; 16]).expect("lease id"),
+                    103,
+                    200,
+                    1,
+                )
+                .expect("claim request"),
+            )
+            .await
+            .expect("claim")
+            .pop()
+            .expect("claimed item");
+        let target = claimed.record().request().target_set().targets()[0].clone();
+        let target_receipt = if attempted {
+            DeliveryTargetReceipt::attempted(target, outcome)
+        } else {
+            DeliveryTargetReceipt::skipped(target, outcome).expect("skipped receipt")
+        };
+        let receipt =
+            DeliveryReceipt::for_request(claimed.record().request(), vec![target_receipt])
+                .expect("receipt");
+        store
+            .record_attempt(
+                DeliveryAttemptEvidence::new(
+                    claimed.record().item_id(),
+                    claimed.lease().id(),
+                    claimed.record().revision(),
+                    DeliveryAttempt::FIRST,
+                    receipt,
+                    150,
+                )
+                .expect("attempt evidence"),
+            )
+            .await
+            .expect("record attempt")
     }
 
     #[tokio::test]
@@ -987,6 +1047,259 @@ mod tests {
                 .expect("preserved version"),
             10
         );
+
+        drop(connection);
+        let store = v10_store().await;
+        let valid = event();
+        seed_complete(&store, 14, valid.clone()).await;
+        let mut wire = valid.wire().clone();
+        wire.sig = "ee".repeat(64);
+        let mismatched_raw = serde_json::to_vec(&wire).expect("mismatched raw");
+        sqlx::query("DROP TRIGGER radroots_runtime_events_raw_update_guard")
+            .execute(&store.pool)
+            .await
+            .expect("remove update guard for corruption fixture");
+        sqlx::query("UPDATE radroots_runtime_events SET signed_event = ? WHERE event_id = ?")
+            .bind(mismatched_raw)
+            .bind(valid.id().as_bytes().as_slice())
+            .execute(&store.pool)
+            .await
+            .expect("stored raw mismatch fixture");
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let report = inspect(&mut connection).await.expect("preflight").report;
+        assert_eq!(report.invalid_or_unsupported(), 1);
+    }
+
+    #[tokio::test]
+    async fn malformed_event_encodings_and_identifiers_are_counted_fail_closed() {
+        for signed_event in [vec![0xff], b"not-json".to_vec()] {
+            let store = v10_store().await;
+            sqlx::query(
+                "INSERT INTO radroots_runtime_events (
+                   source_generation, source_sequence, event_id, admission_stage,
+                   signed_event, admitted_at_unix_ms, updated_at_unix_ms
+                 ) VALUES (?, 1, ?, 'raw', ?, 10, 10)",
+            )
+            .bind(store.generation.as_bytes().as_slice())
+            .bind([72; 32].as_slice())
+            .bind(signed_event)
+            .execute(&store.pool)
+            .await
+            .expect("malformed event fixture");
+            let mut connection = store.pool.acquire().await.expect("connection");
+            let report = inspect(&mut connection).await.expect("preflight").report;
+            assert_eq!(report.invalid_or_unsupported(), 1);
+        }
+
+        let store = v10_store().await;
+        sqlx::query(
+            "INSERT INTO radroots_runtime_events (
+               source_generation, source_sequence, event_id, admission_stage,
+               signed_event, admitted_at_unix_ms, updated_at_unix_ms
+             ) VALUES (?, 1, ?, 'raw', ?, 10, 10)",
+        )
+        .bind(store.generation.as_bytes().as_slice())
+        .bind([73; 32].as_slice())
+        .bind(event().raw_json().as_bytes())
+        .execute(&store.pool)
+        .await
+        .expect("mismatched event fixture");
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let report = inspect(&mut connection).await.expect("preflight").report;
+        assert_eq!(report.invalid_or_unsupported(), 1);
+    }
+
+    #[tokio::test]
+    async fn committed_without_outbox_and_corrupt_journal_rows_are_blocked() {
+        let store = v10_store().await;
+        let prepared = prepare(&store, 6).await;
+        let signed = store
+            .transition(JournalTransition::signed(
+                prepared.instance_id(),
+                prepared.revision(),
+                *event().id(),
+            ))
+            .await
+            .expect("signed transition");
+        store
+            .transition(JournalTransition::committed(
+                prepared.instance_id(),
+                signed.revision(),
+                *event().id(),
+                102,
+            ))
+            .await
+            .expect("committed transition");
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let report = inspect(&mut connection).await.expect("preflight").report;
+        assert_eq!(report.signed_without_complete_event(), 1);
+
+        drop(connection);
+        let store = v10_store().await;
+        prepare(&store, 7).await;
+        sqlx::query(
+            "UPDATE radroots_runtime_journal_operations SET operation_id = X'FF'
+             WHERE instance_id = ?",
+        )
+        .bind(operation_id(7).as_bytes().as_slice())
+        .execute(&store.pool)
+        .await
+        .expect("corrupt journal fixture");
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let report = inspect(&mut connection).await.expect("preflight").report;
+        assert_eq!(report.invalid_or_unsupported(), 1);
+    }
+
+    #[tokio::test]
+    async fn eligible_and_retryable_legacy_evidence_replays_exactly() {
+        for (byte, outcome, attempted) in [
+            (8, DeliveryOutcome::accepted(), true),
+            (9, DeliveryOutcome::unavailable(), true),
+            (10, DeliveryOutcome::unavailable(), false),
+        ] {
+            let store = v10_store().await;
+            seed_complete(&store, byte, event()).await;
+            let legacy = record_legacy_attempt(&store, outcome, attempted).await;
+            assert!(matches!(
+                legacy.stage(),
+                OutboxStage::Satisfied | OutboxStage::Retryable
+            ));
+            let mut connection = store.pool.acquire().await.expect("connection");
+            let inspected = inspect(&mut connection).await.expect("preflight");
+            assert!(inspected.report.is_eligible());
+            for candidate in &inspected.candidates {
+                convert_candidate(candidate).expect("candidate conversion");
+            }
+            crate::migration::migrate_runtime(&mut connection, crate::OpenMode::ReadWriteExisting)
+                .await
+                .expect("migration with delivery evidence");
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT attempt_count FROM radroots_runtime_authored_delivery_plans",
+                )
+                .fetch_one(&mut *connection)
+                .await
+                .expect("attempt count"),
+                1
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_rejects_ineligible_preflight_and_blocked_ids_are_bounded() {
+        let store = v10_store().await;
+        prepare(&store, 10).await;
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let inspected = inspect(&mut connection).await.expect("preflight");
+        let mut transaction = connection.begin().await.expect("transaction");
+        assert!(matches!(
+            apply(&mut transaction, &inspected).await,
+            Err(Error::AuthoredMigrationBlocked { .. })
+        ));
+        transaction.rollback().await.expect("rollback");
+
+        let mut blocked = Vec::new();
+        push_blocked(&mut blocked, &[0; 15]);
+        assert!(blocked.is_empty());
+        for byte in 0..=BLOCKED_IDENTIFIERS_MAX {
+            push_blocked(&mut blocked, &[u8::try_from(byte).unwrap_or(u8::MAX); 16]);
+        }
+        assert_eq!(blocked.len(), BLOCKED_IDENTIFIERS_MAX);
+    }
+
+    #[tokio::test]
+    async fn apply_detects_metadata_races_and_import_count_drift() {
+        let store = v10_store().await;
+        seed_complete(&store, 11, event()).await;
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let inspected = inspect(&mut connection).await.expect("preflight");
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::raw_sql(runtime::migration_sql(11).expect("migration SQL"))
+            .execute(&mut *transaction)
+            .await
+            .expect("successor schema");
+        sqlx::query(
+            "UPDATE radroots_runtime_events
+             SET admitted_contract_id = 'radroots.profile.metadata.v1',
+                 admitted_registry_version = 7",
+        )
+        .execute(&mut *transaction)
+        .await
+        .expect("concurrent metadata fixture");
+        assert!(matches!(
+            apply(&mut transaction, &inspected).await,
+            Err(Error::SchemaMigrationFailed { .. })
+        ));
+        transaction.rollback().await.expect("rollback");
+
+        drop(connection);
+        let store = v10_store().await;
+        seed_complete(&store, 12, event()).await;
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let mut inspected = inspect(&mut connection).await.expect("preflight");
+        inspected.candidates.clear();
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::raw_sql(runtime::migration_sql(11).expect("migration SQL"))
+            .execute(&mut *transaction)
+            .await
+            .expect("successor schema");
+        assert!(matches!(
+            apply(&mut transaction, &inspected).await,
+            Err(Error::SchemaMigrationFailed { .. })
+        ));
+        transaction.rollback().await.expect("rollback");
+    }
+
+    #[tokio::test]
+    async fn apply_rejects_successor_foreign_key_corruption() {
+        let store = v10_store().await;
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let inspected = inspect(&mut connection).await.expect("preflight");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable fixture foreign keys");
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::raw_sql(runtime::migration_sql(11).expect("migration SQL"))
+            .execute(&mut *transaction)
+            .await
+            .expect("successor schema");
+        sqlx::query(
+            "INSERT INTO radroots_runtime_authored_delivery_targets (
+               plan_id, ordinal, target_fingerprint, target_snapshot
+             ) VALUES (?, 0, 'orphan', x'7b7d')",
+        )
+        .bind([99; 16].as_slice())
+        .execute(&mut *transaction)
+        .await
+        .expect("orphan fixture");
+        assert!(matches!(
+            apply(&mut transaction, &inspected).await,
+            Err(Error::SchemaMigrationFailed { .. })
+        ));
+        transaction.rollback().await.expect("rollback");
+    }
+
+    #[tokio::test]
+    async fn nonadvancing_legacy_retry_schedule_is_rejected() {
+        let store = v10_store().await;
+        seed_complete(&store, 13, event()).await;
+        let legacy = record_legacy_attempt(&store, DeliveryOutcome::unavailable(), true).await;
+        sqlx::query(
+            "UPDATE radroots_runtime_outbox_items SET retry_not_before_unix_ms = 150
+             WHERE item_id = ?",
+        )
+        .bind(legacy.item_id().as_bytes().as_slice())
+        .execute(&store.pool)
+        .await
+        .expect("nonadvancing retry fixture");
+        let mut connection = store.pool.acquire().await.expect("connection");
+        let inspected = inspect(&mut connection).await.expect("preflight");
+        assert!(inspected.report.is_eligible());
+        assert!(matches!(
+            convert_candidate(&inspected.candidates[0]),
+            Err(Error::SchemaMigrationFailed { .. })
+        ));
     }
 
     #[tokio::test]

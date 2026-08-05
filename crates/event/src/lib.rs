@@ -65,7 +65,7 @@ pub mod trade;
 mod verification;
 pub mod wire;
 
-pub use draft::{EventDraft, SignedEvent};
+pub use draft::SignedEvent;
 pub use envelope::{EventEnvelope as Event, EventKind, EventTag};
 pub use generic_draft::GenericEventDraft;
 pub use id::EventId;

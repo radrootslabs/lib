@@ -199,7 +199,7 @@ const FORBIDDEN_CORE_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
 const FORBIDDEN_DELIVERY_PAYLOAD_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: "payload_digest",
-        reason: "delivery requests must carry RadrootsTransportPayload instead of digest-only fields",
+        reason: "delivery requests must carry DeliveryPayload instead of digest-only fields",
     },
     ForbiddenConcept {
         pattern: "DigestOnly",
@@ -641,7 +641,7 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
     let transport_source = read_source(crates_root.join("transport/src/target.rs").as_path());
     for required in [
         "let mut fingerprints = BTreeSet::new();",
-        "RadrootsTransportError::DuplicateTargetFingerprint",
+        "TransportError::DuplicateTargetFingerprint",
         "targets.len() > TARGET_SET_MAX_ITEMS",
     ] {
         assert!(

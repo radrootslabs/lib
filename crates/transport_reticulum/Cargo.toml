@@ -21,6 +21,7 @@ serde = { workspace = true, optional = true, features = ["derive"] }
 
 [dev-dependencies]
 futures = { workspace = true }
+radroots_event = { workspace = true, features = ["std", "serde"] }
 serde_json = { workspace = true, features = ["std"] }
 
 [lints.rust]

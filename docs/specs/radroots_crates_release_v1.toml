@@ -201,7 +201,7 @@ modules = [
 ]
 root_exports = [
   "Event",
-  "EventDraft",
+  "GenericEventDraft",
   "SignedEvent",
   "VerifiedEvent",
   "EventId",
@@ -534,7 +534,11 @@ root_exports = [
   "PullRequest",
   "PullReceipt",
   "PushRequest",
-  "PushReceipt",
+  "PushPreparation",
+  "PushStatus",
+  "SigningRunReceipt",
+  "AdmissionRunReceipt",
+  "DeliveryExecutionReceipt",
   "SyncStatus",
   "Error",
 ]

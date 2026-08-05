@@ -16,8 +16,8 @@ use radroots_storage::{
     event::{EventAdmission, SourceGeneration, StoredVisibleEvent},
     memory::MemoryStorage,
     projection::{
-        ProjectionGeneration, ProjectionHealth, ProjectionId, RawSourceDigest, RebuildFailure,
-        RebuildTicketId,
+        InvalidationReason, ProjectionGeneration, ProjectionHealth, ProjectionId,
+        ProjectionInvalidation, RawSourceDigest, RebuildFailure, RebuildTicketId,
     },
 };
 use radroots_sync::{
@@ -306,6 +306,40 @@ fn generation_change_rebuilds_and_reducer_failure_is_durable() {
     )
     .expect("retry failed generation");
     assert_eq!(retried_failure.state(), RefreshState::Failed);
+}
+
+#[test]
+fn obsolete_generation_request_fails_closed_after_invalidation() {
+    let (engine, storage, id) = setup();
+    seed(&storage, 1);
+    let active = reducer(&id, 1, false);
+    block_on(engine.refresh_projection(
+        RefreshRequest::new(id.clone(), active.generation(), 10, 1).expect("request"),
+        &active,
+    ))
+    .expect("initial refresh");
+
+    let replacement = ProjectionGeneration::new([2; 32]).expect("replacement generation");
+    block_on(ProjectionStore::invalidate(
+        &*storage,
+        ProjectionInvalidation::new(
+            id.clone(),
+            active.generation(),
+            replacement,
+            InvalidationReason::ProjectionGenerationChanged,
+            2_000,
+        )
+        .expect("invalidation"),
+    ))
+    .expect("invalidate active generation");
+
+    assert_eq!(
+        block_on(engine.refresh_projection(
+            RefreshRequest::new(id, active.generation(), 10, 1).expect("obsolete request"),
+            &active,
+        )),
+        Err(Error::StorageFailed)
+    );
 }
 
 #[test]

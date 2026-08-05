@@ -1,237 +1,164 @@
 use futures_executor::block_on;
-use radroots_protocol::runtime::v1::OperationId;
+use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_storage::{
     Error,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId,
         AtomicCommitOutcome, AtomicCommitReceipt, AtomicStorage, AtomicWorkflow,
+        AtomicWorkflowKind, CommitIngested,
     },
-    journal::{IdempotencyDigest, IdempotencyKey, OperationInstanceId, PrepareOperation},
-};
-use radroots_transport::BoxFuture;
-use std::{
-    collections::BTreeMap,
-    sync::{
-        Mutex,
-        atomic::{AtomicBool, Ordering},
+    event::{
+        AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPosition,
+        EventSequence, SourceGeneration,
     },
+    memory::MemoryStorage,
+};
+use radroots_transport::{
+    Target, TransportId,
+    source::{EventProvenance, ObservedEvent},
 };
 
-struct ReferenceAtomic {
-    receipts: Mutex<BTreeMap<AtomicCommitId, AtomicCommitReceipt>>,
-    fail_before_commit: AtomicBool,
+fn signed_event() -> SignedEvent {
+    let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
+    SignedEvent::from_wire_verified_id(Nip01EventWire::parse_json(raw).expect("wire event"), raw)
+        .expect("signed event")
 }
 
-impl ReferenceAtomic {
-    fn new() -> Self {
-        Self {
-            receipts: Mutex::new(BTreeMap::new()),
-            fail_before_commit: AtomicBool::new(false),
-        }
-    }
+fn admission(event: SignedEvent) -> EventAdmission {
+    let target = Target::nostr_relay("wss://relay.example").expect("target");
+    let provenance = EventProvenance::new(TransportId::NOSTR, target.fingerprint().clone(), 100)
+        .expect("provenance");
+    EventAdmission::raw(ObservedEvent::new(event, provenance))
 }
 
-impl AtomicStorage for ReferenceAtomic {
-    fn commit(&self, request: AtomicCommit) -> BoxFuture<'_, Result<AtomicCommitReceipt, Error>> {
-        Box::pin(async move {
-            let mut receipts = self.receipts.lock().expect("atomic test lock");
-            if let Some(existing) = receipts.get(&request.commit_id()) {
-                if existing.digest() != request.digest()
-                    || existing.outcome().kind() != request.workflow().kind()
-                {
-                    return Err(Error::AtomicCommitConflict);
-                }
-                return AtomicCommitReceipt::new(
-                    &request,
-                    AtomicCommitDisposition::Replay,
-                    existing.committed_at_unix_ms(),
-                    existing.outcome().clone(),
-                );
-            }
-            if self.fail_before_commit.swap(false, Ordering::SeqCst) {
-                return Err(Error::AtomicCommitFailed);
-            }
-            let outcome = match request.workflow().clone() {
-                AtomicWorkflow::Prepared(operation) => AtomicCommitOutcome::Prepared {
-                    journal: operation.into_record()?,
-                },
-                _ => return Err(Error::AtomicCommitFailed),
-            };
-            let receipt = AtomicCommitReceipt::new(
-                &request,
-                AtomicCommitDisposition::Committed,
-                request.requested_at_unix_ms(),
-                outcome,
-            )?;
-            receipts.insert(request.commit_id(), receipt.clone());
-            Ok(receipt)
-        })
-    }
-
-    fn receipt(
-        &self,
-        commit_id: AtomicCommitId,
-    ) -> BoxFuture<'_, Result<Option<AtomicCommitReceipt>, Error>> {
-        Box::pin(async move {
-            Ok(self
-                .receipts
-                .lock()
-                .expect("atomic test lock")
-                .get(&commit_id)
-                .cloned())
-        })
-    }
-}
-
-fn request(commit_byte: u8, digest_byte: u8) -> AtomicCommit {
-    let prepare = PrepareOperation::new(
-        OperationInstanceId::new([9; 16]).expect("operation instance"),
-        OperationId::TradePrivateArtifactSeal,
-        IdempotencyKey::parse("atomic-test-key").expect("idempotency key"),
-        IdempotencyDigest::new([3; 32]),
-        100,
-    )
-    .expect("prepare operation");
+fn commit_request(id: u8, digest: u8) -> AtomicCommit {
     AtomicCommit::new(
-        AtomicCommitId::new([commit_byte; 16]).expect("commit id"),
-        AtomicCommitDigest::new([digest_byte; 32]),
+        AtomicCommitId::new([id; 16]).expect("commit ID"),
+        AtomicCommitDigest::new([digest; 32]),
         100,
-        AtomicWorkflow::Prepared(prepare),
+        AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
+            admission(signed_event()),
+            None,
+        ))),
     )
-    .expect("atomic commit")
+    .expect("commit")
+}
+
+fn outcome() -> AtomicCommitOutcome {
+    let event = signed_event();
+    AtomicCommitOutcome::Ingested {
+        admission: AdmissionReceipt::new(
+            *event.id(),
+            EventPosition::new(
+                SourceGeneration::new([1; 32]).expect("generation"),
+                EventSequence::new(1).expect("sequence"),
+            ),
+            AdmissionStage::Raw,
+            AdmissionDisposition::Inserted,
+        ),
+        projection: None,
+    }
 }
 
 #[test]
-fn failure_before_commit_leaves_no_partial_receipt() {
-    let store = ReferenceAtomic::new();
-    let request = request(1, 2);
-    store.fail_before_commit.store(true, Ordering::SeqCst);
-    assert_eq!(
-        block_on(store.commit(request.clone())),
-        Err(Error::AtomicCommitFailed)
-    );
-    assert_eq!(
-        block_on(store.receipt(request.commit_id())).expect("receipt query"),
-        None
-    );
-
-    let committed = block_on(store.commit(request.clone())).expect("commit");
-    assert_eq!(committed.disposition(), AtomicCommitDisposition::Committed);
-    assert_eq!(committed.commit_id(), request.commit_id());
-    assert_eq!(committed.digest(), request.digest());
-    assert_eq!(committed.committed_at_unix_ms(), 100);
-    assert_eq!(request.commit_id().as_bytes(), &[1; 16]);
-    assert_eq!(request.digest().as_bytes(), &[2; 32]);
-    assert_eq!(request.requested_at_unix_ms(), 100);
-    assert_eq!(
-        request.workflow().kind(),
-        radroots_storage::atomic::AtomicWorkflowKind::Prepared
-    );
-    assert!(
-        block_on(store.receipt(request.commit_id()))
-            .expect("receipt query")
-            .is_some()
-    );
-}
-
-#[test]
-fn exact_commit_replays_and_digest_reuse_conflicts() {
-    let store = ReferenceAtomic::new();
-    let original_request = request(1, 2);
-    let original = block_on(store.commit(original_request.clone())).expect("commit");
-    let replay = block_on(store.commit(original_request)).expect("replay");
-    assert_eq!(replay.disposition(), AtomicCommitDisposition::Replay);
-    assert_eq!(replay.outcome(), original.outcome());
-    assert_eq!(
-        block_on(store.commit(request(1, 4))),
-        Err(Error::AtomicCommitConflict)
-    );
-}
-
-#[test]
-fn atomic_contract_is_dyn_compatible_and_rejects_invalid_identity_and_time() {
-    fn accepts_dyn(_: &dyn AtomicStorage) {}
-    let store = ReferenceAtomic::new();
-    accepts_dyn(&store);
+fn atomic_identity_workflow_and_receipt_models_are_exact() {
     assert_eq!(
         AtomicCommitId::new([0; 16]),
         Err(Error::InvalidAtomicCommitId)
     );
-    let valid = request(1, 2);
+    let request = commit_request(1, 2);
+    assert_eq!(request.commit_id().as_bytes(), &[1; 16]);
+    assert_eq!(request.digest().as_bytes(), &[2; 32]);
+    assert_eq!(request.requested_at_unix_ms(), 100);
+    assert_eq!(request.workflow().kind(), AtomicWorkflowKind::Ingested);
+    let AtomicWorkflow::Ingested(ingested) = request.workflow();
+    assert_eq!(ingested.admission().event().id(), signed_event().id());
+    assert_eq!(ingested.projection(), None);
+
     assert_eq!(
         AtomicCommit::new(
-            valid.commit_id(),
-            valid.digest(),
+            request.commit_id(),
+            request.digest(),
             0,
-            valid.workflow().clone()
+            request.workflow().clone(),
         ),
         Err(Error::InvalidAtomicCommitTimestamp)
     );
 
-    let outcome = match valid.workflow().clone() {
-        AtomicWorkflow::Prepared(operation) => AtomicCommitOutcome::Prepared {
-            journal: operation.into_record().expect("journal record"),
-        },
-        _ => unreachable!(),
-    };
+    let receipt =
+        AtomicCommitReceipt::new(&request, AtomicCommitDisposition::Committed, 100, outcome())
+            .expect("receipt");
+    assert_eq!(receipt.commit_id(), request.commit_id());
+    assert_eq!(receipt.digest(), request.digest());
+    assert_eq!(receipt.disposition(), AtomicCommitDisposition::Committed);
+    assert_eq!(receipt.committed_at_unix_ms(), 100);
+    assert_eq!(receipt.outcome().kind(), AtomicWorkflowKind::Ingested);
     assert_eq!(
-        AtomicCommitReceipt::new(
-            &valid,
-            AtomicCommitDisposition::Committed,
-            99,
-            outcome.clone(),
-        ),
+        AtomicCommitReceipt::new(&request, AtomicCommitDisposition::Committed, 99, outcome(),),
         Err(Error::AtomicWorkflowMismatch)
     );
-    assert_eq!(
-        AtomicCommitReceipt::from_durable_parts(
-            valid.commit_id(),
-            valid.digest(),
-            AtomicCommitDisposition::Committed,
-            0,
-            100,
-            radroots_storage::atomic::AtomicWorkflowKind::Prepared,
-            outcome.clone(),
-        ),
-        Err(Error::AtomicWorkflowMismatch)
-    );
-    assert_eq!(
-        AtomicCommitReceipt::from_durable_parts(
-            valid.commit_id(),
-            valid.digest(),
-            AtomicCommitDisposition::Committed,
-            100,
-            99,
-            radroots_storage::atomic::AtomicWorkflowKind::Prepared,
-            outcome.clone(),
-        ),
-        Err(Error::AtomicWorkflowMismatch)
-    );
-    assert_eq!(
-        AtomicCommitReceipt::from_durable_parts(
-            valid.commit_id(),
-            valid.digest(),
-            AtomicCommitDisposition::Committed,
-            100,
-            100,
-            radroots_storage::atomic::AtomicWorkflowKind::Signed,
-            outcome.clone(),
-        ),
-        Err(Error::AtomicWorkflowMismatch)
-    );
-    let reconstructed = AtomicCommitReceipt::from_durable_parts(
-        valid.commit_id(),
-        valid.digest(),
+}
+
+#[test]
+fn durable_receipt_reconstruction_rejects_timestamp_incoherence() {
+    let request = commit_request(1, 2);
+    for (requested_at, committed_at) in [(0, 100), (101, 100)] {
+        assert_eq!(
+            AtomicCommitReceipt::from_durable_parts(
+                request.commit_id(),
+                request.digest(),
+                AtomicCommitDisposition::Replay,
+                requested_at,
+                committed_at,
+                AtomicWorkflowKind::Ingested,
+                outcome(),
+            ),
+            Err(Error::AtomicWorkflowMismatch)
+        );
+    }
+
+    let receipt = AtomicCommitReceipt::from_durable_parts(
+        request.commit_id(),
+        request.digest(),
         AtomicCommitDisposition::Replay,
         100,
         101,
-        radroots_storage::atomic::AtomicWorkflowKind::Prepared,
-        outcome.clone(),
+        AtomicWorkflowKind::Ingested,
+        outcome(),
     )
     .expect("durable receipt");
-    assert_eq!(reconstructed.commit_id(), valid.commit_id());
-    assert_eq!(reconstructed.digest(), valid.digest());
-    assert_eq!(reconstructed.disposition(), AtomicCommitDisposition::Replay);
-    assert_eq!(reconstructed.committed_at_unix_ms(), 101);
-    assert_eq!(reconstructed.outcome(), &outcome);
+    assert_eq!(receipt.disposition(), AtomicCommitDisposition::Replay);
+    assert_eq!(receipt.committed_at_unix_ms(), 101);
+}
+
+#[test]
+fn memory_atomic_boundary_replays_exactly_and_conflicts_on_digest_reuse() {
+    fn accepts_dyn(_: &dyn AtomicStorage) {}
+
+    let store = MemoryStorage::default();
+    accepts_dyn(&store);
+    let request = commit_request(1, 2);
+    assert_eq!(
+        block_on(store.commit(request.clone()))
+            .expect("commit")
+            .disposition(),
+        AtomicCommitDisposition::Committed
+    );
+    assert_eq!(
+        block_on(store.commit(request.clone()))
+            .expect("replay")
+            .disposition(),
+        AtomicCommitDisposition::Replay
+    );
+    assert_eq!(
+        block_on(store.commit(commit_request(1, 3))),
+        Err(Error::AtomicCommitConflict)
+    );
+    assert_eq!(
+        block_on(store.receipt(request.commit_id()))
+            .expect("receipt")
+            .expect("durable receipt")
+            .digest(),
+        request.digest()
+    );
 }

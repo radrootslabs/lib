@@ -1,162 +1,113 @@
-use radroots_transport::capability::{Availability, Maturity};
-use radroots_transport::sink::EventSink;
-use radroots_transport::source::{EventSource, FetchBounds, FetchRequest};
-use radroots_transport::target::{TargetLabel, TargetScope};
+use futures::executor::block_on;
+use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_transport::{
-    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportImplementationState, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy, Target, TargetSet,
-    TransportId,
+    DeliveryRequest, Error as TransportError, EventSink, EventSource, FetchRequest, Target,
+    TargetSet, TransportId,
+    capability::{Availability, Maturity},
+    outcome::{DeliveryOutcomeKind, FetchTargetState},
+    policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    sink::DeliveryPayload,
+    source::FetchBounds,
+    target::{TargetLabel, TargetScope},
 };
 use radroots_transport_reticulum::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsReticulumAgentEndpoint,
-    RadrootsReticulumBehavior, RadrootsReticulumEndpoint, RadrootsReticulumError,
-    RadrootsReticulumFetchRequest, RadrootsReticulumProfile, RadrootsReticulumTransport,
-    ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
-    ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RETICULUM_V1_MAX_PAYLOAD_BYTES,
+    RadrootsReticulumAgentEndpoint, RadrootsReticulumBehavior, RadrootsReticulumEndpoint,
+    RadrootsReticulumError, RadrootsReticulumProfile, RadrootsReticulumTransport,
+    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
+    ReticulumFragmentIntegrityV1, ReticulumFragmentPolicyV1, ReticulumFragmentationModeV1,
+    ReticulumGatewaySemanticsV1, ReticulumPayloadPolicyV1, ReticulumPrivacySemanticsV1,
+    ReticulumRoutingMetadataV1,
 };
-#[cfg(feature = "serde")]
-use serde_json::Value;
 
-fn reticulum_target(uri: &str) -> Target {
-    assert_eq!(uri, RADROOTS_RETICULUM_ENDPOINT_URI);
+fn signed_event() -> SignedEvent {
+    let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
+    SignedEvent::from_wire_verified_id(Nip01EventWire::parse_json(raw).expect("wire event"), raw)
+        .expect("signed event")
+}
+
+fn scope() -> TargetScope {
+    TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope")
+}
+
+fn target() -> Target {
     ReticulumDestinationV1::local()
         .transport_target()
-        .expect("reticulum target")
+        .expect("Reticulum target")
 }
 
-fn scoped_reticulum_target(scope: &str) -> Target {
-    Target::new_with_metadata(
-        TransportId::RETICULUM,
-        RADROOTS_RETICULUM_ENDPOINT_URI,
-        Some(TargetScope::parse(scope).expect("scope")),
-        None,
-    )
-    .expect("scoped reticulum target")
+fn target_set(target: Target) -> TargetSet {
+    TargetSet::new(vec![target]).expect("target set")
 }
 
-fn nostr_target() -> Target {
-    Target::new(TransportId::NOSTR, "wss://relay.example").expect("nostr target")
-}
-
-fn delivery_request(targets: Vec<Target>) -> RadrootsTransportDeliveryRequest {
-    RadrootsTransportDeliveryRequest::new(
+fn delivery(target: Target) -> DeliveryRequest {
+    DeliveryRequest::new(
         "reticulum-delivery",
-        reticulum_payload(),
-        TargetSet::new(targets).expect("target set"),
-        RadrootsTransportSatisfactionPolicy::any_accepted(),
+        DeliveryPayload::new(signed_event()),
+        target_set(target),
+        SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+        1_800_000_200_000,
     )
     .expect("delivery request")
 }
 
-fn reticulum_payload() -> RadrootsTransportPayload {
-    RadrootsTransportPayload::mesh_frame_cbor("reticulum-message", [1_u8, 2, 3]).expect("payload")
+fn fetch(target: Target) -> FetchRequest {
+    FetchRequest::new(
+        "reticulum-fetch",
+        target_set(target),
+        FetchBounds::new(10, 1_800_000_200_000).expect("fetch bounds"),
+    )
+    .expect("fetch request")
 }
 
 #[test]
-fn default_profile_is_configured_deferred_until_implemented_and_rejecting() {
-    let profile = RadrootsReticulumProfile::default();
-    let status = profile.status();
-
-    assert_eq!(profile.profile_id(), "transport.reticulum.default");
-    assert_eq!(profile.endpoint().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
-    assert_eq!(profile.scope().as_str(), RADROOTS_RETICULUM_SCOPE_ID);
-    assert_eq!(profile.agent_endpoint(), None);
+fn payload_fragment_and_routing_policies_are_explicitly_inert() {
+    let fragments = ReticulumFragmentPolicyV1::unsupported();
+    assert_eq!(fragments.mode, ReticulumFragmentationModeV1::Unsupported);
+    assert_eq!(fragments.max_fragment_count, 1);
     assert_eq!(
-        profile.behavior(),
-        RadrootsReticulumBehavior::RejectDeliveryAttempts
+        fragments.max_reassembled_bytes,
+        RETICULUM_V1_MAX_PAYLOAD_BYTES
     );
     assert_eq!(
-        status.transport_status.implementation,
-        RadrootsTransportImplementationState::Real
-    );
-    assert_eq!(
-        status.transport_status.maturity,
-        RadrootsTransportCapabilityMaturity::Preview
-    );
-    assert_eq!(
-        status.transport_status.availability,
-        RadrootsTransportCapabilityAvailability::Unavailable
-    );
-    assert!(status.transport_status.configured);
-    assert_eq!(
-        status.transport_status.profile_id.as_deref(),
-        Some("transport.reticulum.default")
-    );
-    assert_eq!(
-        status.transport_status.endpoint_uri.as_deref(),
-        Some(RADROOTS_RETICULUM_ENDPOINT_URI)
-    );
-    assert_eq!(
-        profile.destination().uri().as_str(),
-        RADROOTS_RETICULUM_ENDPOINT_URI
-    );
-    assert_eq!(
-        profile.destination().routing().scope.as_str(),
-        RADROOTS_RETICULUM_SCOPE_ID
-    );
-    assert_eq!(
-        status.destination.routing().gateway,
-        ReticulumGatewaySemanticsV1::NoGatewayForwarding
-    );
-    assert_eq!(
-        status.destination.routing().privacy,
-        ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
-    );
-    assert!(status.capability_report.delivery_required);
-    assert!(!status.capability_report.fetch_required);
-    assert!(!status.capability_report.can_deliver);
-    assert!(!status.capability_report.can_fetch);
-    assert!(!status.capability_report.can_discover);
-    assert!(!status.capability_report.can_forward_gateway);
-    assert!(!status.capability_report.can_observe_receipts);
-    assert_eq!(
-        status.capability_report.destination.fingerprint(),
-        status.destination.fingerprint()
-    );
-    assert_eq!(
-        status.capability_report.payload_policy.fragment_policy.mode,
-        ReticulumFragmentationModeV1::Unsupported
-    );
-    assert_eq!(
-        status
-            .capability_report
-            .payload_policy
-            .fragment_policy
-            .max_fragment_count,
-        1
-    );
-    assert_eq!(
-        status
-            .capability_report
-            .payload_policy
-            .fragment_policy
-            .duplicate_fragment_behavior,
+        fragments.duplicate_fragment_behavior,
         ReticulumDuplicateFragmentBehaviorV1::Reject
     );
     assert_eq!(
-        status
-            .capability_report
-            .payload_policy
-            .fragment_policy
-            .integrity_verification,
+        fragments.integrity_verification,
         ReticulumFragmentIntegrityV1::PayloadDigest
     );
+
+    let payload = ReticulumPayloadPolicyV1::v1();
+    assert_eq!(payload.max_payload_bytes, RETICULUM_V1_MAX_PAYLOAD_BYTES);
+    assert_eq!(payload.fragment_policy, fragments);
+
+    let routing = ReticulumRoutingMetadataV1::local();
+    assert_eq!(routing.scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
     assert_eq!(
-        status.transport_status.message,
-        RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
+        routing.gateway,
+        ReticulumGatewaySemanticsV1::NoGatewayForwarding
     );
-    assert!(!status.transport_status.usable_for_delivery);
-    assert_eq!(status.scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
-    assert_eq!(status.agent_endpoint, None);
+    assert_eq!(
+        routing.privacy,
+        ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
+    );
+
+    let report = ReticulumCapabilityReportV1::unavailable_local();
+    assert!(report.delivery_required);
+    assert!(!report.fetch_required);
+    assert!(!report.can_deliver);
+    assert!(!report.can_fetch);
+    assert!(!report.can_discover);
+    assert!(!report.can_forward_gateway);
+    assert!(!report.can_observe_receipts);
+    assert_eq!(report.payload_policy, payload);
 }
 
 #[test]
-fn endpoint_and_profile_validation_are_strict_and_canonical() {
-    let endpoint =
-        RadrootsReticulumEndpoint::parse(RADROOTS_RETICULUM_ENDPOINT_URI).expect("endpoint");
+fn endpoint_and_agent_endpoint_values_are_strict_and_canonical() {
+    let endpoint = RadrootsReticulumEndpoint::default();
     assert_eq!(endpoint.as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(endpoint.to_string(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(
@@ -164,526 +115,250 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         RADROOTS_RETICULUM_ENDPOINT_URI
     );
     assert_eq!(
-        RadrootsReticulumEndpoint::default().as_str(),
-        RADROOTS_RETICULUM_ENDPOINT_URI
+        RadrootsReticulumEndpoint::parse(RADROOTS_RETICULUM_ENDPOINT_URI).unwrap(),
+        endpoint
     );
-
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse(" ").expect_err("empty endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("reticulum:").expect_err("empty endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("https://target").expect_err("wrong scheme"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("RETICULUM:unavailable").expect_err("case drift endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse(" reticulum:unavailable")
-            .expect_err("leading whitespace endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("reticulum:unavailable ")
-            .expect_err("trailing whitespace endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("reticulum:custom").expect_err("custom endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("reticulum:bad target").expect_err("whitespace endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    assert_eq!(
-        RadrootsReticulumEndpoint::parse("reticulum:bad\ntarget").expect_err("control endpoint"),
-        RadrootsReticulumError::InvalidEndpoint
-    );
-    let agent_endpoint = RadrootsReticulumAgentEndpoint::parse("reticulum-agent://localhost:19999")
-        .expect("agent endpoint");
-    assert_eq!(agent_endpoint.as_str(), "reticulum-agent://localhost:19999");
-    assert_eq!(
-        agent_endpoint.to_string(),
-        "reticulum-agent://localhost:19999"
-    );
-    assert_eq!(
-        agent_endpoint.clone().into_string(),
-        "reticulum-agent://localhost:19999"
-    );
-    let local_agent_endpoint =
-        RadrootsReticulumAgentEndpoint::parse("reticulum-agent:local-controller")
-            .expect("local agent endpoint");
-    assert_eq!(
-        local_agent_endpoint.as_str(),
-        "reticulum-agent:local-controller"
-    );
-    for invalid_agent in [
-        "",
-        " reticulum-agent://localhost",
-        "reticulum-agent:",
-        "reticulum agent",
-        "agent",
-        "https://localhost:19999",
-        "ws://localhost:19999",
-        "reticulum://localhost:19999",
-        "RETICULUM-AGENT://localhost:19999",
-    ] {
+    for invalid in ["", " ", "RETICULUM:local", "reticulum:remote"] {
         assert_eq!(
-            RadrootsReticulumAgentEndpoint::parse(invalid_agent)
-                .expect_err("invalid agent endpoint"),
-            RadrootsReticulumError::InvalidAgentEndpoint
+            RadrootsReticulumEndpoint::parse(invalid).unwrap_err(),
+            RadrootsReticulumError::InvalidEndpoint
         );
     }
+
+    for valid in [
+        "reticulum-agent:local-controller",
+        "reticulum-agent://localhost:19999",
+    ] {
+        let agent = RadrootsReticulumAgentEndpoint::parse(valid).expect("agent endpoint");
+        assert_eq!(agent.as_str(), valid);
+        assert_eq!(agent.to_string(), valid);
+        assert_eq!(agent.into_string(), valid);
+    }
+    for invalid in [
+        "",
+        " reticulum-agent:local",
+        "reticulum-agent:local ",
+        "reticulum-agent:local\n",
+        "reticulum agent:local",
+        "RETICULUM-AGENT:local",
+        "reticulum-agent:",
+    ] {
+        assert_eq!(
+            RadrootsReticulumAgentEndpoint::parse(invalid).unwrap_err(),
+            RadrootsReticulumError::InvalidAgentEndpoint,
+            "{invalid:?}"
+        );
+    }
+}
+
+#[test]
+fn destinations_preserve_transport_identity_scope_and_optional_labels() {
+    let local = ReticulumDestinationV1::local();
+    assert_eq!(local.uri().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(local.routing().scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
+    assert_eq!(local.label(), None);
+
+    let label = TargetLabel::parse("Local node").expect("label");
+    let labeled = ReticulumDestinationV1::new(
+        RADROOTS_RETICULUM_ENDPOINT_URI,
+        TargetScope::parse("farm.mesh").expect("scope"),
+        Some(label.clone()),
+    )
+    .expect("destination");
+    assert_eq!(labeled.label(), Some(&label));
+    assert_ne!(labeled.fingerprint(), local.fingerprint());
+
+    let transport_target = labeled.transport_target().expect("transport target");
+    assert_eq!(transport_target.kind(), &TransportId::RETICULUM);
     assert_eq!(
-        RadrootsReticulumProfile::new(
-            "transport reticulum",
-            endpoint,
-            TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
-            None,
-            RadrootsReticulumBehavior::RejectDeliveryAttempts,
-        )
-        .expect_err("profile id whitespace"),
-        RadrootsReticulumError::InvalidProfileId
+        ReticulumDestinationV1::from_target(&transport_target).expect("round trip"),
+        labeled
     );
+
+    let local_target = Target::local("local:memory").expect("local target");
+    assert_eq!(
+        ReticulumDestinationV1::from_target(&local_target).unwrap_err(),
+        TransportError::InvalidTargetUri
+    );
+    let wrong_uri = Target::new_with_metadata(
+        TransportId::RETICULUM,
+        "reticulum:remote",
+        Some(scope()),
+        None,
+    )
+    .expect("wrong URI target");
+    assert_eq!(
+        ReticulumDestinationV1::from_target(&wrong_uri).unwrap_err(),
+        TransportError::InvalidTargetUri
+    );
+    let missing_scope =
+        Target::new(TransportId::RETICULUM, RADROOTS_RETICULUM_ENDPOINT_URI).expect("target");
+    assert_eq!(
+        ReticulumDestinationV1::from_target(&missing_scope).unwrap_err(),
+        TransportError::EmptyTargetScope
+    );
+}
+
+#[test]
+fn profiles_expose_canonical_preview_configuration() {
+    let default = RadrootsReticulumProfile::default();
+    assert_eq!(default.profile_id(), "transport.reticulum.default");
+    assert_eq!(default.endpoint().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(default.scope().as_str(), RADROOTS_RETICULUM_SCOPE_ID);
+    assert_eq!(default.agent_endpoint(), None);
+    assert_eq!(
+        default.behavior(),
+        RadrootsReticulumBehavior::RejectDeliveryAttempts
+    );
+    assert_eq!(
+        default.destination(),
+        &default.capability_report().destination
+    );
+
     assert_eq!(
         RadrootsReticulumProfile::new(
             "",
             RadrootsReticulumEndpoint::default(),
-            TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
+            scope(),
             None,
             RadrootsReticulumBehavior::RejectDeliveryAttempts,
         )
-        .expect_err("empty profile id"),
+        .unwrap_err(),
         RadrootsReticulumError::InvalidProfileId
     );
-    let profile = RadrootsReticulumProfile::new(
+    assert_eq!(
+        RadrootsReticulumProfile::new(
+            "transport reticulum",
+            RadrootsReticulumEndpoint::default(),
+            scope(),
+            None,
+            RadrootsReticulumBehavior::RejectDeliveryAttempts,
+        )
+        .unwrap_err(),
+        RadrootsReticulumError::InvalidProfileId
+    );
+
+    let agent =
+        RadrootsReticulumAgentEndpoint::parse("reticulum-agent:local").expect("agent endpoint");
+    let custom = RadrootsReticulumProfile::new(
         "transport.reticulum.custom",
         RadrootsReticulumEndpoint::default(),
-        TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"),
-        Some(agent_endpoint),
+        TargetScope::parse("farm.mesh").expect("scope"),
+        Some(agent.clone()),
         RadrootsReticulumBehavior::DeferDeliveryPlans,
     )
-    .expect("custom behavior profile");
-    assert_eq!(profile.profile_id(), "transport.reticulum.custom");
-    assert_eq!(profile.endpoint().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    .expect("profile");
+    assert_eq!(custom.profile_id(), "transport.reticulum.custom");
+    assert_eq!(custom.agent_endpoint(), Some(&agent));
     assert_eq!(
-        profile.behavior(),
+        custom.behavior(),
+        RadrootsReticulumBehavior::DeferDeliveryPlans
+    );
+
+    let updated = default
+        .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans)
+        .with_agent_endpoint(agent.clone());
+    assert_eq!(updated.agent_endpoint(), Some(&agent));
+    assert_eq!(
+        updated.behavior(),
         RadrootsReticulumBehavior::DeferDeliveryPlans
     );
     assert_eq!(
-        profile.agent_endpoint().map(|endpoint| endpoint.as_str()),
-        Some("reticulum-agent://localhost:19999")
-    );
-    assert_eq!(
-        profile
-            .capability_report()
-            .destination
-            .routing()
-            .scope
-            .as_str(),
-        RADROOTS_RETICULUM_SCOPE_ID
+        RadrootsReticulumBehavior::default(),
+        RadrootsReticulumBehavior::RejectDeliveryAttempts
     );
 }
 
 #[test]
-fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
-    let transport = RadrootsReticulumTransport::default();
-    let request = delivery_request(vec![scoped_reticulum_target("farm-north.mesh_1")]);
-    let receipt = transport.deliver(request).expect("delivery receipt");
-
-    assert_eq!(receipt.target_receipts().len(), 1);
-    assert_eq!(
-        receipt.target_receipts()[0]
-            .target
-            .scope()
-            .map(|scope| scope.as_str()),
-        Some("farm-north.mesh_1")
-    );
-    assert_eq!(
-        receipt.target_receipts()[0].status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-    );
-    assert_eq!(
-        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
-        0
-    );
-
-    let deferred_transport = RadrootsReticulumTransport::new(
-        RadrootsReticulumProfile::default()
-            .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans),
-    );
-    let deferred = deferred_transport
-        .deliver(delivery_request(vec![scoped_reticulum_target(
-            "farm-south.mesh_2",
-        )]))
-        .expect("deferred delivery receipt");
-    assert_eq!(
-        deferred.target_receipts()[0]
-            .target
-            .scope()
-            .map(|scope| scope.as_str()),
-        Some("farm-south.mesh_2")
-    );
-    assert_eq!(
-        deferred.target_receipts()[0].status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-    );
-    assert_eq!(
-        deferred.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
-        0
-    );
-}
-
-#[test]
-fn final_transport_spis_report_unavailable_reticulum_source_and_sink() {
-    let transport = RadrootsReticulumTransport::default();
-    let target_set = TargetSet::new(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)])
-        .expect("target set");
-    let sink_status =
-        futures::executor::block_on(EventSink::status(&transport)).expect("sink status");
-    assert_eq!(sink_status.transport_id(), TransportId::RETICULUM);
-    assert_eq!(sink_status.maturity(), Maturity::Preview);
-    assert_eq!(sink_status.availability(), Availability::Unavailable);
-    assert!(!sink_status.capabilities().can_deliver());
-
-    let source_status =
-        futures::executor::block_on(EventSource::status(&transport)).expect("source status");
-    assert_eq!(source_status.transport_id(), TransportId::RETICULUM);
-    assert_eq!(source_status.maturity(), Maturity::Preview);
-    assert_eq!(source_status.availability(), Availability::Unavailable);
-    assert!(!source_status.capabilities().can_fetch());
-
-    let fetch = futures::executor::block_on(EventSource::fetch(
-        &transport,
-        FetchRequest::new(
-            "core-fetch",
-            target_set,
-            FetchBounds::new(10, 10_000).expect("fetch bounds"),
-        )
-        .expect("fetch request"),
-    ))
-    .expect("fetch page");
-    assert!(fetch.events().is_empty());
-    assert_eq!(fetch.target_outcomes().len(), 1);
-}
-
-#[test]
-fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing() {
-    let transport = RadrootsReticulumTransport::default();
-    let request = delivery_request(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)]);
-    let receipt = transport.deliver(request).expect("delivery receipt");
-
-    assert_eq!(receipt.target_receipts().len(), 1);
-    assert_eq!(
-        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
-        0
-    );
-    for target_receipt in receipt.target_receipts() {
-        assert_eq!(target_receipt.target.kind(), &TransportId::RETICULUM);
-        assert_eq!(
-            target_receipt.status,
-            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-        );
-        assert_eq!(
-            target_receipt.outcome.code.as_deref(),
-            Some("transport_unavailable")
-        );
-        assert_eq!(
-            target_receipt.outcome.message.as_deref(),
-            Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
-        );
-    }
-}
-
-#[test]
-fn noncanonical_reticulum_targets_are_rejected() {
-    for invalid in [
-        " reticulum:unavailable",
-        "reticulum:unavailable ",
-        "RETICULUM:unavailable",
-        "reticulum:Unavailable",
-        "reticulum:temporary",
-        "reticulum:unavailable-alt",
-        "reticulum:custom",
-    ] {
-        let result = Target::new(TransportId::RETICULUM, invalid)
-            .and_then(|target| ReticulumDestinationV1::from_target(&target).map(|_| target));
-        assert_eq!(
-            result.expect_err("noncanonical Reticulum target"),
-            radroots_transport::RadrootsTransportError::InvalidTargetUri
-        );
-    }
-}
-
-#[test]
-fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
-    let transport = RadrootsReticulumTransport::new(
-        RadrootsReticulumProfile::default()
-            .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans),
-    );
-    let request = delivery_request(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)]);
-    let receipt = transport.deliver(request).expect("delivery receipt");
-
-    assert_eq!(receipt.target_receipts().len(), 1);
-    assert_eq!(
-        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
-        0
-    );
-    assert_eq!(
-        receipt.target_receipts()[0].status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-    );
-    assert_eq!(
-        receipt.target_receipts()[0].outcome.code.as_deref(),
-        Some("deferred_until_implemented")
-    );
-    assert!(
-        !RadrootsTransportSatisfactionPolicy::any_accepted()
-            .is_satisfied_by(
-                1,
-                receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted)
-            )
-            .expect("satisfaction check")
-    );
-}
-
-#[test]
-fn non_reticulum_targets_are_rejected_without_nostr_routing() {
-    let transport = RadrootsReticulumTransport::default();
-    let err = transport
-        .deliver(delivery_request(vec![nostr_target()]))
-        .expect_err("non-reticulum target");
-
-    assert_eq!(err, RadrootsReticulumError::NonReticulumTarget);
-}
-
-#[test]
-fn reticulum_target_constructor_always_supplies_typed_scope() {
-    let target = reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI);
-    assert_eq!(
-        target.scope().map(|scope| scope.as_str()),
-        Some(RADROOTS_RETICULUM_SCOPE_ID)
-    );
-}
-
-#[test]
-fn fetch_reports_deferred_until_implemented_without_observed_events() {
+fn canonical_source_and_sink_return_request_bound_unavailable_evidence() {
     let transport = RadrootsReticulumTransport::default();
     assert_eq!(
         transport.profile().profile_id(),
         "transport.reticulum.default"
     );
-    assert_eq!(
-        transport.status().transport_status.implementation,
-        RadrootsTransportImplementationState::Real
-    );
-    let receipt = transport
-        .fetch(RadrootsReticulumFetchRequest::new("fetch-1", 10).expect("fetch request"))
-        .expect("fetch receipt");
+    let transport = RadrootsReticulumTransport::new(transport.profile().clone());
 
-    assert_eq!(receipt.request_id, "fetch-1");
-    assert_eq!(receipt.endpoint_uri, RADROOTS_RETICULUM_ENDPOINT_URI);
-    assert_eq!(receipt.observed_event_count, 0);
+    let sink_status = block_on(EventSink::status(&transport)).expect("sink status");
+    assert_eq!(sink_status.transport_id(), TransportId::RETICULUM);
+    assert_eq!(sink_status.maturity(), Maturity::Preview);
+    assert_eq!(sink_status.availability(), Availability::Unavailable);
+    assert!(!sink_status.capabilities().can_deliver());
     assert_eq!(
-        receipt.implementation,
-        RadrootsTransportImplementationState::Real
+        sink_status.message(),
+        RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
     );
-    assert_eq!(receipt.scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
-    assert_eq!(receipt.agent_endpoint, None);
+
+    let source_status = block_on(EventSource::status(&transport)).expect("source status");
+    assert_eq!(source_status.transport_id(), TransportId::RETICULUM);
+    assert_eq!(source_status.maturity(), Maturity::Preview);
+    assert_eq!(source_status.availability(), Availability::Unavailable);
+    assert!(!source_status.capabilities().can_fetch());
     assert_eq!(
-        receipt.outcome.status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        source_status.message(),
+        RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
+    );
+
+    let delivery = delivery(target());
+    let receipt =
+        block_on(EventSink::deliver(&transport, delivery.clone())).expect("delivery receipt");
+    receipt
+        .validate_for_request(&delivery)
+        .expect("request bound");
+    assert_eq!(receipt.target_receipts().len(), 1);
+    assert!(!receipt.target_receipts()[0].was_attempted());
+    assert_eq!(
+        receipt.target_receipts()[0].outcome().kind(),
+        DeliveryOutcomeKind::Unavailable
     );
     assert_eq!(
-        RadrootsReticulumFetchRequest::new("fetch-0", 0).expect_err("zero limit"),
-        RadrootsReticulumError::InvalidFetchLimit
+        receipt.target_receipts()[0].outcome().code(),
+        Some("transport_unavailable")
+    );
+
+    let fetch = fetch(target());
+    let page = block_on(EventSource::fetch(&transport, fetch.clone())).expect("fetch page");
+    page.validate_for_request(&fetch).expect("request bound");
+    assert!(page.events().is_empty());
+    assert_eq!(page.target_outcomes().len(), 1);
+    assert_eq!(
+        page.target_outcomes()[0].state(),
+        FetchTargetState::Unavailable
     );
     assert_eq!(
-        transport
-            .fetch(RadrootsReticulumFetchRequest {
-                request_id: "fetch-public-zero".to_owned(),
-                max_events: 0,
-            })
-            .expect_err("zero limit at transport boundary"),
-        RadrootsReticulumError::InvalidFetchLimit
-    );
-    let deferred_transport = RadrootsReticulumTransport::new(
-        RadrootsReticulumProfile::default()
-            .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans),
-    );
-    let deferred = deferred_transport
-        .fetch(RadrootsReticulumFetchRequest::new("fetch-deferred", 1).expect("fetch"))
-        .expect("fetch receipt");
-    assert_eq!(
-        deferred.outcome.status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        page.target_outcomes()[0].message(),
+        Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
     );
 }
 
 #[test]
-fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
-    let agent_endpoint = RadrootsReticulumAgentEndpoint::parse("reticulum-agent://localhost:19999")
-        .expect("agent endpoint");
-    let transport = RadrootsReticulumTransport::new(
-        RadrootsReticulumProfile::default().with_agent_endpoint(agent_endpoint),
-    );
-    let status = transport.status();
-    assert_eq!(
-        status
-            .agent_endpoint
-            .as_ref()
-            .map(|endpoint| endpoint.as_str()),
-        Some("reticulum-agent://localhost:19999")
-    );
-    assert_eq!(
-        status.transport_status.implementation,
-        RadrootsTransportImplementationState::Real
-    );
-    assert!(!status.transport_status.usable_for_delivery);
-    assert!(!status.transport_status.capabilities.deliver);
-    assert!(!status.transport_status.capabilities.fetch);
-    assert!(!status.transport_status.capabilities.discovery);
-    assert!(!status.transport_status.capabilities.gateway_forwarding);
-    assert!(!status.transport_status.capabilities.receipt_observation);
+fn source_and_sink_reject_noncanonical_targets_before_adapter_effects() {
+    let transport = RadrootsReticulumTransport::default();
+    let invalid_targets = [
+        Target::nostr_relay("wss://relay.example").expect("Nostr target"),
+        Target::new_with_metadata(
+            TransportId::RETICULUM,
+            "reticulum:remote",
+            Some(scope()),
+            None,
+        )
+        .expect("wrong URI target"),
+        Target::new(TransportId::RETICULUM, RADROOTS_RETICULUM_ENDPOINT_URI)
+            .expect("unscoped target"),
+    ];
 
-    let receipt = transport
-        .deliver(delivery_request(vec![reticulum_target(
-            RADROOTS_RETICULUM_ENDPOINT_URI,
-        )]))
-        .expect("delivery receipt");
-    assert_eq!(
-        receipt.target_receipts()[0].status,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
-    );
-    let fetch = transport
-        .fetch(RadrootsReticulumFetchRequest::new("fetch-agent", 1).expect("fetch"))
-        .expect("fetch receipt");
-    assert_eq!(
-        fetch
-            .agent_endpoint
-            .as_ref()
-            .map(|endpoint| endpoint.as_str()),
-        Some("reticulum-agent://localhost:19999")
-    );
-    assert_eq!(fetch.observed_event_count, 0);
-    assert_eq!(
-        fetch.implementation,
-        RadrootsTransportImplementationState::Real
-    );
-}
-
-#[test]
-#[cfg(feature = "serde")]
-fn public_models_round_trip_through_serde() {
-    let profile = RadrootsReticulumProfile::default()
-        .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans);
-    let json = serde_json::to_string(&profile).expect("profile json");
-    let decoded: RadrootsReticulumProfile = serde_json::from_str(&json).expect("profile decode");
-
-    assert_eq!(decoded, profile);
-}
-
-#[test]
-#[cfg(feature = "serde")]
-fn destination_deserialization_revalidates_canonical_identity() {
-    let destination = ReticulumDestinationV1::local();
-    let canonical = serde_json::to_value(&destination).expect("serialize destination");
-    assert_eq!(
-        serde_json::from_value::<ReticulumDestinationV1>(canonical.clone())
-            .expect("deserialize canonical destination"),
-        destination
-    );
-
-    let mut forged_fingerprint = canonical.clone();
-    forged_fingerprint
-        .as_object_mut()
-        .expect("destination object")
-        .insert("fingerprint".to_owned(), Value::String("0".repeat(64)));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_fingerprint).is_err());
-
-    let mut forged_scope = canonical.clone();
-    forged_scope
-        .get_mut("routing")
-        .and_then(Value::as_object_mut)
-        .expect("routing object")
-        .insert("scope".to_owned(), Value::String("remote".to_owned()));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_scope).is_err());
-
-    let mut nested_unknown = canonical.clone();
-    nested_unknown
-        .get_mut("routing")
-        .and_then(Value::as_object_mut)
-        .expect("routing object")
-        .insert("unexpected".to_owned(), Value::Bool(true));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(nested_unknown).is_err());
-
-    let mut top_level_unknown = canonical;
-    top_level_unknown
-        .as_object_mut()
-        .expect("destination object")
-        .insert("unexpected".to_owned(), Value::Bool(true));
-    assert!(serde_json::from_value::<ReticulumDestinationV1>(top_level_unknown).is_err());
-}
-
-#[test]
-fn destination_rejects_non_reticulum_targets() {
-    let local = Target::new(TransportId::LOCAL, "local:memory").expect("local target");
-    assert!(ReticulumDestinationV1::from_target(&local).is_err());
-
-    let missing_scope = Target::new(TransportId::RETICULUM, RADROOTS_RETICULUM_ENDPOINT_URI)
-        .expect("unscoped target");
-    assert_eq!(
-        ReticulumDestinationV1::from_target(&missing_scope),
-        Err(radroots_transport::RadrootsTransportError::EmptyTargetScope)
-    );
-
-    let label = TargetLabel::parse("Local node").unwrap();
-    let destination = ReticulumDestinationV1::new(
-        RADROOTS_RETICULUM_ENDPOINT_URI,
-        TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).unwrap(),
-        Some(label.clone()),
-    )
-    .unwrap();
-    assert_eq!(destination.label(), Some(&label));
-    let target = destination.transport_target().unwrap();
-    assert_eq!(
-        ReticulumDestinationV1::from_target(&target).unwrap(),
-        destination
-    );
-}
-
-#[test]
-fn reticulum_source_remains_inert_without_runtime_delivery_hooks() {
-    let source = include_str!("../src/lib.rs").to_ascii_lowercase();
-    for forbidden in [
-        "socket",
-        "rnsd",
-        "python",
-        "identity",
-        "send_mesh",
-        "fallback",
-        "nostr",
-    ] {
-        assert!(
-            !source.contains(forbidden),
-            "Reticulum source contains forbidden runtime hook {forbidden}"
+    for invalid in invalid_targets {
+        let failure = block_on(EventSink::deliver(&transport, delivery(invalid.clone())))
+            .expect_err("sink must reject target");
+        assert_eq!(failure.code(), "invalid_transport_contract");
+        assert_eq!(
+            block_on(EventSource::fetch(&transport, fetch(invalid))).unwrap_err(),
+            TransportError::InvalidTargetUri
         );
     }
 }
 
 #[test]
-fn reticulum_errors_and_defaults_are_stable() {
-    assert_eq!(
-        RadrootsReticulumBehavior::default(),
-        RadrootsReticulumBehavior::RejectDeliveryAttempts
-    );
+fn reticulum_error_messages_are_stable() {
     let cases = [
         (
             RadrootsReticulumError::InvalidEndpoint,
@@ -698,16 +373,53 @@ fn reticulum_errors_and_defaults_are_stable() {
             "invalid Reticulum profile id",
         ),
         (
-            RadrootsReticulumError::InvalidFetchLimit,
-            "Reticulum fetch limit must be greater than zero",
-        ),
-        (
             RadrootsReticulumError::NonReticulumTarget,
             "Reticulum transport received a non-Reticulum target",
         ),
     ];
-
-    for (error, message) in cases {
-        assert_eq!(error.to_string(), message);
+    for (error, expected) in cases {
+        assert_eq!(error.to_string(), expected);
     }
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn public_models_round_trip_and_destination_identity_is_revalidated() {
+    let profile = RadrootsReticulumProfile::default()
+        .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans);
+    let encoded = serde_json::to_string(&profile).expect("profile JSON");
+    assert_eq!(
+        serde_json::from_str::<RadrootsReticulumProfile>(&encoded).expect("profile round trip"),
+        profile
+    );
+
+    let destination = ReticulumDestinationV1::new(
+        RADROOTS_RETICULUM_ENDPOINT_URI,
+        scope(),
+        Some(TargetLabel::parse("Local node").expect("label")),
+    )
+    .expect("destination");
+    let value = serde_json::to_value(&destination).expect("destination JSON");
+    assert_eq!(
+        serde_json::from_value::<ReticulumDestinationV1>(value.clone())
+            .expect("destination round trip"),
+        destination
+    );
+
+    for (path, forged) in [
+        ("uri", serde_json::json!("reticulum:remote")),
+        ("label", serde_json::json!(" Other node ")),
+        ("fingerprint", serde_json::json!("0".repeat(64))),
+    ] {
+        let mut invalid = value.clone();
+        invalid[path] = forged;
+        assert!(
+            serde_json::from_value::<ReticulumDestinationV1>(invalid).is_err(),
+            "forged {path} must fail"
+        );
+    }
+
+    let mut routing = value;
+    routing["routing"]["scope"] = serde_json::json!("remote");
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(routing).is_err());
 }

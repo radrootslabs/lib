@@ -292,7 +292,7 @@ The final review makes the following deliberate changes:
 - `trade`
 - `wire`
 
-    **Permitted root exports:** `Event`, `EventDraft`, `SignedEvent`, `VerifiedEvent`, `EventId`, `EventKind`, `EventTag`, `Error`
+    **Permitted root exports:** `Event`, `GenericEventDraft`, `SignedEvent`, `VerifiedEvent`, `EventId`, `EventKind`, `EventTag`, `Error`
 
     **Explicitly forbidden.** Live Nostr clients, relay pools, signing backends, SQLite, outbox claims, retry scheduling, application state, or duplicate trade/order identifier concepts.
 
@@ -621,7 +621,7 @@ The final review makes the following deliberate changes:
 - `push`
 - `status`
 
-    **Permitted root exports:** `Engine`, `PullRequest`, `PullReceipt`, `PushRequest`, `PushReceipt`, `SyncStatus`, `Error`
+    **Permitted root exports:** `Engine`, `PullRequest`, `PullReceipt`, `PushRequest`, `PushPreparation`, `PushStatus`, `SigningRunReceipt`, `AdmissionRunReceipt`, `DeliveryExecutionReceipt`, `SyncStatus`, `Error`
 
     **Explicitly forbidden.** Creating an executor, spawning hidden workers, installing timers globally, owning process lifecycle, storing UI state, or transport-specific branches outside adapters.
 
@@ -1093,7 +1093,7 @@ host-owned databases
 
 ### 13.2 Signing
 
-`radroots_signing::Signer` signs a frozen canonical `EventDraft`. The signing layer:
+`radroots_signing::Signer` signs an immutable canonical `AuthoredEventPlan`. The signing layer:
 
 - authorizes actor role and expected public key before invoking a signer;
 - verifies the signer result matches the exact draft;

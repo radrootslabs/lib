@@ -440,6 +440,58 @@ pub fn radroots_event::calendar::canonical_calendar_geohash_is_valid(&str) -> bo
 pub fn radroots_event::calendar::canonical_calendar_tag_text_is_valid(&str) -> bool
 pub fn radroots_event::calendar::covered_utc_days(u64, core::option::Option<u64>) -> core::result::Result<core::ops::range::RangeInclusive<u64>, radroots_event::calendar::CalendarEventError>
 pub mod radroots_event::contract
+pub enum radroots_event::contract::ContractIdentityError
+pub radroots_event::contract::ContractIdentityError::ContractIdMissing
+pub radroots_event::contract::ContractIdentityError::ContractIdNamespace
+pub radroots_event::contract::ContractIdentityError::ContractIdSyntax
+pub radroots_event::contract::ContractIdentityError::ContractIdTooLong
+pub radroots_event::contract::ContractIdentityError::ContractIdTooLong::actual: usize
+pub radroots_event::contract::ContractIdentityError::ContractIdTooLong::max: usize
+pub radroots_event::contract::ContractIdentityError::RegistryVersionZero
+pub radroots_event::contract::ContractIdentityError::UnknownContract
+pub radroots_event::contract::ContractIdentityError::UnknownContract::contract_id: alloc::string::String
+pub radroots_event::contract::ContractIdentityError::UnsupportedRegistryVersion
+pub radroots_event::contract::ContractIdentityError::UnsupportedRegistryVersion::actual: u32
+impl radroots_event::contract::ContractIdentityError
+pub const fn radroots_event::contract::ContractIdentityError::code(&self) -> &'static str
+impl core::error::Error for radroots_event::contract::ContractIdentityError
+impl core::fmt::Display for radroots_event::contract::ContractIdentityError
+pub fn radroots_event::contract::ContractIdentityError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_event::contract::ContractId(_)
+impl radroots_event::contract::ContractId
+pub fn radroots_event::contract::ContractId::as_str(&self) -> &str
+pub fn radroots_event::contract::ContractId::into_string(self) -> alloc::string::String
+pub fn radroots_event::contract::ContractId::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_event::contract::ContractIdentityError>
+impl core::fmt::Display for radroots_event::contract::ContractId
+pub fn radroots_event::contract::ContractId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_event::contract::ContractId
+pub fn radroots_event::contract::ContractId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_event::contract::ContractId
+pub fn radroots_event::contract::ContractId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_event::contract::ContractKey
+impl radroots_event::contract::ContractKey
+pub fn radroots_event::contract::ContractKey::contract(&self) -> &'static EventContract
+pub const fn radroots_event::contract::ContractKey::contract_id(&self) -> &radroots_event::contract::ContractId
+pub fn radroots_event::contract::ContractKey::current(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_event::contract::ContractIdentityError>
+pub fn radroots_event::contract::ContractKey::new(radroots_event::contract::RegistryVersion, radroots_event::contract::ContractId) -> core::result::Result<Self, radroots_event::contract::ContractIdentityError>
+pub const fn radroots_event::contract::ContractKey::registry_version(&self) -> radroots_event::contract::RegistryVersion
+impl serde_core::ser::Serialize for radroots_event::contract::ContractKey
+pub fn radroots_event::contract::ContractKey::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_event::contract::ContractKey
+pub fn radroots_event::contract::ContractKey::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_event::contract::RegistryVersion(_)
+impl radroots_event::contract::RegistryVersion
+pub const radroots_event::contract::RegistryVersion::CURRENT: Self
+pub const radroots_event::contract::RegistryVersion::V7: Self
+pub const fn radroots_event::contract::RegistryVersion::get(self) -> u32
+pub const fn radroots_event::contract::RegistryVersion::new(u32) -> core::result::Result<Self, radroots_event::contract::ContractIdentityError>
+impl core::fmt::Display for radroots_event::contract::RegistryVersion
+pub fn radroots_event::contract::RegistryVersion::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_event::contract::RegistryVersion
+pub fn radroots_event::contract::RegistryVersion::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_event::contract::RegistryVersion
+pub fn radroots_event::contract::RegistryVersion::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_event::contract::CONTRACT_ID_MAX_BYTES: usize
 pub const radroots_event::contract::VERSION: &str
 pub mod radroots_event::draft
 pub enum radroots_event::draft::DraftError
@@ -462,27 +514,6 @@ pub radroots_event::draft::DraftError::DraftExpectedEventIdMismatch::expected_ev
 pub radroots_event::draft::DraftError::Envelope(radroots_event::envelope::EventEnvelopeError)
 pub radroots_event::draft::DraftError::IdParse(radroots_event::id::ParseError)
 pub radroots_event::draft::DraftError::SignedEvent(radroots_event::draft::SignedEventError)
-pub radroots_event::draft::DraftError::SignedEventComputedIdMismatch
-pub radroots_event::draft::DraftError::SignedEventComputedIdMismatch::computed_event_id: alloc::string::String
-pub radroots_event::draft::DraftError::SignedEventComputedIdMismatch::expected_event_id: alloc::string::String
-pub radroots_event::draft::DraftError::SignedEventContentMismatch
-pub radroots_event::draft::DraftError::SignedEventContentMismatch::actual_len: usize
-pub radroots_event::draft::DraftError::SignedEventContentMismatch::expected_len: usize
-pub radroots_event::draft::DraftError::SignedEventCreatedAtMismatch
-pub radroots_event::draft::DraftError::SignedEventCreatedAtMismatch::actual_created_at: u64
-pub radroots_event::draft::DraftError::SignedEventCreatedAtMismatch::expected_created_at: u64
-pub radroots_event::draft::DraftError::SignedEventIdMismatch
-pub radroots_event::draft::DraftError::SignedEventIdMismatch::actual_event_id: alloc::string::String
-pub radroots_event::draft::DraftError::SignedEventIdMismatch::expected_event_id: alloc::string::String
-pub radroots_event::draft::DraftError::SignedEventKindMismatch
-pub radroots_event::draft::DraftError::SignedEventKindMismatch::actual_kind: u32
-pub radroots_event::draft::DraftError::SignedEventKindMismatch::expected_kind: u32
-pub radroots_event::draft::DraftError::SignedEventPubkeyMismatch
-pub radroots_event::draft::DraftError::SignedEventPubkeyMismatch::actual_pubkey: alloc::string::String
-pub radroots_event::draft::DraftError::SignedEventPubkeyMismatch::expected_pubkey: alloc::string::String
-pub radroots_event::draft::DraftError::SignedEventTagsMismatch
-pub radroots_event::draft::DraftError::SignedEventTagsMismatch::actual_len: usize
-pub radroots_event::draft::DraftError::SignedEventTagsMismatch::expected_len: usize
 pub radroots_event::draft::DraftError::UnknownContract(alloc::string::String)
 impl core::convert::From<radroots_event::draft::SignedEventError> for radroots_event::draft::DraftError
 pub fn radroots_event::draft::DraftError::from(radroots_event::draft::SignedEventError) -> Self
@@ -505,25 +536,6 @@ pub fn radroots_event::draft::SignedEventError::from(radroots_event::envelope::E
 impl core::error::Error for radroots_event::draft::SignedEventError
 impl core::fmt::Display for radroots_event::draft::SignedEventError
 pub fn radroots_event::draft::SignedEventError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct radroots_event::draft::EventDraft
-impl radroots_event::draft::EventDraft
-pub fn radroots_event::draft::EventDraft::content(&self) -> &str
-pub fn radroots_event::draft::EventDraft::contract_id(&self) -> &str
-pub fn radroots_event::draft::EventDraft::contract_registry_version(&self) -> u32
-pub fn radroots_event::draft::EventDraft::created_at(&self) -> radroots_event::envelope::EventTimestamp
-pub fn radroots_event::draft::EventDraft::created_at_u64(&self) -> u64
-pub fn radroots_event::draft::EventDraft::expected_event_id(&self) -> &radroots_event::id::EventId
-pub fn radroots_event::draft::EventDraft::expected_event_id_hex(&self) -> alloc::string::String
-pub fn radroots_event::draft::EventDraft::expected_pubkey(&self) -> &radroots_identity::key::PublicKey
-pub fn radroots_event::draft::EventDraft::kind(&self) -> radroots_event::envelope::EventKind
-pub fn radroots_event::draft::EventDraft::kind_u32(&self) -> u32
-pub fn radroots_event::draft::EventDraft::new(impl core::convert::Into<alloc::string::String>, u32, u64, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, impl core::convert::Into<alloc::string::String>, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event::draft::DraftError>
-pub fn radroots_event::draft::EventDraft::nip01_preimage(&self) -> core::result::Result<alloc::string::String, radroots_event::draft::DraftError>
-pub fn radroots_event::draft::EventDraft::tags(&self) -> &radroots_event::envelope::EventTags
-pub fn radroots_event::draft::EventDraft::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
-pub fn radroots_event::draft::EventDraft::validate_for_signing(&self) -> core::result::Result<(), radroots_event::draft::DraftError>
-impl<'de> serde_core::de::Deserialize<'de> for radroots_event::draft::EventDraft
-pub fn radroots_event::draft::EventDraft::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_event::draft::SignedEvent
 impl radroots_event::draft::SignedEvent
 pub fn radroots_event::draft::SignedEvent::content(&self) -> &str
@@ -557,7 +569,6 @@ pub radroots_event::draft::SignedEventParts::sig: alloc::string::String
 pub radroots_event::draft::SignedEventParts::tags: alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
 pub fn radroots_event::draft::compute_nip01_event_id(&str, u64, u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event::id::EventId, radroots_event::draft::DraftError>
 pub fn radroots_event::draft::nip01_event_id_preimage(&str, u64, u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<alloc::string::String, radroots_event::draft::DraftError>
-pub fn radroots_event::draft::validate_signed_nostr_event_matches_draft(&radroots_event::draft::SignedEvent, &radroots_event::draft::EventDraft) -> core::result::Result<(), radroots_event::draft::DraftError>
 pub mod radroots_event::envelope
 pub mod radroots_event::envelope::event_head
 pub mod radroots_event::envelope::kind
@@ -1306,6 +1317,26 @@ pub const radroots_event::food::availability::RADROOTS_FOOD_IMAGE_MAX_COUNT: usi
 pub const radroots_event::food::availability::RADROOTS_FOOD_TEXT_MAX_BYTES: usize
 pub fn radroots_event::food::availability::food_media_blossom_digest(&str) -> core::option::Option<radroots_blossom::hash::Sha256>
 pub fn radroots_event::food::availability::food_media_http_url_is_valid(&str) -> bool
+pub mod radroots_event::generic_draft
+pub struct radroots_event::generic_draft::GenericEventDraft
+impl radroots_event::generic_draft::GenericEventDraft
+pub fn radroots_event::generic_draft::GenericEventDraft::content(&self) -> &str
+pub const fn radroots_event::generic_draft::GenericEventDraft::contract(&self) -> &radroots_event::contract::ContractKey
+pub fn radroots_event::generic_draft::GenericEventDraft::contract_id(&self) -> &str
+pub const fn radroots_event::generic_draft::GenericEventDraft::created_at(&self) -> radroots_event::envelope::EventTimestamp
+pub const fn radroots_event::generic_draft::GenericEventDraft::created_at_u64(&self) -> u64
+pub const fn radroots_event::generic_draft::GenericEventDraft::expected_event_id(&self) -> &radroots_event::id::EventId
+pub fn radroots_event::generic_draft::GenericEventDraft::expected_event_id_hex(&self) -> alloc::string::String
+pub const fn radroots_event::generic_draft::GenericEventDraft::expected_pubkey(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_event::generic_draft::GenericEventDraft::kind(&self) -> radroots_event::envelope::EventKind
+pub const fn radroots_event::generic_draft::GenericEventDraft::kind_u32(&self) -> u32
+pub fn radroots_event::generic_draft::GenericEventDraft::new(impl core::convert::Into<alloc::string::String>, u32, u64, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, impl core::convert::Into<alloc::string::String>, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event::draft::DraftError>
+pub fn radroots_event::generic_draft::GenericEventDraft::nip01_preimage(&self) -> core::result::Result<alloc::string::String, radroots_event::draft::DraftError>
+pub const fn radroots_event::generic_draft::GenericEventDraft::tags(&self) -> &radroots_event::envelope::EventTags
+pub fn radroots_event::generic_draft::GenericEventDraft::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+pub fn radroots_event::generic_draft::GenericEventDraft::validate_for_authoring(&self) -> core::result::Result<(), radroots_event::draft::DraftError>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_event::generic_draft::GenericEventDraft
+pub fn radroots_event::generic_draft::GenericEventDraft::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub mod radroots_event::id
 #[non_exhaustive] pub enum radroots_event::id::Nip01CoordinateParseError
 pub radroots_event::id::Nip01CoordinateParseError::Empty
@@ -2161,6 +2192,7 @@ pub fn radroots_event::post::comment::Nip22CommentRoot::from(radroots_event::pos
 impl core::convert::From<radroots_event::post::comment::Nip22EventRootReference> for radroots_event::post::comment::Nip22CommentRoot
 pub fn radroots_event::post::comment::Nip22CommentRoot::from(radroots_event::post::comment::Nip22EventRootReference) -> Self
 pub enum radroots_event::post::comment::Nip22CommentRootKind
+pub radroots_event::post::comment::Nip22CommentRootKind::Article
 pub radroots_event::post::comment::Nip22CommentRootKind::CalendarDateEvent
 pub radroots_event::post::comment::Nip22CommentRootKind::CalendarTimeEvent
 pub radroots_event::post::comment::Nip22CommentRootKind::ClassifiedListing
@@ -2373,7 +2405,10 @@ pub radroots_event::post::AuthoredPostError::ImageFallbackHashMismatch
 pub radroots_event::post::AuthoredPostError::ImageMediaTypeInvalid
 pub radroots_event::post::AuthoredPostError::ImageMissing
 pub radroots_event::post::AuthoredPostError::ImageSizeInvalid
-pub radroots_event::post::AuthoredPostError::ImageUrlMissingFromContent
+pub radroots_event::post::AuthoredPostError::ImageUrlOccurrenceCount
+pub radroots_event::post::AuthoredPostError::ImageUrlOccurrenceCount::actual: usize
+pub radroots_event::post::AuthoredPostError::ImageUrlOccurrenceCount::expected: usize
+pub radroots_event::post::AuthoredPostError::ImageUrlOverlap
 pub radroots_event::post::AuthoredPostError::TagBytesExceeded
 pub radroots_event::post::AuthoredPostError::TagBytesExceeded::actual: usize
 pub radroots_event::post::AuthoredPostError::TagBytesExceeded::max: usize
@@ -3461,25 +3496,6 @@ pub fn radroots_event::envelope::EventEnvelope::tag_slices(&self) -> &[radroots_
 pub fn radroots_event::envelope::EventEnvelope::tags(&self) -> &radroots_event::envelope::EventTags
 pub fn radroots_event::envelope::EventEnvelope::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
 pub fn radroots_event::envelope::EventEnvelope::to_nip01_wire(&self) -> Nip01EventWire
-pub struct radroots_event::EventDraft
-impl radroots_event::draft::EventDraft
-pub fn radroots_event::draft::EventDraft::content(&self) -> &str
-pub fn radroots_event::draft::EventDraft::contract_id(&self) -> &str
-pub fn radroots_event::draft::EventDraft::contract_registry_version(&self) -> u32
-pub fn radroots_event::draft::EventDraft::created_at(&self) -> radroots_event::envelope::EventTimestamp
-pub fn radroots_event::draft::EventDraft::created_at_u64(&self) -> u64
-pub fn radroots_event::draft::EventDraft::expected_event_id(&self) -> &radroots_event::id::EventId
-pub fn radroots_event::draft::EventDraft::expected_event_id_hex(&self) -> alloc::string::String
-pub fn radroots_event::draft::EventDraft::expected_pubkey(&self) -> &radroots_identity::key::PublicKey
-pub fn radroots_event::draft::EventDraft::kind(&self) -> radroots_event::envelope::EventKind
-pub fn radroots_event::draft::EventDraft::kind_u32(&self) -> u32
-pub fn radroots_event::draft::EventDraft::new(impl core::convert::Into<alloc::string::String>, u32, u64, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, impl core::convert::Into<alloc::string::String>, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event::draft::DraftError>
-pub fn radroots_event::draft::EventDraft::nip01_preimage(&self) -> core::result::Result<alloc::string::String, radroots_event::draft::DraftError>
-pub fn radroots_event::draft::EventDraft::tags(&self) -> &radroots_event::envelope::EventTags
-pub fn radroots_event::draft::EventDraft::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
-pub fn radroots_event::draft::EventDraft::validate_for_signing(&self) -> core::result::Result<(), radroots_event::draft::DraftError>
-impl<'de> serde_core::de::Deserialize<'de> for radroots_event::draft::EventDraft
-pub fn radroots_event::draft::EventDraft::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_event::EventId(_)
 impl radroots_event::id::EventId
 pub const fn radroots_event::id::EventId::as_bytes(&self) -> &[u8; 32]
@@ -3530,6 +3546,25 @@ impl serde_core::ser::Serialize for radroots_event::envelope::EventTag
 pub fn radroots_event::envelope::EventTag::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::envelope::EventTag
 pub fn radroots_event::envelope::EventTag::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_event::GenericEventDraft
+impl radroots_event::generic_draft::GenericEventDraft
+pub fn radroots_event::generic_draft::GenericEventDraft::content(&self) -> &str
+pub const fn radroots_event::generic_draft::GenericEventDraft::contract(&self) -> &radroots_event::contract::ContractKey
+pub fn radroots_event::generic_draft::GenericEventDraft::contract_id(&self) -> &str
+pub const fn radroots_event::generic_draft::GenericEventDraft::created_at(&self) -> radroots_event::envelope::EventTimestamp
+pub const fn radroots_event::generic_draft::GenericEventDraft::created_at_u64(&self) -> u64
+pub const fn radroots_event::generic_draft::GenericEventDraft::expected_event_id(&self) -> &radroots_event::id::EventId
+pub fn radroots_event::generic_draft::GenericEventDraft::expected_event_id_hex(&self) -> alloc::string::String
+pub const fn radroots_event::generic_draft::GenericEventDraft::expected_pubkey(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_event::generic_draft::GenericEventDraft::kind(&self) -> radroots_event::envelope::EventKind
+pub const fn radroots_event::generic_draft::GenericEventDraft::kind_u32(&self) -> u32
+pub fn radroots_event::generic_draft::GenericEventDraft::new(impl core::convert::Into<alloc::string::String>, u32, u64, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, impl core::convert::Into<alloc::string::String>, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event::draft::DraftError>
+pub fn radroots_event::generic_draft::GenericEventDraft::nip01_preimage(&self) -> core::result::Result<alloc::string::String, radroots_event::draft::DraftError>
+pub const fn radroots_event::generic_draft::GenericEventDraft::tags(&self) -> &radroots_event::envelope::EventTags
+pub fn radroots_event::generic_draft::GenericEventDraft::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+pub fn radroots_event::generic_draft::GenericEventDraft::validate_for_authoring(&self) -> core::result::Result<(), radroots_event::draft::DraftError>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_event::generic_draft::GenericEventDraft
+pub fn radroots_event::generic_draft::GenericEventDraft::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_event::SignedEvent
 impl radroots_event::draft::SignedEvent
 pub fn radroots_event::draft::SignedEvent::content(&self) -> &str

@@ -861,10 +861,12 @@ name = "radroots_storage"
 version = "0.1.0-alpha"
 dependencies = [
  "radroots_event",
+ "radroots_event_codec",
  "radroots_protocol",
  "radroots_trade",
  "radroots_transport",
  "serde",
+ "sha2",
 ]
 
 [[package]]

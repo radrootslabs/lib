@@ -21,7 +21,7 @@ const FORBIDDEN_EVENT_NAMES: &[ForbiddenEventName] = &[
     },
     ForbiddenEventName {
         pattern: "RadrootsFrozenEventDraft",
-        reason: "event construction must use EventDraft",
+        reason: "generic event construction must use GenericEventDraft",
     },
     ForbiddenEventName {
         pattern: "RadrootsNostrEvent",
@@ -156,7 +156,7 @@ fn typed_authoring_mapping_is_not_implemented_in_the_generic_event_draft() {
     ] {
         assert!(
             !draft.contains(retired),
-            "generic EventDraft retains codec-owned typed mapping `{retired}`"
+            "generic authored input retains codec-owned typed mapping `{retired}`"
         );
     }
 }

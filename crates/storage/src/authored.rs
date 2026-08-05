@@ -526,9 +526,8 @@ impl ExactSignedArtifact {
             event,
             raw_json_sha256,
         };
-        if Sha256::digest(artifact.event.raw_json().as_bytes()).as_slice()
-            != artifact.raw_json_sha256
-        {
+        let computed_sha256: [u8; 32] = Sha256::digest(artifact.event.raw_json().as_bytes()).into();
+        if computed_sha256 != artifact.raw_json_sha256 {
             return Err(Error::InvalidAuthoredArtifact);
         }
         Ok(artifact)
@@ -886,7 +885,11 @@ impl AuthoredArtifact {
             *self = previous;
             return Err(error);
         }
-        self.validate()
+        if let Err(error) = self.validate() {
+            *self = previous;
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub fn record_signing_failure(
@@ -982,7 +985,11 @@ impl AuthoredArtifact {
             *self = previous;
             return Err(error);
         }
-        self.validate()
+        if let Err(error) = self.validate() {
+            *self = previous;
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub fn record_admission(
@@ -1415,4 +1422,464 @@ fn valid_code(value: &str) -> bool {
         && value.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         })
+}
+
+#[cfg(test)]
+mod invariant_tests {
+    use super::*;
+    use radroots_event::{GenericEventDraft, wire::v1::Nip01EventWire};
+
+    const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+
+    fn operation_id() -> OperationInstanceId {
+        OperationInstanceId::new([1; 16]).unwrap()
+    }
+
+    fn artifact_id(value: u8) -> AuthoredArtifactId {
+        AuthoredArtifactId::new([value; 16]).unwrap()
+    }
+
+    fn plan() -> AuthoredEventPlan {
+        AuthoredEventPlan::from_generic(
+            GenericEventDraft::new(
+                "radroots.social.geochat.v1",
+                20_000,
+                1_800_000_100,
+                Vec::new(),
+                "authored invariant",
+                AUTHOR,
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn signed(plan: &AuthoredEventPlan) -> SignedEvent {
+        let wire = Nip01EventWire {
+            id: plan.expected_event_id().to_hex(),
+            pubkey: plan.author().to_hex(),
+            created_at: plan.created_at(),
+            kind: plan.body().kind(),
+            tags: plan.body().tags().to_vec(),
+            content: plan.body().content().to_owned(),
+            sig: "dd".repeat(64),
+            extra: Default::default(),
+        };
+        let raw = serde_json::to_string(&wire).unwrap();
+        SignedEvent::from_wire_verified_id(wire, raw).unwrap()
+    }
+
+    fn planned(value: u8) -> AuthoredArtifact {
+        AuthoredArtifact::planned(artifact_id(value), operation_id(), 0, &plan(), 10).unwrap()
+    }
+
+    fn imported(value: u8) -> AuthoredArtifact {
+        let plan = plan();
+        AuthoredArtifact::imported_signed(artifact_id(value), operation_id(), 0, signed(&plan), 10)
+            .unwrap()
+    }
+
+    fn valid_claim(revision: NonZeroU64, at: u64) -> WorkClaim {
+        WorkClaim::new([7; 16], "worker", NonZeroU64::MIN, at, at + 10, revision).unwrap()
+    }
+
+    fn failure(phase: WorkPhase, class: FailureClass) -> WorkFailure {
+        let retry_at = (class == FailureClass::Retryable).then_some(30);
+        WorkFailure::new("failure", phase, class, retry_at, None).unwrap()
+    }
+
+    fn retry(phase: WorkPhase) -> RetrySchedule {
+        RetrySchedule::new(NonZeroU32::MIN, 30, failure(phase, FailureClass::Retryable)).unwrap()
+    }
+
+    #[test]
+    fn validator_rejects_corruption_at_each_nested_invariant() {
+        let mut value = imported(1);
+        value.signing_claim = Some(valid_claim(value.revision, 10));
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = imported(2);
+        value.signing_retry = Some(retry(WorkPhase::Signing));
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = planned(3);
+        value.plan = Some(DurableAuthoredPlan {
+            wire_json: vec![0xff],
+        });
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = imported(4);
+        value.admission_state = AdmissionState::Retryable;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut claimed = planned(5);
+        claimed
+            .set_signing_claim(valid_claim(claimed.revision, 11), 11)
+            .unwrap();
+        let mut value = claimed.clone();
+        value.signing_claim.as_mut().unwrap().token = [0; 16];
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = claimed.clone();
+        value.signing_state = SigningState::Cancelled;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = claimed.clone();
+        value.signing_claim.as_mut().unwrap().row_revision = value.revision;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = claimed;
+        value.signing_claim.as_mut().unwrap().acquired_at_unix_ms += 1;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let authored_plan = plan();
+        let mut admission = planned(6);
+        admission.record_signed(signed(&authored_plan), 11).unwrap();
+        admission
+            .set_admission_claim(valid_claim(admission.revision, 12), 12)
+            .unwrap();
+        let mut value = admission.clone();
+        value.admission_claim.as_mut().unwrap().token = [0; 16];
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = admission.clone();
+        value.signed = None;
+        value.signing_state = SigningState::Planned;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = admission.clone();
+        value.admission_state = AdmissionState::Inserted;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = admission.clone();
+        value.admission_claim.as_mut().unwrap().row_revision = value.revision;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = admission;
+        value.admission_claim.as_mut().unwrap().acquired_at_unix_ms += 1;
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = planned(7);
+        value.signing_state = SigningState::Retryable;
+        value.signing_retry = Some(retry(WorkPhase::Admission));
+        value.last_failure = value
+            .signing_retry
+            .as_ref()
+            .map(|schedule| schedule.failure.clone());
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = imported(8);
+        value.admission_state = AdmissionState::Retryable;
+        value.admission_retry = Some(retry(WorkPhase::Signing));
+        value.last_failure = value
+            .admission_retry
+            .as_ref()
+            .map(|schedule| schedule.failure.clone());
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = planned(9);
+        value.last_failure = Some(WorkFailure {
+            code: "INVALID".to_owned(),
+            phase: WorkPhase::Signing,
+            class: FailureClass::Terminal,
+            retry_after_unix_ms: None,
+            diagnostic: None,
+        });
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+
+        let mut value = planned(10);
+        value.signing_state = SigningState::Indeterminate;
+        value.last_failure = Some(failure(WorkPhase::Signing, FailureClass::Terminal));
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = planned(11);
+        value.signing_state = SigningState::FailedTerminal;
+        value.last_failure = Some(failure(WorkPhase::Signing, FailureClass::Indeterminate));
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = imported(12);
+        value.admission_state = AdmissionState::Rejected;
+        value.last_failure = Some(failure(WorkPhase::Signing, FailureClass::Terminal));
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+        let mut value = planned(13);
+        value.last_failure = Some(failure(WorkPhase::Signing, FailureClass::Terminal));
+        assert_eq!(value.validate(), Err(Error::InvalidAuthoredArtifact));
+    }
+
+    #[test]
+    fn every_mutating_transition_rolls_back_on_revision_overflow() {
+        let authored_plan = plan();
+
+        let mut value = planned(20);
+        value.revision = NonZeroU64::MAX;
+        let before = value.clone();
+        assert_eq!(
+            value.record_signed(signed(&authored_plan), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        assert_eq!(value, before);
+
+        let mut value = planned(21);
+        value.revision = NonZeroU64::MAX;
+        let before = value.clone();
+        assert_eq!(
+            value.set_signing_claim(valid_claim(value.revision, 11), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        assert_eq!(value, before);
+
+        let mut value = planned(22);
+        value.revision = NonZeroU64::MAX;
+        let before = value.clone();
+        assert_eq!(
+            value.record_signing_failure(
+                failure(WorkPhase::Signing, FailureClass::Terminal),
+                None,
+                11,
+            ),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        assert_eq!(value, before);
+
+        let mut value = planned(23);
+        value.revision = NonZeroU64::MAX;
+        let before = value.clone();
+        assert_eq!(
+            value.cancel_signing(11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        assert_eq!(value, before);
+
+        let mut value = imported(24);
+        value.revision = NonZeroU64::MAX;
+        let before = value.clone();
+        assert_eq!(
+            value.set_admission_claim(valid_claim(value.revision, 11), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        assert_eq!(value, before);
+
+        let mut value = imported(25);
+        value.revision = NonZeroU64::MAX;
+        let before = value.clone();
+        assert_eq!(
+            value.record_admission(AdmissionState::Inserted, None, None, 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        assert_eq!(value, before);
+    }
+
+    #[test]
+    fn every_mutating_transition_rolls_back_when_post_state_is_invalid() {
+        let authored_plan = plan();
+        let mut values = (30_u8..34).map(planned).collect::<Vec<_>>();
+        for value in &mut values {
+            value.plan = None;
+        }
+
+        let before = values[0].clone();
+        assert_eq!(
+            values[0].record_signed(signed(&authored_plan), 11),
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        assert_eq!(values[0], before);
+
+        let before = values[1].clone();
+        let revision = values[1].revision;
+        assert_eq!(
+            values[1].set_signing_claim(valid_claim(revision, 11), 11),
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        assert_eq!(values[1], before);
+
+        let before = values[2].clone();
+        assert_eq!(
+            values[2].record_signing_failure(
+                failure(WorkPhase::Signing, FailureClass::Terminal),
+                None,
+                11,
+            ),
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        assert_eq!(values[2], before);
+
+        let before = values[3].clone();
+        assert_eq!(
+            values[3].cancel_signing(11),
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        assert_eq!(values[3], before);
+
+        let mut value = imported(34);
+        value.origin = ArtifactOrigin::Planned;
+        let before = value.clone();
+        assert_eq!(
+            value.set_admission_claim(valid_claim(value.revision, 11), 11),
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        assert_eq!(value, before);
+
+        let mut value = imported(35);
+        value.origin = ArtifactOrigin::Planned;
+        let before = value.clone();
+        assert_eq!(
+            value.record_admission(AdmissionState::Inserted, None, None, 11),
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        assert_eq!(value, before);
+    }
+
+    fn empty_settlement() -> OperationSettlement {
+        OperationSettlement {
+            artifacts: 1,
+            signed: 1,
+            admitted: 1,
+            pending: 0,
+            retryable: 0,
+            indeterminate: 0,
+            failed_terminal: 0,
+            cancelled: 0,
+            delivery_plans: 0,
+            delivery_satisfied: 0,
+            delivery_pending: 0,
+            delivery_retryable: 0,
+            delivery_exhausted: 0,
+            delivery_failed_terminal: 0,
+            delivery_cancelled: 0,
+        }
+    }
+
+    #[test]
+    fn settlement_predicates_evaluate_every_independent_dimension() {
+        assert!(empty_settlement().is_settled());
+        for mutate in [
+            |value: &mut OperationSettlement| value.pending = 1,
+            |value: &mut OperationSettlement| value.retryable = 1,
+            |value: &mut OperationSettlement| value.indeterminate = 1,
+            |value: &mut OperationSettlement| value.delivery_pending = 1,
+            |value: &mut OperationSettlement| value.delivery_retryable = 1,
+        ] {
+            let mut value = empty_settlement();
+            mutate(&mut value);
+            assert!(!value.is_settled());
+        }
+
+        assert!(!empty_settlement().has_failures());
+        for mutate in [
+            |value: &mut OperationSettlement| value.indeterminate = 1,
+            |value: &mut OperationSettlement| value.failed_terminal = 1,
+            |value: &mut OperationSettlement| value.cancelled = 1,
+            |value: &mut OperationSettlement| value.delivery_exhausted = 1,
+            |value: &mut OperationSettlement| value.delivery_failed_terminal = 1,
+            |value: &mut OperationSettlement| value.delivery_cancelled = 1,
+        ] {
+            let mut value = empty_settlement();
+            mutate(&mut value);
+            assert!(value.has_failures());
+        }
+
+        assert!(empty_settlement().is_successful());
+        for mutate in [
+            |value: &mut OperationSettlement| value.pending = 1,
+            |value: &mut OperationSettlement| value.failed_terminal = 1,
+            |value: &mut OperationSettlement| value.signed = 0,
+            |value: &mut OperationSettlement| value.admitted = 0,
+            |value: &mut OperationSettlement| value.delivery_plans = 1,
+        ] {
+            let mut value = empty_settlement();
+            mutate(&mut value);
+            assert!(!value.is_successful());
+        }
+    }
+
+    #[test]
+    fn settlement_rejects_each_artifact_identity_and_integrity_mismatch() {
+        let artifact = planned(40);
+        let operation =
+            AuthoredOperation::new(operation_id(), vec![artifact.artifact_id()], 10).unwrap();
+        assert_eq!(
+            OperationSettlement::evaluate(&operation, &[]),
+            Err(Error::InvalidAuthoredOperation)
+        );
+
+        let mut wrong_operation = artifact.clone();
+        wrong_operation.operation_id = OperationInstanceId::new([2; 16]).unwrap();
+        assert_eq!(
+            OperationSettlement::evaluate(&operation, &[wrong_operation]),
+            Err(Error::InvalidAuthoredOperation)
+        );
+        let mut wrong_id = artifact.clone();
+        wrong_id.artifact_id = artifact_id(41);
+        assert_eq!(
+            OperationSettlement::evaluate(&operation, &[wrong_id]),
+            Err(Error::InvalidAuthoredOperation)
+        );
+        let mut wrong_ordinal = artifact.clone();
+        wrong_ordinal.ordinal = 1;
+        assert_eq!(
+            OperationSettlement::evaluate(&operation, &[wrong_ordinal]),
+            Err(Error::InvalidAuthoredOperation)
+        );
+        let mut invalid = artifact;
+        invalid.plan = None;
+        assert_eq!(
+            OperationSettlement::evaluate(&operation, &[invalid]),
+            Err(Error::InvalidAuthoredOperation)
+        );
+    }
+
+    #[test]
+    fn transition_preconditions_distinguish_origin_state_and_signed_presence() {
+        let authored_plan = plan();
+
+        let mut value = planned(50);
+        value.signing_state = SigningState::Cancelled;
+        assert_eq!(
+            value.record_signed(signed(&authored_plan), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+
+        let mut value = imported(51);
+        assert_eq!(
+            value.set_signing_claim(valid_claim(value.revision, 11), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        let mut value = planned(52);
+        value.signing_state = SigningState::Cancelled;
+        assert_eq!(
+            value.set_signing_claim(valid_claim(value.revision, 11), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+
+        let mut value = imported(53);
+        assert_eq!(
+            value.record_signing_failure(
+                failure(WorkPhase::Signing, FailureClass::Terminal),
+                None,
+                11,
+            ),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        let mut value = planned(54);
+        value.signing_state = SigningState::Cancelled;
+        assert_eq!(
+            value.record_signing_failure(
+                failure(WorkPhase::Signing, FailureClass::Terminal),
+                None,
+                11,
+            ),
+            Err(Error::InvalidAuthoredTransition)
+        );
+
+        let mut value = imported(55);
+        value.admission_state = AdmissionState::Inserted;
+        assert_eq!(
+            value.set_admission_claim(valid_claim(value.revision, 11), 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+
+        let mut missing_signed = imported(56);
+        missing_signed.signed = None;
+        assert_eq!(
+            missing_signed.record_admission(AdmissionState::Inserted, None, None, 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+        let mut terminal_admission = imported(57);
+        terminal_admission.admission_state = AdmissionState::Inserted;
+        assert_eq!(
+            terminal_admission.record_admission(AdmissionState::Duplicate, None, None, 11),
+            Err(Error::InvalidAuthoredTransition)
+        );
+    }
 }

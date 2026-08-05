@@ -100,22 +100,6 @@ pub enum Error {
     #[error("Signed event error: {0}")]
     SignedEvent(#[from] radroots_event::draft::SignedEventError),
 
-    #[cfg(feature = "events")]
-    #[error(
-        "Frozen draft signer public key mismatch: expected {expected_pubkey}, got {actual_pubkey}"
-    )]
-    FrozenDraftPubkeyMismatch {
-        expected_pubkey: String,
-        actual_pubkey: String,
-    },
-
-    #[cfg(feature = "events")]
-    #[error("Frozen draft event ID mismatch: expected {expected_event_id}, got {actual_event_id}")]
-    FrozenDraftEventIdMismatch {
-        expected_event_id: String,
-        actual_event_id: String,
-    },
-
     #[error("Key error: {0}")]
     KeyError(#[cfg_attr(feature = "std", source)] nostr::key::Error),
 

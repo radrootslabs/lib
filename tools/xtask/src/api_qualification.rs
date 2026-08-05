@@ -23,6 +23,11 @@ pub fn run(root: &Path) -> Result<(), String> {
         eprintln!("cargo {}", args.join(" "));
         let status = Command::new("cargo")
             .args(&args)
+            // Keep rustdoc-JSON qualification distinct from ordinary `cargo doc`
+            // artifacts in the extbuild-owned target tree. Cargo otherwise may
+            // reuse an HTML-only rustdoc fingerprint and leave semver-checks
+            // without the JSON artifact it requested.
+            .env("CARGO_PROFILE_DEV_DEBUG", "none")
             .current_dir(root)
             .status()
             .map_err(|error| format!("failed to start cargo-semver-checks: {error}"))?;
@@ -43,7 +48,7 @@ fn load(root: &Path) -> Result<Contract, String> {
 fn validate(contract: &Contract, expected_packages: usize) -> Result<(), String> {
     if contract.schema_version != 1
         || contract.tool != "cargo-semver-checks"
-        || contract.release_type != "minor"
+        || contract.release_type != "major"
         || contract.feature_policy != "all"
         || contract.baseline_revision.len() < 7
     {
@@ -121,6 +126,8 @@ mod tests {
             .expect("workspace root");
         let contract = load(root).expect("contract");
         validate(&contract, 17).expect("valid contract");
-        assert!(invocation(&contract, "radroots_core").contains(&"--all-features".to_owned()));
+        let invocation = invocation(&contract, "radroots_core");
+        assert!(invocation.contains(&"--all-features".to_owned()));
+        assert!(invocation.ends_with(&["--release-type".to_owned(), "major".to_owned()]));
     }
 }

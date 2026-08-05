@@ -4,36 +4,17 @@ pub enum radroots_storage::atomic::AtomicCommitDisposition
 pub radroots_storage::atomic::AtomicCommitDisposition::Committed
 pub radroots_storage::atomic::AtomicCommitDisposition::Replay
 pub enum radroots_storage::atomic::AtomicCommitOutcome
-pub radroots_storage::atomic::AtomicCommitOutcome::Delivered
-pub radroots_storage::atomic::AtomicCommitOutcome::Delivered::outbox: alloc::boxed::Box<radroots_storage::outbox::OutboxRecord>
-pub radroots_storage::atomic::AtomicCommitOutcome::Enqueued
-pub radroots_storage::atomic::AtomicCommitOutcome::Enqueued::admission: radroots_storage::event::AdmissionReceipt
-pub radroots_storage::atomic::AtomicCommitOutcome::Enqueued::journal: radroots_storage::journal::OperationRecord
-pub radroots_storage::atomic::AtomicCommitOutcome::Enqueued::outbox: alloc::boxed::Box<radroots_storage::outbox::OutboxRecord>
 pub radroots_storage::atomic::AtomicCommitOutcome::Ingested
 pub radroots_storage::atomic::AtomicCommitOutcome::Ingested::admission: radroots_storage::event::AdmissionReceipt
 pub radroots_storage::atomic::AtomicCommitOutcome::Ingested::projection: core::option::Option<alloc::boxed::Box<radroots_storage::projection::ProjectionStatus>>
-pub radroots_storage::atomic::AtomicCommitOutcome::Prepared
-pub radroots_storage::atomic::AtomicCommitOutcome::Prepared::journal: radroots_storage::journal::OperationRecord
-pub radroots_storage::atomic::AtomicCommitOutcome::Signed
-pub radroots_storage::atomic::AtomicCommitOutcome::Signed::event_id: radroots_event::id::EventId
-pub radroots_storage::atomic::AtomicCommitOutcome::Signed::journal: radroots_storage::journal::OperationRecord
 impl radroots_storage::atomic::AtomicCommitOutcome
 pub const fn radroots_storage::atomic::AtomicCommitOutcome::kind(&self) -> radroots_storage::atomic::AtomicWorkflowKind
 pub enum radroots_storage::atomic::AtomicWorkflow
-pub radroots_storage::atomic::AtomicWorkflow::Delivered(alloc::boxed::Box<radroots_storage::outbox::DeliveryAttemptEvidence>)
-pub radroots_storage::atomic::AtomicWorkflow::Enqueued(alloc::boxed::Box<radroots_storage::atomic::CommitEnqueued>)
 pub radroots_storage::atomic::AtomicWorkflow::Ingested(alloc::boxed::Box<radroots_storage::atomic::CommitIngested>)
-pub radroots_storage::atomic::AtomicWorkflow::Prepared(radroots_storage::journal::PrepareOperation)
-pub radroots_storage::atomic::AtomicWorkflow::Signed(alloc::boxed::Box<radroots_storage::atomic::CommitSigned>)
 impl radroots_storage::atomic::AtomicWorkflow
 pub const fn radroots_storage::atomic::AtomicWorkflow::kind(&self) -> radroots_storage::atomic::AtomicWorkflowKind
 pub enum radroots_storage::atomic::AtomicWorkflowKind
-pub radroots_storage::atomic::AtomicWorkflowKind::Delivered
-pub radroots_storage::atomic::AtomicWorkflowKind::Enqueued
 pub radroots_storage::atomic::AtomicWorkflowKind::Ingested
-pub radroots_storage::atomic::AtomicWorkflowKind::Prepared
-pub radroots_storage::atomic::AtomicWorkflowKind::Signed
 pub struct radroots_storage::atomic::AtomicCommit
 impl radroots_storage::atomic::AtomicCommit
 pub const fn radroots_storage::atomic::AtomicCommit::commit_id(&self) -> radroots_storage::atomic::AtomicCommitId
@@ -55,33 +36,335 @@ pub const fn radroots_storage::atomic::AtomicCommitReceipt::commit_id(&self) -> 
 pub const fn radroots_storage::atomic::AtomicCommitReceipt::committed_at_unix_ms(&self) -> u64
 pub const fn radroots_storage::atomic::AtomicCommitReceipt::digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
 pub const fn radroots_storage::atomic::AtomicCommitReceipt::disposition(&self) -> radroots_storage::atomic::AtomicCommitDisposition
+pub fn radroots_storage::atomic::AtomicCommitReceipt::from_durable_parts(radroots_storage::atomic::AtomicCommitId, radroots_storage::atomic::AtomicCommitDigest, radroots_storage::atomic::AtomicCommitDisposition, u64, u64, radroots_storage::atomic::AtomicWorkflowKind, radroots_storage::atomic::AtomicCommitOutcome) -> core::result::Result<Self, radroots_storage::Error>
 pub fn radroots_storage::atomic::AtomicCommitReceipt::new(&radroots_storage::atomic::AtomicCommit, radroots_storage::atomic::AtomicCommitDisposition, u64, radroots_storage::atomic::AtomicCommitOutcome) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::atomic::AtomicCommitReceipt::outcome(&self) -> &radroots_storage::atomic::AtomicCommitOutcome
-pub struct radroots_storage::atomic::CommitEnqueued
-impl radroots_storage::atomic::CommitEnqueued
-pub const fn radroots_storage::atomic::CommitEnqueued::admission(&self) -> &radroots_storage::event::EventAdmission
-pub const fn radroots_storage::atomic::CommitEnqueued::committed_at_unix_ms(&self) -> u64
-pub const fn radroots_storage::atomic::CommitEnqueued::expected_revision(&self) -> radroots_storage::journal::JournalRevision
-pub const fn radroots_storage::atomic::CommitEnqueued::instance_id(&self) -> radroots_storage::journal::OperationInstanceId
-pub fn radroots_storage::atomic::CommitEnqueued::new(radroots_storage::journal::OperationInstanceId, radroots_storage::journal::JournalRevision, radroots_storage::event::EventAdmission, radroots_storage::outbox::EnqueueOutboxItem, u64) -> core::result::Result<Self, radroots_storage::Error>
-pub const fn radroots_storage::atomic::CommitEnqueued::outbox(&self) -> &radroots_storage::outbox::EnqueueOutboxItem
 pub struct radroots_storage::atomic::CommitIngested
 impl radroots_storage::atomic::CommitIngested
 pub const fn radroots_storage::atomic::CommitIngested::admission(&self) -> &radroots_storage::event::EventAdmission
 pub const fn radroots_storage::atomic::CommitIngested::new(radroots_storage::event::EventAdmission, core::option::Option<radroots_storage::projection::ProjectionCheckpoint>) -> Self
 pub const fn radroots_storage::atomic::CommitIngested::projection(&self) -> core::option::Option<&radroots_storage::projection::ProjectionCheckpoint>
-pub struct radroots_storage::atomic::CommitSigned
-impl radroots_storage::atomic::CommitSigned
-pub const fn radroots_storage::atomic::CommitSigned::event(&self) -> &radroots_event::draft::SignedEvent
-pub const fn radroots_storage::atomic::CommitSigned::expected_revision(&self) -> radroots_storage::journal::JournalRevision
-pub const fn radroots_storage::atomic::CommitSigned::instance_id(&self) -> radroots_storage::journal::OperationInstanceId
-pub fn radroots_storage::atomic::CommitSigned::new(radroots_storage::journal::OperationInstanceId, radroots_storage::journal::JournalRevision, radroots_event::draft::SignedEvent) -> Self
 pub trait radroots_storage::atomic::AtomicStorage: core::marker::Send + core::marker::Sync
 pub fn radroots_storage::atomic::AtomicStorage::commit(&self, radroots_storage::atomic::AtomicCommit) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::atomic::AtomicCommitReceipt, radroots_storage::Error>>
 pub fn radroots_storage::atomic::AtomicStorage::receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::atomic::AtomicCommitReceipt>, radroots_storage::Error>>
 impl radroots_storage::atomic::AtomicStorage for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::commit(&self, radroots_storage::atomic::AtomicCommit) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::atomic::AtomicCommitReceipt, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::atomic::AtomicCommitReceipt>, radroots_storage::Error>>
+pub mod radroots_storage::authored
+pub enum radroots_storage::authored::AdmissionState
+pub radroots_storage::authored::AdmissionState::Cancelled
+pub radroots_storage::authored::AdmissionState::Duplicate
+pub radroots_storage::authored::AdmissionState::Inserted
+pub radroots_storage::authored::AdmissionState::Pending
+pub radroots_storage::authored::AdmissionState::Rejected
+pub radroots_storage::authored::AdmissionState::Retryable
+impl radroots_storage::authored::AdmissionState
+pub const fn radroots_storage::authored::AdmissionState::is_admitted(self) -> bool
+pub enum radroots_storage::authored::ArtifactOrigin
+pub radroots_storage::authored::ArtifactOrigin::ImportedSigned
+pub radroots_storage::authored::ArtifactOrigin::Planned
+impl radroots_storage::authored::ArtifactOrigin
+pub const fn radroots_storage::authored::ArtifactOrigin::is_resignable(self) -> bool
+pub enum radroots_storage::authored::FailureClass
+pub radroots_storage::authored::FailureClass::Indeterminate
+pub radroots_storage::authored::FailureClass::Retryable
+pub radroots_storage::authored::FailureClass::Terminal
+pub enum radroots_storage::authored::SigningState
+pub radroots_storage::authored::SigningState::Cancelled
+pub radroots_storage::authored::SigningState::FailedTerminal
+pub radroots_storage::authored::SigningState::Indeterminate
+pub radroots_storage::authored::SigningState::Planned
+pub radroots_storage::authored::SigningState::Retryable
+pub radroots_storage::authored::SigningState::Signed
+pub enum radroots_storage::authored::WorkPhase
+pub radroots_storage::authored::WorkPhase::Admission
+pub radroots_storage::authored::WorkPhase::Delivery
+pub radroots_storage::authored::WorkPhase::Signing
+pub struct radroots_storage::authored::AuthoredArtifact
+impl radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_storage::authored::AuthoredArtifact::admission_claim(&self) -> core::option::Option<&radroots_storage::authored::WorkClaim>
+pub const fn radroots_storage::authored::AuthoredArtifact::admission_retry(&self) -> core::option::Option<&radroots_storage::authored::RetrySchedule>
+pub const fn radroots_storage::authored::AuthoredArtifact::admission_state(&self) -> radroots_storage::authored::AdmissionState
+pub const fn radroots_storage::authored::AuthoredArtifact::artifact_id(&self) -> radroots_storage::authored::AuthoredArtifactId
+pub fn radroots_storage::authored::AuthoredArtifact::cancel_signing(&mut self, u64) -> core::result::Result<(), radroots_storage::Error>
+pub const fn radroots_storage::authored::AuthoredArtifact::created_at_unix_ms(&self) -> u64
+pub fn radroots_storage::authored::AuthoredArtifact::imported_signed(radroots_storage::authored::AuthoredArtifactId, radroots_storage::journal::OperationInstanceId, u16, radroots_event::draft::SignedEvent, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored::AuthoredArtifact::last_failure(&self) -> core::option::Option<&radroots_storage::authored::WorkFailure>
+pub const fn radroots_storage::authored::AuthoredArtifact::operation_id(&self) -> radroots_storage::journal::OperationInstanceId
+pub const fn radroots_storage::authored::AuthoredArtifact::ordinal(&self) -> u16
+pub const fn radroots_storage::authored::AuthoredArtifact::origin(&self) -> radroots_storage::authored::ArtifactOrigin
+pub const fn radroots_storage::authored::AuthoredArtifact::plan(&self) -> core::option::Option<&radroots_storage::authored::DurableAuthoredPlan>
+pub fn radroots_storage::authored::AuthoredArtifact::planned(radroots_storage::authored::AuthoredArtifactId, radroots_storage::journal::OperationInstanceId, u16, &radroots_event_codec::authoring::AuthoredEventPlan, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::AuthoredArtifact::reconstruct(Self) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::AuthoredArtifact::record_admission(&mut self, radroots_storage::authored::AdmissionState, core::option::Option<radroots_storage::authored::WorkFailure>, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored::AuthoredArtifact::record_signed(&mut self, radroots_event::draft::SignedEvent, u64) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored::AuthoredArtifact::record_signing_failure(&mut self, radroots_storage::authored::WorkFailure, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<(), radroots_storage::Error>
+pub const fn radroots_storage::authored::AuthoredArtifact::revision(&self) -> core::num::nonzero::NonZeroU64
+pub fn radroots_storage::authored::AuthoredArtifact::set_admission_claim(&mut self, radroots_storage::authored::WorkClaim, u64) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored::AuthoredArtifact::set_signing_claim(&mut self, radroots_storage::authored::WorkClaim, u64) -> core::result::Result<(), radroots_storage::Error>
+pub const fn radroots_storage::authored::AuthoredArtifact::signed(&self) -> core::option::Option<&radroots_storage::authored::ExactSignedArtifact>
+pub const fn radroots_storage::authored::AuthoredArtifact::signing_claim(&self) -> core::option::Option<&radroots_storage::authored::WorkClaim>
+pub const fn radroots_storage::authored::AuthoredArtifact::signing_retry(&self) -> core::option::Option<&radroots_storage::authored::RetrySchedule>
+pub const fn radroots_storage::authored::AuthoredArtifact::signing_state(&self) -> radroots_storage::authored::SigningState
+pub const fn radroots_storage::authored::AuthoredArtifact::updated_at_unix_ms(&self) -> u64
+pub fn radroots_storage::authored::AuthoredArtifact::validate(&self) -> core::result::Result<(), radroots_storage::Error>
+pub struct radroots_storage::authored::AuthoredArtifactId(_)
+impl radroots_storage::authored::AuthoredArtifactId
+pub const fn radroots_storage::authored::AuthoredArtifactId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_storage::authored::AuthoredArtifactId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
+impl core::convert::From<radroots_storage::authored::AuthoredArtifactId> for [u8; 16]
+pub fn [u8; 16]::from(radroots_storage::authored::AuthoredArtifactId) -> Self
+impl core::convert::TryFrom<[u8; 16]> for radroots_storage::authored::AuthoredArtifactId
+pub type radroots_storage::authored::AuthoredArtifactId::Error = radroots_storage::Error
+pub fn radroots_storage::authored::AuthoredArtifactId::try_from([u8; 16]) -> core::result::Result<Self, Self::Error>
+pub struct radroots_storage::authored::AuthoredOperation
+impl radroots_storage::authored::AuthoredOperation
+pub fn radroots_storage::authored::AuthoredOperation::artifact_ids(&self) -> &[radroots_storage::authored::AuthoredArtifactId]
+pub const fn radroots_storage::authored::AuthoredOperation::created_at_unix_ms(&self) -> u64
+pub fn radroots_storage::authored::AuthoredOperation::new(radroots_storage::journal::OperationInstanceId, alloc::vec::Vec<radroots_storage::authored::AuthoredArtifactId>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored::AuthoredOperation::operation_id(&self) -> radroots_storage::journal::OperationInstanceId
+pub fn radroots_storage::authored::AuthoredOperation::reconstruct(radroots_storage::journal::OperationInstanceId, alloc::vec::Vec<radroots_storage::authored::AuthoredArtifactId>, u64, u64, core::num::nonzero::NonZeroU64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored::AuthoredOperation::revision(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_storage::authored::AuthoredOperation::updated_at_unix_ms(&self) -> u64
+pub struct radroots_storage::authored::DurableAuthoredPlan
+impl radroots_storage::authored::DurableAuthoredPlan
+pub fn radroots_storage::authored::DurableAuthoredPlan::decode(&self) -> core::result::Result<radroots_event_codec::authoring::wire::HistoricalPlanIntegrity, radroots_storage::Error>
+pub fn radroots_storage::authored::DurableAuthoredPlan::from_plan(&radroots_event_codec::authoring::AuthoredEventPlan) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::DurableAuthoredPlan::reconstruct(alloc::vec::Vec<u8>) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::DurableAuthoredPlan::wire_json(&self) -> &[u8]
+pub struct radroots_storage::authored::ExactSignedArtifact
+impl radroots_storage::authored::ExactSignedArtifact
+pub const fn radroots_storage::authored::ExactSignedArtifact::event(&self) -> &radroots_event::draft::SignedEvent
+pub fn radroots_storage::authored::ExactSignedArtifact::new(radroots_event::draft::SignedEvent) -> Self
+pub const fn radroots_storage::authored::ExactSignedArtifact::raw_json_sha256(&self) -> &[u8; 32]
+pub fn radroots_storage::authored::ExactSignedArtifact::reconstruct(radroots_event::draft::SignedEvent, [u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
+pub struct radroots_storage::authored::OperationSettlement
+impl radroots_storage::authored::OperationSettlement
+pub const fn radroots_storage::authored::OperationSettlement::admitted(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::artifacts(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::cancelled(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_cancelled(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_exhausted(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_failed_terminal(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_pending(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_plans(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_retryable(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::delivery_satisfied(self) -> u16
+pub fn radroots_storage::authored::OperationSettlement::evaluate(&radroots_storage::authored::AuthoredOperation, &[radroots_storage::authored::AuthoredArtifact]) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::OperationSettlement::evaluate_complete(&radroots_storage::authored::AuthoredOperation, &[radroots_storage::authored::AuthoredArtifact], &[radroots_storage::authored_delivery::AuthoredDeliveryPlan]) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored::OperationSettlement::failed_terminal(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::has_failures(self) -> bool
+pub const fn radroots_storage::authored::OperationSettlement::indeterminate(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::is_settled(self) -> bool
+pub const fn radroots_storage::authored::OperationSettlement::is_successful(self) -> bool
+pub const fn radroots_storage::authored::OperationSettlement::pending(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::retryable(self) -> u16
+pub const fn radroots_storage::authored::OperationSettlement::signed(self) -> u16
+pub struct radroots_storage::authored::RetrySchedule
+impl radroots_storage::authored::RetrySchedule
+pub const fn radroots_storage::authored::RetrySchedule::attempt(&self) -> core::num::nonzero::NonZeroU32
+pub const fn radroots_storage::authored::RetrySchedule::failure(&self) -> &radroots_storage::authored::WorkFailure
+pub fn radroots_storage::authored::RetrySchedule::new(core::num::nonzero::NonZeroU32, u64, radroots_storage::authored::WorkFailure) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::RetrySchedule::next_attempt(&self, u64, radroots_storage::authored::WorkFailure) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored::RetrySchedule::not_before_unix_ms(&self) -> u64
+pub struct radroots_storage::authored::WorkClaim
+impl radroots_storage::authored::WorkClaim
+pub const fn radroots_storage::authored::WorkClaim::acquired_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored::WorkClaim::expires_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored::WorkClaim::generation(&self) -> core::num::nonzero::NonZeroU64
+pub fn radroots_storage::authored::WorkClaim::matches_fence(&self, &[u8; 16], core::num::nonzero::NonZeroU64, core::num::nonzero::NonZeroU64, u64) -> bool
+pub fn radroots_storage::authored::WorkClaim::new([u8; 16], impl core::convert::Into<alloc::string::String>, core::num::nonzero::NonZeroU64, u64, u64, core::num::nonzero::NonZeroU64) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored::WorkClaim::owner(&self) -> &str
+pub const fn radroots_storage::authored::WorkClaim::row_revision(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_storage::authored::WorkClaim::token(&self) -> &[u8; 16]
+pub fn radroots_storage::authored::WorkClaim::validate(&self) -> core::result::Result<(), radroots_storage::Error>
+pub struct radroots_storage::authored::WorkFailure
+impl radroots_storage::authored::WorkFailure
+pub const fn radroots_storage::authored::WorkFailure::class(&self) -> radroots_storage::authored::FailureClass
+pub fn radroots_storage::authored::WorkFailure::code(&self) -> &str
+pub fn radroots_storage::authored::WorkFailure::diagnostic(&self) -> core::option::Option<&str>
+pub fn radroots_storage::authored::WorkFailure::new(impl core::convert::Into<alloc::string::String>, radroots_storage::authored::WorkPhase, radroots_storage::authored::FailureClass, core::option::Option<u64>, core::option::Option<alloc::string::String>) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored::WorkFailure::phase(&self) -> radroots_storage::authored::WorkPhase
+pub const fn radroots_storage::authored::WorkFailure::retry_after_unix_ms(&self) -> core::option::Option<u64>
+pub fn radroots_storage::authored::WorkFailure::validate(&self) -> core::result::Result<(), radroots_storage::Error>
+pub const radroots_storage::authored::AUTHORED_OPERATION_ARTIFACTS_MAX: usize
+pub const radroots_storage::authored::WORK_CLAIM_OWNER_MAX_BYTES: usize
+pub const radroots_storage::authored::WORK_FAILURE_CODE_MAX_BYTES: usize
+pub const radroots_storage::authored::WORK_FAILURE_DIAGNOSTIC_MAX_BYTES: usize
+pub mod radroots_storage::authored_atomic
+pub enum radroots_storage::authored_atomic::AuthoredAtomicCommand
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::ApplyAdmission(radroots_storage::authored_atomic::ApplyAdmissionResult)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::ApplyDelivery(radroots_storage::authored_atomic::ApplyDeliveryAttempt)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::ApplyFailure(radroots_storage::authored_atomic::ApplyWorkFailure)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::ApplySigned(radroots_storage::authored_atomic::ApplySignedArtifact)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Cancel(radroots_storage::authored_atomic::CancelAuthoredWork)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Claim(radroots_storage::authored_atomic::ClaimAuthoredWork)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Prepare(radroots_storage::authored_atomic::PrepareAuthoredOperation)
+impl radroots_storage::authored_atomic::AuthoredAtomicCommand
+pub fn radroots_storage::authored_atomic::AuthoredAtomicCommand::commit_id(&self) -> radroots_storage::atomic::AtomicCommitId
+pub fn radroots_storage::authored_atomic::AuthoredAtomicCommand::digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
+pub const fn radroots_storage::authored_atomic::AuthoredAtomicCommand::requested_at_unix_ms(&self) -> u64
+pub enum radroots_storage::authored_atomic::AuthoredAtomicOutcome
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Artifact(radroots_storage::authored::AuthoredArtifact)
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::DeliveryPlan(radroots_storage::authored_delivery::AuthoredDeliveryPlan)
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared::artifacts: alloc::vec::Vec<radroots_storage::authored::AuthoredArtifact>
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared::delivery_plans: alloc::vec::Vec<radroots_storage::authored_delivery::AuthoredDeliveryPlan>
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared::operation: radroots_storage::authored::AuthoredOperation
+pub enum radroots_storage::authored_atomic::AuthoredWorkTarget
+pub radroots_storage::authored_atomic::AuthoredWorkTarget::Artifact(radroots_storage::authored::AuthoredArtifactId)
+pub radroots_storage::authored_atomic::AuthoredWorkTarget::DeliveryPlan(radroots_storage::authored_delivery::AuthoredDeliveryPlanId)
+pub enum radroots_storage::authored_atomic::CancelAuthoredTarget
+pub radroots_storage::authored_atomic::CancelAuthoredTarget::ArtifactAdmission(radroots_storage::authored::AuthoredArtifactId)
+pub radroots_storage::authored_atomic::CancelAuthoredTarget::ArtifactSigning(radroots_storage::authored::AuthoredArtifactId)
+pub radroots_storage::authored_atomic::CancelAuthoredTarget::DeliveryPlan(radroots_storage::authored_delivery::AuthoredDeliveryPlanId)
+pub enum radroots_storage::authored_atomic::ClaimAuthoredTarget
+pub radroots_storage::authored_atomic::ClaimAuthoredTarget::ArtifactAdmission(radroots_storage::authored::AuthoredArtifactId)
+pub radroots_storage::authored_atomic::ClaimAuthoredTarget::ArtifactSigning(radroots_storage::authored::AuthoredArtifactId)
+pub radroots_storage::authored_atomic::ClaimAuthoredTarget::DeliveryPlan(radroots_storage::authored_delivery::AuthoredDeliveryPlanId)
+pub struct radroots_storage::authored_atomic::ApplyAdmissionResult
+impl radroots_storage::authored_atomic::ApplyAdmissionResult
+pub const fn radroots_storage::authored_atomic::ApplyAdmissionResult::applied_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::ApplyAdmissionResult::artifact_id(&self) -> radroots_storage::authored::AuthoredArtifactId
+pub const fn radroots_storage::authored_atomic::ApplyAdmissionResult::failure(&self) -> core::option::Option<&radroots_storage::authored::WorkFailure>
+pub const fn radroots_storage::authored_atomic::ApplyAdmissionResult::fence(&self) -> &radroots_storage::authored_atomic::WorkFence
+pub fn radroots_storage::authored_atomic::ApplyAdmissionResult::new(radroots_storage::authored::AuthoredArtifactId, radroots_storage::authored_atomic::WorkFence, radroots_storage::authored::AdmissionState, core::option::Option<radroots_storage::authored::WorkFailure>, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::ApplyAdmissionResult::retry(&self) -> core::option::Option<&radroots_storage::authored::RetrySchedule>
+pub const fn radroots_storage::authored_atomic::ApplyAdmissionResult::state(&self) -> radroots_storage::authored::AdmissionState
+pub struct radroots_storage::authored_atomic::ApplyDeliveryAttempt
+impl radroots_storage::authored_atomic::ApplyDeliveryAttempt
+pub const fn radroots_storage::authored_atomic::ApplyDeliveryAttempt::applied_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::ApplyDeliveryAttempt::fence(&self) -> &radroots_storage::authored_atomic::WorkFence
+pub fn radroots_storage::authored_atomic::ApplyDeliveryAttempt::new(radroots_storage::authored_delivery::AuthoredDeliveryPlanId, radroots_storage::authored_atomic::WorkFence, radroots_storage::authored_delivery::DeliveryAttemptOutcome, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::ApplyDeliveryAttempt::outcome(&self) -> &radroots_storage::authored_delivery::DeliveryAttemptOutcome
+pub const fn radroots_storage::authored_atomic::ApplyDeliveryAttempt::plan_id(&self) -> radroots_storage::authored_delivery::AuthoredDeliveryPlanId
+pub const fn radroots_storage::authored_atomic::ApplyDeliveryAttempt::retry(&self) -> core::option::Option<&radroots_storage::authored::RetrySchedule>
+pub struct radroots_storage::authored_atomic::ApplySignedArtifact
+impl radroots_storage::authored_atomic::ApplySignedArtifact
+pub const fn radroots_storage::authored_atomic::ApplySignedArtifact::applied_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::ApplySignedArtifact::artifact_id(&self) -> radroots_storage::authored::AuthoredArtifactId
+pub const fn radroots_storage::authored_atomic::ApplySignedArtifact::event(&self) -> &radroots_event::draft::SignedEvent
+pub const fn radroots_storage::authored_atomic::ApplySignedArtifact::fence(&self) -> &radroots_storage::authored_atomic::WorkFence
+pub fn radroots_storage::authored_atomic::ApplySignedArtifact::new(radroots_storage::authored::AuthoredArtifactId, radroots_storage::authored_atomic::WorkFence, radroots_event::draft::SignedEvent, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub struct radroots_storage::authored_atomic::ApplyWorkFailure
+impl radroots_storage::authored_atomic::ApplyWorkFailure
+pub const fn radroots_storage::authored_atomic::ApplyWorkFailure::applied_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::ApplyWorkFailure::failure(&self) -> &radroots_storage::authored::WorkFailure
+pub const fn radroots_storage::authored_atomic::ApplyWorkFailure::fence(&self) -> &radroots_storage::authored_atomic::WorkFence
+pub fn radroots_storage::authored_atomic::ApplyWorkFailure::new(radroots_storage::authored_atomic::AuthoredWorkTarget, radroots_storage::authored_atomic::WorkFence, radroots_storage::authored::WorkFailure, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::ApplyWorkFailure::retry(&self) -> core::option::Option<&radroots_storage::authored::RetrySchedule>
+pub const fn radroots_storage::authored_atomic::ApplyWorkFailure::target(&self) -> &radroots_storage::authored_atomic::AuthoredWorkTarget
+pub struct radroots_storage::authored_atomic::AuthoredAtomicReceipt
+impl radroots_storage::authored_atomic::AuthoredAtomicReceipt
+pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::commit_id(&self) -> radroots_storage::atomic::AtomicCommitId
+pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::committed_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
+pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::disposition(&self) -> radroots_storage::atomic::AtomicCommitDisposition
+pub fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::from_durable_parts(radroots_storage::atomic::AtomicCommitId, radroots_storage::atomic::AtomicCommitDigest, radroots_storage::atomic::AtomicCommitDisposition, u64, radroots_storage::authored_atomic::AuthoredAtomicOutcome) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::new(&radroots_storage::authored_atomic::AuthoredAtomicCommand, radroots_storage::atomic::AtomicCommitDisposition, u64, radroots_storage::authored_atomic::AuthoredAtomicOutcome) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::outcome(&self) -> &radroots_storage::authored_atomic::AuthoredAtomicOutcome
+pub struct radroots_storage::authored_atomic::CancelAuthoredWork
+impl radroots_storage::authored_atomic::CancelAuthoredWork
+pub const fn radroots_storage::authored_atomic::CancelAuthoredWork::cancelled_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::CancelAuthoredWork::expected_revision(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_storage::authored_atomic::CancelAuthoredWork::new(radroots_storage::authored_atomic::CancelAuthoredTarget, core::num::nonzero::NonZeroU64, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::CancelAuthoredWork::target(&self) -> &radroots_storage::authored_atomic::CancelAuthoredTarget
+pub struct radroots_storage::authored_atomic::ClaimAuthoredWork
+impl radroots_storage::authored_atomic::ClaimAuthoredWork
+pub const fn radroots_storage::authored_atomic::ClaimAuthoredWork::claim(&self) -> &radroots_storage::authored::WorkClaim
+pub const fn radroots_storage::authored_atomic::ClaimAuthoredWork::new(radroots_storage::authored_atomic::ClaimAuthoredTarget, radroots_storage::authored::WorkClaim) -> Self
+pub const fn radroots_storage::authored_atomic::ClaimAuthoredWork::target(&self) -> &radroots_storage::authored_atomic::ClaimAuthoredTarget
+pub struct radroots_storage::authored_atomic::PrepareAuthoredOperation
+impl radroots_storage::authored_atomic::PrepareAuthoredOperation
+pub fn radroots_storage::authored_atomic::PrepareAuthoredOperation::artifacts(&self) -> &[radroots_storage::authored::AuthoredArtifact]
+pub fn radroots_storage::authored_atomic::PrepareAuthoredOperation::delivery_plans(&self) -> &[radroots_storage::authored_delivery::AuthoredDeliveryPlan]
+pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::input_digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
+pub fn radroots_storage::authored_atomic::PrepareAuthoredOperation::new(radroots_storage::authored::AuthoredOperation, alloc::vec::Vec<radroots_storage::authored::AuthoredArtifact>, alloc::vec::Vec<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::atomic::AtomicCommitDigest, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::operation(&self) -> &radroots_storage::authored::AuthoredOperation
+pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::requested_at_unix_ms(&self) -> u64
+pub struct radroots_storage::authored_atomic::WorkFence
+impl radroots_storage::authored_atomic::WorkFence
+pub const fn radroots_storage::authored_atomic::WorkFence::generation(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_storage::authored_atomic::WorkFence::new([u8; 16], core::num::nonzero::NonZeroU64, core::num::nonzero::NonZeroU64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::WorkFence::row_revision(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_storage::authored_atomic::WorkFence::token(&self) -> &[u8; 16]
+pub trait radroots_storage::authored_atomic::AuthoredAtomicStorage: core::marker::Send + core::marker::Sync
+pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::Error>>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::execute_authored(&self, radroots_storage::authored_atomic::AuthoredAtomicCommand) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>>
+impl radroots_storage::authored_atomic::AuthoredAtomicStorage for radroots_storage::memory::MemoryStorage
+pub fn radroots_storage::memory::MemoryStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::execute_authored(&self, radroots_storage::authored_atomic::AuthoredAtomicCommand) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>>
+pub mod radroots_storage::authored_delivery
+pub enum radroots_storage::authored_delivery::AuthoredDeliveryState
+pub radroots_storage::authored_delivery::AuthoredDeliveryState::Cancelled
+pub radroots_storage::authored_delivery::AuthoredDeliveryState::Exhausted
+pub radroots_storage::authored_delivery::AuthoredDeliveryState::FailedTerminal
+pub radroots_storage::authored_delivery::AuthoredDeliveryState::Pending
+pub radroots_storage::authored_delivery::AuthoredDeliveryState::Retryable
+pub radroots_storage::authored_delivery::AuthoredDeliveryState::Satisfied
+impl radroots_storage::authored_delivery::AuthoredDeliveryState
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryState::is_terminal(self) -> bool
+pub enum radroots_storage::authored_delivery::DeliveryAttemptOutcome
+pub radroots_storage::authored_delivery::DeliveryAttemptOutcome::Receipt(radroots_transport::sink::DeliveryReceipt)
+pub radroots_storage::authored_delivery::DeliveryAttemptOutcome::SinkFailure(radroots_transport::sink::SinkFailure)
+pub struct radroots_storage::authored_delivery::AuthoredDeliveryAttempt
+impl radroots_storage::authored_delivery::AuthoredDeliveryAttempt
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::attempt(&self) -> core::num::nonzero::NonZeroU32
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::outcome(&self) -> &radroots_storage::authored_delivery::DeliveryAttemptOutcome
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::reconstruct(core::num::nonzero::NonZeroU32, u64, radroots_storage::authored_delivery::DeliveryAttemptOutcome, radroots_transport::policy::SatisfactionState) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::recorded_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::satisfaction(&self) -> radroots_transport::policy::SatisfactionState
+pub struct radroots_storage::authored_delivery::AuthoredDeliveryIntent
+impl radroots_storage::authored_delivery::AuthoredDeliveryIntent
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::deadline_unix_ms(&self) -> u64
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::from_request(&radroots_transport::sink::DeliveryRequest) -> Self
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::materialize(&self, radroots_transport::sink::DeliveryPayload) -> core::result::Result<radroots_transport::sink::DeliveryRequest, radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::new(impl core::convert::Into<alloc::string::String>, radroots_transport::target::TargetSet, radroots_transport::policy::SatisfactionPolicy, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::request_id(&self) -> &radroots_transport::sink::DeliveryRequestId
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::satisfaction(&self) -> &radroots_transport::policy::SatisfactionPolicy
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::target_set(&self) -> &radroots_transport::target::TargetSet
+pub struct radroots_storage::authored_delivery::AuthoredDeliveryPlan
+impl radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::apply_receipt(&mut self, &[u8; 16], core::num::nonzero::NonZeroU64, core::num::nonzero::NonZeroU64, radroots_transport::sink::DeliveryReceipt, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::apply_sink_failure(&mut self, &[u8; 16], core::num::nonzero::NonZeroU64, core::num::nonzero::NonZeroU64, radroots_transport::sink::SinkFailure, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<(), radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::artifact_id(&self) -> radroots_storage::authored::AuthoredArtifactId
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::attempt_count(&self) -> u32
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::attempts(&self) -> &[radroots_storage::authored_delivery::AuthoredDeliveryAttempt]
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::bind_signed_event(&mut self, radroots_event::draft::SignedEvent, u64) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::cancel(&mut self, u64) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::claim(&mut self, radroots_storage::authored::WorkClaim, u64) -> core::result::Result<(), radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::claim_evidence(&self) -> core::option::Option<&radroots_storage::authored::WorkClaim>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::created_at_unix_ms(&self) -> u64
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::evaluate_next_attempt(&self, &radroots_storage::authored_delivery::DeliveryAttemptOutcome) -> core::result::Result<radroots_transport::policy::SatisfactionState, radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::intent(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryIntent
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::last_failure(&self) -> core::option::Option<&radroots_storage::authored::WorkFailure>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::new(radroots_storage::authored_delivery::AuthoredDeliveryPlanId, radroots_storage::authored::AuthoredArtifactId, radroots_storage::authored_delivery::AuthoredDeliveryIntent, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::new_bound(radroots_storage::authored_delivery::AuthoredDeliveryPlanId, radroots_storage::authored::AuthoredArtifactId, radroots_transport::sink::DeliveryRequest, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::plan_id(&self) -> radroots_storage::authored_delivery::AuthoredDeliveryPlanId
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::reconstruct(Self) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::request(&self) -> core::option::Option<&radroots_transport::sink::DeliveryRequest>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::request_digest(&self) -> &[u8; 32]
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::retry(&self) -> core::option::Option<&radroots_storage::authored::RetrySchedule>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::revision(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::state(&self) -> radroots_storage::authored_delivery::AuthoredDeliveryState
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::updated_at_unix_ms(&self) -> u64
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::validate(&self) -> core::result::Result<(), radroots_storage::Error>
+pub struct radroots_storage::authored_delivery::AuthoredDeliveryPlanId(_)
+impl radroots_storage::authored_delivery::AuthoredDeliveryPlanId
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlanId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlanId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
+impl core::convert::From<radroots_storage::authored_delivery::AuthoredDeliveryPlanId> for [u8; 16]
+pub fn [u8; 16]::from(radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> Self
+impl core::convert::TryFrom<[u8; 16]> for radroots_storage::authored_delivery::AuthoredDeliveryPlanId
+pub type radroots_storage::authored_delivery::AuthoredDeliveryPlanId::Error = radroots_storage::Error
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlanId::try_from([u8; 16]) -> core::result::Result<Self, Self::Error>
+pub const radroots_storage::authored_delivery::DELIVERY_PLAN_ATTEMPTS_MAX: u32
 pub mod radroots_storage::backup
 pub enum radroots_storage::backup::BackupMemberKind
 pub radroots_storage::backup::BackupMemberKind::Metadata
@@ -124,10 +407,14 @@ impl radroots_storage::backup::BackupFormatVersion
 pub const radroots_storage::backup::BackupFormatVersion::V1: Self
 pub const fn radroots_storage::backup::BackupFormatVersion::get(self) -> u16
 pub const fn radroots_storage::backup::BackupFormatVersion::new(u16) -> core::result::Result<Self, radroots_storage::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::BackupFormatVersion
+pub fn radroots_storage::backup::BackupFormatVersion::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::BackupId(_)
 impl radroots_storage::backup::BackupId
 pub const fn radroots_storage::backup::BackupId::as_bytes(&self) -> &[u8; 16]
 pub const fn radroots_storage::backup::BackupId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::BackupId
+pub fn radroots_storage::backup::BackupId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::BackupManifest
 impl radroots_storage::backup::BackupManifest
 pub const fn radroots_storage::backup::BackupManifest::backup_id(&self) -> radroots_storage::backup::BackupId
@@ -138,6 +425,8 @@ pub fn radroots_storage::backup::BackupManifest::members(&self) -> &[radroots_st
 pub fn radroots_storage::backup::BackupManifest::new(radroots_storage::backup::BackupFormatVersion, radroots_storage::backup::BackupId, u64, radroots_storage::backup::BackupSecretPolicy, alloc::vec::Vec<radroots_storage::backup::BackupMember>) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::backup::BackupManifest::secret_policy(&self) -> radroots_storage::backup::BackupSecretPolicy
 pub const fn radroots_storage::backup::BackupManifest::total_bytes(&self) -> u64
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::BackupManifest
+pub fn radroots_storage::backup::BackupManifest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::BackupMember
 impl radroots_storage::backup::BackupMember
 pub const fn radroots_storage::backup::BackupMember::byte_length(&self) -> u64
@@ -145,6 +434,8 @@ pub const fn radroots_storage::backup::BackupMember::kind(&self) -> radroots_sto
 pub fn radroots_storage::backup::BackupMember::new(impl core::convert::Into<alloc::string::String>, radroots_storage::backup::BackupMemberKind, u64, radroots_storage::backup::MemberDigest) -> core::result::Result<Self, radroots_storage::Error>
 pub fn radroots_storage::backup::BackupMember::relative_path(&self) -> &str
 pub const fn radroots_storage::backup::BackupMember::sha256(&self) -> radroots_storage::backup::MemberDigest
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::BackupMember
+pub fn radroots_storage::backup::BackupMember::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::BackupOperation
 impl radroots_storage::backup::BackupOperation
 pub const fn radroots_storage::backup::BackupOperation::manifest(&self) -> core::option::Option<&radroots_storage::backup::BackupManifest>
@@ -161,6 +452,8 @@ pub const fn radroots_storage::backup::BackupPlan::format_version(&self) -> radr
 pub const fn radroots_storage::backup::BackupPlan::new(radroots_storage::backup::BackupId, radroots_storage::backup::BackupFormatVersion, radroots_storage::backup::BackupSecretPolicy, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::backup::BackupPlan::requested_at_unix_ms(&self) -> u64
 pub const fn radroots_storage::backup::BackupPlan::secret_policy(&self) -> radroots_storage::backup::BackupSecretPolicy
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::BackupPlan
+pub fn radroots_storage::backup::BackupPlan::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::MemberDigest(_)
 impl radroots_storage::backup::MemberDigest
 pub const fn radroots_storage::backup::MemberDigest::as_bytes(&self) -> &[u8; 32]
@@ -170,11 +463,15 @@ impl radroots_storage::backup::ReliabilityRevision
 pub const radroots_storage::backup::ReliabilityRevision::INITIAL: Self
 pub const fn radroots_storage::backup::ReliabilityRevision::get(self) -> u64
 pub const fn radroots_storage::backup::ReliabilityRevision::new(u64) -> core::result::Result<Self, radroots_storage::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::ReliabilityRevision
+pub fn radroots_storage::backup::ReliabilityRevision::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::RestoreMemberStatus
 impl radroots_storage::backup::RestoreMemberStatus
 pub fn radroots_storage::backup::RestoreMemberStatus::new(impl core::convert::Into<alloc::string::String>, radroots_storage::backup::MemberVerification) -> core::result::Result<Self, radroots_storage::Error>
 pub fn radroots_storage::backup::RestoreMemberStatus::relative_path(&self) -> &str
 pub const fn radroots_storage::backup::RestoreMemberStatus::verification(&self) -> radroots_storage::backup::MemberVerification
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::RestoreMemberStatus
+pub fn radroots_storage::backup::RestoreMemberStatus::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::backup::RestoreOperation
 impl radroots_storage::backup::RestoreOperation
 pub fn radroots_storage::backup::RestoreOperation::member_status(&self) -> &[radroots_storage::backup::RestoreMemberStatus]
@@ -189,6 +486,8 @@ pub const fn radroots_storage::backup::RestorePlan::accepted_secret_policy(&self
 pub const fn radroots_storage::backup::RestorePlan::manifest(&self) -> &radroots_storage::backup::BackupManifest
 pub fn radroots_storage::backup::RestorePlan::new(radroots_storage::backup::BackupManifest, radroots_storage::backup::BackupSecretPolicy, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::backup::RestorePlan::requested_at_unix_ms(&self) -> u64
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::backup::RestorePlan
+pub fn radroots_storage::backup::RestorePlan::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_storage::backup::BACKUP_MEMBER_MAX: usize
 pub const radroots_storage::backup::BACKUP_MEMBER_PATH_MAX_BYTES: usize
 pub trait radroots_storage::backup::StorageReliability: core::marker::Send + core::marker::Sync
@@ -208,6 +507,8 @@ pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transp
 pub fn radroots_storage::memory::MemoryStorage::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
 pub mod radroots_storage::event
+pub use radroots_storage::event::BoxFuture
+pub use radroots_storage::event::EventId
 pub enum radroots_storage::event::AdmissionDisposition
 pub radroots_storage::event::AdmissionDisposition::Advanced
 pub radroots_storage::event::AdmissionDisposition::Duplicate
@@ -268,6 +569,7 @@ pub const fn radroots_storage::event::SourceGeneration::as_bytes(&self) -> &[u8;
 pub const fn radroots_storage::event::SourceGeneration::new([u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
 pub struct radroots_storage::event::StoredEventProvenance
 impl radroots_storage::event::StoredEventProvenance
+pub fn radroots_storage::event::StoredEventProvenance::from_stored_parts(radroots_storage::event::EventPosition, &str, &str, u64, core::option::Option<&str>) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::event::StoredEventProvenance::new(radroots_storage::event::EventPosition, radroots_transport::source::EventProvenance) -> Self
 pub const fn radroots_storage::event::StoredEventProvenance::position(&self) -> radroots_storage::event::EventPosition
 pub const fn radroots_storage::event::StoredEventProvenance::provenance(&self) -> &radroots_transport::source::EventProvenance
@@ -279,13 +581,13 @@ pub const fn radroots_storage::event::StoredRawEvent::position(&self) -> radroot
 pub const fn radroots_storage::event::StoredRawEvent::stage(&self) -> radroots_storage::event::AdmissionStage
 pub struct radroots_storage::event::StoredVerifiedEvent
 impl radroots_storage::event::StoredVerifiedEvent
-pub const fn radroots_storage::event::StoredVerifiedEvent::event(&self) -> &radroots_event::verification::SignatureVerifiedEvent
-pub const fn radroots_storage::event::StoredVerifiedEvent::new(radroots_storage::event::EventPosition, radroots_event::verification::SignatureVerifiedEvent) -> Self
+pub const fn radroots_storage::event::StoredVerifiedEvent::event(&self) -> &radroots_event::draft::SignedEvent
+pub const fn radroots_storage::event::StoredVerifiedEvent::new(radroots_storage::event::EventPosition, radroots_event::draft::SignedEvent) -> Self
 pub const fn radroots_storage::event::StoredVerifiedEvent::position(&self) -> radroots_storage::event::EventPosition
 pub struct radroots_storage::event::StoredVisibleEvent
 impl radroots_storage::event::StoredVisibleEvent
-pub const fn radroots_storage::event::StoredVisibleEvent::event(&self) -> &radroots_event::admission::VisibleEvent
-pub const fn radroots_storage::event::StoredVisibleEvent::new(radroots_storage::event::EventPosition, radroots_event::admission::VisibleEvent) -> Self
+pub const fn radroots_storage::event::StoredVisibleEvent::event(&self) -> &radroots_event::draft::SignedEvent
+pub const fn radroots_storage::event::StoredVisibleEvent::new(radroots_storage::event::EventPosition, radroots_event::draft::SignedEvent) -> Self
 pub const fn radroots_storage::event::StoredVisibleEvent::position(&self) -> radroots_storage::event::EventPosition
 pub const radroots_storage::event::EVENT_QUERY_ID_MAX: usize
 pub const radroots_storage::event::EVENT_QUERY_LIMIT_MAX: u16
@@ -305,6 +607,9 @@ pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_st
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 pub type radroots_storage::event::EventCursor = radroots_storage::event::EventPosition
 pub mod radroots_storage::journal
+pub use radroots_storage::journal::BoxFuture
+pub use radroots_storage::journal::EventId
+pub use radroots_storage::journal::OperationId
 pub enum radroots_storage::journal::CancellationState
 pub radroots_storage::journal::CancellationState::CancelledBeforeCommit
 pub radroots_storage::journal::CancellationState::NotRequested
@@ -425,6 +730,12 @@ pub fn radroots_storage::memory::MemoryStorage::default() -> Self
 impl radroots_storage::atomic::AtomicStorage for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::commit(&self, radroots_storage::atomic::AtomicCommit) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::atomic::AtomicCommitReceipt, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::atomic::AtomicCommitReceipt>, radroots_storage::Error>>
+impl radroots_storage::authored_atomic::AuthoredAtomicStorage for radroots_storage::memory::MemoryStorage
+pub fn radroots_storage::memory::MemoryStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::execute_authored(&self, radroots_storage::authored_atomic::AuthoredAtomicCommand) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>>
 impl radroots_storage::backup::StorageReliability for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::begin_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::begin_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
@@ -465,12 +776,36 @@ pub fn radroots_storage::memory::MemoryStorage::checkpoint(&self, radroots_stora
 pub fn radroots_storage::memory::MemoryStorage::event_index_checkpoint(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
+impl radroots_storage::status::StorageStatusProvider for radroots_storage::memory::MemoryStorage
+pub fn radroots_storage::memory::MemoryStorage::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub mod radroots_storage::outbox
+pub use radroots_storage::outbox::BoxFuture
+pub use radroots_storage::outbox::DeliveryOutcome
+pub use radroots_storage::outbox::DeliveryOutcomeKind
+pub use radroots_storage::outbox::DeliveryPayload
+pub use radroots_storage::outbox::DeliveryReceipt
+pub use radroots_storage::outbox::DeliveryRequest
+pub use radroots_storage::outbox::DeliveryTargetReceipt
+pub use radroots_storage::outbox::Retryability
+pub use radroots_storage::outbox::SatisfactionClass
+pub use radroots_storage::outbox::SatisfactionPolicy
+pub use radroots_storage::outbox::SatisfactionState
+pub use radroots_storage::outbox::TARGET_SET_MAX_ITEMS
+pub use radroots_storage::outbox::Target
+pub use radroots_storage::outbox::TargetFingerprint
+pub use radroots_storage::outbox::TargetLabel
+pub use radroots_storage::outbox::TargetPolicy
+pub use radroots_storage::outbox::TargetScope
+pub use radroots_storage::outbox::TargetSet
+pub use radroots_storage::outbox::TransportId
+pub use radroots_storage::outbox::evaluate_transport_satisfaction
 pub enum radroots_storage::outbox::EnqueueDisposition
 pub radroots_storage::outbox::EnqueueDisposition::Created
 pub radroots_storage::outbox::EnqueueDisposition::Replay
@@ -507,8 +842,13 @@ pub const fn radroots_storage::outbox::DeliveryAttempt::get(self) -> u32
 pub const fn radroots_storage::outbox::DeliveryAttempt::new(u32) -> core::result::Result<Self, radroots_storage::Error>
 pub struct radroots_storage::outbox::DeliveryAttemptEvidence
 impl radroots_storage::outbox::DeliveryAttemptEvidence
+pub const fn radroots_storage::outbox::DeliveryAttemptEvidence::attempt(&self) -> radroots_storage::outbox::DeliveryAttempt
+pub const fn radroots_storage::outbox::DeliveryAttemptEvidence::expected_revision(&self) -> radroots_storage::outbox::OutboxRevision
 pub const fn radroots_storage::outbox::DeliveryAttemptEvidence::item_id(&self) -> radroots_storage::outbox::OutboxItemId
+pub const fn radroots_storage::outbox::DeliveryAttemptEvidence::lease_id(&self) -> radroots_storage::outbox::LeaseId
 pub fn radroots_storage::outbox::DeliveryAttemptEvidence::new(radroots_storage::outbox::OutboxItemId, radroots_storage::outbox::LeaseId, radroots_storage::outbox::OutboxRevision, radroots_storage::outbox::DeliveryAttempt, radroots_transport::sink::DeliveryReceipt, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::outbox::DeliveryAttemptEvidence::receipt(&self) -> &radroots_transport::sink::DeliveryReceipt
+pub const fn radroots_storage::outbox::DeliveryAttemptEvidence::recorded_at_unix_ms(&self) -> u64
 pub struct radroots_storage::outbox::DeliveryPlanDigest(_)
 impl radroots_storage::outbox::DeliveryPlanDigest
 pub const fn radroots_storage::outbox::DeliveryPlanDigest::as_bytes(&self) -> &[u8; 32]
@@ -558,6 +898,7 @@ impl radroots_storage::outbox::OutboxRecord
 pub fn radroots_storage::outbox::OutboxRecord::claim(&mut self, radroots_storage::outbox::OutboxLease) -> core::result::Result<(), radroots_storage::Error>
 pub const fn radroots_storage::outbox::OutboxRecord::created_at_unix_ms(&self) -> u64
 pub fn radroots_storage::outbox::OutboxRecord::evidence(&self) -> &[radroots_storage::outbox::TargetDeliveryEvidence]
+pub fn radroots_storage::outbox::OutboxRecord::from_durable_parts(radroots_storage::outbox::EnqueueOutboxItem, radroots_storage::outbox::OutboxRevision, radroots_storage::outbox::OutboxStage, core::option::Option<radroots_storage::outbox::OutboxLease>, core::option::Option<radroots_storage::outbox::DeliveryAttempt>, alloc::vec::Vec<radroots_storage::outbox::TargetDeliveryEvidence>, radroots_storage::outbox::SatisfactionResult, core::option::Option<u64>, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::outbox::OutboxRecord::item_id(&self) -> radroots_storage::outbox::OutboxItemId
 pub const fn radroots_storage::outbox::OutboxRecord::last_attempt(&self) -> core::option::Option<radroots_storage::outbox::DeliveryAttempt>
 pub fn radroots_storage::outbox::OutboxRecord::latest_target_evidence(&self, &radroots_transport::target::TargetFingerprint) -> core::option::Option<&radroots_storage::outbox::TargetDeliveryEvidence>
@@ -588,6 +929,7 @@ pub fn radroots_storage::outbox::OutboxStatus::total(self) -> core::option::Opti
 pub struct radroots_storage::outbox::TargetDeliveryEvidence
 impl radroots_storage::outbox::TargetDeliveryEvidence
 pub const fn radroots_storage::outbox::TargetDeliveryEvidence::attempt(&self) -> radroots_storage::outbox::DeliveryAttempt
+pub fn radroots_storage::outbox::TargetDeliveryEvidence::new(radroots_transport::target::TargetFingerprint, radroots_storage::outbox::DeliveryAttempt, bool, radroots_transport::outcome::DeliveryOutcome, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::outbox::TargetDeliveryEvidence::outcome(&self) -> &radroots_transport::outcome::DeliveryOutcome
 pub const fn radroots_storage::outbox::TargetDeliveryEvidence::recorded_at_unix_ms(&self) -> u64
 pub const fn radroots_storage::outbox::TargetDeliveryEvidence::target(&self) -> &radroots_transport::target::TargetFingerprint
@@ -657,6 +999,7 @@ impl radroots_storage::private_artifact::PrivateArtifactMetadata
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::artifact_id(&self) -> radroots_storage::private_artifact::PrivateArtifactId
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::commitment(&self) -> radroots_storage::private_artifact::ArtifactCommitment
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::created_at_unix_ms(&self) -> u64
+pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::from_durable_parts(radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::ArtifactKind, radroots_storage::private_artifact::ArtifactSchemaId, radroots_storage::private_artifact::ArtifactCommitment, u64, radroots_storage::private_artifact::DurableSecretReference, radroots_storage::private_artifact::RetentionPolicy, radroots_storage::private_artifact::PrivateArtifactRevision, radroots_storage::private_artifact::PrivateArtifactStage, u64, u64, core::option::Option<(u64, radroots_storage::private_artifact::DeletionReason, radroots_storage::private_artifact::ArtifactCommitment)>) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::kind(&self) -> &radroots_storage::private_artifact::ArtifactKind
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::mark_expired(&self, radroots_storage::private_artifact::PrivateArtifactRevision, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::new(radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::ArtifactKind, radroots_storage::private_artifact::ArtifactSchemaId, radroots_storage::private_artifact::ArtifactCommitment, u64, radroots_storage::private_artifact::DurableSecretReference, radroots_storage::private_artifact::RetentionPolicy, u64) -> core::result::Result<Self, radroots_storage::Error>
@@ -708,6 +1051,8 @@ pub fn radroots_storage::memory::MemoryStorage::put_metadata(&self, radroots_sto
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::Error>>
 pub mod radroots_storage::projection
+pub use radroots_storage::projection::BoxFuture
+pub use radroots_storage::projection::EventId
 pub enum radroots_storage::projection::InvalidationReason
 pub radroots_storage::projection::InvalidationReason::EventIndexManifestChanged
 pub radroots_storage::projection::InvalidationReason::IntegrityFailure
@@ -719,6 +1064,11 @@ pub radroots_storage::projection::ProjectionHealth::Failed
 pub radroots_storage::projection::ProjectionHealth::Invalidated
 pub radroots_storage::projection::ProjectionHealth::Ready
 pub radroots_storage::projection::ProjectionHealth::Rebuilding
+pub enum radroots_storage::projection::RebuildFailure
+pub radroots_storage::projection::RebuildFailure::IntegrityFailure
+pub radroots_storage::projection::RebuildFailure::PromotionRejected
+pub radroots_storage::projection::RebuildFailure::ReducerRejected
+pub radroots_storage::projection::RebuildFailure::SourceChanged
 pub enum radroots_storage::projection::RebuildStage
 pub radroots_storage::projection::RebuildStage::Completed
 pub radroots_storage::projection::RebuildStage::Failed
@@ -808,13 +1158,22 @@ pub const fn radroots_storage::projection::ProjectionStatus::generation(&self) -
 pub const fn radroots_storage::projection::ProjectionStatus::health(&self) -> radroots_storage::projection::ProjectionHealth
 pub fn radroots_storage::projection::ProjectionStatus::new(radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionHealth, core::option::Option<radroots_storage::projection::ProjectionCheckpoint>, core::option::Option<radroots_storage::projection::RebuildTicketId>) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::projection::ProjectionStatus::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub struct radroots_storage::projection::RawSourceDigest(_)
+impl radroots_storage::projection::RawSourceDigest
+pub const fn radroots_storage::projection::RawSourceDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_storage::projection::RawSourceDigest::new([u8; 32]) -> Self
 pub struct radroots_storage::projection::RebuildTicket
 impl radroots_storage::projection::RebuildTicket
 pub const fn radroots_storage::projection::RebuildTicket::checkpoint(&self) -> core::option::Option<&radroots_storage::projection::ProjectionCheckpoint>
+pub const fn radroots_storage::projection::RebuildTicket::failure(&self) -> core::option::Option<radroots_storage::projection::RebuildFailure>
+pub fn radroots_storage::projection::RebuildTicket::from_durable_parts(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionInvalidation, radroots_storage::projection::ProjectionRevision, radroots_storage::projection::RebuildStage, radroots_storage::event::SourceGeneration, core::option::Option<radroots_storage::event::EventPosition>, radroots_storage::projection::RawSourceDigest, core::option::Option<radroots_storage::projection::ProjectionCheckpoint>, core::option::Option<radroots_storage::projection::RebuildFailure>, u64, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::projection::RebuildTicket::invalidation(&self) -> &radroots_storage::projection::ProjectionInvalidation
-pub fn radroots_storage::projection::RebuildTicket::requested(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionInvalidation) -> Self
+pub fn radroots_storage::projection::RebuildTicket::requested(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionInvalidation, radroots_storage::event::SourceGeneration, core::option::Option<radroots_storage::event::EventPosition>, radroots_storage::projection::RawSourceDigest) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::projection::RebuildTicket::requested_at_unix_ms(&self) -> u64
 pub const fn radroots_storage::projection::RebuildTicket::revision(&self) -> radroots_storage::projection::ProjectionRevision
+pub const fn radroots_storage::projection::RebuildTicket::source_digest(&self) -> radroots_storage::projection::RawSourceDigest
+pub const fn radroots_storage::projection::RebuildTicket::source_generation(&self) -> radroots_storage::event::SourceGeneration
+pub const fn radroots_storage::projection::RebuildTicket::source_high_water(&self) -> core::option::Option<radroots_storage::event::EventPosition>
 pub const fn radroots_storage::projection::RebuildTicket::stage(&self) -> radroots_storage::projection::RebuildStage
 pub const fn radroots_storage::projection::RebuildTicket::ticket_id(&self) -> radroots_storage::projection::RebuildTicketId
 pub fn radroots_storage::projection::RebuildTicket::transition(&self, radroots_storage::projection::RebuildTransition) -> core::result::Result<Self, radroots_storage::Error>
@@ -827,7 +1186,7 @@ pub struct radroots_storage::projection::RebuildTransition
 impl radroots_storage::projection::RebuildTransition
 pub const fn radroots_storage::projection::RebuildTransition::checkpoint(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionRevision, u64, radroots_storage::projection::ProjectionCheckpoint) -> Self
 pub const fn radroots_storage::projection::RebuildTransition::complete(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionRevision, u64, radroots_storage::projection::ProjectionCheckpoint) -> Self
-pub const fn radroots_storage::projection::RebuildTransition::fail(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionRevision, u64) -> Self
+pub const fn radroots_storage::projection::RebuildTransition::fail(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionRevision, u64, radroots_storage::projection::RebuildFailure) -> Self
 pub const fn radroots_storage::projection::RebuildTransition::start(radroots_storage::projection::RebuildTicketId, radroots_storage::projection::ProjectionRevision, u64) -> Self
 pub const fn radroots_storage::projection::RebuildTransition::ticket_id(&self) -> radroots_storage::projection::RebuildTicketId
 pub const radroots_storage::projection::EVENT_INDEX_ARTIFACT_PATH_MAX_BYTES: usize
@@ -840,8 +1199,10 @@ pub fn radroots_storage::projection::ProjectionStore::checkpoint(&self, radroots
 pub fn radroots_storage::projection::ProjectionStore::event_index_checkpoint(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
@@ -850,8 +1211,10 @@ pub fn radroots_storage::memory::MemoryStorage::checkpoint(&self, radroots_stora
 pub fn radroots_storage::memory::MemoryStorage::event_index_checkpoint(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
@@ -908,6 +1271,10 @@ pub const fn radroots_storage::status::StorageStatus::open_mode(self) -> radroot
 pub const fn radroots_storage::status::StorageStatus::shutdown(self) -> radroots_storage::status::ShutdownState
 pub const fn radroots_storage::status::StorageStatus::wal_enabled(self) -> bool
 pub const fn radroots_storage::status::StorageStatus::writer_policy(self) -> radroots_storage::status::WriterPolicy
+pub trait radroots_storage::status::StorageStatusProvider: core::marker::Send + core::marker::Sync
+pub fn radroots_storage::status::StorageStatusProvider::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
+impl radroots_storage::status::StorageStatusProvider for radroots_storage::memory::MemoryStorage
+pub fn radroots_storage::memory::MemoryStorage::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 #[non_exhaustive] pub enum radroots_storage::Error
 pub radroots_storage::Error::AdmissionEventMismatch
 pub radroots_storage::Error::AdmissionRegression
@@ -924,6 +1291,8 @@ pub radroots_storage::Error::CorruptProjectionRecord
 pub radroots_storage::Error::CorruptReliabilityOperation
 pub radroots_storage::Error::CorruptStoredEvent
 pub radroots_storage::Error::CursorGenerationMismatch
+pub radroots_storage::Error::DeliveryAttemptOverflow
+pub radroots_storage::Error::DeliveryPlanClaimConflict
 pub radroots_storage::Error::DuplicateBackupMember
 pub radroots_storage::Error::DuplicateEventIndexShard
 pub radroots_storage::Error::DuplicateEventQueryId
@@ -934,6 +1303,10 @@ pub radroots_storage::Error::EventPageLimitExceeded
 pub radroots_storage::Error::IdempotencyConflict
 pub radroots_storage::Error::InvalidAtomicCommitId
 pub radroots_storage::Error::InvalidAtomicCommitTimestamp
+pub radroots_storage::Error::InvalidAuthoredArtifact
+pub radroots_storage::Error::InvalidAuthoredDeliveryPlan
+pub radroots_storage::Error::InvalidAuthoredOperation
+pub radroots_storage::Error::InvalidAuthoredTransition
 pub radroots_storage::Error::InvalidBackupId
 pub radroots_storage::Error::InvalidBackupManifest
 pub radroots_storage::Error::InvalidBackupMemberLength
@@ -987,8 +1360,11 @@ pub radroots_storage::Error::InvalidRecoveryDeadline
 pub radroots_storage::Error::InvalidReliabilityRevision
 pub radroots_storage::Error::InvalidRestoreTimestamp
 pub radroots_storage::Error::InvalidRestoreTransition
+pub radroots_storage::Error::InvalidRetrySchedule
 pub radroots_storage::Error::InvalidSourceGeneration
 pub radroots_storage::Error::InvalidStorageStatus
+pub radroots_storage::Error::InvalidWorkClaim
+pub radroots_storage::Error::InvalidWorkFailure
 pub radroots_storage::Error::JournalOperationCommitted
 pub radroots_storage::Error::JournalRevisionConflict
 pub radroots_storage::Error::OperationIdentityMismatch
@@ -1089,8 +1465,10 @@ pub fn radroots_storage::ProjectionStore::checkpoint(&self, radroots_storage::pr
 pub fn radroots_storage::ProjectionStore::event_index_checkpoint(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
@@ -1099,10 +1477,12 @@ pub fn radroots_storage::memory::MemoryStorage::checkpoint(&self, radroots_stora
 pub fn radroots_storage::memory::MemoryStorage::event_index_checkpoint(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
-pub trait radroots_storage::Storage: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage
-impl<T> radroots_storage::Storage for T where T: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage
+pub trait radroots_storage::Storage: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage
+impl<T> radroots_storage::Storage for T where T: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage

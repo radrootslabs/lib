@@ -557,3 +557,72 @@ fn map_storage_error(error: StorageError) -> Error {
         _ => Error::StorageFailed,
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_source_identity_stage_encoding_and_error_mapping_are_exact() {
+        let invalidation = ProjectionInvalidation::new(
+            ProjectionId::parse("projection-helper").unwrap(),
+            ProjectionGeneration::new([1; 32]).unwrap(),
+            ProjectionGeneration::new([2; 32]).unwrap(),
+            InvalidationReason::ProjectionGenerationChanged,
+            1,
+        )
+        .unwrap();
+        let source_generation = SourceGeneration::new([11; 32]).unwrap();
+        let digest = RawSourceDigest::new([12; 32]);
+        let ticket = RebuildTicket::requested(
+            RebuildTicketId::new([13; 16]).unwrap(),
+            invalidation,
+            source_generation,
+            None,
+            digest,
+        )
+        .unwrap();
+        let matching = RawSourceSnapshot {
+            generation: source_generation,
+            high_water: None,
+            digest,
+        };
+        assert!(matching.matches_ticket(&ticket));
+        assert!(
+            !RawSourceSnapshot {
+                generation: SourceGeneration::new([14; 32]).unwrap(),
+                ..matching
+            }
+            .matches_ticket(&ticket)
+        );
+        assert!(
+            !RawSourceSnapshot {
+                high_water: Some(EventPosition::new(
+                    source_generation,
+                    radroots_storage::event::EventSequence::new(1).unwrap(),
+                )),
+                ..matching
+            }
+            .matches_ticket(&ticket)
+        );
+        assert!(
+            !RawSourceSnapshot {
+                digest: RawSourceDigest::new([15; 32]),
+                ..matching
+            }
+            .matches_ticket(&ticket)
+        );
+        assert_eq!(admission_stage_byte(AdmissionStage::Raw), 0);
+        assert_eq!(admission_stage_byte(AdmissionStage::Verified), 1);
+        assert_eq!(admission_stage_byte(AdmissionStage::Visible), 2);
+        assert_eq!(
+            map_storage_error(StorageError::ProjectionRevisionConflict),
+            Error::StorageConflict
+        );
+        assert_eq!(
+            map_storage_error(StorageError::BackendUnavailable),
+            Error::StorageFailed
+        );
+    }
+}

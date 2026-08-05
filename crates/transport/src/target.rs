@@ -1,7 +1,7 @@
 //! Extensible transport identities and canonical operation targets.
 
 use crate::{
-    RadrootsTransportError, TransportId,
+    Error as TransportError, TransportId,
     endpoint::{ENDPOINT_URI_MAX_BYTES, TARGET_LABEL_MAX_BYTES, TARGET_SCOPE_MAX_BYTES},
 };
 use alloc::collections::BTreeSet;
@@ -21,12 +21,12 @@ pub const TARGET_SET_MAX_ITEMS: usize = 64;
 pub struct EndpointUri(String);
 
 impl EndpointUri {
-    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, TransportError> {
         let canonical = canonicalize_uri(raw.as_ref())?;
         Ok(Self(canonical))
     }
 
-    fn parse_nostr_relay(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    fn parse_nostr_relay(raw: impl AsRef<str>) -> Result<Self, TransportError> {
         let canonical = canonicalize_nostr_relay_uri(raw.as_ref())?;
         Ok(Self(canonical))
     }
@@ -49,7 +49,7 @@ impl AsRef<str> for EndpointUri {
 }
 
 impl FromStr for EndpointUri {
-    type Err = RadrootsTransportError;
+    type Err = TransportError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -57,7 +57,7 @@ impl FromStr for EndpointUri {
 }
 
 impl TryFrom<&str> for EndpointUri {
-    type Error = RadrootsTransportError;
+    type Error = TransportError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -87,10 +87,10 @@ impl<'de> serde::Deserialize<'de> for EndpointUri {
 pub struct TargetScope(String);
 
 impl TargetScope {
-    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, TransportError> {
         let value = raw.as_ref();
         if value.is_empty() {
-            return Err(RadrootsTransportError::EmptyTargetScope);
+            return Err(TransportError::EmptyTargetScope);
         }
         if value.len() > TARGET_SCOPE_MAX_BYTES
             || value != value.trim()
@@ -98,7 +98,7 @@ impl TargetScope {
                 .chars()
                 .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.')))
         {
-            return Err(RadrootsTransportError::InvalidTargetScope);
+            return Err(TransportError::InvalidTargetScope);
         }
         Ok(Self(value.to_string()))
     }
@@ -121,7 +121,7 @@ impl AsRef<str> for TargetScope {
 }
 
 impl FromStr for TargetScope {
-    type Err = RadrootsTransportError;
+    type Err = TransportError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -129,7 +129,7 @@ impl FromStr for TargetScope {
 }
 
 impl TryFrom<&str> for TargetScope {
-    type Error = RadrootsTransportError;
+    type Error = TransportError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -153,14 +153,14 @@ impl<'de> serde::Deserialize<'de> for TargetScope {
 pub struct TargetLabel(String);
 
 impl TargetLabel {
-    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, TransportError> {
         let raw = raw.as_ref();
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Err(RadrootsTransportError::EmptyTargetLabel);
+            return Err(TransportError::EmptyTargetLabel);
         }
         if raw.len() > TARGET_LABEL_MAX_BYTES || trimmed.chars().any(char::is_control) {
-            return Err(RadrootsTransportError::InvalidTargetLabel);
+            return Err(TransportError::InvalidTargetLabel);
         }
         Ok(Self(trimmed.to_string()))
     }
@@ -183,7 +183,7 @@ impl AsRef<str> for TargetLabel {
 }
 
 impl FromStr for TargetLabel {
-    type Err = RadrootsTransportError;
+    type Err = TransportError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -191,7 +191,7 @@ impl FromStr for TargetLabel {
 }
 
 impl TryFrom<&str> for TargetLabel {
-    type Error = RadrootsTransportError;
+    type Error = TransportError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -234,10 +234,10 @@ impl TargetFingerprint {
         Self(hex_encode(&digest))
     }
 
-    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, TransportError> {
         let raw = raw.as_ref();
         if raw.len() != 64 || !raw.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(RadrootsTransportError::InvalidTargetFingerprint);
+            return Err(TransportError::InvalidTargetFingerprint);
         }
         Ok(Self(raw.to_ascii_lowercase()))
     }
@@ -270,7 +270,7 @@ impl AsRef<str> for TargetFingerprint {
 }
 
 impl FromStr for TargetFingerprint {
-    type Err = RadrootsTransportError;
+    type Err = TransportError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -278,7 +278,7 @@ impl FromStr for TargetFingerprint {
 }
 
 impl TryFrom<&str> for TargetFingerprint {
-    type Error = RadrootsTransportError;
+    type Error = TransportError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -314,11 +314,11 @@ pub struct Target {
 }
 
 impl Target {
-    pub fn new(kind: TransportId, uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn new(kind: TransportId, uri: impl AsRef<str>) -> Result<Self, TransportError> {
         Self::new_with_metadata(kind, uri, None, None)
     }
 
-    pub fn nostr_relay(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn nostr_relay(uri: impl AsRef<str>) -> Result<Self, TransportError> {
         Self::nostr_relay_with_metadata(uri, None, None)
     }
 
@@ -326,11 +326,11 @@ impl Target {
         uri: impl AsRef<str>,
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
-    ) -> Result<Self, RadrootsTransportError> {
+    ) -> Result<Self, TransportError> {
         Self::new_with_metadata(TransportId::NOSTR, uri, scope, label)
     }
 
-    pub fn local(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn local(uri: impl AsRef<str>) -> Result<Self, TransportError> {
         Self::local_with_metadata(uri, None, None)
     }
 
@@ -338,7 +338,7 @@ impl Target {
         uri: impl AsRef<str>,
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
-    ) -> Result<Self, RadrootsTransportError> {
+    ) -> Result<Self, TransportError> {
         Self::new_with_metadata(TransportId::LOCAL, uri, scope, label)
     }
 
@@ -347,7 +347,7 @@ impl Target {
         uri: impl AsRef<str>,
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
-    ) -> Result<Self, RadrootsTransportError> {
+    ) -> Result<Self, TransportError> {
         let raw_uri = uri.as_ref();
         let uri = match kind {
             TransportId::NOSTR => EndpointUri::parse_nostr_relay(raw_uri)?,
@@ -412,7 +412,7 @@ impl<'de> serde::Deserialize<'de> for Target {
             .map(|label| {
                 let parsed = TargetLabel::parse(label.as_str())?;
                 if parsed.as_str() != label {
-                    return Err(RadrootsTransportError::InvalidTargetLabel);
+                    return Err(TransportError::InvalidTargetLabel);
                 }
                 Ok(parsed)
             })
@@ -449,17 +449,17 @@ pub struct TargetSet {
 }
 
 impl TargetSet {
-    pub fn new(targets: Vec<Target>) -> Result<Self, RadrootsTransportError> {
+    pub fn new(targets: Vec<Target>) -> Result<Self, TransportError> {
         if targets.is_empty() {
-            return Err(RadrootsTransportError::EmptyTargetSet);
+            return Err(TransportError::EmptyTargetSet);
         }
         if targets.len() > TARGET_SET_MAX_ITEMS {
-            return Err(RadrootsTransportError::TargetSetTooLarge);
+            return Err(TransportError::TargetSetTooLarge);
         }
         let mut fingerprints = BTreeSet::new();
         for target in &targets {
             if !fingerprints.insert(target.fingerprint.as_str().to_string()) {
-                return Err(RadrootsTransportError::DuplicateTargetFingerprint);
+                return Err(TransportError::DuplicateTargetFingerprint);
             }
         }
         Ok(Self { targets })
@@ -503,27 +503,27 @@ impl<'de> serde::Deserialize<'de> for TargetSet {
     }
 }
 
-fn canonicalize_uri(raw: &str) -> Result<String, RadrootsTransportError> {
+fn canonicalize_uri(raw: &str) -> Result<String, TransportError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err(RadrootsTransportError::EmptyTargetUri);
+        return Err(TransportError::EmptyTargetUri);
     }
     if raw != trimmed {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     if trimmed.len() > ENDPOINT_URI_MAX_BYTES {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     if trimmed
         .chars()
         .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
     {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     if let Some(colon) = trimmed.find(':') {
         let scheme = &trimmed[..colon];
         if !is_valid_scheme(scheme) {
-            return Err(RadrootsTransportError::InvalidTargetUri);
+            return Err(TransportError::InvalidTargetUri);
         }
         let rest = &trimmed[colon + 1..];
         if let Some(authority_rest) = rest.strip_prefix("//") {
@@ -550,32 +550,32 @@ fn is_valid_scheme(value: &str) -> bool {
         && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
 }
 
-fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportError> {
+fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, TransportError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err(RadrootsTransportError::EmptyTargetUri);
+        return Err(TransportError::EmptyTargetUri);
     }
     if raw != trimmed {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     if trimmed.len() > ENDPOINT_URI_MAX_BYTES {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     if trimmed
         .chars()
         .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
     {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     if trimmed.contains('?') || trimmed.contains('#') || trimmed.contains('\\') {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     let Some(scheme_end) = trimmed.find("://") else {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     };
     let scheme = trimmed[..scheme_end].to_ascii_lowercase();
     if !matches!(scheme.as_str(), "wss" | "ws") {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     let endpoint = &trimmed[scheme_end + 3..];
     let authority_end = endpoint.find('/').unwrap_or(endpoint.len());
@@ -592,13 +592,13 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportEr
 fn canonicalize_nostr_relay_authority(
     authority: &str,
     scheme: &str,
-) -> Result<String, RadrootsTransportError> {
+) -> Result<String, TransportError> {
     if authority.is_empty() || authority.contains('@') {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     let (host, port) = if let Some(rest) = authority.strip_prefix('[') {
         let Some(host_end) = rest.find(']') else {
-            return Err(RadrootsTransportError::InvalidTargetUri);
+            return Err(TransportError::InvalidTargetUri);
         };
         let host = &rest[..host_end];
         let suffix = &rest[host_end + 1..];
@@ -607,7 +607,7 @@ fn canonicalize_nostr_relay_authority(
                 .chars()
                 .any(|ch| matches!(ch, '[' | ']' | '/' | '?' | '#' | '@' | '\\'))
         {
-            return Err(RadrootsTransportError::InvalidTargetUri);
+            return Err(TransportError::InvalidTargetUri);
         }
         let canonical_host = canonicalize_nostr_relay_ipv6(host)?;
         (
@@ -616,7 +616,7 @@ fn canonicalize_nostr_relay_authority(
         )
     } else {
         if authority.contains(['[', ']', '\\']) {
-            return Err(RadrootsTransportError::InvalidTargetUri);
+            return Err(TransportError::InvalidTargetUri);
         }
         let mut parts = authority.splitn(2, ':');
         let host = parts.next().unwrap_or_default();
@@ -627,7 +627,7 @@ fn canonicalize_nostr_relay_authority(
         (canonicalize_nostr_relay_host(host)?, port)
     };
     if scheme == "ws" && !is_local_ws_relay_host(host.as_str()) {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     let port =
         port.filter(|port| !matches!((scheme, port.as_str()), ("wss", "443") | ("ws", "80")));
@@ -637,51 +637,51 @@ fn canonicalize_nostr_relay_authority(
     })
 }
 
-fn parse_nostr_relay_port(suffix: &str) -> Result<Option<String>, RadrootsTransportError> {
+fn parse_nostr_relay_port(suffix: &str) -> Result<Option<String>, TransportError> {
     if suffix.is_empty() {
         return Ok(None);
     }
     let Some(port) = suffix.strip_prefix(':') else {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     };
     parse_nostr_relay_port_with_prefix(port).map(Some)
 }
 
-fn parse_nostr_relay_port_with_prefix(port: &str) -> Result<String, RadrootsTransportError> {
+fn parse_nostr_relay_port_with_prefix(port: &str) -> Result<String, TransportError> {
     if port.is_empty()
         || !port.bytes().all(|byte| byte.is_ascii_digit())
         || port.len() > 1 && port.starts_with('0')
     {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     let value = port
         .parse::<u32>()
-        .map_err(|_| RadrootsTransportError::InvalidTargetUri)?;
+        .map_err(|_| TransportError::InvalidTargetUri)?;
     if !(1..=u16::MAX as u32).contains(&value) {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     Ok(port.to_string())
 }
 
-fn canonicalize_nostr_relay_host(host: &str) -> Result<String, RadrootsTransportError> {
+fn canonicalize_nostr_relay_host(host: &str) -> Result<String, TransportError> {
     let canonical = host.to_ascii_lowercase();
     if canonical_ipv4(canonical.as_str()) || canonical_dns_host(canonical.as_str()) {
         return Ok(canonical);
     }
-    Err(RadrootsTransportError::InvalidTargetUri)
+    Err(TransportError::InvalidTargetUri)
 }
 
-fn canonicalize_nostr_relay_ipv6(host: &str) -> Result<String, RadrootsTransportError> {
+fn canonicalize_nostr_relay_ipv6(host: &str) -> Result<String, TransportError> {
     if host.is_empty()
         || !host
             .bytes()
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f' | b'A'..=b'F' | b':'))
     {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     }
     host.parse::<Ipv6Addr>()
         .map(|address| address.to_string())
-        .map_err(|_| RadrootsTransportError::InvalidTargetUri)
+        .map_err(|_| TransportError::InvalidTargetUri)
 }
 
 fn canonical_ipv4(value: &str) -> bool {
@@ -734,17 +734,17 @@ fn dns_label_is_whatwg_number(value: &str) -> bool {
             .is_some_and(|digits| digits.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
-fn validate_nostr_relay_path(path: &str) -> Result<(), RadrootsTransportError> {
+fn validate_nostr_relay_path(path: &str) -> Result<(), TransportError> {
     if path.is_empty() || path == "/" {
         return Ok(());
     }
     let Some(component) = path.strip_prefix('/') else {
-        return Err(RadrootsTransportError::InvalidTargetUri);
+        return Err(TransportError::InvalidTargetUri);
     };
     if relay_path_component_is_valid(component) {
         Ok(())
     } else {
-        Err(RadrootsTransportError::InvalidTargetUri)
+        Err(TransportError::InvalidTargetUri)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{SqliteStorage, journal, outbox, projection};
+use crate::{SqliteStorage, projection};
 use radroots_storage::{
     Error,
     atomic::{
@@ -10,7 +10,6 @@ use radroots_storage::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, BoxFuture, EventPosition,
         EventSequence, SourceGeneration,
     },
-    journal::JournalTransition,
 };
 use sqlx::{Row, Sqlite};
 
@@ -137,52 +136,6 @@ async fn execute_workflow(
     workflow: AtomicWorkflow,
 ) -> Result<AtomicCommitOutcome, Error> {
     match workflow {
-        AtomicWorkflow::Prepared(operation) => Ok(AtomicCommitOutcome::Prepared {
-            journal: journal::prepare_transaction(transaction, operation)
-                .await?
-                .record()
-                .clone(),
-        }),
-        AtomicWorkflow::Signed(signed) => {
-            let event_id = *signed.event().id();
-            let journal = journal::transition_transaction(
-                transaction,
-                JournalTransition::signed(
-                    signed.instance_id(),
-                    signed.expected_revision(),
-                    event_id,
-                ),
-            )
-            .await?;
-            Ok(AtomicCommitOutcome::Signed { journal, event_id })
-        }
-        AtomicWorkflow::Enqueued(enqueued) => {
-            let admission = storage
-                .admit_transaction(transaction, enqueued.admission().clone())
-                .await?;
-            let outbox = outbox::enqueue_transaction(transaction, enqueued.outbox().clone())
-                .await?
-                .record()
-                .clone();
-            let journal = journal::transition_transaction(
-                transaction,
-                JournalTransition::committed(
-                    enqueued.instance_id(),
-                    enqueued.expected_revision(),
-                    *enqueued.admission().event_id(),
-                    enqueued.committed_at_unix_ms(),
-                ),
-            )
-            .await?;
-            Ok(AtomicCommitOutcome::Enqueued {
-                journal,
-                admission,
-                outbox: Box::new(outbox),
-            })
-        }
-        AtomicWorkflow::Delivered(evidence) => Ok(AtomicCommitOutcome::Delivered {
-            outbox: Box::new(outbox::record_attempt_transaction(transaction, *evidence).await?),
-        }),
         AtomicWorkflow::Ingested(ingested) => {
             let admission = storage
                 .admit_transaction(transaction, ingested.admission().clone())
@@ -238,44 +191,6 @@ fn encode_outcome(outcome: &AtomicCommitOutcome) -> Result<Vec<u8>, Error> {
     let mut bytes = Vec::with_capacity(512);
     bytes.push(RECEIPT_FORMAT_VERSION);
     match outcome {
-        AtomicCommitOutcome::Prepared { journal } => {
-            bytes.push(0);
-            put_blob(
-                &mut bytes,
-                journal::encode_record_snapshot(journal)?.as_slice(),
-            )?;
-        }
-        AtomicCommitOutcome::Signed { journal, event_id } => {
-            bytes.push(1);
-            put_blob(
-                &mut bytes,
-                journal::encode_record_snapshot(journal)?.as_slice(),
-            )?;
-            bytes.extend_from_slice(event_id.as_bytes());
-        }
-        AtomicCommitOutcome::Enqueued {
-            journal,
-            admission,
-            outbox,
-        } => {
-            bytes.push(2);
-            put_blob(
-                &mut bytes,
-                journal::encode_record_snapshot(journal)?.as_slice(),
-            )?;
-            encode_admission(&mut bytes, admission);
-            put_blob(
-                &mut bytes,
-                outbox::encode_record_snapshot(outbox)?.as_slice(),
-            )?;
-        }
-        AtomicCommitOutcome::Delivered { outbox } => {
-            bytes.push(3);
-            put_blob(
-                &mut bytes,
-                outbox::encode_record_snapshot(outbox)?.as_slice(),
-            )?;
-        }
         AtomicCommitOutcome::Ingested {
             admission,
             projection,
@@ -309,30 +224,6 @@ fn decode_outcome(bytes: &[u8]) -> Result<AtomicCommitOutcome, Error> {
         return Err(Error::AtomicCommitFailed);
     }
     let outcome = match cursor.byte()? {
-        0 => AtomicCommitOutcome::Prepared {
-            journal: journal::decode_record_snapshot(cursor.blob()?)
-                .map_err(|_| Error::AtomicCommitFailed)?,
-        },
-        1 => AtomicCommitOutcome::Signed {
-            journal: journal::decode_record_snapshot(cursor.blob()?)
-                .map_err(|_| Error::AtomicCommitFailed)?,
-            event_id: radroots_storage::event::EventId::from_bytes(cursor.array()?),
-        },
-        2 => AtomicCommitOutcome::Enqueued {
-            journal: journal::decode_record_snapshot(cursor.blob()?)
-                .map_err(|_| Error::AtomicCommitFailed)?,
-            admission: decode_admission(&mut cursor)?,
-            outbox: Box::new(
-                outbox::decode_record_snapshot(cursor.blob()?)
-                    .map_err(|_| Error::AtomicCommitFailed)?,
-            ),
-        },
-        3 => AtomicCommitOutcome::Delivered {
-            outbox: Box::new(
-                outbox::decode_record_snapshot(cursor.blob()?)
-                    .map_err(|_| Error::AtomicCommitFailed)?,
-            ),
-        },
         4 => {
             let admission = decode_admission(&mut cursor)?;
             let projection = match cursor.byte()? {
@@ -469,20 +360,12 @@ fn preserve_primary<T>(primary: Error, _rollback: Result<(), T>) -> Error {
 
 const fn workflow_name(kind: AtomicWorkflowKind) -> &'static str {
     match kind {
-        AtomicWorkflowKind::Prepared => "prepared",
-        AtomicWorkflowKind::Signed => "signed",
-        AtomicWorkflowKind::Enqueued => "enqueued",
-        AtomicWorkflowKind::Delivered => "delivered",
         AtomicWorkflowKind::Ingested => "ingested",
     }
 }
 
 fn workflow_kind(value: &str) -> Result<AtomicWorkflowKind, Error> {
     match value.as_bytes() {
-        b"prepared" => Ok(AtomicWorkflowKind::Prepared),
-        b"signed" => Ok(AtomicWorkflowKind::Signed),
-        b"enqueued" => Ok(AtomicWorkflowKind::Enqueued),
-        b"delivered" => Ok(AtomicWorkflowKind::Delivered),
         b"ingested" => Ok(AtomicWorkflowKind::Ingested),
         _ => Err(Error::AtomicCommitFailed),
     }
@@ -515,19 +398,8 @@ mod tests {
     use crate::migration::runtime::{MIGRATIONS, migration_sql};
     use radroots_event::{SignedEvent, wire::Nip01EventWire};
     use radroots_storage::{
-        Journal, Outbox,
-        atomic::{CommitEnqueued, CommitIngested, CommitSigned},
-        event::EventAdmission,
-        journal::{
-            IdempotencyDigest, IdempotencyKey, JournalRevision, JournalStage, JournalTransition,
-            OperationId, OperationInstanceId, PrepareOperation,
-        },
-        outbox::{
-            ClaimOutboxItems, DeliveryAttempt, DeliveryAttemptEvidence, DeliveryOutcome,
-            DeliveryPayload, DeliveryPlanDigest, DeliveryReceipt, DeliveryRequest,
-            DeliveryTargetReceipt, EnqueueOutboxItem, LeaseId, LeaseOwner, OutboxItemId,
-            SatisfactionClass, SatisfactionPolicy, TargetPolicy, TargetSet,
-        },
+        atomic::{AtomicWorkflow, CommitIngested},
+        event::{EventAdmission, SourceGeneration},
         projection::{ProjectionCheckpoint, ProjectionGeneration, ProjectionId},
         status::EventStoreMode,
     };
@@ -566,36 +438,18 @@ mod tests {
         SqliteStorage::new(pool, generation, mode)
     }
 
-    fn instance(byte: u8) -> OperationInstanceId {
-        OperationInstanceId::new([byte; 16]).expect("instance")
-    }
-
-    fn prepare(byte: u8, at: u64) -> PrepareOperation {
-        PrepareOperation::new(
-            instance(byte),
-            OperationId::SyncPush,
-            IdempotencyKey::parse(format!("atomic-operation-{byte:02x}")).expect("idempotency key"),
-            IdempotencyDigest::new([byte; 32]),
-            at,
-        )
-        .expect("prepare")
-    }
-
-    fn signed_event(content: &str, created_at: u64) -> SignedEvent {
+    fn signed_event() -> SignedEvent {
         let mut wire = Nip01EventWire {
             id: "0".repeat(64),
             pubkey: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_owned(),
-            created_at,
+            created_at: 1_800_001_001,
             kind: 1,
             tags: vec![],
-            content: content.to_owned(),
+            content: "atomic inbound".to_owned(),
             sig: "42".repeat(64),
             extra: Default::default(),
         };
-        wire.id = wire
-            .computed_event_id()
-            .expect("canonical event id")
-            .to_hex();
+        wire.id = wire.computed_event_id().expect("event id").to_hex();
         let raw_json = serde_json::json!({
             "id": &wire.id,
             "pubkey": &wire.pubkey,
@@ -609,7 +463,7 @@ mod tests {
         SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn admission(event: SignedEvent, observed_at: u64) -> EventAdmission {
+    fn admission(observed_at: u64) -> EventAdmission {
         let target = Target::new(TransportId::NOSTR, "wss://atomic.example").expect("target");
         let provenance = EventProvenance::new(
             TransportId::NOSTR,
@@ -617,534 +471,108 @@ mod tests {
             observed_at,
         )
         .expect("provenance");
-        EventAdmission::raw(ObservedEvent::new(event, provenance))
+        EventAdmission::raw(ObservedEvent::new(signed_event(), provenance))
     }
 
-    fn delivery_request(event: SignedEvent) -> DeliveryRequest {
-        DeliveryRequest::new(
-            "atomic-delivery-request",
-            DeliveryPayload::new(event),
-            TargetSet::new(vec![
-                Target::nostr_relay("wss://one.atomic.example").expect("first target"),
-                Target::nostr_relay("wss://two.atomic.example").expect("second target"),
-            ])
-            .expect("target set"),
-            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
-            10_000,
-        )
-        .expect("delivery request")
-    }
-
-    fn atomic_commit(byte: u8, at: u64, workflow: AtomicWorkflow) -> AtomicCommit {
+    fn commit(byte: u8, digest: u8, workflow: AtomicWorkflow) -> AtomicCommit {
         AtomicCommit::new(
             AtomicCommitId::new([byte; 16]).expect("commit id"),
-            AtomicCommitDigest::new([byte; 32]),
-            at,
+            AtomicCommitDigest::new([digest; 32]),
+            100,
             workflow,
         )
         .expect("atomic commit")
     }
 
-    fn checkpoint(sequence: u64, at: u64) -> ProjectionCheckpoint {
+    fn checkpoint() -> ProjectionCheckpoint {
         ProjectionCheckpoint::new(
             ProjectionId::parse("atomic_projection").expect("projection id"),
             ProjectionGeneration::new([81; 32]).expect("projection generation"),
-            Some(EventPosition::new(
-                SourceGeneration::new([71; 32]).expect("source generation"),
-                EventSequence::new(sequence).expect("sequence"),
-            )),
-            sequence,
-            at,
+            None,
+            1,
+            100,
         )
         .expect("checkpoint")
     }
 
     #[tokio::test]
-    async fn workflows_commit_replay_and_reconstruct_original_receipts() {
+    async fn inbound_commit_is_atomic_replayable_and_reconstructable() {
         let store = store(EventStoreMode::ReadWrite).await;
-        let prepared_request = atomic_commit(1, 100, AtomicWorkflow::Prepared(prepare(1, 100)));
-        let prepared = store
-            .commit(prepared_request.clone())
-            .await
-            .expect("prepare commit");
-        assert_eq!(prepared.disposition(), AtomicCommitDisposition::Committed);
-
-        let outbound_event = signed_event("atomic outbound", 1_800_001_001);
-        let signed = store
-            .commit(atomic_commit(
-                2,
-                110,
-                AtomicWorkflow::Signed(Box::new(CommitSigned::new(
-                    instance(1),
-                    JournalRevision::INITIAL,
-                    outbound_event.clone(),
-                ))),
-            ))
-            .await
-            .expect("signed commit");
-        assert!(matches!(
-            signed.outcome(),
-            AtomicCommitOutcome::Signed { .. }
-        ));
-
-        let replay = store
-            .commit(prepared_request.clone())
-            .await
-            .expect("prepared replay");
-        assert_eq!(replay.disposition(), AtomicCommitDisposition::Replay);
-        assert_eq!(replay.outcome(), prepared.outcome());
-        let conflicting = AtomicCommit::new(
-            prepared_request.commit_id(),
-            AtomicCommitDigest::new([99; 32]),
-            100,
-            AtomicWorkflow::Prepared(prepare(1, 100)),
-        )
-        .expect("conflicting request");
-        assert_eq!(
-            store.commit(conflicting).await,
-            Err(Error::AtomicCommitConflict)
+        let request = commit(
+            1,
+            1,
+            AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
+                admission(90),
+                Some(checkpoint()),
+            ))),
         );
-
-        let outbound_admission = admission(outbound_event.clone(), 120);
-        let enqueue = EnqueueOutboxItem::new(
-            OutboxItemId::new([1; 16]).expect("item id"),
-            instance(1),
-            DeliveryPlanDigest::new([1; 32]),
-            delivery_request(outbound_event.clone()),
-            120,
-        )
-        .expect("enqueue");
-        let enqueued = store
-            .commit(atomic_commit(
-                3,
-                120,
-                AtomicWorkflow::Enqueued(Box::new(
-                    CommitEnqueued::new(
-                        instance(1),
-                        JournalRevision::new(2).expect("revision"),
-                        outbound_admission,
-                        enqueue,
-                        120,
-                    )
-                    .expect("enqueued workflow"),
-                )),
-            ))
-            .await
-            .expect("enqueue commit");
+        let committed = store.commit(request.clone()).await.expect("commit");
+        assert_eq!(committed.disposition(), AtomicCommitDisposition::Committed);
         assert!(matches!(
-            enqueued.outcome(),
-            AtomicCommitOutcome::Enqueued { .. }
-        ));
-
-        let claimed = store
-            .claim(
-                ClaimOutboxItems::new(
-                    LeaseOwner::parse("atomic-worker").expect("owner"),
-                    LeaseId::new([9; 16]).expect("lease seed"),
-                    130,
-                    200,
-                    1,
-                )
-                .expect("claim request"),
-            )
-            .await
-            .expect("claim")
-            .pop()
-            .expect("claimed item");
-        let delivery_receipt = DeliveryReceipt::for_request(
-            claimed.record().request(),
-            claimed
-                .record()
-                .request()
-                .target_set()
-                .targets()
-                .iter()
-                .cloned()
-                .map(|target| DeliveryTargetReceipt::attempted(target, DeliveryOutcome::accepted()))
-                .collect(),
-        )
-        .expect("delivery receipt");
-        let delivered = store
-            .commit(atomic_commit(
-                4,
-                140,
-                AtomicWorkflow::Delivered(Box::new(
-                    DeliveryAttemptEvidence::new(
-                        claimed.record().item_id(),
-                        claimed.lease().id(),
-                        claimed.record().revision(),
-                        DeliveryAttempt::FIRST,
-                        delivery_receipt,
-                        140,
-                    )
-                    .expect("delivery evidence"),
-                )),
-            ))
-            .await
-            .expect("delivery commit");
-        assert!(matches!(
-            delivered.outcome(),
-            AtomicCommitOutcome::Delivered { .. }
-        ));
-
-        let inbound_event = signed_event("atomic inbound", 1_800_001_002);
-        let ingested = store
-            .commit(atomic_commit(
-                5,
-                150,
-                AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
-                    admission(inbound_event, 150),
-                    Some(checkpoint(2, 150)),
-                ))),
-            ))
-            .await
-            .expect("ingest commit");
-        assert!(matches!(
-            ingested.outcome(),
+            committed.outcome(),
             AtomicCommitOutcome::Ingested {
                 projection: Some(_),
                 ..
             }
         ));
 
-        for (byte, expected) in [
-            (1, &prepared),
-            (2, &signed),
-            (3, &enqueued),
-            (4, &delivered),
-            (5, &ingested),
-        ] {
-            let stored = store
-                .receipt(AtomicCommitId::new([byte; 16]).expect("commit id"))
-                .await
-                .expect("receipt lookup")
-                .expect("stored receipt");
-            assert_eq!(stored, *expected);
-        }
-    }
-
-    #[tokio::test]
-    async fn every_ingest_mutation_fault_rolls_back_all_prior_statements() {
-        let fault_points = [
-            (
-                "CREATE TEMP TRIGGER atomic_fault_0 BEFORE UPDATE ON radroots_runtime_source_generations BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-                "radroots_runtime_source_generations",
-            ),
-            (
-                "CREATE TEMP TRIGGER atomic_fault_1 BEFORE INSERT ON radroots_runtime_events BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-                "radroots_runtime_events",
-            ),
-            (
-                "CREATE TEMP TRIGGER atomic_fault_2 BEFORE INSERT ON radroots_runtime_event_provenance BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-                "radroots_runtime_event_provenance",
-            ),
-            (
-                "CREATE TEMP TRIGGER atomic_fault_3 BEFORE INSERT ON radroots_runtime_projection_checkpoints BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-                "radroots_runtime_projection_checkpoints",
-            ),
-            (
-                "CREATE TEMP TRIGGER atomic_fault_4 BEFORE INSERT ON radroots_runtime_atomic_commits BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-                "radroots_runtime_atomic_commits",
-            ),
-        ];
-        for (index, (trigger, table)) in fault_points.into_iter().enumerate() {
-            let store = store(EventStoreMode::ReadWrite).await;
-            sqlx::raw_sql(trigger)
-                .execute(store.pool())
-                .await
-                .expect("fault trigger");
-            let event = signed_event("fault injection", 1_800_002_000 + index as u64);
-            let result = store
-                .commit(atomic_commit(
-                    20 + u8::try_from(index).expect("fault index"),
-                    200,
-                    AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
-                        admission(event, 200),
-                        Some(checkpoint(1, 200)),
-                    ))),
-                ))
-                .await;
-            assert_eq!(result, Err(Error::BackendUnavailable), "fault at {table}");
-            for (durable_table, count_query) in [
-                (
-                    "radroots_runtime_events",
-                    "SELECT COUNT(*) FROM radroots_runtime_events",
-                ),
-                (
-                    "radroots_runtime_event_provenance",
-                    "SELECT COUNT(*) FROM radroots_runtime_event_provenance",
-                ),
-                (
-                    "radroots_runtime_projection_checkpoints",
-                    "SELECT COUNT(*) FROM radroots_runtime_projection_checkpoints",
-                ),
-                (
-                    "radroots_runtime_atomic_commits",
-                    "SELECT COUNT(*) FROM radroots_runtime_atomic_commits",
-                ),
-            ] {
-                let count = sqlx::query_scalar::<_, i64>(count_query)
-                    .fetch_one(store.pool())
-                    .await
-                    .expect("durable row count");
-                assert_eq!(count, 0, "partial row remained in {durable_table}");
-            }
-            let sequence = sqlx::query_scalar::<_, i64>(
-                "SELECT sequence_head FROM radroots_runtime_source_generations",
-            )
-            .fetch_one(store.pool())
+        let replay = store.commit(request.clone()).await.expect("replay");
+        assert_eq!(replay.disposition(), AtomicCommitDisposition::Replay);
+        assert_eq!(replay.outcome(), committed.outcome());
+        let reconstructed = store
+            .receipt(request.commit_id())
             .await
-            .expect("sequence head");
-            assert_eq!(sequence, 0, "sequence advanced at {table}");
-        }
-    }
+            .expect("receipt lookup")
+            .expect("receipt");
+        assert_eq!(reconstructed.outcome(), committed.outcome());
 
-    #[tokio::test]
-    async fn journal_and_enqueue_faults_restore_the_precommit_state() {
-        let journal_store = store(EventStoreMode::ReadWrite).await;
-        sqlx::raw_sql(
-            "CREATE TEMP TRIGGER atomic_journal_insert_fault BEFORE INSERT ON radroots_runtime_journal_operations BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-        )
-        .execute(journal_store.pool())
-        .await
-        .expect("journal insert fault");
+        let conflict = commit(
+            1,
+            2,
+            AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission(90), None))),
+        );
         assert_eq!(
-            journal_store
-                .commit(atomic_commit(
-                    50,
-                    500,
-                    AtomicWorkflow::Prepared(prepare(50, 500)),
-                ))
-                .await,
-            Err(Error::BackendUnavailable)
+            store.commit(conflict).await,
+            Err(Error::AtomicCommitConflict)
         );
-        assert!(
-            journal_store
-                .operation(instance(50))
-                .await
-                .expect("journal lookup")
-                .is_none()
-        );
-
-        for (index, trigger) in [
-            "CREATE TEMP TRIGGER atomic_outbox_item_fault BEFORE INSERT ON radroots_runtime_outbox_items BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-            "CREATE TEMP TRIGGER atomic_outbox_target_fault BEFORE INSERT ON radroots_runtime_outbox_targets BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-            "CREATE TEMP TRIGGER atomic_journal_update_fault BEFORE UPDATE ON radroots_runtime_journal_operations BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let store = store(EventStoreMode::ReadWrite).await;
-            let operation_byte = 60 + u8::try_from(index).expect("case index");
-            let outbound_event =
-                signed_event("enqueue fault", 1_800_003_000 + index as u64);
-            let prepared = store
-                .prepare(prepare(operation_byte, 600))
-                .await
-                .expect("prepare")
-                .record()
-                .clone();
-            let signed = store
-                .transition(JournalTransition::signed(
-                    instance(operation_byte),
-                    prepared.revision(),
-                    *outbound_event.id(),
-                ))
-                .await
-                .expect("sign journal");
-            sqlx::raw_sql(trigger)
-                .execute(store.pool())
-                .await
-                .expect("enqueue fault trigger");
-            let enqueue = EnqueueOutboxItem::new(
-                OutboxItemId::new([operation_byte; 16]).expect("item id"),
-                instance(operation_byte),
-                DeliveryPlanDigest::new([operation_byte; 32]),
-                delivery_request(outbound_event.clone()),
-                610,
-            )
-            .expect("enqueue");
-            let request = atomic_commit(
-                70 + u8::try_from(index).expect("case index"),
-                610,
-                AtomicWorkflow::Enqueued(Box::new(
-                    CommitEnqueued::new(
-                        instance(operation_byte),
-                        signed.revision(),
-                        admission(outbound_event, 610),
-                        enqueue,
-                        610,
-                    )
-                    .expect("enqueue workflow"),
-                )),
-            );
-            assert_eq!(store.commit(request).await, Err(Error::BackendUnavailable));
-            let durable = store
-                .operation(instance(operation_byte))
-                .await
-                .expect("journal lookup")
-                .expect("signed journal");
-            assert_eq!(durable.state().stage(), JournalStage::Signed);
-            assert_eq!(durable.revision(), signed.revision());
-            assert_eq!(
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_events")
-                    .fetch_one(store.pool())
-                    .await
-                    .expect("event count"),
-                0
-            );
-            assert_eq!(
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_outbox_items")
-                    .fetch_one(store.pool())
-                    .await
-                    .expect("outbox count"),
-                0
-            );
-            assert_eq!(
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_atomic_commits")
-                    .fetch_one(store.pool())
-                    .await
-                    .expect("commit count"),
-                0
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn delivery_faults_restore_the_claimed_outbox_record() {
-        for (index, trigger) in [
-            "CREATE TEMP TRIGGER atomic_delivery_update_fault BEFORE UPDATE ON radroots_runtime_outbox_items BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-            "CREATE TEMP TRIGGER atomic_delivery_evidence_fault BEFORE INSERT ON radroots_runtime_delivery_evidence BEGIN SELECT RAISE(ABORT, 'atomic fault'); END",
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let store = store(EventStoreMode::ReadWrite).await;
-            let operation_byte = 80 + u8::try_from(index).expect("case index");
-            store
-                .prepare(prepare(operation_byte, 800))
-                .await
-                .expect("prepare");
-            let request = delivery_request(signed_event(
-                "delivery fault",
-                1_800_004_000 + index as u64,
-            ));
-            store
-                .enqueue(
-                    EnqueueOutboxItem::new(
-                        OutboxItemId::new([operation_byte; 16]).expect("item id"),
-                        instance(operation_byte),
-                        DeliveryPlanDigest::new([operation_byte; 32]),
-                        request.clone(),
-                        810,
-                    )
-                    .expect("enqueue"),
-                )
-                .await
-                .expect("enqueue");
-            let claimed = store
-                .claim(
-                    ClaimOutboxItems::new(
-                        LeaseOwner::parse("atomic-fault-worker").expect("owner"),
-                        LeaseId::new([operation_byte; 16]).expect("lease seed"),
-                        820,
-                        900,
-                        1,
-                    )
-                    .expect("claim request"),
-                )
-                .await
-                .expect("claim")
-                .pop()
-                .expect("claimed item");
-            sqlx::raw_sql(trigger)
-                .execute(store.pool())
-                .await
-                .expect("delivery fault trigger");
-            let receipt = DeliveryReceipt::for_request(
-                &request,
-                request
-                    .target_set()
-                    .targets()
-                    .iter()
-                    .cloned()
-                    .map(|target| {
-                        DeliveryTargetReceipt::attempted(target, DeliveryOutcome::accepted())
-                    })
-                    .collect(),
-            )
-            .expect("delivery receipt");
-            let evidence = DeliveryAttemptEvidence::new(
-                claimed.record().item_id(),
-                claimed.lease().id(),
-                claimed.record().revision(),
-                DeliveryAttempt::FIRST,
-                receipt,
-                830,
-            )
-            .expect("delivery evidence");
-            assert_eq!(
-                store
-                    .commit(atomic_commit(
-                        90 + u8::try_from(index).expect("case index"),
-                        830,
-                        AtomicWorkflow::Delivered(Box::new(evidence)),
-                    ))
-                    .await,
-                Err(Error::BackendUnavailable)
-            );
-            assert_eq!(
-                store
-                    .item(claimed.record().item_id())
-                    .await
-                    .expect("item lookup")
-                    .expect("claimed record"),
-                *claimed.record()
-            );
-            assert_eq!(
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radroots_runtime_delivery_evidence")
-                    .fetch_one(store.pool())
-                    .await
-                    .expect("evidence count"),
-                0
-            );
-        }
     }
 
     #[tokio::test]
     async fn read_only_mode_rejects_atomic_mutation() {
         let store = store(EventStoreMode::ReadOnly).await;
-        assert_eq!(
-            store
-                .commit(atomic_commit(
-                    40,
-                    400,
-                    AtomicWorkflow::Prepared(prepare(40, 400)),
-                ))
-                .await,
-            Err(Error::BackendUnavailable)
+        let request = commit(
+            2,
+            2,
+            AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission(90), None))),
         );
+        assert_eq!(store.commit(request).await, Err(Error::BackendUnavailable));
     }
 
     #[test]
-    fn rollback_failure_never_replaces_the_primary_failure() {
-        let primary = Error::JournalRevisionConflict;
+    fn receipt_decoder_rejects_retired_and_trailing_payloads() {
         assert_eq!(
-            preserve_primary(primary.clone(), Err::<(), _>("rollback failed")),
-            primary
-        );
-    }
-
-    #[test]
-    fn receipt_decoding_rejects_trailing_or_unknown_data() {
-        let record = prepare(50, 500).into_record().expect("record");
-        let outcome = AtomicCommitOutcome::Prepared { journal: record };
-        let mut encoded = encode_outcome(&outcome).expect("encoded outcome");
-        encoded.push(0);
-        assert_eq!(
-            decode_outcome(encoded.as_slice()),
+            decode_outcome(&vec![0; RECEIPT_MAX_BYTES + 1]),
             Err(Error::AtomicCommitFailed)
         );
-        assert_eq!(decode_outcome(&[99, 0]), Err(Error::AtomicCommitFailed));
+        assert_eq!(decode_outcome(&[0]), Err(Error::AtomicCommitFailed));
+        assert_eq!(
+            decode_outcome(&[RECEIPT_FORMAT_VERSION, 0]),
+            Err(Error::AtomicCommitFailed)
+        );
+        let outcome = AtomicCommitOutcome::Ingested {
+            admission: AdmissionReceipt::new(
+                radroots_storage::event::EventId::from_bytes([1; 32]),
+                EventPosition::new(
+                    SourceGeneration::new([2; 32]).expect("generation"),
+                    EventSequence::new(1).expect("sequence"),
+                ),
+                AdmissionStage::Raw,
+                AdmissionDisposition::Inserted,
+            ),
+            projection: None,
+        };
+        let mut bytes = encode_outcome(&outcome).expect("encode");
+        bytes.push(0);
+        assert_eq!(decode_outcome(&bytes), Err(Error::AtomicCommitFailed));
     }
 }

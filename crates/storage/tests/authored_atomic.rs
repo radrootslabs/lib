@@ -6,13 +6,14 @@ use radroots_storage::{
     Error,
     atomic::{AtomicCommitDigest, AtomicCommitDisposition},
     authored::{
-        AuthoredArtifact, AuthoredArtifactId, AuthoredOperation, FailureClass, RetrySchedule,
-        SigningState, WorkClaim, WorkFailure, WorkPhase,
+        AdmissionState, AuthoredArtifact, AuthoredArtifactId, AuthoredOperation, FailureClass,
+        RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
     },
     authored_atomic::{
-        ApplyDeliveryAttempt, ApplySignedArtifact, AuthoredAtomicCommand, AuthoredAtomicOutcome,
-        AuthoredAtomicStorage, AuthoredWorkTarget, ClaimAuthoredTarget, ClaimAuthoredWork,
-        PrepareAuthoredOperation, WorkFence,
+        ApplyAdmissionResult, ApplyDeliveryAttempt, ApplySignedArtifact, ApplyWorkFailure,
+        AuthoredAtomicCommand, AuthoredAtomicOutcome, AuthoredAtomicReceipt, AuthoredAtomicStorage,
+        AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork, ClaimAuthoredTarget,
+        ClaimAuthoredWork, PrepareAuthoredOperation, WorkFence,
     },
     authored_delivery::{
         AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId,
@@ -23,8 +24,8 @@ use radroots_storage::{
     memory::MemoryStorage,
 };
 use radroots_transport::{
-    DeliveryReceipt, Target, TargetSet,
-    outcome::DeliveryOutcome,
+    DeliveryReceipt, SinkFailure, Target, TargetSet,
+    outcome::{DeliveryOutcome, Retryability},
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
     sink::DeliveryTargetReceipt,
 };
@@ -125,6 +126,62 @@ fn claim(
         AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(target, claim.clone())),
         claim,
     )
+}
+
+fn fence(claim: &WorkClaim) -> WorkFence {
+    WorkFence::new(*claim.token(), claim.generation(), claim.row_revision()).unwrap()
+}
+
+fn prepared_storage() -> (MemoryStorage, AuthoredEventPlan) {
+    let storage = MemoryStorage::new(SourceGeneration::new([1; 32]).unwrap());
+    let (prepare, plan) = prepare(7);
+    block_on(storage.execute_authored(prepare)).unwrap();
+    (storage, plan)
+}
+
+fn signed_storage() -> MemoryStorage {
+    let (storage, plan) = prepared_storage();
+    let artifact = block_on(storage.authored_artifact(ids().1))
+        .unwrap()
+        .unwrap();
+    let (command, active) = claim(
+        ClaimAuthoredTarget::ArtifactSigning(ids().1),
+        artifact.revision(),
+        4,
+        11,
+    );
+    block_on(storage.execute_authored(command)).unwrap();
+    let apply = ApplySignedArtifact::new(ids().1, fence(&active), signed(&plan), 12).unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplySigned(apply))).unwrap();
+    storage
+}
+
+fn claim_admission(storage: &MemoryStorage, token: u8, at: u64) -> WorkClaim {
+    let artifact = block_on(storage.authored_artifact(ids().1))
+        .unwrap()
+        .unwrap();
+    let (command, active) = claim(
+        ClaimAuthoredTarget::ArtifactAdmission(ids().1),
+        artifact.revision(),
+        token,
+        at,
+    );
+    block_on(storage.execute_authored(command)).unwrap();
+    active
+}
+
+fn claim_delivery(storage: &MemoryStorage, token: u8, at: u64) -> WorkClaim {
+    let plan = block_on(storage.authored_delivery_plan(ids().2))
+        .unwrap()
+        .unwrap();
+    let (command, active) = claim(
+        ClaimAuthoredTarget::DeliveryPlan(ids().2),
+        plan.revision(),
+        token,
+        at,
+    );
+    block_on(storage.execute_authored(command)).unwrap();
+    active
 }
 
 #[test]
@@ -334,5 +391,628 @@ fn delivery_attempt_and_work_failure_commands_preserve_atomic_state() {
             .expect("artifact")
             .expect("artifact"),
         before
+    );
+}
+
+#[test]
+fn authored_atomic_command_models_cover_every_phase_identity_and_durable_outcome() {
+    assert_eq!(
+        WorkFence::new([0; 16], NonZeroU64::MIN, NonZeroU64::MIN),
+        Err(Error::InvalidWorkClaim)
+    );
+    let fence =
+        WorkFence::new([7; 16], NonZeroU64::new(2).unwrap(), NonZeroU64::MIN).expect("fence");
+    assert_eq!(fence.token(), &[7; 16]);
+    assert_eq!(fence.generation(), NonZeroU64::new(2).unwrap());
+    assert_eq!(fence.row_revision(), NonZeroU64::MIN);
+
+    let (prepared_command, authored_plan) = prepare(7);
+    let AuthoredAtomicCommand::Prepare(prepared) = prepared_command.clone() else {
+        unreachable!()
+    };
+    assert_eq!(prepared.operation().operation_id(), ids().0);
+    assert_eq!(prepared.artifacts().len(), 1);
+    assert_eq!(prepared.delivery_plans().len(), 1);
+    assert_eq!(prepared.input_digest(), AtomicCommitDigest::new([7; 32]));
+    assert_eq!(prepared.requested_at_unix_ms(), 10);
+
+    assert_eq!(
+        PrepareAuthoredOperation::new(
+            prepared.operation().clone(),
+            Vec::new(),
+            Vec::new(),
+            AtomicCommitDigest::new([1; 32]),
+            10,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    assert_eq!(
+        PrepareAuthoredOperation::new(
+            prepared.operation().clone(),
+            prepared.artifacts().to_vec(),
+            prepared.delivery_plans().to_vec(),
+            AtomicCommitDigest::new([1; 32]),
+            0,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+
+    let work_claim =
+        WorkClaim::new([8; 16], "worker", NonZeroU64::MIN, 11, 20, NonZeroU64::MIN).unwrap();
+    let claim_commands = [
+        AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+            ClaimAuthoredTarget::ArtifactSigning(ids().1),
+            work_claim.clone(),
+        )),
+        AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+            ClaimAuthoredTarget::ArtifactAdmission(ids().1),
+            work_claim.clone(),
+        )),
+        AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+            ClaimAuthoredTarget::DeliveryPlan(ids().2),
+            work_claim.clone(),
+        )),
+    ];
+    for command in &claim_commands {
+        let AuthoredAtomicCommand::Claim(value) = command else {
+            unreachable!()
+        };
+        assert_eq!(value.claim(), &work_claim);
+        let _ = value.target();
+    }
+
+    let apply_signed = ApplySignedArtifact::new(ids().1, fence.clone(), signed(&authored_plan), 12)
+        .expect("signed command");
+    assert_eq!(apply_signed.artifact_id(), ids().1);
+    assert_eq!(apply_signed.fence(), &fence);
+    assert_eq!(apply_signed.event().id(), authored_plan.expected_event_id());
+    assert_eq!(apply_signed.applied_at_unix_ms(), 12);
+    assert_eq!(
+        ApplySignedArtifact::new(ids().1, fence.clone(), signed(&authored_plan), 0),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+
+    let retry_failure = WorkFailure::new(
+        "temporary_admission",
+        WorkPhase::Admission,
+        FailureClass::Retryable,
+        Some(30),
+        Some("try another worker".to_owned()),
+    )
+    .unwrap();
+    let retry = RetrySchedule::new(NonZeroU32::MIN, 30, retry_failure.clone()).unwrap();
+    let apply_admission = ApplyAdmissionResult::new(
+        ids().1,
+        fence.clone(),
+        AdmissionState::Retryable,
+        Some(retry_failure.clone()),
+        Some(retry.clone()),
+        13,
+    )
+    .unwrap();
+    assert_eq!(apply_admission.artifact_id(), ids().1);
+    assert_eq!(apply_admission.fence(), &fence);
+    assert_eq!(apply_admission.state(), AdmissionState::Retryable);
+    assert_eq!(apply_admission.failure(), Some(&retry_failure));
+    assert_eq!(apply_admission.retry(), Some(&retry));
+    assert_eq!(apply_admission.applied_at_unix_ms(), 13);
+    assert_eq!(
+        ApplyAdmissionResult::new(
+            ids().1,
+            fence.clone(),
+            AdmissionState::Inserted,
+            None,
+            None,
+            0,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+
+    let request = intent()
+        .materialize(radroots_transport::sink::DeliveryPayload::new(signed(
+            &authored_plan,
+        )))
+        .unwrap();
+    let receipt = DeliveryReceipt::for_request(
+        &request,
+        request
+            .target_set()
+            .targets()
+            .iter()
+            .cloned()
+            .map(|target| {
+                DeliveryTargetReceipt::attempted(
+                    target,
+                    DeliveryOutcome::accepted()
+                        .with_detail("accepted", "accepted by relay")
+                        .unwrap(),
+                )
+            })
+            .collect(),
+    )
+    .unwrap();
+    let apply_delivery = ApplyDeliveryAttempt::new(
+        ids().2,
+        fence.clone(),
+        DeliveryAttemptOutcome::Receipt(receipt.clone()),
+        None,
+        14,
+    )
+    .unwrap();
+    assert_eq!(apply_delivery.plan_id(), ids().2);
+    assert_eq!(apply_delivery.fence(), &fence);
+    assert!(matches!(
+        apply_delivery.outcome(),
+        DeliveryAttemptOutcome::Receipt(_)
+    ));
+    assert_eq!(apply_delivery.retry(), None);
+    assert_eq!(apply_delivery.applied_at_unix_ms(), 14);
+    assert_eq!(
+        ApplyDeliveryAttempt::new(
+            ids().2,
+            fence.clone(),
+            DeliveryAttemptOutcome::Receipt(receipt),
+            None,
+            0,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+
+    let sink_failure = SinkFailure::for_request(
+        &request,
+        "relay_unavailable",
+        Retryability::Retryable,
+        Some(30),
+        None,
+        Vec::new(),
+    )
+    .unwrap();
+    let sink_command = AuthoredAtomicCommand::ApplyDelivery(
+        ApplyDeliveryAttempt::new(
+            ids().2,
+            fence.clone(),
+            DeliveryAttemptOutcome::SinkFailure(sink_failure),
+            Some(retry.clone()),
+            14,
+        )
+        .unwrap(),
+    );
+
+    let failure_commands = [
+        (AuthoredWorkTarget::Artifact(ids().1), WorkPhase::Signing),
+        (AuthoredWorkTarget::Artifact(ids().1), WorkPhase::Admission),
+        (
+            AuthoredWorkTarget::DeliveryPlan(ids().2),
+            WorkPhase::Delivery,
+        ),
+    ]
+    .map(|(target, phase)| {
+        let failure = WorkFailure::new(
+            "terminal_failure",
+            phase,
+            FailureClass::Terminal,
+            None,
+            Some("terminal".to_owned()),
+        )
+        .unwrap();
+        AuthoredAtomicCommand::ApplyFailure(
+            ApplyWorkFailure::new(target, fence.clone(), failure, None, 15).unwrap(),
+        )
+    });
+    for command in &failure_commands {
+        let AuthoredAtomicCommand::ApplyFailure(value) = command else {
+            unreachable!()
+        };
+        let _ = value.target();
+        assert_eq!(value.fence(), &fence);
+        assert_eq!(value.failure().class(), FailureClass::Terminal);
+        assert_eq!(value.retry(), None);
+        assert_eq!(value.applied_at_unix_ms(), 15);
+    }
+    assert_eq!(
+        ApplyWorkFailure::new(
+            AuthoredWorkTarget::Artifact(ids().1),
+            fence.clone(),
+            retry_failure,
+            Some(retry),
+            0,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+
+    let cancel_commands = [
+        CancelAuthoredTarget::ArtifactSigning(ids().1),
+        CancelAuthoredTarget::ArtifactAdmission(ids().1),
+        CancelAuthoredTarget::DeliveryPlan(ids().2),
+    ]
+    .map(|target| {
+        AuthoredAtomicCommand::Cancel(CancelAuthoredWork::new(target, NonZeroU64::MIN, 16).unwrap())
+    });
+    for command in &cancel_commands {
+        let AuthoredAtomicCommand::Cancel(value) = command else {
+            unreachable!()
+        };
+        let _ = value.target();
+        assert_eq!(value.expected_revision(), NonZeroU64::MIN);
+        assert_eq!(value.cancelled_at_unix_ms(), 16);
+    }
+    assert_eq!(
+        CancelAuthoredWork::new(
+            CancelAuthoredTarget::ArtifactSigning(ids().1),
+            NonZeroU64::MIN,
+            0,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+
+    let mut commands = vec![
+        prepared_command,
+        AuthoredAtomicCommand::ApplySigned(apply_signed),
+        AuthoredAtomicCommand::ApplyAdmission(apply_admission),
+        AuthoredAtomicCommand::ApplyDelivery(apply_delivery),
+        sink_command,
+    ];
+    commands.extend(claim_commands);
+    commands.extend(failure_commands);
+    commands.extend(cancel_commands);
+    for command in commands {
+        assert_ne!(command.commit_id().as_bytes(), &[0; 16]);
+        assert_ne!(command.digest().as_bytes(), &[0; 32]);
+        assert_ne!(command.requested_at_unix_ms(), 0);
+    }
+
+    let outcome = AuthoredAtomicOutcome::Prepared {
+        operation: prepared.operation().clone(),
+        artifacts: prepared.artifacts().to_vec(),
+        delivery_plans: prepared.delivery_plans().to_vec(),
+    };
+    let command = AuthoredAtomicCommand::Prepare(prepared.clone());
+    assert_eq!(
+        AuthoredAtomicReceipt::new(
+            &command,
+            AtomicCommitDisposition::Committed,
+            9,
+            outcome.clone(),
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    let receipt = AuthoredAtomicReceipt::new(
+        &command,
+        AtomicCommitDisposition::Committed,
+        10,
+        outcome.clone(),
+    )
+    .unwrap();
+    assert_eq!(receipt.commit_id(), command.commit_id());
+    assert_eq!(receipt.digest(), command.digest());
+    assert_eq!(receipt.disposition(), AtomicCommitDisposition::Committed);
+    assert_eq!(receipt.committed_at_unix_ms(), 10);
+    assert_eq!(receipt.outcome(), &outcome);
+    assert_eq!(
+        AuthoredAtomicReceipt::from_durable_parts(
+            receipt.commit_id(),
+            receipt.digest(),
+            AtomicCommitDisposition::Replay,
+            0,
+            outcome.clone(),
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+    assert!(
+        AuthoredAtomicReceipt::from_durable_parts(
+            receipt.commit_id(),
+            receipt.digest(),
+            AtomicCommitDisposition::Replay,
+            11,
+            outcome,
+        )
+        .is_ok()
+    );
+    let invalid_outcome = AuthoredAtomicOutcome::Prepared {
+        operation: prepared.operation().clone(),
+        artifacts: Vec::new(),
+        delivery_plans: Vec::new(),
+    };
+    assert_eq!(
+        AuthoredAtomicReceipt::from_durable_parts(
+            receipt.commit_id(),
+            receipt.digest(),
+            AtomicCommitDisposition::Replay,
+            11,
+            invalid_outcome,
+        ),
+        Err(Error::AtomicWorkflowMismatch)
+    );
+}
+
+#[test]
+fn memory_executes_admission_results_and_every_authored_failure_phase() {
+    let storage = signed_storage();
+    let active = claim_admission(&storage, 5, 13);
+    let inserted = ApplyAdmissionResult::new(
+        ids().1,
+        fence(&active),
+        AdmissionState::Inserted,
+        None,
+        None,
+        14,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyAdmission(inserted))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_artifact(ids().1))
+            .unwrap()
+            .unwrap()
+            .admission_state(),
+        AdmissionState::Inserted
+    );
+
+    let (storage, _) = prepared_storage();
+    let artifact = block_on(storage.authored_artifact(ids().1))
+        .unwrap()
+        .unwrap();
+    let (command, active) = claim(
+        ClaimAuthoredTarget::ArtifactSigning(ids().1),
+        artifact.revision(),
+        4,
+        11,
+    );
+    block_on(storage.execute_authored(command)).unwrap();
+    let failure = WorkFailure::new(
+        "terminal_signer_failure",
+        WorkPhase::Signing,
+        FailureClass::Terminal,
+        None,
+        None,
+    )
+    .unwrap();
+    let command = ApplyWorkFailure::new(
+        AuthoredWorkTarget::Artifact(ids().1),
+        fence(&active),
+        failure,
+        None,
+        12,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyFailure(command))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_artifact(ids().1))
+            .unwrap()
+            .unwrap()
+            .signing_state(),
+        SigningState::FailedTerminal
+    );
+
+    let storage = signed_storage();
+    let active = claim_admission(&storage, 5, 13);
+    let failure = WorkFailure::new(
+        "temporary_admission_failure",
+        WorkPhase::Admission,
+        FailureClass::Retryable,
+        Some(30),
+        None,
+    )
+    .unwrap();
+    let retry = RetrySchedule::new(NonZeroU32::MIN, 30, failure.clone()).unwrap();
+    let command = ApplyWorkFailure::new(
+        AuthoredWorkTarget::Artifact(ids().1),
+        fence(&active),
+        failure,
+        Some(retry),
+        14,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyFailure(command))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_artifact(ids().1))
+            .unwrap()
+            .unwrap()
+            .admission_state(),
+        AdmissionState::Retryable
+    );
+
+    let storage = signed_storage();
+    let active = claim_admission(&storage, 5, 13);
+    let failure = WorkFailure::new(
+        "terminal_admission_failure",
+        WorkPhase::Admission,
+        FailureClass::Terminal,
+        None,
+        None,
+    )
+    .unwrap();
+    let command = ApplyWorkFailure::new(
+        AuthoredWorkTarget::Artifact(ids().1),
+        fence(&active),
+        failure,
+        None,
+        14,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyFailure(command))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_artifact(ids().1))
+            .unwrap()
+            .unwrap()
+            .admission_state(),
+        AdmissionState::Rejected
+    );
+}
+
+#[test]
+fn memory_executes_delivery_failures_and_rejects_phase_mismatches_atomically() {
+    let storage = signed_storage();
+    let active = claim_delivery(&storage, 5, 13);
+    let failure = WorkFailure::new(
+        "relay_unavailable",
+        WorkPhase::Delivery,
+        FailureClass::Retryable,
+        Some(30),
+        Some("relay unavailable".to_owned()),
+    )
+    .unwrap();
+    let retry = RetrySchedule::new(NonZeroU32::MIN, 30, failure.clone()).unwrap();
+    let command = ApplyWorkFailure::new(
+        AuthoredWorkTarget::DeliveryPlan(ids().2),
+        fence(&active),
+        failure,
+        Some(retry),
+        14,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyFailure(command))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_delivery_plan(ids().2))
+            .unwrap()
+            .unwrap()
+            .state(),
+        AuthoredDeliveryState::Retryable
+    );
+
+    let storage = signed_storage();
+    let active = claim_delivery(&storage, 5, 13);
+    let request = block_on(storage.authored_delivery_plan(ids().2))
+        .unwrap()
+        .unwrap()
+        .request()
+        .unwrap()
+        .clone();
+    let sink_failure = SinkFailure::for_request(
+        &request,
+        "relay_terminal",
+        Retryability::Terminal,
+        None,
+        Some("terminal".to_owned()),
+        Vec::new(),
+    )
+    .unwrap();
+    let command = ApplyDeliveryAttempt::new(
+        ids().2,
+        fence(&active),
+        DeliveryAttemptOutcome::SinkFailure(sink_failure),
+        None,
+        14,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyDelivery(command))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_delivery_plan(ids().2))
+            .unwrap()
+            .unwrap()
+            .state(),
+        AuthoredDeliveryState::FailedTerminal
+    );
+
+    for (target, phase, class) in [
+        (
+            AuthoredWorkTarget::Artifact(ids().1),
+            WorkPhase::Delivery,
+            FailureClass::Terminal,
+        ),
+        (
+            AuthoredWorkTarget::DeliveryPlan(ids().2),
+            WorkPhase::Admission,
+            FailureClass::Terminal,
+        ),
+        (
+            AuthoredWorkTarget::DeliveryPlan(ids().2),
+            WorkPhase::Delivery,
+            FailureClass::Indeterminate,
+        ),
+    ] {
+        let (storage, _) = prepared_storage();
+        let failure = WorkFailure::new("mismatch", phase, class, None, None).unwrap();
+        let command = ApplyWorkFailure::new(
+            target,
+            WorkFence::new([9; 16], NonZeroU64::MIN, NonZeroU64::MIN).unwrap(),
+            failure,
+            None,
+            12,
+        )
+        .unwrap();
+        assert!(
+            block_on(storage.execute_authored(AuthoredAtomicCommand::ApplyFailure(command)))
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn memory_executes_all_cancellation_targets_and_revision_fences() {
+    let (storage, _) = prepared_storage();
+    let artifact = block_on(storage.authored_artifact(ids().1))
+        .unwrap()
+        .unwrap();
+    let stale = CancelAuthoredWork::new(
+        CancelAuthoredTarget::ArtifactSigning(ids().1),
+        NonZeroU64::new(9).unwrap(),
+        11,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(storage.execute_authored(AuthoredAtomicCommand::Cancel(stale))),
+        Err(Error::InvalidAuthoredTransition)
+    );
+    let cancel = CancelAuthoredWork::new(
+        CancelAuthoredTarget::ArtifactSigning(ids().1),
+        artifact.revision(),
+        11,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::Cancel(cancel))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_artifact(ids().1))
+            .unwrap()
+            .unwrap()
+            .signing_state(),
+        SigningState::Cancelled
+    );
+
+    let storage = signed_storage();
+    let artifact = block_on(storage.authored_artifact(ids().1))
+        .unwrap()
+        .unwrap();
+    let cancel = CancelAuthoredWork::new(
+        CancelAuthoredTarget::ArtifactAdmission(ids().1),
+        artifact.revision(),
+        13,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::Cancel(cancel))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_artifact(ids().1))
+            .unwrap()
+            .unwrap()
+            .admission_state(),
+        AdmissionState::Cancelled
+    );
+
+    let storage = signed_storage();
+    let plan = block_on(storage.authored_delivery_plan(ids().2))
+        .unwrap()
+        .unwrap();
+    let stale = CancelAuthoredWork::new(
+        CancelAuthoredTarget::DeliveryPlan(ids().2),
+        NonZeroU64::MIN,
+        13,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(storage.execute_authored(AuthoredAtomicCommand::Cancel(stale))),
+        Err(Error::InvalidAuthoredDeliveryPlan)
+    );
+    let cancel = CancelAuthoredWork::new(
+        CancelAuthoredTarget::DeliveryPlan(ids().2),
+        plan.revision(),
+        13,
+    )
+    .unwrap();
+    block_on(storage.execute_authored(AuthoredAtomicCommand::Cancel(cancel))).unwrap();
+    assert_eq!(
+        block_on(storage.authored_delivery_plan(ids().2))
+            .unwrap()
+            .unwrap()
+            .state(),
+        AuthoredDeliveryState::Cancelled
     );
 }

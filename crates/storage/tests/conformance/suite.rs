@@ -2,10 +2,10 @@ use futures_executor::block_on;
 use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
-    Error, EventStore, Journal, Outbox, ProjectionStore,
+    EventStore, Journal, Outbox, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicStorage,
-        AtomicWorkflow, CommitEnqueued, CommitIngested, CommitSigned,
+        AtomicWorkflow, CommitIngested,
     },
     backup::{
         BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupPlan,
@@ -13,14 +13,8 @@ use radroots_storage::{
         RestoreMemberStatus, RestorePlan, RestoreStage, RestoreTransition, StorageReliability,
     },
     event::{EventAdmission, EventQuery, EventQueryBounds},
-    journal::{
-        IdempotencyDigest, IdempotencyKey, JournalRevision, JournalStage, OperationInstanceId,
-        PrepareOperation,
-    },
-    outbox::{
-        ClaimOutboxItems, DeliveryAttempt, DeliveryAttemptEvidence, DeliveryPlanDigest,
-        EnqueueDisposition, EnqueueOutboxItem, LeaseId, LeaseOwner, OutboxItemId, OutboxStage,
-    },
+    journal::{IdempotencyDigest, IdempotencyKey, OperationInstanceId, PrepareOperation},
+    outbox::{DeliveryPlanDigest, EnqueueDisposition, EnqueueOutboxItem, OutboxItemId},
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DurableSecretReference,
         PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactStore, RetentionPolicy,
@@ -29,10 +23,9 @@ use radroots_storage::{
     status::{ShutdownState, StorageBackend},
 };
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, Target, TargetSet, TransportId,
-    outcome::DeliveryOutcome,
+    DeliveryRequest, Target, TargetSet, TransportId,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
-    sink::{DeliveryPayload, DeliveryTargetReceipt},
+    sink::DeliveryPayload,
     source::{EventProvenance, ObservedEvent},
 };
 
@@ -187,163 +180,37 @@ pub(crate) fn assert_conflict_conformance(harness: &impl StorageConformanceHarne
 }
 
 pub(crate) fn assert_atomic_workflow_conformance(harness: &impl StorageConformanceHarness) {
-    let instance = OperationInstanceId::new([10; 16]).expect("operation instance");
-    let prepared_request = atomic_commit(
-        10,
-        10,
-        100,
-        AtomicWorkflow::Prepared(prepare(instance, "atomic", 10)),
-    );
-    let prepared = block_on(harness.atomic_storage().commit(prepared_request.clone()))
-        .expect("atomic prepare");
-    assert_eq!(prepared.disposition(), AtomicCommitDisposition::Committed);
-    assert_eq!(
-        block_on(harness.atomic_storage().commit(prepared_request))
-            .expect("prepare replay")
-            .disposition(),
-        AtomicCommitDisposition::Replay
-    );
-
-    let event = signed_event("conformance-atomic");
-    let signed = block_on(harness.atomic_storage().commit(atomic_commit(
-        11,
-        11,
-        110,
-        AtomicWorkflow::Signed(Box::new(CommitSigned::new(
-            instance,
-            JournalRevision::INITIAL,
-            event.clone(),
-        ))),
-    )))
-    .expect("atomic sign");
-    assert_eq!(
-        signed.outcome().kind(),
-        radroots_storage::atomic::AtomicWorkflowKind::Signed
-    );
-
-    let enqueue = enqueue([11; 16], instance, event.clone());
-    assert_eq!(
-        CommitEnqueued::new(
-            instance,
-            JournalRevision::new(2).expect("journal revision"),
-            admission(event.clone(), 120),
-            enqueue.clone(),
-            0,
-        ),
-        Err(Error::AtomicWorkflowMismatch)
-    );
-    let enqueued = block_on(
-        harness.atomic_storage().commit(atomic_commit(
-            12,
-            12,
-            120,
-            AtomicWorkflow::Enqueued(Box::new(
-                CommitEnqueued::new(
-                    instance,
-                    JournalRevision::new(2).expect("journal revision"),
-                    admission(event, 120),
-                    enqueue,
-                    120,
+    let event = signed_event("conformance-ingest");
+    let request = atomic_commit(
+        14,
+        14,
+        150,
+        AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
+            admission(event, 150),
+            Some(
+                ProjectionCheckpoint::new(
+                    ProjectionId::parse("conformance.ingest").expect("projection id"),
+                    ProjectionGeneration::new([14; 32]).expect("projection generation"),
+                    None,
+                    1,
+                    150,
                 )
-                .expect("enqueue workflow"),
-            )),
-        )),
-    )
-    .expect("atomic enqueue");
-    assert_eq!(
-        block_on(harness.journal().operation(instance))
-            .expect("journal lookup")
-            .expect("journal record")
-            .state()
-            .stage(),
-        JournalStage::Committed
+                .expect("projection checkpoint"),
+            ),
+        ))),
     );
-    assert_eq!(
-        enqueued.outcome().kind(),
-        radroots_storage::atomic::AtomicWorkflowKind::Enqueued
-    );
-
-    let claimed = block_on(
-        harness.outbox().claim(
-            ClaimOutboxItems::new(
-                LeaseOwner::parse("conformance-worker").expect("lease owner"),
-                LeaseId::new([12; 16]).expect("lease id"),
-                130,
-                150,
-                1,
-            )
-            .expect("claim request"),
-        ),
-    )
-    .expect("claim outbox")
-    .pop()
-    .expect("claimed item");
-    let receipt = DeliveryReceipt::for_request(
-        claimed.record().request(),
-        claimed
-            .record()
-            .request()
-            .target_set()
-            .targets()
-            .iter()
-            .cloned()
-            .map(|target| DeliveryTargetReceipt::attempted(target, DeliveryOutcome::delivered()))
-            .collect(),
-    )
-    .expect("delivery receipt");
-    let evidence = DeliveryAttemptEvidence::new(
-        claimed.record().item_id(),
-        claimed.lease().id(),
-        claimed.record().revision(),
-        DeliveryAttempt::FIRST,
-        receipt,
-        140,
-    )
-    .expect("delivery evidence");
-    let delivered = block_on(harness.atomic_storage().commit(atomic_commit(
-        13,
-        13,
-        140,
-        AtomicWorkflow::Delivered(Box::new(evidence)),
-    )))
-    .expect("atomic deliver");
-    assert_eq!(
-        delivered.outcome().kind(),
-        radroots_storage::atomic::AtomicWorkflowKind::Delivered
-    );
-    assert_eq!(
-        block_on(harness.outbox().item(claimed.record().item_id()))
-            .expect("outbox lookup")
-            .expect("outbox item")
-            .stage(),
-        OutboxStage::Satisfied
-    );
-
-    let ingest_event = signed_event("conformance-ingest");
-    let ingested = block_on(
-        harness.atomic_storage().commit(atomic_commit(
-            14,
-            14,
-            150,
-            AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
-                admission(ingest_event, 150),
-                Some(
-                    ProjectionCheckpoint::new(
-                        ProjectionId::parse("conformance.ingest").expect("projection id"),
-                        ProjectionGeneration::new([14; 32]).expect("projection generation"),
-                        None,
-                        1,
-                        150,
-                    )
-                    .expect("projection checkpoint"),
-                ),
-            ))),
-        )),
-    )
-    .expect("atomic ingest");
+    let ingested =
+        block_on(harness.atomic_storage().commit(request.clone())).expect("atomic ingest");
+    assert_eq!(ingested.disposition(), AtomicCommitDisposition::Committed);
     assert_eq!(
         ingested.outcome().kind(),
         radroots_storage::atomic::AtomicWorkflowKind::Ingested
+    );
+    assert_eq!(
+        block_on(harness.atomic_storage().commit(request))
+            .expect("atomic replay")
+            .disposition(),
+        AtomicCommitDisposition::Replay
     );
 }
 

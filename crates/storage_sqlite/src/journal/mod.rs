@@ -287,117 +287,6 @@ pub(crate) fn decode_record(row: &sqlx::sqlite::SqliteRow) -> Result<OperationRe
     .map_err(|_| Error::CorruptJournalRecord)
 }
 
-pub(crate) fn encode_record_snapshot(record: &OperationRecord) -> Result<Vec<u8>, Error> {
-    let mut bytes = Vec::with_capacity(160);
-    bytes.push(1);
-    bytes.extend_from_slice(record.instance_id().as_bytes());
-    snapshot_put_string(&mut bytes, record.operation_id().as_str())?;
-    snapshot_put_string(&mut bytes, record.idempotency_key().as_str())?;
-    bytes.extend_from_slice(record.input_digest().as_bytes());
-    bytes.extend_from_slice(&record.prepared_at_unix_ms().to_be_bytes());
-    bytes.extend_from_slice(&record.revision().get().to_be_bytes());
-    match record.state() {
-        JournalState::Prepared => bytes.push(0),
-        JournalState::Signed { event_id } => {
-            bytes.push(1);
-            bytes.extend_from_slice(event_id.as_bytes());
-        }
-        JournalState::Recoverable(recovery) => {
-            bytes.push(2);
-            snapshot_put_blob(&mut bytes, encode_recovery(recovery).as_slice())?;
-        }
-        JournalState::Committed {
-            event_id,
-            committed_at_unix_ms,
-        } => {
-            bytes.push(3);
-            bytes.extend_from_slice(event_id.as_bytes());
-            bytes.extend_from_slice(&committed_at_unix_ms.to_be_bytes());
-        }
-    }
-    bytes.push(match record.cancellation() {
-        CancellationState::NotRequested => 0,
-        CancellationState::CancelledBeforeCommit => 1,
-        CancellationState::ObservedAfterCommit => 2,
-    });
-    Ok(bytes)
-}
-
-pub(crate) fn decode_record_snapshot(bytes: &[u8]) -> Result<OperationRecord, Error> {
-    let mut offset = 0;
-    if take_byte(bytes, &mut offset)? != 1 {
-        return Err(Error::CorruptJournalRecord);
-    }
-    let instance_id = OperationInstanceId::new(take_array(bytes, &mut offset)?)
-        .map_err(|_| Error::CorruptJournalRecord)?;
-    let operation_id = OperationId::parse(snapshot_take_string(bytes, &mut offset)?)
-        .map_err(|_| Error::CorruptJournalRecord)?;
-    let idempotency_key = IdempotencyKey::parse(snapshot_take_string(bytes, &mut offset)?)
-        .map_err(|_| Error::CorruptJournalRecord)?;
-    let input_digest = IdempotencyDigest::new(take_array(bytes, &mut offset)?);
-    let prepared_at_unix_ms = u64::from_be_bytes(take_array(bytes, &mut offset)?);
-    let revision = JournalRevision::new(u64::from_be_bytes(take_array(bytes, &mut offset)?))
-        .map_err(|_| Error::CorruptJournalRecord)?;
-    let state = match take_byte(bytes, &mut offset)? {
-        0 => JournalState::Prepared,
-        1 => JournalState::Signed {
-            event_id: EventId::from_bytes(take_array(bytes, &mut offset)?),
-        },
-        2 => JournalState::Recoverable(decode_recovery(snapshot_take_blob(bytes, &mut offset)?)?),
-        3 => JournalState::Committed {
-            event_id: EventId::from_bytes(take_array(bytes, &mut offset)?),
-            committed_at_unix_ms: u64::from_be_bytes(take_array(bytes, &mut offset)?),
-        },
-        _ => return Err(Error::CorruptJournalRecord),
-    };
-    let cancellation = match take_byte(bytes, &mut offset)? {
-        0 => CancellationState::NotRequested,
-        1 => CancellationState::CancelledBeforeCommit,
-        2 => CancellationState::ObservedAfterCommit,
-        _ => return Err(Error::CorruptJournalRecord),
-    };
-    if offset != bytes.len() {
-        return Err(Error::CorruptJournalRecord);
-    }
-    OperationRecord::from_parts(
-        instance_id,
-        operation_id,
-        idempotency_key,
-        input_digest,
-        prepared_at_unix_ms,
-        revision,
-        state,
-        cancellation,
-    )
-    .map_err(|_| Error::CorruptJournalRecord)
-}
-
-fn snapshot_put_string(bytes: &mut Vec<u8>, value: &str) -> Result<(), Error> {
-    snapshot_put_blob(bytes, value.as_bytes())
-}
-
-fn snapshot_put_blob(bytes: &mut Vec<u8>, value: &[u8]) -> Result<(), Error> {
-    let length = u16::try_from(value.len()).map_err(|_| Error::CorruptJournalRecord)?;
-    bytes.extend_from_slice(&length.to_be_bytes());
-    bytes.extend_from_slice(value);
-    Ok(())
-}
-
-fn snapshot_take_string<'a>(bytes: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
-    core::str::from_utf8(snapshot_take_blob(bytes, offset)?)
-        .map_err(|_| Error::CorruptJournalRecord)
-}
-
-fn snapshot_take_blob<'a>(bytes: &'a [u8], offset: &mut usize) -> Result<&'a [u8], Error> {
-    let length = usize::from(u16::from_be_bytes(take_array(bytes, offset)?));
-    let end = offset
-        .checked_add(length)
-        .ok_or(Error::CorruptJournalRecord)?;
-    let value = bytes.get(*offset..end).ok_or(Error::CorruptJournalRecord)?;
-    *offset = end;
-    Ok(value)
-}
-
 type EncodedState = (&'static str, Option<Vec<u8>>, Option<Vec<u8>>, Option<u64>);
 
 fn encode_state(state: &JournalState) -> EncodedState {
@@ -653,6 +542,29 @@ mod tests {
         .expect("prepare")
     }
 
+    #[test]
+    fn recovery_decoder_and_state_guard_reject_noncanonical_encodings() {
+        let event_id = EventId::from_bytes([42; 32]);
+        let recovery = RecoveryRecord::new(
+            RecoveryPoint::Signed { event_id },
+            RecoveryReason::Interrupted,
+            1,
+            None,
+        )
+        .expect("recovery");
+        assert_eq!(
+            decode_state("recoverable", None, Some(recovery.clone()), None),
+            Err(Error::CorruptJournalRecord)
+        );
+        assert_eq!(decode_recovery(&[2]), Err(Error::CorruptJournalRecord));
+        let mut encoded = encode_recovery(&recovery);
+        encoded.push(0);
+        assert_eq!(
+            decode_recovery(encoded.as_slice()),
+            Err(Error::CorruptJournalRecord)
+        );
+    }
+
     #[tokio::test]
     async fn prepare_replays_exact_identity_and_rejects_conflicts() {
         let store = store(EventStoreMode::ReadWrite).await;
@@ -838,21 +750,5 @@ mod tests {
             read_only.prepare(prepare(instance(6), 6, 6, 600)).await,
             Err(Error::BackendUnavailable)
         );
-
-        let encoded = encode_record_snapshot(&prepared).expect("encode journal snapshot");
-        for end in 0..encoded.len() {
-            let _ = decode_record_snapshot(&encoded[..end]);
-        }
-        let mut trailing = encoded.clone();
-        trailing.push(0);
-        assert_eq!(
-            decode_record_snapshot(&trailing),
-            Err(Error::CorruptJournalRecord)
-        );
-        for index in 0..encoded.len() {
-            let mut corrupt = encoded.clone();
-            corrupt[index] ^= 0xff;
-            let _ = decode_record_snapshot(&corrupt);
-        }
     }
 }

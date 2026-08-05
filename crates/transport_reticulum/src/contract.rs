@@ -1,7 +1,7 @@
 use crate::RADROOTS_RETICULUM_ENDPOINT_URI;
 use radroots_transport::target::EndpointUri;
 use radroots_transport::target::{TargetFingerprint, TargetLabel, TargetScope};
-use radroots_transport::{RadrootsTransportError, Target, TransportId};
+use radroots_transport::{Error as TransportError, Target, TransportId};
 
 pub const RETICULUM_V1_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 
@@ -115,7 +115,10 @@ impl ReticulumDestinationV1 {
         uri: impl AsRef<str>,
         scope: TargetScope,
         label: Option<TargetLabel>,
-    ) -> Result<Self, RadrootsTransportError> {
+    ) -> Result<Self, TransportError> {
+        if uri.as_ref() != RADROOTS_RETICULUM_ENDPOINT_URI {
+            return Err(TransportError::InvalidTargetUri);
+        }
         let target = Target::new_with_metadata(
             TransportId::RETICULUM,
             uri.as_ref(),
@@ -137,23 +140,23 @@ impl ReticulumDestinationV1 {
         })
     }
 
-    pub fn from_target(target: &Target) -> Result<Self, RadrootsTransportError> {
+    pub fn from_target(target: &Target) -> Result<Self, TransportError> {
         if target.kind() != &TransportId::RETICULUM
             || target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
         {
-            return Err(RadrootsTransportError::InvalidTargetUri);
+            return Err(TransportError::InvalidTargetUri);
         }
         let Some(scope) = target.scope().cloned() else {
-            return Err(RadrootsTransportError::EmptyTargetScope);
+            return Err(TransportError::EmptyTargetScope);
         };
         let destination = Self::new(target.uri().as_str(), scope, target.label().cloned())?;
         if destination.fingerprint != *target.fingerprint() {
-            return Err(RadrootsTransportError::InvalidTargetFingerprint);
+            return Err(TransportError::InvalidTargetFingerprint);
         }
         Ok(destination)
     }
 
-    pub fn transport_target(&self) -> Result<Target, RadrootsTransportError> {
+    pub fn transport_target(&self) -> Result<Target, TransportError> {
         Target::new_with_metadata(
             TransportId::RETICULUM,
             self.uri.as_str(),

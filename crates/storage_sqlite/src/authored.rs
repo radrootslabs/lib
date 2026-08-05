@@ -1159,19 +1159,28 @@ where
 mod tests {
     use super::*;
     use crate::migration::runtime::{MIGRATIONS, migration_sql};
-    use core::num::NonZeroU64;
+    use core::num::{NonZeroU32, NonZeroU64};
     use radroots_event::{GenericEventDraft, SignedEvent, wire::v1::Nip01EventWire};
     use radroots_event_codec::authoring::AuthoredEventPlan;
     use radroots_storage::{
-        authored::{AuthoredArtifact, WorkClaim},
-        authored_atomic::{ApplySignedArtifact, ClaimAuthoredWork, PrepareAuthoredOperation},
+        authored::{
+            AdmissionState, AuthoredArtifact, FailureClass, RetrySchedule, WorkClaim, WorkFailure,
+            WorkPhase,
+        },
+        authored_atomic::{
+            ApplyAdmissionResult, ApplyDeliveryAttempt, ApplySignedArtifact, ApplyWorkFailure,
+            AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork, ClaimAuthoredWork,
+            PrepareAuthoredOperation,
+        },
         authored_delivery::{AuthoredDeliveryIntent, AuthoredDeliveryPlan},
         event::SourceGeneration,
         status::EventStoreMode,
     };
     use radroots_transport::{
-        Target, TargetSet,
+        DeliveryReceipt, SinkFailure, Target, TargetSet,
+        outcome::{DeliveryOutcome, Retryability},
         policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+        sink::DeliveryTargetReceipt,
     };
     use sqlx::sqlite::SqlitePoolOptions;
 
@@ -1278,6 +1287,127 @@ mod tests {
         )
         .expect("prepare");
         (AuthoredAtomicCommand::Prepare(command), event_plan)
+    }
+
+    fn fence(claim: &WorkClaim) -> WorkFence {
+        WorkFence::new(*claim.token(), claim.generation(), claim.row_revision()).unwrap()
+    }
+
+    async fn prepared_store() -> (SqliteStorage, AuthoredEventPlan) {
+        let store = store(EventStoreMode::ReadWrite).await;
+        let (command, plan) = prepare();
+        store.execute_authored(command).await.unwrap();
+        (store, plan)
+    }
+
+    async fn signed_store() -> SqliteStorage {
+        let (store, event_plan) = prepared_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        let claim = WorkClaim::new(
+            [4; 16],
+            "sqlite-signer",
+            NonZeroU64::MIN,
+            11,
+            50,
+            artifact.revision(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+                ClaimAuthoredTarget::ArtifactSigning(ids().1),
+                claim.clone(),
+            )))
+            .await
+            .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplySigned(
+                ApplySignedArtifact::new(ids().1, fence(&claim), signed(&event_plan), 12).unwrap(),
+            ))
+            .await
+            .unwrap();
+        store
+    }
+
+    async fn claim_admission(store: &SqliteStorage) -> WorkClaim {
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        let claim = WorkClaim::new(
+            [5; 16],
+            "sqlite-admission",
+            NonZeroU64::new(2).unwrap(),
+            13,
+            50,
+            artifact.revision(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+                ClaimAuthoredTarget::ArtifactAdmission(ids().1),
+                claim.clone(),
+            )))
+            .await
+            .unwrap();
+        claim
+    }
+
+    async fn claim_delivery(store: &SqliteStorage) -> WorkClaim {
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        let claim = WorkClaim::new(
+            [6; 16],
+            "sqlite-delivery",
+            NonZeroU64::new(3).unwrap(),
+            13,
+            50,
+            plan.revision(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+                ClaimAuthoredTarget::DeliveryPlan(ids().2),
+                claim.clone(),
+            )))
+            .await
+            .unwrap();
+        claim
+    }
+
+    async fn satisfied_store() -> SqliteStorage {
+        let store = signed_store().await;
+        let delivery_claim = claim_delivery(&store).await;
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        let request = plan.request().unwrap();
+        let receipt = DeliveryReceipt::for_request(
+            request,
+            request
+                .target_set()
+                .targets()
+                .iter()
+                .cloned()
+                .map(|target| DeliveryTargetReceipt::attempted(target, DeliveryOutcome::accepted()))
+                .collect(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyDelivery(
+                ApplyDeliveryAttempt::new(
+                    ids().2,
+                    fence(&delivery_claim),
+                    DeliveryAttemptOutcome::Receipt(receipt),
+                    None,
+                    14,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        store
     }
 
     #[tokio::test]
@@ -1474,6 +1604,837 @@ mod tests {
         assert_eq!(
             store.authored_artifact(ids().1).await,
             Err(Error::AtomicCommitFailed)
+        );
+    }
+
+    #[tokio::test]
+    async fn authored_admission_and_delivery_commands_round_trip_exact_state() {
+        let store = signed_store().await;
+        let admission_claim = claim_admission(&store).await;
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyAdmission(
+                ApplyAdmissionResult::new(
+                    ids().1,
+                    fence(&admission_claim),
+                    AdmissionState::Inserted,
+                    None,
+                    None,
+                    14,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_artifact(ids().1)
+                .await
+                .unwrap()
+                .unwrap()
+                .admission_state(),
+            AdmissionState::Inserted
+        );
+
+        let delivery_claim = claim_delivery(&store).await;
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        let request = plan.request().unwrap();
+        let receipt = DeliveryReceipt::for_request(
+            request,
+            request
+                .target_set()
+                .targets()
+                .iter()
+                .cloned()
+                .map(|target| DeliveryTargetReceipt::attempted(target, DeliveryOutcome::accepted()))
+                .collect(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyDelivery(
+                ApplyDeliveryAttempt::new(
+                    ids().2,
+                    fence(&delivery_claim),
+                    DeliveryAttemptOutcome::Receipt(receipt),
+                    None,
+                    14,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_delivery_plan(ids().2)
+                .await
+                .unwrap()
+                .unwrap()
+                .state(),
+            AuthoredDeliveryState::Satisfied
+        );
+    }
+
+    #[tokio::test]
+    async fn authored_failure_commands_persist_each_phase_and_retry_class() {
+        let (store, _) = prepared_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        let claim = WorkClaim::new(
+            [4; 16],
+            "sqlite-signer",
+            NonZeroU64::MIN,
+            11,
+            50,
+            artifact.revision(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+                ClaimAuthoredTarget::ArtifactSigning(ids().1),
+                claim.clone(),
+            )))
+            .await
+            .unwrap();
+        let failure = WorkFailure::new(
+            "terminal_signer",
+            WorkPhase::Signing,
+            FailureClass::Terminal,
+            None,
+            None,
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyFailure(
+                ApplyWorkFailure::new(
+                    AuthoredWorkTarget::Artifact(ids().1),
+                    fence(&claim),
+                    failure,
+                    None,
+                    12,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_artifact(ids().1)
+                .await
+                .unwrap()
+                .unwrap()
+                .signing_state(),
+            SigningState::FailedTerminal
+        );
+
+        let store = signed_store().await;
+        let claim = claim_admission(&store).await;
+        let failure = WorkFailure::new(
+            "temporary_admission",
+            WorkPhase::Admission,
+            FailureClass::Retryable,
+            Some(30),
+            None,
+        )
+        .unwrap();
+        let retry = RetrySchedule::new(NonZeroU32::MIN, 30, failure.clone()).unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyFailure(
+                ApplyWorkFailure::new(
+                    AuthoredWorkTarget::Artifact(ids().1),
+                    fence(&claim),
+                    failure,
+                    Some(retry),
+                    14,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_artifact(ids().1)
+                .await
+                .unwrap()
+                .unwrap()
+                .admission_state(),
+            AdmissionState::Retryable
+        );
+
+        let store = signed_store().await;
+        let claim = claim_delivery(&store).await;
+        let failure = WorkFailure::new(
+            "relay_terminal",
+            WorkPhase::Delivery,
+            FailureClass::Terminal,
+            None,
+            Some("terminal".to_owned()),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyFailure(
+                ApplyWorkFailure::new(
+                    AuthoredWorkTarget::DeliveryPlan(ids().2),
+                    fence(&claim),
+                    failure,
+                    None,
+                    14,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_delivery_plan(ids().2)
+                .await
+                .unwrap()
+                .unwrap()
+                .state(),
+            AuthoredDeliveryState::FailedTerminal
+        );
+    }
+
+    #[tokio::test]
+    async fn authored_sink_failure_and_every_cancellation_target_are_durable() {
+        let store = signed_store().await;
+        let claim = claim_delivery(&store).await;
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        let failure = SinkFailure::for_request(
+            plan.request().unwrap(),
+            "relay_unavailable",
+            Retryability::Retryable,
+            Some(30),
+            None,
+            Vec::new(),
+        )
+        .unwrap();
+        let work_failure = WorkFailure::new(
+            "relay_unavailable",
+            WorkPhase::Delivery,
+            FailureClass::Retryable,
+            Some(30),
+            None,
+        )
+        .unwrap();
+        let retry = RetrySchedule::new(NonZeroU32::MIN, 30, work_failure).unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::ApplyDelivery(
+                ApplyDeliveryAttempt::new(
+                    ids().2,
+                    fence(&claim),
+                    DeliveryAttemptOutcome::SinkFailure(failure),
+                    Some(retry),
+                    14,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_delivery_plan(ids().2)
+                .await
+                .unwrap()
+                .unwrap()
+                .state(),
+            AuthoredDeliveryState::Retryable
+        );
+
+        let (store, _) = prepared_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Cancel(
+                CancelAuthoredWork::new(
+                    CancelAuthoredTarget::ArtifactSigning(ids().1),
+                    artifact.revision(),
+                    11,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+
+        let store = signed_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Cancel(
+                CancelAuthoredWork::new(
+                    CancelAuthoredTarget::ArtifactAdmission(ids().1),
+                    artifact.revision(),
+                    13,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+
+        let store = signed_store().await;
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Cancel(
+                CancelAuthoredWork::new(
+                    CancelAuthoredTarget::DeliveryPlan(ids().2),
+                    plan.revision(),
+                    13,
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn authored_missing_rows_conflicts_and_cross_table_integrity_fail_closed() {
+        let store = store(EventStoreMode::ReadWrite).await;
+        assert!(store.authored_operation(ids().0).await.unwrap().is_none());
+        assert!(store.authored_artifact(ids().1).await.unwrap().is_none());
+        assert!(
+            store
+                .authored_delivery_plan(ids().2)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .authored_receipt(AtomicCommitId::new([9; 16]).unwrap())
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let (command, _) = prepare();
+        store.execute_authored(command.clone()).await.unwrap();
+        assert_eq!(
+            store.execute_authored(command).await.unwrap().disposition(),
+            AtomicCommitDisposition::Replay
+        );
+        let (conflict, _) = prepare();
+        let AuthoredAtomicCommand::Prepare(value) = conflict else {
+            unreachable!()
+        };
+        let conflict = PrepareAuthoredOperation::new(
+            value.operation().clone(),
+            value.artifacts().to_vec(),
+            value.delivery_plans().to_vec(),
+            AtomicCommitDigest::new([8; 32]),
+            value.requested_at_unix_ms(),
+        )
+        .unwrap();
+        assert_eq!(
+            store
+                .execute_authored(AuthoredAtomicCommand::Prepare(conflict))
+                .await,
+            Err(Error::AtomicCommitConflict)
+        );
+
+        sqlx::query("DELETE FROM radroots_runtime_authored_artifacts WHERE artifact_id = ?")
+            .bind(ids().1.as_bytes().as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_operation(ids().0).await,
+            Err(Error::InvalidAuthoredOperation)
+        );
+    }
+
+    #[tokio::test]
+    async fn denormalized_authored_columns_are_verified_against_canonical_snapshots() {
+        let (store, _) = prepared_store().await;
+
+        macro_rules! reject_operation_shadow {
+            ($update:literal, $restore:literal) => {{
+                sqlx::query($update).execute(&store.pool).await.unwrap();
+                assert_eq!(
+                    store.authored_operation(ids().0).await,
+                    Err(Error::InvalidAuthoredOperation)
+                );
+                sqlx::query($restore).execute(&store.pool).await.unwrap();
+            }};
+        }
+        reject_operation_shadow!(
+            "UPDATE radroots_runtime_authored_operations SET artifact_count = 2",
+            "UPDATE radroots_runtime_authored_operations SET artifact_count = 1"
+        );
+        reject_operation_shadow!(
+            "UPDATE radroots_runtime_authored_operations SET created_at_unix_ms = 9",
+            "UPDATE radroots_runtime_authored_operations SET created_at_unix_ms = 10"
+        );
+        reject_operation_shadow!(
+            "UPDATE radroots_runtime_authored_operations SET updated_at_unix_ms = 11",
+            "UPDATE radroots_runtime_authored_operations SET updated_at_unix_ms = 10"
+        );
+        reject_operation_shadow!(
+            "UPDATE radroots_runtime_authored_operations SET revision = 2",
+            "UPDATE radroots_runtime_authored_operations SET revision = 1"
+        );
+
+        macro_rules! reject_artifact_shadow {
+            ($update:literal, $restore:literal) => {{
+                sqlx::query($update).execute(&store.pool).await.unwrap();
+                assert_eq!(
+                    store.authored_artifact(ids().1).await,
+                    Err(Error::InvalidAuthoredArtifact)
+                );
+                sqlx::query($restore).execute(&store.pool).await.unwrap();
+            }};
+        }
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET ordinal = 1",
+            "UPDATE radroots_runtime_authored_artifacts SET ordinal = 0"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET signing_state = 'retryable'",
+            "UPDATE radroots_runtime_authored_artifacts SET signing_state = 'planned'"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET admission_state = 'inserted'",
+            "UPDATE radroots_runtime_authored_artifacts SET admission_state = 'pending'"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET retry_not_before_unix_ms = 30",
+            "UPDATE radroots_runtime_authored_artifacts SET retry_not_before_unix_ms = NULL"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET last_failure_code = 'forged'",
+            "UPDATE radroots_runtime_authored_artifacts SET last_failure_code = NULL"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET created_at_unix_ms = 9",
+            "UPDATE radroots_runtime_authored_artifacts SET created_at_unix_ms = 10"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET updated_at_unix_ms = 11",
+            "UPDATE radroots_runtime_authored_artifacts SET updated_at_unix_ms = 10"
+        );
+        reject_artifact_shadow!(
+            "UPDATE radroots_runtime_authored_artifacts SET revision = 2",
+            "UPDATE radroots_runtime_authored_artifacts SET revision = 1"
+        );
+
+        macro_rules! reject_plan_shadow {
+            ($update:literal, $restore:literal) => {{
+                sqlx::query($update).execute(&store.pool).await.unwrap();
+                assert_eq!(
+                    store.authored_delivery_plan(ids().2).await,
+                    Err(Error::InvalidAuthoredDeliveryPlan)
+                );
+                sqlx::query($restore).execute(&store.pool).await.unwrap();
+            }};
+        }
+        reject_plan_shadow!(
+            "UPDATE radroots_runtime_authored_delivery_plans SET attempt_count = 1",
+            "UPDATE radroots_runtime_authored_delivery_plans SET attempt_count = 0"
+        );
+        reject_plan_shadow!(
+            "UPDATE radroots_runtime_authored_delivery_plans SET last_failure_code = 'forged'",
+            "UPDATE radroots_runtime_authored_delivery_plans SET last_failure_code = NULL"
+        );
+        reject_plan_shadow!(
+            "UPDATE radroots_runtime_authored_delivery_plans SET created_at_unix_ms = 9",
+            "UPDATE radroots_runtime_authored_delivery_plans SET created_at_unix_ms = 10"
+        );
+        reject_plan_shadow!(
+            "UPDATE radroots_runtime_authored_delivery_plans SET updated_at_unix_ms = 11",
+            "UPDATE radroots_runtime_authored_delivery_plans SET updated_at_unix_ms = 10"
+        );
+        reject_plan_shadow!(
+            "UPDATE radroots_runtime_authored_delivery_plans SET revision = 2",
+            "UPDATE radroots_runtime_authored_delivery_plans SET revision = 1"
+        );
+        reject_plan_shadow!(
+            "UPDATE radroots_runtime_authored_delivery_targets SET ordinal = 9 WHERE ordinal = 0",
+            "UPDATE radroots_runtime_authored_delivery_targets SET ordinal = 0 WHERE ordinal = 9"
+        );
+    }
+
+    #[tokio::test]
+    async fn authored_binary_claim_attempt_and_receipt_shadows_fail_closed() {
+        assert_eq!(
+            decode_snapshot::<serde_json::Value>(Vec::new()),
+            Err(Error::AtomicCommitFailed)
+        );
+        assert_eq!(
+            decode_snapshot::<serde_json::Value>(vec![0; SNAPSHOT_MAX_BYTES + 1]),
+            Err(Error::AtomicCommitFailed)
+        );
+        assert_eq!(
+            encode_snapshot(&"x".repeat(SNAPSHOT_MAX_BYTES + 1)),
+            Err(Error::AtomicCommitFailed)
+        );
+
+        let (store, _) = prepared_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        let plan_wire = artifact.plan().unwrap().wire_json().to_vec();
+        sqlx::query("UPDATE radroots_runtime_authored_artifacts SET plan_wire = x'7b7d'")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_artifact(ids().1).await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        sqlx::query("UPDATE radroots_runtime_authored_artifacts SET plan_wire = ?")
+            .bind(plan_wire.as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_artifacts
+             SET origin = 'imported_signed', plan_wire = NULL,
+                 signing_state = 'signed', signed_raw_json = x'7b7d', signed_raw_sha256 = zeroblob(32)",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_artifact(ids().1).await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+
+        let (store, _) = prepared_store().await;
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_delivery_plans SET request_digest = zeroblob(32)",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_delivery_plans SET request_digest = ?, state = 'cancelled'",
+        )
+        .bind(plan.request_digest().as_slice())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+        sqlx::query("UPDATE radroots_runtime_authored_delivery_plans SET state = 'pending'")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let target = plan.intent().target_set().targets()[0].clone();
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_delivery_targets
+             SET target_fingerprint = 'forged' WHERE ordinal = 0",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_delivery_targets
+             SET target_fingerprint = ?, target_snapshot = x'7b7d' WHERE ordinal = 0",
+        )
+        .bind(target.fingerprint().as_str())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::AtomicCommitFailed)
+        );
+
+        let (store, _) = prepared_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        let claim = WorkClaim::new(
+            [4; 16],
+            "sqlite-signer",
+            NonZeroU64::MIN,
+            11,
+            50,
+            artifact.revision(),
+        )
+        .unwrap();
+        store
+            .execute_authored(AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
+                ClaimAuthoredTarget::ArtifactSigning(ids().1),
+                claim,
+            )))
+            .await
+            .unwrap();
+        for (update, restore) in [
+            (
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_token = zeroblob(16)",
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_token = x'04040404040404040404040404040404'",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_generation = 2",
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_generation = 1",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_revision = 2",
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_revision = 1",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_expires_at_unix_ms = 51",
+                "UPDATE radroots_runtime_authored_artifacts SET signing_claim_expires_at_unix_ms = 50",
+            ),
+        ] {
+            sqlx::query(update).execute(&store.pool).await.unwrap();
+            assert_eq!(
+                store.authored_artifact(ids().1).await,
+                Err(Error::InvalidAuthoredArtifact)
+            );
+            sqlx::query(restore).execute(&store.pool).await.unwrap();
+        }
+
+        let store = signed_store().await;
+        claim_delivery(&store).await;
+        for (update, restore) in [
+            (
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_token = zeroblob(16)",
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_token = x'06060606060606060606060606060606'",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_generation = 4",
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_generation = 3",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_revision = 99",
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_revision = 2",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_expires_at_unix_ms = 51",
+                "UPDATE radroots_runtime_authored_delivery_plans SET claim_expires_at_unix_ms = 50",
+            ),
+        ] {
+            sqlx::query(update).execute(&store.pool).await.unwrap();
+            assert_eq!(
+                store.authored_delivery_plan(ids().2).await,
+                Err(Error::InvalidAuthoredDeliveryPlan)
+            );
+            sqlx::query(restore).execute(&store.pool).await.unwrap();
+        }
+
+        let store = signed_store().await;
+        let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
+        let signed = artifact.signed().expect("signed artifact");
+        sqlx::query("UPDATE radroots_runtime_authored_artifacts SET signed_raw_json = x'7b7d'")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_artifact(ids().1).await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_artifacts
+             SET signed_raw_json = ?, signed_raw_sha256 = zeroblob(32)",
+        )
+        .bind(signed.event().raw_json().as_bytes())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_artifact(ids().1).await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+
+        let store = signed_store().await;
+        claim_admission(&store).await;
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_artifacts
+             SET admission_claim_generation = admission_claim_generation + 1",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_artifact(ids().1).await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+
+        let (store, _) = prepared_store().await;
+        sqlx::query("DELETE FROM radroots_runtime_authored_delivery_targets WHERE plan_id = ?")
+            .bind(ids().2.as_bytes().as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+
+        let (store, _) = prepared_store().await;
+        sqlx::query(
+            "INSERT INTO radroots_runtime_authored_delivery_attempts (
+               plan_id, attempt, satisfaction, recorded_at_unix_ms, outcome_snapshot
+             ) VALUES (?, 1, 'pending', 20, x'7b7d')",
+        )
+        .bind(ids().2.as_bytes().as_slice())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+
+        let (store, _) = prepared_store().await;
+        let other_target = Target::nostr_relay("wss://shadow.example").unwrap();
+        sqlx::query(
+            "UPDATE radroots_runtime_authored_delivery_targets
+             SET target_snapshot = ? WHERE plan_id = ? AND ordinal = 0",
+        )
+        .bind(encode_snapshot(&other_target).unwrap())
+        .bind(ids().2.as_bytes().as_slice())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+
+        let store = satisfied_store().await;
+        for (update, restore) in [
+            (
+                "UPDATE radroots_runtime_authored_delivery_attempts SET attempt = 2",
+                "UPDATE radroots_runtime_authored_delivery_attempts SET attempt = 1",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_delivery_attempts SET satisfaction = 'pending'",
+                "UPDATE radroots_runtime_authored_delivery_attempts SET satisfaction = 'satisfied'",
+            ),
+            (
+                "UPDATE radroots_runtime_authored_delivery_attempts SET recorded_at_unix_ms = 15",
+                "UPDATE radroots_runtime_authored_delivery_attempts SET recorded_at_unix_ms = 14",
+            ),
+        ] {
+            sqlx::query(update).execute(&store.pool).await.unwrap();
+            assert_eq!(
+                store.authored_delivery_plan(ids().2).await,
+                Err(Error::InvalidAuthoredDeliveryPlan)
+            );
+            sqlx::query(restore).execute(&store.pool).await.unwrap();
+        }
+        let plan = store
+            .authored_delivery_plan(ids().2)
+            .await
+            .unwrap()
+            .unwrap();
+        let request = plan.request().unwrap();
+        let different = DeliveryAttemptOutcome::Receipt(
+            DeliveryReceipt::for_request(
+                request,
+                request
+                    .target_set()
+                    .targets()
+                    .iter()
+                    .cloned()
+                    .map(|target| {
+                        DeliveryTargetReceipt::attempted(target, DeliveryOutcome::unavailable())
+                    })
+                    .collect(),
+            )
+            .unwrap(),
+        );
+        sqlx::query("UPDATE radroots_runtime_authored_delivery_attempts SET outcome_snapshot = ?")
+            .bind(encode_snapshot(&different).unwrap())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+
+        async fn disable_foreign_keys(store: &SqliteStorage) {
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+
+        let (store, _) = prepared_store().await;
+        disable_foreign_keys(&store).await;
+        sqlx::query("UPDATE radroots_runtime_authored_operations SET operation_id = ?")
+            .bind([41; 16].as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_operation(OperationInstanceId::new([41; 16]).unwrap())
+                .await,
+            Err(Error::InvalidAuthoredOperation)
+        );
+
+        let (store, _) = prepared_store().await;
+        disable_foreign_keys(&store).await;
+        sqlx::query("UPDATE radroots_runtime_authored_artifacts SET artifact_id = ?")
+            .bind([42; 16].as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_artifact(AuthoredArtifactId::new([42; 16]).unwrap())
+                .await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+
+        let (store, _) = prepared_store().await;
+        disable_foreign_keys(&store).await;
+        sqlx::query("UPDATE radroots_runtime_authored_artifacts SET operation_id = ?")
+            .bind([43; 16].as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_artifact(ids().1).await,
+            Err(Error::InvalidAuthoredArtifact)
+        );
+
+        let (store, _) = prepared_store().await;
+        disable_foreign_keys(&store).await;
+        sqlx::query("UPDATE radroots_runtime_authored_delivery_plans SET plan_id = ?")
+            .bind([44; 16].as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .authored_delivery_plan(AuthoredDeliveryPlanId::new([44; 16]).unwrap())
+                .await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
+        );
+
+        let (store, _) = prepared_store().await;
+        disable_foreign_keys(&store).await;
+        sqlx::query("UPDATE radroots_runtime_authored_delivery_plans SET artifact_id = ?")
+            .bind([45; 16].as_slice())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.authored_delivery_plan(ids().2).await,
+            Err(Error::InvalidAuthoredDeliveryPlan)
         );
     }
 

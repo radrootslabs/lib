@@ -23,22 +23,23 @@ use radroots_signing::{
     status::SignerAvailability,
 };
 use radroots_storage::{
-    EventStore, Journal, Outbox,
+    EventStore, Journal, Outbox, ProjectionStore,
+    atomic::AtomicStorage,
+    authored_atomic::AuthoredAtomicStorage,
     authored_delivery::AuthoredDeliveryState,
     event::{EventQuery, EventQueryBounds, SourceGeneration},
     journal::{IdempotencyKey, OperationInstanceId},
     memory::MemoryStorage,
-    outbox::{ClaimOutboxItems, LeaseId, LeaseOwner, OutboxStage, SatisfactionResult},
+    status::StorageStatusProvider,
 };
 use radroots_storage_sqlite::{OpenMode, OpenOptions, Paths, SqliteStorage};
 use radroots_sync::{
     Engine, PushRequest,
     policy::{Clock, DeadlinePolicy, Error, IdSource, OperationKind, SyncId, SyncStorage},
-    push::DeliveryRunRequest,
 };
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, SinkFailure, SinkStatus,
-    Target, TargetSet, TransportId,
+    DeliveryReceipt, DeliveryRequest, Error as TransportError, EventSink, EventSource, FetchPage,
+    FetchRequest, SinkFailure, SinkStatus, SourceStatus, Target, TargetSet, TransportId,
     outcome::{DeliveryOutcome, Retryability},
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
     sink::DeliveryTargetReceipt,
@@ -48,6 +49,501 @@ use secp256k1::{Keypair, Message, Secp256k1, SecretKey};
 const CONTENT: &str = "frozen-content";
 
 struct MockSink;
+
+struct FaultStorage {
+    inner: Arc<MemoryStorage>,
+    fault_kind: AtomicUsize,
+    remaining: AtomicUsize,
+    admit_error: AtomicUsize,
+    prepared: Mutex<Option<radroots_storage::authored_atomic::AuthoredAtomicOutcome>>,
+}
+
+impl FaultStorage {
+    fn new(generation: u8) -> Self {
+        Self {
+            inner: Arc::new(MemoryStorage::new(
+                SourceGeneration::new([generation; 32]).expect("generation"),
+            )),
+            fault_kind: AtomicUsize::new(0),
+            remaining: AtomicUsize::new(0),
+            admit_error: AtomicUsize::new(0),
+            prepared: Mutex::new(None),
+        }
+    }
+
+    fn fault_next_prepared(&self) {
+        self.fault_kind.store(1, Ordering::Relaxed);
+        self.remaining.store(1, Ordering::Relaxed);
+    }
+
+    fn fault_nth_artifact(&self, nth: usize) {
+        self.fault_kind.store(2, Ordering::Relaxed);
+        self.remaining.store(nth, Ordering::Relaxed);
+    }
+
+    fn fault_nth_plan(&self, nth: usize) {
+        self.fault_kind.store(3, Ordering::Relaxed);
+        self.remaining.store(nth, Ordering::Relaxed);
+    }
+
+    fn fault_prepared_identity(&self) {
+        self.fault_kind.store(4, Ordering::Relaxed);
+        self.remaining.store(1, Ordering::Relaxed);
+    }
+
+    fn fail_admission_with(&self, value: usize) {
+        self.admit_error.store(value, Ordering::Relaxed);
+    }
+}
+
+impl EventStore for FaultStorage {
+    fn status(
+        &self,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>,
+    > {
+        EventStore::status(self.inner.as_ref())
+    }
+    fn admit(
+        &self,
+        value: radroots_storage::event::EventAdmission,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::event::AdmissionReceipt, radroots_storage::Error>,
+    > {
+        match self.admit_error.load(Ordering::Relaxed) {
+            1 => Box::pin(async { Err(radroots_storage::Error::EventConflict) }),
+            2 => Box::pin(async { Err(radroots_storage::Error::BackendUnavailable) }),
+            _ => EventStore::admit(self.inner.as_ref(), value),
+        }
+    }
+    fn query_raw(
+        &self,
+        value: radroots_storage::event::EventQuery,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>,
+            radroots_storage::Error,
+        >,
+    > {
+        EventStore::query_raw(self.inner.as_ref(), value)
+    }
+    fn query_verified(
+        &self,
+        value: radroots_storage::event::EventQuery,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>,
+            radroots_storage::Error,
+        >,
+    > {
+        EventStore::query_verified(self.inner.as_ref(), value)
+    }
+    fn query_visible(
+        &self,
+        value: radroots_storage::event::EventQuery,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>,
+            radroots_storage::Error,
+        >,
+    > {
+        EventStore::query_visible(self.inner.as_ref(), value)
+    }
+    fn query_provenance(
+        &self,
+        id: radroots_storage::event::EventId,
+        bounds: radroots_storage::event::EventQueryBounds,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::event::EventPage<radroots_storage::event::StoredEventProvenance>,
+            radroots_storage::Error,
+        >,
+    > {
+        EventStore::query_provenance(self.inner.as_ref(), id, bounds)
+    }
+}
+
+impl Journal for FaultStorage {
+    fn prepare(
+        &self,
+        value: radroots_storage::journal::PrepareOperation,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::journal::PrepareReceipt, radroots_storage::Error>,
+    > {
+        Journal::prepare(self.inner.as_ref(), value)
+    }
+    fn operation(
+        &self,
+        id: OperationInstanceId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::journal::OperationRecord>, radroots_storage::Error>,
+    > {
+        Journal::operation(self.inner.as_ref(), id)
+    }
+    fn by_idempotency_key(
+        &self,
+        id: radroots_storage::journal::OperationId,
+        key: IdempotencyKey,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::journal::OperationRecord>, radroots_storage::Error>,
+    > {
+        Journal::by_idempotency_key(self.inner.as_ref(), id, key)
+    }
+    fn transition(
+        &self,
+        value: radroots_storage::journal::JournalTransition,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::journal::OperationRecord, radroots_storage::Error>,
+    > {
+        Journal::transition(self.inner.as_ref(), value)
+    }
+    fn recoverable(
+        &self,
+        limit: u16,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Vec<radroots_storage::journal::OperationRecord>, radroots_storage::Error>,
+    > {
+        Journal::recoverable(self.inner.as_ref(), limit)
+    }
+}
+
+impl Outbox for FaultStorage {
+    fn enqueue(
+        &self,
+        value: radroots_storage::outbox::EnqueueOutboxItem,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::outbox::EnqueueReceipt, radroots_storage::Error>,
+    > {
+        Outbox::enqueue(self.inner.as_ref(), value)
+    }
+    fn item(
+        &self,
+        id: radroots_storage::outbox::OutboxItemId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::outbox::OutboxRecord>, radroots_storage::Error>,
+    > {
+        Outbox::item(self.inner.as_ref(), id)
+    }
+    fn claim(
+        &self,
+        value: radroots_storage::outbox::ClaimOutboxItems,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Vec<radroots_storage::outbox::ClaimedOutboxItem>, radroots_storage::Error>,
+    > {
+        Outbox::claim(self.inner.as_ref(), value)
+    }
+    fn record_attempt(
+        &self,
+        value: radroots_storage::outbox::DeliveryAttemptEvidence,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::outbox::OutboxRecord, radroots_storage::Error>,
+    > {
+        Outbox::record_attempt(self.inner.as_ref(), value)
+    }
+    fn release(
+        &self,
+        id: radroots_storage::outbox::OutboxItemId,
+        lease: radroots_storage::outbox::LeaseId,
+        revision: radroots_storage::outbox::OutboxRevision,
+        at: u64,
+        retry: Option<u64>,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::outbox::OutboxRecord, radroots_storage::Error>,
+    > {
+        Outbox::release(self.inner.as_ref(), id, lease, revision, at, retry)
+    }
+    fn status(
+        &self,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::outbox::OutboxStatus, radroots_storage::Error>,
+    > {
+        Outbox::status(self.inner.as_ref())
+    }
+}
+
+impl ProjectionStore for FaultStorage {
+    fn status(
+        &self,
+        id: radroots_storage::projection::ProjectionId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>,
+    > {
+        ProjectionStore::status(self.inner.as_ref(), id)
+    }
+    fn checkpoint(
+        &self,
+        value: radroots_storage::projection::ProjectionCheckpoint,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>,
+    > {
+        ProjectionStore::checkpoint(self.inner.as_ref(), value)
+    }
+    fn invalidate(
+        &self,
+        value: radroots_storage::projection::ProjectionInvalidation,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>,
+    > {
+        ProjectionStore::invalidate(self.inner.as_ref(), value)
+    }
+    fn invalidation(
+        &self,
+        id: radroots_storage::projection::ProjectionId,
+        generation: radroots_storage::projection::ProjectionGeneration,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::projection::ProjectionInvalidation>,
+            radroots_storage::Error,
+        >,
+    > {
+        ProjectionStore::invalidation(self.inner.as_ref(), id, generation)
+    }
+    fn request_rebuild(
+        &self,
+        value: radroots_storage::projection::RebuildTicket,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>,
+    > {
+        ProjectionStore::request_rebuild(self.inner.as_ref(), value)
+    }
+    fn rebuild(
+        &self,
+        id: radroots_storage::projection::RebuildTicketId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>,
+    > {
+        ProjectionStore::rebuild(self.inner.as_ref(), id)
+    }
+    fn transition_rebuild(
+        &self,
+        value: radroots_storage::projection::RebuildTransition,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>,
+    > {
+        ProjectionStore::transition_rebuild(self.inner.as_ref(), value)
+    }
+    fn event_index_manifest(
+        &self,
+        generation: radroots_storage::projection::ProjectionGeneration,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>,
+    > {
+        ProjectionStore::event_index_manifest(self.inner.as_ref(), generation)
+    }
+    fn put_event_index_manifest(
+        &self,
+        value: radroots_storage::projection::EventIndexManifest,
+    ) -> radroots_transport::BoxFuture<'_, Result<(), radroots_storage::Error>> {
+        ProjectionStore::put_event_index_manifest(self.inner.as_ref(), value)
+    }
+    fn event_index_checkpoint(
+        &self,
+        generation: radroots_storage::projection::ProjectionGeneration,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::Error>,
+    > {
+        ProjectionStore::event_index_checkpoint(self.inner.as_ref(), generation)
+    }
+    fn put_event_index_checkpoint(
+        &self,
+        value: radroots_storage::projection::EventIndexCheckpoint,
+    ) -> radroots_transport::BoxFuture<'_, Result<(), radroots_storage::Error>> {
+        ProjectionStore::put_event_index_checkpoint(self.inner.as_ref(), value)
+    }
+}
+
+impl AtomicStorage for FaultStorage {
+    fn commit(
+        &self,
+        value: radroots_storage::atomic::AtomicCommit,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::atomic::AtomicCommitReceipt, radroots_storage::Error>,
+    > {
+        AtomicStorage::commit(self.inner.as_ref(), value)
+    }
+    fn receipt(
+        &self,
+        id: radroots_storage::atomic::AtomicCommitId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::atomic::AtomicCommitReceipt>, radroots_storage::Error>,
+    > {
+        AtomicStorage::receipt(self.inner.as_ref(), id)
+    }
+}
+
+impl StorageStatusProvider for FaultStorage {
+    fn storage_status(
+        &self,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::status::StorageStatus, radroots_storage::Error>,
+    > {
+        StorageStatusProvider::storage_status(self.inner.as_ref())
+    }
+}
+
+impl AuthoredAtomicStorage for FaultStorage {
+    fn execute_authored(
+        &self,
+        command: radroots_storage::authored_atomic::AuthoredAtomicCommand,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>,
+    > {
+        Box::pin(async move {
+            let receipt =
+                AuthoredAtomicStorage::execute_authored(self.inner.as_ref(), command).await?;
+            if let radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared { .. } =
+                receipt.outcome()
+            {
+                let mut cache = self.prepared.lock().expect("prepared cache");
+                if cache.is_none() {
+                    *cache = Some(receipt.outcome().clone());
+                }
+            }
+            let kind = match receipt.outcome() {
+                radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared { .. } => 1,
+                radroots_storage::authored_atomic::AuthoredAtomicOutcome::Artifact(_) => 2,
+                radroots_storage::authored_atomic::AuthoredAtomicOutcome::DeliveryPlan(_) => 3,
+            };
+            let fault = self.fault_kind.load(Ordering::Relaxed);
+            if (fault != kind && !(fault == 4 && kind == 1))
+                || self.remaining.fetch_sub(1, Ordering::Relaxed) != 1
+            {
+                return Ok(receipt);
+            }
+            let cached = self
+                .prepared
+                .lock()
+                .expect("prepared cache")
+                .clone()
+                .expect("prepared outcome");
+            let forged = match (fault, cached) {
+                (4, cached) => cached,
+                (
+                    1,
+                    radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared {
+                        artifacts,
+                        ..
+                    },
+                ) => radroots_storage::authored_atomic::AuthoredAtomicOutcome::Artifact(
+                    artifacts[0].clone(),
+                ),
+                (
+                    2,
+                    radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared {
+                        delivery_plans,
+                        ..
+                    },
+                ) => radroots_storage::authored_atomic::AuthoredAtomicOutcome::DeliveryPlan(
+                    delivery_plans[0].clone(),
+                ),
+                (
+                    3,
+                    radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared {
+                        artifacts,
+                        ..
+                    },
+                ) => radroots_storage::authored_atomic::AuthoredAtomicOutcome::Artifact(
+                    artifacts[0].clone(),
+                ),
+                _ => unreachable!(),
+            };
+            radroots_storage::authored_atomic::AuthoredAtomicReceipt::from_durable_parts(
+                receipt.commit_id(),
+                receipt.digest(),
+                receipt.disposition(),
+                receipt.committed_at_unix_ms(),
+                forged,
+            )
+        })
+    }
+    fn authored_receipt(
+        &self,
+        id: radroots_storage::atomic::AtomicCommitId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>,
+            radroots_storage::Error,
+        >,
+    > {
+        AuthoredAtomicStorage::authored_receipt(self.inner.as_ref(), id)
+    }
+    fn authored_operation(
+        &self,
+        id: OperationInstanceId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>,
+    > {
+        AuthoredAtomicStorage::authored_operation(self.inner.as_ref(), id)
+    }
+    fn authored_artifact(
+        &self,
+        id: radroots_storage::authored::AuthoredArtifactId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>,
+    > {
+        AuthoredAtomicStorage::authored_artifact(self.inner.as_ref(), id)
+    }
+    fn authored_delivery_plan(
+        &self,
+        id: radroots_storage::authored_delivery::AuthoredDeliveryPlanId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>,
+            radroots_storage::Error,
+        >,
+    > {
+        AuthoredAtomicStorage::authored_delivery_plan(self.inner.as_ref(), id)
+    }
+}
+
+struct MockSource;
+
+impl EventSource for MockSource {
+    fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SourceStatus, TransportError>> {
+        Box::pin(async { unreachable!("missing-sink check does not inspect source") })
+    }
+
+    fn fetch(
+        &self,
+        _request: FetchRequest,
+    ) -> radroots_transport::BoxFuture<'_, Result<FetchPage, TransportError>> {
+        Box::pin(async { unreachable!("missing-sink check does not fetch") })
+    }
+}
 
 impl EventSink for MockSink {
     fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SinkStatus, TransportError>> {
@@ -63,8 +559,9 @@ impl EventSink for MockSink {
 
 enum DeliveryBehavior {
     Outcomes(Vec<DeliveryOutcome>),
-    AdapterError,
     MismatchedRequest,
+    Failure(Retryability),
+    MismatchedFailure,
     Pending,
 }
 
@@ -106,15 +603,6 @@ impl EventSink for ScriptedSink {
                 DeliveryBehavior::Outcomes(outcomes) => {
                     Ok(receipt(&request, outcomes).expect("valid scripted receipt"))
                 }
-                DeliveryBehavior::AdapterError => Err(SinkFailure::for_request(
-                    &request,
-                    "adapter_unavailable",
-                    Retryability::Retryable,
-                    None,
-                    None,
-                    Vec::new(),
-                )
-                .expect("valid scripted failure")),
                 DeliveryBehavior::MismatchedRequest => {
                     let mismatched = DeliveryRequest::new(
                         "mismatched-request",
@@ -129,6 +617,34 @@ impl EventSink for ScriptedSink {
                         vec![DeliveryOutcome::accepted(); mismatched.target_set().len()],
                     )
                     .expect("mismatched receipt"))
+                }
+                DeliveryBehavior::Failure(retryability) => Err(SinkFailure::for_request(
+                    &request,
+                    "scripted_failure",
+                    retryability,
+                    None,
+                    Some("scripted failure".to_owned()),
+                    Vec::new(),
+                )
+                .expect("valid scripted failure")),
+                DeliveryBehavior::MismatchedFailure => {
+                    let mismatched = DeliveryRequest::new(
+                        "mismatched-failure",
+                        request.payload().clone(),
+                        request.target_set().clone(),
+                        request.satisfaction().clone(),
+                        request.deadline_unix_ms(),
+                    )
+                    .expect("mismatched request");
+                    Err(SinkFailure::for_request(
+                        &mismatched,
+                        "mismatched_failure",
+                        Retryability::Terminal,
+                        None,
+                        None,
+                        Vec::new(),
+                    )
+                    .expect("mismatched failure"))
                 }
                 DeliveryBehavior::Pending => std::future::pending().await,
             }
@@ -367,57 +883,27 @@ fn setup_engine_with_sink(
     ((engine, storage), clock)
 }
 
-fn delivery_run(seed: u8, limit: u16) -> DeliveryRunRequest {
-    DeliveryRunRequest::new(
-        LeaseOwner::parse("sync-delivery-test").expect("lease owner"),
-        SyncId::new([seed; 16]).expect("lease seed"),
-        1_000,
-        limit,
+fn fault_engine(
+    storage: Arc<FaultStorage>,
+    signer: Arc<MockSigner>,
+    sink: Arc<dyn EventSink>,
+) -> Engine {
+    let capability: Arc<dyn SyncStorage> = storage;
+    Engine::builder(
+        capability,
+        Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+        Arc::new(TestIds(AtomicU64::new(10))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).unwrap(),
     )
-    .expect("delivery run")
+    .sink(sink)
+    .signer(signer)
+    .build()
+    .unwrap()
 }
 
-#[test]
-fn authorized_signing_atomically_enqueues_and_replays_without_resigning() {
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let (engine, storage) = setup_engine(signer.clone());
-    let request = request(1, "wss://relay.example");
-    assert_eq!(request.operation_id().as_bytes(), &[1; 16]);
-    assert_eq!(request.idempotency_key().as_str(), "push-1");
-    assert_ne!(request.actor().public_key().as_bytes(), &[0; 32]);
-    assert!(!request.plan().body().content().is_empty());
-    assert_eq!(request.targets().len(), 1);
-    assert_eq!(request.satisfaction().class(), SatisfactionClass::Accepted);
-    assert_eq!(
-        request.cancellation(),
-        CancellationPolicy::PreservePublishedRequest
-    );
-    assert!(format!("{request:?}").contains("redacted exact authored plan"));
-    let receipt = block_on(engine.sign_and_enqueue(request.clone())).expect("enqueue");
-    assert_eq!(receipt.operation_id().as_bytes(), &[1; 16]);
-    assert!(!receipt.is_replay());
-    assert_eq!(receipt.outbox().stage(), OutboxStage::Pending);
-    assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
-    let replay = block_on(engine.sign_and_enqueue(request)).expect("replay");
-    assert!(replay.is_replay());
-    assert_eq!(replay.outbox(), receipt.outbox());
-    assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
-
-    let visible = block_on(storage.query_visible(EventQuery::all(
-        EventQueryBounds::first(10).expect("bounds"),
-    )))
-    .expect("visible events");
-    assert_eq!(visible.items().len(), 1);
-    assert!(
-        block_on(Outbox::item(
-            &*storage,
-            radroots_storage::outbox::OutboxItemId::new([1; 16]).expect("item id"),
-        ))
-        .expect("outbox item")
-        .is_some()
-    );
+fn execute_to_admitted(engine: &Engine, push: &PushRequest) {
+    block_on(engine.sign_prepared(push.clone())).expect("sign prepared push");
+    block_on(engine.admit_signed(push.operation_id())).expect("admit signed push");
 }
 
 #[test]
@@ -473,6 +959,119 @@ fn preparation_is_atomic_status_visible_and_replays_without_external_effects() {
         Err(Error::StorageConflict)
     );
     assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn authored_storage_outcome_contracts_fail_closed_at_each_orchestration_phase() {
+    let storage = Arc::new(FaultStorage::new(84));
+    storage.fault_next_prepared();
+    let engine = fault_engine(
+        storage,
+        Arc::new(MockSigner::new(SignBehavior::Pending)),
+        Arc::new(MockSink),
+    );
+    assert_eq!(
+        block_on(engine.prepare_push(request(84, "wss://fault.example"))),
+        Err(Error::StorageFailed)
+    );
+
+    let storage = Arc::new(FaultStorage::new(85));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Pending)),
+        Arc::new(MockSink),
+    );
+    block_on(engine.prepare_push(request(85, "wss://fault.example"))).unwrap();
+    storage.fault_prepared_identity();
+    assert_eq!(
+        block_on(engine.prepare_push(request(86, "wss://fault.example"))),
+        Err(Error::StorageFailed)
+    );
+
+    let storage = Arc::new(FaultStorage::new(87));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        })),
+        Arc::new(MockSink),
+    );
+    let push = request(87, "wss://fault.example");
+    block_on(engine.prepare_push(push.clone())).unwrap();
+    storage.fault_nth_artifact(1);
+    assert_eq!(
+        block_on(engine.sign_prepared(push)),
+        Err(Error::StorageFailed)
+    );
+
+    let storage = Arc::new(FaultStorage::new(88));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        })),
+        Arc::new(MockSink),
+    );
+    let push = request(88, "wss://fault.example");
+    block_on(engine.prepare_push(push.clone())).unwrap();
+    storage.fault_nth_artifact(2);
+    assert_eq!(
+        block_on(engine.sign_prepared(push)),
+        Err(Error::StorageFailed)
+    );
+
+    let storage = Arc::new(FaultStorage::new(89));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        })),
+        Arc::new(MockSink),
+    );
+    let push = request(89, "wss://fault.example");
+    block_on(engine.sign_prepared(push.clone())).unwrap();
+    storage.fault_nth_artifact(2);
+    assert_eq!(
+        block_on(engine.admit_signed(push.operation_id())),
+        Err(Error::StorageFailed)
+    );
+
+    let storage = Arc::new(FaultStorage::new(90));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Error(
+            SigningErrorKind::SignerRejected,
+        ))),
+        Arc::new(MockSink),
+    );
+    let push = request(90, "wss://fault.example");
+    block_on(engine.prepare_push(push.clone())).unwrap();
+    storage.fault_nth_artifact(2);
+    assert_eq!(
+        block_on(engine.sign_prepared(push)),
+        Err(Error::StorageFailed)
+    );
+
+    for (byte, nth) in [(91, 1), (92, 2)] {
+        let storage = Arc::new(FaultStorage::new(byte));
+        let sink = Arc::new(ScriptedSink::new([DeliveryBehavior::Outcomes(vec![
+            DeliveryOutcome::accepted(),
+        ])]));
+        let engine = fault_engine(
+            storage.clone(),
+            Arc::new(MockSigner::new(SignBehavior::Success {
+                completed_at_unix_ms: 1_800_000_200_500,
+            })),
+            sink,
+        );
+        let push = request(byte, "wss://fault.example");
+        execute_to_admitted(&engine, &push);
+        storage.fault_nth_plan(nth);
+        assert_eq!(
+            block_on(engine.deliver_push(push.operation_id())),
+            Err(Error::StorageFailed)
+        );
+    }
 }
 
 #[test]
@@ -651,6 +1250,10 @@ fn signing_failures_persist_retry_indeterminate_terminal_and_cancelled_states() 
             .signing_state(),
         radroots_storage::authored::SigningState::Indeterminate
     );
+    assert_eq!(
+        block_on(engine.sign_prepared(uncertain)),
+        Err(Error::SigningIndeterminate)
+    );
 
     let cancelled = Arc::new(MockSigner::new(SignBehavior::Error(
         SigningErrorKind::SignerCancelled,
@@ -669,6 +1272,10 @@ fn signing_failures_persist_retry_indeterminate_terminal_and_cancelled_states() 
             .signing_state(),
         radroots_storage::authored::SigningState::Cancelled
     );
+    assert_eq!(
+        block_on(engine.sign_prepared(cancelled_push)),
+        Err(Error::SignerFailed)
+    );
 
     let terminal = Arc::new(MockSigner::new(SignBehavior::Error(
         SigningErrorKind::SignerRejected,
@@ -686,6 +1293,20 @@ fn signing_failures_persist_retry_indeterminate_terminal_and_cancelled_states() 
             .artifact()
             .signing_state(),
         radroots_storage::authored::SigningState::FailedTerminal
+    );
+    assert_eq!(
+        block_on(engine.sign_prepared(terminal_push)),
+        Err(Error::SignerFailed)
+    );
+
+    let deadline = Arc::new(MockSigner::new(SignBehavior::Error(
+        SigningErrorKind::DeadlineExceeded,
+    )));
+    let (engine, _) = setup_engine(deadline);
+    let deadline_push = request(14, "wss://relay.example");
+    assert_eq!(
+        block_on(engine.sign_prepared(deadline_push)),
+        Err(Error::SignerDeadlineExceeded)
     );
 }
 
@@ -864,7 +1485,22 @@ fn authored_delivery_persists_retry_evidence_and_complete_settlement() {
         SatisfactionClass::Accepted,
         TargetPolicy::all(),
     );
-    block_on(engine.sign_and_enqueue(push.clone())).expect("prepare authored delivery");
+    execute_to_admitted(&engine, &push);
+    let admitted = block_on(engine.push_status(push.operation_id()))
+        .expect("admitted status")
+        .expect("admitted operation");
+    assert_eq!(
+        engine.retry_decision(admitted.delivery_plan(), 0),
+        Err(Error::ClockUnavailable)
+    );
+    assert_eq!(
+        engine.retry_decision(admitted.delivery_plan(), 1_800_000_200_100),
+        Ok(SyncRetryDecision::Ready)
+    );
+    assert_eq!(
+        engine.retry_decision(admitted.delivery_plan(), 1_800_000_300_000),
+        Ok(SyncRetryDecision::Expired)
+    );
 
     let first = block_on(engine.deliver_push(push.operation_id())).expect("first attempt");
     assert!(!first.is_replay());
@@ -875,6 +1511,14 @@ fn authored_delivery_persists_retry_evidence_and_complete_settlement() {
         .retry()
         .expect("durable retry")
         .not_before_unix_ms();
+    assert_eq!(
+        engine.retry_decision(first.plan(), retry_at - 1),
+        Ok(SyncRetryDecision::DeferredUntil { unix_ms: retry_at })
+    );
+    assert_eq!(
+        engine.retry_decision(first.plan(), retry_at),
+        Ok(SyncRetryDecision::Ready)
+    );
     assert_eq!(
         block_on(engine.deliver_push(push.operation_id())),
         Err(Error::DeliveryDeferred)
@@ -892,6 +1536,10 @@ fn authored_delivery_persists_retry_evidence_and_complete_settlement() {
     clock.0.store(retry_at, Ordering::Relaxed);
     let second = block_on(engine.deliver_push(push.operation_id())).expect("retry attempt");
     assert_eq!(second.plan().state(), AuthoredDeliveryState::Satisfied);
+    assert_eq!(
+        engine.retry_decision(second.plan(), retry_at),
+        Ok(SyncRetryDecision::Satisfied)
+    );
     assert_eq!(second.plan().attempt_count(), 2);
     assert_eq!(second.plan().attempts().len(), 2);
     let replay = block_on(engine.deliver_push(push.operation_id())).expect("terminal replay");
@@ -917,10 +1565,14 @@ fn invalid_authored_delivery_receipt_terminalizes_without_hot_loop() {
     }));
     let ((engine, _), _) = setup_engine_with_sink(signer, sink.clone());
     let push = request(74, "wss://one.example");
-    block_on(engine.sign_and_enqueue(push.clone())).expect("prepare authored delivery");
+    execute_to_admitted(&engine, &push);
 
     let failed = block_on(engine.deliver_push(push.operation_id())).expect("durable failure");
     assert_eq!(failed.plan().state(), AuthoredDeliveryState::FailedTerminal);
+    assert_eq!(
+        engine.retry_decision(failed.plan(), 1_800_000_200_100),
+        Ok(SyncRetryDecision::Exhausted)
+    );
     assert_eq!(failed.plan().attempt_count(), 1);
     assert_eq!(
         failed.plan().last_failure().expect("failure").code(),
@@ -940,6 +1592,224 @@ fn invalid_authored_delivery_receipt_terminalizes_without_hot_loop() {
 }
 
 #[test]
+fn sink_failures_deadlines_and_missing_capabilities_are_durable_and_bounded() {
+    for (byte, behavior, expected) in [
+        (
+            77,
+            DeliveryBehavior::Failure(Retryability::Retryable),
+            AuthoredDeliveryState::Retryable,
+        ),
+        (
+            78,
+            DeliveryBehavior::Failure(Retryability::Terminal),
+            AuthoredDeliveryState::FailedTerminal,
+        ),
+        (
+            79,
+            DeliveryBehavior::MismatchedFailure,
+            AuthoredDeliveryState::FailedTerminal,
+        ),
+    ] {
+        let sink = Arc::new(ScriptedSink::new([behavior]));
+        let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        }));
+        let ((engine, _), _) = setup_engine_with_sink(signer, sink);
+        let push = request(byte, "wss://failure.example");
+        execute_to_admitted(&engine, &push);
+        let delivered =
+            block_on(engine.deliver_push(push.operation_id())).expect("durable failure");
+        assert_eq!(delivered.plan().state(), expected);
+    }
+
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_500,
+    }));
+    let ((engine, _), clock) =
+        setup_engine_with_sink(signer, Arc::new(ScriptedSink::new(std::iter::empty())));
+    let push = request(80, "wss://deadline.example");
+    execute_to_admitted(&engine, &push);
+    clock
+        .0
+        .store(push.delivery_deadline_unix_ms(), Ordering::Relaxed);
+    let expired = block_on(engine.deliver_push(push.operation_id())).expect("deadline evidence");
+    assert_eq!(
+        expired.plan().state(),
+        AuthoredDeliveryState::FailedTerminal
+    );
+    assert_eq!(
+        expired.plan().last_failure().expect("failure").code(),
+        "delivery_deadline_exceeded"
+    );
+
+    let storage = Arc::new(MemoryStorage::new(
+        SourceGeneration::new([81; 32]).expect("generation"),
+    ));
+    let capability: Arc<dyn SyncStorage> = storage;
+    let no_signer = Engine::builder(
+        capability,
+        Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+        Arc::new(TestIds(AtomicU64::new(10))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).unwrap(),
+    )
+    .sink(Arc::new(MockSink))
+    .build()
+    .unwrap();
+    assert_eq!(
+        block_on(no_signer.sign_prepared(request(81, "wss://missing.example"))),
+        Err(Error::MissingSigner)
+    );
+
+    let storage = Arc::new(MemoryStorage::new(
+        SourceGeneration::new([82; 32]).expect("generation"),
+    ));
+    let capability: Arc<dyn SyncStorage> = storage;
+    let no_sink = Engine::builder(
+        capability,
+        Arc::new(TestClock(AtomicU64::new(1_800_000_200_000))),
+        Arc::new(TestIds(AtomicU64::new(10))),
+        DeadlinePolicy::new(10_000, 10_000, 10_000).unwrap(),
+    )
+    .source(Arc::new(MockSource))
+    .build()
+    .unwrap();
+    assert_eq!(
+        block_on(no_sink.deliver_push(SyncId::new([82; 16]).unwrap())),
+        Err(Error::MissingSink)
+    );
+
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_500,
+    }));
+    let (engine, _) = setup_engine(signer);
+    let unsigned = request(83, "wss://unsigned.example");
+    block_on(engine.prepare_push(unsigned.clone())).unwrap();
+    assert_eq!(
+        block_on(engine.admit_signed(unsigned.operation_id())),
+        Err(Error::InvalidSignerOutput)
+    );
+    assert_eq!(
+        block_on(engine.deliver_push(unsigned.operation_id())),
+        Err(Error::InvalidSignerOutput)
+    );
+}
+
+#[test]
+fn active_authored_claims_and_admission_storage_failures_are_fenced() {
+    let storage = Arc::new(FaultStorage::new(93));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        })),
+        Arc::new(MockSink),
+    );
+    let push = request(93, "wss://claim.example");
+    block_on(engine.prepare_push(push.clone())).unwrap();
+    let artifact = block_on(engine.push_status(push.operation_id()))
+        .unwrap()
+        .unwrap()
+        .artifact()
+        .clone();
+    let claim = radroots_storage::authored::WorkClaim::new(
+        [93; 16],
+        "external-signer",
+        std::num::NonZeroU64::MIN,
+        1_800_000_200_000,
+        1_800_000_210_000,
+        artifact.revision(),
+    )
+    .unwrap();
+    block_on(AuthoredAtomicStorage::execute_authored(
+        storage.as_ref(),
+        radroots_storage::authored_atomic::AuthoredAtomicCommand::Claim(
+            radroots_storage::authored_atomic::ClaimAuthoredWork::new(
+                radroots_storage::authored_atomic::ClaimAuthoredTarget::ArtifactSigning(
+                    artifact.artifact_id(),
+                ),
+                claim,
+            ),
+        ),
+    ))
+    .unwrap();
+    assert_eq!(
+        block_on(engine.sign_prepared(push)),
+        Err(Error::WorkClaimConflict)
+    );
+
+    let storage = Arc::new(FaultStorage::new(94));
+    let engine = fault_engine(
+        storage.clone(),
+        Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        })),
+        Arc::new(MockSink),
+    );
+    let push = request(94, "wss://claim.example");
+    block_on(engine.sign_prepared(push.clone())).unwrap();
+    let artifact = block_on(engine.push_status(push.operation_id()))
+        .unwrap()
+        .unwrap()
+        .artifact()
+        .clone();
+    let claim = radroots_storage::authored::WorkClaim::new(
+        [94; 16],
+        "external-admission",
+        std::num::NonZeroU64::MIN,
+        1_800_000_200_500,
+        1_800_000_210_500,
+        artifact.revision(),
+    )
+    .unwrap();
+    block_on(AuthoredAtomicStorage::execute_authored(
+        storage.as_ref(),
+        radroots_storage::authored_atomic::AuthoredAtomicCommand::Claim(
+            radroots_storage::authored_atomic::ClaimAuthoredWork::new(
+                radroots_storage::authored_atomic::ClaimAuthoredTarget::ArtifactAdmission(
+                    artifact.artifact_id(),
+                ),
+                claim,
+            ),
+        ),
+    ))
+    .unwrap();
+    assert_eq!(
+        block_on(engine.admit_signed(push.operation_id())),
+        Err(Error::WorkClaimConflict)
+    );
+
+    for (byte, fault, expected) in [
+        (95, 1, radroots_storage::authored::AdmissionState::Rejected),
+        (96, 2, radroots_storage::authored::AdmissionState::Retryable),
+    ] {
+        let storage = Arc::new(FaultStorage::new(byte));
+        let engine = fault_engine(
+            storage.clone(),
+            Arc::new(MockSigner::new(SignBehavior::Success {
+                completed_at_unix_ms: 1_800_000_200_500,
+            })),
+            Arc::new(MockSink),
+        );
+        let push = request(byte, "wss://admission-error.example");
+        block_on(engine.sign_prepared(push.clone())).unwrap();
+        storage.fail_admission_with(fault);
+        assert_eq!(
+            block_on(engine.admit_signed(push.operation_id())),
+            Err(Error::AdmissionFailed),
+            "admission fault {fault}"
+        );
+        assert_eq!(
+            block_on(engine.push_status(push.operation_id()))
+                .unwrap()
+                .unwrap()
+                .artifact()
+                .admission_state(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn authored_delivery_claims_fence_concurrent_and_stale_workers() {
     let pending_sink = Arc::new(ScriptedSink::new([DeliveryBehavior::Pending]));
     let signer = Arc::new(MockSigner::new(SignBehavior::Success {
@@ -947,7 +1817,7 @@ fn authored_delivery_claims_fence_concurrent_and_stale_workers() {
     }));
     let ((engine, storage), clock) = setup_engine_with_sink(signer, pending_sink.clone());
     let push = request(75, "wss://one.example");
-    block_on(engine.sign_and_enqueue(push.clone())).expect("prepare authored delivery");
+    execute_to_admitted(&engine, &push);
 
     let mut pending = Box::pin(engine.deliver_push(push.operation_id())).fuse();
     let mut context = std::task::Context::from_waker(noop_waker_ref());
@@ -960,6 +1830,16 @@ fn authored_delivery_claims_fence_concurrent_and_stale_workers() {
         .claim_evidence()
         .expect("delivery claim")
         .expires_at_unix_ms();
+    assert_eq!(
+        engine.retry_decision(claimed.delivery_plan(), expires_at - 1),
+        Ok(SyncRetryDecision::InFlightUntil {
+            unix_ms: expires_at,
+        })
+    );
+    assert_eq!(
+        engine.retry_decision(claimed.delivery_plan(), expires_at),
+        Ok(SyncRetryDecision::Ready)
+    );
     assert_eq!(
         block_on(engine.deliver_push(push.operation_id())),
         Err(Error::WorkClaimConflict)
@@ -1027,9 +1907,13 @@ async fn sqlite_authored_delivery_retry_survives_reopen() {
         .build()
         .expect("engine");
         engine
-            .sign_and_enqueue(push.clone())
+            .sign_prepared(push.clone())
             .await
-            .expect("prepare authored delivery");
+            .expect("sign prepared push");
+        engine
+            .admit_signed(push.operation_id())
+            .await
+            .expect("admit signed push");
         let first = engine
             .deliver_push(push.operation_id())
             .await
@@ -1083,475 +1967,4 @@ async fn sqlite_authored_delivery_retry_survives_reopen() {
     assert_eq!(completed.plan().attempt_count(), 2);
     assert_eq!(completed.plan().state(), AuthoredDeliveryState::Satisfied);
     assert_eq!(sink.requests.lock().expect("request log").len(), 1);
-}
-
-#[test]
-fn signer_rejection_challenge_and_timeout_fail_before_enqueue() {
-    for kind in [
-        SigningErrorKind::SignerRejected,
-        SigningErrorKind::SignerCapabilityMissing,
-        SigningErrorKind::SignerTimeout,
-        SigningErrorKind::SignerOutputInvalid,
-    ] {
-        let signer = Arc::new(MockSigner::new(SignBehavior::Error(kind)));
-        let (engine, storage) = setup_engine(signer);
-        assert_eq!(
-            block_on(engine.sign_and_enqueue(request(2, "wss://relay.example"))),
-            Err(Error::SignerFailed)
-        );
-        assert!(
-            block_on(Outbox::item(
-                &*storage,
-                radroots_storage::outbox::OutboxItemId::new([2; 16]).expect("item id"),
-            ))
-            .expect("outbox lookup")
-            .is_none()
-        );
-    }
-
-    let late = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_212_000,
-    }));
-    let (engine, _) = setup_engine(late);
-    assert_eq!(
-        block_on(engine.sign_and_enqueue(request(3, "wss://relay.example"))),
-        Err(Error::SignerDeadlineExceeded)
-    );
-}
-
-#[test]
-fn idempotency_conflict_and_cancellation_before_commit_fail_closed() {
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let (engine, _) = setup_engine(signer.clone());
-    block_on(engine.sign_and_enqueue(request(4, "wss://relay.example"))).expect("enqueue");
-    assert_eq!(
-        block_on(engine.sign_and_enqueue(request(4, "wss://other.example"))),
-        Err(Error::StorageConflict)
-    );
-    assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
-
-    let pending = Arc::new(MockSigner::new(SignBehavior::Pending));
-    let (engine, storage) = setup_engine(pending);
-    let pending_push = request(5, "wss://relay.example");
-    let mut future = Box::pin(engine.sign_and_enqueue(pending_push.clone())).fuse();
-    let mut context = std::task::Context::from_waker(noop_waker_ref());
-    assert!(future.poll_unpin(&mut context).is_pending());
-    drop(future);
-    let status = block_on(engine.push_status(SyncId::new([5; 16]).expect("operation")))
-        .expect("authored status")
-        .expect("prepared operation");
-    assert!(status.artifact().signing_claim().is_some());
-    assert_eq!(
-        block_on(engine.sign_prepared(pending_push)),
-        Err(Error::WorkClaimConflict)
-    );
-    assert!(
-        block_on(Journal::operation(
-            &*storage,
-            OperationInstanceId::new([5; 16]).expect("instance id"),
-        ))
-        .expect("legacy journal lookup")
-        .is_none()
-    );
-    assert!(
-        block_on(Outbox::item(
-            &*storage,
-            radroots_storage::outbox::OutboxItemId::new([5; 16]).expect("item id"),
-        ))
-        .expect("outbox lookup")
-        .is_none()
-    );
-}
-
-#[test]
-fn delivery_evaluates_any_all_quorum_required_and_partial_outcomes() {
-    let sink = Arc::new(ScriptedSink::new([
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::accepted(),
-            DeliveryOutcome::rejected(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::accepted(),
-            DeliveryOutcome::delivered(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::delivered(),
-            DeliveryOutcome::accepted(),
-            DeliveryOutcome::rejected(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::rejected(),
-            DeliveryOutcome::accepted(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::accepted(),
-            DeliveryOutcome::unavailable(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::rejected(),
-            DeliveryOutcome::unavailable(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::rejected(),
-            DeliveryOutcome::unavailable(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::unavailable(),
-            DeliveryOutcome::rejected(),
-        ]),
-    ]));
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let ((engine, _), _) = setup_engine_with_sink(signer, sink.clone());
-    let two = ["wss://one.example", "wss://two.example"];
-    let three = [
-        "wss://one.example",
-        "wss://two.example",
-        "wss://three.example",
-    ];
-    let required = Target::new(TransportId::NOSTR, two[1])
-        .expect("required target")
-        .fingerprint()
-        .clone();
-    let plans = [
-        request_with_policy(11, &two, SatisfactionClass::Accepted, TargetPolicy::any()),
-        request_with_policy(12, &two, SatisfactionClass::Accepted, TargetPolicy::all()),
-        request_with_policy(
-            13,
-            &three,
-            SatisfactionClass::Accepted,
-            TargetPolicy::quorum(2).expect("quorum"),
-        ),
-        request_with_policy(
-            14,
-            &two,
-            SatisfactionClass::Accepted,
-            TargetPolicy::required(vec![required]).expect("required policy"),
-        ),
-        request_with_policy(15, &two, SatisfactionClass::Accepted, TargetPolicy::all()),
-        request_with_policy(16, &two, SatisfactionClass::Accepted, TargetPolicy::all()),
-        request_with_policy(17, &two, SatisfactionClass::Accepted, TargetPolicy::any()),
-        request_with_policy(
-            18,
-            &two,
-            SatisfactionClass::Accepted,
-            TargetPolicy::required(vec![
-                Target::new(TransportId::NOSTR, two[1])
-                    .expect("terminal required target")
-                    .fingerprint()
-                    .clone(),
-            ])
-            .expect("terminal required policy"),
-        ),
-    ];
-    for plan in plans {
-        block_on(engine.sign_and_enqueue(plan)).expect("enqueue delivery plan");
-    }
-
-    let delivered = block_on(engine.deliver_pending(delivery_run(31, 8))).expect("deliver batch");
-    assert_eq!(delivered.succeeded(), 8);
-    assert_eq!(delivered.failed(), 0);
-    let records: Vec<_> = delivered
-        .outcomes()
-        .iter()
-        .map(|outcome| outcome.as_ref().expect("durable outcome"))
-        .collect();
-    assert_eq!(records[0].stage(), OutboxStage::Satisfied);
-    assert_eq!(records[1].stage(), OutboxStage::Satisfied);
-    assert_eq!(records[2].stage(), OutboxStage::Satisfied);
-    assert_eq!(records[3].stage(), OutboxStage::Satisfied);
-    assert_eq!(records[4].stage(), OutboxStage::Retryable);
-    assert_eq!(records[4].satisfaction(), SatisfactionResult::Pending);
-    assert_eq!(records[5].stage(), OutboxStage::Exhausted);
-    assert_eq!(records[6].stage(), OutboxStage::Retryable);
-    assert_eq!(records[7].stage(), OutboxStage::Exhausted);
-    for record in records {
-        assert_eq!(record.evidence().len(), record.request().target_set().len());
-        let expected: Vec<_> = record
-            .request()
-            .target_set()
-            .targets()
-            .iter()
-            .map(|target| target.fingerprint())
-            .collect();
-        let actual: Vec<_> = record
-            .evidence()
-            .iter()
-            .map(|evidence| evidence.target())
-            .collect();
-        assert_eq!(actual, expected);
-    }
-    assert_eq!(sink.requests.lock().expect("request log").len(), 8);
-}
-
-#[test]
-fn transport_failure_is_durable_and_retry_preserves_the_exact_plan() {
-    let sink = Arc::new(ScriptedSink::new([
-        DeliveryBehavior::AdapterError,
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::accepted(),
-            DeliveryOutcome::unavailable(),
-        ]),
-        DeliveryBehavior::Outcomes(vec![
-            DeliveryOutcome::unavailable(),
-            DeliveryOutcome::accepted(),
-        ]),
-    ]));
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let ((engine, _), _) = setup_engine_with_sink(signer, sink.clone());
-    block_on(engine.sign_and_enqueue(request_with_policy(
-        21,
-        &["wss://one.example", "wss://two.example"],
-        SatisfactionClass::Accepted,
-        TargetPolicy::all(),
-    )))
-    .expect("enqueue retry plan");
-
-    let first = block_on(engine.deliver_pending(delivery_run(41, 1))).expect("first delivery");
-    let first = first.outcomes()[0].as_ref().expect("durable failure");
-    assert_eq!(first.stage(), OutboxStage::Retryable);
-    assert_eq!(first.evidence().len(), 2);
-    assert!(first.evidence().iter().all(|evidence| {
-        !evidence.was_attempted() && evidence.outcome() == &DeliveryOutcome::unavailable()
-    }));
-
-    let second = block_on(engine.deliver_pending(delivery_run(42, 1))).expect("partial retry");
-    let second = second.outcomes()[0].as_ref().expect("durable retry");
-    assert_eq!(second.stage(), OutboxStage::Retryable);
-    assert_eq!(second.last_attempt().expect("attempt").get(), 2);
-
-    let third = block_on(engine.deliver_pending(delivery_run(43, 1))).expect("completed retry");
-    let third = third.outcomes()[0].as_ref().expect("durable retry");
-    assert_eq!(third.stage(), OutboxStage::Satisfied);
-    assert_eq!(third.last_attempt().expect("attempt").get(), 3);
-    assert_eq!(third.evidence().len(), 6);
-    assert_eq!(
-        third
-            .latest_target_evidence(third.request().target_set().targets()[0].fingerprint())
-            .expect("latest first target evidence")
-            .outcome(),
-        &DeliveryOutcome::unavailable()
-    );
-    assert!(
-        third.evidence()[2]
-            .outcome()
-            .satisfies(SatisfactionClass::Accepted)
-    );
-    let requests = sink.requests.lock().expect("request log");
-    assert_eq!(requests.len(), 3);
-    assert_eq!(requests[0], requests[1]);
-    assert_eq!(requests[1], requests[2]);
-}
-
-#[test]
-fn malformed_receipts_release_work_and_expired_plans_terminalize() {
-    let malformed_sink = Arc::new(ScriptedSink::new([DeliveryBehavior::MismatchedRequest]));
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let ((engine, storage), _) = setup_engine_with_sink(signer, malformed_sink);
-    let enqueued = block_on(engine.sign_and_enqueue(request(31, "wss://one.example")))
-        .expect("enqueue malformed receipt plan");
-    let malformed =
-        block_on(engine.deliver_pending(delivery_run(51, 1))).expect("malformed delivery pass");
-    assert_eq!(malformed.outcomes(), &[Err(Error::InvalidDeliveryRequest)]);
-    let released = block_on(Outbox::item(&*storage, enqueued.outbox().item_id()))
-        .expect("released lookup")
-        .expect("released record");
-    assert_eq!(released.stage(), OutboxStage::Pending);
-    assert!(released.lease().is_none());
-    assert!(released.evidence().is_empty());
-
-    let expired_sink = Arc::new(ScriptedSink::new([]));
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let ((engine, _), clock) = setup_engine_with_sink(signer, expired_sink.clone());
-    let enqueued = block_on(engine.sign_and_enqueue(request(32, "wss://one.example")))
-        .expect("enqueue expiring plan");
-    clock.0.store(
-        enqueued.outbox().request().deadline_unix_ms() + 1,
-        Ordering::Relaxed,
-    );
-    let expired =
-        block_on(engine.deliver_pending(delivery_run(52, 1))).expect("expired delivery pass");
-    let expired = expired.outcomes()[0]
-        .as_ref()
-        .expect("durable terminal state");
-    assert_eq!(expired.stage(), OutboxStage::Exhausted);
-    assert_eq!(expired.satisfaction(), SatisfactionResult::Exhausted);
-    assert!(expired.evidence()[0].outcome().is_terminal());
-    assert!(
-        expired_sink
-            .requests
-            .lock()
-            .expect("request log")
-            .is_empty()
-    );
-}
-
-#[test]
-fn delivery_run_rejects_unbounded_claims() {
-    let owner = LeaseOwner::parse("sync-delivery-test").expect("lease owner");
-    let seed = SyncId::new([71; 16]).expect("lease seed");
-    assert_eq!(
-        DeliveryRunRequest::new(owner.clone(), seed, 0, 1),
-        Err(Error::InvalidDeliveryRequest)
-    );
-    assert_eq!(
-        DeliveryRunRequest::new(owner, seed, 1_000, 0),
-        Err(Error::InvalidDeliveryRequest)
-    );
-    let owner = LeaseOwner::parse("sync-delivery-test").expect("lease owner");
-    assert_eq!(
-        DeliveryRunRequest::new(owner.clone(), seed, 86_400_001, 1),
-        Err(Error::InvalidDeliveryRequest)
-    );
-    assert_eq!(
-        DeliveryRunRequest::new(
-            owner,
-            seed,
-            1_000,
-            radroots_storage::outbox::OUTBOX_CLAIM_LIMIT_MAX + 1,
-        ),
-        Err(Error::InvalidDeliveryRequest)
-    );
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let (engine, _) = setup_engine(signer);
-    let over_engine_budget = DeliveryRunRequest::new(
-        LeaseOwner::parse("sync-delivery-test").expect("lease owner"),
-        seed,
-        10_001,
-        1,
-    )
-    .expect("globally bounded delivery run");
-    assert_eq!(
-        block_on(engine.deliver_pending(over_engine_budget)),
-        Err(Error::InvalidDeliveryRequest)
-    );
-
-    let valid = request(72, "wss://one.example");
-    let invalid_quorum = PushRequest::new(
-        valid.operation_id(),
-        valid.idempotency_key().clone(),
-        valid.actor().clone(),
-        valid.plan().clone(),
-        valid.targets().clone(),
-        SatisfactionPolicy::new(
-            SatisfactionClass::Accepted,
-            TargetPolicy::quorum(2).expect("quorum"),
-        ),
-        valid.delivery_deadline_unix_ms(),
-        valid.cancellation(),
-    );
-    assert!(matches!(invalid_quorum, Err(Error::InvalidPushRequest)));
-    let absent = Target::new(TransportId::NOSTR, "wss://absent.example")
-        .expect("absent target")
-        .fingerprint()
-        .clone();
-    let invalid_required = PushRequest::new(
-        valid.operation_id(),
-        valid.idempotency_key().clone(),
-        valid.actor().clone(),
-        valid.plan().clone(),
-        valid.targets().clone(),
-        SatisfactionPolicy::new(
-            SatisfactionClass::Accepted,
-            TargetPolicy::required(vec![absent]).expect("required"),
-        ),
-        valid.delivery_deadline_unix_ms(),
-        valid.cancellation(),
-    );
-    assert!(matches!(invalid_required, Err(Error::InvalidPushRequest)));
-}
-
-#[test]
-fn retry_decisions_are_passive_typed_and_deadline_aware() {
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let (engine, storage) = setup_engine(signer);
-    let enqueued = block_on(engine.sign_and_enqueue(request(61, "wss://one.example")))
-        .expect("enqueue retry decision plan");
-    let now = enqueued.outbox().created_at_unix_ms() + 1;
-    assert_eq!(
-        engine.retry_decision(enqueued.outbox(), now),
-        Ok(SyncRetryDecision::Ready)
-    );
-    let claimed = block_on(Outbox::claim(
-        &*storage,
-        ClaimOutboxItems::new(
-            LeaseOwner::parse("retry-decision-test").expect("owner"),
-            LeaseId::new([81; 16]).expect("lease seed"),
-            now,
-            now + 100,
-            1,
-        )
-        .expect("claim request"),
-    ))
-    .expect("claim")
-    .pop()
-    .expect("claimed plan");
-    assert_eq!(
-        engine.retry_decision(claimed.record(), now + 1),
-        Ok(SyncRetryDecision::InFlightUntil { unix_ms: now + 100 })
-    );
-    assert_eq!(
-        engine.retry_decision(claimed.record(), now + 100),
-        Ok(SyncRetryDecision::Ready)
-    );
-    let deferred = block_on(Outbox::release(
-        &*storage,
-        claimed.record().item_id(),
-        claimed.lease().id(),
-        claimed.record().revision(),
-        now + 2,
-        Some(now + 50),
-    ))
-    .expect("release with deferral");
-    assert_eq!(
-        engine.retry_decision(&deferred, now + 3),
-        Ok(SyncRetryDecision::DeferredUntil { unix_ms: now + 50 })
-    );
-    assert_eq!(
-        engine.retry_decision(&deferred, now + 50),
-        Ok(SyncRetryDecision::Ready)
-    );
-    assert_eq!(
-        engine.retry_decision(&deferred, deferred.request().deadline_unix_ms()),
-        Ok(SyncRetryDecision::Expired)
-    );
-    assert_eq!(
-        engine.retry_decision(&deferred, 0),
-        Err(Error::ClockUnavailable)
-    );
-
-    let sink = Arc::new(ScriptedSink::new([
-        DeliveryBehavior::Outcomes(vec![DeliveryOutcome::accepted()]),
-        DeliveryBehavior::Outcomes(vec![DeliveryOutcome::rejected()]),
-    ]));
-    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
-        completed_at_unix_ms: 1_800_000_200_500,
-    }));
-    let ((engine, _), _) = setup_engine_with_sink(signer, sink);
-    block_on(engine.sign_and_enqueue(request(62, "wss://one.example")))
-        .expect("enqueue satisfied plan");
-    block_on(engine.sign_and_enqueue(request(63, "wss://two.example")))
-        .expect("enqueue exhausted plan");
-    let delivered = block_on(engine.deliver_pending(delivery_run(82, 2))).expect("deliver plans");
-    assert_eq!(
-        engine.retry_decision(delivered.outcomes()[0].as_ref().expect("satisfied"), now),
-        Ok(SyncRetryDecision::Satisfied)
-    );
-    assert_eq!(
-        engine.retry_decision(delivered.outcomes()[1].as_ref().expect("exhausted"), now),
-        Ok(SyncRetryDecision::Exhausted)
-    );
 }

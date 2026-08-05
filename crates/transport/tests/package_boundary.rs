@@ -16,7 +16,6 @@ const ROOT: &str = include_str!("../src/lib.rs");
 const SOURCE: &str = include_str!("../src/source.rs");
 const SINK: &str = include_str!("../src/sink.rs");
 const ID: &str = include_str!("../src/id.rs");
-const PREDECESSOR_MODELS: &str = include_str!("../src/transport.rs");
 const TARGET: &str = include_str!("../src/target.rs");
 const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
 
@@ -181,7 +180,6 @@ fn source_and_sink_are_independent_dyn_compatible_host_spis() {
     }
     assert!(!SINK.contains("fn fetch("));
 
-    assert!(!PREDECESSOR_MODELS.contains("pub trait RadrootsTransport"));
     for retired in [
         "Publish-frozen external-consumer",
         "pub fn reticulum(",

@@ -1217,55 +1217,6 @@ impl AtomicStorage for MemoryStorage {
             }
             let mut candidate = state.clone();
             let outcome = match request.workflow().clone() {
-                AtomicWorkflow::Prepared(operation) => AtomicCommitOutcome::Prepared {
-                    journal: Self::prepare_locked(&mut candidate, operation)?
-                        .record()
-                        .clone(),
-                },
-                AtomicWorkflow::Signed(signed) => {
-                    let event_id = *signed.event().id();
-                    let journal = Self::transition_locked(
-                        &mut candidate,
-                        JournalTransition::signed(
-                            signed.instance_id(),
-                            signed.expected_revision(),
-                            event_id,
-                        ),
-                    )?;
-                    AtomicCommitOutcome::Signed { journal, event_id }
-                }
-                AtomicWorkflow::Enqueued(enqueued) => {
-                    let admission =
-                        self.admit_locked(&mut candidate, enqueued.admission().clone())?;
-                    let outbox = Self::enqueue_locked(&mut candidate, enqueued.outbox().clone())?
-                        .record()
-                        .clone();
-                    let journal = Self::transition_locked(
-                        &mut candidate,
-                        JournalTransition::committed(
-                            enqueued.instance_id(),
-                            enqueued.expected_revision(),
-                            *enqueued.admission().event_id(),
-                            enqueued.committed_at_unix_ms(),
-                        ),
-                    )?;
-                    AtomicCommitOutcome::Enqueued {
-                        journal,
-                        admission,
-                        outbox: Box::new(outbox),
-                    }
-                }
-                AtomicWorkflow::Delivered(evidence) => {
-                    let record = candidate
-                        .outbox
-                        .iter_mut()
-                        .find(|record| record.item_id() == evidence.item_id())
-                        .ok_or(Error::OutboxItemNotFound)?;
-                    record.record_attempt(*evidence)?;
-                    AtomicCommitOutcome::Delivered {
-                        outbox: Box::new(record.clone()),
-                    }
-                }
                 AtomicWorkflow::Ingested(ingested) => {
                     let admission =
                         self.admit_locked(&mut candidate, ingested.admission().clone())?;

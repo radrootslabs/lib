@@ -18,6 +18,7 @@ struct MockSource;
 struct MockSink;
 struct MockSigner;
 struct UnconfiguredSource;
+struct UnconfiguredSink;
 struct FixedClock;
 struct FixedIds;
 
@@ -91,6 +92,28 @@ impl EventSink for MockSink {
         _request: DeliveryRequest,
     ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         Box::pin(async { unreachable!("composition does not deliver") })
+    }
+}
+
+impl EventSink for UnconfiguredSink {
+    fn status(&self) -> radroots_transport::BoxFuture<'_, Result<SinkStatus, TransportError>> {
+        Box::pin(async {
+            Ok(SinkStatus::new(
+                radroots_transport::TransportId::NOSTR,
+                false,
+                Maturity::Preview,
+                Availability::Available,
+                SinkCapabilities::DELIVER,
+                "not configured",
+            ))
+        })
+    }
+
+    fn deliver(
+        &self,
+        _request: DeliveryRequest,
+    ) -> radroots_transport::BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+        Box::pin(async { unreachable!("status does not deliver") })
     }
 }
 
@@ -332,6 +355,15 @@ fn status_aggregates_typed_capability_and_protocol_reports() {
     assert_eq!(status.source().state(), SyncCapabilityState::Compiled);
     assert!(status.source().status().is_some());
     assert_eq!(status.sink().state(), SyncCapabilityState::Unsupported);
+
+    let (storage, clock, ids, deadlines) = dependencies();
+    let compiled_sink = Engine::builder(storage, clock, ids, deadlines)
+        .sink(Arc::new(UnconfiguredSink))
+        .build()
+        .expect("unconfigured sink engine");
+    let status = block_on(compiled_sink.status(&[])).expect("compiled sink status");
+    assert_eq!(status.sink().state(), SyncCapabilityState::Compiled);
+    assert!(status.sink().status().is_some());
 
     assert_eq!(
         block_on(full.status(&[projection.clone(), projection])),

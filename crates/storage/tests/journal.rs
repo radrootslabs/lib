@@ -530,4 +530,63 @@ fn journal_value_and_state_validation_matrix_is_complete() {
         JournalTransition::resume(instance_id, resumed.revision()).instance_id(),
         instance_id
     );
+
+    assert_eq!(
+        PrepareOperation::new(
+            instance(9),
+            OperationId::SyncPush,
+            key(9),
+            IdempotencyDigest::new([9; 32]),
+            0,
+        ),
+        Err(Error::InvalidOperationTimestamp)
+    );
+
+    let prepared = prepare(instance(10), 10, 100).into_record().unwrap();
+    let signed = prepared
+        .transition(&JournalTransition::signed(
+            instance(10),
+            prepared.revision(),
+            event_id("c"),
+        ))
+        .unwrap();
+    assert_eq!(
+        signed.transition(&JournalTransition::committed(
+            instance(10),
+            signed.revision(),
+            event_id("c"),
+            99,
+        )),
+        Err(Error::InvalidJournalTransition)
+    );
+    let cancelled_signed = signed
+        .transition(&JournalTransition::cancelled(
+            instance(10),
+            signed.revision(),
+            100,
+        ))
+        .unwrap();
+    assert_eq!(
+        cancelled_signed.cancellation(),
+        CancellationState::CancelledBeforeCommit
+    );
+
+    let cancellation_recovery = RecoveryRecord::new(
+        RecoveryPoint::Prepared,
+        RecoveryReason::CancelledBeforeCommit,
+        1,
+        None,
+    )
+    .unwrap();
+    let recovered = prepared
+        .transition(&JournalTransition::recoverable(
+            instance(10),
+            prepared.revision(),
+            cancellation_recovery,
+        ))
+        .unwrap();
+    assert_eq!(
+        recovered.cancellation(),
+        CancellationState::CancelledBeforeCommit
+    );
 }

@@ -2895,6 +2895,7 @@ name = "radroots_transport_reticulum"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "radroots_event",
  "radroots_transport",
  "serde",
  "serde_json",

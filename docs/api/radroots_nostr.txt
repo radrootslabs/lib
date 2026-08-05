@@ -88,13 +88,16 @@ pub fn radroots_nostr::event::EventAdapter<'a>::raw_id(&'a self) -> alloc::strin
 pub fn radroots_nostr::event::EventAdapter<'a>::raw_kind(&'a self) -> u32
 pub struct radroots_nostr::event::ExternalSigningRequest
 impl radroots_nostr::event::ExternalSigningRequest
+pub const fn radroots_nostr::event::ExternalSigningRequest::authored_plan(&self) -> core::option::Option<&radroots_event_codec::authoring::AuthoredEventPlan>
 pub fn radroots_nostr::event::ExternalSigningRequest::complete(self, radroots_nostr::event::Event) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub fn radroots_nostr::event::ExternalSigningRequest::expected_event_id(&self) -> radroots_nostr::event::EventId
 pub fn radroots_nostr::event::ExternalSigningRequest::expected_public_key(&self) -> nostr::key::public_key::PublicKey
+pub fn radroots_nostr::event::ExternalSigningRequest::from_authored_plan(radroots_event_codec::authoring::AuthoredEventPlan) -> core::result::Result<Self, radroots_nostr::Error>
 impl serde_core::ser::Serialize for radroots_nostr::event::ExternalSigningRequest
 pub fn radroots_nostr::event::ExternalSigningRequest::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 pub struct radroots_nostr::event::FoodAvailabilityBuilder
 impl radroots_nostr::event::FoodAvailabilityBuilder
+pub fn radroots_nostr::event::FoodAvailabilityBuilder::into_external_signing_request(self, nostr::key::public_key::PublicKey) -> core::result::Result<radroots_nostr::event::ExternalSigningRequest, radroots_nostr::Error>
 pub fn radroots_nostr::event::FoodAvailabilityBuilder::sign_with_keys(self, &nostr::key::Keys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub struct radroots_nostr::event::GenericBuilder
 impl radroots_nostr::event::GenericBuilder
@@ -111,22 +114,27 @@ pub fn radroots_nostr::event::GenericBuilder::text_note(impl core::convert::Into
 pub struct radroots_nostr::event::Nip09DeletionRequestBuilder
 impl radroots_nostr::event::Nip09DeletionRequestBuilder
 pub fn radroots_nostr::event::Nip09DeletionRequestBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::event::Nip09DeletionRequestBuilder::into_external_signing_request(self, nostr::key::public_key::PublicKey) -> core::result::Result<radroots_nostr::event::ExternalSigningRequest, radroots_nostr::Error>
 pub fn radroots_nostr::event::Nip09DeletionRequestBuilder::sign_with_keys(self, &nostr::key::Keys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub struct radroots_nostr::event::Nip10ReplyBuilder
 impl radroots_nostr::event::Nip10ReplyBuilder
 pub fn radroots_nostr::event::Nip10ReplyBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::event::Nip10ReplyBuilder::into_external_signing_request(self, nostr::key::public_key::PublicKey) -> core::result::Result<radroots_nostr::event::ExternalSigningRequest, radroots_nostr::Error>
 pub fn radroots_nostr::event::Nip10ReplyBuilder::sign_with_keys(self, &nostr::key::Keys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub struct radroots_nostr::event::Nip22CommentBuilder
 impl radroots_nostr::event::Nip22CommentBuilder
 pub fn radroots_nostr::event::Nip22CommentBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::event::Nip22CommentBuilder::into_external_signing_request(self, nostr::key::public_key::PublicKey) -> core::result::Result<radroots_nostr::event::ExternalSigningRequest, radroots_nostr::Error>
 pub fn radroots_nostr::event::Nip22CommentBuilder::sign_with_keys(self, &nostr::key::Keys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub struct radroots_nostr::event::PostBuilder
 impl radroots_nostr::event::PostBuilder
 pub fn radroots_nostr::event::PostBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::event::PostBuilder::into_external_signing_request(self, nostr::key::public_key::PublicKey) -> core::result::Result<radroots_nostr::event::ExternalSigningRequest, radroots_nostr::Error>
 pub fn radroots_nostr::event::PostBuilder::sign_with_keys(self, &nostr::key::Keys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub struct radroots_nostr::event::ProfileBuilder
 impl radroots_nostr::event::ProfileBuilder
 pub fn radroots_nostr::event::ProfileBuilder::custom_created_at(self, radroots_nostr::event::Timestamp) -> Self
+pub fn radroots_nostr::event::ProfileBuilder::into_external_signing_request(self, nostr::key::public_key::PublicKey) -> core::result::Result<radroots_nostr::event::ExternalSigningRequest, radroots_nostr::Error>
 pub fn radroots_nostr::event::ProfileBuilder::sign_with_keys(self, &nostr::key::Keys) -> core::result::Result<radroots_nostr::event::Event, radroots_nostr::Error>
 pub struct radroots_nostr::event::SignatureVerifier
 impl radroots_event::verification::SignatureVerifier for radroots_nostr::event::SignatureVerifier
@@ -259,7 +267,6 @@ pub fn radroots_nostr::signing::LocalSigner::fmt(&self, &mut core::fmt::Formatte
 impl radroots_signing::signer::Signer for radroots_nostr::signing::LocalSigner
 pub fn radroots_nostr::signing::LocalSigner::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
 pub fn radroots_nostr::signing::LocalSigner::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>
-pub fn radroots_nostr::signing::sign_frozen_draft(&nostr::key::Keys, &radroots_event::draft::EventDraft) -> core::result::Result<radroots_event::draft::SignedEvent, radroots_nostr::Error>
 pub mod radroots_nostr::tag
 pub enum radroots_nostr::tag::ResolveError
 pub radroots_nostr::tag::ResolveError::DecryptionError(alloc::string::String)
@@ -283,6 +290,7 @@ pub type radroots_nostr::tag::Tag = nostr::event::tag::Tag
 pub type radroots_nostr::tag::TagKind<'a> = nostr::event::tag::kind::TagKind<'a>
 pub type radroots_nostr::tag::TagStandard = nostr::event::tag::standard::TagStandard
 pub enum radroots_nostr::Error
+pub radroots_nostr::Error::AuthoredPlan(radroots_event_codec::authoring::typed::AuthoredPlanError)
 pub radroots_nostr::Error::CoordinateConversion
 pub radroots_nostr::Error::DraftError(radroots_event::draft::DraftError)
 pub radroots_nostr::Error::EventBuildError(nostr::event::builder::Error)
@@ -297,14 +305,10 @@ pub radroots_nostr::Error::ExternalSigningEventIdMismatch
 pub radroots_nostr::Error::ExternalSigningEventIdMismatch::actual: nostr::event::id::EventId
 pub radroots_nostr::Error::ExternalSigningEventIdMismatch::expected: nostr::event::id::EventId
 pub radroots_nostr::Error::ExternalSigningEventInvalid(nostr::event::error::Error)
+pub radroots_nostr::Error::ExternalSigningPlanMismatch
+pub radroots_nostr::Error::ExternalSigningPlanMismatch::field: &'static str
 pub radroots_nostr::Error::FilterTagError(alloc::string::String)
 pub radroots_nostr::Error::FoodAvailabilityEncode(radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError)
-pub radroots_nostr::Error::FrozenDraftEventIdMismatch
-pub radroots_nostr::Error::FrozenDraftEventIdMismatch::actual_event_id: alloc::string::String
-pub radroots_nostr::Error::FrozenDraftEventIdMismatch::expected_event_id: alloc::string::String
-pub radroots_nostr::Error::FrozenDraftPubkeyMismatch
-pub radroots_nostr::Error::FrozenDraftPubkeyMismatch::actual_pubkey: alloc::string::String
-pub radroots_nostr::Error::FrozenDraftPubkeyMismatch::expected_pubkey: alloc::string::String
 pub radroots_nostr::Error::InvalidEncryptedSecretKey
 pub radroots_nostr::Error::InvalidNpub
 pub radroots_nostr::Error::InvalidPublicKey

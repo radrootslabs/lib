@@ -9867,7 +9867,7 @@ domains = ["profile", "farm", "operational_listing", "trade"]
 [shared_types]
 public = [
   "Nip01EventWireParts",
-  "EventDraft",
+  "GenericEventDraft",
   "SignedEvent",
   "EventEnvelope",
   "EventRef",

@@ -41,8 +41,6 @@ pub mod signing;
 #[cfg(feature = "events")]
 mod event_adapters;
 
-#[cfg(feature = "signing")]
-mod draft_signing;
 #[cfg(feature = "events")]
 mod event_convert;
 #[cfg(feature = "events")]

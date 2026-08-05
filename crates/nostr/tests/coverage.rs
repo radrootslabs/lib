@@ -412,6 +412,36 @@ fn event_and_job_adapters_cover_native_value_boundaries() {
             .sign_with_keys(&keys)
             .unwrap();
     assert!(to_profile_event_metadata(&unrelated_tag_profile).is_some());
+    let typed_profile =
+        nostr::EventBuilder::new(RadrootsNostrKind::Metadata, profile_event.content.clone())
+            .tag(RadrootsNostrTag::custom(
+                RadrootsNostrTagKind::Custom(Cow::Borrowed("t")),
+                vec!["radroots:type:farm".to_string()],
+            ))
+            .sign_with_keys(&keys)
+            .unwrap();
+    assert!(
+        to_profile_event_metadata(&typed_profile)
+            .expect("typed profile")
+            .data
+            .profile_type
+            .is_some()
+    );
+    let unknown_profile_type =
+        nostr::EventBuilder::new(RadrootsNostrKind::Metadata, profile_event.content.clone())
+            .tag(RadrootsNostrTag::custom(
+                RadrootsNostrTagKind::Custom(Cow::Borrowed("t")),
+                vec!["radroots:type:unknown".to_string()],
+            ))
+            .sign_with_keys(&keys)
+            .unwrap();
+    assert_eq!(
+        to_profile_event_metadata(&unknown_profile_type)
+            .expect("profile with unknown type")
+            .data
+            .profile_type,
+        None
+    );
     let invalid_profile = nostr::EventBuilder::new(RadrootsNostrKind::Metadata, "not-json")
         .sign_with_keys(&keys)
         .unwrap();

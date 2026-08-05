@@ -5,14 +5,11 @@
 //! observed after a successful commit cannot claim rollback; replaying the same
 //! commit identity and digest returns the original receipt.
 
-use radroots_event::{EventId, SignedEvent};
 use radroots_transport::BoxFuture;
 
 use crate::{
     Error,
     event::{AdmissionReceipt, EventAdmission},
-    journal::{JournalRevision, OperationInstanceId, OperationRecord, PrepareOperation},
-    outbox::{DeliveryAttemptEvidence, EnqueueOutboxItem, OutboxRecord},
     projection::{ProjectionCheckpoint, ProjectionStatus},
 };
 
@@ -50,94 +47,7 @@ impl AtomicCommitDigest {
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AtomicWorkflowKind {
-    Prepared,
-    Signed,
-    Enqueued,
-    Delivered,
     Ingested,
-}
-
-/// Journal transition inputs for a newly signed operation.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommitSigned {
-    instance_id: OperationInstanceId,
-    expected_revision: JournalRevision,
-    event: SignedEvent,
-}
-
-impl CommitSigned {
-    pub fn new(
-        instance_id: OperationInstanceId,
-        expected_revision: JournalRevision,
-        event: SignedEvent,
-    ) -> Self {
-        Self {
-            instance_id,
-            expected_revision,
-            event,
-        }
-    }
-    pub const fn instance_id(&self) -> OperationInstanceId {
-        self.instance_id
-    }
-    pub const fn expected_revision(&self) -> JournalRevision {
-        self.expected_revision
-    }
-    pub const fn event(&self) -> &SignedEvent {
-        &self.event
-    }
-}
-
-/// Atomic canonical admission, journal commit, and delivery-plan enqueue.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommitEnqueued {
-    instance_id: OperationInstanceId,
-    expected_revision: JournalRevision,
-    admission: EventAdmission,
-    outbox: EnqueueOutboxItem,
-    committed_at_unix_ms: u64,
-}
-
-impl CommitEnqueued {
-    pub fn new(
-        instance_id: OperationInstanceId,
-        expected_revision: JournalRevision,
-        admission: EventAdmission,
-        outbox: EnqueueOutboxItem,
-        committed_at_unix_ms: u64,
-    ) -> Result<Self, Error> {
-        if [
-            committed_at_unix_ms == 0,
-            admission.event_id() != outbox.request().payload().event().id(),
-            outbox.operation_instance_id() != instance_id,
-        ]
-        .contains(&true)
-        {
-            return Err(Error::AtomicWorkflowMismatch);
-        }
-        Ok(Self {
-            instance_id,
-            expected_revision,
-            admission,
-            outbox,
-            committed_at_unix_ms,
-        })
-    }
-    pub const fn instance_id(&self) -> OperationInstanceId {
-        self.instance_id
-    }
-    pub const fn expected_revision(&self) -> JournalRevision {
-        self.expected_revision
-    }
-    pub const fn admission(&self) -> &EventAdmission {
-        &self.admission
-    }
-    pub const fn outbox(&self) -> &EnqueueOutboxItem {
-        &self.outbox
-    }
-    pub const fn committed_at_unix_ms(&self) -> u64 {
-        self.committed_at_unix_ms
-    }
 }
 
 /// Atomic inbound admission with an optional projection checkpoint advance.
@@ -164,20 +74,12 @@ impl CommitIngested {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AtomicWorkflow {
-    Prepared(PrepareOperation),
-    Signed(Box<CommitSigned>),
-    Enqueued(Box<CommitEnqueued>),
-    Delivered(Box<DeliveryAttemptEvidence>),
     Ingested(Box<CommitIngested>),
 }
 
 impl AtomicWorkflow {
     pub const fn kind(&self) -> AtomicWorkflowKind {
         match self {
-            Self::Prepared(_) => AtomicWorkflowKind::Prepared,
-            Self::Signed(_) => AtomicWorkflowKind::Signed,
-            Self::Enqueued(_) => AtomicWorkflowKind::Enqueued,
-            Self::Delivered(_) => AtomicWorkflowKind::Delivered,
             Self::Ingested(_) => AtomicWorkflowKind::Ingested,
         }
     }
@@ -233,21 +135,6 @@ pub enum AtomicCommitDisposition {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AtomicCommitOutcome {
-    Prepared {
-        journal: OperationRecord,
-    },
-    Signed {
-        journal: OperationRecord,
-        event_id: EventId,
-    },
-    Enqueued {
-        journal: OperationRecord,
-        admission: AdmissionReceipt,
-        outbox: Box<OutboxRecord>,
-    },
-    Delivered {
-        outbox: Box<OutboxRecord>,
-    },
     Ingested {
         admission: AdmissionReceipt,
         projection: Option<Box<ProjectionStatus>>,
@@ -257,10 +144,6 @@ pub enum AtomicCommitOutcome {
 impl AtomicCommitOutcome {
     pub const fn kind(&self) -> AtomicWorkflowKind {
         match self {
-            Self::Prepared { .. } => AtomicWorkflowKind::Prepared,
-            Self::Signed { .. } => AtomicWorkflowKind::Signed,
-            Self::Enqueued { .. } => AtomicWorkflowKind::Enqueued,
-            Self::Delivered { .. } => AtomicWorkflowKind::Delivered,
             Self::Ingested { .. } => AtomicWorkflowKind::Ingested,
         }
     }

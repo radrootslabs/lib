@@ -1,4 +1,4 @@
-use crate::RadrootsTransportError;
+use crate::Error as TransportError;
 use alloc::string::{String, ToString};
 use core::{fmt, str::FromStr};
 use radroots_protocol::capability::v1::{
@@ -26,14 +26,14 @@ impl TransportId {
     pub const RADROOTSD: Self = Self(ProtocolTransportKind::RADROOTSD);
 
     /// Parses an exact canonical identity.
-    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, TransportError> {
         ProtocolTransportKind::parse(value.as_ref())
             .map(Self)
             .map_err(map_protocol_error)
     }
 
     /// Parses an exact canonical identity.
-    pub fn parse_canonical(value: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+    pub fn parse_canonical(value: impl AsRef<str>) -> Result<Self, TransportError> {
         Self::parse(value)
     }
 
@@ -48,11 +48,11 @@ impl TransportId {
     }
 }
 
-fn map_protocol_error(error: ProtocolError) -> RadrootsTransportError {
+fn map_protocol_error(error: ProtocolError) -> TransportError {
     match error {
-        ProtocolError::EmptyTransportKind => RadrootsTransportError::EmptyTransportKind,
-        ProtocolError::InvalidTransportKind { .. } => RadrootsTransportError::InvalidTransportKind,
-        _ => RadrootsTransportError::InvalidTransportKind,
+        ProtocolError::EmptyTransportKind => TransportError::EmptyTransportKind,
+        ProtocolError::InvalidTransportKind { .. } => TransportError::InvalidTransportKind,
+        _ => TransportError::InvalidTransportKind,
     }
 }
 
@@ -69,7 +69,7 @@ impl fmt::Display for TransportId {
 }
 
 impl FromStr for TransportId {
-    type Err = RadrootsTransportError;
+    type Err = TransportError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -77,7 +77,7 @@ impl FromStr for TransportId {
 }
 
 impl TryFrom<&str> for TransportId {
-    type Error = RadrootsTransportError;
+    type Error = TransportError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -85,7 +85,7 @@ impl TryFrom<&str> for TransportId {
 }
 
 impl TryFrom<String> for TransportId {
-    type Error = RadrootsTransportError;
+    type Error = TransportError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -145,11 +145,11 @@ mod tests {
         assert_eq!(TransportId::from(protocol_id), id);
         assert_eq!(
             TransportId::parse(""),
-            Err(RadrootsTransportError::EmptyTransportKind)
+            Err(TransportError::EmptyTransportKind)
         );
         assert_eq!(
             TransportId::parse("Invalid"),
-            Err(RadrootsTransportError::InvalidTransportKind)
+            Err(TransportError::InvalidTransportKind)
         );
 
         #[cfg(feature = "serde")]

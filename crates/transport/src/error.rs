@@ -3,10 +3,8 @@
 use core::fmt;
 
 /// Transport contract failure.
-pub type Error = RadrootsTransportError;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTransportError {
+pub enum Error {
     UnsupportedOperation,
     EmptyTransportKind,
     InvalidTransportKind,
@@ -64,7 +62,7 @@ pub enum RadrootsTransportError {
     PayloadDigestMismatch,
 }
 
-impl fmt::Display for RadrootsTransportError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnsupportedOperation => f.write_str("transport operation is unsupported"),

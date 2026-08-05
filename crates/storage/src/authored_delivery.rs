@@ -568,7 +568,11 @@ impl AuthoredDeliveryPlan {
             *self = previous;
             return Err(error);
         }
-        self.validate()
+        if let Err(error) = self.validate() {
+            *self = previous;
+            return Err(error);
+        }
+        Ok(())
     }
 
     fn apply_attempt(

@@ -21,8 +21,6 @@ use radroots_signing::{
 
 use crate::{Error as NostrError, key::SecretKey};
 
-pub use crate::draft_signing::sign_frozen_draft;
-
 type Clock = fn() -> Result<u64, SigningError>;
 
 /// A local Nostr key-backed signer adapter.
@@ -124,10 +122,8 @@ fn system_time_unix_ms() -> Result<u64, SigningError> {
 
 fn normalize_nostr_error(source: NostrError) -> SigningError {
     let kind = match &source {
-        NostrError::FrozenDraftPubkeyMismatch { .. }
-        | NostrError::ExternalSigningAuthorMismatch { .. } => Kind::AuthorizationDenied,
-        NostrError::FrozenDraftEventIdMismatch { .. }
-        | NostrError::ExternalSigningEventIdMismatch { .. }
+        NostrError::ExternalSigningAuthorMismatch { .. } => Kind::AuthorizationDenied,
+        NostrError::ExternalSigningEventIdMismatch { .. }
         | NostrError::ExternalSigningEventInvalid(_)
         | NostrError::ExternalSigningPlanMismatch { .. } => Kind::SignerOutputInvalid,
         _ => Kind::InternalError,

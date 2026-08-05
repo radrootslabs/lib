@@ -7,15 +7,15 @@ use radroots_storage::{
     Error, EventStore, Journal, Outbox, ProjectionStore,
     atomic::{
         AtomicCommit, AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId, AtomicStorage,
-        AtomicWorkflow, CommitIngested, CommitSigned,
+        AtomicWorkflow, CommitIngested,
     },
     event::{
         EventAdmission, EventPosition, EventQuery, EventQueryBounds, EventSequence,
         SourceGeneration,
     },
     journal::{
-        IdempotencyDigest, IdempotencyKey, JournalRevision, JournalStage, OperationInstanceId,
-        PrepareOperation,
+        IdempotencyDigest, IdempotencyKey, JournalStage, OperationInstanceId, PrepareOperation,
+        RECOVERABLE_QUERY_LIMIT_MAX,
     },
     memory::MemoryStorage,
     outbox::{
@@ -24,8 +24,8 @@ use radroots_storage::{
     },
     private_artifact::{
         ArtifactCommitment, ArtifactKind, ArtifactSchemaId, DurableSecretReference,
-        PrivateArtifactId, PrivateArtifactMetadata, PrivateArtifactRevision, PrivateArtifactStore,
-        RetentionPolicy,
+        EXPIRED_ARTIFACT_QUERY_LIMIT_MAX, PrivateArtifactId, PrivateArtifactMetadata,
+        PrivateArtifactRevision, PrivateArtifactStore, RetentionPolicy,
     },
     projection::{
         InvalidationReason, ProjectionCheckpoint, ProjectionGeneration, ProjectionHealth,
@@ -164,45 +164,22 @@ fn memory_event_and_journal_implement_the_canonical_spis() {
 }
 
 #[test]
-fn memory_atomic_commits_share_event_and_journal_state_and_replay() {
+fn memory_atomic_ingest_commits_event_state_and_replays() {
     let store = MemoryStorage::default();
-    let instance = OperationInstanceId::new([2; 16]).expect("instance");
-    let prepared_request = atomic(1, 1, AtomicWorkflow::Prepared(prepare(instance)));
-    let prepared = block_on(store.commit(prepared_request.clone())).expect("atomic prepare");
-    assert_eq!(prepared.disposition(), AtomicCommitDisposition::Committed);
+    let event = signed_event();
+    let ingest = atomic(
+        1,
+        1,
+        AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission(event, 20), None))),
+    );
+    let committed = block_on(store.commit(ingest.clone())).expect("atomic ingest");
+    assert_eq!(committed.disposition(), AtomicCommitDisposition::Committed);
     assert_eq!(
-        block_on(store.commit(prepared_request))
+        block_on(store.commit(ingest))
             .expect("atomic replay")
             .disposition(),
         AtomicCommitDisposition::Replay
     );
-
-    let event = signed_event();
-    let signed_request = atomic(
-        2,
-        2,
-        AtomicWorkflow::Signed(Box::new(CommitSigned::new(
-            instance,
-            JournalRevision::INITIAL,
-            event.clone(),
-        ))),
-    );
-    block_on(store.commit(signed_request)).expect("atomic signed");
-    assert_eq!(
-        block_on(store.operation(instance))
-            .expect("operation")
-            .expect("journal record")
-            .state()
-            .stage(),
-        JournalStage::Signed
-    );
-
-    let ingest = atomic(
-        3,
-        3,
-        AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission(event, 20), None))),
-    );
-    block_on(store.commit(ingest)).expect("atomic ingest");
     assert_eq!(
         block_on(EventStore::status(&store))
             .expect("status")
@@ -580,14 +557,40 @@ fn memory_projection_and_private_artifact_conflict_matrix_is_complete() {
     )
     .unwrap();
     block_on(store.invalidate(invalidation.clone())).unwrap();
+    assert_eq!(
+        block_on(store.invalidate(invalidation.clone()))
+            .unwrap()
+            .health(),
+        ProjectionHealth::Invalidated
+    );
+    let conflicting_invalidation = ProjectionInvalidation::new(
+        projection_id.clone(),
+        initial,
+        ProjectionGeneration::new([6; 32]).unwrap(),
+        InvalidationReason::ProjectionGenerationChanged,
+        111,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.invalidate(conflicting_invalidation)),
+        Err(Error::ProjectionRevisionConflict)
+    );
     assert!(
         block_on(store.invalidation(projection_id.clone(), replacement))
             .unwrap()
             .is_some()
     );
+    assert!(
+        block_on(store.invalidation(
+            projection_id.clone(),
+            ProjectionGeneration::new([9; 32]).unwrap(),
+        ))
+        .unwrap()
+        .is_none()
+    );
     let ticket = RebuildTicket::requested(
         RebuildTicketId::new([7; 16]).unwrap(),
-        invalidation,
+        invalidation.clone(),
         store.generation(),
         None,
         RawSourceDigest::new([8; 32]),
@@ -596,6 +599,18 @@ fn memory_projection_and_private_artifact_conflict_matrix_is_complete() {
     assert_eq!(
         block_on(store.request_rebuild(ticket.clone())).unwrap(),
         ticket
+    );
+    let conflicting_ticket = RebuildTicket::requested(
+        ticket.ticket_id(),
+        invalidation,
+        store.generation(),
+        None,
+        RawSourceDigest::new([9; 32]),
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.request_rebuild(conflicting_ticket)),
+        Err(Error::ProjectionRevisionConflict)
     );
     assert_eq!(
         block_on(store.request_rebuild(ticket.clone())).unwrap(),
@@ -643,5 +658,164 @@ fn memory_projection_and_private_artifact_conflict_matrix_is_complete() {
     assert_eq!(
         block_on(store.expired(1, 0)),
         Err(Error::InvalidExpiredArtifactQueryLimit)
+    );
+}
+
+#[test]
+fn memory_branch_guards_distinguish_each_identity_and_bound() {
+    let store = MemoryStorage::new(SourceGeneration::new([7; 32]).unwrap());
+    let event = signed_event();
+    block_on(store.admit(admission(event.clone(), 10))).unwrap();
+    let other_id = radroots_event::EventId::parse("f".repeat(64)).unwrap();
+    let selected = block_on(store.query_raw(
+        EventQuery::for_ids(EventQueryBounds::first(10).unwrap(), vec![other_id]).unwrap(),
+    ))
+    .unwrap();
+    assert!(selected.items().is_empty());
+
+    let instance = OperationInstanceId::new([1; 16]).unwrap();
+    block_on(store.prepare(prepare(instance))).unwrap();
+    let different_operation = PrepareOperation::new(
+        OperationInstanceId::new([2; 16]).unwrap(),
+        OperationId::SyncPull,
+        IdempotencyKey::parse("memory-operation").unwrap(),
+        IdempotencyDigest::new([3; 32]),
+        100,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.prepare(different_operation)),
+        Err(Error::IdempotencyConflict)
+    );
+    let different_instance = PrepareOperation::new(
+        OperationInstanceId::new([2; 16]).unwrap(),
+        OperationId::SyncPush,
+        IdempotencyKey::parse("memory-operation").unwrap(),
+        IdempotencyDigest::new([3; 32]),
+        100,
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(store.prepare(different_instance)),
+        Err(Error::IdempotencyConflict)
+    );
+    assert_eq!(
+        block_on(store.recoverable(RECOVERABLE_QUERY_LIMIT_MAX + 1)),
+        Err(Error::InvalidJournalQueryLimit)
+    );
+
+    let private = MemoryStorage::default();
+    block_on(private.put_metadata(private_metadata())).unwrap();
+    assert_eq!(
+        block_on(private.expired(1, EXPIRED_ARTIFACT_QUERY_LIMIT_MAX + 1)),
+        Err(Error::InvalidExpiredArtifactQueryLimit)
+    );
+    block_on(private.mark_expired(
+        PrivateArtifactId::new([9; 16]).unwrap(),
+        PrivateArtifactRevision::INITIAL,
+        300,
+    ))
+    .unwrap();
+    assert!(block_on(private.expired(400, 1)).unwrap().is_empty());
+}
+
+#[test]
+fn memory_outbox_replay_checks_each_durable_plan_field_and_retry_window() {
+    let make_request = |id: &str| {
+        DeliveryRequest::new(
+            id,
+            DeliveryPayload::new(signed_event()),
+            TargetSet::new(vec![Target::nostr_relay("wss://relay.example").unwrap()]).unwrap(),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1_000,
+        )
+        .unwrap()
+    };
+    let make_item = |instance: u8, digest: u8, request: DeliveryRequest, created: u64| {
+        EnqueueOutboxItem::new(
+            OutboxItemId::new([1; 16]).unwrap(),
+            OperationInstanceId::new([instance; 16]).unwrap(),
+            DeliveryPlanDigest::new([digest; 32]),
+            request,
+            created,
+        )
+        .unwrap()
+    };
+
+    for conflict in [
+        make_item(2, 1, make_request("memory-delivery"), 100),
+        make_item(1, 2, make_request("memory-delivery"), 100),
+        make_item(1, 1, make_request("different-delivery"), 100),
+        make_item(1, 1, make_request("memory-delivery"), 101),
+    ] {
+        let store = MemoryStorage::default();
+        block_on(store.enqueue(make_item(1, 1, make_request("memory-delivery"), 100))).unwrap();
+        assert_eq!(
+            block_on(store.enqueue(conflict)),
+            Err(Error::OutboxPlanConflict)
+        );
+    }
+
+    let store = MemoryStorage::default();
+    block_on(store.enqueue(make_item(1, 1, make_request("memory-delivery"), 100))).unwrap();
+    let lease_seed = LeaseId::new([3; 16]).unwrap();
+    let claimed = block_on(
+        store.claim(
+            ClaimOutboxItems::new(
+                LeaseOwner::parse("worker").unwrap(),
+                lease_seed,
+                200,
+                250,
+                1,
+            )
+            .unwrap(),
+        ),
+    )
+    .unwrap();
+    let record = &claimed[0];
+    block_on(store.release(
+        record.record().item_id(),
+        record.lease().id(),
+        record.record().revision(),
+        210,
+        Some(300),
+    ))
+    .unwrap();
+    let early = ClaimOutboxItems::new(
+        LeaseOwner::parse("worker").unwrap(),
+        LeaseId::new([4; 16]).unwrap(),
+        299,
+        350,
+        1,
+    )
+    .unwrap();
+    assert!(block_on(store.claim(early)).unwrap().is_empty());
+}
+
+#[test]
+fn memory_atomic_replay_rejects_a_changed_digest_without_mutation() {
+    let store = MemoryStorage::default();
+    let event = signed_event();
+    let committed = atomic(
+        1,
+        1,
+        AtomicWorkflow::Ingested(Box::new(CommitIngested::new(
+            admission(event.clone(), 20),
+            None,
+        ))),
+    );
+    block_on(store.commit(committed)).unwrap();
+    let conflict = atomic(
+        1,
+        2,
+        AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission(event, 20), None))),
+    );
+    assert_eq!(
+        block_on(store.commit(conflict)),
+        Err(Error::AtomicCommitConflict)
+    );
+    assert_eq!(
+        block_on(EventStore::status(&store)).unwrap().raw_events(),
+        1
     );
 }

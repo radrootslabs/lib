@@ -6,6 +6,7 @@ use std::sync::{
 
 use futures::{future, task::noop_waker_ref};
 use radroots_event::{SignedEvent, wire::v1::Nip01EventWire};
+use radroots_identity::PublicKey;
 use radroots_transport::{
     BoxFuture, Error, EventSource, FetchPage, FetchRequest, SourceStatus, Target, TargetSet,
     TransportId,
@@ -137,6 +138,69 @@ fn fetch_bounds_request_ids_and_cursors_fail_closed() {
         FetchCursor::parse("x".repeat(FETCH_CURSOR_MAX_BYTES + 1)).expect_err("oversized cursor"),
         Error::InvalidFetchCursor
     );
+    for invalid in [" request", "request ", "request\nid"] {
+        assert_eq!(
+            FetchRequest::new(
+                invalid,
+                TargetSet::new(vec![target("wss://one.example")]).expect("targets"),
+                FetchBounds::new(1, 1).expect("bounds"),
+            )
+            .expect_err("invalid request id"),
+            Error::InvalidFetchRequestId
+        );
+    }
+    for invalid in [" cursor", "cursor ", "cursor\nid"] {
+        assert_eq!(
+            FetchCursor::parse(invalid).expect_err("invalid cursor"),
+            Error::InvalidFetchCursor
+        );
+    }
+
+    let bounds = FetchBounds::new(FETCH_PAGE_MAX_EVENTS, u64::MAX).expect("maximum bounds");
+    assert_eq!(bounds.limit(), FETCH_PAGE_MAX_EVENTS);
+    assert_eq!(bounds.deadline_unix_ms(), u64::MAX);
+    let cursor = FetchCursor::parse("cursor").expect("cursor");
+    assert_eq!(cursor.as_str(), "cursor");
+    assert_eq!(cursor.to_string(), "cursor");
+}
+
+#[test]
+fn selectors_expose_bounds_and_reject_each_nonmatching_dimension() {
+    let event = signed_event();
+    let other_author =
+        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .expect("other author");
+
+    let reversed_since = FetchSelector::all()
+        .with_until_unix_seconds(1)
+        .expect("until")
+        .with_since_unix_seconds(2)
+        .expect_err("reversed since");
+    assert_eq!(reversed_since, Error::InvalidFetchTimeRange);
+
+    for selector in [
+        FetchSelector::all().with_kinds(vec![1]).expect("kinds"),
+        FetchSelector::all()
+            .with_authors(vec![other_author])
+            .expect("authors"),
+        FetchSelector::all()
+            .with_since_unix_seconds(event.created_at() + 1)
+            .expect("since"),
+        FetchSelector::all()
+            .with_until_unix_seconds(event.created_at() - 1)
+            .expect("until"),
+    ] {
+        assert!(!selector.matches(&event));
+    }
+
+    let selector = FetchSelector::all()
+        .with_since_unix_seconds(event.created_at())
+        .expect("since")
+        .with_until_unix_seconds(event.created_at())
+        .expect("until");
+    assert_eq!(selector.since_unix_seconds(), Some(event.created_at()));
+    assert_eq!(selector.until_unix_seconds(), Some(event.created_at()));
+    assert!(selector.matches(&event));
 }
 
 #[test]
@@ -293,6 +357,34 @@ fn pages_reject_oversize_unrequested_and_duplicate_evidence() {
         page.validate_for_request(&other_request)
             .expect_err("request mismatch"),
         Error::FetchPageRequestMismatch
+    );
+
+    let filtered = FetchRequest::new(
+        "filtered-request",
+        request.target_set().clone(),
+        request.bounds(),
+    )
+    .expect("filtered request")
+    .with_selector(
+        FetchSelector::all()
+            .with_kinds(vec![1])
+            .expect("filtered selector"),
+    );
+    let unexpected = ObservedEvent::new(
+        signed_event(),
+        EventProvenance::new(TransportId::NOSTR, requested.fingerprint().clone(), 1)
+            .expect("provenance"),
+    );
+    assert_eq!(
+        FetchPage::for_request(&filtered, vec![unexpected], Vec::new(), NextPage::Complete)
+            .expect_err("selector mismatch"),
+        Error::UnexpectedFetchEvent
+    );
+
+    assert_eq!(
+        EventProvenance::new(TransportId::NOSTR, requested.fingerprint().clone(), 0)
+            .expect_err("zero observation time"),
+        Error::InvalidObservedAt
     );
 }
 
