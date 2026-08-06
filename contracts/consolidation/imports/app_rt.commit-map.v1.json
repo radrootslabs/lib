@@ -1,0 +1,1518 @@
+{
+  "schema_version": 1,
+  "schema": "radroots.history-import.commit-map.v1",
+  "source_id": "app_rt",
+  "frozen_commit": "7ab1a8624d50890d6d18545ffb47d8083afa8c67",
+  "filtered_head": "2441d0d21c33946e11ee7254c7bae5818d799901",
+  "source_commit_count": 60,
+  "source_path_commit_count": 49,
+  "rewritten_commit_count": 58,
+  "topology_support_commit_count": 9,
+  "omitted_empty_commit_count": 0,
+  "final_tree_sha256": "4813f4b5296dbb48ac890a967f9c6cf7a50dc762e92508696ac15ef900bbe616",
+  "path_map_sha256": "149adae50385ec89862093341d9ad74709fe690c46bf2cb163758809ae41fad6",
+  "verifications": [
+    "archive_restore",
+    "git_fsck",
+    "mapped_parent_closure",
+    "commit_count",
+    "path_coverage",
+    "normalized_patch_equivalence",
+    "final_tree_digest",
+    "authorship",
+    "timestamps",
+    "message_scope_only",
+    "git_log_follow",
+    "secret_scan",
+    "license_scan",
+    "bot_identity_scan",
+    "github_workflow_exclusion",
+    "context_firewall"
+  ],
+  "commits": [
+    {
+      "source_commit": "0d4f0957ffe1de02fe2e412e3e933605181fe998",
+      "target_commit": "311d27c3f85fbd1b158256d68efafee27f39a77f",
+      "source_parents": [
+        "5993663cf3170e0893cf257b4c20f19d776211a8"
+      ],
+      "target_parents": [
+        "94726e9bdbb70e89111b7a20c882cb7794fd133e"
+      ],
+      "source_subject": "nostr: migrate consumers to parsed event wrappers",
+      "target_subject": "nostr: migrate consumers to parsed event wrappers",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-04T14:11:02Z",
+      "target_author_time": "2026-03-04T14:11:02Z",
+      "source_committer_time": "2026-03-04T14:11:02Z",
+      "target_committer_time": "2026-03-04T14:11:02Z",
+      "source_paths": [
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs"
+      ],
+      "normalized_patch_sha256": "5a4bc05180bec2091a7dbfd218d90d44d3ed5b473026c588b4bf1c86f679e251",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "159fec013fdb9e1a541b5f15bdf4c98b1a342188",
+      "target_commit": "5c0d4e91102ed091b13f340fa0811cef0aa5a311",
+      "source_parents": [],
+      "target_parents": [],
+      "source_subject": "Initial commit",
+      "target_subject": "Initial commit",
+      "source_author": "triesap <triesap@radroots.dev>",
+      "target_author": "triesap <triesap@radroots.dev>",
+      "source_author_time": "2025-08-29T23:21:01Z",
+      "target_author_time": "2025-08-29T23:21:01Z",
+      "source_committer_time": "2025-08-29T23:21:01Z",
+      "target_committer_time": "2025-08-29T23:21:01Z",
+      "source_paths": [
+        "crates/ffi/Cargo.toml",
+        "crates/ffi/bin/uniffi-bindgen.rs",
+        "crates/ffi/src/lib.rs",
+        "crates/ffi/uniffi.toml"
+      ],
+      "normalized_patch_sha256": "34e0005636e8bba8bdc7a0596c482fd09a5b6b2c952d59f441f40d4da2646ac5",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "15c507c591b215c425ddf96d11727782007df078",
+      "target_commit": "15f0de693d2b4d22a33349e47a2d5e170cb666d5",
+      "source_parents": [
+        "e5db05eeef4beb3babaadebc1216f82fca10ae5e"
+      ],
+      "target_parents": [
+        "04e546e8045fe4a27f64db966b2d507236429402"
+      ],
+      "source_subject": "runtime: add Phase 1 outbox retry decisions",
+      "target_subject": "runtime: add Phase 1 outbox retry decisions",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T08:26:41Z",
+      "target_author_time": "2026-07-16T08:26:41Z",
+      "source_committer_time": "2026-07-16T08:26:41Z",
+      "target_committer_time": "2026-07-16T08:26:41Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "61ab082f4b5e2593e8a1b261396371848bcceaeea10e0d9ad217cad04704ae7a",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "16b8322bb2c09a4ca60666ab6e95a9b44657daf5",
+      "target_commit": "11bd9bd8df0efff0bbc08481d3e8656bec24f92f",
+      "source_parents": [
+        "a9897ef4f8ea281af428bd9fd13f4f1b5d6d21fd"
+      ],
+      "target_parents": [
+        "a3229c53756560c0f815ab0606272ecad5aaa772"
+      ],
+      "source_subject": "runtime: add Phase 1 stewardship access items",
+      "target_subject": "runtime: add Phase 1 stewardship access items",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T09:24:47Z",
+      "target_author_time": "2026-07-16T09:24:47Z",
+      "source_committer_time": "2026-07-16T09:24:47Z",
+      "target_committer_time": "2026-07-16T09:24:47Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "4fe6e6531edac2af0a4207ccdf7eba7c6a752e0cc7ebb02152e1cbfde3b994b3",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "1a41df3a85b708c9ced4113b89998760abd6bb4f",
+      "target_commit": "0f4d424a22d1b811f64c9d3afdc102df0a2052e2",
+      "source_parents": [],
+      "target_parents": [],
+      "source_subject": "Initial commit",
+      "target_subject": "Initial commit",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-15T17:30:58Z",
+      "target_author_time": "2026-02-15T17:30:58Z",
+      "source_committer_time": "2026-02-15T17:30:58Z",
+      "target_committer_time": "2026-02-15T17:30:58Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/build.rs",
+        "crates/core/src/error.rs",
+        "crates/core/src/lib.rs",
+        "crates/core/src/logging.rs",
+        "crates/core/src/runtime/app_info.rs",
+        "crates/core/src/runtime/builder.rs",
+        "crates/core/src/runtime/info.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/wasm/Cargo.toml",
+        "crates/wasm/src/lib.rs"
+      ],
+      "normalized_patch_sha256": "a0d6cf00ff1aea19168c48d2d8d3dc7de370c4a31456a71aeaa70affe55795da",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "1c114fefd13e796739b1d9098848e2e7dc73a4d7",
+      "target_commit": "c1428bb006ca570c429b2d7ff0ce5f8d21360657",
+      "source_parents": [
+        "3540eab8fe3b4f02253e5a2c0b1ab75bc130151c"
+      ],
+      "target_parents": [
+        "47addd903de6f67989dfaf53afaba148e6449721"
+      ],
+      "source_subject": "runtime: add Phase 1 route execution flows",
+      "target_subject": "runtime: add Phase 1 route execution flows",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T09:04:07Z",
+      "target_author_time": "2026-07-16T09:04:07Z",
+      "source_committer_time": "2026-07-16T09:04:07Z",
+      "target_committer_time": "2026-07-16T09:04:07Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "0eda92094a41434e6688eee24ba706631b4c3a9c552c3e271fb01f6aa553615b",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "22a13759b3c3ea3f37729cfc83ca46623a7ed807",
+      "target_commit": "c5b3573be71a7ff55ae0bb05d5671fa9634881cb",
+      "source_parents": [
+        "76566989befa1f8df687efd921f2af52f88b58c8"
+      ],
+      "target_parents": [
+        "41ec40f03da11eec1bdaf677a3b93598360010db"
+      ],
+      "source_subject": "app-core: migrate runtime key flows to accounts apis",
+      "target_subject": "app-core: migrate runtime key flows to accounts apis",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-20T17:43:41Z",
+      "target_author_time": "2026-02-20T17:43:41Z",
+      "source_committer_time": "2026-02-20T17:43:41Z",
+      "target_committer_time": "2026-02-20T17:43:41Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs"
+      ],
+      "normalized_patch_sha256": "03b6cecbab189e7dcd08b72d8f95875f13fd7c47a541d1d17136de392fe2b210",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "26261c98f42b9bfea69272db52e7b563256740e0",
+      "target_commit": "277605eba52fd97027973e6dc3f4eaa097cb47f6",
+      "source_parents": [
+        "abeeb653d19e6c4369007083907341b332460363"
+      ],
+      "target_parents": [
+        "1b452ae3ed12662359f67ca704c5dc11275421a5"
+      ],
+      "source_subject": "release: enforce publish boundaries for 0.1.0 set",
+      "target_subject": "release: enforce publish boundaries for 0.1.0 set",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-25T01:18:19Z",
+      "target_author_time": "2026-02-25T01:18:19Z",
+      "source_committer_time": "2026-02-25T01:18:19Z",
+      "target_committer_time": "2026-02-25T01:18:19Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/wasm/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "fc98d09397884567954d8f78bc2e1fb89318ba2248df4cde219030a30a81f2f5",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "2ea70deb5c8143ee156aa8489c1d790c3278eaaf",
+      "target_commit": "7cbb8f28f0d3b40c41fd052852413b82c64d9bed",
+      "source_parents": [
+        "922c8a82977fa0e41616ebdf978ef2df78c0063c"
+      ],
+      "target_parents": [
+        "1189f05f02f16ac153e565cd603b16517dd152ed"
+      ],
+      "source_subject": "crate-surface: adopt final app runtime crates",
+      "target_subject": "crate-surface: adopt final app runtime crates",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-12T00:50:57Z",
+      "target_author_time": "2026-07-12T00:50:57Z",
+      "source_committer_time": "2026-07-12T00:50:57Z",
+      "target_committer_time": "2026-07-12T00:50:57Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/error_mapping.rs"
+      ],
+      "normalized_patch_sha256": "3c93eafcf486bd40864d8b390b8592beec39f8b91ca42f4caf084260dbd6f5c7",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "32b4cb1ef2ba07105a1683bd002ca7e4bf2d5688",
+      "target_commit": "bc329ad84d1865d0b9d167c4abed44993b40253a",
+      "source_parents": [
+        "6bf9f92a5d3323be527d736e56405dcc1653be36"
+      ],
+      "target_parents": [
+        "752c32f6ec3f7ca88bda21ecb7dc793bda8253ad"
+      ],
+      "source_subject": "core: narrow ios key custody boundary",
+      "target_subject": "core: narrow ios key custody boundary",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-13T02:10:03-07:00",
+      "target_author_time": "2026-06-13T02:10:03-07:00",
+      "source_committer_time": "2026-06-13T02:10:03-07:00",
+      "target_committer_time": "2026-06-13T02:10:03-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/key_management.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "91d3e732f3660566c7d0953cfdfa40bbf5a1ec14c69b50e883129d8a1881d473",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "3540eab8fe3b4f02253e5a2c0b1ab75bc130151c",
+      "target_commit": "47addd903de6f67989dfaf53afaba148e6449721",
+      "source_parents": [
+        "575432275c256d75f3dbfeacff34da464204475f"
+      ],
+      "target_parents": [
+        "adcf4016531edcd7dcb26c22c21479b3834d39ad"
+      ],
+      "source_subject": "runtime: add Phase 1 prototype paths",
+      "target_subject": "runtime: add Phase 1 prototype paths",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T08:41:07Z",
+      "target_author_time": "2026-07-16T08:41:07Z",
+      "source_committer_time": "2026-07-16T08:41:07Z",
+      "target_committer_time": "2026-07-16T08:41:07Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "0d8cc11bd3837dbc0a875a676323bf5e730aa19b590fb36be068fac280d6f2a8",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "3d9d5940f5af3ec043f51133cc572a2df4680287",
+      "target_commit": "1d8ead4da5eef1635f4a28e259b109cb0608a075",
+      "source_parents": [
+        "fcbdc0f5d60a0bf6b55e0333799f8c9cfc8b8cfc"
+      ],
+      "target_parents": [
+        "71ee71fdc08f32dc7e8bef8cb1154bc9319dba70"
+      ],
+      "source_subject": "docs: update `radroots-app-core` readme",
+      "target_subject": "docs: update `radroots-app-core` readme",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-02T23:08:56Z",
+      "target_author_time": "2026-03-02T23:08:56Z",
+      "source_committer_time": "2026-03-02T23:08:56Z",
+      "target_committer_time": "2026-03-02T23:08:56Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "3ee79c4b346df72c1572ce80ce59b6dfe709bfc0",
+      "target_commit": "282f0de65476648c0af3667453f9a369cb0284af",
+      "source_parents": [
+        "4040e5614a27a41f90818a437f12dab6d5387aa4"
+      ],
+      "target_parents": [
+        "68ddae06e652550a3ccf0d075be1a0a26b07b850"
+      ],
+      "source_subject": "field: align runtime ffi with current rr-rs APIs",
+      "target_subject": "field: align runtime ffi with current rr-rs APIs",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T16:23:58-07:00",
+      "target_author_time": "2026-06-11T16:23:58-07:00",
+      "source_committer_time": "2026-06-11T16:23:58-07:00",
+      "target_committer_time": "2026-06-11T16:23:58-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/trade_listing.rs"
+      ],
+      "normalized_patch_sha256": "51bffe466716c3fe874118d4f869b28f0317e7faad1a48cbf5e9c2c777d8d8e6",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "3f488b12ab5afd7f1bff478fbf814b76884caea7",
+      "target_commit": "e16cc55e4f08491585506b8d5d045b6c9afeb861",
+      "source_parents": [
+        "e93a4588067186cd7bfb68be8cdace9bb78f5f47"
+      ],
+      "target_parents": [
+        "c40f5af362fe2a85e6a0c886b9ea045b246ce203"
+      ],
+      "source_subject": "field: restore swift ffi crate for field library extraction",
+      "target_subject": "field: restore swift ffi crate for field library extraction",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T15:59:28-07:00",
+      "target_author_time": "2026-06-11T15:59:28-07:00",
+      "source_committer_time": "2026-06-11T15:59:28-07:00",
+      "target_committer_time": "2026-06-11T15:59:28-07:00",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "4040e5614a27a41f90818a437f12dab6d5387aa4",
+      "target_commit": "68ddae06e652550a3ccf0d075be1a0a26b07b850",
+      "source_parents": [
+        "d5e624b7312992d74efa427b0bda2c2f85c0356e"
+      ],
+      "target_parents": [
+        "f8cbeb5ff30463dacbcbf295faf3f0fa7e6abb74"
+      ],
+      "source_subject": "field: use snake case crate dependency keys",
+      "target_subject": "field: use snake case crate dependency keys",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T16:08:09-07:00",
+      "target_author_time": "2026-06-11T16:08:09-07:00",
+      "source_committer_time": "2026-06-11T16:08:09-07:00",
+      "target_committer_time": "2026-06-11T16:08:09-07:00",
+      "source_paths": [
+        "crates/core/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "80d97a8a5b0216c580ea31d4f641cda8bbb58a03b0764c4da12b0b27006aa94a",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "410f869eb4e4b3642ff514a6d2de59e71ed48deb",
+      "target_commit": "ddc2739e79fc86737622ef3be91abce997ed1bf6",
+      "source_parents": [
+        "b0bc5663551f296625991a36e87ef1ec7209e311"
+      ],
+      "target_parents": [
+        "b4de9ddf6a10f0f99118c82bc0d9fc3ed8d993a8"
+      ],
+      "source_subject": "runtime: expose mobile read outcomes",
+      "target_subject": "runtime: expose mobile read outcomes",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-19T16:43:26-07:00",
+      "target_author_time": "2026-06-19T16:43:26-07:00",
+      "source_committer_time": "2026-06-19T16:43:26-07:00",
+      "target_committer_time": "2026-06-19T16:43:26-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/tests/error_mapping.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "e8e793e543451ff4187bba842dd9bb7327e9cdacd18b82c432c7b491f3b83762",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "4a2526f571c2f6408767572fe6c9a34fcfd5131b",
+      "target_commit": "35a7c98af2678996b71c4cf90907ccc672135660",
+      "source_parents": [
+        "32b4cb1ef2ba07105a1683bd002ca7e4bf2d5688"
+      ],
+      "target_parents": [
+        "bc329ad84d1865d0b9d167c4abed44993b40253a"
+      ],
+      "source_subject": "core: make nostr host custody explicit",
+      "target_subject": "core: make nostr host custody explicit",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-13T15:12:19-07:00",
+      "target_author_time": "2026-06-13T15:12:19-07:00",
+      "source_committer_time": "2026-06-13T15:12:19-07:00",
+      "target_committer_time": "2026-06-13T15:12:19-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/tests/key_management.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "6d3f410e72758360a4bb7594bac0c2327921b29eb2d34699481a6e70b8cedb2f",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "50d303f0ad4a4b4cb4bf34b9014beccede980e48",
+      "target_commit": "4c9dbf929b0aab0f359a752891f9fb5e7320c166",
+      "source_parents": [
+        "73387dd2fb3d51a227497bec900e150ad42f75ab"
+      ],
+      "target_parents": [
+        "0a48613e1225c82aa603a127646b00b272ebd415"
+      ],
+      "source_subject": "docs: update `radroots-app-core` readme",
+      "target_subject": "docs: update `radroots-app-core` readme",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-01T15:13:28Z",
+      "target_author_time": "2026-03-01T15:13:28Z",
+      "source_committer_time": "2026-03-01T15:13:28Z",
+      "target_committer_time": "2026-03-01T15:13:28Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "5749ebca9a0d9af235c9097cef3be2d98f644ea9",
+      "target_commit": "7a15fcde8e6b5a6e1f62c1ebe53180b1910d761c",
+      "source_parents": [
+        "fee2551e8dce4330d21570e4a74c6747c36d0ff0"
+      ],
+      "target_parents": [
+        "b48181fc930a6e11d5bd77e4086dd11de3de959c"
+      ],
+      "source_subject": "build: pin the sdk dependency by revision",
+      "target_subject": "build: pin the sdk dependency by revision",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-04T20:30:54Z",
+      "target_author_time": "2026-08-04T20:30:54Z",
+      "source_committer_time": "2026-08-04T20:30:54Z",
+      "target_committer_time": "2026-08-04T20:30:54Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "575432275c256d75f3dbfeacff34da464204475f",
+      "target_commit": "adcf4016531edcd7dcb26c22c21479b3834d39ad",
+      "source_parents": [
+        "15c507c591b215c425ddf96d11727782007df078"
+      ],
+      "target_parents": [
+        "15f0de693d2b4d22a33349e47a2d5e170cb666d5"
+      ],
+      "source_subject": "runtime: add Phase 1 search filters",
+      "target_subject": "runtime: add Phase 1 search filters",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T08:31:57Z",
+      "target_author_time": "2026-07-16T08:31:57Z",
+      "source_committer_time": "2026-07-16T08:31:57Z",
+      "target_committer_time": "2026-07-16T08:31:57Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "ee7163860fe81186a4259dd91173b997424b10c01747c98de2bb96354a6ce09f",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "5993663cf3170e0893cf257b4c20f19d776211a8",
+      "target_commit": "94726e9bdbb70e89111b7a20c882cb7794fd133e",
+      "source_parents": [
+        "66cf7a284373f27de2ac07df0243c46ff86298be"
+      ],
+      "target_parents": [
+        "ab310061d19d405b4c3fca9210689583ed7a82c3"
+      ],
+      "source_subject": "build: add publish metadata for remaining crates",
+      "target_subject": "build: add publish metadata for remaining crates",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-03T16:34:07Z",
+      "target_author_time": "2026-03-03T16:34:07Z",
+      "source_committer_time": "2026-03-03T16:34:07Z",
+      "target_committer_time": "2026-03-03T16:34:07Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/wasm/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "05e9127aadd93634f58c8d8f6dbef8b23ed35cd598399520d085f1a7df7956b7",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "66cf7a284373f27de2ac07df0243c46ff86298be",
+      "target_commit": "ab310061d19d405b4c3fca9210689583ed7a82c3",
+      "source_parents": [
+        "6829cb40fd9361059decd52a153bdd183ec58426"
+      ],
+      "target_parents": [
+        "cb2c3b25537c114f6d7b958f1932657880e96813"
+      ],
+      "source_subject": "contract: expand publish set for remaining crates",
+      "target_subject": "contract: expand publish set for remaining crates",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-03T16:01:33Z",
+      "target_author_time": "2026-03-03T16:01:33Z",
+      "source_committer_time": "2026-03-03T16:01:33Z",
+      "target_committer_time": "2026-03-03T16:01:33Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/wasm/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "e9b95c800b69e74a40e6e02a9fc9173275789967f2f5661b62acb2ea58e08408",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "6829cb40fd9361059decd52a153bdd183ec58426",
+      "target_commit": "cb2c3b25537c114f6d7b958f1932657880e96813",
+      "source_parents": [
+        "ad49197b1ac776ac25619b3a17269cf30e1a8fcf"
+      ],
+      "target_parents": [
+        "c9f7e4fa34c7cf7e6e79c8762c9c6de8f5c62751"
+      ],
+      "source_subject": "build: set `radroots-app-wasm` version to 0.1.0-alpha.1",
+      "target_subject": "build: set `radroots-app-wasm` version to 0.1.0-alpha.1",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-02T23:14:54Z",
+      "target_author_time": "2026-03-02T23:14:54Z",
+      "source_committer_time": "2026-03-02T23:14:54Z",
+      "target_committer_time": "2026-03-02T23:14:54Z",
+      "source_paths": [
+        "crates/wasm/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "03106e975d443eec421ba7d4eb391f6f28c2571f76afd8a7f1768863cba901b0",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "6a294fd597b94ae3602fc5e97ed1ddab16d8a7e3",
+      "target_commit": "8515bc882ef64e3340deb808333a40df2fe3f0ad",
+      "source_parents": [
+        "0d4f0957ffe1de02fe2e412e3e933605181fe998"
+      ],
+      "target_parents": [
+        "311d27c3f85fbd1b158256d68efafee27f39a77f"
+      ],
+      "source_subject": "app-core: run cargo fmt",
+      "target_subject": "app-core: run cargo fmt",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-04T17:53:30Z",
+      "target_author_time": "2026-03-04T17:53:30Z",
+      "source_committer_time": "2026-03-04T17:53:30Z",
+      "target_committer_time": "2026-03-04T17:53:30Z",
+      "source_paths": [
+        "crates/core/src/runtime/mod.rs"
+      ],
+      "normalized_patch_sha256": "ddb8410dd231128736dcff2b7b4ea96dfe862d1b84fae7b062b3b31f57e8ec79",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "6bf9f92a5d3323be527d736e56405dcc1653be36",
+      "target_commit": "752c32f6ec3f7ca88bda21ecb7dc793bda8253ad",
+      "source_parents": [
+        "982b0693481f20a930d43e384804befb763e0dc3"
+      ],
+      "target_parents": [
+        "f2abea990be434d5e146021f5941cf4ccb47e15b"
+      ],
+      "source_subject": "field: add nostr identity reset ffi",
+      "target_subject": "field: add nostr identity reset ffi",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-12T00:05:40-07:00",
+      "target_author_time": "2026-06-12T00:05:40-07:00",
+      "source_committer_time": "2026-06-12T00:05:40-07:00",
+      "target_committer_time": "2026-06-12T00:05:40-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/tests/key_management.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "63f103049fdf7290d60d531eacc2f763c3b762eb001ace885560195052def910",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "73387dd2fb3d51a227497bec900e150ad42f75ab",
+      "target_commit": "0a48613e1225c82aa603a127646b00b272ebd415",
+      "source_parents": [
+        "26261c98f42b9bfea69272db52e7b563256740e0"
+      ],
+      "target_parents": [
+        "277605eba52fd97027973e6dc3f4eaa097cb47f6"
+      ],
+      "source_subject": "app: remove deprecated swift ffi crate",
+      "target_subject": "app: remove deprecated swift ffi crate",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-28T20:32:40Z",
+      "target_author_time": "2026-02-28T20:32:40Z",
+      "source_committer_time": "2026-02-28T20:32:40Z",
+      "target_committer_time": "2026-02-28T20:32:40Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "74b104b12c6b923bffd84c926d649f07295bf08e",
+      "target_commit": "9e2b8dfd12843b82fb819c25e6c81673fa255138",
+      "source_parents": [
+        "cebfc9dda0e59ec26e63e5ccc9774efef055a323"
+      ],
+      "target_parents": [
+        "b2818c22b502731cb31facd96014946c10f2c6bc"
+      ],
+      "source_subject": "coverage: raise `app-ffi-swift` to strict 100 gates",
+      "target_subject": "coverage: raise `app-ffi-swift` to strict 100 gates",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-22T04:36:24Z",
+      "target_author_time": "2026-02-22T04:36:24Z",
+      "source_committer_time": "2026-02-22T04:36:24Z",
+      "target_committer_time": "2026-02-22T04:36:24Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "75033666bdee16c91798bdfd19cf101428448579",
+      "target_commit": "e57c6160d8141dbae8197555d56ee14ecc912c2b",
+      "source_parents": [
+        "ef310ab022c1926fddfa6a92b55a4092bfe4a72a"
+      ],
+      "target_parents": [
+        "2bf4f30411aa9d62cfa1ed3bbd0472a16efbc320"
+      ],
+      "source_subject": "runtime: expose Phase 1 projections",
+      "target_subject": "runtime: expose Phase 1 projections",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T06:37:45Z",
+      "target_author_time": "2026-07-16T06:37:45Z",
+      "source_committer_time": "2026-07-16T06:37:45Z",
+      "target_committer_time": "2026-07-16T06:37:45Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "1fc9eddeaf082142fad8f37516e706a35e89daa3573e68cd9c012d6348495734",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "76566989befa1f8df687efd921f2af52f88b58c8",
+      "target_commit": "41ec40f03da11eec1bdaf677a3b93598360010db",
+      "source_parents": [
+        "1a41df3a85b708c9ced4113b89998760abd6bb4f"
+      ],
+      "target_parents": [
+        "0f4d424a22d1b811f64c9d3afdc102df0a2052e2"
+      ],
+      "source_subject": "build: require explicit env vars in build scripts",
+      "target_subject": "build: require explicit env vars in build scripts",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-18T00:26:33Z",
+      "target_author_time": "2026-02-18T00:26:33Z",
+      "source_committer_time": "2026-02-18T00:26:33Z",
+      "target_committer_time": "2026-02-18T00:26:33Z",
+      "source_paths": [
+        "crates/core/build.rs"
+      ],
+      "normalized_patch_sha256": "5498110bfb9a2e8654be75c8c3d2f5e50d7e013b9f38e3d5d20694dba8db9bcd",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "7ab1a8624d50890d6d18545ffb47d8083afa8c67",
+      "target_commit": "2441d0d21c33946e11ee7254c7bae5818d799901",
+      "source_parents": [
+        "5749ebca9a0d9af235c9097cef3be2d98f644ea9"
+      ],
+      "target_parents": [
+        "7a15fcde8e6b5a6e1f62c1ebe53180b1910d761c"
+      ],
+      "source_subject": "deps: adopt final SDK revision",
+      "target_subject": "deps: adopt final SDK revision",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-05T22:17:06Z",
+      "target_author_time": "2026-08-05T22:17:06Z",
+      "source_committer_time": "2026-08-05T22:17:06Z",
+      "target_committer_time": "2026-08-05T22:17:06Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "84cc08db36d8cc9fb7696f75468f2b1601716981",
+      "target_commit": "8f35bf5da9bc7810cdddeb5ffe8182b74081af8e",
+      "source_parents": [
+        "22a13759b3c3ea3f37729cfc83ca46623a7ed807"
+      ],
+      "target_parents": [
+        "c5b3573be71a7ff55ae0bb05d5671fa9634881cb"
+      ],
+      "source_subject": "coverage: add per-crate coverage profiles for run-crate lanes",
+      "target_subject": "coverage: add per-crate coverage profiles for run-crate lanes",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-22T03:49:54Z",
+      "target_author_time": "2026-02-22T03:49:54Z",
+      "source_committer_time": "2026-02-22T03:49:54Z",
+      "target_committer_time": "2026-02-22T03:49:54Z",
+      "source_paths": [
+        "crates/core/src/runtime/key_management.rs"
+      ],
+      "normalized_patch_sha256": "b9434196c85c707bb4d92762755c1c88f7b7bc8d088cb7775ab15a0316542f80",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "862eef9535c0f678d3c71bf00a5d718dff47434d",
+      "target_commit": "d5fc09e3072525f23a8dc06261e36f09c74c62c9",
+      "source_parents": [
+        "3d9d5940f5af3ec043f51133cc572a2df4680287"
+      ],
+      "target_parents": [
+        "1d8ead4da5eef1635f4a28e259b109cb0608a075"
+      ],
+      "source_subject": "docs: update `radroots-app-wasm` readme",
+      "target_subject": "docs: update `radroots-app-wasm` readme",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-02T23:08:57Z",
+      "target_author_time": "2026-03-02T23:08:57Z",
+      "source_committer_time": "2026-03-02T23:08:57Z",
+      "target_committer_time": "2026-03-02T23:08:57Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "8b304a2ac28077ceae94edc3ab289999a23e05f5",
+      "target_commit": "2c38c4b61d9175aa952075b181d383c159bbc383",
+      "source_parents": [
+        "74b104b12c6b923bffd84c926d649f07295bf08e"
+      ],
+      "target_parents": [
+        "9e2b8dfd12843b82fb819c25e6c81673fa255138"
+      ],
+      "source_subject": "coverage: raise `radroots-app-wasm` to strict 100 gates",
+      "target_subject": "coverage: raise `radroots-app-wasm` to strict 100 gates",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-22T04:38:04Z",
+      "target_author_time": "2026-02-22T04:38:04Z",
+      "source_committer_time": "2026-02-22T04:38:04Z",
+      "target_committer_time": "2026-02-22T04:38:04Z",
+      "source_paths": [
+        "crates/wasm/src/lib.rs"
+      ],
+      "normalized_patch_sha256": "a072ab3d98fd20170b6c0afdae25d9f02f71accb6055c893a63288032555f25c",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "922c8a82977fa0e41616ebdf978ef2df78c0063c",
+      "target_commit": "1189f05f02f16ac153e565cd603b16517dd152ed",
+      "source_parents": [
+        "c7a0b19f87ad4cd2a7837b703ca48717a57c6c54"
+      ],
+      "target_parents": [
+        "f126376aec6f6fd587f1e2614e4c5f815770190d"
+      ],
+      "source_subject": "runtime: fix Nostr lock boundaries",
+      "target_subject": "runtime: fix Nostr lock boundaries",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-19T17:53:20-07:00",
+      "target_author_time": "2026-06-19T17:53:20-07:00",
+      "source_committer_time": "2026-06-19T17:53:20-07:00",
+      "target_committer_time": "2026-06-19T17:53:20-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/error_mapping.rs"
+      ],
+      "normalized_patch_sha256": "61a447907df65a727d468775bedd548e5c987500f869e2916936bc3372cb475c",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "92eb05edc06b1eb3fd689212ec00057086d9029d",
+      "target_commit": "71a906114de24507b6715f156a0f0e0ae82ae9d7",
+      "source_parents": [
+        "75033666bdee16c91798bdfd19cf101428448579"
+      ],
+      "target_parents": [
+        "e57c6160d8141dbae8197555d56ee14ecc912c2b"
+      ],
+      "source_subject": "runtime: rank Phase 1 Today cards",
+      "target_subject": "runtime: rank Phase 1 Today cards",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T07:25:37Z",
+      "target_author_time": "2026-07-16T07:25:37Z",
+      "source_committer_time": "2026-07-16T07:25:37Z",
+      "target_committer_time": "2026-07-16T07:25:37Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "1471f09bcbed32ac401549d82177b2a2b60c9281011bfa76803f7416e813bf43",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "95fe7d580ff37d0c6498fbe380a13056d0956b5c",
+      "target_commit": null,
+      "source_parents": [
+        "3ee79c4b346df72c1572ce80ce59b6dfe709bfc0"
+      ],
+      "target_parents": [],
+      "source_subject": "deps: add field workspace lockfile",
+      "target_subject": null,
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": null,
+      "source_author_time": "2026-06-11T17:05:13-07:00",
+      "target_author_time": null,
+      "source_committer_time": "2026-06-11T17:05:13-07:00",
+      "target_committer_time": null,
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "out_of_scope"
+    },
+    {
+      "source_commit": "97e6d5ff3702a3036dc7bebc73f01ec2824bcc54",
+      "target_commit": "6538de41d7992251e06205f1450f6348b7a55cc1",
+      "source_parents": [
+        "df58405b452cd89a072a1bd3a0ebecd3ac287833"
+      ],
+      "target_parents": [
+        "edefb4d696ae3588f1f6503f9817e296a40d3d1f"
+      ],
+      "source_subject": "app-rt: delegate runtime behavior to radroots sdk",
+      "target_subject": "app-rt: delegate runtime behavior to radroots sdk",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-03T15:53:20Z",
+      "target_author_time": "2026-08-03T15:53:20Z",
+      "source_committer_time": "2026-08-03T15:53:20Z",
+      "target_committer_time": "2026-08-03T15:53:20Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/error.rs",
+        "crates/core/src/lib.rs",
+        "crates/core/src/runtime/builder.rs",
+        "crates/core/src/runtime/info.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/sdk.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/error_mapping.rs",
+        "crates/core/tests/key_management.rs",
+        "crates/core/tests/no_nostr_runtime.rs",
+        "crates/core/tests/sdk_runtime.rs"
+      ],
+      "normalized_patch_sha256": "e580828b1abe00dc3a7ed832e75d8ac1075ec18f6b074df38c3bb5edd283fbc9",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "982b0693481f20a930d43e384804befb763e0dc3",
+      "target_commit": "f2abea990be434d5e146021f5941cf4ccb47e15b",
+      "source_parents": [
+        "b0f02e7583dfe67866dc2db172dc3549e0fa82e6"
+      ],
+      "target_parents": [
+        "dfb28e38f45bf898c10be0278826c3d1445ee4f3"
+      ],
+      "source_subject": "field: replace auth session ffi with nostr identity",
+      "target_subject": "field: replace auth session ffi with nostr identity",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T23:47:05-07:00",
+      "target_author_time": "2026-06-11T23:47:05-07:00",
+      "source_committer_time": "2026-06-11T23:47:05-07:00",
+      "target_committer_time": "2026-06-11T23:47:05-07:00",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/runtime/auth_session.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "0172ff0a821725c9b7740456dc9b77db432b881e0bfd94d53e192ffb4409946a",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "98958b64ff9049f2db98e359d1686857cc343660",
+      "target_commit": "035717adf65596f2ec93b59462f5db241232ba5b",
+      "source_parents": [
+        "97e6d5ff3702a3036dc7bebc73f01ec2824bcc54"
+      ],
+      "target_parents": [
+        "6538de41d7992251e06205f1450f6348b7a55cc1"
+      ],
+      "source_subject": "app-rt: migrate uniffi contract to final sdk",
+      "target_subject": "app-rt: migrate uniffi contract to final sdk",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-03T16:05:40Z",
+      "target_author_time": "2026-08-03T16:05:40Z",
+      "source_committer_time": "2026-08-03T16:05:40Z",
+      "target_committer_time": "2026-08-03T16:05:40Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/error.rs",
+        "crates/core/src/lib.rs",
+        "crates/core/src/runtime/info.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/sdk.rs",
+        "crates/core/tests/sdk_runtime.rs",
+        "crates/core/tests/uniffi_contract.rs"
+      ],
+      "normalized_patch_sha256": "6cf0cc3b68e8d5e74b65d6b1328f72737a87cbccb1424535a37157bf4566ae01",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "9e27d87988431005e46236e44bc6e5378f33a83b",
+      "target_commit": "9fcdc4d89787b1b7c242838b24f59b5ba571df2d",
+      "source_parents": [
+        "159fec013fdb9e1a541b5f15bdf4c98b1a342188",
+        "3f488b12ab5afd7f1bff478fbf814b76884caea7"
+      ],
+      "target_parents": [
+        "5c0d4e91102ed091b13f340fa0811cef0aa5a311",
+        "e16cc55e4f08491585506b8d5d045b6c9afeb861"
+      ],
+      "source_subject": "field: import field rust ffi crate history",
+      "target_subject": "field: import field rust ffi crate history",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T16:00:09-07:00",
+      "target_author_time": "2026-06-11T16:00:09-07:00",
+      "source_committer_time": "2026-06-11T16:00:09-07:00",
+      "target_committer_time": "2026-06-11T16:00:09-07:00",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/build.rs",
+        "crates/core/src/error.rs",
+        "crates/core/src/lib.rs",
+        "crates/core/src/logging.rs",
+        "crates/core/src/runtime/app_info.rs",
+        "crates/core/src/runtime/builder.rs",
+        "crates/core/src/runtime/info.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/logging_error.rs",
+        "crates/core/tests/no_nostr_runtime.rs",
+        "crates/ffi/Cargo.toml",
+        "crates/ffi/bin/uniffi-bindgen.rs",
+        "crates/ffi/src/lib.rs",
+        "crates/ffi/uniffi.toml",
+        "crates/wasm/Cargo.toml",
+        "crates/wasm/src/lib.rs"
+      ],
+      "normalized_patch_sha256": "e68eb3ab8e3aa459ff74c5b297c5185eda87d2f010e57169da5cf8755cf4ce58",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "a1548ea5b3c1094473cde2cdcfd0e122b9add5a8",
+      "target_commit": "fbe0ff8c4ba0580d5c15f0ad4aed4e734cd1f43b",
+      "source_parents": [
+        "f7458e3a856e2a6f70050d6eecaf565734c4e7af"
+      ],
+      "target_parents": [
+        "35a7c98af2678996b71c4cf90907ccc672135660"
+      ],
+      "source_subject": "ffi: rename shared ffi crate",
+      "target_subject": "ffi: rename shared ffi crate",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-19T16:16:09-07:00",
+      "target_author_time": "2026-06-19T16:16:09-07:00",
+      "source_committer_time": "2026-06-19T16:16:09-07:00",
+      "target_committer_time": "2026-06-19T16:16:09-07:00",
+      "source_paths": [
+        "crates/ffi/Cargo.toml",
+        "crates/ffi/bin/uniffi-bindgen.rs",
+        "crates/ffi/src/lib.rs",
+        "crates/ffi/uniffi.toml"
+      ],
+      "normalized_patch_sha256": "1c7c0b68dc985d3f6141512dbe80f6e27f2149e321175ebbc3dffedc26415b61",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "a9897ef4f8ea281af428bd9fd13f4f1b5d6d21fd",
+      "target_commit": "a3229c53756560c0f815ab0606272ecad5aaa772",
+      "source_parents": [
+        "1c114fefd13e796739b1d9098848e2e7dc73a4d7"
+      ],
+      "target_parents": [
+        "c1428bb006ca570c429b2d7ff0ce5f8d21360657"
+      ],
+      "source_subject": "runtime: add Phase 1 proof provenance artifacts",
+      "target_subject": "runtime: add Phase 1 proof provenance artifacts",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T09:17:01Z",
+      "target_author_time": "2026-07-16T09:17:01Z",
+      "source_committer_time": "2026-07-16T09:17:01Z",
+      "target_committer_time": "2026-07-16T09:17:01Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "b2719753b88d3a1bc927499fdc3c0a3e8289f36bf8b42fa44f11cce72c4b4602",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "abeeb653d19e6c4369007083907341b332460363",
+      "target_commit": "1b452ae3ed12662359f67ca704c5dc11275421a5",
+      "source_parents": [
+        "8b304a2ac28077ceae94edc3ab289999a23e05f5"
+      ],
+      "target_parents": [
+        "2c38c4b61d9175aa952075b181d383c159bbc383"
+      ],
+      "source_subject": "trade: consolidate listing kind lane around dvm kinds",
+      "target_subject": "trade: consolidate listing kind lane around dvm kinds",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-22T14:20:12Z",
+      "target_author_time": "2026-02-22T14:20:12Z",
+      "source_committer_time": "2026-02-22T14:20:12Z",
+      "target_committer_time": "2026-02-22T14:20:12Z",
+      "source_paths": [
+        "crates/core/src/runtime/trade_listing.rs"
+      ],
+      "normalized_patch_sha256": "55b8540babee06a44ccbadbddada7652851ea2dc95121260c7bbf276826db32b",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "ad49197b1ac776ac25619b3a17269cf30e1a8fcf",
+      "target_commit": "c9f7e4fa34c7cf7e6e79c8762c9c6de8f5c62751",
+      "source_parents": [
+        "862eef9535c0f678d3c71bf00a5d718dff47434d"
+      ],
+      "target_parents": [
+        "d5fc09e3072525f23a8dc06261e36f09c74c62c9"
+      ],
+      "source_subject": "build: set `radroots-app-core` version to 0.1.0-alpha.1",
+      "target_subject": "build: set `radroots-app-core` version to 0.1.0-alpha.1",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-02T23:14:54Z",
+      "target_author_time": "2026-03-02T23:14:54Z",
+      "source_committer_time": "2026-03-02T23:14:54Z",
+      "target_committer_time": "2026-03-02T23:14:54Z",
+      "source_paths": [
+        "crates/core/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "630bfbce77bf829c82c47c940897a0b106c93d1db5903572a3bdd681a29ed7e5",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "b0bc5663551f296625991a36e87ef1ec7209e311",
+      "target_commit": "b4de9ddf6a10f0f99118c82bc0d9fc3ed8d993a8",
+      "source_parents": [
+        "a1548ea5b3c1094473cde2cdcfd0e122b9add5a8"
+      ],
+      "target_parents": [
+        "fbe0ff8c4ba0580d5c15f0ad4aed4e734cd1f43b"
+      ],
+      "source_subject": "errors: type mobile runtime failures",
+      "target_subject": "errors: type mobile runtime failures",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-19T16:35:54-07:00",
+      "target_author_time": "2026-06-19T16:35:54-07:00",
+      "source_committer_time": "2026-06-19T16:35:54-07:00",
+      "target_committer_time": "2026-06-19T16:35:54-07:00",
+      "source_paths": [
+        "crates/core/src/error.rs",
+        "crates/core/src/logging.rs",
+        "crates/core/src/runtime/builder.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/error_mapping.rs",
+        "crates/core/tests/logging_error.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "6be0fc7717c34e0536c56bf0a6255d296a149124ed5f62b8e798699e657dd54b",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "b0f02e7583dfe67866dc2db172dc3549e0fa82e6",
+      "target_commit": "dfb28e38f45bf898c10be0278826c3d1445ee4f3",
+      "source_parents": [
+        "95fe7d580ff37d0c6498fbe380a13056d0956b5c"
+      ],
+      "target_parents": [
+        "282f0de65476648c0af3667453f9a369cb0284af"
+      ],
+      "source_subject": "field: add auth session ffi",
+      "target_subject": "field: add auth session ffi",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T21:37:04-07:00",
+      "target_author_time": "2026-06-11T21:37:04-07:00",
+      "source_committer_time": "2026-06-11T21:37:04-07:00",
+      "target_committer_time": "2026-06-11T21:37:04-07:00",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/runtime/auth_session.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs"
+      ],
+      "normalized_patch_sha256": "320bcaeb5b48a5731aaaddf699fc7f3db43f073b62b1978708400e58c5d78168",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "b770841d2d2ea1cafc1d4a644d596cb8727624d9",
+      "target_commit": "b580bd27deec4665c91bee63e5287e2c76d48c67",
+      "source_parents": [
+        "fc7cb752482c4b0d5bc1503818ef96c27f234435"
+      ],
+      "target_parents": [
+        "ecfa5ec333069200b28f9809d5e3416e44e2e75c"
+      ],
+      "source_subject": "app-rt: restore sdk-backed mobile social bridge",
+      "target_subject": "app-rt: restore sdk-backed mobile social bridge",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-03T17:18:01Z",
+      "target_author_time": "2026-08-03T17:18:01Z",
+      "source_committer_time": "2026-08-03T17:18:01Z",
+      "target_committer_time": "2026-08-03T17:18:01Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/ffi/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "334c4aa5abf122ba45b1bba75fa0f04d91905bee58f88c51ffd367c8243f9210",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "c55885fd87b4f969798f68865ea9237f47458564",
+      "target_commit": "7cf7adfae464f19e6839d580a8a7c219143927ac",
+      "source_parents": [
+        "2ea70deb5c8143ee156aa8489c1d790c3278eaaf"
+      ],
+      "target_parents": [
+        "7cbb8f28f0d3b40c41fd052852413b82c64d9bed"
+      ],
+      "source_subject": "runtime: align event envelope accessors",
+      "target_subject": "runtime: align event envelope accessors",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-15T01:19:00Z",
+      "target_author_time": "2026-07-15T01:19:00Z",
+      "source_committer_time": "2026-07-15T01:19:00Z",
+      "target_committer_time": "2026-07-15T01:19:00Z",
+      "source_paths": [
+        "crates/core/src/runtime/info.rs",
+        "crates/core/src/runtime/trade_listing.rs"
+      ],
+      "normalized_patch_sha256": "d47a8ba468046d4648f45ea532df3e50b17dc60f5b2ceddef0c8ad3f88193658",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "c7a0b19f87ad4cd2a7837b703ca48717a57c6c54",
+      "target_commit": "f126376aec6f6fd587f1e2614e4c5f815770190d",
+      "source_parents": [
+        "410f869eb4e4b3642ff514a6d2de59e71ed48deb"
+      ],
+      "target_parents": [
+        "ddc2739e79fc86737622ef3be91abce997ed1bf6"
+      ],
+      "source_subject": "api: remove retired mobile trade endpoints",
+      "target_subject": "api: remove retired mobile trade endpoints",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-19T16:49:07-07:00",
+      "target_author_time": "2026-06-19T16:49:07-07:00",
+      "source_committer_time": "2026-06-19T16:49:07-07:00",
+      "target_committer_time": "2026-06-19T16:49:07-07:00",
+      "source_paths": [
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/error_mapping.rs"
+      ],
+      "normalized_patch_sha256": "1d9d36bc73f56c2956ffce401c08d83e8ff281e34d9b345dc267084a4838391d",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "cebfc9dda0e59ec26e63e5ccc9774efef055a323",
+      "target_commit": "b2818c22b502731cb31facd96014946c10f2c6bc",
+      "source_parents": [
+        "84cc08db36d8cc9fb7696f75468f2b1601716981"
+      ],
+      "target_parents": [
+        "8f35bf5da9bc7810cdddeb5ffe8182b74081af8e"
+      ],
+      "source_subject": "coverage: raise `radroots-app-core` to strict 100 gates",
+      "target_subject": "coverage: raise `radroots-app-core` to strict 100 gates",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-02-22T04:31:36Z",
+      "target_author_time": "2026-02-22T04:31:36Z",
+      "source_committer_time": "2026-02-22T04:31:36Z",
+      "target_committer_time": "2026-02-22T04:31:36Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/logging.rs",
+        "crates/core/src/runtime/builder.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/core/tests/logging_error.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "fdd7d50aa1c0ddcba3ea895ac4cdf59042f26f2cee0b5501807d7fb068273955",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "d5e624b7312992d74efa427b0bda2c2f85c0356e",
+      "target_commit": "f8cbeb5ff30463dacbcbf295faf3f0fa7e6abb74",
+      "source_parents": [
+        "9e27d87988431005e46236e44bc6e5378f33a83b"
+      ],
+      "target_parents": [
+        "9fcdc4d89787b1b7c242838b24f59b5ba571df2d"
+      ],
+      "source_subject": "field: normalize imported field crate workspace",
+      "target_subject": "field: normalize imported field crate workspace",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-06-11T16:04:16-07:00",
+      "target_author_time": "2026-06-11T16:04:16-07:00",
+      "source_committer_time": "2026-06-11T16:04:16-07:00",
+      "target_committer_time": "2026-06-11T16:04:16-07:00",
+      "source_paths": [
+        "crates/core/src/logging.rs",
+        "crates/ffi/Cargo.toml",
+        "crates/ffi/bin/uniffi-bindgen.rs",
+        "crates/ffi/src/lib.rs",
+        "crates/ffi/uniffi.toml",
+        "crates/wasm/src/lib.rs"
+      ],
+      "normalized_patch_sha256": "eb09437d86fc62b5fdd27716bfef70bc30769ebc71018999e3f84d5f6a3eacbe",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "df58405b452cd89a072a1bd3a0ebecd3ac287833",
+      "target_commit": "edefb4d696ae3588f1f6503f9817e296a40d3d1f",
+      "source_parents": [
+        "16b8322bb2c09a4ca60666ab6e95a9b44657daf5"
+      ],
+      "target_parents": [
+        "11bd9bd8df0efff0bbc08481d3e8656bec24f92f"
+      ],
+      "source_subject": "runtime: qualify Phase 1 public closure",
+      "target_subject": "runtime: qualify Phase 1 public closure",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-18T06:28:32Z",
+      "target_author_time": "2026-07-18T06:28:32Z",
+      "source_committer_time": "2026-07-18T06:28:32Z",
+      "target_committer_time": "2026-07-18T06:28:32Z",
+      "source_paths": [
+        "crates/core/build.rs",
+        "crates/core/src/logging.rs",
+        "crates/core/src/runtime/builder.rs",
+        "crates/core/src/runtime/key_management.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/nostr.rs",
+        "crates/core/src/runtime/product_surface.rs",
+        "crates/core/src/runtime/trade_listing.rs",
+        "crates/ffi/src/lib.rs",
+        "crates/wasm/src/lib.rs"
+      ],
+      "normalized_patch_sha256": "e0185256cbbce51ada06cfd824ddc2a197dbc1dc1b117c7f26831297ad0464e8",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "e5db05eeef4beb3babaadebc1216f82fca10ae5e",
+      "target_commit": "04e546e8045fe4a27f64db966b2d507236429402",
+      "source_parents": [
+        "92eb05edc06b1eb3fd689212ec00057086d9029d"
+      ],
+      "target_parents": [
+        "71a906114de24507b6715f156a0f0e0ae82ae9d7"
+      ],
+      "source_subject": "runtime: test Phase 1 object page routing",
+      "target_subject": "runtime: test Phase 1 object page routing",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T08:20:30Z",
+      "target_author_time": "2026-07-16T08:20:30Z",
+      "source_committer_time": "2026-07-16T08:20:30Z",
+      "target_committer_time": "2026-07-16T08:20:30Z",
+      "source_paths": [
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "101fb9e93f5d4373ca4bf2b74d99b6e60c3d51e12c2c30c7f32ab40d46575b9e",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "e93a4588067186cd7bfb68be8cdace9bb78f5f47",
+      "target_commit": "c40f5af362fe2a85e6a0c886b9ea045b246ce203",
+      "source_parents": [
+        "f6b00e684d6de7fd302eb0b418479943c88a8c7b"
+      ],
+      "target_parents": [
+        "1e0204c307577acd8600ca3876839ad9b95079d6"
+      ],
+      "source_subject": "app-core: reflow runtime stop logging",
+      "target_subject": "app-core: reflow runtime stop logging",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-05T20:18:34Z",
+      "target_author_time": "2026-03-05T20:18:34Z",
+      "source_committer_time": "2026-03-05T20:18:34Z",
+      "target_committer_time": "2026-03-05T20:18:34Z",
+      "source_paths": [
+        "crates/core/src/runtime/mod.rs"
+      ],
+      "normalized_patch_sha256": "6f29cd8aefcc8c8496ea2af423e92ddc3cdc5c1404271afabf2e35b2f44976aa",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "ef310ab022c1926fddfa6a92b55a4092bfe4a72a",
+      "target_commit": "2bf4f30411aa9d62cfa1ed3bbd0472a16efbc320",
+      "source_parents": [
+        "c55885fd87b4f969798f68865ea9237f47458564"
+      ],
+      "target_parents": [
+        "7cf7adfae464f19e6839d580a8a7c219143927ac"
+      ],
+      "source_subject": "runtime: add Phase 1 product contracts",
+      "target_subject": "runtime: add Phase 1 product contracts",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-07-16T06:20:11Z",
+      "target_author_time": "2026-07-16T06:20:11Z",
+      "source_committer_time": "2026-07-16T06:20:11Z",
+      "target_committer_time": "2026-07-16T06:20:11Z",
+      "source_paths": [
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/src/runtime/product_surface.rs"
+      ],
+      "normalized_patch_sha256": "32e97f2ee529303126e30ef04467895f7bddd6d09e771d50bacb270b02fcf66a",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "f6b00e684d6de7fd302eb0b418479943c88a8c7b",
+      "target_commit": "1e0204c307577acd8600ca3876839ad9b95079d6",
+      "source_parents": [
+        "6a294fd597b94ae3602fc5e97ed1ddab16d8a7e3"
+      ],
+      "target_parents": [
+        "8515bc882ef64e3340deb808333a40df2fe3f0ad"
+      ],
+      "source_subject": "app-core: close runtime no-default strict region gaps",
+      "target_subject": "app-core: close runtime no-default strict region gaps",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-05T01:23:18Z",
+      "target_author_time": "2026-03-05T01:23:18Z",
+      "source_committer_time": "2026-03-05T01:23:18Z",
+      "target_committer_time": "2026-03-05T01:23:18Z",
+      "source_paths": [
+        "crates/core/src/runtime/info.rs",
+        "crates/core/src/runtime/mod.rs",
+        "crates/core/tests/no_nostr_runtime.rs"
+      ],
+      "normalized_patch_sha256": "85793421a8e9194699f5ffadcaa387ba4499cc3f564be74aff756f220d974cd0",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "f7458e3a856e2a6f70050d6eecaf565734c4e7af",
+      "target_commit": null,
+      "source_parents": [
+        "4a2526f571c2f6408767572fe6c9a34fcfd5131b"
+      ],
+      "target_parents": [],
+      "source_subject": "lock: refresh field_lib dependency lock",
+      "target_subject": null,
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": null,
+      "source_author_time": "2026-06-19T16:11:20-07:00",
+      "target_author_time": null,
+      "source_committer_time": "2026-06-19T16:11:20-07:00",
+      "target_committer_time": null,
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "out_of_scope"
+    },
+    {
+      "source_commit": "fc7cb752482c4b0d5bc1503818ef96c27f234435",
+      "target_commit": "ecfa5ec333069200b28f9809d5e3416e44e2e75c",
+      "source_parents": [
+        "98958b64ff9049f2db98e359d1686857cc343660"
+      ],
+      "target_parents": [
+        "035717adf65596f2ec93b59462f5db241232ba5b"
+      ],
+      "source_subject": "app-rt: finalize packaged sdk integration",
+      "target_subject": "app-rt: finalize packaged sdk integration",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-03T16:13:57Z",
+      "target_author_time": "2026-08-03T16:13:57Z",
+      "source_committer_time": "2026-08-03T16:13:57Z",
+      "target_committer_time": "2026-08-03T16:13:57Z",
+      "source_paths": [
+        "crates/bindgen/Cargo.toml",
+        "crates/bindgen/src/main.rs",
+        "crates/core/Cargo.toml",
+        "crates/core/build.rs",
+        "crates/ffi/Cargo.toml",
+        "crates/ffi/bin/uniffi-bindgen.rs",
+        "crates/wasm/Cargo.toml"
+      ],
+      "normalized_patch_sha256": "9d0c48a4573a894a468889c51ae28fcc36432b7545be10de3ccd18971e499e16",
+      "empty_commit_disposition": "retained"
+    },
+    {
+      "source_commit": "fcbdc0f5d60a0bf6b55e0333799f8c9cfc8b8cfc",
+      "target_commit": "71ee71fdc08f32dc7e8bef8cb1154bc9319dba70",
+      "source_parents": [
+        "50d303f0ad4a4b4cb4bf34b9014beccede980e48"
+      ],
+      "target_parents": [
+        "4c9dbf929b0aab0f359a752891f9fb5e7320c166"
+      ],
+      "source_subject": "docs: update `radroots-app-wasm` readme",
+      "target_subject": "docs: update `radroots-app-wasm` readme",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-03-01T15:14:33Z",
+      "target_author_time": "2026-03-01T15:14:33Z",
+      "source_committer_time": "2026-03-01T15:14:33Z",
+      "target_committer_time": "2026-03-01T15:14:33Z",
+      "source_paths": [],
+      "normalized_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "empty_commit_disposition": "topology_support"
+    },
+    {
+      "source_commit": "fee2551e8dce4330d21570e4a74c6747c36d0ff0",
+      "target_commit": "b48181fc930a6e11d5bd77e4086dd11de3de959c",
+      "source_parents": [
+        "b770841d2d2ea1cafc1d4a644d596cb8727624d9"
+      ],
+      "target_parents": [
+        "b580bd27deec4665c91bee63e5287e2c76d48c67"
+      ],
+      "source_subject": "logging: own mobile host initialization",
+      "target_subject": "logging: own mobile host initialization",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-04T13:21:16Z",
+      "target_author_time": "2026-08-04T13:21:16Z",
+      "source_committer_time": "2026-08-04T13:21:16Z",
+      "target_committer_time": "2026-08-04T13:21:16Z",
+      "source_paths": [
+        "crates/core/Cargo.toml",
+        "crates/core/src/logging.rs",
+        "crates/core/src/logging/writer.rs"
+      ],
+      "normalized_patch_sha256": "1287d0848f605c59ca8ea98d80f14b273c3deaf84518d9c6d82f6dde522e5e96",
+      "empty_commit_disposition": "retained"
+    }
+  ]
+}

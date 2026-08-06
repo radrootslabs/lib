@@ -36,6 +36,10 @@ members = [
   "crates/mesh",
   "crates/mesh_agent_client",
   "crates/mesh_agent_proto",
+  "crates/mobile_bindgen",
+  "crates/mobile_core",
+  "crates/mobile_ffi",
+  "crates/mobile_wasm",
   "crates/core_bindings",
   "crates/event_bindings",
   "crates/event_codec_wasm",
@@ -148,6 +152,10 @@ radroots_transport = { package = "radroots_transport", path = "crates/transport"
 radroots_mesh = { path = "crates/mesh", version = "=0.1.0-alpha", default-features = false }
 radroots_mesh_agent_client = { path = "crates/mesh_agent_client", version = "=0.1.0-alpha", default-features = false }
 radroots_mesh_agent_proto = { path = "crates/mesh_agent_proto", version = "=0.1.0-alpha", default-features = false }
+radroots_mobile_bindgen = { path = "crates/mobile_bindgen", version = "=0.1.0-alpha" }
+radroots_mobile_core = { path = "crates/mobile_core", version = "=0.1.0-alpha", default-features = false }
+radroots_mobile_ffi = { path = "crates/mobile_ffi", version = "=0.1.0-alpha" }
+radroots_mobile_wasm = { path = "crates/mobile_wasm", version = "=0.1.0-alpha" }
 radroots_simplex_app_store = { path = "crates/simplex_app_store", version = "=0.1.0-alpha", default-features = false }
 radroots_sdk = { path = "crates/sdk", version = "=0.1.0-alpha", default-features = false }
 radroots_sdk_ffi = { path = "crates/sdk_ffi", version = "=0.1.0-alpha" }

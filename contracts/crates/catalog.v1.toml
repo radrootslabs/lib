@@ -1257,14 +1257,14 @@ replaces = []
 [[package]]
 name = "radroots_mobile_core"
 path = "crates/mobile_core"
-state = "reserved_import"
+state = "active"
 tier = "runtime"
 visibility = "private_runtime"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-or-later"
 platforms = ["native", "wasm32"]
-groups = ["mobile"]
+groups = ["coverage_required", "mobile"]
 owners = ["mobile"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1281,20 +1281,19 @@ source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/core"
 source_tree_sha256 = "8ae546ee60a97bfc145c12ea94dcd6d528bf5f49e974159442738c29eb3d6ee1"
 compatibility = ["product", "lifecycle", "package_private"]
-removal_gate = "mobile_history_import_verified"
 replaces = ["radroots_app_core"]
 
 [[package]]
 name = "radroots_mobile_ffi"
 path = "crates/mobile_ffi"
-state = "reserved_import"
+state = "active"
 tier = "boundary"
 visibility = "private_boundary"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-or-later"
 platforms = ["apple", "android"]
-groups = ["mobile", "boundaries"]
+groups = ["coverage_required", "mobile", "boundaries"]
 owners = ["mobile"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1312,20 +1311,19 @@ source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/ffi"
 source_tree_sha256 = "9a38699ad6d39b9f8764fed6a67bd55908ff54cb2e3cae9a3890ce1a46789b2b"
 compatibility = ["ffi", "swift", "kotlin", "lifecycle", "package_private"]
-removal_gate = "mobile_history_import_verified"
 replaces = ["radroots_app_ffi"]
 
 [[package]]
 name = "radroots_mobile_wasm"
 path = "crates/mobile_wasm"
-state = "reserved_import"
+state = "active"
 tier = "boundary"
 visibility = "private_boundary"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-or-later"
 platforms = ["wasm32"]
-groups = ["mobile", "wasm", "boundaries"]
+groups = ["coverage_required", "mobile", "wasm", "boundaries"]
 owners = ["mobile"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1343,20 +1341,19 @@ source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/wasm"
 source_tree_sha256 = "8c65c867eafc0643ca9fd86150766af4f4ab2f0f8321d66306418261a8f43124"
 compatibility = ["wasm", "lifecycle", "package_private"]
-removal_gate = "mobile_history_import_verified"
 replaces = ["radroots_app_wasm"]
 
 [[package]]
 name = "radroots_mobile_bindgen"
 path = "crates/mobile_bindgen"
-state = "reserved_import"
+state = "active"
 tier = "codegen"
 visibility = "private_codegen"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-or-later"
 platforms = ["native"]
-groups = ["mobile", "boundaries"]
+groups = ["coverage_required", "mobile", "boundaries"]
 owners = ["mobile"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1375,7 +1372,6 @@ source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/bindgen"
 source_tree_sha256 = "f0a9d7ec9794257bc56063117208e6e83a34efe1b852e8af6d6a56a1693d27fa"
 compatibility = ["generated", "swift", "kotlin", "package_private"]
-removal_gate = "mobile_history_import_verified"
 replaces = ["radroots_app_bindgen"]
 
 [[package]]

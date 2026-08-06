@@ -45,6 +45,11 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the UniFFI facade has no measured branch records"
 
+[overrides.radroots_mobile_bindgen]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the coverage-only bindgen entry point has no measured branch records"
+
 [overrides.radroots_test_fixtures]
 require_branches = false
 temporary = true
@@ -66,6 +71,10 @@ crates = [
   "radroots_mesh",
   "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
+  "radroots_mobile_bindgen",
+  "radroots_mobile_core",
+  "radroots_mobile_ffi",
+  "radroots_mobile_wasm",
   "radroots_nostr",
   "radroots_nostr_connect",
   "radroots_nostrdb",

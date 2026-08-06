@@ -57,6 +57,16 @@ bytes = 515435
 final_tree_sha256 = "456b9249343ee4fd21f7c8cda642a941062af97382520e54eefc13113da382cd"
 path_map_sha256 = "c5a4a696db94bec4658b62fe775f96b81e7ae913b5dedc10448a72a9f1bf3725"
 
+[[import]]
+source_id = "app_rt"
+frozen_commit = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+filtered_head = "2441d0d21c33946e11ee7254c7bae5818d799901"
+artifact = "app_rt.commit-map.v1.json"
+sha256 = "ebd8e2345391cf1e86ed2e2667657a608eca34a606b09d467bbf9608fd70eb60"
+bytes = 66361
+final_tree_sha256 = "4813f4b5296dbb48ac890a967f9c6cf7a50dc762e92508696ac15ef900bbe616"
+path_map_sha256 = "149adae50385ec89862093341d9ad74709fe690c46bf2cb163758809ae41fad6"
+
 [[archive]]
 source_id = "sdk"
 kind = "git_bundle"
@@ -82,8 +92,8 @@ sha256 = "9a9ba8e6002ee3d6fcb232e18fb84dbc2885bb37e7bdba736b44a1e5bb6489b0"
 bytes = 167343
 source_commit_count = 60
 source_path_commit_count = 49
-rewritten_commit_count = 56
-topology_support_commit_count = 7
+rewritten_commit_count = 58
+topology_support_commit_count = 9
 omitted_empty_commit_count = 0
 source_object_count = 508
 refname = "refs/heads/master"
