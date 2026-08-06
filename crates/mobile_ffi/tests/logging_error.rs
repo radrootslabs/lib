@@ -1,5 +1,5 @@
 use radroots_mobile_core::RadrootsAppError;
-use radroots_mobile_core::logging;
+use radroots_mobile_ffi::logging;
 
 #[test]
 fn init_logging_stdout_maps_global_subscriber_error() {
