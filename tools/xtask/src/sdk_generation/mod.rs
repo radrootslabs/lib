@@ -32,7 +32,7 @@ pub fn artifact(
         }
         ("ffi", "swift" | "kotlin") => {
             bindings::generate(source_root, consumer_root, language, mode)?;
-            bindings::check(source_root, consumer_root)?;
+            bindings::check_generated_language(source_root, consumer_root, language)?;
         }
         _ => {
             return Err(format!(

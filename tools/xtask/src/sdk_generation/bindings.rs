@@ -169,24 +169,33 @@ fn normalize_generated_text(contents: &str) -> String {
     normalized
 }
 
-pub fn check(source_root: &Path, consumer_root: &Path) -> Result<(), String> {
-    check_language(
-        source_root,
-        consumer_root,
-        "swift",
-        &[
-            "radroots_sdk.swift",
-            "radroots_sdkFFI.h",
-            "radroots_sdkFFI.modulemap",
-        ],
-    )?;
-    check_language(
-        source_root,
-        consumer_root,
-        "kotlin",
-        &["uniffi/radroots_sdk/radroots_sdk.kt"],
-    )?;
-    check_kotlin_schema_inventory(consumer_root)
+pub fn check_generated_language(
+    source_root: &Path,
+    consumer_root: &Path,
+    language: &str,
+) -> Result<(), String> {
+    match language {
+        "swift" => check_language(
+            source_root,
+            consumer_root,
+            "swift",
+            &[
+                "radroots_sdk.swift",
+                "radroots_sdkFFI.h",
+                "radroots_sdkFFI.modulemap",
+            ],
+        ),
+        "kotlin" => {
+            check_language(
+                source_root,
+                consumer_root,
+                "kotlin",
+                &["uniffi/radroots_sdk/radroots_sdk.kt"],
+            )?;
+            check_kotlin_schema_inventory(consumer_root)
+        }
+        _ => Err("SDK binding language must be swift or kotlin".to_owned()),
+    }
 }
 
 fn check_kotlin_schema_inventory(root: &Path) -> Result<(), String> {
@@ -325,7 +334,47 @@ mod tests {
 
     use crate::build_control::Mode;
 
-    use super::{check, generate};
+    use super::{
+        BINDGEN_VERSION, FFI_PACKAGE, FFI_VERSION, SourceLock, check_generated_language,
+        ffi_source_sha256, generate,
+    };
+
+    #[test]
+    fn language_check_does_not_require_the_other_binding_tree() {
+        let consumer = tempfile::TempDir::new().expect("consumer fixture");
+        let source = crate::workspace_root();
+        let output_dir = consumer.path().join("generated/swift");
+        fs::create_dir_all(&output_dir).expect("Swift output directory");
+        let outputs = BTreeMap::from([
+            ("radroots_sdk.swift".to_owned(), "swift\n"),
+            ("radroots_sdkFFI.h".to_owned(), "header\n"),
+            ("radroots_sdkFFI.modulemap".to_owned(), "module\n"),
+        ]);
+        for (name, contents) in &outputs {
+            fs::write(output_dir.join(name), contents).expect("Swift fixture output");
+        }
+        let lock = SourceLock {
+            schema_version: 1,
+            source_package: FFI_PACKAGE.to_owned(),
+            source_version: FFI_VERSION.to_owned(),
+            source_sha256: ffi_source_sha256(&source).expect("FFI source digest"),
+            generator: "uniffi".to_owned(),
+            generator_version: BINDGEN_VERSION.to_owned(),
+            language: "swift".to_owned(),
+            outputs: outputs
+                .into_iter()
+                .map(|(name, contents)| {
+                    (name, format!("{:x}", Sha256::digest(contents.as_bytes())))
+                })
+                .collect(),
+        };
+        let mut rendered = serde_json::to_string_pretty(&lock).expect("source lock");
+        rendered.push('\n');
+        fs::write(output_dir.join("source.lock"), rendered).expect("source lock fixture");
+
+        check_generated_language(&source, consumer.path(), "swift").expect("Swift-only validation");
+        assert!(check_generated_language(&source, consumer.path(), "kotlin").is_err());
+    }
 
     #[test]
     #[ignore = "requires the native UniFFI bindgen toolchain"]
@@ -334,7 +383,9 @@ mod tests {
         let source = crate::workspace_root();
         generate(&source, consumer.path(), "swift", Mode::Write).expect("Swift generation");
         generate(&source, consumer.path(), "kotlin", Mode::Write).expect("Kotlin generation");
-        check(&source, consumer.path()).expect("fresh generated bindings");
+        check_generated_language(&source, consumer.path(), "swift").expect("fresh Swift bindings");
+        check_generated_language(&source, consumer.path(), "kotlin")
+            .expect("fresh Kotlin bindings");
 
         let expected = BTreeMap::from([
             (
