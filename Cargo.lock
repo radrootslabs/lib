@@ -3054,6 +3054,7 @@ name = "radroots_mobile_ffi"
 version = "0.1.0-alpha"
 dependencies = [
  "radroots_mobile_core",
+ "rustix 1.1.4",
  "tempfile",
  "tracing",
  "tracing-appender",
