@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "schema": "radroots.history-import.commit-map.v1",
+  "source_id": "studio_mpl_legacy_core",
+  "frozen_commit": "6074a4745be361f21bb47d4778c74a14b2d57954",
+  "filtered_head": "09b463c5875c2cefc09569468db1bff6472cfc3b",
+  "source_commit_count": 1,
+  "source_path_commit_count": 1,
+  "rewritten_commit_count": 1,
+  "topology_support_commit_count": 0,
+  "omitted_empty_commit_count": 0,
+  "final_tree_sha256": "0e04a38aa0c9f1f1db055e01bed2ce11154b2d9d0cf2e746e5d89dbfe5d1ce9e",
+  "path_map_sha256": "cab788f7be2329c906c993e168c0dbbbd6b6facf5e2afbd0a54290fb3d88190e",
+  "verifications": [
+    "archive_restore",
+    "git_fsck",
+    "mapped_parent_closure",
+    "commit_count",
+    "path_coverage",
+    "normalized_patch_equivalence",
+    "final_tree_digest",
+    "authorship",
+    "timestamps",
+    "message_scope_only",
+    "git_log_follow",
+    "secret_scan",
+    "license_scan",
+    "bot_identity_scan",
+    "github_workflow_exclusion",
+    "context_firewall"
+  ],
+  "commits": [
+    {
+      "source_commit": "6074a4745be361f21bb47d4778c74a14b2d57954",
+      "target_commit": "09b463c5875c2cefc09569468db1bff6472cfc3b",
+      "source_parents": [],
+      "target_parents": [],
+      "source_subject": "studio: track native dashboard refactor",
+      "target_subject": "studio: track native dashboard refactor",
+      "source_author": "triesap <tyson@radroots.org>",
+      "target_author": "triesap <tyson@radroots.org>",
+      "source_author_time": "2026-08-03T22:45:35Z",
+      "target_author_time": "2026-08-03T22:45:35Z",
+      "source_committer_time": "2026-08-03T22:45:35Z",
+      "target_committer_time": "2026-08-03T22:45:35Z",
+      "source_paths": [
+        "studio_app/studio_app_core/Cargo.lock",
+        "studio_app/studio_app_core/Cargo.toml",
+        "studio_app/studio_app_core/RADROOTS_PATCH_VERSION",
+        "studio_app/studio_app_core/crates/core/Cargo.toml",
+        "studio_app/studio_app_core/crates/core/src/lib.rs",
+        "studio_app/studio_app_core/crates/core/uniffi.toml",
+        "studio_app/studio_app_core/rust-toolchain.toml",
+        "studio_app/studio_app_core/tools/uniffi-bindgen/Cargo.toml",
+        "studio_app/studio_app_core/tools/uniffi-bindgen/src/main.rs"
+      ],
+      "normalized_patch_sha256": "5aeb305010a8a711e78d9a63e94a432facfab2ead97cbd4bd95c7a00d0e11849",
+      "empty_commit_disposition": "retained"
+    }
+  ]
+}

@@ -239,8 +239,10 @@ fn verify_history_import(
         .iter()
         .find(|archive| archive.source_id == source_id)
         .ok_or_else(|| format!("unknown history source {source_id}"))?;
-    if archive.kind != "git_bundle" {
-        return Err(format!("history source {source_id} is not a Git bundle"));
+    if !matches!(archive.kind.as_str(), "git_bundle" | "path_fast_export") {
+        return Err(format!(
+            "history source {source_id} has an unsupported archive kind"
+        ));
     }
     let path_maps = history
         .path_map
@@ -250,7 +252,11 @@ fn verify_history_import(
     if path_maps.is_empty() {
         return Err(format!("history source {source_id} has no path map"));
     }
-    if git_stdout(source_root, &["rev-parse", "master"])?.trim() != archive.frozen_commit {
+    let source_head = git_stdout(source_root, &["rev-parse", "master"])?
+        .trim()
+        .to_owned();
+    validate_oid(&source_head, "source head")?;
+    if archive.kind == "git_bundle" && source_head != archive.frozen_commit {
         return Err(format!(
             "history source {source_id} is not at its frozen commit"
         ));
@@ -286,7 +292,7 @@ fn verify_history_import(
         .to_owned();
     validate_oid(&filtered_head, "filtered head")?;
     let expected_filtered_head = by_source
-        .get(archive.frozen_commit.as_str())
+        .get(source_head.as_str())
         .and_then(|target| *target)
         .ok_or_else(|| "frozen source head was omitted by filtering".to_owned())?;
     if filtered_head != expected_filtered_head {
@@ -296,14 +302,14 @@ fn verify_history_import(
     verify_import_path_coverage(
         source_root,
         filtered_root,
-        archive,
+        &source_head,
         &path_maps,
         &filtered_head,
     )?;
     verify_import_final_tree(
         source_root,
         filtered_root,
-        &archive.frozen_commit,
+        &source_head,
         &filtered_head,
         &path_maps,
     )?;
@@ -386,7 +392,11 @@ fn verify_history_import(
             }
         };
         commits.push(ImportCommit {
-            source_commit: entry.source.clone(),
+            source_commit: if archive.kind == "path_fast_export" {
+                archive.frozen_commit.clone()
+            } else {
+                entry.source.clone()
+            },
             target_commit: entry.target.clone(),
             source_parents,
             target_parents,
@@ -721,7 +731,7 @@ fn verify_import_final_tree(
 fn verify_import_path_coverage(
     source_root: &Path,
     filtered_root: &Path,
-    archive: &Archive,
+    source_commit: &str,
     path_maps: &[&PathMap],
     filtered_head: &str,
 ) -> Result<(), String> {
@@ -731,7 +741,7 @@ fn verify_import_path_coverage(
             &[
                 "cat-file",
                 "-e",
-                &format!("{}:{}", archive.frozen_commit, path_map.source),
+                &format!("{source_commit}:{}", path_map.source),
             ],
         )?;
         git(

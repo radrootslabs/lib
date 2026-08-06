@@ -77,6 +77,16 @@ bytes = 986718
 final_tree_sha256 = "8158d9dd59199fa28faca31327ff20d8fe654dc15cc38dc2f2ce2adc9c049b32"
 path_map_sha256 = "7b0302d616114ddc769d88eee05309ddaa5fb978a683ac5f7e49692ce810a7be"
 
+[[import]]
+source_id = "studio_mpl_legacy_core"
+frozen_commit = "6074a4745be361f21bb47d4778c74a14b2d57954"
+filtered_head = "09b463c5875c2cefc09569468db1bff6472cfc3b"
+artifact = "studio_mpl_legacy_core.commit-map.v1.json"
+sha256 = "a1f6a9feade4bc972287b02989b0962e679d2053e743308f966b4c985593ce1f"
+bytes = 2391
+final_tree_sha256 = "0e04a38aa0c9f1f1db055e01bed2ce11154b2d9d0cf2e746e5d89dbfe5d1ce9e"
+path_map_sha256 = "cab788f7be2329c906c993e168c0dbbbd6b6facf5e2afbd0a54290fb3d88190e"
+
 [[archive]]
 source_id = "sdk"
 kind = "git_bundle"
