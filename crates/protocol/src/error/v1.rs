@@ -53,6 +53,33 @@ pub enum Class {
     Unknown,
 }
 
+impl Class {
+    /// Returns the stable wire identity for this class.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Validation => "validation",
+            Self::Contract => "contract",
+            Self::Storage => "storage",
+            Self::Resource => "resource",
+            Self::Conflict => "conflict",
+            Self::Operation => "operation",
+            Self::Authorization => "authorization",
+            Self::Signer => "signer",
+            Self::Network => "network",
+            Self::Sync => "sync",
+            Self::Runtime => "runtime",
+            Self::Projection => "projection",
+            Self::Query => "query",
+            Self::Capability => "capability",
+            Self::Privacy => "privacy",
+            Self::Security => "security",
+            Self::Maintenance => "maintenance",
+            Self::Internal => "internal",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 /// Stable recovery action vocabulary established by the SDK surface.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
@@ -72,6 +99,30 @@ pub enum RecoveryAction {
     RetryGeoNamesDownload,
     EnableRequiredFeature,
     RecreateClient,
+}
+
+impl RecoveryAction {
+    /// Returns the stable wire identity for this recovery action.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InspectLocalStores => "inspect_local_stores",
+            Self::ConfigureStorage => "configure_storage",
+            Self::InspectGeoNamesAsset => "inspect_geo_names_asset",
+            Self::RetryOperationWithSameIdempotencyKey => {
+                "retry_operation_with_same_idempotency_key"
+            }
+            Self::ConfigureTransportTargets => "configure_transport_targets",
+            Self::ConfigureGeoNamesCache => "configure_geo_names_cache",
+            Self::ConfigureSigner => "configure_signer",
+            Self::FixRequest => "fix_request",
+            Self::SelectAuthorizedActor => "select_authorized_actor",
+            Self::CompleteSignerAuthentication => "complete_signer_authentication",
+            Self::RetryAfterTransportFailure => "retry_after_transport_failure",
+            Self::RetryGeoNamesDownload => "retry_geonames_download",
+            Self::EnableRequiredFeature => "enable_required_feature",
+            Self::RecreateClient => "recreate_client",
+        }
+    }
 }
 
 /// One generated catalog descriptor.
@@ -768,6 +819,21 @@ mod tests {
     use alloc::collections::BTreeSet;
 
     use super::*;
+
+    #[test]
+    fn class_and_recovery_labels_are_explicit_and_stable() {
+        assert_eq!(Class::Validation.as_str(), "validation");
+        assert_eq!(Class::Unknown.as_str(), "unknown");
+        assert_eq!(
+            RecoveryAction::InspectLocalStores.as_str(),
+            "inspect_local_stores"
+        );
+        assert_eq!(RecoveryAction::RecreateClient.as_str(), "recreate_client");
+        assert_eq!(
+            RecoveryAction::RetryOperationWithSameIdempotencyKey.as_str(),
+            "retry_operation_with_same_idempotency_key"
+        );
+    }
 
     #[test]
     fn generated_catalog_is_complete_unique_and_self_consistent() {
