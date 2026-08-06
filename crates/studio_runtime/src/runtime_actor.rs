@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -138,6 +139,7 @@ pub struct RuntimeActorHandle {
     session_generation: Arc<AtomicU64>,
     foreground_session: Arc<Mutex<Option<ForegroundSessionBinding>>>,
     installation_identity: InstallationIdentity,
+    runtime: Handle,
     actor_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     actor_exit: watch::Receiver<bool>,
 }
@@ -294,6 +296,7 @@ impl RuntimeActorHandle {
             session_generation,
             foreground_session,
             installation_identity,
+            runtime: runtime.clone(),
             actor_task: Arc::new(Mutex::new(Some(actor_task))),
             actor_exit,
         })
@@ -581,7 +584,7 @@ impl RuntimeActorHandle {
         let mut actor_exit = self.actor_exit.clone();
         if !*actor_exit.borrow() {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            tokio::time::timeout(remaining, actor_exit.wait_for(|exited| *exited))
+            self.timeout(remaining, actor_exit.wait_for(|exited| *exited))
                 .await
                 .map_err(|_| command_timed_out())?
                 .map_err(|_| runtime_closed())?;
@@ -593,7 +596,7 @@ impl RuntimeActorHandle {
             .take();
         if let Some(actor_task) = actor_task {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            tokio::time::timeout(remaining, actor_task)
+            self.timeout(remaining, actor_task)
                 .await
                 .map_err(|_| command_timed_out())?
                 .map_err(|_| runtime_closed())?;
@@ -678,7 +681,7 @@ impl RuntimeActorHandle {
         let receipt = match self.mailbox.submit(context, command) {
             CommandSubmission::Accepted(ticket) => {
                 let remaining = deadline.saturating_duration_since(Instant::now());
-                match tokio::time::timeout(remaining, ticket.receipt()).await {
+                match self.timeout(remaining, ticket.receipt()).await {
                     Ok(receipt) => receipt,
                     Err(_) => CommandReceipt::new(request_id, CommandResult::TimedOut),
                 }
@@ -693,6 +696,14 @@ impl RuntimeActorHandle {
             CommandResult::Closed => Err(runtime_closed()),
             CommandResult::Failed(error) => Err(error),
         }
+    }
+
+    fn timeout<F>(&self, duration: Duration, future: F) -> tokio::time::Timeout<F>
+    where
+        F: Future,
+    {
+        let _guard = self.runtime.enter();
+        tokio::time::timeout(duration, future)
     }
 
     #[cfg(test)]
@@ -1364,9 +1375,12 @@ const fn observer_registration_failed() -> SafeError {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
     use std::num::NonZeroUsize;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Condvar, Mutex};
+    use std::task::{Context, Poll, Wake, Waker};
+    use std::thread::{self, Thread};
     use std::time::{Duration, Instant};
 
     use radroots_studio_application::{
@@ -1531,6 +1545,40 @@ mod tests {
         .await
         .expect("actor");
         (actor, secrets)
+    }
+
+    struct ThreadWake(Thread);
+
+    impl Wake for ThreadWake {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+
+    fn block_on_without_runtime<F: Future>(future: F) -> F::Output {
+        let waker = Waker::from(Arc::new(ThreadWake(thread::current())));
+        let mut context = Context::from_waker(&waker);
+        let mut future = std::pin::pin!(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => thread::park(),
+            }
+        }
+    }
+
+    #[test]
+    fn actor_operations_support_foreign_executor_polling() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let (actor, _) = runtime.block_on(actor());
+
+        let snapshot = block_on_without_runtime(actor.bootstrap()).expect("bootstrap");
+        assert_eq!(snapshot, actor.snapshot());
+        block_on_without_runtime(actor.close()).expect("close");
     }
 
     #[tokio::test(flavor = "multi_thread")]
