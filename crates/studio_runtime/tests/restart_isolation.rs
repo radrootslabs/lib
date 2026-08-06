@@ -5,7 +5,7 @@ use radroots_studio_application::{
     RelayConfiguration, SessionState,
 };
 use radroots_studio_domain::{SecretKeyInput, UnixTimestamp};
-use radroots_studio_storage::PersistentAppCore;
+use radroots_studio_runtime::PersistentAppCore;
 use tempfile::tempdir;
 
 const SECRET_A: &str = "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7";

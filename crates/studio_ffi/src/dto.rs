@@ -399,13 +399,19 @@ impl From<ProfileLoadState> for ProfileLoadStateDto {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use radroots_studio_application::{AppCore, RelayConfiguration};
+    use radroots_studio_nostr::NostrKeyMaterialProvider;
 
     use super::AppSnapshotDto;
 
     #[test]
     fn snapshot_dto_is_revisioned_public_and_secret_free() {
-        let core = AppCore::in_memory(RelayConfiguration::default());
+        let core = AppCore::new(
+            RelayConfiguration::default(),
+            Arc::new(NostrKeyMaterialProvider),
+        );
         let snapshot = core.bootstrap().expect("bootstrap");
         let dto = AppSnapshotDto::from(&snapshot);
         let debug = format!("{dto:?}");

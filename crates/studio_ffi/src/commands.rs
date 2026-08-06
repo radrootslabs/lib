@@ -9,10 +9,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use directories::ProjectDirs;
 use radroots_studio_application::{
     Clock, DurableRequestId, GeneratedKeyRecoveryHandle, RelayConfiguration, RelayRuntimeMode,
-    RemovalConfirmationToken, SdkNostrClient, relay_configuration_from_environment,
+    RemovalConfirmationToken, relay_configuration_from_environment,
 };
 use radroots_studio_domain::{PublicKey, SafeError, SecretKeyInput, UnixTimestamp};
-use radroots_studio_storage::{OsKeyringSecretStore, RuntimeActorHandle};
+use radroots_studio_nostr::SdkNostrClient;
+use radroots_studio_runtime::{
+    RuntimeActorHandle, RuntimeDependencies, UuidInstallationIdentitySource,
+};
+use radroots_studio_storage::OsKeyringSecretStore;
 
 use crate::{
     AccountDto, AppSnapshotDto, WireErrorCategory, WireErrorCode, WireRecoveryAction,
@@ -282,14 +286,25 @@ impl StudioAppCore {
     /// A failed commit must be recovered by importing the already-saved recovery key.
     pub async fn acknowledge_generated_account_v2(
         &self,
+        context: RequestContextDto,
         request: Arc<GeneratedRecoveryRequest>,
     ) -> Result<AppSnapshotDto, StudioError> {
         if request.resolved.swap(true, Ordering::AcqRel) {
             return Err(generated_recovery_expired());
         }
+        let request_id = DurableRequestId::parse(context.request_id.clone())
+            .map_err(|error| StudioError::correlated(error, &context.request_id))?;
+        let timeout = command_timeout(context.deadline_millis, &context.request_id)?;
         self.inner
             .actor
-            .acknowledge_generated_key_stage(request.handle.id())
+            .acknowledge_generated_key_stage(
+                request.handle.id(),
+                request_id,
+                radroots_studio_application::SnapshotRevision::from_value(
+                    context.expected_revision,
+                ),
+                timeout,
+            )
             .await
             .map(|snapshot| self.inner.dto_for(&snapshot))
             .map_err(generated_commit_failed)
@@ -331,7 +346,7 @@ impl StudioAppCore {
             .map_err(|error| StudioError::correlated(error, &context.request_id))?;
         self.inner
             .actor
-            .import_secret_key_request(
+            .import_secret_key(
                 request_id,
                 radroots_studio_application::SnapshotRevision::from_value(
                     context.expected_revision,
@@ -449,6 +464,7 @@ impl StudioAppCore {
     /// Returns a safe confirmation, credential, recovery, or storage error.
     pub async fn confirm_account_removal(
         &self,
+        context: RequestContextDto,
         request: Arc<RemovalRequest>,
     ) -> Result<AppSnapshotDto, StudioError> {
         let token = request
@@ -457,9 +473,19 @@ impl StudioAppCore {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
             .ok_or_else(confirmation_expired)?;
+        let request_id = DurableRequestId::parse(context.request_id.clone())
+            .map_err(|error| StudioError::correlated(error, &context.request_id))?;
+        let timeout = command_timeout(context.deadline_millis, &context.request_id)?;
         self.inner
             .actor
-            .confirm_account_removal(token)
+            .confirm_account_removal(
+                token,
+                request_id,
+                radroots_studio_application::SnapshotRevision::from_value(
+                    context.expected_revision,
+                ),
+                timeout,
+            )
             .await
             .map(|snapshot| self.inner.dto_for(&snapshot))
             .map_err(StudioError::from)
@@ -499,15 +525,19 @@ impl StudioAppCore {
         };
         let (relays, startup_relay_problem) =
             local_first_relay_configuration(relay_configuration_from_environment(mode));
-        let actor = RuntimeActorHandle::open(
+        let runtime = runtime()?;
+        let actor = runtime.block_on(RuntimeActorHandle::open(
             path,
             relays,
-            Arc::new(OsKeyringSecretStore::default()),
-            Arc::new(SystemClock),
-            Arc::new(SdkNostrClient::new(Duration::from_secs(5))),
-            NonZeroUsize::new(ACTOR_MAILBOX_CAPACITY).expect("nonzero actor mailbox capacity"),
-            runtime().handle(),
-        )?;
+            RuntimeDependencies::new(
+                Arc::new(OsKeyringSecretStore::default()),
+                Arc::new(SystemClock),
+                Arc::new(SdkNostrClient::new(Duration::from_secs(5))),
+                Arc::new(UuidInstallationIdentitySource),
+            ),
+            actor_mailbox_capacity()?,
+            runtime.handle(),
+        ))?;
         Ok(Arc::new(Self {
             inner: Arc::new(RuntimeCore {
                 actor,
@@ -538,7 +568,7 @@ impl Clock for SystemClock {
             .map_or(0, |duration| {
                 i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
             });
-        UnixTimestamp::from_seconds(seconds).expect("system time is nonnegative")
+        UnixTimestamp::from_seconds(seconds).unwrap_or(UnixTimestamp::UNIX_EPOCH)
     }
 }
 
@@ -574,15 +604,33 @@ fn command_timeout(millis: u64, correlation_id: &str) -> Result<Duration, Studio
     Ok(Duration::from_millis(millis))
 }
 
-pub(crate) fn runtime() -> &'static tokio::runtime::Runtime {
-    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .thread_name("radroots-studio-core")
-            .build()
-            .expect("Tokio runtime construction")
-    })
+pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, StudioError> {
+    static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, ()>> = OnceLock::new();
+    RUNTIME
+        .get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_name("radroots-studio-core")
+                .build()
+                .map_err(|_| ())
+        })
+        .as_ref()
+        .map_err(|()| runtime_unavailable())
+}
+
+fn actor_mailbox_capacity() -> Result<NonZeroUsize, StudioError> {
+    NonZeroUsize::new(ACTOR_MAILBOX_CAPACITY).ok_or_else(runtime_unavailable)
+}
+
+fn runtime_unavailable() -> StudioError {
+    StudioError::Failure {
+        code: WireErrorCode::InvalidApplicationState,
+        category: WireErrorCategory::Lifecycle,
+        retryable: true,
+        recovery_action: WireRecoveryAction::RestartApplication,
+        correlation_id: None,
+        safe_message: "The application runtime is unavailable.".to_owned(),
+    }
 }
 
 fn path_unavailable() -> StudioError {
@@ -648,9 +696,12 @@ mod tests {
     use std::num::NonZeroUsize;
     use std::sync::Arc;
 
-    use radroots_studio_application::{InMemorySecretStore, RelayConfiguration, SdkNostrClient};
+    use radroots_studio_application::{InMemorySecretStore, RelayConfiguration};
     use radroots_studio_domain::SafeError;
-    use radroots_studio_storage::RuntimeActorHandle;
+    use radroots_studio_nostr::SdkNostrClient;
+    use radroots_studio_runtime::{
+        RuntimeActorHandle, RuntimeDependencies, UuidInstallationIdentitySource,
+    };
 
     use radroots_studio_storage::{CREDENTIAL_SERVICE, CURRENT_SCHEMA_VERSION};
 
@@ -662,15 +713,19 @@ mod tests {
         verify_compatibility,
     };
 
-    fn in_memory_core() -> Arc<StudioAppCore> {
+    async fn in_memory_core() -> Arc<StudioAppCore> {
         let actor = RuntimeActorHandle::in_memory(
             RelayConfiguration::default(),
-            Arc::new(InMemorySecretStore::default()),
-            Arc::new(SystemClock),
-            Arc::new(SdkNostrClient::new(std::time::Duration::from_millis(10))),
+            RuntimeDependencies::new(
+                Arc::new(InMemorySecretStore::default()),
+                Arc::new(SystemClock),
+                Arc::new(SdkNostrClient::new(std::time::Duration::from_millis(10))),
+                Arc::new(UuidInstallationIdentitySource),
+            ),
             NonZeroUsize::new(ACTOR_MAILBOX_CAPACITY).expect("capacity"),
-            runtime().handle(),
+            runtime().expect("runtime").handle(),
         )
+        .await
         .expect("in-memory actor");
         Arc::new(StudioAppCore {
             inner: Arc::new(RuntimeCore {
@@ -684,7 +739,7 @@ mod tests {
 
     #[tokio::test]
     async fn exported_bootstrap_and_snapshot_are_revisioned() {
-        let core = in_memory_core();
+        let core = in_memory_core().await;
         let bootstrapped = core.bootstrap().await.expect("bootstrap");
         let current = core.snapshot();
 
@@ -694,7 +749,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_context_import_replays_one_committed_receipt() {
-        let core = in_memory_core();
+        let core = in_memory_core().await;
         let initial = core.snapshot();
         let context = RequestContextDto {
             request_id: "ffi-test-import-1".to_owned(),
@@ -718,7 +773,7 @@ mod tests {
 
     #[tokio::test]
     async fn generated_recovery_handle_is_one_use_and_acknowledgement_gated() {
-        let core = in_memory_core();
+        let core = in_memory_core().await;
         let initial = core.snapshot();
         let recovery = core
             .begin_generated_account_v2()
@@ -729,13 +784,18 @@ mod tests {
         let nsec = recovery.take_recovery_nsec().expect("one-use nsec");
         assert!(nsec.starts_with("nsec1"));
         assert!(recovery.take_recovery_nsec().is_err());
+        let context = RequestContextDto {
+            request_id: "ffi-test-generate-1".to_owned(),
+            expected_revision: initial.revision,
+            deadline_millis: 5_000,
+        };
         let committed = core
-            .acknowledge_generated_account_v2(Arc::clone(&recovery))
+            .acknowledge_generated_account_v2(context.clone(), Arc::clone(&recovery))
             .await
             .expect("acknowledge");
         assert_eq!(committed.accounts.len(), 1);
         let repeated = core
-            .acknowledge_generated_account_v2(recovery)
+            .acknowledge_generated_account_v2(context, recovery)
             .await
             .expect_err("repeated acknowledgement");
         assert!(matches!(
@@ -806,7 +866,7 @@ mod tests {
 
         assert_eq!(property("baseline.id"), Some("studio-runtime-v5"));
         assert_eq!(property("schema.version"), Some("5"));
-        assert_eq!(CURRENT_SCHEMA_VERSION, 9);
+        assert_eq!(CURRENT_SCHEMA_VERSION, 10);
         assert_eq!(property("ffi.contract"), Some("legacy-unversioned-v1"));
         assert_eq!(property("ffi.snapshot.schema"), Some("1"));
         assert_eq!(property("ffi.runtime.version"), Some("0.1.0-alpha"));

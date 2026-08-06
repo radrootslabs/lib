@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use radroots_studio_domain::{PublicKey, SafeError, SafeErrorCode, SafeMessage, UnixTimestamp};
 
 use crate::{
-    AccountRepository, AppSnapshot, AppStateRepository, RelayConfiguration, SnapshotRevision,
-    StateMachine, StateTransition,
+    AccountRepository, AppSnapshot, AppStateRepository, KeyMaterialProvider, RelayConfiguration,
+    SnapshotRevision, StateMachine, StateTransition,
 };
 
 pub struct RemovalConfirmationToken {
@@ -68,20 +68,38 @@ struct CoreState {
 
 pub struct AppCore {
     relay_configuration: RelayConfiguration,
+    key_material: Arc<dyn KeyMaterialProvider>,
     state: Mutex<CoreState>,
 }
 
 impl AppCore {
     #[must_use]
-    pub fn in_memory(relay_configuration: RelayConfiguration) -> Self {
+    pub fn new(
+        relay_configuration: RelayConfiguration,
+        key_material: Arc<dyn KeyMaterialProvider>,
+    ) -> Self {
         Self {
             relay_configuration,
+            key_material,
             state: Mutex::new(CoreState {
                 state_machine: StateMachine::booting(),
                 removal_tokens: BTreeMap::new(),
                 next_removal_token: 1,
             }),
         }
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub fn in_memory(relay_configuration: RelayConfiguration) -> Self {
+        Self::new(
+            relay_configuration,
+            Arc::new(crate::test_support::TestKeyMaterialProvider::default()),
+        )
+    }
+
+    pub(crate) fn key_material(&self) -> &dyn KeyMaterialProvider {
+        self.key_material.as_ref()
     }
 
     /// Moves the in-memory core from booting to an empty ready snapshot.

@@ -7,42 +7,53 @@ use std::time::{Duration, Instant};
 
 use radroots_studio_application::{
     ActorMailbox, AppSnapshot, ChangeSubscriptionId, Clock, CommandContext, CommandEnvelope,
-    CommandReceipt, CommandResult, CommandSubmission, ForegroundSessionBinding,
+    CommandReceipt, CommandResult, CommandSubmission, DurableRequestId, ForegroundSessionBinding,
     GenerateAccountReceipt, GeneratedKeyRecoveryHandle, GeneratedKeyStage, ImportAccountReceipt,
-    LifecycleGate, NostrClient, OrderedSnapshotChanges, ProfileRefreshPlan, RecoveryStageId,
-    RelayConfiguration, RemovalConfirmationToken, RequestId, RuntimeCommandClass, RuntimeLifecycle,
-    SecretStore, SessionGeneration, SnapshotChange, SnapshotChangeReceiver, SnapshotRevision,
-    TaskCorrelation,
+    LifecycleGate, NostrClient, OrderedSnapshotChanges, ProfileFetchResult, ProfileRefreshPlan,
+    RecoveryStageId, RelayConfiguration, RemovalConfirmationToken, RequestId, RuntimeCommandClass,
+    RuntimeLifecycle, SecretStore, SessionGeneration, SnapshotChange, SnapshotChangeReceiver,
+    SnapshotRevision, StagedGeneratedKey, TaskCorrelation,
 };
 use radroots_studio_domain::{
-    AccountIdentity, BindingAvailability, Kind0ProfileCandidate, LocalSignerBinding, PublicKey,
-    SafeError, SafeErrorCode, SafeMessage, SecretKeyInput,
+    AccountIdentity, BindingAvailability, LocalSignerBinding, PublicKey, SafeError, SafeErrorCode,
+    SafeMessage, SecretKeyInput,
 };
 use tokio::runtime::Handle;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::PersistentAppCore;
+use crate::blocking::{BlockingExecutionError, BoundedBlockingExecutor};
+use crate::{InstallationIdentity, InstallationIdentitySource, PersistentAppCore};
 
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_TASK_CAPACITY: usize = 64;
+const DEFAULT_BLOCKING_CAPACITY: usize = 4;
 
 enum RuntimeCommand {
     Snapshot,
-    GenerateAccount,
+    GenerateAccount {
+        durable_request: DurableRequestId,
+        expected_revision: u64,
+    },
     BeginGeneratedKeyStage,
-    AcknowledgeGeneratedKeyStage(RecoveryStageId),
+    AcknowledgeGeneratedKeyStage {
+        id: RecoveryStageId,
+        durable_request: DurableRequestId,
+    },
     CancelGeneratedKeyStage,
     ImportSecretKey {
         input: SecretKeyInput,
-        durable_request: Option<radroots_studio_application::DurableRequestId>,
-        durable_expected_revision: Option<u64>,
+        durable_request: DurableRequestId,
+        expected_revision: u64,
     },
     SelectAccount(PublicKey),
     ActivateAccount(PublicKey),
     SignOut,
     RefreshActiveProfile,
     RequestAccountRemoval(PublicKey),
-    ConfirmAccountRemoval(RemovalConfirmationToken),
+    ConfirmAccountRemoval {
+        token: RemovalConfirmationToken,
+        durable_request: DurableRequestId,
+    },
     SubscribeChanges(NonZeroUsize),
     UnsubscribeChanges(ChangeSubscriptionId),
     Close,
@@ -66,12 +77,12 @@ impl RuntimeCommand {
             Self::Snapshot | Self::SubscribeChanges(_) | Self::UnsubscribeChanges(_) => {
                 RuntimeCommandClass::Observe
             }
-            Self::GenerateAccount
+            Self::GenerateAccount { .. }
             | Self::BeginGeneratedKeyStage
-            | Self::AcknowledgeGeneratedKeyStage(_)
+            | Self::AcknowledgeGeneratedKeyStage { .. }
             | Self::ImportSecretKey { .. }
             | Self::ActivateAccount(_)
-            | Self::ConfirmAccountRemoval(_) => RuntimeCommandClass::UseCredential,
+            | Self::ConfirmAccountRemoval { .. } => RuntimeCommandClass::UseCredential,
             Self::SelectAccount(_)
             | Self::SignOut
             | Self::RequestAccountRemoval(_)
@@ -79,6 +90,13 @@ impl RuntimeCommand {
             Self::RefreshActiveProfile => RuntimeCommandClass::UseRelay,
             Self::Close => RuntimeCommandClass::Shutdown,
         }
+    }
+
+    const fn resolves_revision_through_durable_replay(&self) -> bool {
+        matches!(
+            self,
+            Self::GenerateAccount { .. } | Self::ImportSecretKey { .. }
+        )
     }
 }
 
@@ -89,25 +107,26 @@ struct RuntimeActor {
     nostr: Arc<dyn NostrClient>,
     lifecycle: Arc<Mutex<LifecycleGate>>,
     runtime: Handle,
+    blocking: BoundedBlockingExecutor,
     session_generation: SessionGeneration,
     published_session_generation: Arc<AtomicU64>,
     profile_tasks: BTreeMap<RequestId, PendingProfileTask>,
     changes: OrderedSnapshotChanges,
     published_foreground_session: Arc<Mutex<Option<ForegroundSessionBinding>>>,
-    durable_request_namespace: String,
     generated_key_stage: GeneratedKeyStage,
 }
 
 struct PendingProfileTask {
     correlation: TaskCorrelation,
     plan: ProfileRefreshPlan,
+    deadline: Instant,
     reply: oneshot::Sender<CommandReceipt<RuntimeCommandValue>>,
     handle: tokio::task::JoinHandle<()>,
 }
 
 struct ProfileCompletion {
     request_id: RequestId,
-    result: Result<Option<Kind0ProfileCandidate>, SafeError>,
+    result: Result<ProfileFetchResult, SafeError>,
 }
 
 #[derive(Clone)]
@@ -115,10 +134,37 @@ pub struct RuntimeActorHandle {
     mailbox: ActorMailbox<RuntimeCommand, RuntimeCommandValue>,
     adapter: Arc<PersistentAppCore>,
     lifecycle: Arc<Mutex<LifecycleGate>>,
-    runtime: Handle,
     next_request: Arc<AtomicU64>,
     session_generation: Arc<AtomicU64>,
     foreground_session: Arc<Mutex<Option<ForegroundSessionBinding>>>,
+    installation_identity: InstallationIdentity,
+    actor_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    actor_exit: watch::Receiver<bool>,
+}
+
+#[derive(Clone)]
+pub struct RuntimeDependencies {
+    secrets: Arc<dyn SecretStore>,
+    clock: Arc<dyn Clock>,
+    nostr: Arc<dyn NostrClient>,
+    installation_source: Arc<dyn InstallationIdentitySource>,
+}
+
+impl RuntimeDependencies {
+    #[must_use]
+    pub fn new(
+        secrets: Arc<dyn SecretStore>,
+        clock: Arc<dyn Clock>,
+        nostr: Arc<dyn NostrClient>,
+        installation_source: Arc<dyn InstallationIdentitySource>,
+    ) -> Self {
+        Self {
+            secrets,
+            clock,
+            nostr,
+            installation_source,
+        }
+    }
 }
 
 pub struct RuntimeChangeSubscription {
@@ -144,23 +190,22 @@ impl RuntimeActorHandle {
     ///
     /// Returns a safe storage, recovery, or lifecycle error before the actor is
     /// published when opening cannot reach ready state.
-    pub fn open(
+    pub async fn open(
         path: &Path,
         relay_configuration: RelayConfiguration,
-        secrets: Arc<dyn SecretStore>,
-        clock: Arc<dyn Clock>,
-        nostr: Arc<dyn NostrClient>,
+        dependencies: RuntimeDependencies,
         capacity: NonZeroUsize,
         runtime: &Handle,
     ) -> Result<Self, SafeError> {
-        Self::start(
-            PersistentAppCore::open(path, relay_configuration)?,
-            secrets,
-            clock,
-            nostr,
-            capacity,
-            runtime,
-        )
+        let blocking = BoundedBlockingExecutor::new(DEFAULT_BLOCKING_CAPACITY, runtime);
+        let path = path.to_path_buf();
+        let adapter = blocking
+            .execute(Instant::now() + DEFAULT_COMMAND_TIMEOUT, move || {
+                PersistentAppCore::open(&path, relay_configuration)
+            })
+            .await
+            .map_err(blocking_execution_failed)??;
+        Self::start(adapter, dependencies, capacity, runtime, blocking).await
     }
 
     /// Starts one isolated actor-owned in-memory runtime for tests.
@@ -168,53 +213,59 @@ impl RuntimeActorHandle {
     /// # Errors
     ///
     /// Returns a safe storage, recovery, or lifecycle error before publication.
-    pub fn in_memory(
+    pub async fn in_memory(
         relay_configuration: RelayConfiguration,
-        secrets: Arc<dyn SecretStore>,
-        clock: Arc<dyn Clock>,
-        nostr: Arc<dyn NostrClient>,
+        dependencies: RuntimeDependencies,
         capacity: NonZeroUsize,
         runtime: &Handle,
     ) -> Result<Self, SafeError> {
-        Self::start(
-            PersistentAppCore::in_memory(relay_configuration)?,
-            secrets,
-            clock,
-            nostr,
-            capacity,
-            runtime,
-        )
+        let blocking = BoundedBlockingExecutor::new(DEFAULT_BLOCKING_CAPACITY, runtime);
+        let adapter = blocking
+            .execute(Instant::now() + DEFAULT_COMMAND_TIMEOUT, move || {
+                PersistentAppCore::in_memory(relay_configuration)
+            })
+            .await
+            .map_err(blocking_execution_failed)??;
+        Self::start(adapter, dependencies, capacity, runtime, blocking).await
     }
 
-    fn start(
+    async fn start(
         adapter: PersistentAppCore,
-        secrets: Arc<dyn SecretStore>,
-        clock: Arc<dyn Clock>,
-        nostr: Arc<dyn NostrClient>,
+        dependencies: RuntimeDependencies,
         capacity: NonZeroUsize,
         runtime: &Handle,
+        blocking: BoundedBlockingExecutor,
     ) -> Result<Self, SafeError> {
         let mut gate = LifecycleGate::opening();
         gate.begin_compatibility_check()?;
         gate.compatibility_accepted()?;
         gate.ownership_acquired()?;
         gate.migration_complete()?;
-        adapter.bootstrap(secrets.as_ref(), clock.as_ref())?;
+        let RuntimeDependencies {
+            secrets,
+            clock,
+            nostr,
+            installation_source,
+        } = dependencies;
+        let adapter = Arc::new(adapter);
+        let bootstrap_adapter = Arc::clone(&adapter);
+        let bootstrap_secrets = Arc::clone(&secrets);
+        let bootstrap_clock = Arc::clone(&clock);
+        let installation_identity = blocking
+            .execute(Instant::now() + DEFAULT_COMMAND_TIMEOUT, move || {
+                bootstrap_adapter
+                    .bootstrap(bootstrap_secrets.as_ref(), bootstrap_clock.as_ref())?;
+                bootstrap_adapter.initialize_installation_identity(installation_source.as_ref())
+            })
+            .await
+            .map_err(blocking_execution_failed)??;
         gate.recovery_complete()?;
 
-        let adapter = Arc::new(adapter);
         let lifecycle = Arc::new(Mutex::new(gate));
         let (mailbox, receiver) = ActorMailbox::bounded(capacity);
         let session_generation = Arc::new(AtomicU64::new(SessionGeneration::initial().value()));
         let foreground_session = Arc::new(Mutex::new(None));
         let changes = OrderedSnapshotChanges::new(adapter.core().snapshot());
-        let durable_request_namespace = format!(
-            "runtime:{}:{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |duration| duration.as_nanos())
-        );
         let actor = RuntimeActor {
             adapter: Arc::clone(&adapter),
             secrets,
@@ -222,23 +273,29 @@ impl RuntimeActorHandle {
             nostr,
             lifecycle: Arc::clone(&lifecycle),
             runtime: runtime.clone(),
+            blocking,
             session_generation: SessionGeneration::initial(),
             published_session_generation: Arc::clone(&session_generation),
             profile_tasks: BTreeMap::new(),
             changes,
             published_foreground_session: Arc::clone(&foreground_session),
-            durable_request_namespace,
             generated_key_stage: GeneratedKeyStage::default(),
         };
-        drop(runtime.spawn(actor.run(receiver)));
+        let (actor_exit_sender, actor_exit) = watch::channel(false);
+        let actor_task = runtime.spawn(async move {
+            actor.run(receiver).await;
+            let _ = actor_exit_sender.send(true);
+        });
         Ok(Self {
             mailbox,
             adapter,
             lifecycle,
-            runtime: runtime.clone(),
             next_request: Arc::new(AtomicU64::new(1)),
             session_generation,
             foreground_session,
+            installation_identity,
+            actor_task: Arc::new(Mutex::new(Some(actor_task))),
+            actor_exit,
         })
     }
 
@@ -264,6 +321,11 @@ impl RuntimeActorHandle {
     }
 
     #[must_use]
+    pub fn installation_identity(&self) -> &InstallationIdentity {
+        &self.installation_identity
+    }
+
+    #[must_use]
     pub fn snapshot(&self) -> AppSnapshot {
         self.adapter.core().snapshot()
     }
@@ -282,8 +344,23 @@ impl RuntimeActorHandle {
     /// # Errors
     ///
     /// Returns a safe account, storage, keyring, timeout, or actor error.
-    pub async fn generate_account(&self) -> Result<GenerateAccountReceipt, SafeError> {
-        match self.dispatch(RuntimeCommand::GenerateAccount, None).await? {
+    pub async fn generate_account(
+        &self,
+        request: DurableRequestId,
+        expected_revision: SnapshotRevision,
+        timeout: Duration,
+    ) -> Result<GenerateAccountReceipt, SafeError> {
+        match self
+            .dispatch_durable(
+                RuntimeCommand::GenerateAccount {
+                    durable_request: request,
+                    expected_revision: expected_revision.value(),
+                },
+                expected_revision,
+                timeout,
+            )
+            .await?
+        {
             RuntimeCommandValue::Generated(receipt) => Ok(receipt),
             _ => Err(invalid_actor_response()),
         }
@@ -312,9 +389,19 @@ impl RuntimeActorHandle {
     pub async fn acknowledge_generated_key_stage(
         &self,
         id: RecoveryStageId,
+        request: DurableRequestId,
+        expected_revision: SnapshotRevision,
+        timeout: Duration,
     ) -> Result<AppSnapshot, SafeError> {
         let value = self
-            .dispatch(RuntimeCommand::AcknowledgeGeneratedKeyStage(id), None)
+            .dispatch_durable(
+                RuntimeCommand::AcknowledgeGeneratedKeyStage {
+                    id,
+                    durable_request: request,
+                },
+                expected_revision,
+                timeout,
+            )
             .await?;
         Self::expect_snapshot(value)
     }
@@ -341,48 +428,20 @@ impl RuntimeActorHandle {
     /// Returns a safe account, storage, keyring, timeout, or actor error.
     pub async fn import_secret_key(
         &self,
-        input: SecretKeyInput,
-    ) -> Result<ImportAccountReceipt, SafeError> {
-        match self
-            .dispatch(
-                RuntimeCommand::ImportSecretKey {
-                    input,
-                    durable_request: None,
-                    durable_expected_revision: None,
-                },
-                None,
-            )
-            .await?
-        {
-            RuntimeCommandValue::Imported(receipt) => Ok(receipt),
-            _ => Err(invalid_actor_response()),
-        }
-    }
-
-    /// Imports or repairs with a caller-owned durable request and deadline.
-    ///
-    /// # Errors
-    ///
-    /// Returns a safe validation, conflict, timeout, persistence, or actor error.
-    pub async fn import_secret_key_request(
-        &self,
-        request: radroots_studio_application::DurableRequestId,
+        request: DurableRequestId,
         expected_revision: SnapshotRevision,
         input: SecretKeyInput,
         timeout: Duration,
     ) -> Result<ImportAccountReceipt, SafeError> {
-        let raw_request = self.next_request.fetch_add(1, Ordering::Relaxed);
-        let request_id = RequestId::new(raw_request).ok_or_else(request_space_exhausted)?;
         match self
-            .dispatch_with_deadline(
+            .dispatch_durable(
                 RuntimeCommand::ImportSecretKey {
                     input,
-                    durable_request: Some(request),
-                    durable_expected_revision: Some(expected_revision.value()),
+                    durable_request: request,
+                    expected_revision: expected_revision.value(),
                 },
-                None,
-                request_id,
-                Instant::now() + timeout,
+                expected_revision,
+                timeout,
             )
             .await?
         {
@@ -463,9 +522,19 @@ impl RuntimeActorHandle {
     pub async fn confirm_account_removal(
         &self,
         token: RemovalConfirmationToken,
+        request: DurableRequestId,
+        expected_revision: SnapshotRevision,
+        timeout: Duration,
     ) -> Result<AppSnapshot, SafeError> {
         let value = self
-            .dispatch(RuntimeCommand::ConfirmAccountRemoval(token), None)
+            .dispatch_durable(
+                RuntimeCommand::ConfirmAccountRemoval {
+                    token,
+                    durable_request: request,
+                },
+                expected_revision,
+                timeout,
+            )
             .await?;
         Self::expect_snapshot(value)
     }
@@ -486,20 +555,50 @@ impl RuntimeActorHandle {
     /// Returns a safe timeout or actor error. An expired queued close cannot
     /// later change runtime state.
     pub async fn close_with_timeout(&self, timeout: Duration) -> Result<(), SafeError> {
+        let deadline = Instant::now() + timeout;
+        if matches!(self.lifecycle(), RuntimeLifecycle::Closed) {
+            return self.await_actor_exit(deadline).await;
+        }
         let raw_request = self.next_request.fetch_add(1, Ordering::Relaxed);
         let request_id = RequestId::new(raw_request).ok_or_else(request_space_exhausted)?;
-        match self
-            .dispatch_with_deadline(
-                RuntimeCommand::Close,
-                None,
-                request_id,
-                Instant::now() + timeout,
-            )
-            .await?
+        let command_result = match self
+            .dispatch_with_deadline(RuntimeCommand::Close, None, request_id, deadline)
+            .await
         {
-            RuntimeCommandValue::Closed => Ok(()),
-            _ => Err(invalid_actor_response()),
+            Ok(RuntimeCommandValue::Closed) => Ok(()),
+            Ok(_) => Err(invalid_actor_response()),
+            Err(error) => Err(error),
+        };
+        let exit_result = self.await_actor_exit(deadline).await;
+        if matches!(self.lifecycle(), RuntimeLifecycle::Closed) {
+            exit_result
+        } else {
+            command_result.and(exit_result)
         }
+    }
+
+    async fn await_actor_exit(&self, deadline: Instant) -> Result<(), SafeError> {
+        let mut actor_exit = self.actor_exit.clone();
+        if !*actor_exit.borrow() {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            tokio::time::timeout(remaining, actor_exit.wait_for(|exited| *exited))
+                .await
+                .map_err(|_| command_timed_out())?
+                .map_err(|_| runtime_closed())?;
+        }
+        let actor_task = self
+            .actor_task
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(actor_task) = actor_task {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            tokio::time::timeout(remaining, actor_task)
+                .await
+                .map_err(|_| command_timed_out())?
+                .map_err(|_| runtime_closed())?;
+        }
+        Ok(())
     }
 
     /// Atomically registers a bounded ordered change consumer with its initial snapshot.
@@ -551,6 +650,23 @@ impl RuntimeActorHandle {
         .await
     }
 
+    async fn dispatch_durable(
+        &self,
+        command: RuntimeCommand,
+        expected_revision: SnapshotRevision,
+        timeout: Duration,
+    ) -> Result<RuntimeCommandValue, SafeError> {
+        let raw_request = self.next_request.fetch_add(1, Ordering::Relaxed);
+        let request_id = RequestId::new(raw_request).ok_or_else(request_space_exhausted)?;
+        self.dispatch_with_deadline(
+            command,
+            Some(expected_revision),
+            request_id,
+            Instant::now() + timeout,
+        )
+        .await
+    }
+
     async fn dispatch_with_deadline(
         &self,
         command: RuntimeCommand,
@@ -562,13 +678,9 @@ impl RuntimeActorHandle {
         let receipt = match self.mailbox.submit(context, command) {
             CommandSubmission::Accepted(ticket) => {
                 let remaining = deadline.saturating_duration_since(Instant::now());
-                let waiting = self
-                    .runtime
-                    .spawn(async move { tokio::time::timeout(remaining, ticket.receipt()).await });
-                match waiting.await {
-                    Ok(Ok(receipt)) => receipt,
-                    Ok(Err(_)) => CommandReceipt::new(request_id, CommandResult::TimedOut),
-                    Err(_) => CommandReceipt::new(request_id, CommandResult::Closed),
+                match tokio::time::timeout(remaining, ticket.receipt()).await {
+                    Ok(receipt) => receipt,
+                    Err(_) => CommandReceipt::new(request_id, CommandResult::TimedOut),
                 }
             }
             CommandSubmission::Rejected(receipt) => receipt,
@@ -584,6 +696,51 @@ impl RuntimeActorHandle {
     }
 
     #[cfg(test)]
+    async fn import_secret_key_test(
+        &self,
+        input: SecretKeyInput,
+    ) -> Result<ImportAccountReceipt, SafeError> {
+        let request_number = self.next_request.fetch_add(1, Ordering::Relaxed);
+        self.import_secret_key(
+            DurableRequestId::parse(format!("test:import:{request_number}"))?,
+            self.snapshot().revision(),
+            input,
+            DEFAULT_COMMAND_TIMEOUT,
+        )
+        .await
+    }
+
+    #[cfg(test)]
+    async fn acknowledge_generated_key_stage_test(
+        &self,
+        id: RecoveryStageId,
+    ) -> Result<AppSnapshot, SafeError> {
+        let request_number = self.next_request.fetch_add(1, Ordering::Relaxed);
+        self.acknowledge_generated_key_stage(
+            id,
+            DurableRequestId::parse(format!("test:generate:{request_number}"))?,
+            self.snapshot().revision(),
+            DEFAULT_COMMAND_TIMEOUT,
+        )
+        .await
+    }
+
+    #[cfg(test)]
+    async fn confirm_account_removal_test(
+        &self,
+        token: RemovalConfirmationToken,
+    ) -> Result<AppSnapshot, SafeError> {
+        let request_number = self.next_request.fetch_add(1, Ordering::Relaxed);
+        self.confirm_account_removal(
+            token,
+            DurableRequestId::parse(format!("test:remove:{request_number}"))?,
+            self.snapshot().revision(),
+            DEFAULT_COMMAND_TIMEOUT,
+        )
+        .await
+    }
+
+    #[cfg(test)]
     async fn import_secret_key_with_timeout(
         &self,
         input: SecretKeyInput,
@@ -591,14 +748,16 @@ impl RuntimeActorHandle {
     ) -> Result<ImportAccountReceipt, SafeError> {
         let raw_request = self.next_request.fetch_add(1, Ordering::Relaxed);
         let request_id = RequestId::new(raw_request).ok_or_else(request_space_exhausted)?;
+        let expected_revision = self.adapter.core().snapshot().revision();
+        let durable_request = DurableRequestId::parse(format!("test:timeout:{raw_request}"))?;
         match self
             .dispatch_with_deadline(
                 RuntimeCommand::ImportSecretKey {
                     input,
-                    durable_request: None,
-                    durable_expected_revision: None,
+                    durable_request,
+                    expected_revision: expected_revision.value(),
                 },
-                None,
+                Some(expected_revision),
                 request_id,
                 Instant::now() + timeout,
             )
@@ -629,21 +788,21 @@ impl RuntimeActor {
                     let Some(envelope) = envelope else {
                         break;
                     };
-                    if !self.handle_command(envelope, &completion_sender) {
+                    if !self.handle_command(envelope, &completion_sender).await {
                         break;
                     }
                 }
                 completion = completions.recv(), if !self.profile_tasks.is_empty() => {
                     if let Some(completion) = completion {
-                        self.complete_profile_task(completion);
+                        self.complete_profile_task(completion).await;
                     }
                 }
             }
         }
-        self.cancel_profile_tasks(None);
+        self.cancel_profile_tasks(None).await;
     }
 
-    fn handle_command(
+    async fn handle_command(
         &mut self,
         envelope: CommandEnvelope<RuntimeCommand, RuntimeCommandValue>,
         completion_sender: &mpsc::Sender<ProfileCompletion>,
@@ -654,11 +813,12 @@ impl RuntimeActor {
             return true;
         }
         if matches!(command, RuntimeCommand::RefreshActiveProfile) {
-            self.start_profile_task(context, reply, completion_sender.clone());
+            self.start_profile_task(context, reply, completion_sender.clone())
+                .await;
             return true;
         }
         if matches!(command, RuntimeCommand::Close) {
-            let result = self.close_actor();
+            let result = self.close_actor().await;
             let closed = matches!(result, CommandResult::Completed(_));
             let _ = reply.send(CommandReceipt::new(context.request_id(), result));
             return !closed;
@@ -667,16 +827,16 @@ impl RuntimeActor {
             command,
             RuntimeCommand::ActivateAccount(_)
                 | RuntimeCommand::SignOut
-                | RuntimeCommand::ConfirmAccountRemoval(_)
+                | RuntimeCommand::ConfirmAccountRemoval { .. }
         );
         let begins_generated_recovery = matches!(&command, RuntimeCommand::BeginGeneratedKeyStage);
-        let result = self.execute_sync(context, command);
+        let result = self.execute_command(context, command).await;
         if begins_generated_recovery && matches!(&result, CommandResult::Completed(_)) {
             let snapshot = self.adapter.core().snapshot();
-            self.cancel_profile_tasks(Some(&snapshot));
+            self.cancel_profile_tasks(Some(&snapshot)).await;
         }
         if changes_session && matches!(result, CommandResult::Completed(_)) {
-            self.advance_session_generation();
+            self.advance_session_generation().await;
             self.synchronize_foreground_session();
         }
         if matches!(result, CommandResult::Completed(_)) {
@@ -709,7 +869,7 @@ impl RuntimeActor {
             && !matches!(
                 command,
                 RuntimeCommand::Snapshot
-                    | RuntimeCommand::AcknowledgeGeneratedKeyStage(_)
+                    | RuntimeCommand::AcknowledgeGeneratedKeyStage { .. }
                     | RuntimeCommand::CancelGeneratedKeyStage
                     | RuntimeCommand::SubscribeChanges(_)
                     | RuntimeCommand::UnsubscribeChanges(_)
@@ -719,80 +879,112 @@ impl RuntimeActor {
             return Some(CommandResult::Failed(generated_recovery_route_active()));
         }
         let current_revision = self.adapter.core().snapshot().revision();
-        if context
-            .expected_revision()
-            .is_some_and(|expected| expected != current_revision)
+        if !command.resolves_revision_through_durable_replay()
+            && context
+                .expected_revision()
+                .is_some_and(|expected| expected != current_revision)
         {
             return Some(CommandResult::Conflicted { current_revision });
         }
         None
     }
 
-    fn execute_sync(
+    async fn execute_command(
         &mut self,
         context: CommandContext,
         command: RuntimeCommand,
     ) -> CommandResult<RuntimeCommandValue> {
-        let durable_request = radroots_studio_application::DurableRequestId::parse(format!(
-            "{}:{}",
-            self.durable_request_namespace,
-            context.request_id().get()
-        ));
-        let expected_revision = context
-            .expected_revision()
-            .unwrap_or_else(|| self.adapter.core().snapshot().revision())
-            .value();
         let result = match command {
             RuntimeCommand::Snapshot => Ok(RuntimeCommandValue::Snapshot(Box::new(
                 self.adapter.core().snapshot(),
             ))),
-            RuntimeCommand::GenerateAccount => durable_request.and_then(|request| {
-                self.adapter
-                    .generate_account_durable(
-                        &request,
-                        expected_revision,
-                        self.secrets.as_ref(),
-                        self.clock.as_ref(),
-                    )
-                    .map(RuntimeCommandValue::Generated)
-            }),
-            RuntimeCommand::BeginGeneratedKeyStage => self
-                .generated_key_stage
-                .begin(
-                    RecoveryStageId::new(
-                        NonZeroU64::new(context.request_id().get())
-                            .expect("request IDs are always non-zero"),
-                    ),
-                    expected_revision,
-                    self.clock.now(),
-                )
-                .map(RuntimeCommandValue::GeneratedKeyStage),
-            RuntimeCommand::AcknowledgeGeneratedKeyStage(id) => {
-                durable_request.and_then(|request| self.commit_generated_key_stage(&request, id))
+            RuntimeCommand::GenerateAccount {
+                durable_request,
+                expected_revision,
+            } => {
+                self.run_blocking(context.deadline(), move |adapter, secrets, clock| {
+                    adapter
+                        .generate_account_durable(
+                            &durable_request,
+                            expected_revision,
+                            secrets.as_ref(),
+                            clock.as_ref(),
+                        )
+                        .map(RuntimeCommandValue::Generated)
+                })
+                .await
             }
+            RuntimeCommand::BeginGeneratedKeyStage => {
+                match NonZeroU64::new(context.request_id().get()).map(RecoveryStageId::new) {
+                    Some(stage_id) => self
+                        .generated_key_stage
+                        .begin(
+                            self.adapter.key_material(),
+                            stage_id,
+                            self.adapter.core().snapshot().revision().value(),
+                            self.clock.now(),
+                        )
+                        .map(RuntimeCommandValue::GeneratedKeyStage),
+                    None => Err(request_space_exhausted()),
+                }
+            }
+            RuntimeCommand::AcknowledgeGeneratedKeyStage {
+                id,
+                durable_request,
+            } => match self.generated_key_stage.take(id, self.clock.now()) {
+                Ok(staged) => {
+                    self.run_blocking(context.deadline(), move |adapter, secrets, clock| {
+                        commit_generated_key_stage(
+                            adapter.as_ref(),
+                            secrets.as_ref(),
+                            clock.as_ref(),
+                            &durable_request,
+                            staged,
+                        )
+                    })
+                    .await
+                }
+                Err(error) => Err(error),
+            },
             RuntimeCommand::CancelGeneratedKeyStage => Ok(
                 RuntimeCommandValue::GeneratedKeyStageCancelled(self.generated_key_stage.cancel()),
             ),
             RuntimeCommand::ImportSecretKey {
                 input,
-                durable_request: caller_request,
-                durable_expected_revision,
-            } => self.import_secret_key_command(
-                input,
-                caller_request,
                 durable_request,
-                durable_expected_revision.unwrap_or(expected_revision),
-            ),
-            RuntimeCommand::SelectAccount(public_key) => self
-                .adapter
-                .select_account(public_key)
-                .map(Box::new)
-                .map(RuntimeCommandValue::Snapshot),
-            RuntimeCommand::ActivateAccount(public_key) => self
-                .adapter
-                .activate_account(public_key, self.secrets.as_ref(), self.clock.as_ref())
-                .map(Box::new)
-                .map(RuntimeCommandValue::Snapshot),
+                expected_revision,
+            } => {
+                self.run_blocking(context.deadline(), move |adapter, secrets, clock| {
+                    adapter
+                        .import_secret_key_durable(
+                            &durable_request,
+                            expected_revision,
+                            input,
+                            secrets.as_ref(),
+                            clock.as_ref(),
+                        )
+                        .map(RuntimeCommandValue::Imported)
+                })
+                .await
+            }
+            RuntimeCommand::SelectAccount(public_key) => {
+                self.run_blocking(context.deadline(), move |adapter, _, _| {
+                    adapter
+                        .select_account(public_key)
+                        .map(Box::new)
+                        .map(RuntimeCommandValue::Snapshot)
+                })
+                .await
+            }
+            RuntimeCommand::ActivateAccount(public_key) => {
+                self.run_blocking(context.deadline(), move |adapter, secrets, clock| {
+                    adapter
+                        .activate_account(public_key, secrets.as_ref(), clock.as_ref())
+                        .map(Box::new)
+                        .map(RuntimeCommandValue::Snapshot)
+                })
+                .await
+            }
             RuntimeCommand::SignOut => self
                 .adapter
                 .sign_out()
@@ -802,17 +994,23 @@ impl RuntimeActor {
                 .adapter
                 .request_account_removal(public_key, self.clock.as_ref())
                 .map(RuntimeCommandValue::RemovalRequest),
-            RuntimeCommand::ConfirmAccountRemoval(token) => durable_request.and_then(|request| {
-                self.adapter
-                    .confirm_account_removal_durable(
-                        &request,
-                        token,
-                        self.secrets.as_ref(),
-                        self.clock.as_ref(),
-                    )
-                    .map(Box::new)
-                    .map(RuntimeCommandValue::Snapshot)
-            }),
+            RuntimeCommand::ConfirmAccountRemoval {
+                token,
+                durable_request,
+            } => {
+                self.run_blocking(context.deadline(), move |adapter, secrets, clock| {
+                    adapter
+                        .confirm_account_removal_durable(
+                            &durable_request,
+                            token,
+                            secrets.as_ref(),
+                            clock.as_ref(),
+                        )
+                        .map(Box::new)
+                        .map(RuntimeCommandValue::Snapshot)
+                })
+                .await
+            }
             RuntimeCommand::SubscribeChanges(capacity) => self
                 .changes
                 .subscribe(capacity)
@@ -830,43 +1028,30 @@ impl RuntimeActor {
         result.map_or_else(CommandResult::Failed, CommandResult::Completed)
     }
 
-    fn commit_generated_key_stage(
-        &mut self,
-        request: &radroots_studio_application::DurableRequestId,
-        id: RecoveryStageId,
-    ) -> Result<RuntimeCommandValue, SafeError> {
-        let staged = self.generated_key_stage.take(id, self.clock.now())?;
-        self.adapter.commit_staged_generated_key(
-            request,
-            staged,
-            self.secrets.as_ref(),
-            self.clock.as_ref(),
-        )?;
-        Ok(RuntimeCommandValue::Snapshot(Box::new(
-            self.adapter.core().snapshot(),
-        )))
-    }
-
-    fn import_secret_key_command(
+    async fn run_blocking<F>(
         &self,
-        input: SecretKeyInput,
-        caller_request: Option<radroots_studio_application::DurableRequestId>,
-        fallback_request: Result<radroots_studio_application::DurableRequestId, SafeError>,
-        expected_revision: u64,
-    ) -> Result<RuntimeCommandValue, SafeError> {
-        let request = caller_request.map_or(fallback_request, Ok)?;
-        self.adapter
-            .import_secret_key_durable(
-                &request,
-                expected_revision,
-                input,
-                self.secrets.as_ref(),
-                self.clock.as_ref(),
-            )
-            .map(RuntimeCommandValue::Imported)
+        deadline: Instant,
+        operation: F,
+    ) -> Result<RuntimeCommandValue, SafeError>
+    where
+        F: FnOnce(
+                Arc<PersistentAppCore>,
+                Arc<dyn SecretStore>,
+                Arc<dyn Clock>,
+            ) -> Result<RuntimeCommandValue, SafeError>
+            + Send
+            + 'static,
+    {
+        let adapter = Arc::clone(&self.adapter);
+        let secrets = Arc::clone(&self.secrets);
+        let clock = Arc::clone(&self.clock);
+        self.blocking
+            .execute(deadline, move || operation(adapter, secrets, clock))
+            .await
+            .map_err(blocking_execution_failed)?
     }
 
-    fn start_profile_task(
+    async fn start_profile_task(
         &mut self,
         context: CommandContext,
         reply: oneshot::Sender<CommandReceipt<RuntimeCommandValue>>,
@@ -917,7 +1102,9 @@ impl RuntimeActor {
         let relays = plan.relays().to_vec();
         let request_id = context.request_id();
         let handle = self.runtime.spawn(async move {
-            let result = client.fetch_profile(correlation.account(), &relays).await;
+            let result = client
+                .fetch_profile(correlation.account(), &relays, context.deadline())
+                .await;
             let _ = completion_sender
                 .send(ProfileCompletion { request_id, result })
                 .await;
@@ -927,14 +1114,27 @@ impl RuntimeActor {
             PendingProfileTask {
                 correlation,
                 plan,
+                deadline: context.deadline(),
                 reply,
                 handle,
             },
         );
-        debug_assert!(previous.is_none(), "request identifiers are unique");
+        if let Some(previous) = previous {
+            self.lifecycle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .fail(request_space_exhausted());
+            previous.handle.abort();
+            let _ = previous.handle.await;
+            let _ = previous.reply.send(CommandReceipt::new(
+                previous.correlation.request_id(),
+                CommandResult::Failed(request_space_exhausted()),
+            ));
+            self.cancel_profile_tasks(None).await;
+        }
     }
 
-    fn close_actor(&mut self) -> CommandResult<RuntimeCommandValue> {
+    async fn close_actor(&mut self) -> CommandResult<RuntimeCommandValue> {
         let transition = (|| {
             let mut lifecycle = self
                 .lifecycle
@@ -946,7 +1146,7 @@ impl RuntimeActor {
         match transition {
             Ok(()) => {
                 self.generated_key_stage.cancel();
-                self.cancel_profile_tasks(None);
+                self.cancel_profile_tasks(None).await;
                 self.changes.close();
                 *self
                     .published_foreground_session
@@ -958,10 +1158,11 @@ impl RuntimeActor {
         }
     }
 
-    fn complete_profile_task(&mut self, completion: ProfileCompletion) {
+    async fn complete_profile_task(&mut self, completion: ProfileCompletion) {
         let Some(task) = self.profile_tasks.remove(&completion.request_id) else {
             return;
         };
+        let _ = task.handle.await;
         let current = self.adapter.core().snapshot();
         let foreground = self
             .published_foreground_session
@@ -978,17 +1179,22 @@ impl RuntimeActor {
                 .active_account()
                 .is_some_and(|active| active.account().public_key() == task.correlation.account());
         let result = if correlated {
-            self.adapter
-                .core()
-                .complete_profile_refresh(
-                    &task.plan,
-                    completion.result,
-                    self.adapter.database(),
-                    self.clock.as_ref(),
-                )
-                .map(Box::new)
-                .map(RuntimeCommandValue::Snapshot)
-                .map_or_else(CommandResult::Failed, CommandResult::Completed)
+            let plan = task.plan.clone();
+            let completed = self
+                .run_blocking(task.deadline, move |adapter, _, clock| {
+                    adapter
+                        .core()
+                        .complete_profile_refresh(
+                            &plan,
+                            completion.result,
+                            adapter.database(),
+                            clock.as_ref(),
+                        )
+                        .map(Box::new)
+                        .map(RuntimeCommandValue::Snapshot)
+                })
+                .await;
+            completed.map_or_else(CommandResult::Failed, CommandResult::Completed)
         } else {
             CommandResult::Completed(RuntimeCommandValue::Snapshot(Box::new(current)))
         };
@@ -1000,20 +1206,20 @@ impl RuntimeActor {
             .send(CommandReceipt::new(task.correlation.request_id(), result));
     }
 
-    fn advance_session_generation(&mut self) {
+    async fn advance_session_generation(&mut self) {
         let Some(next) = self.session_generation.next() else {
             self.lifecycle
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .fail(request_space_exhausted());
-            self.cancel_profile_tasks(None);
+            self.cancel_profile_tasks(None).await;
             return;
         };
         self.session_generation = next;
         self.published_session_generation
             .store(next.value(), Ordering::Release);
         let snapshot = self.adapter.core().snapshot();
-        self.cancel_profile_tasks(Some(&snapshot));
+        self.cancel_profile_tasks(Some(&snapshot)).await;
     }
 
     fn synchronize_foreground_session(&mut self) {
@@ -1046,10 +1252,11 @@ impl RuntimeActor {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = session;
     }
 
-    fn cancel_profile_tasks(&mut self, snapshot: Option<&AppSnapshot>) {
+    async fn cancel_profile_tasks(&mut self, snapshot: Option<&AppSnapshot>) {
         let tasks = std::mem::take(&mut self.profile_tasks);
         for (_, task) in tasks {
             task.handle.abort();
+            let _ = task.handle.await;
             let receipt_result = snapshot.map_or(CommandResult::Closed, |snapshot| {
                 CommandResult::Completed(RuntimeCommandValue::Snapshot(Box::new(snapshot.clone())))
             });
@@ -1058,6 +1265,30 @@ impl RuntimeActor {
                 receipt_result,
             ));
         }
+    }
+}
+
+fn commit_generated_key_stage(
+    adapter: &PersistentAppCore,
+    secrets: &dyn SecretStore,
+    clock: &dyn Clock,
+    request: &DurableRequestId,
+    staged: StagedGeneratedKey,
+) -> Result<RuntimeCommandValue, SafeError> {
+    adapter.commit_staged_generated_key(request, staged, secrets, clock)?;
+    Ok(RuntimeCommandValue::Snapshot(Box::new(
+        adapter.core().snapshot(),
+    )))
+}
+
+const fn blocking_execution_failed(error: BlockingExecutionError) -> SafeError {
+    match error {
+        BlockingExecutionError::DeadlineElapsed => command_timed_out(),
+        BlockingExecutionError::Saturated => command_rejected(),
+        BlockingExecutionError::TaskFailed => SafeError::new(
+            SafeErrorCode::InvalidApplicationState,
+            SafeMessage::new("The runtime blocking worker failed."),
+        ),
     }
 }
 
@@ -1136,18 +1367,39 @@ mod tests {
     use std::num::NonZeroUsize;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Condvar, Mutex};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use radroots_studio_application::{
-        BoxFuture, Clock, FailureSecretStore, InMemorySecretStore, NostrClient, RelayConfiguration,
-        RuntimeLifecycle, SecretStore, SecretStoreOperation, SessionState,
+        BoxFuture, Clock, FailureSecretStore, InMemorySecretStore, NostrClient, ProfileFetchResult,
+        RelayConfiguration, RuntimeLifecycle, SecretStore, SecretStoreOperation, SessionState,
     };
     use radroots_studio_domain::{
-        Kind0ProfileCandidate, PublicKey, RelayUrl, SafeError, SafeErrorCode, SecretKeyInput,
+        PublicKey, RelayDestinationPolicy, RelayUrl, SafeError, SafeErrorCode, SecretKeyInput,
         UnixTimestamp,
     };
 
-    use super::RuntimeActorHandle;
+    use super::{RuntimeActorHandle, RuntimeDependencies};
+    use crate::{InstallationIdentity, InstallationIdentitySource, UuidInstallationIdentitySource};
+
+    struct FixedInstallationIdentity(&'static str);
+
+    impl InstallationIdentitySource for FixedInstallationIdentity {
+        fn generate(&self) -> Result<InstallationIdentity, SafeError> {
+            InstallationIdentity::parse(self.0)
+        }
+    }
+
+    fn dependencies(
+        secrets: Arc<dyn SecretStore>,
+        nostr: Arc<dyn NostrClient>,
+    ) -> RuntimeDependencies {
+        RuntimeDependencies::new(
+            secrets,
+            Arc::new(FixedClock),
+            nostr,
+            Arc::new(UuidInstallationIdentitySource),
+        )
+    }
 
     struct FixedClock;
 
@@ -1164,8 +1416,9 @@ mod tests {
             &'a self,
             _public_key: PublicKey,
             _relays: &'a [RelayUrl],
-        ) -> BoxFuture<'a, Result<Option<Kind0ProfileCandidate>, SafeError>> {
-            Box::pin(async { Ok(None) })
+            _deadline: Instant,
+        ) -> BoxFuture<'a, Result<ProfileFetchResult, SafeError>> {
+            Box::pin(async { Ok(ProfileFetchResult::complete(None)) })
         }
     }
 
@@ -1188,12 +1441,13 @@ mod tests {
             &'a self,
             _public_key: PublicKey,
             _relays: &'a [RelayUrl],
-        ) -> BoxFuture<'a, Result<Option<Kind0ProfileCandidate>, SafeError>> {
+            _deadline: Instant,
+        ) -> BoxFuture<'a, Result<ProfileFetchResult, SafeError>> {
             Box::pin(async move {
                 self.started.add_permits(1);
                 let permit = self.release.acquire().await.expect("release");
                 permit.forget();
-                Ok(None)
+                Ok(ProfileFetchResult::complete(None))
             })
         }
     }
@@ -1262,28 +1516,77 @@ mod tests {
         }
     }
 
-    fn actor() -> (RuntimeActorHandle, Arc<InMemorySecretStore>) {
+    async fn actor() -> (RuntimeActorHandle, Arc<InMemorySecretStore>) {
         let secrets = Arc::new(InMemorySecretStore::default());
         let secret_port: Arc<dyn SecretStore> = secrets.clone();
         let actor = RuntimeActorHandle::in_memory(
             RelayConfiguration::default(),
-            secret_port,
-            Arc::new(FixedClock),
-            Arc::new(OfflineNostr),
+            dependencies(secret_port, Arc::new(OfflineNostr)),
             NonZeroUsize::new(8).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
         (actor, secrets)
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn installation_identity_survives_file_backed_runtime_restart() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("studio.sqlite3");
+        let first = RuntimeActorHandle::open(
+            &path,
+            RelayConfiguration::default(),
+            RuntimeDependencies::new(
+                Arc::new(InMemorySecretStore::default()),
+                Arc::new(FixedClock),
+                Arc::new(OfflineNostr),
+                Arc::new(FixedInstallationIdentity(
+                    "11aabbccddeeff001122334455667788",
+                )),
+            ),
+            NonZeroUsize::new(8).expect("capacity"),
+            &tokio::runtime::Handle::current(),
+        )
+        .await
+        .expect("first runtime");
+        assert_eq!(
+            first.installation_identity().as_str(),
+            "11aabbccddeeff001122334455667788"
+        );
+        first.close().await.expect("first close");
+        drop(first);
+
+        let second = RuntimeActorHandle::open(
+            &path,
+            RelayConfiguration::default(),
+            RuntimeDependencies::new(
+                Arc::new(InMemorySecretStore::default()),
+                Arc::new(FixedClock),
+                Arc::new(OfflineNostr),
+                Arc::new(FixedInstallationIdentity(
+                    "22aabbccddeeff001122334455667788",
+                )),
+            ),
+            NonZeroUsize::new(8).expect("capacity"),
+            &tokio::runtime::Handle::current(),
+        )
+        .await
+        .expect("second runtime");
+        assert_eq!(
+            second.installation_identity().as_str(),
+            "11aabbccddeeff001122334455667788"
+        );
+        second.close().await.expect("second close");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn account_mutations_run_serially_through_one_ready_actor() {
-        let (actor, secrets) = actor();
+        let (actor, secrets) = actor().await;
         assert_eq!(actor.lifecycle(), RuntimeLifecycle::Ready);
 
         let imported = actor
-            .import_secret_key(
+            .import_secret_key_test(
                 SecretKeyInput::parse(
                     "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7".to_owned(),
                 )
@@ -1308,7 +1611,7 @@ mod tests {
             .await
             .expect("removal request");
         let removed = actor
-            .confirm_account_removal(removal)
+            .confirm_account_removal_test(removal)
             .await
             .expect("remove");
         assert!(removed.accounts().is_empty());
@@ -1317,7 +1620,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn generated_key_stage_is_exclusive_cancelable_and_snapshot_free() {
-        let (actor, secrets) = actor();
+        let (actor, secrets) = actor().await;
         let initial = actor.snapshot();
         let stage = actor
             .begin_generated_key_stage()
@@ -1352,7 +1655,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn recovery_handle_is_one_use_and_acknowledgement_commits_once() {
-        let (actor, secrets) = actor();
+        let (actor, secrets) = actor().await;
         let initial = actor.snapshot();
         let handle = actor
             .begin_generated_key_stage()
@@ -1366,7 +1669,7 @@ mod tests {
         assert!(!secrets.contains(public_key).expect("not committed"));
 
         let committed = actor
-            .acknowledge_generated_key_stage(handle.id())
+            .acknowledge_generated_key_stage_test(handle.id())
             .await
             .expect("acknowledge");
         assert_eq!(committed.accounts().len(), 1);
@@ -1374,7 +1677,7 @@ mod tests {
         assert!(secrets.contains(public_key).expect("credential committed"));
         assert!(
             actor
-                .acknowledge_generated_key_stage(handle.id())
+                .acknowledge_generated_key_stage_test(handle.id())
                 .await
                 .is_err()
         );
@@ -1387,12 +1690,11 @@ mod tests {
         let secret_port: Arc<dyn SecretStore> = secrets.clone();
         let actor = RuntimeActorHandle::in_memory(
             RelayConfiguration::default(),
-            secret_port,
-            Arc::new(FixedClock),
-            Arc::new(OfflineNostr),
+            dependencies(secret_port, Arc::new(OfflineNostr)),
             NonZeroUsize::new(8).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
         let handle = actor
             .begin_generated_key_stage()
@@ -1400,7 +1702,7 @@ mod tests {
             .expect("generated key stage");
 
         let error = actor
-            .acknowledge_generated_key_stage(handle.id())
+            .acknowledge_generated_key_stage_test(handle.id())
             .await
             .expect_err("injected keyring failure");
 
@@ -1417,16 +1719,19 @@ mod tests {
     async fn session_generation_cancels_correlated_profile_work_on_sign_out() {
         let client = Arc::new(BlockingNostr::new());
         let actor = RuntimeActorHandle::in_memory(
-            RelayConfiguration::new(vec![RelayUrl::parse("ws://localhost:8080").expect("relay")]),
-            Arc::new(InMemorySecretStore::default()),
-            Arc::new(FixedClock),
-            client.clone(),
+            RelayConfiguration::new(vec![
+                RelayUrl::parse("ws://localhost:8080", RelayDestinationPolicy::Local)
+                    .expect("relay"),
+            ])
+            .expect("relay configuration"),
+            dependencies(Arc::new(InMemorySecretStore::default()), client.clone()),
             NonZeroUsize::new(8).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
         let imported = actor
-            .import_secret_key(
+            .import_secret_key_test(
                 SecretKeyInput::parse(
                     "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7".to_owned(),
                 )
@@ -1461,18 +1766,17 @@ mod tests {
         let secrets = Arc::new(BlockingSecretStore::new());
         let actor = RuntimeActorHandle::in_memory(
             RelayConfiguration::default(),
-            secrets.clone(),
-            Arc::new(FixedClock),
-            Arc::new(OfflineNostr),
+            dependencies(secrets.clone(), Arc::new(OfflineNostr)),
             NonZeroUsize::new(1).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
 
         let first_actor = actor.clone();
         let first = tokio::spawn(async move {
             first_actor
-                .import_secret_key(secret(
+                .import_secret_key_test(secret(
                     "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
                 ))
                 .await
@@ -1482,7 +1786,7 @@ mod tests {
         let second_actor = actor.clone();
         let second = tokio::spawn(async move {
             second_actor
-                .import_secret_key(secret(
+                .import_secret_key_test(secret(
                     "0000000000000000000000000000000000000000000000000000000000000001",
                 ))
                 .await
@@ -1495,7 +1799,7 @@ mod tests {
             tokio::task::yield_now().await;
         }
         let rejected = actor
-            .import_secret_key(secret(
+            .import_secret_key_test(secret(
                 "0000000000000000000000000000000000000000000000000000000000000002",
             ))
             .await
@@ -1507,10 +1811,17 @@ mod tests {
 
         secrets.release();
         first.await.expect("first task").expect("first command");
-        second.await.expect("second task").expect("second command");
+        let second = second
+            .await
+            .expect("second task")
+            .expect_err("accepted stale revision conflicts explicitly");
+        assert_eq!(
+            second.message().as_str(),
+            "The account operation conflicts with the current application state."
+        );
         assert_eq!(
             actor.bootstrap().await.expect("snapshot").accounts().len(),
-            2
+            1
         );
     }
 
@@ -1519,18 +1830,17 @@ mod tests {
         let secrets = Arc::new(BlockingSecretStore::new());
         let actor = RuntimeActorHandle::in_memory(
             RelayConfiguration::default(),
-            secrets.clone(),
-            Arc::new(FixedClock),
-            Arc::new(OfflineNostr),
+            dependencies(secrets.clone(), Arc::new(OfflineNostr)),
             NonZeroUsize::new(1).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
 
         let first_actor = actor.clone();
         let first = tokio::spawn(async move {
             first_actor
-                .import_secret_key(secret(
+                .import_secret_key_test(secret(
                     "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
                 ))
                 .await
@@ -1556,24 +1866,21 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn close_is_terminal_and_every_later_command_is_rejected_as_closed() {
-        let (actor, _) = actor();
+        let (actor, _) = actor().await;
         actor.close().await.expect("close");
         assert_eq!(actor.lifecycle(), RuntimeLifecycle::Closed);
 
-        for error in [
-            actor.bootstrap().await.expect_err("bootstrap after close"),
-            actor.close().await.expect_err("repeated close"),
-        ] {
-            assert_eq!(
-                error.message().as_str(),
-                "The application runtime is closed."
-            );
-        }
+        let error = actor.bootstrap().await.expect_err("bootstrap after close");
+        assert_eq!(
+            error.message().as_str(),
+            "The application runtime is closed."
+        );
+        actor.close().await.expect("repeated close is idempotent");
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn actor_subscription_atomically_delivers_initial_then_ordered_changes() {
-        let (actor, _) = actor();
+        let (actor, _) = actor().await;
         let mut subscription = actor
             .subscribe_changes(NonZeroUsize::new(4).expect("capacity"))
             .await
@@ -1583,7 +1890,7 @@ mod tests {
         assert!(initial.previous_revision().is_none());
 
         actor
-            .import_secret_key(secret(
+            .import_secret_key_test(secret(
                 "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
             ))
             .await
@@ -1604,17 +1911,16 @@ mod tests {
         let secrets = Arc::new(BlockingSecretStore::new());
         let actor = RuntimeActorHandle::in_memory(
             RelayConfiguration::default(),
-            secrets.clone(),
-            Arc::new(FixedClock),
-            Arc::new(OfflineNostr),
+            dependencies(secrets.clone(), Arc::new(OfflineNostr)),
             NonZeroUsize::new(1).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
         let import_actor = actor.clone();
         let import = tokio::spawn(async move {
             import_actor
-                .import_secret_key(secret(
+                .import_secret_key_test(secret(
                     "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
                 ))
                 .await
@@ -1645,16 +1951,19 @@ mod tests {
     async fn shutdown_cancels_in_flight_work_and_terminates_publication() {
         let client = Arc::new(BlockingNostr::new());
         let actor = RuntimeActorHandle::in_memory(
-            RelayConfiguration::new(vec![RelayUrl::parse("ws://localhost:8080").expect("relay")]),
-            Arc::new(InMemorySecretStore::default()),
-            Arc::new(FixedClock),
-            client.clone(),
+            RelayConfiguration::new(vec![
+                RelayUrl::parse("ws://localhost:8080", RelayDestinationPolicy::Local)
+                    .expect("relay"),
+            ])
+            .expect("relay configuration"),
+            dependencies(Arc::new(InMemorySecretStore::default()), client.clone()),
             NonZeroUsize::new(8).expect("capacity"),
             &tokio::runtime::Handle::current(),
         )
+        .await
         .expect("actor");
         let imported = actor
-            .import_secret_key(secret(
+            .import_secret_key_test(secret(
                 "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
             ))
             .await

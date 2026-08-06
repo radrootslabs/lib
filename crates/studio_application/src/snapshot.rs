@@ -4,6 +4,8 @@ use radroots_studio_domain::{
     AccountSummary, ProfileMetadata, PublicKey, RelayUrl, SafeError, SafeErrorCode, SafeMessage,
 };
 
+pub const MAX_CONFIGURED_RELAYS: usize = 16;
+
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SnapshotRevision(u64);
 
@@ -70,15 +72,30 @@ pub enum ProfileLoadState {
 pub struct RelayConfiguration(Vec<RelayUrl>);
 
 impl RelayConfiguration {
-    #[must_use]
-    pub fn new(relays: Vec<RelayUrl>) -> Self {
-        Self(relays)
+    /// Creates a bounded, explicitly classified relay configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe configuration error before runtime or network work when
+    /// the relay count exceeds the Studio policy.
+    pub fn new(relays: Vec<RelayUrl>) -> Result<Self, SafeError> {
+        if relays.len() > MAX_CONFIGURED_RELAYS {
+            return Err(relay_limit_exceeded());
+        }
+        Ok(Self(relays))
     }
 
     #[must_use]
     pub fn relays(&self) -> &[RelayUrl] {
         &self.0
     }
+}
+
+const fn relay_limit_exceeded() -> SafeError {
+    SafeError::new(
+        SafeErrorCode::InvalidRelayConfiguration,
+        SafeMessage::new("The Nostr relay configuration exceeds its limit."),
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -279,7 +296,7 @@ const fn invalid_snapshot() -> SafeError {
 mod tests {
     use radroots_studio_domain::{
         AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
-        PublicKey, UnixTimestamp,
+        PublicKey, RelayDestinationPolicy, RelayUrl, SafeErrorCode, UnixTimestamp,
     };
 
     use super::{
@@ -314,6 +331,21 @@ mod tests {
         assert!(snapshot.recoverable_problem().is_none());
         assert!(!debug.contains("nsec1"));
         assert!(!debug.contains(&"11".repeat(32)));
+    }
+
+    #[test]
+    fn relay_configuration_rejects_excess_targets_before_runtime_work() {
+        let relays = (0..=super::MAX_CONFIGURED_RELAYS)
+            .map(|index| {
+                RelayUrl::parse(
+                    format!("wss://relay-{index}.example").as_str(),
+                    RelayDestinationPolicy::Public,
+                )
+                .expect("relay")
+            })
+            .collect();
+        let error = RelayConfiguration::new(relays).expect_err("relay limit");
+        assert_eq!(error.code(), SafeErrorCode::InvalidRelayConfiguration);
     }
 
     #[test]

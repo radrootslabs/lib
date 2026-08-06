@@ -280,8 +280,12 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         "private_fixture",
         "private_tool",
     ]);
-    let allowed_licenses =
-        BTreeSet::from(["MIT OR Apache-2.0", "GPL-3.0-only", "GPL-3.0-or-later"]);
+    let allowed_licenses = BTreeSet::from([
+        "MIT OR Apache-2.0",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+        "MPL-2.0",
+    ]);
     let mut names = BTreeSet::new();
     let mut paths = BTreeSet::new();
     let mut public = BTreeSet::new();

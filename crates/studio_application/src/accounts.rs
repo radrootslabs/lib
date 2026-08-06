@@ -1,17 +1,15 @@
 use std::sync::{Mutex, MutexGuard};
 
-use radroots_studio_domain::{
-    AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
-    Nsec, PublicKey, SafeError, SafeErrorCode, SafeMessage, SecretKeyInput,
-};
-use radroots_studio_nostr::{generate_local_keypair, import_secret};
-
 use crate::{
     AccountOperationKind, AccountOperationPhase, AccountRepository, AppCore, AppStateRepository,
     Clock, DurableOperationKind, DurableOperationPhase, DurableOperationRepository,
     DurableOperationStart, DurableRequestId, DurableTerminalOutcome, OperationDiagnostic,
     OperationId, OperationJournal, OperationPriorState, PendingAccountOperation,
     RemovalConfirmationToken, SecretStore, StagedGeneratedKey, StateTransition,
+};
+use radroots_studio_domain::{
+    AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
+    Nsec, PublicKey, SafeError, SafeErrorCode, SafeMessage, SecretKeyInput,
 };
 
 pub struct GenerateAccountReceipt {
@@ -97,7 +95,7 @@ impl AppCore {
         clock: &(impl Clock + ?Sized),
     ) -> Result<GenerateAccountReceipt, SafeError> {
         self.require_revision(expected_revision)?;
-        let generated = generate_local_keypair()?;
+        let generated = self.key_material().generate()?;
         let (public_key, npub, secret, nsec) = generated.into_parts();
         let account = AccountSummary::new(
             AccountIdentity::verify(public_key, npub.as_str().to_owned())?,
@@ -156,7 +154,7 @@ impl AppCore {
             };
         }
         self.require_revision(expected_revision)?;
-        let imported = import_secret(input)?;
+        let imported = self.key_material().import(input)?;
         let (public_key, npub, secret) = imported.into_parts();
         let previous = accounts.find_account(public_key)?;
         if let Some(existing) = &previous
@@ -508,7 +506,7 @@ impl AppCore {
         journal: &(impl OperationJournal + ?Sized),
         clock: &(impl Clock + ?Sized),
     ) -> Result<GenerateAccountReceipt, SafeError> {
-        let generated = generate_local_keypair()?;
+        let generated = self.key_material().generate()?;
         let (public_key, npub, secret, nsec) = generated.into_parts();
         let account = AccountSummary::new(
             AccountIdentity::verify(public_key, npub.as_str().to_owned())?,
@@ -553,7 +551,7 @@ impl AppCore {
         journal: &(impl OperationJournal + ?Sized),
         clock: &(impl Clock + ?Sized),
     ) -> Result<ImportAccountReceipt, SafeError> {
-        let imported = import_secret(input)?;
+        let imported = self.key_material().import(input)?;
         let (public_key, npub, secret) = imported.into_parts();
         if let Some(existing) = accounts.find_account(public_key)? {
             if existing.signer().availability() != BindingAvailability::CredentialMissing
@@ -1160,7 +1158,7 @@ mod tests {
             )
             .expect("input")
         };
-        let imported = radroots_studio_nostr::import_secret(input()).expect("derive");
+        let imported = core.key_material().import(input()).expect("derive");
         let (public_key, npub, _) = imported.into_parts();
         let missing = AccountSummary::new(
             AccountIdentity::verify(public_key, npub.as_str().to_owned()).expect("identity"),

@@ -1,19 +1,39 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use radroots_studio_application::{
     AppCore, AppSnapshot, Clock, DurableRequestId, GenerateAccountReceipt, ImportAccountReceipt,
-    RelayConfiguration, RemovalConfirmationToken, SecretStore, StagedGeneratedKey,
+    KeyMaterialProvider, RelayConfiguration, RemovalConfirmationToken, SecretStore,
+    StagedGeneratedKey,
 };
 use radroots_studio_domain::{PublicKey, SafeError, SecretKeyInput};
+use radroots_studio_nostr::NostrKeyMaterialProvider;
 
-use crate::Database;
+use radroots_studio_storage::Database;
+
+use crate::{InstallationIdentity, InstallationIdentitySource};
 
 pub struct PersistentAppCore {
     core: AppCore,
     database: Database,
+    key_material: Arc<dyn KeyMaterialProvider>,
 }
 
 impl PersistentAppCore {
+    pub(crate) fn initialize_installation_identity(
+        &self,
+        source: &dyn InstallationIdentitySource,
+    ) -> Result<InstallationIdentity, SafeError> {
+        if let Some(existing) = self.database.load_installation_id()? {
+            return InstallationIdentity::parse(existing);
+        }
+        let candidate = source.generate()?;
+        InstallationIdentity::parse(
+            self.database
+                .initialize_installation_id(candidate.as_str())?,
+        )
+    }
+
     /// Commits an acknowledged generated-key stage through the durable coordinator.
     ///
     /// # Errors
@@ -43,9 +63,11 @@ impl PersistentAppCore {
     ///
     /// Returns a safe storage error when the database cannot be opened or migrated.
     pub fn open(path: &Path, relay_configuration: RelayConfiguration) -> Result<Self, SafeError> {
+        let key_material: Arc<dyn KeyMaterialProvider> = Arc::new(NostrKeyMaterialProvider);
         Ok(Self {
-            core: AppCore::in_memory(relay_configuration),
+            core: AppCore::new(relay_configuration, Arc::clone(&key_material)),
             database: Database::open(path)?,
+            key_material,
         })
     }
 
@@ -55,10 +77,16 @@ impl PersistentAppCore {
     ///
     /// Returns a safe storage error when the database cannot be initialized.
     pub fn in_memory(relay_configuration: RelayConfiguration) -> Result<Self, SafeError> {
+        let key_material: Arc<dyn KeyMaterialProvider> = Arc::new(NostrKeyMaterialProvider);
         Ok(Self {
-            core: AppCore::in_memory(relay_configuration),
+            core: AppCore::new(relay_configuration, Arc::clone(&key_material)),
             database: Database::in_memory()?,
+            key_material,
         })
+    }
+
+    pub(crate) fn key_material(&self) -> &dyn KeyMaterialProvider {
+        self.key_material.as_ref()
     }
 
     /// Restores public accounts and selection while keeping the session signed out.

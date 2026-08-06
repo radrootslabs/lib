@@ -7,10 +7,7 @@ use radroots_studio_application::ChangeSubscriptionId;
 use crate::commands::RuntimeCore;
 use crate::{AppSnapshotDto, StudioAppCore, StudioError};
 
-const OBSERVER_CHANGE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(64) {
-    Some(capacity) => capacity,
-    None => unreachable!(),
-};
+const OBSERVER_CHANGE_CAPACITY: NonZeroUsize = NonZeroUsize::MIN.saturating_add(63);
 
 #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
 pub struct SnapshotChangeDto {
@@ -37,7 +34,7 @@ pub struct ObserverSubscription {
 
 #[uniffi::export]
 impl ObserverSubscription {
-    pub fn unsubscribe(&self) {
+    pub async fn unsubscribe(&self) {
         let id = self
             .id
             .lock()
@@ -46,24 +43,17 @@ impl ObserverSubscription {
         let (Some(core), Some(id)) = (self.core.upgrade(), id) else {
             return;
         };
-        if let Some(task) = core
-            .observers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&id)
-        {
+        let task = {
+            core.observers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove(&id)
+        };
+        if let Some(task) = task {
             task.abort();
+            let _ = task.await;
         }
-        let actor = core.actor.clone();
-        crate::commands::runtime().spawn(async move {
-            let _ = actor.unsubscribe_changes(id).await;
-        });
-    }
-}
-
-impl Drop for ObserverSubscription {
-    fn drop(&mut self) {
-        self.unsubscribe();
+        let _ = core.actor.unsubscribe_changes(id).await;
     }
 }
 
@@ -89,9 +79,12 @@ impl StudioAppCore {
             .map_err(StudioError::from)?;
         let id = subscription.id();
         let observer: Arc<dyn StudioChangeObserver> = Arc::from(observer);
-        let runtime_core = Arc::clone(&self.inner);
-        let task = crate::commands::runtime().spawn(async move {
+        let runtime_core = Arc::downgrade(&self.inner);
+        let task = crate::commands::runtime()?.spawn(async move {
             while let Some(change) = subscription.receive().await {
+                let Some(runtime_core) = runtime_core.upgrade() else {
+                    break;
+                };
                 observer.on_change(SnapshotChangeDto {
                     snapshot: AppSnapshotDto::from_runtime(
                         change.snapshot(),
@@ -132,6 +125,7 @@ impl StudioAppCore {
         );
         for (_, task) in handles {
             task.abort();
+            let _ = task.await;
         }
         self.inner.actor.close().await.map_err(StudioError::from)?;
         Ok(ShutdownReceiptDto {
@@ -161,9 +155,12 @@ mod tests {
     use nostr::{EventBuilder, Keys, Metadata};
     use nostr_relay_builder::MockRelay;
     use nostr_sdk::Client;
-    use radroots_studio_application::{InMemorySecretStore, RelayConfiguration, SdkNostrClient};
-    use radroots_studio_domain::RelayUrl;
-    use radroots_studio_storage::RuntimeActorHandle;
+    use radroots_studio_application::{InMemorySecretStore, RelayConfiguration};
+    use radroots_studio_domain::{RelayDestinationPolicy, RelayUrl};
+    use radroots_studio_nostr::SdkNostrClient;
+    use radroots_studio_runtime::{
+        RuntimeActorHandle, RuntimeDependencies, UuidInstallationIdentitySource,
+    };
 
     use crate::commands::{ACTOR_MAILBOX_CAPACITY, RuntimeCore, SystemClock, runtime};
     use crate::{
@@ -188,19 +185,23 @@ mod tests {
         }
     }
 
-    fn core() -> Arc<StudioAppCore> {
-        core_with_relays(RelayConfiguration::default())
+    async fn core() -> Arc<StudioAppCore> {
+        core_with_relays(RelayConfiguration::default()).await
     }
 
-    fn core_with_relays(relays: RelayConfiguration) -> Arc<StudioAppCore> {
+    async fn core_with_relays(relays: RelayConfiguration) -> Arc<StudioAppCore> {
         let actor = RuntimeActorHandle::in_memory(
             relays,
-            Arc::new(InMemorySecretStore::default()),
-            Arc::new(SystemClock),
-            Arc::new(SdkNostrClient::new(std::time::Duration::from_millis(10))),
+            RuntimeDependencies::new(
+                Arc::new(InMemorySecretStore::default()),
+                Arc::new(SystemClock),
+                Arc::new(SdkNostrClient::new(std::time::Duration::from_millis(10))),
+                Arc::new(UuidInstallationIdentitySource),
+            ),
             NonZeroUsize::new(ACTOR_MAILBOX_CAPACITY).expect("capacity"),
-            runtime().handle(),
+            runtime().expect("runtime").handle(),
         )
+        .await
         .expect("actor");
         Arc::new(StudioAppCore {
             inner: Arc::new(RuntimeCore {
@@ -214,8 +215,8 @@ mod tests {
 
     #[test]
     fn callbacks_allow_reentry_and_stop_after_subscription_close() {
-        runtime().block_on(async {
-            let core = core();
+        runtime().expect("runtime").block_on(async {
+            let core = core().await;
             let observer = Arc::new(RecordingObserver::default());
             *observer.core.lock().expect("core") = Some(Arc::clone(&core));
             let subscription = core
@@ -230,7 +231,7 @@ mod tests {
                 .await
                 .expect("idempotent bootstrap");
             assert_eq!(observer.snapshots.lock().expect("snapshots").len(), 1);
-            subscription.unsubscribe();
+            subscription.unsubscribe().await;
             core.inner.actor.sign_out().await.expect("sign out");
             assert_eq!(observer.snapshots.lock().expect("snapshots").len(), 1);
         });
@@ -238,20 +239,23 @@ mod tests {
 
     #[test]
     fn core_close_deregisters_all_observers_and_rejects_new_subscriptions() {
-        let core = core();
-        let observer = Arc::new(RecordingObserver::default());
-        let _subscription = runtime()
-            .block_on(core.subscribe_changes_v2(Box::new(ArcObserver(observer.clone()))))
-            .expect("subscribe");
+        runtime().expect("runtime").block_on(async {
+            let core = core().await;
+            let observer = Arc::new(RecordingObserver::default());
+            let _subscription = core
+                .subscribe_changes_v2(Box::new(ArcObserver(observer.clone())))
+                .await
+                .expect("subscribe");
 
-        runtime().block_on(core.shutdown_v2()).expect("shutdown");
+            core.shutdown_v2().await.expect("shutdown");
 
-        assert!(
-            runtime()
-                .block_on(core.subscribe_changes_v2(Box::new(ArcObserver(observer))))
-                .is_err()
-        );
-        assert!(core.inner.observers.lock().expect("observers").is_empty());
+            assert!(
+                core.subscribe_changes_v2(Box::new(ArcObserver(observer)))
+                    .await
+                    .is_err()
+            );
+            assert!(core.inner.observers.lock().expect("observers").is_empty());
+        });
     }
 
     #[tokio::test]
@@ -272,9 +276,14 @@ mod tests {
             .await
             .expect("publish profile");
 
-        let core = core_with_relays(RelayConfiguration::new(vec![
-            RelayUrl::parse(relay_url.as_str()).expect("relay URL"),
-        ]));
+        let core = core_with_relays(
+            RelayConfiguration::new(vec![
+                RelayUrl::parse(relay_url.as_str(), RelayDestinationPolicy::Local)
+                    .expect("relay URL"),
+            ])
+            .expect("relay configuration"),
+        )
+        .await;
         core.bootstrap().await.expect("bootstrap");
         let observer = Arc::new(RecordingObserver::default());
         *observer.core.lock().expect("core") = Some(Arc::clone(&core));
@@ -310,7 +319,7 @@ mod tests {
                         == Some("FFI Profile")
             })
         }));
-        subscription.unsubscribe();
+        subscription.unsubscribe().await;
         let count = observer.snapshots.lock().expect("snapshots").len();
         core.sign_out().await.expect("sign out");
         assert_eq!(observer.snapshots.lock().expect("snapshots").len(), count);

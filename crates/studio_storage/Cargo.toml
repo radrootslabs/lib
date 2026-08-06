@@ -18,13 +18,9 @@ radroots_studio_application.workspace = true
 radroots_studio_domain.workspace = true
 refinery = { version = "=0.9.2", default-features = false, features = ["rusqlite"] }
 rusqlite = { version = "=0.39.0", features = ["bundled"] }
-tokio = { version = "=1.47.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 zeroize = "=1.9.0"
 
 [dev-dependencies]
-nostr = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr" }
-nostr-relay-builder = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr-relay-builder" }
-nostr-sdk = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr-sdk" }
 tempfile = "=3.23.0"
 
 [lints]

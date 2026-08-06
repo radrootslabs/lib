@@ -1,9 +1,10 @@
 use radroots_studio_domain::{PublicKey, RelayUrl, SafeError, SafeErrorCode};
+use std::time::Instant;
 
 use crate::{
     ActiveAccountSnapshot, AppCore, AppSnapshot, CachedProfile, Clock, NostrClient,
-    ProfileLoadState, ProfileRefreshStatus, ProfileRepository, RelayConnectionState,
-    SnapshotRevision, StateTransition,
+    ProfileFetchResult, ProfileLoadState, ProfileRefreshStatus, ProfileRepository,
+    RelayConnectionState, RelayFetchCompleteness, SnapshotRevision, StateTransition,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -51,8 +52,9 @@ impl AppCore {
         profiles: &(impl ProfileRepository + ?Sized),
         client: &(impl NostrClient + ?Sized),
         clock: &(impl Clock + ?Sized),
+        deadline: Instant,
     ) -> Result<AppSnapshot, SafeError> {
-        self.refresh_profile_for_active_account(profiles, client, clock)
+        self.refresh_profile_for_active_account(profiles, client, clock, deadline)
             .await
     }
 
@@ -69,11 +71,14 @@ impl AppCore {
         profiles: &(impl ProfileRepository + ?Sized),
         client: &(impl NostrClient + ?Sized),
         clock: &(impl Clock + ?Sized),
+        deadline: Instant,
     ) -> Result<AppSnapshot, SafeError> {
         let Some(plan) = self.begin_profile_refresh()? else {
             return Ok(self.snapshot());
         };
-        let result = client.fetch_profile(plan.public_key(), plan.relays()).await;
+        let result = client
+            .fetch_profile(plan.public_key(), plan.relays(), deadline)
+            .await;
         self.complete_profile_refresh(&plan, result, profiles, clock)
     }
 
@@ -114,7 +119,7 @@ impl AppCore {
     pub fn complete_profile_refresh(
         &self,
         plan: &ProfileRefreshPlan,
-        result: Result<Option<radroots_studio_domain::Kind0ProfileCandidate>, SafeError>,
+        result: Result<ProfileFetchResult, SafeError>,
         profiles: &(impl ProfileRepository + ?Sized),
         clock: &(impl Clock + ?Sized),
     ) -> Result<AppSnapshot, SafeError> {
@@ -129,42 +134,17 @@ impl AppCore {
             .ok_or_else(invalid_profile_completion)?;
 
         match result {
-            Ok(Some(candidate)) => {
-                let cached = CachedProfile::new(
-                    candidate.clone(),
-                    clock.now(),
-                    ProfileRefreshStatus::Success,
-                );
-                profiles.save_profile(&cached)?;
-                let winning_profile = profiles.load_profile(plan.public_key())?.map_or_else(
-                    || candidate.metadata().clone(),
-                    |profile| profile.candidate().metadata().clone(),
-                );
-                self.apply_transition(StateTransition::UpdateActiveAccount {
-                    expected: plan.public_key(),
-                    active_account: Box::new(ActiveAccountSnapshot::new(
-                        current_active.account().clone(),
-                        RelayConnectionState::Connected,
-                        ProfileLoadState::Fresh,
-                        Some(winning_profile),
-                    )),
-                    problem: None,
-                })
+            Ok(fetched) => {
+                let (candidate, completeness) = fetched.into_parts();
+                self.complete_successful_profile_fetch(
+                    plan,
+                    current_active,
+                    candidate,
+                    completeness,
+                    profiles,
+                    clock,
+                )
             }
-            Ok(None) => self.apply_transition(StateTransition::UpdateActiveAccount {
-                expected: plan.public_key(),
-                active_account: Box::new(ActiveAccountSnapshot::new(
-                    current_active.account().clone(),
-                    RelayConnectionState::Connected,
-                    if current_active.profile().is_some() {
-                        ProfileLoadState::Cached
-                    } else {
-                        ProfileLoadState::Empty
-                    },
-                    current_active.profile().cloned(),
-                )),
-                problem: None,
-            }),
             Err(error) => {
                 let status = refresh_status(error);
                 profiles.record_refresh_status(plan.public_key(), clock.now(), status)?;
@@ -181,6 +161,70 @@ impl AppCore {
             }
         }
     }
+
+    fn complete_successful_profile_fetch(
+        &self,
+        plan: &ProfileRefreshPlan,
+        current_active: ActiveAccountSnapshot,
+        candidate: Option<radroots_studio_domain::Kind0ProfileCandidate>,
+        completeness: RelayFetchCompleteness,
+        profiles: &(impl ProfileRepository + ?Sized),
+        clock: &(impl Clock + ?Sized),
+    ) -> Result<AppSnapshot, SafeError> {
+        let relay_state = match completeness {
+            RelayFetchCompleteness::Complete => RelayConnectionState::Connected,
+            RelayFetchCompleteness::Partial => RelayConnectionState::Degraded,
+        };
+        let problem = match completeness {
+            RelayFetchCompleteness::Complete => None,
+            RelayFetchCompleteness::Partial => Some(partial_relay_result()),
+        };
+        match candidate {
+            Some(candidate) => {
+                let cached = CachedProfile::new(
+                    candidate.clone(),
+                    clock.now(),
+                    ProfileRefreshStatus::Success,
+                );
+                profiles.save_profile(&cached)?;
+                let winning_profile = profiles.load_profile(plan.public_key())?.map_or_else(
+                    || candidate.metadata().clone(),
+                    |profile| profile.candidate().metadata().clone(),
+                );
+                self.apply_transition(StateTransition::UpdateActiveAccount {
+                    expected: plan.public_key(),
+                    active_account: Box::new(ActiveAccountSnapshot::new(
+                        current_active.account().clone(),
+                        relay_state,
+                        ProfileLoadState::Fresh,
+                        Some(winning_profile),
+                    )),
+                    problem,
+                })
+            }
+            None => self.apply_transition(StateTransition::UpdateActiveAccount {
+                expected: plan.public_key(),
+                active_account: Box::new(ActiveAccountSnapshot::new(
+                    current_active.account().clone(),
+                    relay_state,
+                    if current_active.profile().is_some() {
+                        ProfileLoadState::Cached
+                    } else {
+                        ProfileLoadState::Empty
+                    },
+                    current_active.profile().cloned(),
+                )),
+                problem,
+            }),
+        }
+    }
+}
+
+const fn partial_relay_result() -> SafeError {
+    SafeError::new(
+        SafeErrorCode::RelayConnectionFailed,
+        radroots_studio_domain::SafeMessage::new("One or more Nostr relays did not complete."),
+    )
 }
 
 const fn invalid_profile_completion() -> SafeError {
@@ -208,16 +252,19 @@ const fn refresh_status(error: SafeError) -> ProfileRefreshStatus {
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
+    use std::time::{Duration, Instant};
 
     use radroots_studio_domain::{
-        EventId, Kind0ProfileCandidate, ProfileMetadata, PublicKey, RelayUrl, SafeError,
-        SafeErrorCode, SafeMessage, SecretKeyInput, UnixTimestamp, select_latest_kind0,
+        EventId, Kind0ProfileCandidate, ProfileMetadata, PublicKey, RelayDestinationPolicy,
+        RelayUrl, SafeError, SafeErrorCode, SafeMessage, SecretKeyInput, UnixTimestamp,
+        select_latest_kind0,
     };
 
     use crate::{
         ActiveAccountSnapshot, AppCore, BoxFuture, CachedProfile, Clock, InMemoryAccountRepository,
-        InMemoryOperationJournal, InMemorySecretStore, NostrClient, ProfileLoadState,
-        ProfileRefreshStatus, ProfileRepository, RelayConfiguration, RelayConnectionState,
+        InMemoryOperationJournal, InMemorySecretStore, NostrClient, ProfileFetchResult,
+        ProfileLoadState, ProfileRefreshStatus, ProfileRepository, RelayConfiguration,
+        RelayConnectionState,
     };
 
     #[derive(Default)]
@@ -277,9 +324,10 @@ mod tests {
             &'a self,
             _public_key: PublicKey,
             _relays: &'a [RelayUrl],
-        ) -> BoxFuture<'a, Result<Option<Kind0ProfileCandidate>, SafeError>> {
+            _deadline: std::time::Instant,
+        ) -> BoxFuture<'a, Result<ProfileFetchResult, SafeError>> {
             let result = self.0.clone();
-            Box::pin(async move { result })
+            Box::pin(async move { result.map(ProfileFetchResult::complete) })
         }
     }
 
@@ -304,12 +352,13 @@ mod tests {
             &'a self,
             _public_key: PublicKey,
             _relays: &'a [RelayUrl],
-        ) -> BoxFuture<'a, Result<Option<Kind0ProfileCandidate>, SafeError>> {
+            _deadline: std::time::Instant,
+        ) -> BoxFuture<'a, Result<ProfileFetchResult, SafeError>> {
             Box::pin(async move {
                 self.started.add_permits(1);
                 let permit = self.release.acquire().await.expect("release open");
                 permit.forget();
-                self.result.clone()
+                self.result.clone().map(ProfileFetchResult::complete)
             })
         }
     }
@@ -324,8 +373,10 @@ mod tests {
     }
 
     fn active_core(profiles: &MemoryProfiles, cached_name: Option<&str>) -> (AppCore, PublicKey) {
-        let relays =
-            RelayConfiguration::new(vec![RelayUrl::parse("ws://localhost:8080").expect("relay")]);
+        let relays = RelayConfiguration::new(vec![
+            RelayUrl::parse("ws://localhost:8080", RelayDestinationPolicy::Local).expect("relay"),
+        ])
+        .expect("relay configuration");
         let core = AppCore::in_memory(relays);
         let accounts = InMemoryAccountRepository::default();
         let secrets = InMemorySecretStore::default();
@@ -395,7 +446,9 @@ mod tests {
             Some(RelayConnectionState::Connecting)
         );
         let client = FixedClient(Ok(Some(profile(public_key, "Fresh", 20))));
-        let result = client.fetch_profile(plan.public_key(), plan.relays()).await;
+        let result = client
+            .fetch_profile(plan.public_key(), plan.relays(), deadline())
+            .await;
         core.complete_profile_refresh(&plan, result, &profiles, &FixedClock)
             .expect("complete refresh");
         assert_eq!(
@@ -418,7 +471,12 @@ mod tests {
         );
 
         let snapshot = core
-            .refresh_profile_for_active_account(&profiles, &FixedClient(Err(error)), &FixedClock)
+            .refresh_profile_for_active_account(
+                &profiles,
+                &FixedClient(Err(error)),
+                &FixedClock,
+                deadline(),
+            )
             .await
             .expect("nonfatal refresh");
 
@@ -445,7 +503,8 @@ mod tests {
         let (core, public_key) = active_core(&profiles, Some("Cached"));
         let client = BlockingClient::new(Ok(Some(profile(public_key, "Stale", 20))));
 
-        let refresh = core.refresh_profile_for_active_account(&profiles, &client, &FixedClock);
+        let refresh =
+            core.refresh_profile_for_active_account(&profiles, &client, &FixedClock, deadline());
         let sign_out = async {
             let permit = client.started.acquire().await.expect("refresh starts");
             permit.forget();
@@ -481,6 +540,7 @@ mod tests {
                 &profiles,
                 &FixedClient(Ok(Some(profile(public_key, "First", 10)))),
                 &FixedClock,
+                deadline(),
             )
             .await
             .expect("first refresh");
@@ -489,6 +549,7 @@ mod tests {
                 &profiles,
                 &FixedClient(Ok(Some(profile(public_key, "Second", 20)))),
                 &FixedClock,
+                deadline(),
             )
             .await
             .expect("second refresh");
@@ -503,10 +564,45 @@ mod tests {
         );
         let signed_out = core.sign_out().expect("sign out");
         let no_op = core
-            .refresh_active_profile(&profiles, &FixedClient(Ok(None)), &FixedClock)
+            .refresh_active_profile(&profiles, &FixedClient(Ok(None)), &FixedClock, deadline())
             .await
             .expect("signed-out no-op");
         assert_eq!(no_op, signed_out);
+    }
+
+    fn deadline() -> Instant {
+        Instant::now() + Duration::from_secs(5)
+    }
+
+    #[test]
+    fn partial_relay_success_retains_verified_data_and_marks_degraded_connectivity() {
+        let profiles = MemoryProfiles::default();
+        let (core, public_key) = active_core(&profiles, None);
+        let plan = core
+            .begin_profile_refresh()
+            .expect("begin")
+            .expect("active");
+        let snapshot = core
+            .complete_profile_refresh(
+                &plan,
+                Ok(ProfileFetchResult::partial(Some(profile(
+                    public_key, "Partial", 30,
+                )))),
+                &profiles,
+                &FixedClock,
+            )
+            .expect("partial completion");
+        let active = snapshot.active_account().expect("active account");
+        assert_eq!(active.relay_state(), RelayConnectionState::Degraded);
+        assert_eq!(active.profile_state(), ProfileLoadState::Fresh);
+        assert_eq!(
+            active.profile().and_then(ProfileMetadata::name),
+            Some("Partial")
+        );
+        assert_eq!(
+            snapshot.recoverable_problem().map(SafeError::code),
+            Some(SafeErrorCode::RelayConnectionFailed)
+        );
     }
 
     #[test]
@@ -524,7 +620,9 @@ mod tests {
 
         core.complete_profile_refresh(
             &second,
-            Ok(Some(profile(public_key, "Newest", 30))),
+            Ok(ProfileFetchResult::complete(Some(profile(
+                public_key, "Newest", 30,
+            )))),
             &profiles,
             &FixedClock,
         )
@@ -532,7 +630,9 @@ mod tests {
         let final_snapshot = core
             .complete_profile_refresh(
                 &first,
-                Ok(Some(profile(public_key, "Older", 20))),
+                Ok(ProfileFetchResult::complete(Some(profile(
+                    public_key, "Older", 20,
+                )))),
                 &profiles,
                 &FixedClock,
             )

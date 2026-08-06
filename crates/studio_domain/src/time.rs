@@ -4,6 +4,8 @@
 pub struct UnixTimestamp(i64);
 
 impl UnixTimestamp {
+    pub const UNIX_EPOCH: Self = Self(0);
+
     #[must_use]
     pub const fn from_seconds(seconds: i64) -> Option<Self> {
         if seconds < 0 {

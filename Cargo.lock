@@ -3965,11 +3965,7 @@ dependencies = [
 name = "radroots_studio_application"
 version = "0.1.0-alpha"
 dependencies = [
- "nostr 0.44.1",
- "nostr-relay-builder",
- "nostr-sdk 0.44.0",
  "radroots_studio_domain",
- "radroots_studio_nostr",
  "secrecy",
  "tokio",
 ]
@@ -3994,6 +3990,8 @@ dependencies = [
  "nostr-sdk 0.44.0",
  "radroots_studio_application",
  "radroots_studio_domain",
+ "radroots_studio_nostr",
+ "radroots_studio_runtime",
  "radroots_studio_storage",
  "tempfile",
  "tokio",
@@ -4005,7 +4003,37 @@ name = "radroots_studio_nostr"
 version = "0.1.0-alpha"
 dependencies = [
  "nostr 0.44.1",
+ "nostr-relay-builder",
+ "nostr-sdk 0.44.0",
+ "radroots_identity",
+ "radroots_studio_application",
  "radroots_studio_domain",
+ "radroots_transport",
+ "radroots_transport_nostr",
+ "tokio",
+]
+
+[[package]]
+name = "radroots_studio_preferences"
+version = "0.1.0-alpha"
+dependencies = [
+ "url",
+]
+
+[[package]]
+name = "radroots_studio_runtime"
+version = "0.1.0-alpha"
+dependencies = [
+ "nostr 0.44.1",
+ "nostr-relay-builder",
+ "nostr-sdk 0.44.0",
+ "radroots_studio_application",
+ "radroots_studio_domain",
+ "radroots_studio_nostr",
+ "radroots_studio_storage",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4014,15 +4042,11 @@ version = "0.1.0-alpha"
 dependencies = [
  "fs2",
  "keyring 4.1.6",
- "nostr 0.44.1",
- "nostr-relay-builder",
- "nostr-sdk 0.44.0",
  "radroots_studio_application",
  "radroots_studio_domain",
  "refinery",
  "rusqlite",
  "tempfile",
- "tokio",
  "zeroize",
 ]
 

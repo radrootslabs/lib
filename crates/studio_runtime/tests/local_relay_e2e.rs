@@ -5,10 +5,11 @@ use nostr_relay_builder::MockRelay;
 use nostr_sdk::Client;
 use radroots_studio_application::{
     Clock, InMemorySecretStore, ProfileLoadState, ProfileRepository, RelayConfiguration,
-    RelayConnectionState, SdkNostrClient, SecretStore, SessionState,
+    RelayConnectionState, SecretStore, SessionState,
 };
-use radroots_studio_domain::{RelayUrl, SecretKeyInput, UnixTimestamp};
-use radroots_studio_storage::PersistentAppCore;
+use radroots_studio_domain::{RelayDestinationPolicy, RelayUrl, SecretKeyInput, UnixTimestamp};
+use radroots_studio_nostr::SdkNostrClient;
+use radroots_studio_runtime::PersistentAppCore;
 
 const SECRET_HEX: &str = "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7";
 
@@ -42,9 +43,12 @@ async fn local_relay_e2e_imports_activates_refreshes_and_caches_profile() {
         .await
         .expect("publish profile");
 
-    let relay = RelayUrl::parse(relay_url.as_str()).expect("relay URL");
-    let adapter = PersistentAppCore::in_memory(RelayConfiguration::new(vec![relay]))
-        .expect("persistent adapter");
+    let relay =
+        RelayUrl::parse(relay_url.as_str(), RelayDestinationPolicy::Local).expect("relay URL");
+    let adapter = PersistentAppCore::in_memory(
+        RelayConfiguration::new(vec![relay]).expect("relay configuration"),
+    )
+    .expect("persistent adapter");
     let secrets = InMemorySecretStore::default();
     adapter.bootstrap(&secrets, &FixedClock).expect("bootstrap");
     let imported = adapter
@@ -66,6 +70,7 @@ async fn local_relay_e2e_imports_activates_refreshes_and_caches_profile() {
             adapter.database(),
             &SdkNostrClient::new(Duration::from_secs(2)),
             &FixedClock,
+            std::time::Instant::now() + Duration::from_secs(2),
         )
         .await
         .expect("refresh profile");

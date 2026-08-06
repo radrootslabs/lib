@@ -1,9 +1,10 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::time::Instant;
 
 use radroots_studio_domain::{
-    AccountSummary, BindingAvailability, Kind0ProfileCandidate, PublicKey, RelayUrl, SafeError,
-    SafeErrorCode, SafeMessage, UnixTimestamp,
+    AccountSummary, BindingAvailability, Kind0ProfileCandidate, Npub, Nsec, PublicKey, RelayUrl,
+    SafeError, SafeErrorCode, SafeMessage, SecretKeyInput, UnixTimestamp,
 };
 
 const MAX_DURABLE_REQUEST_ID_BYTES: usize = 128;
@@ -234,6 +235,41 @@ pub enum ProfileRefreshStatus {
     Success,
     Offline,
     InvalidData,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RelayFetchCompleteness {
+    Complete,
+    Partial,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProfileFetchResult {
+    candidate: Option<Kind0ProfileCandidate>,
+    completeness: RelayFetchCompleteness,
+}
+
+impl ProfileFetchResult {
+    #[must_use]
+    pub const fn complete(candidate: Option<Kind0ProfileCandidate>) -> Self {
+        Self {
+            candidate,
+            completeness: RelayFetchCompleteness::Complete,
+        }
+    }
+
+    #[must_use]
+    pub const fn partial(candidate: Option<Kind0ProfileCandidate>) -> Self {
+        Self {
+            candidate,
+            completeness: RelayFetchCompleteness::Partial,
+        }
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (Option<Kind0ProfileCandidate>, RelayFetchCompleteness) {
+        (self.candidate, self.completeness)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -590,7 +626,75 @@ pub trait NostrClient: Send + Sync {
         &'a self,
         public_key: PublicKey,
         relays: &'a [RelayUrl],
-    ) -> BoxFuture<'a, Result<Option<Kind0ProfileCandidate>, SafeError>>;
+        deadline: Instant,
+    ) -> BoxFuture<'a, Result<ProfileFetchResult, SafeError>>;
+}
+
+pub struct GeneratedKeyMaterial {
+    public_key: PublicKey,
+    npub: Npub,
+    secret: SecretKeyInput,
+    nsec: Nsec,
+}
+
+impl GeneratedKeyMaterial {
+    #[must_use]
+    pub const fn new(
+        public_key: PublicKey,
+        npub: Npub,
+        secret: SecretKeyInput,
+        nsec: Nsec,
+    ) -> Self {
+        Self {
+            public_key,
+            npub,
+            secret,
+            nsec,
+        }
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (PublicKey, Npub, SecretKeyInput, Nsec) {
+        (self.public_key, self.npub, self.secret, self.nsec)
+    }
+}
+
+pub struct ImportedKeyMaterial {
+    public_key: PublicKey,
+    npub: Npub,
+    secret: SecretKeyInput,
+}
+
+impl ImportedKeyMaterial {
+    #[must_use]
+    pub const fn new(public_key: PublicKey, npub: Npub, secret: SecretKeyInput) -> Self {
+        Self {
+            public_key,
+            npub,
+            secret,
+        }
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (PublicKey, Npub, SecretKeyInput) {
+        (self.public_key, self.npub, self.secret)
+    }
+}
+
+pub trait KeyMaterialProvider: Send + Sync {
+    /// Generates one keypair from host-provided cryptographic entropy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a redacted key or entropy error.
+    fn generate(&self) -> Result<GeneratedKeyMaterial, SafeError>;
+
+    /// Canonicalizes imported secret material and derives its public identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a redacted validation error.
+    fn import(&self, input: SecretKeyInput) -> Result<ImportedKeyMaterial, SafeError>;
 }
 
 pub trait Clock: Send + Sync {
@@ -599,18 +703,18 @@ pub trait Clock: Send + Sync {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use std::sync::Mutex;
 
-    use radroots_studio_domain::{
-        AccountSummary, Kind0ProfileCandidate, PublicKey, RelayUrl, SafeError, UnixTimestamp,
-    };
+    use radroots_studio_domain::{AccountSummary, PublicKey, RelayUrl, SafeError, UnixTimestamp};
 
     use super::{
         AccountNamespaceRepository, AccountOperationKind, AccountOperationPhase,
         AccountPreferenceKey, AccountRepository, AppStateRepository, BoxFuture, CachedProfile,
         Clock, DurableOperationReceipt, DurableRequestId, DurableTerminalOutcome, NostrClient,
         OperationDiagnostic, OperationId, OperationJournal, PendingAccountOperation,
-        ProfileRefreshStatus, ProfileRepository,
+        ProfileFetchResult, ProfileRefreshStatus, ProfileRepository,
     };
 
     #[test]
@@ -750,8 +854,9 @@ mod tests {
             &'a self,
             _public_key: PublicKey,
             _relays: &'a [RelayUrl],
-        ) -> BoxFuture<'a, Result<Option<Kind0ProfileCandidate>, SafeError>> {
-            Box::pin(async { Ok(None) })
+            _deadline: Instant,
+        ) -> BoxFuture<'a, Result<ProfileFetchResult, SafeError>> {
+            Box::pin(async { Ok(ProfileFetchResult::complete(None)) })
         }
     }
 

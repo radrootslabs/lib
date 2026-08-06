@@ -61,6 +61,8 @@ private = [
   "radroots_studio_application",
   "radroots_studio_domain",
   "radroots_studio_nostr",
+  "radroots_studio_preferences",
+  "radroots_studio_runtime",
   "radroots_studio_storage",
 ]
 build_codegen = [

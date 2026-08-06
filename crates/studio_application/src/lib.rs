@@ -6,7 +6,6 @@ pub mod app_core;
 mod change_stream;
 pub mod config;
 pub mod custody;
-pub mod nostr_client;
 pub mod ports;
 mod profile_refresh;
 pub mod recovery;
@@ -14,6 +13,9 @@ pub mod secrets;
 pub mod session;
 pub mod snapshot;
 pub mod state_machine;
+
+#[cfg(test)]
+mod test_support;
 
 pub use accounts::{
     GenerateAccountReceipt, ImportAccountReceipt, InMemoryAccountRepository,
@@ -35,21 +37,22 @@ pub use custody::{
     GENERATED_KEY_STAGE_TTL, GeneratedKeyRecoveryHandle, GeneratedKeyStage, GeneratedKeyStageView,
     RecoveryStageId, StagedGeneratedKey,
 };
-pub use nostr_client::SdkNostrClient;
 pub use ports::{
     AccountNamespaceRepository, AccountOperationKind, AccountOperationPhase, AccountPreferenceKey,
     AccountRepository, AppStateRepository, BoxFuture, CachedProfile, Clock,
     DurableAccountOperation, DurableOperationKind, DurableOperationPhase, DurableOperationReceipt,
     DurableOperationRepository, DurableOperationStart, DurableRequestId, DurableTerminalOutcome,
-    NostrClient, OperationDiagnostic, OperationId, OperationJournal, OperationPriorState,
-    PendingAccountOperation, ProfileRefreshStatus, ProfileRepository,
+    GeneratedKeyMaterial, ImportedKeyMaterial, KeyMaterialProvider, NostrClient,
+    OperationDiagnostic, OperationId, OperationJournal, OperationPriorState,
+    PendingAccountOperation, ProfileFetchResult, ProfileRefreshStatus, ProfileRepository,
+    RelayFetchCompleteness,
 };
 pub use profile_refresh::ProfileRefreshPlan;
 pub use secrets::{
     FailureSecretStore, InMemorySecretStore, SecretStore, SecretStoreCall, SecretStoreOperation,
 };
 pub use snapshot::{
-    ActiveAccountSnapshot, AppLifecycle, AppSnapshot, ProfileLoadState, RelayConfiguration,
-    RelayConnectionState, SessionState, SnapshotRevision,
+    ActiveAccountSnapshot, AppLifecycle, AppSnapshot, MAX_CONFIGURED_RELAYS, ProfileLoadState,
+    RelayConfiguration, RelayConnectionState, SessionState, SnapshotRevision,
 };
 pub use state_machine::{StateMachine, StateTransition};

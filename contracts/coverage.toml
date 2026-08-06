@@ -92,6 +92,8 @@ crates = [
   "radroots_studio_domain",
   "radroots_studio_ffi",
   "radroots_studio_nostr",
+  "radroots_studio_preferences",
+  "radroots_studio_runtime",
   "radroots_studio_storage",
   "radroots_studio_uniffi_bindgen",
   "radroots_sync",

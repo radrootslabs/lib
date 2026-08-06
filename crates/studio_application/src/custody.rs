@@ -2,12 +2,11 @@ use std::num::NonZeroU64;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use crate::KeyMaterialProvider;
 use radroots_studio_domain::{
     AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
     Nsec, SafeError, SafeErrorCode, SafeMessage, SecretKeyInput, UnixTimestamp,
 };
-use radroots_studio_nostr::generate_local_keypair;
-
 pub const GENERATED_KEY_STAGE_TTL: Duration = Duration::from_mins(5);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -133,6 +132,7 @@ impl GeneratedKeyStage {
     /// Returns a safe conflict while an unexpired recovery stage is active.
     pub fn begin(
         &mut self,
+        key_material: &dyn KeyMaterialProvider,
         id: RecoveryStageId,
         expected_revision: u64,
         now: UnixTimestamp,
@@ -141,7 +141,7 @@ impl GeneratedKeyStage {
         if self.pending.is_some() {
             return Err(recovery_in_progress());
         }
-        let generated = generate_local_keypair()?;
+        let generated = key_material.generate()?;
         let (public_key, npub, secret, recovery_nsec) = generated.into_parts();
         let account = AccountSummary::new(
             AccountIdentity::verify(public_key, npub.as_str().to_owned())?,
@@ -237,6 +237,7 @@ mod tests {
     use radroots_studio_domain::UnixTimestamp;
 
     use super::{GENERATED_KEY_STAGE_TTL, GeneratedKeyStage, RecoveryStageId};
+    use crate::test_support::TestKeyMaterialProvider;
 
     fn time(seconds: i64) -> UnixTimestamp {
         UnixTimestamp::from_seconds(seconds).expect("time")
@@ -249,11 +250,14 @@ mod tests {
     #[test]
     fn stage_is_exclusive_cancelable_and_never_publishes_secret_debug() {
         let mut stage = GeneratedKeyStage::default();
-        let handle = stage.begin(id(1), 4, time(10)).expect("begin");
+        let key_material = TestKeyMaterialProvider::default();
+        let handle = stage
+            .begin(&key_material, id(1), 4, time(10))
+            .expect("begin");
         let view = handle.view();
         assert_eq!(view.expires_at().as_seconds(), 310);
         assert_eq!(stage.pending().expect("pending").expected_revision(), 4);
-        assert!(stage.begin(id(2), 4, time(11)).is_err());
+        assert!(stage.begin(&key_material, id(2), 4, time(11)).is_err());
         let nsec = handle.take_recovery_nsec().expect("one-use recovery");
         assert_eq!(nsec.with_exposed_secret(str::len), 63);
         assert!(handle.take_recovery_nsec().is_err());
@@ -266,14 +270,19 @@ mod tests {
     #[test]
     fn stage_expires_and_is_destroyed_on_owner_drop() {
         let mut stage = GeneratedKeyStage::default();
-        stage.begin(id(1), 0, time(20)).expect("begin");
+        let key_material = TestKeyMaterialProvider::default();
+        stage
+            .begin(&key_material, id(1), 0, time(20))
+            .expect("begin");
         let expiry = 20 + i64::try_from(GENERATED_KEY_STAGE_TTL.as_secs()).expect("ttl");
         assert!(stage.expire(time(expiry)));
         assert!(stage.pending().is_none());
         assert!(stage.take(id(1), time(expiry)).is_err());
 
         let mut shutdown_stage = GeneratedKeyStage::default();
-        shutdown_stage.begin(id(2), 0, time(30)).expect("begin");
+        shutdown_stage
+            .begin(&key_material, id(2), 0, time(30))
+            .expect("begin");
         drop(shutdown_stage);
     }
 }

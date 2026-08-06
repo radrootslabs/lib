@@ -1,10 +1,8 @@
-use radroots_studio_domain::{PublicKey, SafeError, SafeErrorCode, SafeMessage};
-use radroots_studio_nostr::import_secret;
-
 use crate::{
     AccountRepository, ActiveAccountSnapshot, AppCore, AppSnapshot, AppStateRepository, Clock,
     ProfileLoadState, ProfileRepository, RelayConnectionState, SecretStore, StateTransition,
 };
+use radroots_studio_domain::{PublicKey, SafeError, SafeErrorCode, SafeMessage};
 
 impl AppCore {
     /// Drops the active session while retaining accounts, selection, and credentials.
@@ -40,7 +38,7 @@ impl AppCore {
         self.apply_transition(StateTransition::BeginActivation(public_key))?;
         let prepared = (|| {
             let credential = secrets.load(public_key)?;
-            let imported = import_secret(credential)?;
+            let imported = self.key_material().import(credential)?;
             let (derived_public_key, _npub, canonical_secret) = imported.into_parts();
             drop(canonical_secret);
             if derived_public_key != public_key {

@@ -1,5 +1,5 @@
 schema = "radroots.workspace.platform-inventory.v1"
-catalog_sha256 = "990cae5fc037497618bf5324de9b955c08077ef134ce885b46b34b629da93136"
+catalog_sha256 = "8c27cebf6825f9ed74e122513c661f6dd31837dddb39d0988014121d8ab05e75"
 
 [[platform]]
 id = "android"
@@ -23,7 +23,7 @@ packages = ["radroots_studio_ffi"]
 
 [[platform]]
 id = "native"
-packages = ["radroots_core_bindings", "radroots_event_bindings", "radroots_geonames", "radroots_identity_bindings", "radroots_mesh", "radroots_mesh_agent_client", "radroots_mobile_bindgen", "radroots_mobile_core", "radroots_nostrdb", "radroots_replica_schema_bindings", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_sdk_ffi", "radroots_secrets", "radroots_simplex_app_store", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_storage", "radroots_storage_sqlite", "radroots_studio_application", "radroots_studio_domain", "radroots_studio_nostr", "radroots_studio_runtime", "radroots_studio_storage", "radroots_studio_uniffi_bindgen", "radroots_sync", "radroots_trade_bindings", "radroots_transport_nostr", "radroots_transport_reticulum", "xtask"]
+packages = ["radroots_core_bindings", "radroots_event_bindings", "radroots_geonames", "radroots_identity_bindings", "radroots_mesh", "radroots_mesh_agent_client", "radroots_mobile_bindgen", "radroots_mobile_core", "radroots_nostrdb", "radroots_replica_schema_bindings", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_sdk_ffi", "radroots_secrets", "radroots_simplex_app_store", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_storage", "radroots_storage_sqlite", "radroots_studio_application", "radroots_studio_domain", "radroots_studio_nostr", "radroots_studio_preferences", "radroots_studio_runtime", "radroots_studio_storage", "radroots_studio_uniffi_bindgen", "radroots_sync", "radroots_trade_bindings", "radroots_transport_nostr", "radroots_transport_reticulum", "xtask"]
 
 [[platform]]
 id = "wasm32"

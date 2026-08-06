@@ -1,4 +1,6 @@
-use radroots_studio_domain::{SafeError, SafeErrorCode, SafeMessage, normalize_relay_urls};
+use radroots_studio_domain::{
+    RelayDestinationPolicy, SafeError, SafeErrorCode, SafeMessage, normalize_relay_urls,
+};
 
 use crate::RelayConfiguration;
 
@@ -38,19 +40,19 @@ pub fn relay_configuration_from_value(
     mode: RelayRuntimeMode,
 ) -> Result<RelayConfiguration, SafeError> {
     let configured = value.unwrap_or_default().trim();
-    let source = if configured.is_empty() {
+    let (source, policy) = if configured.is_empty() {
         match mode {
-            RelayRuntimeMode::Development => DEVELOPMENT_RELAY,
+            RelayRuntimeMode::Development => (DEVELOPMENT_RELAY, RelayDestinationPolicy::Local),
             RelayRuntimeMode::Packaged => return Err(invalid_configuration()),
         }
     } else {
-        configured
+        (configured, RelayDestinationPolicy::Public)
     };
-    let normalized = normalize_relay_urls(source.split(',').map(str::trim))?;
+    let normalized = normalize_relay_urls(source.split(',').map(str::trim), policy)?;
     if normalized.is_empty() {
         return Err(invalid_configuration());
     }
-    Ok(RelayConfiguration::new(normalized))
+    RelayConfiguration::new(normalized)
 }
 
 const fn invalid_configuration() -> SafeError {
