@@ -18,6 +18,15 @@ pub enum StorageBackend {
     Sqlite,
 }
 
+impl StorageBackend {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::Sqlite => "sqlite",
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -25,6 +34,16 @@ pub enum StorageOpenMode {
     ReadOnly,
     ReadWriteExisting,
     Create,
+}
+
+impl StorageOpenMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+            Self::ReadWriteExisting => "read_write_existing",
+            Self::Create => "create",
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -44,6 +63,16 @@ pub enum ShutdownState {
     Closed,
 }
 
+impl ShutdownState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Closing => "closing",
+            Self::Closed => "closed",
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -52,6 +81,17 @@ pub enum IntegrityHealth {
     Degraded,
     Corrupt,
     Unknown,
+}
+
+impl IntegrityHealth {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Healthy => "healthy",
+            Self::Degraded => "degraded",
+            Self::Corrupt => "corrupt",
+            Self::Unknown => "unknown",
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -250,6 +290,25 @@ impl EventStoreStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn storage_status_labels_are_explicit_and_stable() {
+        assert_eq!(StorageBackend::Memory.as_str(), "memory");
+        assert_eq!(StorageBackend::Sqlite.as_str(), "sqlite");
+        assert_eq!(StorageOpenMode::ReadOnly.as_str(), "read_only");
+        assert_eq!(
+            StorageOpenMode::ReadWriteExisting.as_str(),
+            "read_write_existing"
+        );
+        assert_eq!(StorageOpenMode::Create.as_str(), "create");
+        assert_eq!(ShutdownState::Open.as_str(), "open");
+        assert_eq!(ShutdownState::Closing.as_str(), "closing");
+        assert_eq!(ShutdownState::Closed.as_str(), "closed");
+        assert_eq!(IntegrityHealth::Healthy.as_str(), "healthy");
+        assert_eq!(IntegrityHealth::Degraded.as_str(), "degraded");
+        assert_eq!(IntegrityHealth::Corrupt.as_str(), "corrupt");
+        assert_eq!(IntegrityHealth::Unknown.as_str(), "unknown");
+    }
 
     fn integrity() -> IntegrityStatus {
         IntegrityStatus::new(IntegrityHealth::Healthy, Some(1), 3, 0).unwrap()
