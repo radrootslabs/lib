@@ -242,7 +242,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         "removed identifier 'tangle' must not reappear",
         &[
             "contracts/consolidation/baseline.v1.toml",
-            "tools/sdk_xtask_import/src/package_matrix.rs",
+            "tools/xtask/src/sdk_generation/package_matrix.rs",
             "tools/xtask/src/hygiene.rs",
         ],
         &mut failures,
@@ -334,7 +334,7 @@ fn reject_retired_listing_aliases(root: &Path, failures: &mut Vec<String>) {
 
     for file in files_under(root, &rel_roots) {
         let rel = display_path(root, &file);
-        if rel == "tools/xtask/src/hygiene.rs" || rel.starts_with("tools/sdk_xtask_import/") {
+        if rel == "tools/xtask/src/hygiene.rs" {
             continue;
         }
         if is_retired_listing_module_path(&rel) {

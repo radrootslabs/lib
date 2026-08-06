@@ -358,7 +358,13 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["sync"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/sync"
@@ -378,7 +384,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/nostrdb"
@@ -398,7 +411,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/transport_reticulum"
@@ -418,7 +438,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_app_store"
@@ -438,7 +465,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_agent_proto"
@@ -458,7 +492,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_chat_proto"
@@ -478,7 +519,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_smp_crypto"
@@ -498,7 +546,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_smp_proto"
@@ -518,7 +573,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_smp_transport"
@@ -538,7 +600,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/replica_schema"
@@ -558,7 +627,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/replica_store"
@@ -578,7 +654,15 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "fixture"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "fixture",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/replica_sync"
@@ -598,7 +682,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/mesh"
@@ -618,7 +709,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/mesh_agent_client"
@@ -638,7 +736,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["coverage_required", "preview"]
 owners = ["preview"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/mesh_agent_proto"
@@ -658,7 +763,15 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["runtime"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/runtime_paths"
@@ -678,7 +791,15 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["runtime"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/runtime_distribution"
@@ -698,7 +819,15 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "preview"]
 owners = ["runtime"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/runtime_manager"
@@ -738,7 +867,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["coverage_required", "preview"]
 owners = ["testing"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime", "fixture"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+  "fixture",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/test_fixtures"
@@ -758,7 +896,18 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "tools"]
 owners = ["architecture"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime", "fixture", "tool"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+  "fixture",
+  "codegen",
+  "tool",
+]
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "tools/xtask"
@@ -778,7 +927,14 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native", "sdk"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/sdk"
@@ -798,7 +954,15 @@ license = "MIT OR Apache-2.0"
 platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native", "sdk"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/radroots"
@@ -818,7 +982,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "sdk", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/core_bindings"
@@ -838,7 +1011,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "sdk", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/event_bindings"
@@ -858,7 +1040,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "sdk", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/identity_bindings"
@@ -878,7 +1069,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "sdk", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/trade_bindings"
@@ -898,7 +1098,17 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "sdk", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "sdk", "facade", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "sdk",
+  "facade",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_schema_bindings"
@@ -918,7 +1128,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["wasm32"]
 groups = ["coverage_required", "sdk", "wasm", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/event_codec_wasm"
@@ -938,7 +1157,17 @@ license = "MIT OR Apache-2.0"
 platforms = ["wasm32"]
 groups = ["coverage_required", "sdk", "wasm", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "sdk", "facade", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "sdk",
+  "facade",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_store_wasm"
@@ -958,7 +1187,17 @@ license = "MIT OR Apache-2.0"
 platforms = ["wasm32"]
 groups = ["coverage_required", "sdk", "wasm", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "sdk", "facade", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "sdk",
+  "facade",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_sync_wasm"
@@ -978,7 +1217,16 @@ license = "MIT OR Apache-2.0"
 platforms = ["native"]
 groups = ["coverage_required", "sdk", "boundaries"]
 owners = ["sdk"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/ffi"
@@ -1018,7 +1266,16 @@ license = "GPL-3.0-or-later"
 platforms = ["native", "wasm32"]
 groups = ["mobile"]
 owners = ["mobile"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "runtime",
+]
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/core"
@@ -1039,7 +1296,17 @@ license = "GPL-3.0-or-later"
 platforms = ["apple", "android"]
 groups = ["mobile", "boundaries"]
 owners = ["mobile"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "runtime",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/ffi"
@@ -1060,7 +1327,17 @@ license = "GPL-3.0-or-later"
 platforms = ["wasm32"]
 groups = ["mobile", "wasm", "boundaries"]
 owners = ["mobile"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "runtime",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/wasm"
@@ -1081,7 +1358,18 @@ license = "GPL-3.0-or-later"
 platforms = ["native"]
 groups = ["mobile", "boundaries"]
 owners = ["mobile"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime", "boundary", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "runtime",
+  "boundary",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/bindgen"
@@ -1102,7 +1390,16 @@ license = "GPL-3.0-only"
 platforms = ["native"]
 groups = ["studio"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/domain"
@@ -1123,7 +1420,17 @@ license = "GPL-3.0-only"
 platforms = ["native"]
 groups = ["studio"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+  "application",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/application"
@@ -1144,7 +1451,18 @@ license = "GPL-3.0-only"
 platforms = ["native"]
 groups = ["studio"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+  "application",
+  "application_adapter",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/nostr"
@@ -1165,7 +1483,18 @@ license = "GPL-3.0-only"
 platforms = ["native"]
 groups = ["studio"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+  "application",
+  "application_adapter",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/storage"
@@ -1186,7 +1515,19 @@ license = "GPL-3.0-only"
 platforms = ["native"]
 groups = ["studio"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter", "runtime_composition"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+  "application",
+  "application_adapter",
+  "runtime_composition",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/ffi"
@@ -1207,7 +1548,20 @@ license = "GPL-3.0-only"
 platforms = ["linux", "macos", "windows"]
 groups = ["studio", "boundaries"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter", "runtime_composition", "boundary"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+  "application",
+  "application_adapter",
+  "runtime_composition",
+  "boundary",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/ffi"
@@ -1228,7 +1582,21 @@ license = "GPL-3.0-only"
 platforms = ["native"]
 groups = ["studio", "boundaries"]
 owners = ["studio"]
-permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter", "runtime_composition", "boundary", "codegen"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "sdk",
+  "facade",
+  "application_domain",
+  "application",
+  "application_adapter",
+  "runtime_composition",
+  "boundary",
+  "codegen",
+]
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/tools/uniffi-bindgen"

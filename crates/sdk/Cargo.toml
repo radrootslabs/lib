@@ -13,12 +13,29 @@ readme = "README.md"
 documentation = "https://docs.rs/radroots_sdk"
 keywords = ["radroots", "sdk", "local-food", "nostr"]
 categories = ["api-bindings", "asynchronous", "network-programming"]
-include = ["src/**", "tests/**", "!tests/package_boundary.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = [
+  "src/**",
+  "tests/**",
+  "!tests/package_boundary.rs",
+  "examples/**",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+]
 autotests = false
 autoexamples = false
 
 [package.metadata.docs.rs]
-features = ["memory", "sync", "nostr", "nip46", "local-signing", "geonames", "knowledge"]
+features = [
+  "memory",
+  "sync",
+  "nostr",
+  "nip46",
+  "local-signing",
+  "geonames",
+  "knowledge",
+]
 
 [lib]
 name = "radroots_sdk"
@@ -28,40 +45,18 @@ default = ["memory"]
 memory = ["radroots_storage/memory"]
 sqlite = ["dep:radroots_storage_sqlite"]
 sync = ["dep:radroots_sync", "dep:uuid"]
-nostr = [
-  "sync",
-  "dep:radroots_nostr",
-  "dep:radroots_transport_nostr",
-]
-nip46 = [
-  "nostr",
-  "dep:radroots_nostr_connect",
-]
+nostr = ["sync", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
+nip46 = ["nostr", "dep:radroots_nostr_connect"]
 local-signing = [
   "dep:radroots_nostr",
   "dep:radroots_secrets",
   "radroots_nostr/signing",
 ]
-radrootsd = [
-  "sync",
-  "dep:reqwest",
-  "dep:serde",
-  "dep:serde_json",
-]
+radrootsd = ["sync", "dep:reqwest", "dep:serde", "dep:serde_json"]
 geonames = ["dep:radroots_geonames"]
-knowledge = [
-  "radroots_event/knowledge",
-  "radroots_event_codec/knowledge",
-]
+knowledge = ["radroots_event/knowledge", "radroots_event_codec/knowledge"]
 native = ["sqlite", "sync", "local-signing"]
-full = [
-  "native",
-  "nostr",
-  "nip46",
-  "radrootsd",
-  "geonames",
-  "knowledge",
-]
+full = ["native", "nostr", "nip46", "radrootsd", "geonames", "knowledge"]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
@@ -70,7 +65,9 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
   "json",
   "std",
 ] }
-radroots_identity = { workspace = true, default-features = false, features = ["std"] }
+radroots_identity = { workspace = true, default-features = false, features = [
+  "std",
+] }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_signing = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false }

@@ -13,7 +13,19 @@ readme = "README.md"
 documentation = "https://docs.rs/radroots_transport_nostr"
 keywords = ["radroots", "nostr", "transport", "websocket"]
 categories = ["asynchronous", "network-programming"]
-include = ["src/**", "tests/**", "!tests/legacy_quarantine.rs", "!tests/network_hardening.rs", "!tests/package_boundary.rs", "!tests/workspace_consumers.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = [
+  "src/**",
+  "tests/**",
+  "!tests/legacy_quarantine.rs",
+  "!tests/network_hardening.rs",
+  "!tests/package_boundary.rs",
+  "!tests/workspace_consumers.rs",
+  "examples/**",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+]
 
 [package.metadata.docs.rs]
 features = []
@@ -22,8 +34,12 @@ features = []
 name = "radroots_transport_nostr"
 
 [dependencies]
-radroots_event_codec = { workspace = true, default-features = false, features = ["json"] }
-radroots_nostr = { workspace = true, default-features = false, features = ["events"] }
+radroots_event_codec = { workspace = true, default-features = false, features = [
+  "json",
+] }
+radroots_nostr = { workspace = true, default-features = false, features = [
+  "events",
+] }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
 async-wsocket = { workspace = true }

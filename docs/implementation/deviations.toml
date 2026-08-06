@@ -132,7 +132,21 @@ id = "RCRV1-DEV-009"
 date = "2026-08-02"
 status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
-affected_steps = ["170", "179", "189", "196", "201", "213", "226", "235", "263", "269", "288", "292", "313"]
+affected_steps = [
+  "170",
+  "179",
+  "189",
+  "196",
+  "201",
+  "213",
+  "226",
+  "235",
+  "263",
+  "269",
+  "288",
+  "292",
+  "313",
+]
 spec_anchors = [
   "docs/specs/radroots_crates_release_v1.md#13-radroots_storage",
   "docs/specs/radroots_crates_release_v1.md#14-radroots_storage_sqlite",
@@ -149,7 +163,7 @@ verification = [
   "Package manifests carry machine-readable publish-frozen metadata naming the final replacement, deviation, Step 313 removal gate, and prohibition on new consumers.",
   "A storage-owned quarantine test requires the four packages to remain private and absent from the approved publication inventory.",
   "Workspace checks and tests prove current migration consumers remain buildable while publication stays frozen.",
-  "Step 313 performs the all-first-party forbidden-name search and final package deletion."
+  "Step 313 performs the all-first-party forbidden-name search and final package deletion.",
 ]
 unresolved_risk = "None; all four predecessor packages and their active dependency edges are absent."
 normative_architecture_change = false
@@ -222,7 +236,21 @@ id = "RCRV1-DEV-004"
 date = "2026-07-28"
 status = "active"
 approval = "Explicit user coverage-policy update dated 2026-07-28 17:15 UTC."
-affected_steps = ["098", "155", "225", "260", "268", "294", "298", "299", "301", "302", "303", "304", "314"]
+affected_steps = [
+  "098",
+  "155",
+  "225",
+  "260",
+  "268",
+  "294",
+  "298",
+  "299",
+  "301",
+  "302",
+  "303",
+  "304",
+  "314",
+]
 spec_anchors = [
   "docs/specs/radroots_crates_release_v1.md#245-coverage-policy",
   "docs/specs/radroots_crates_release_v1.toml#quality_policy.coverage",

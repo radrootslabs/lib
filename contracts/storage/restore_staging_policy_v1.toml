@@ -4,7 +4,13 @@ authority = "writable_storage_only"
 runtime_staging = ".runtime.sqlite.restore-{backup_id_hex}.staging"
 protected_staging = ".private.sqlite.restore-{backup_id_hex}.staging"
 creation = "create_new_mode_0600"
-verification = ["exact_length", "sha256", "current_schema_catalog", "sqlite_integrity_check", "foreign_key_check"]
+verification = [
+  "exact_length",
+  "sha256",
+  "current_schema_catalog",
+  "sqlite_integrity_check",
+  "foreign_key_check",
+]
 live_mutation = false
 existing_staging = "reject"
 protected_member = "manifest_policy_controlled"

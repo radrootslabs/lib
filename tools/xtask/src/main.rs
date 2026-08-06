@@ -34,6 +34,8 @@ mod release_graph;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod sdk_generation;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod target_qualification;
@@ -495,21 +497,37 @@ fn run(args: &[String]) -> Result<(), String> {
             source_date_epoch,
             builder_id,
             features,
-        } => build_control::artifact(
-            product.as_str(),
-            target.as_str(),
-            language.as_str(),
-            match mode {
+        } => {
+            let product = product.as_str();
+            let target = target.as_str();
+            let language = language.as_str();
+            let mode = match mode {
                 ArtifactMode::Check => build_control::Mode::Check,
                 ArtifactMode::Write => build_control::Mode::Write,
-            },
-            &consumer_root,
-            &source_root,
-            &output,
-            source_date_epoch,
-            &builder_id,
-            &features,
-        ),
+            };
+            build_control::validate_generation_roots(
+                product,
+                target,
+                language,
+                &consumer_root,
+                &source_root,
+            )?;
+            if product == "sdk" {
+                sdk_generation::artifact(&source_root, &consumer_root, target, language, mode)?;
+            }
+            build_control::artifact(
+                product,
+                target,
+                language,
+                mode,
+                &consumer_root,
+                &source_root,
+                &output,
+                source_date_epoch,
+                &builder_id,
+                &features,
+            )
+        }
     }
 }
 

@@ -23,6 +23,9 @@ let
   darwinBuildInputs = lib.optionals pkgs.stdenv.isDarwin [
     pkgs.libiconv
   ];
+  processInspectionInputs =
+    lib.optionals pkgs.stdenv.isDarwin [ pkgs.unixtools.ps ]
+    ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.procps ];
   repoSource = lib.sources.cleanSource root;
   cargoSource = lib.fileset.toSource {
     root = root;
@@ -101,7 +104,8 @@ let
       pkg-config
       python3
     ]
-    ++ darwinBuildInputs;
+    ++ darwinBuildInputs
+    ++ processInspectionInputs;
   coverageRuntimeInputs = stableRuntimeInputs ++ [
     toolchains.coverage
     cargoLlvmCov
@@ -119,7 +123,8 @@ let
       pkgs.clang
       pkgs.llvmPackages.libclang
       pkgs.perl
-    ];
+    ]
+    ++ processInspectionInputs;
     buildInputs = [
       pkgs.libsodium
     ]

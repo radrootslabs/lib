@@ -2,6 +2,7 @@
 
 use std::ffi::OsString;
 use std::fs;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -416,7 +417,7 @@ fn read_detailed_summary(
                 function
                     .filenames
                     .iter()
-                    .any(|filename| filename.contains(scope_filter))
+                    .any(|filename| coverage_filename_matches_scope(filename, scope_filter))
             })
         {
             continue;
@@ -426,7 +427,7 @@ fn read_detailed_summary(
             let filename = region_filename(function, region)?;
             if scope_filter
                 .as_deref()
-                .is_none_or(|scope_filter| filename.contains(scope_filter))
+                .is_none_or(|scope_filter| coverage_filename_matches_scope(filename, scope_filter))
             {
                 Some((filename, region[0]))
             } else {
@@ -452,10 +453,9 @@ fn read_detailed_summary(
                 let Some(filename) = region_filename(function, region) else {
                     continue;
                 };
-                if scope_filter
-                    .as_deref()
-                    .is_some_and(|scope_filter| !filename.contains(scope_filter))
-                {
+                if scope_filter.as_deref().is_some_and(|scope_filter| {
+                    !coverage_filename_matches_scope(filename, scope_filter)
+                }) {
                     continue;
                 }
                 let key = RegionCoverageKey {
@@ -496,10 +496,9 @@ fn read_detailed_summary(
                 let Some(filename) = branch_filename(function, branch) else {
                     continue;
                 };
-                if scope_filter
-                    .as_deref()
-                    .is_some_and(|scope_filter| !filename.contains(scope_filter))
-                {
+                if scope_filter.as_deref().is_some_and(|scope_filter| {
+                    !coverage_filename_matches_scope(filename, scope_filter)
+                }) {
                     continue;
                 }
                 let key = BranchCoverageKey {
@@ -622,6 +621,20 @@ fn is_ignorable_detail_function(
 fn scope_path_fragment(scope: &str) -> String {
     let crate_dir = scope.strip_prefix("radroots_").unwrap_or(scope);
     format!("/crates/{crate_dir}/src/")
+}
+
+fn coverage_filename_matches_scope(filename: &str, scope_filter: &str) -> bool {
+    let mut normalized = PathBuf::new();
+    for component in Path::new(filename).components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            component => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized.to_string_lossy().contains(scope_filter)
 }
 
 fn percentage(covered: u64, total: u64) -> f64 {
@@ -2396,6 +2409,13 @@ mod tests {
           "filenames": ["/workspace/crates/b/src/lib.rs"],
           "regions": [
             [20, 1, 20, 6, 0, 0, 0, 0]
+          ]
+        },
+        {
+          "count": 0,
+          "filenames": ["/workspace/crates/a/src/adapters/../../tests/unit.rs"],
+          "regions": [
+            [30, 1, 30, 6, 0, 0, 0, 0]
           ]
         }
       ]

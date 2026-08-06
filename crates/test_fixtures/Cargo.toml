@@ -15,9 +15,5 @@ authors = ["Tyson Lupul <tyson@radroots.org>"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
 
 [dependencies]
-radroots_event = { workspace = true, features = [
-  "std",
-  "serde",
-  "knowledge",
-] }
+radroots_event = { workspace = true, features = ["std", "serde", "knowledge"] }
 radroots_identity = { workspace = true }

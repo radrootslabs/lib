@@ -15,6 +15,36 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
+[overrides.radroots]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the facade crate has no measured branch records"
+
+[overrides.radroots_core_bindings]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the binding inventory has no measured branch records"
+
+[overrides.radroots_event_bindings]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the binding inventory has no measured branch records"
+
+[overrides.radroots_identity_bindings]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the binding inventory has no measured branch records"
+
+[overrides.radroots_replica_schema_bindings]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the binding inventory has no measured branch records"
+
+[overrides.radroots_sdk_ffi]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the UniFFI facade has no measured branch records"
+
 [overrides.radroots_test_fixtures]
 require_branches = false
 temporary = true

@@ -1,11 +1,58 @@
 schema_version = 1
 strategy = "deterministic_state_construction_and_sql_faults"
 runtime_global_hooks = false
-accepted_reopen_outcomes = ["fully_committed_replayable", "typed_recoverable_no_partial_success"]
-atomic_sql_points = ["source_sequence", "event", "provenance", "projection_checkpoint", "commit_receipt", "journal", "outbox_item", "outbox_target", "delivery_evidence"]
-migration_points = ["application_identity", "each_pending_step", "user_version", "exact_catalog", "transaction_commit"]
-backup_points = ["runtime_snapshot", "protected_snapshot", "member_hash", "manifest", "complete_verification", "final_directory_rename", "root_sync"]
-restore_points = ["runtime_staging", "protected_staging", "staged_validation", "marker", "runtime_previous_rename", "runtime_replacement_rename", "protected_previous_rename", "protected_replacement_rename", "installed_validation", "runtime_previous_cleanup", "protected_previous_cleanup", "marker_cleanup"]
-lock_close_points = ["lock_file_open", "exclusive_acquisition", "cross_process_contention", "pool_drain", "lock_release", "closed_status"]
+accepted_reopen_outcomes = [
+  "fully_committed_replayable",
+  "typed_recoverable_no_partial_success",
+]
+atomic_sql_points = [
+  "source_sequence",
+  "event",
+  "provenance",
+  "projection_checkpoint",
+  "commit_receipt",
+  "journal",
+  "outbox_item",
+  "outbox_target",
+  "delivery_evidence",
+]
+migration_points = [
+  "application_identity",
+  "each_pending_step",
+  "user_version",
+  "exact_catalog",
+  "transaction_commit",
+]
+backup_points = [
+  "runtime_snapshot",
+  "protected_snapshot",
+  "member_hash",
+  "manifest",
+  "complete_verification",
+  "final_directory_rename",
+  "root_sync",
+]
+restore_points = [
+  "runtime_staging",
+  "protected_staging",
+  "staged_validation",
+  "marker",
+  "runtime_previous_rename",
+  "runtime_replacement_rename",
+  "protected_previous_rename",
+  "protected_replacement_rename",
+  "installed_validation",
+  "runtime_previous_cleanup",
+  "protected_previous_cleanup",
+  "marker_cleanup",
+]
+lock_close_points = [
+  "lock_file_open",
+  "exclusive_acquisition",
+  "cross_process_contention",
+  "pool_drain",
+  "lock_release",
+  "closed_status",
+]
 restore_recovery = "idempotent_forward_completion_before_connection_open"
 failure_reporting = "stable_typed_error_without_backend_details"

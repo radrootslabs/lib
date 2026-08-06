@@ -73,12 +73,7 @@ worktree_count = 1
 rust_version = "1.97.1"
 resolver = "3"
 package_version = "0.1.0-alpha"
-commands = [
-  "make format",
-  "make check",
-  "make bindings",
-  "make audit",
-]
+commands = ["make format", "make check", "make bindings", "make audit"]
 
 [[surface]]
 repository = "lib"

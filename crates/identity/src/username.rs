@@ -162,7 +162,7 @@ impl<'de> serde::Deserialize<'de> for Username {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
+    use alloc::{format, string::ToString};
 
     use super::*;
 

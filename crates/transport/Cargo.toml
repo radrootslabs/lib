@@ -13,7 +13,17 @@ readme = "README.md"
 documentation = "https://docs.rs/radroots_transport"
 keywords = ["radroots", "transport", "async", "networking"]
 categories = ["asynchronous", "network-programming", "no-std"]
-include = ["src/**", "tests/**", "!tests/package_boundary.rs", "!tests/source_boundary.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = [
+  "src/**",
+  "tests/**",
+  "!tests/package_boundary.rs",
+  "!tests/source_boundary.rs",
+  "examples/**",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+]
 
 [package.metadata.docs.rs]
 features = ["std", "serde"]
@@ -23,11 +33,7 @@ name = "radroots_transport"
 
 [features]
 default = ["std", "serde"]
-std = [
-  "radroots_event/std",
-  "radroots_identity/std",
-  "radroots_protocol/std",
-]
+std = ["radroots_event/std", "radroots_identity/std", "radroots_protocol/std"]
 serde = [
   "dep:serde",
   "radroots_event/serde",

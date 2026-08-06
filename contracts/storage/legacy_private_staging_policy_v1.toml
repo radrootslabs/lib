@@ -3,13 +3,26 @@ runtime_authority = "runtime_sqlite_import_journal_v8"
 private_authority = "private_sqlite_forward_migration_v2"
 source_kind = "private"
 supported_schema = "private_v1"
-table_order = ["metadata", "wrapped_profile_keys", "signing_secrets", "farm_locations", "trade_artifacts", "cursor_keys", "nip46_sessions", "rotation_progress"]
+table_order = [
+  "metadata",
+  "wrapped_profile_keys",
+  "signing_secrets",
+  "farm_locations",
+  "trade_artifacts",
+  "cursor_keys",
+  "nip46_sessions",
+  "rotation_progress",
+]
 cursor = "table_discriminator_u8_plus_utf8_canonical_key_max_1024"
 page_limit_max = 256
 record = "sqlite_json_array_governed_column_order_with_blob_hex"
 secret_bearing_staging_database = "private.sqlite"
 wrapping_key_reference = "required_before_dependent_record"
-recovery = ["runtime_enter_staging", "private_exact_idempotent_page_commit", "runtime_cursor_count_commit"]
+recovery = [
+  "runtime_enter_staging",
+  "private_exact_idempotent_page_commit",
+  "runtime_cursor_count_commit",
+]
 crash_before_private_commit = "no_private_rows_and_old_runtime_cursor"
 crash_after_private_commit = "exact_replay_verification_from_old_runtime_cursor"
 conflicting_replay = "reject"

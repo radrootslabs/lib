@@ -1,6 +1,11 @@
 schema_version = 1
 authority = "runtime_sqlite_owned_forward_migration_v6"
-identity = ["import_id", "target_generation", "manifest_sha256", "classification_sha256"]
+identity = [
+  "import_id",
+  "target_generation",
+  "manifest_sha256",
+  "classification_sha256",
+]
 import_states = ["classified", "staging", "ready", "committing", "complete"]
 member_states = ["pending", "staging", "ready", "complete"]
 imports_per_target_generation = 1

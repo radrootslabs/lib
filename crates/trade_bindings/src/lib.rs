@@ -4,6 +4,8 @@
 //! `radroots_trade`, `radroots_event`, and `radroots_core` owners. This crate
 //! intentionally does not activate code generation in a public runtime crate.
 
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TradeTypeDisposition {
     SourceTradeRoot,
@@ -89,6 +91,7 @@ pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
     ),
 ];
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn source_root(export_name: &'static str) -> TradeTypeInventoryEntry {
     TradeTypeInventoryEntry {
         export_name,
@@ -96,6 +99,7 @@ const fn source_root(export_name: &'static str) -> TradeTypeInventoryEntry {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn event_import(export_name: &'static str) -> TradeTypeInventoryEntry {
     TradeTypeInventoryEntry {
         export_name,
@@ -103,6 +107,7 @@ const fn event_import(export_name: &'static str) -> TradeTypeInventoryEntry {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn local_shape(export_name: &'static str) -> TradeTypeInventoryEntry {
     TradeTypeInventoryEntry {
         export_name,
@@ -110,6 +115,7 @@ const fn local_shape(export_name: &'static str) -> TradeTypeInventoryEntry {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn json_number_safe_count(
     type_name: &'static str,
     field_name: &'static str,
@@ -121,9 +127,68 @@ const fn json_number_safe_count(
     }
 }
 
+/// Validates that the checked-in trade binding inventory is internally coherent.
+#[must_use]
+pub fn inventory_is_valid() -> bool {
+    inventory_entries_are_valid(TRADE_TYPE_INVENTORY, TRADE_LARGE_INTEGER_POLICIES)
+}
+
+fn inventory_entries_are_valid(
+    types: &[TradeTypeInventoryEntry],
+    policies: &[TradeLargeIntegerPolicyEntry],
+) -> bool {
+    !types.is_empty()
+        && types.iter().enumerate().all(|(index, entry)| {
+            !entry.export_name.is_empty()
+                && !types[..index]
+                    .iter()
+                    .any(|prior| prior.export_name == entry.export_name)
+        })
+        && policies.iter().all(|policy| {
+            !policy.field_name.is_empty()
+                && types
+                    .iter()
+                    .any(|entry| entry.export_name == policy.type_name)
+        })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{TRADE_LARGE_INTEGER_POLICIES, TRADE_TYPE_INVENTORY, TradeTypeDisposition};
+    use super::{
+        TRADE_LARGE_INTEGER_POLICIES, TRADE_TYPE_INVENTORY, TradeLargeIntegerPolicy,
+        TradeLargeIntegerPolicyEntry, TradeTypeDisposition, TradeTypeInventoryEntry,
+        inventory_entries_are_valid, inventory_is_valid,
+    };
+
+    #[test]
+    fn checked_in_inventory_is_coherent_and_invalid_shapes_fail_closed() {
+        assert!(inventory_is_valid());
+        assert!(!inventory_entries_are_valid(&[], &[]));
+
+        let valid = TradeTypeInventoryEntry {
+            export_name: "Valid",
+            disposition: TradeTypeDisposition::SourceTradeRoot,
+        };
+        let empty = TradeTypeInventoryEntry {
+            export_name: "",
+            disposition: TradeTypeDisposition::SourceTradeRoot,
+        };
+        assert!(!inventory_entries_are_valid(&[empty], &[]));
+        assert!(!inventory_entries_are_valid(&[valid, valid], &[]));
+
+        let empty_field = TradeLargeIntegerPolicyEntry {
+            type_name: "Valid",
+            field_name: "",
+            policy: TradeLargeIntegerPolicy::JsonNumberSafeCount,
+        };
+        let unknown_type = TradeLargeIntegerPolicyEntry {
+            type_name: "Missing",
+            field_name: "count",
+            policy: TradeLargeIntegerPolicy::JsonNumberSafeCount,
+        };
+        assert!(!inventory_entries_are_valid(&[valid], &[empty_field]));
+        assert!(!inventory_entries_are_valid(&[valid], &[unknown_type]));
+    }
 
     #[test]
     fn trade_type_inventory_is_deterministic() {

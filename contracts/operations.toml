@@ -333,11 +333,7 @@ vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json
 domain = "blossom"
 id = "blossom.verify_descriptor_bytes"
 stability = "beta"
-inputs = [
-  "ApprovedDescriptor",
-  "Bytes",
-  "MediaType",
-]
+inputs = ["ApprovedDescriptor", "Bytes", "MediaType"]
 outputs = ["ByteVerifiedDescriptor"]
 error_class = "validation_error"
 deterministic = true
@@ -370,10 +366,7 @@ inputs = [
   "CreatedAt",
   "LifetimeSeconds",
 ]
-outputs = [
-  "AuthoredUploadClaim",
-  "AuthorizationWireParts",
-]
+outputs = ["AuthoredUploadClaim", "AuthorizationWireParts"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -411,10 +404,7 @@ vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
 domain = "blossom"
 id = "blossom.validate_authorization_claim"
 stability = "beta"
-inputs = [
-  "AuthorizationClaim",
-  "AuthorizationValidation",
-]
+inputs = ["AuthorizationClaim", "AuthorizationValidation"]
 outputs = ["ValidatedAuthorizationClaim"]
 error_class = "validation_error"
 deterministic = true
@@ -1821,10 +1811,7 @@ rust_types = [
 
 [operations.trade_prepare_workflow.conformance]
 vector = "contracts/conformance/vectors/trade/prepare_workflow.v1.json"
-case_kinds = [
-  "trade.prepare_workflow.valid",
-  "trade.prepare_workflow.invalid",
-]
+case_kinds = ["trade.prepare_workflow.valid", "trade.prepare_workflow.invalid"]
 
 [operations.knowledge_contract_manifest_json]
 domain = "knowledge"

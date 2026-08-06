@@ -12,7 +12,9 @@ authors = ["Tyson Lupul <tyson@radroots.org>"]
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
 dto_bindgen_core = { workspace = true }
+dto_bindgen_backend_ts = { workspace = true }
 fs2 = { workspace = true }
+flate2 = { workspace = true }
 hex = { workspace = true }
 jsonschema = { workspace = true }
 prettyplease = { workspace = true }
@@ -21,12 +23,18 @@ quote = { workspace = true }
 radroots_event_codec = { workspace = true, features = [
   "manifests",
 ], default-features = false }
+radroots_core_bindings = { workspace = true }
+radroots_event_bindings = { workspace = true }
+radroots_identity = { workspace = true }
+radroots_identity_bindings = { workspace = true }
 radroots_protocol = { workspace = true, features = ["std"] }
+radroots_replica_schema_bindings = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 syn = { workspace = true }
+tar = { workspace = true }
 tempfile = { workspace = true }
 toml = { workspace = true }
 

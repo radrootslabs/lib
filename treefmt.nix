@@ -3,6 +3,7 @@
 
   settings.global.excludes = [
     ".direnv/**"
+    "contracts/crates/generated/**"
     "target/**"
   ];
 

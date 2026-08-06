@@ -520,15 +520,8 @@ pub fn artifact(
     validate_identifier(target, "target")?;
     validate_identifier(language, "language")?;
     validate_identifier(builder_id, "builder id")?;
-    validate_artifact_route(product, target, language)?;
+    validate_generation_roots(product, target, language, consumer_path, source_path)?;
     let consumer = ConsumerRoot::open(consumer_path)?;
-    if consumer.product != product {
-        return Err(format!(
-            "consumer marker {} does not match artifact product {product}",
-            consumer.product
-        ));
-    }
-    verify_source_root(source_path, &consumer.source_lock)?;
     let mut sorted_features = features.iter().map(String::as_str).collect::<Vec<_>>();
     sorted_features.sort_unstable();
     sorted_features.dedup();
@@ -577,9 +570,36 @@ pub fn artifact(
     }
 }
 
+pub fn validate_generation_roots(
+    product: &str,
+    target: &str,
+    language: &str,
+    consumer_path: &Path,
+    source_path: &Path,
+) -> Result<(), String> {
+    validate_identifier(product, "product")?;
+    validate_identifier(target, "target")?;
+    validate_identifier(language, "language")?;
+    validate_artifact_route(product, target, language)?;
+    let consumer = ConsumerRoot::open(consumer_path)?;
+    if consumer.product != product {
+        return Err(format!(
+            "consumer marker {} does not match artifact product {product}",
+            consumer.product
+        ));
+    }
+    verify_source_root(source_path, &consumer.source_lock)
+}
+
 fn validate_artifact_route(product: &str, target: &str, language: &str) -> Result<(), String> {
     let valid = match product {
-        "sdk" => matches!(target, "typescript" | "wasm" | "ffi") && language == "typescript",
+        "sdk" => matches!(
+            (target, language),
+            ("typescript", "typescript")
+                | ("wasm", "javascript")
+                | ("ffi", "swift")
+                | ("ffi", "kotlin")
+        ),
         "mobile" => matches!(
             (target, language),
             ("ios", "swift") | ("android", "kotlin") | ("wasm", "javascript")
@@ -786,6 +806,10 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if bytes.contains(&b'\r') || !bytes.ends_with(b"\n") {
         return Err("generated text must use LF and end with one newline".to_owned());
     }
+    atomic_write_bytes(path, bytes)
+}
+
+pub(crate) fn atomic_write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("output {} has no parent", path.display()))?;
@@ -1193,6 +1217,10 @@ mod tests {
             validate_artifact_route("mobile", "ios", "kotlin").is_err(),
             "unsupported target/language must fail"
         );
+        assert!(validate_artifact_route("sdk", "wasm", "javascript").is_ok());
+        assert!(validate_artifact_route("sdk", "ffi", "swift").is_ok());
+        assert!(validate_artifact_route("sdk", "ffi", "kotlin").is_ok());
+        assert!(validate_artifact_route("sdk", "wasm", "typescript").is_err());
         assert!(
             artifact(
                 "sdk",

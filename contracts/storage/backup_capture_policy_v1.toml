@@ -11,7 +11,12 @@ include_protected_members = ["runtime/runtime.sqlite", "private/private.sqlite"]
 created_at = "plan_requested_at_unix_ms"
 member_digest = "sha256"
 member_length = "exact_bytes"
-filesystem_sync = ["member_file", "member_directory", "staging_directory", "backup_root"]
+filesystem_sync = [
+  "member_file",
+  "member_directory",
+  "staging_directory",
+  "backup_root",
+]
 existing_staging_or_final = "reject"
 hidden_clock = false
 unsafe_ffi = false

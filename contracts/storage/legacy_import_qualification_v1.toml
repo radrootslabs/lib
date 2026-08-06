@@ -1,6 +1,23 @@
 schema_version = 1
-source_matrix = ["event_store_v1_to_v4", "outbox_v1", "private_v1", "studio_v1_host_handoff"]
-required_cases = ["mandatory_backup", "unsupported_schema_rejection", "mixed_source_golden", "bounded_resume", "close_reopen", "invalid_row_rollback", "private_commit_recovery", "lost_success_retry", "conflicting_identity_rejection", "source_retention", "no_live_dual_write"]
+source_matrix = [
+  "event_store_v1_to_v4",
+  "outbox_v1",
+  "private_v1",
+  "studio_v1_host_handoff",
+]
+required_cases = [
+  "mandatory_backup",
+  "unsupported_schema_rejection",
+  "mixed_source_golden",
+  "bounded_resume",
+  "close_reopen",
+  "invalid_row_rollback",
+  "private_commit_recovery",
+  "lost_success_retry",
+  "conflicting_identity_rejection",
+  "source_retention",
+  "no_live_dual_write",
+]
 mixed_imported_row_count = 14
 mixed_host_handoff_row_count = 0
 exact_retry = true

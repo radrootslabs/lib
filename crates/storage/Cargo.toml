@@ -13,7 +13,18 @@ publish = ["crates-io"]
 documentation = "https://docs.rs/radroots_storage"
 keywords = ["radroots", "storage", "persistence", "events"]
 categories = ["database", "data-structures", "no-std"]
-include = ["src/**", "tests/**", "!tests/legacy_quarantine.rs", "!tests/package_boundary.rs", "!tests/workspace_consumers.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = [
+  "src/**",
+  "tests/**",
+  "!tests/legacy_quarantine.rs",
+  "!tests/package_boundary.rs",
+  "!tests/workspace_consumers.rs",
+  "examples/**",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+]
 
 [package.metadata.docs.rs]
 features = ["memory", "serde"]
@@ -34,7 +45,9 @@ serde = [
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false }
-radroots_event_codec = { workspace = true, default-features = false, features = ["json"] }
+radroots_event_codec = { workspace = true, default-features = false, features = [
+  "json",
+] }
 radroots_protocol = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }

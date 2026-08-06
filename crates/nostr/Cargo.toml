@@ -13,7 +13,17 @@ documentation = "https://docs.rs/radroots_nostr"
 readme = "README.md"
 keywords = ["radroots", "nostr", "events", "signing"]
 categories = ["network-programming", "cryptography"]
-include = ["src/**", "tests/**", "!tests/generic_builder_boundary.rs", "!tests/package_boundary.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = [
+  "src/**",
+  "tests/**",
+  "!tests/generic_builder_boundary.rs",
+  "!tests/package_boundary.rs",
+  "examples/**",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+]
 
 [package.metadata.docs.rs]
 features = ["std", "events", "blossom", "nip17", "signing"]
@@ -54,11 +64,14 @@ radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
 radroots_signing = { workspace = true, optional = true, default-features = false }
-nostr = { workspace = true, default-features = false, features = [
+nostr = { workspace = true, default-features = false, features = ["alloc"] }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+] }
+serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
-serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 thiserror = { version = "2", default-features = false }
 
 [dev-dependencies]

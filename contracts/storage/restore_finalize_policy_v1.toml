@@ -7,8 +7,15 @@ marker_encoding = "fixed_binary_v1_exact_member_lengths_and_sha256"
 marker_durability = ["marker_file_fsync", "runtime_parent_fsync"]
 previous_runtime = ".runtime.sqlite.restore-{backup_id_hex}.previous"
 previous_protected = ".private.sqlite.restore-{backup_id_hex}.previous"
-replacement = ["live_to_previous_atomic_rename", "staging_to_live_atomic_rename"]
+replacement = [
+  "live_to_previous_atomic_rename",
+  "staging_to_live_atomic_rename",
+]
 recovery = "marker_driven_idempotent_forward_completion_before_open"
 read_only_recovery = "reject"
-cleanup_order = ["verify_all_live_members", "remove_previous_members", "remove_marker"]
+cleanup_order = [
+  "verify_all_live_members",
+  "remove_previous_members",
+  "remove_marker",
+]
 backend_after_attempt = "closed_reopen_required"
