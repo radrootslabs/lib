@@ -3046,7 +3046,6 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "uniffi",
 ]
 
 [[package]]
@@ -3056,6 +3055,8 @@ dependencies = [
  "radroots_mobile_core",
  "rustix 1.1.4",
  "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

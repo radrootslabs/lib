@@ -1,4 +1,4 @@
-use radroots_mobile_core::{RadrootsAppError, RadrootsRuntime, SdkErrorRecord};
+use radroots_mobile_ffi::{RadrootsAppError, RadrootsRuntime, SdkErrorRecord};
 
 #[tokio::test]
 async fn final_mobile_abi_uses_async_sdk_dtos_and_versioned_errors() {
