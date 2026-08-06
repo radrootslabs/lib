@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const BASELINE_RELATIVE: &str = "contracts/consolidation/baseline.v1.toml";
@@ -137,6 +137,8 @@ struct HistoryContract {
     dual_source: DualSource,
     archive: Vec<Archive>,
     path_map: Vec<PathMap>,
+    #[serde(default)]
+    import: Vec<ImportRecord>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -180,10 +182,684 @@ struct PathMap {
     disposition: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImportRecord {
+    source_id: String,
+    frozen_commit: String,
+    filtered_head: String,
+    artifact: String,
+    sha256: String,
+    bytes: u64,
+    final_tree_sha256: String,
+    path_map_sha256: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CommitMapEntry {
     source: String,
     target: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ImportCommitMap {
+    schema_version: u16,
+    schema: String,
+    source_id: String,
+    frozen_commit: String,
+    filtered_head: String,
+    source_commit_count: u64,
+    source_path_commit_count: u64,
+    rewritten_commit_count: u64,
+    topology_support_commit_count: u64,
+    omitted_empty_commit_count: u64,
+    final_tree_sha256: String,
+    path_map_sha256: String,
+    verifications: Vec<String>,
+    commits: Vec<ImportCommit>,
+}
+
+fn verify_history_import(
+    workspace_root: &Path,
+    source_id: &str,
+    source_root: &Path,
+    filtered_root: &Path,
+    mode: &str,
+) -> Result<(), String> {
+    if !matches!(mode, "check" | "write") {
+        return Err("import verification mode must be check or write".to_owned());
+    }
+    require_real_git_root(source_root, "source root")?;
+    require_real_git_root(filtered_root, "filtered root")?;
+    let history = read_toml::<HistoryContract>(workspace_root, HISTORY_RELATIVE)?;
+    validate_history(&history)?;
+    let archive = history
+        .archive
+        .iter()
+        .find(|archive| archive.source_id == source_id)
+        .ok_or_else(|| format!("unknown history source {source_id}"))?;
+    if archive.kind != "git_bundle" {
+        return Err(format!("history source {source_id} is not a Git bundle"));
+    }
+    let path_maps = history
+        .path_map
+        .iter()
+        .filter(|path_map| path_map.source_id == source_id)
+        .collect::<Vec<_>>();
+    if path_maps.is_empty() {
+        return Err(format!("history source {source_id} has no path map"));
+    }
+    if git_stdout(source_root, &["rev-parse", "master"])?.trim() != archive.frozen_commit {
+        return Err(format!(
+            "history source {source_id} is not at its frozen commit"
+        ));
+    }
+    git(source_root, &["fsck", "--full", "--strict"])?;
+    git(filtered_root, &["fsck", "--full", "--strict"])?;
+
+    let commit_map = parse_commit_map(&filtered_root.join(".git/filter-repo/commit-map"))?;
+    let source_commits = git_stdout(source_root, &["rev-list", "master"])?
+        .lines()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    if source_commits.len() as u64 != archive.source_commit_count
+        || commit_map.len() != source_commits.len()
+        || commit_map
+            .iter()
+            .any(|entry| !source_commits.contains(&entry.source))
+    {
+        return Err("source history and filter-repo commit map differ".to_owned());
+    }
+
+    let source_path_args = path_maps
+        .iter()
+        .map(|path_map| path_map.source.as_str())
+        .collect::<Vec<_>>();
+    let source_path_commits = rev_list_paths(source_root, &source_path_args)?;
+    let by_source = commit_map
+        .iter()
+        .map(|entry| (entry.source.as_str(), entry.target.as_deref()))
+        .collect::<BTreeMap<_, _>>();
+    let filtered_head = git_stdout(filtered_root, &["rev-parse", "master"])?
+        .trim()
+        .to_owned();
+    validate_oid(&filtered_head, "filtered head")?;
+    let expected_filtered_head = by_source
+        .get(archive.frozen_commit.as_str())
+        .and_then(|target| *target)
+        .ok_or_else(|| "frozen source head was omitted by filtering".to_owned())?;
+    if filtered_head != expected_filtered_head {
+        return Err("filtered master does not map from the frozen source head".to_owned());
+    }
+
+    verify_import_path_coverage(
+        source_root,
+        filtered_root,
+        archive,
+        &path_maps,
+        &filtered_head,
+    )?;
+    verify_import_final_tree(
+        source_root,
+        filtered_root,
+        &archive.frozen_commit,
+        &filtered_head,
+        &path_maps,
+    )?;
+    verify_import_context(filtered_root, &filtered_head, &path_maps)?;
+    verify_commit_identities(filtered_root, &filtered_head)?;
+    verify_import_follow_history(source_root, filtered_root, &path_maps, &by_source)?;
+
+    let mut commits = Vec::with_capacity(commit_map.len());
+    let mut rewritten = 0_u64;
+    let mut topology = 0_u64;
+    let mut omitted = 0_u64;
+    for entry in &commit_map {
+        let source_parents = commit_parents(source_root, &entry.source)?;
+        let source_paths = changed_import_paths(source_root, &entry.source, &source_path_args)?;
+        let in_path_history = source_path_commits.contains(&entry.source);
+        let source_metadata = import_commit_metadata(source_root, &entry.source)?;
+        let source_patch = normalized_import_patch(source_root, &entry.source, &path_maps, true)?;
+        let (target_parents, target_metadata, disposition) = match entry.target.as_deref() {
+            Some(target_commit) => {
+                rewritten += 1;
+                let mut expected_parents = Vec::new();
+                for parent in &source_parents {
+                    collect_effective_parents(
+                        source_root,
+                        parent,
+                        &by_source,
+                        &mut expected_parents,
+                    )?;
+                }
+                deduplicate(&mut expected_parents);
+                prune_ancestor_parents(filtered_root, &mut expected_parents)?;
+                let target_parents = commit_parents(filtered_root, target_commit)?;
+                if target_parents != expected_parents {
+                    return Err(format!(
+                        "mapped parent closure drifted for {}",
+                        entry.source
+                    ));
+                }
+                let target_metadata = import_commit_metadata(filtered_root, target_commit)?;
+                verify_import_metadata(&entry.source, &source_metadata, &target_metadata)?;
+                let target_patch =
+                    normalized_import_patch(filtered_root, target_commit, &path_maps, false)?;
+                let source_tree =
+                    normalized_import_tree(source_root, &entry.source, &path_maps, true)?;
+                let target_tree =
+                    normalized_import_tree(filtered_root, target_commit, &path_maps, false)?;
+                if source_tree != target_tree {
+                    return Err(format!("normalized tree drifted for {}", entry.source));
+                }
+                let mut direct_target_parents = source_parents
+                    .iter()
+                    .filter_map(|parent| by_source.get(parent.as_str()).copied().flatten())
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let every_parent_retained = direct_target_parents.len() == source_parents.len();
+                deduplicate(&mut direct_target_parents);
+                prune_ancestor_parents(filtered_root, &mut direct_target_parents)?;
+                if every_parent_retained
+                    && direct_target_parents == target_parents
+                    && source_patch != target_patch
+                {
+                    return Err(format!("normalized patch drifted for {}", entry.source));
+                }
+                let disposition = if in_path_history {
+                    "retained"
+                } else {
+                    topology += 1;
+                    "topology_support"
+                };
+                (target_parents, Some(target_metadata), disposition)
+            }
+            None => {
+                let disposition = if in_path_history {
+                    omitted += 1;
+                    "omitted_empty"
+                } else {
+                    "out_of_scope"
+                };
+                (Vec::new(), None, disposition)
+            }
+        };
+        commits.push(ImportCommit {
+            source_commit: entry.source.clone(),
+            target_commit: entry.target.clone(),
+            source_parents,
+            target_parents,
+            source_subject: source_metadata.subject,
+            target_subject: target_metadata
+                .as_ref()
+                .map(|metadata| metadata.subject.clone()),
+            source_author: source_metadata.author,
+            target_author: target_metadata
+                .as_ref()
+                .map(|metadata| metadata.author.clone()),
+            source_author_time: source_metadata.author_time,
+            target_author_time: target_metadata
+                .as_ref()
+                .map(|metadata| metadata.author_time.clone()),
+            source_committer_time: source_metadata.committer_time,
+            target_committer_time: target_metadata
+                .as_ref()
+                .map(|metadata| metadata.committer_time.clone()),
+            source_paths,
+            normalized_patch_sha256: sha256_bytes(source_patch.as_bytes()),
+            empty_commit_disposition: disposition.to_owned(),
+        });
+    }
+    if source_path_commits.len() as u64 != archive.source_path_commit_count
+        || rewritten != archive.rewritten_commit_count
+        || topology != archive.topology_support_commit_count
+        || omitted != archive.omitted_empty_commit_count
+    {
+        return Err(format!(
+            "history counts drifted: path={}, rewritten={rewritten}, topology={topology}, omitted={omitted}",
+            source_path_commits.len()
+        ));
+    }
+
+    let path_map_bytes = path_maps
+        .iter()
+        .map(|path_map| {
+            format!(
+                "{}\0{}\0{}\n",
+                path_map.source, path_map.target, path_map.license
+            )
+        })
+        .collect::<String>();
+    let final_tree = normalized_import_tree(filtered_root, &filtered_head, &path_maps, false)?;
+    let artifact = ImportCommitMap {
+        schema_version: 1,
+        schema: "radroots.history-import.commit-map.v1".to_owned(),
+        source_id: source_id.to_owned(),
+        frozen_commit: archive.frozen_commit.clone(),
+        filtered_head,
+        source_commit_count: archive.source_commit_count,
+        source_path_commit_count: archive.source_path_commit_count,
+        rewritten_commit_count: archive.rewritten_commit_count,
+        topology_support_commit_count: archive.topology_support_commit_count,
+        omitted_empty_commit_count: archive.omitted_empty_commit_count,
+        final_tree_sha256: sha256_bytes(final_tree.as_bytes()),
+        path_map_sha256: sha256_bytes(path_map_bytes.as_bytes()),
+        verifications: history.required_verifications.clone(),
+        commits,
+    };
+    let mut bytes = serde_json::to_vec_pretty(&artifact)
+        .map_err(|error| format!("serialize history import artifact: {error}"))?;
+    bytes.push(b'\n');
+    let output = workspace_root.join(format!(
+        "contracts/consolidation/imports/{source_id}.commit-map.v1.json"
+    ));
+    match mode {
+        "write" => crate::build_control::atomic_write(&output, &bytes),
+        "check" => {
+            let current =
+                fs::read(&output).map_err(|error| format!("read {}: {error}", output.display()))?;
+            if current == bytes {
+                Ok(())
+            } else {
+                Err(format!(
+                    "history import artifact {} is stale",
+                    output.display()
+                ))
+            }
+        }
+        _ => unreachable!("mode validated"),
+    }
+}
+
+fn prune_ancestor_parents(root: &Path, parents: &mut Vec<String>) -> Result<(), String> {
+    let original = parents.clone();
+    let mut keep = Vec::new();
+    for parent in &original {
+        let mut redundant = false;
+        for candidate in &original {
+            if parent == candidate {
+                continue;
+            }
+            let status = Command::new("git")
+                .args(["merge-base", "--is-ancestor", parent, candidate])
+                .current_dir(root)
+                .status()
+                .map_err(|error| format!("run git merge-base --is-ancestor: {error}"))?;
+            match status.code() {
+                Some(0) => {
+                    redundant = true;
+                    break;
+                }
+                Some(1) => {}
+                _ => return Err("git merge-base --is-ancestor failed".to_owned()),
+            }
+        }
+        if !redundant {
+            keep.push(parent.clone());
+        }
+    }
+    *parents = keep;
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ImportMetadata {
+    author: String,
+    author_time: String,
+    committer_time: String,
+    subject: String,
+}
+
+fn require_real_git_root(path: &Path, label: &str) -> Result<(), String> {
+    if !path.is_absolute() {
+        return Err(format!("{label} must be absolute"));
+    }
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect {label} {}: {error}", path.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!("{label} must be a real directory"));
+    }
+    let git_dir = git_stdout(path, &["rev-parse", "--absolute-git-dir"])?;
+    let git_dir = Path::new(git_dir.trim());
+    if !git_dir.is_absolute() {
+        return Err(format!("{label} Git directory must be absolute"));
+    }
+    let metadata = fs::symlink_metadata(git_dir)
+        .map_err(|error| format!("inspect {label} Git directory: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!("{label} must contain a real Git directory"));
+    }
+    Ok(())
+}
+
+fn rev_list_paths(root: &Path, paths: &[&str]) -> Result<BTreeSet<String>, String> {
+    let mut args = vec!["rev-list", "--full-history", "master", "--"];
+    args.extend_from_slice(paths);
+    Ok(git_stdout(root, &args)?
+        .lines()
+        .map(str::to_owned)
+        .collect())
+}
+
+fn changed_import_paths(root: &Path, commit: &str, paths: &[&str]) -> Result<Vec<String>, String> {
+    let mut args = vec![
+        "diff-tree",
+        "--root",
+        "-m",
+        "-r",
+        "--no-commit-id",
+        "--name-only",
+        commit,
+        "--",
+    ];
+    args.extend_from_slice(paths);
+    let mut changed = git_stdout(root, &args)?
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    changed.sort();
+    changed.dedup();
+    Ok(changed)
+}
+
+fn import_commit_metadata(root: &Path, commit: &str) -> Result<ImportMetadata, String> {
+    let raw = git_stdout(
+        root,
+        &[
+            "show",
+            "-s",
+            "--format=%an%x00%ae%x00%aI%x00%cI%x00%s",
+            commit,
+        ],
+    )?;
+    let fields = raw.trim_end().split('\0').collect::<Vec<_>>();
+    if fields.len() != 5 {
+        return Err(format!("commit metadata cardinality drifted for {commit}"));
+    }
+    Ok(ImportMetadata {
+        author: format!("{} <{}>", fields[0], fields[1]),
+        author_time: fields[2].to_owned(),
+        committer_time: fields[3].to_owned(),
+        subject: fields[4].to_owned(),
+    })
+}
+
+fn verify_import_metadata(
+    source_commit: &str,
+    source: &ImportMetadata,
+    target: &ImportMetadata,
+) -> Result<(), String> {
+    if source.author != target.author
+        || source.author_time != target.author_time
+        || source.committer_time != target.committer_time
+        || !message_is_preserved(&source.subject, &target.subject)
+    {
+        return Err(format!(
+            "attribution or message drifted for {source_commit}"
+        ));
+    }
+    Ok(())
+}
+
+fn normalized_import_patch(
+    root: &Path,
+    commit: &str,
+    path_maps: &[&PathMap],
+    source_side: bool,
+) -> Result<String, String> {
+    let mut normalized = String::new();
+    for path_map in path_maps {
+        let path = if source_side {
+            path_map.source.as_str()
+        } else {
+            path_map.target.as_str()
+        };
+        let patch = git_stdout(
+            root,
+            &[
+                "-c",
+                "core.quotePath=false",
+                "diff-tree",
+                "--root",
+                "-m",
+                "-r",
+                "--binary",
+                "--full-index",
+                "--no-commit-id",
+                commit,
+                "--",
+                path,
+            ],
+        )?;
+        normalized.push_str(&normalize_import_patch_paths(patch, path_maps, source_side));
+    }
+    Ok(normalized)
+}
+
+fn normalize_import_patch_paths(
+    value: String,
+    path_maps: &[&PathMap],
+    source_side: bool,
+) -> String {
+    value
+        .split_inclusive('\n')
+        .map(|line| {
+            if line.starts_with("diff --git ")
+                || line.starts_with("--- ")
+                || line.starts_with("+++ ")
+                || line.starts_with("rename from ")
+                || line.starts_with("rename to ")
+                || line.starts_with("copy from ")
+                || line.starts_with("copy to ")
+                || line.starts_with("Binary files ")
+            {
+                normalize_import_paths(line.to_owned(), path_maps, source_side)
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect()
+}
+
+fn normalize_import_paths(mut value: String, path_maps: &[&PathMap], source_side: bool) -> String {
+    let mut replacements = path_maps
+        .iter()
+        .enumerate()
+        .map(|(index, path_map)| {
+            let path = if source_side {
+                path_map.source.as_str()
+            } else {
+                path_map.target.as_str()
+            };
+            (path, format!("__IMPORT__/{index:02}"))
+        })
+        .collect::<Vec<_>>();
+    replacements.sort_by_key(|(path, _)| std::cmp::Reverse(path.len()));
+    for (path, replacement) in replacements {
+        value = value.replace(path, &replacement);
+    }
+    value
+}
+
+fn normalized_import_tree(
+    root: &Path,
+    commit: &str,
+    path_maps: &[&PathMap],
+    source_side: bool,
+) -> Result<String, String> {
+    let mut args = vec!["ls-tree", "-r", "--full-tree", commit, "--"];
+    args.extend(path_maps.iter().map(|path_map| {
+        if source_side {
+            path_map.source.as_str()
+        } else {
+            path_map.target.as_str()
+        }
+    }));
+    let normalized = normalize_import_paths(git_stdout(root, &args)?, path_maps, source_side);
+    let mut lines = normalized.lines().collect::<Vec<_>>();
+    lines.sort_unstable();
+    Ok(format!("{}\n", lines.join("\n")))
+}
+
+fn verify_import_final_tree(
+    source_root: &Path,
+    filtered_root: &Path,
+    source_commit: &str,
+    target_commit: &str,
+    path_maps: &[&PathMap],
+) -> Result<(), String> {
+    let source = normalized_import_tree(source_root, source_commit, path_maps, true)?;
+    let target = normalized_import_tree(filtered_root, target_commit, path_maps, false)?;
+    if source == target {
+        Ok(())
+    } else {
+        Err("filtered import final tree drifted".to_owned())
+    }
+}
+
+fn verify_import_path_coverage(
+    source_root: &Path,
+    filtered_root: &Path,
+    archive: &Archive,
+    path_maps: &[&PathMap],
+    filtered_head: &str,
+) -> Result<(), String> {
+    for path_map in path_maps {
+        git(
+            source_root,
+            &[
+                "cat-file",
+                "-e",
+                &format!("{}:{}", archive.frozen_commit, path_map.source),
+            ],
+        )?;
+        git(
+            filtered_root,
+            &[
+                "cat-file",
+                "-e",
+                &format!("{filtered_head}:{}", path_map.target),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn verify_import_context(
+    filtered_root: &Path,
+    filtered_head: &str,
+    path_maps: &[&PathMap],
+) -> Result<(), String> {
+    let paths = git_stdout(
+        filtered_root,
+        &["ls-tree", "-r", "--name-only", filtered_head],
+    )?;
+    for path in paths.lines() {
+        let lower = path.to_ascii_lowercase();
+        if !path_maps.iter().any(|path_map| {
+            path == path_map.target || path.starts_with(&format!("{}/", path_map.target))
+        }) || path.split('/').any(|segment| segment == ".github")
+            || matches!(path.rsplit('/').next(), Some("AGENTS.md" | "CLAUDE.md"))
+            || lower.ends_with(".pem")
+            || lower.ends_with(".key")
+            || lower.ends_with("/.env")
+        {
+            return Err(format!("context firewall rejected {path}"));
+        }
+        let contents = git_bytes(filtered_root, &["show", &format!("{filtered_head}:{path}")])?;
+        let text = String::from_utf8_lossy(&contents);
+        let lower_contents = text.to_ascii_lowercase();
+        if text.contains("PRIVATE KEY-----")
+            || text.contains("ghp_")
+            || lower_contents.contains("github-actions[bot]")
+            || lower_contents.contains("gpl-3.0")
+        {
+            return Err(format!(
+                "secret, bot, or license content rejected in {path}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn verify_import_follow_history(
+    source_root: &Path,
+    filtered_root: &Path,
+    path_maps: &[&PathMap],
+    by_source: &BTreeMap<&str, Option<&str>>,
+) -> Result<(), String> {
+    let mapped_targets = by_source
+        .values()
+        .filter_map(|target| *target)
+        .collect::<BTreeSet<_>>();
+    for path_map in path_maps {
+        let target_paths = git_stdout(
+            filtered_root,
+            &[
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "master",
+                "--",
+                &path_map.target,
+            ],
+        )?;
+        for target_path in target_paths.lines() {
+            let suffix = target_path
+                .strip_prefix(&path_map.target)
+                .ok_or_else(|| "target path escaped its import root".to_owned())?;
+            let source_path = format!("{}{}", path_map.source, suffix);
+            let source_log_has_mapped_commit = git_stdout(
+                source_root,
+                &["log", "--follow", "--format=%H", "--", &source_path],
+            )?
+            .lines()
+            .any(|commit| by_source.get(commit).copied().flatten().is_some());
+            let target_log = git_stdout(
+                filtered_root,
+                &["log", "--follow", "--format=%H", "--", target_path],
+            )?
+            .lines()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+            if !source_log_has_mapped_commit
+                || target_log.is_empty()
+                || target_log
+                    .iter()
+                    .any(|commit| !mapped_targets.contains(commit.as_str()))
+            {
+                return Err(format!("git log --follow drifted for {source_path}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ImportCommit {
+    source_commit: String,
+    target_commit: Option<String>,
+    source_parents: Vec<String>,
+    target_parents: Vec<String>,
+    source_subject: String,
+    target_subject: Option<String>,
+    source_author: String,
+    target_author: Option<String>,
+    source_author_time: String,
+    target_author_time: Option<String>,
+    source_committer_time: String,
+    target_committer_time: Option<String>,
+    source_paths: Vec<String>,
+    normalized_patch_sha256: String,
+    empty_commit_disposition: String,
 }
 
 pub fn run(args: &[String], workspace_root: &Path) -> Result<(), String> {
@@ -191,11 +867,26 @@ pub fn run(args: &[String], workspace_root: &Path) -> Result<(), String> {
         [command] if command == "baseline" => validate_baseline_contracts(workspace_root),
         [command] if command == "history" => validate_history_contract(workspace_root, None),
         [command] if command == "history-rehearsal" => run_history_rehearsal(),
+        [command, source_flag, source_id, source_root_flag, source_root, filtered_root_flag, filtered_root, mode_flag, mode]
+            if command == "import-verify"
+                && source_flag == "--source"
+                && source_root_flag == "--source-root"
+                && filtered_root_flag == "--filtered-root"
+                && mode_flag == "--mode" =>
+        {
+            verify_history_import(
+                workspace_root,
+                source_id,
+                Path::new(source_root),
+                Path::new(filtered_root),
+                mode,
+            )
+        }
         [command, flag, archive_root] if command == "history" && flag == "--archive-root" => {
             validate_history_contract(workspace_root, Some(Path::new(archive_root)))
         }
         _ => Err(
-            "consolidation accepts baseline, history [--archive-root <absolute-directory>], or history-rehearsal"
+            "consolidation accepts baseline, history [--archive-root <absolute-directory>], history-rehearsal, or import-verify --source <id> --source-root <absolute-directory> --filtered-root <absolute-directory> --mode <check|write>"
                 .to_owned(),
         ),
     }
@@ -214,8 +905,84 @@ fn validate_history_contract(
 ) -> Result<(), String> {
     let history = read_toml::<HistoryContract>(workspace_root, HISTORY_RELATIVE)?;
     validate_history(&history)?;
+    validate_import_records(workspace_root, &history)?;
     if let Some(archive_root) = archive_root {
         validate_archives(&history, archive_root)?;
+    }
+    Ok(())
+}
+
+fn validate_import_records(workspace_root: &Path, history: &HistoryContract) -> Result<(), String> {
+    let mut sources = BTreeSet::new();
+    for record in &history.import {
+        if !sources.insert(record.source_id.as_str()) {
+            return Err(format!(
+                "duplicate history import source {}",
+                record.source_id
+            ));
+        }
+        let archive = history
+            .archive
+            .iter()
+            .find(|archive| archive.source_id == record.source_id)
+            .ok_or_else(|| format!("unknown history import source {}", record.source_id))?;
+        if record.frozen_commit != archive.frozen_commit {
+            return Err(format!(
+                "history import {} frozen commit drifted",
+                record.source_id
+            ));
+        }
+        validate_oid(&record.filtered_head, "filtered import head")?;
+        validate_artifact_name(&record.artifact)?;
+        validate_sha256(&record.sha256, "commit-map artifact digest")?;
+        validate_sha256(&record.final_tree_sha256, "import final-tree digest")?;
+        validate_sha256(&record.path_map_sha256, "import path-map digest")?;
+        let path = workspace_root
+            .join("contracts/consolidation/imports")
+            .join(&record.artifact);
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("inspect {}: {error}", path.display()))?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() != record.bytes
+        {
+            return Err(format!(
+                "history import artifact {} metadata drifted",
+                path.display()
+            ));
+        }
+        let bytes = fs::read(&path)
+            .map_err(|error| format!("read history import artifact {}: {error}", path.display()))?;
+        if sha256_bytes(&bytes) != record.sha256 {
+            return Err(format!(
+                "history import artifact {} digest drifted",
+                path.display()
+            ));
+        }
+        let artifact = serde_json::from_slice::<ImportCommitMap>(&bytes).map_err(|error| {
+            format!("parse history import artifact {}: {error}", path.display())
+        })?;
+        if artifact.schema_version != 1
+            || artifact.schema != "radroots.history-import.commit-map.v1"
+            || artifact.source_id != record.source_id
+            || artifact.frozen_commit != record.frozen_commit
+            || artifact.filtered_head != record.filtered_head
+            || artifact.final_tree_sha256 != record.final_tree_sha256
+            || artifact.path_map_sha256 != record.path_map_sha256
+            || artifact.source_commit_count != archive.source_commit_count
+            || artifact.source_path_commit_count != archive.source_path_commit_count
+            || artifact.rewritten_commit_count != archive.rewritten_commit_count
+            || artifact.topology_support_commit_count != archive.topology_support_commit_count
+            || artifact.omitted_empty_commit_count != archive.omitted_empty_commit_count
+            || artifact.commits.len() as u64 != archive.source_commit_count
+            || to_unique_set(&artifact.verifications, "import verification")?
+                != to_unique_set(&history.required_verifications, "required verification")?
+        {
+            return Err(format!(
+                "history import artifact {} contract drifted",
+                record.source_id
+            ));
+        }
     }
     Ok(())
 }
@@ -1389,13 +2156,17 @@ fn git(root: &Path, args: &[&str]) -> Result<(), String> {
 }
 
 fn git_stdout(root: &Path, args: &[&str]) -> Result<String, String> {
+    String::from_utf8(git_bytes(root, args)?)
+        .map_err(|error| format!("git {} emitted non-UTF-8 output: {error}", args.join(" ")))
+}
+
+fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let output = Command::new("git")
         .args(args)
         .current_dir(root)
         .output()
         .map_err(|error| format!("run git {}: {error}", args.join(" ")))?;
-    String::from_utf8(command_success(output, root, args)?)
-        .map_err(|error| format!("git {} emitted non-UTF-8 output: {error}", args.join(" ")))
+    command_success(output, root, args)
 }
 
 fn command_success(

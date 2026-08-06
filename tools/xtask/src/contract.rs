@@ -1660,6 +1660,8 @@ struct WorkspaceVersionSection {
 #[derive(Debug, Deserialize)]
 struct WorkspacePackageVersion {
     version: String,
+    #[serde(default)]
+    repository: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3099,6 +3101,11 @@ struct CratesReleaseRepository {
 #[derive(Debug, Deserialize)]
 struct CratesReleasePackage {
     name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsolidationReleaseOwnership {
+    canonical_rust_repository: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -8553,14 +8560,28 @@ fn validate_v1_release_policy(
     let approved = collect_unique_set(&control.approved_packages, "publication.approved_packages")?;
     let local = collect_unique_set(&control.local_packages, "publication.local_packages")?;
     let external = collect_unique_set(&control.external_packages, "publication.external_packages")?;
-    let expected_local = collect_unique_set(
+    let legacy_local = collect_unique_set(
         &architecture.repositories.lib.packages,
         "architecture.repositories.lib.packages",
     )?;
-    let expected_external = collect_unique_set(
+    let legacy_external = collect_unique_set(
         &architecture.repositories.sdk.packages,
         "architecture.repositories.sdk.packages",
     )?;
+    let consolidation_path = workspace_root.join("contracts/consolidation/architecture.v1.toml");
+    let workspace =
+        parse_toml::<WorkspaceVersionCargoManifest>(&workspace_root.join("Cargo.toml"))?;
+    let consolidated_here = if consolidation_path.is_file() {
+        let consolidation = parse_toml::<ConsolidationReleaseOwnership>(&consolidation_path)?;
+        workspace.workspace.package.repository == consolidation.canonical_rust_repository
+    } else {
+        false
+    };
+    let (expected_local, expected_external) = if consolidated_here {
+        (expected_approved.clone(), BTreeSet::new())
+    } else {
+        (legacy_local, legacy_external)
+    };
     for (field, actual, expected) in [
         (
             "publication.approved_packages",

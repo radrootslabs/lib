@@ -782,7 +782,7 @@ fn validate_manifest_value(
     Ok(())
 }
 
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if bytes.contains(&b'\r') || !bytes.ends_with(b"\n") {
         return Err("generated text must use LF and end with one newline".to_owned());
     }
@@ -1295,7 +1295,7 @@ mod tests {
         )
         .expect("public native plan");
         assert!(plan.iter().any(|arg| arg == "radroots_core"));
-        assert!(!plan.iter().any(|arg| arg == "radroots_sdk"));
+        assert!(plan.iter().any(|arg| arg == "radroots_sdk"));
         assert!(!plan.iter().any(|arg| arg == "--workspace"));
         assert!(group_plan(&crate::workspace_root(), "missing", Operation::Check, false).is_err());
     }

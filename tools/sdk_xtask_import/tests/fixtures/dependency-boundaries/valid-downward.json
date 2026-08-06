@@ -1,0 +1,46 @@
+{
+  "packages": [
+    {
+      "id": "fixture#radroots_transport_nostr@0.1.0",
+      "name": "radroots_transport_nostr",
+      "dependencies": [
+        {
+          "name": "radroots_transport",
+          "rename": "transport_spi",
+          "kind": "dev",
+          "features": [],
+          "target": "cfg(unix)",
+          "uses_default_features": false
+        }
+      ]
+    },
+    {
+      "id": "fixture#radroots_transport@0.1.0",
+      "name": "radroots_transport",
+      "dependencies": []
+    }
+  ],
+  "resolve": {
+    "nodes": [
+      {
+        "id": "fixture#radroots_transport_nostr@0.1.0",
+        "deps": [
+          {
+            "name": "transport_spi",
+            "pkg": "fixture#radroots_transport@0.1.0",
+            "dep_kinds": [
+              {
+                "kind": "dev",
+                "target": "cfg(unix)"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "fixture#radroots_transport@0.1.0",
+        "deps": []
+      }
+    ]
+  }
+}

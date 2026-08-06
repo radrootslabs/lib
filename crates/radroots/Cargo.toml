@@ -1,0 +1,51 @@
+[package]
+name = "radroots"
+description = "Curated ordinary-user Rust facade for Radroots"
+version = "0.1.0-alpha"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/radroots"
+keywords = ["radroots", "local-food", "sdk", "nostr"]
+categories = ["api-bindings", "asynchronous", "network-programming"]
+include = ["src/**", "tests/**", "!tests/package_boundary.rs", "examples/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+publish = ["crates-io"]
+autoexamples = false
+
+[package.metadata.docs.rs]
+features = ["client", "nostr", "nip46", "geonames", "knowledge"]
+
+[lints]
+workspace = true
+
+[lib]
+name = "radroots"
+path = "src/lib.rs"
+
+[dependencies]
+radroots_core = { workspace = true }
+radroots_event = { workspace = true }
+radroots_identity = { workspace = true, features = ["std"] }
+radroots_sdk = { workspace = true }
+radroots_trade = { workspace = true, features = ["json", "std"] }
+radroots_transport = { workspace = true }
+
+[features]
+default = ["client"]
+client = ["radroots_sdk/default"]
+native = ["client", "radroots_sdk/native"]
+nostr = ["client", "radroots_sdk/nostr"]
+nip46 = ["nostr", "radroots_sdk/nip46"]
+radrootsd = ["client", "radroots_sdk/radrootsd"]
+geonames = ["client", "radroots_sdk/geonames"]
+knowledge = ["client", "radroots_sdk/knowledge"]
+full = ["radroots_sdk/full"]
+
+[[example]]
+name = "ordinary_memory"
+path = "examples/ordinary_memory.rs"
+required-features = ["client"]

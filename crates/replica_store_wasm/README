@@ -1,0 +1,25 @@
+# radroots_replica_store_wasm
+
+This is the README for `radroots_replica_store_wasm`, which provides WebAssembly
+bindings for `radroots_replica_store` in the `radroots` core libraries.
+
+## Overview
+
+ * a wasm32-only wrapper around the replica store runtime surface;
+ * integration with `radroots_sql_wasm_core` for browser and worker SQL
+   execution;
+ * a small target-specific entry point layer rather than a separate database
+   implementation;
+ * intended for JavaScript-facing callers that need the replica store APIs
+   in wasm builds.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_replica_store_wasm`
+distribution are
+
+ Copyright (c) 2026 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_store_wasm`
+distribution.

@@ -69,6 +69,11 @@ struct ArchitecturePackage {
 }
 
 #[derive(Debug, Deserialize)]
+struct ConsolidationOwnership {
+    canonical_rust_repository: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct WorkspaceManifest {
     workspace: WorkspaceMembers,
 }
@@ -319,12 +324,29 @@ fn validate_public_package_metadata(
         .values()
         .find(|repository| repository.url == workspace.workspace.package.repository)
         .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
-    let local_packages = repository.packages.iter().cloned().collect::<BTreeSet<_>>();
     let all_packages = architecture
         .package
         .iter()
         .map(|package| package.name.as_str())
         .collect::<BTreeSet<_>>();
+    let consolidation_path = workspace_root.join("contracts/consolidation/architecture.v1.toml");
+    let consolidated_owner = if consolidation_path.is_file() {
+        let consolidation = fs::read_to_string(&consolidation_path)
+            .map_err(|error| format!("read {}: {error}", consolidation_path.display()))?;
+        Some(
+            toml::from_str::<ConsolidationOwnership>(&consolidation)
+                .map_err(|error| format!("parse {}: {error}", consolidation_path.display()))?
+                .canonical_rust_repository,
+        )
+    } else {
+        None
+    };
+    let local_packages =
+        if consolidated_owner.as_deref() == Some(workspace.workspace.package.repository.as_str()) {
+            all_packages.iter().map(|name| (*name).to_owned()).collect()
+        } else {
+            repository.packages.iter().cloned().collect::<BTreeSet<_>>()
+        };
     let mut found_local_packages = BTreeSet::new();
 
     for member in &workspace.workspace.members {

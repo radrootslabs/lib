@@ -1,0 +1,30 @@
+[package]
+name = "radroots_sdk_ffi"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Private UniFFI wrapper over the shared Radroots SDK engine"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "radroots-sdk-bindgen"
+path = "src/bin/bindgen.rs"
+
+[dependencies]
+radroots_sdk = { workspace = true, features = ["memory"] }
+thiserror = { workspace = true }
+uniffi = { workspace = true, features = ["cli"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

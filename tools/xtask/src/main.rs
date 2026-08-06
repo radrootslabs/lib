@@ -267,6 +267,9 @@ fn usage() {
     eprintln!("  cargo xtask consolidation baseline");
     eprintln!("  cargo xtask consolidation history [--archive-root <absolute-directory>]");
     eprintln!("  cargo xtask consolidation history-rehearsal");
+    eprintln!(
+        "  cargo xtask consolidation import-verify --source <id> --source-root <absolute-directory> --filtered-root <absolute-directory> --mode <check|write>"
+    );
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");

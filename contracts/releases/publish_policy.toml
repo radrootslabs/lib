@@ -45,17 +45,31 @@ local_packages = [
   "radroots_transport_nostr",
   "radroots_sync",
   "radroots_geonames",
+  "radroots_sdk",
+  "radroots",
 ]
-external_packages = ["radroots_sdk", "radroots"]
+external_packages = []
 
 [workspace_classification]
 private = [
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
+  "radroots_sdk_ffi",
   "radroots_sql_core",
 ]
-build_codegen = ["xtask"]
+build_codegen = [
+  "radroots_core_bindings",
+  "radroots_event_bindings",
+  "radroots_event_codec_wasm",
+  "radroots_identity_bindings",
+  "radroots_replica_schema_bindings",
+  "radroots_replica_store_wasm",
+  "radroots_replica_sync_wasm",
+  "radroots_sdk_sql_wasm_runtime",
+  "radroots_trade_bindings",
+  "xtask",
+]
 test_support = ["radroots_test_fixtures"]
 preview = [
   "radroots_mesh",
@@ -94,4 +108,6 @@ crates = [
   "radroots_transport_nostr",
   "radroots_sync",
   "radroots_geonames",
+  "radroots_sdk",
+  "radroots",
 ]

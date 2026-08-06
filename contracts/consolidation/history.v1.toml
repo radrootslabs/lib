@@ -47,6 +47,16 @@ emergency_fix_flow = "fix canonical owner, qualify, then replay the normalized p
 divergence_policy = "forbidden"
 exit_condition = "all consumers use one qualified lib revision and rollback evidence is green"
 
+[[import]]
+source_id = "sdk"
+frozen_commit = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+filtered_head = "016a58c4b5a2edb020a372bc08d49a1865705737"
+artifact = "sdk.commit-map.v1.json"
+sha256 = "b23788e3e13e2e6f13e4b6294ace6cdb6bae6f74495dc8432327cfbb218c0f24"
+bytes = 515435
+final_tree_sha256 = "456b9249343ee4fd21f7c8cda642a941062af97382520e54eefc13113da382cd"
+path_map_sha256 = "c5a4a696db94bec4658b62fe775f96b81e7ae913b5dedc10448a72a9f1bf3725"
+
 [[archive]]
 source_id = "sdk"
 kind = "git_bundle"
@@ -55,10 +65,10 @@ artifact = "sdk-170ecf2b620107fadca85fcb11fbf3798b4ca1ef.bundle"
 sha256 = "9d2b015bbcd5d516994eeb72064b1e938a04acd0c21eb2e22134b99599fdd2f0"
 bytes = 2020833
 source_commit_count = 427
-source_path_commit_count = 397
+source_path_commit_count = 393
 rewritten_commit_count = 395
-topology_support_commit_count = 0
-omitted_empty_commit_count = 2
+topology_support_commit_count = 2
+omitted_empty_commit_count = 0
 source_object_count = 6077
 refname = "refs/heads/master"
 bot_identity_scan = true

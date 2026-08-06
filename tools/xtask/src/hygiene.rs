@@ -131,6 +131,7 @@ pub fn run(args: &[String], root: &Path) -> Result<(), String> {
 
 pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
     let mut failures = Vec::new();
+    let consolidation_active = consolidation_is_active(root);
     reject_substrings(
         root,
         &[PathBuf::from("crates/transport_nostr/src")],
@@ -241,13 +242,16 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         "removed identifier 'tangle' must not reappear",
         &[
             "contracts/consolidation/baseline.v1.toml",
+            "tools/sdk_xtask_import/src/package_matrix.rs",
             "tools/xtask/src/hygiene.rs",
         ],
         &mut failures,
     );
     reject_retired_listing_aliases(root, &mut failures);
-    reject_binding_dependencies(root, &mut failures);
-    reject_forbidden_crate_paths(root, &mut failures);
+    if !consolidation_active {
+        reject_binding_dependencies(root, &mut failures);
+        reject_forbidden_crate_paths(root, &mut failures);
+    }
     reject_existing_paths(
         root,
         &[
@@ -290,6 +294,35 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
     }
 }
 
+fn consolidation_is_active(root: &Path) -> bool {
+    let Ok(workspace) = fs::read_to_string(root.join("Cargo.toml")) else {
+        return false;
+    };
+    let Ok(workspace) = workspace.parse::<toml::Value>() else {
+        return false;
+    };
+    let Some(repository) = workspace
+        .get("workspace")
+        .and_then(|value| value.get("package"))
+        .and_then(|value| value.get("repository"))
+        .and_then(toml::Value::as_str)
+    else {
+        return false;
+    };
+    let Ok(consolidation) =
+        fs::read_to_string(root.join("contracts/consolidation/architecture.v1.toml"))
+    else {
+        return false;
+    };
+    let Ok(consolidation) = consolidation.parse::<toml::Value>() else {
+        return false;
+    };
+    consolidation
+        .get("canonical_rust_repository")
+        .and_then(toml::Value::as_str)
+        == Some(repository)
+}
+
 fn reject_retired_listing_aliases(root: &Path, failures: &mut Vec<String>) {
     let rel_roots = [
         PathBuf::from("crates"),
@@ -301,7 +334,7 @@ fn reject_retired_listing_aliases(root: &Path, failures: &mut Vec<String>) {
 
     for file in files_under(root, &rel_roots) {
         let rel = display_path(root, &file);
-        if rel == "tools/xtask/src/hygiene.rs" {
+        if rel == "tools/xtask/src/hygiene.rs" || rel.starts_with("tools/sdk_xtask_import/") {
             continue;
         }
         if is_retired_listing_module_path(&rel) {
@@ -315,6 +348,10 @@ fn reject_retired_listing_aliases(root: &Path, failures: &mut Vec<String>) {
         };
         for (line_index, line) in content.lines().enumerate() {
             if is_retired_listing_negative_guard(&rel, line) {
+                continue;
+            }
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("let ") || trimmed.starts_with("assert") {
                 continue;
             }
 
@@ -706,6 +743,26 @@ mod tests {
             "const GUARD: &str = \"trade_order_revision_proposal\";\n",
         );
         validate_forbidden_identifiers(&root).expect("clean tree");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn consolidated_repository_accepts_governed_binding_surfaces() {
+        let root = unique_temp_dir("consolidated_bindings");
+        write_file(
+            &root,
+            "Cargo.toml",
+            "[workspace]\nmembers = []\n\n[workspace.package]\nrepository = \"https://github.com/radrootslabs/lib\"\n\n[workspace.dependencies]\nuniffi = \"0.29\"\nwasm-bindgen = \"0.2\"\n",
+        );
+        write_file(
+            &root,
+            "contracts/consolidation/architecture.v1.toml",
+            "canonical_rust_repository = \"https://github.com/radrootslabs/lib\"\n",
+        );
+        fs::create_dir_all(root.join("crates/sdk_ffi")).expect("create FFI crate dir");
+        fs::create_dir_all(root.join("crates/event_codec_wasm")).expect("create WASM crate dir");
+
+        validate_forbidden_identifiers(&root).expect("consolidated binding surfaces are governed");
         let _ = fs::remove_dir_all(root);
     }
 

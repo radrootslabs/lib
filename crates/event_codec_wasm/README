@@ -1,0 +1,24 @@
+# radroots_event_codec_wasm
+
+This is the README for `radroots_event_codec_wasm`, which provides WebAssembly
+bindings for `radroots_event_codec` in the `radroots` core libraries.
+
+## Overview
+
+ * wasm-bindgen entry points for event content and tag encoding and decoding;
+ * specialized tag helpers for farm, list, job, message, plot, and reaction
+   event families;
+ * JSON and `JsValue` boundaries built around `serde-wasm-bindgen` and base64
+   helpers;
+ * built as `cdylib` and `rlib` artifacts for wasm consumers.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_event_codec_wasm`
+distribution are
+
+ Copyright (c) 2026 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_event_codec_wasm`
+distribution.
