@@ -14,7 +14,7 @@ pub fn package_manifest(spec: PackageSpec) -> serde_json::Value {
         "license": "MIT OR Apache-2.0",
         "repository": "https://github.com/radrootslabs/sdk",
         "repository_directory": spec.package_dir,
-        "generator": "radroots_sdk_xtask",
+        "generator": "radroots_lib_xtask",
         "generated": false
     })
 }
@@ -41,6 +41,7 @@ mod tests {
         assert_eq!(manifest["crate"], package_specs()[0].crate_name);
         assert_eq!(manifest["version"], "0.1.0");
         assert_eq!(manifest["license"], "MIT OR Apache-2.0");
+        assert_eq!(manifest["generator"], "radroots_lib_xtask");
         assert_eq!(
             manifest["repository"],
             "https://github.com/radrootslabs/sdk"
