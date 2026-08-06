@@ -35,21 +35,24 @@ const DEVELOPMENT_DATA_DIR_ENVIRONMENT: &str = "RADROOTS_STUDIO_DEVELOPMENT_DATA
 pub(crate) const ACTOR_MAILBOX_CAPACITY: usize = 64;
 const MAX_COMMAND_DEADLINE_MILLIS: u64 = 30_000;
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct RequestContextDto {
     pub request_id: String,
     pub expected_revision: u64,
     pub deadline_millis: u64,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct AccountCommandReceiptDto {
     pub request_id: String,
     pub committed_revision: u64,
     pub snapshot: AppSnapshotDto,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct CompatibilityDescriptor {
     pub product_version: String,
     pub cargo_package_version: String,
@@ -60,7 +63,8 @@ pub struct CompatibilityDescriptor {
     pub current_schema_version: u32,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct CompatibilityExpectation {
     pub contract_major: u16,
     pub minimum_contract_minor: u16,
@@ -69,7 +73,7 @@ pub struct CompatibilityExpectation {
     pub maximum_schema_version: u32,
 }
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 pub fn compatibility_descriptor() -> CompatibilityDescriptor {
     CompatibilityDescriptor {
         product_version: PRODUCT_VERSION.to_owned(),
@@ -82,7 +86,8 @@ pub fn compatibility_descriptor() -> CompatibilityDescriptor {
     }
 }
 
-#[derive(Debug, uniffi::Error)]
+#[derive(Debug)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Error))]
 pub enum StudioError {
     Failure {
         code: WireErrorCode,
@@ -132,13 +137,13 @@ impl StudioError {
     }
 }
 
-#[derive(uniffi::Object)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Object))]
 pub struct GeneratedRecoveryRequest {
     handle: GeneratedKeyRecoveryHandle,
     resolved: AtomicBool,
 }
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 impl GeneratedRecoveryRequest {
     pub fn account(&self) -> AccountDto {
         self.handle.view().account().into()
@@ -161,7 +166,7 @@ impl GeneratedRecoveryRequest {
     }
 }
 
-#[derive(uniffi::Object)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Object))]
 pub struct RemovalRequest {
     public_key_hex: String,
     deletes_local_credential: bool,
@@ -170,7 +175,7 @@ pub struct RemovalRequest {
     token: Mutex<Option<RemovalConfirmationToken>>,
 }
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 impl RemovalRequest {
     pub fn public_key_hex(&self) -> String {
         self.public_key_hex.clone()
@@ -224,19 +229,19 @@ impl RuntimeCore {
     }
 }
 
-#[derive(uniffi::Object)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Object))]
 pub struct StudioAppCore {
     pub(crate) inner: Arc<RuntimeCore>,
 }
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 impl StudioAppCore {
     /// Verifies the static contract before touching the application data path.
     ///
     /// # Errors
     ///
     /// Returns a safe compatibility error without opening or migrating storage.
-    #[uniffi::constructor]
+    #[cfg_attr(not(coverage_nightly), uniffi::constructor)]
     #[allow(clippy::needless_pass_by_value)]
     pub fn open_compatible(
         expectation: CompatibilityExpectation,
@@ -525,6 +530,10 @@ impl StudioAppCore {
         Self::open_path(path, development_mode)
     }
 
+    // The concrete product opener binds operating-system paths, keyrings, and
+    // SQLite ownership. Platform installation lanes exercise this adapter;
+    // deterministic coverage owns the compatibility and runtime policies.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn open_path(path: &Path, development_mode: bool) -> Result<Arc<Self>, StudioError> {
         let mode = if development_mode {
             RelayRuntimeMode::Development
@@ -580,6 +589,8 @@ impl Clock for SystemClock {
     }
 }
 
+// ProjectDirs and the process environment are host integration boundaries.
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn application_database_path(development_mode: bool) -> Result<PathBuf, StudioError> {
     if development_mode && let Some(directory) = std::env::var_os(DEVELOPMENT_DATA_DIR_ENVIRONMENT)
     {
@@ -700,6 +711,7 @@ fn compatibility_mismatch() -> StudioError {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::num::NonZeroUsize;
     use std::sync::Arc;
@@ -717,7 +729,9 @@ mod tests {
         ACTOR_MAILBOX_CAPACITY, CompatibilityExpectation, DATABASE_APPLICATION, DATABASE_FILENAME,
         DATABASE_ORGANIZATION, DATABASE_QUALIFIER, FFI_CONTRACT_HASH, FFI_CONTRACT_MAJOR,
         FFI_CONTRACT_MINOR, RequestContextDto, RuntimeCore, StudioAppCore, StudioError,
-        SystemClock, compatibility_descriptor, local_first_relay_configuration, runtime,
+        SystemClock, WireErrorCategory, WireErrorCode, WireRecoveryAction, actor_mailbox_capacity,
+        compatibility_descriptor, confirmation_expired, generated_commit_failed,
+        local_first_relay_configuration, path_unavailable, runtime, runtime_unavailable,
         verify_compatibility,
     };
 
@@ -811,6 +825,192 @@ mod tests {
             StudioError::Failure { safe_message, .. }
                 if safe_message == "The generated-key recovery step is no longer valid."
         ));
+    }
+
+    #[tokio::test]
+    async fn account_lifecycle_and_one_use_removal_are_exercised_through_the_ffi_boundary() {
+        let core = in_memory_core().await;
+        let initial = core.bootstrap().await.expect("bootstrap");
+        let imported = core
+            .import_account_v2(
+                RequestContextDto {
+                    request_id: "ffi-lifecycle-import".to_owned(),
+                    expected_revision: initial.revision,
+                    deadline_millis: 5_000,
+                },
+                b"7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7".to_vec(),
+            )
+            .await
+            .expect("import account");
+        let public_key = imported.snapshot.accounts[0].public_key_hex.clone();
+
+        let selected = core
+            .select_account(public_key.clone())
+            .await
+            .expect("select account");
+        let active = core
+            .activate_account(public_key.clone())
+            .await
+            .expect("activate account");
+        assert!(active.revision > selected.revision);
+        let signed_out = core.sign_out().await.expect("sign out");
+        assert!(signed_out.revision > active.revision);
+        let refreshed = core
+            .refresh_active_profile()
+            .await
+            .expect("signed-out refresh is a stable no-op");
+        assert_eq!(refreshed.revision, signed_out.revision);
+
+        let removal = core
+            .request_account_removal(public_key.clone())
+            .await
+            .expect("request removal");
+        assert_eq!(removal.public_key_hex(), public_key);
+        assert!(removal.deletes_local_credential());
+        assert!(!removal.signs_out());
+        assert!(removal.expires_at_seconds() > 0);
+        let removed = core
+            .confirm_account_removal(
+                RequestContextDto {
+                    request_id: "ffi-lifecycle-remove".to_owned(),
+                    expected_revision: signed_out.revision,
+                    deadline_millis: 5_000,
+                },
+                Arc::clone(&removal),
+            )
+            .await
+            .expect("confirm removal");
+        assert!(removed.accounts.is_empty());
+        assert!(
+            core.confirm_account_removal(
+                RequestContextDto {
+                    request_id: "ffi-lifecycle-remove-repeated".to_owned(),
+                    expected_revision: removed.revision,
+                    deadline_millis: 5_000,
+                },
+                removal,
+            )
+            .await
+            .is_err()
+        );
+        assert!(
+            core.select_account("not-a-public-key".to_owned())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn generated_recovery_cancellation_and_request_validation_fail_closed() {
+        let core = in_memory_core().await;
+        let recovery = core
+            .begin_generated_account_v2()
+            .await
+            .expect("begin generated account");
+        assert_eq!(recovery.account().public_key_hex.len(), 64);
+        assert!(recovery.expires_at_seconds() > 0);
+        assert!(
+            core.cancel_generated_account_v2(Arc::clone(&recovery))
+                .await
+                .expect("first cancellation")
+        );
+        assert!(
+            !core
+                .cancel_generated_account_v2(recovery)
+                .await
+                .expect("second cancellation")
+        );
+
+        for context in [
+            RequestContextDto {
+                request_id: String::new(),
+                expected_revision: 0,
+                deadline_millis: 5_000,
+            },
+            RequestContextDto {
+                request_id: "ffi-zero-deadline".to_owned(),
+                expected_revision: 0,
+                deadline_millis: 0,
+            },
+            RequestContextDto {
+                request_id: "ffi-long-deadline".to_owned(),
+                expected_revision: 0,
+                deadline_millis: 30_001,
+            },
+        ] {
+            assert!(core.import_account_v2(context, vec![0; 32]).await.is_err());
+        }
+        assert!(
+            core.import_account_v2(
+                RequestContextDto {
+                    request_id: "ffi-invalid-secret".to_owned(),
+                    expected_revision: 0,
+                    deadline_millis: 5_000,
+                },
+                vec![0; 31],
+            )
+            .await
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn boundary_failures_remain_typed_and_secret_safe() {
+        assert_eq!(actor_mailbox_capacity().expect("capacity").get(), 64);
+        for (error, code, category, retryable, recovery, message) in [
+            (
+                runtime_unavailable(),
+                WireErrorCode::InvalidApplicationState,
+                WireErrorCategory::Lifecycle,
+                true,
+                WireRecoveryAction::RestartApplication,
+                "The application runtime is unavailable.",
+            ),
+            (
+                path_unavailable(),
+                WireErrorCode::StorageUnavailable,
+                WireErrorCategory::Storage,
+                true,
+                WireRecoveryAction::RestartApplication,
+                "The application data directory is unavailable.",
+            ),
+            (
+                confirmation_expired(),
+                WireErrorCode::InvalidApplicationState,
+                WireErrorCategory::Lifecycle,
+                false,
+                WireRecoveryAction::None,
+                "The account removal confirmation is no longer valid.",
+            ),
+            (
+                generated_commit_failed(SafeError::new(
+                    radroots_studio_domain::SafeErrorCode::StorageUnavailable,
+                    radroots_studio_domain::SafeMessage::new("internal detail"),
+                )),
+                WireErrorCode::StorageUnavailable,
+                WireErrorCategory::Storage,
+                false,
+                WireRecoveryAction::None,
+                "The generated account could not be saved. Import the recovery key you saved to try again.",
+            ),
+        ] {
+            assert_eq!(error.to_string(), message);
+            assert!(matches!(
+                error,
+                StudioError::Failure {
+                    code: actual_code,
+                    category: actual_category,
+                    retryable: actual_retryable,
+                    recovery_action: actual_recovery,
+                    correlation_id: None,
+                    safe_message,
+                } if actual_code == code
+                    && actual_category == category
+                    && actual_retryable == retryable
+                    && actual_recovery == recovery
+                    && safe_message == message
+            ));
+        }
     }
 
     #[test]

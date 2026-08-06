@@ -414,5 +414,66 @@ mod tests {
             )
             .is_err()
         );
+
+        let missing = account(3);
+        for result in [
+            AppSnapshot::ready(
+                SnapshotRevision::initial(),
+                RelayConfiguration::default(),
+                Vec::new(),
+                Some(missing.public_key()),
+                SessionState::SignedOut,
+                None,
+                None,
+            ),
+            AppSnapshot::ready(
+                SnapshotRevision::initial(),
+                RelayConfiguration::default(),
+                vec![second.clone()],
+                None,
+                SessionState::SignedOut,
+                None,
+                None,
+            ),
+            AppSnapshot::ready(
+                SnapshotRevision::initial(),
+                RelayConfiguration::default(),
+                vec![second.clone()],
+                Some(missing.public_key()),
+                SessionState::SignedOut,
+                None,
+                None,
+            ),
+            AppSnapshot::ready(
+                SnapshotRevision::initial(),
+                RelayConfiguration::default(),
+                vec![second.clone()],
+                Some(second.public_key()),
+                SessionState::SignedOut,
+                Some(ActiveAccountSnapshot::new(
+                    missing,
+                    RelayConnectionState::Disconnected,
+                    ProfileLoadState::Empty,
+                    None,
+                )),
+                None,
+            ),
+            AppSnapshot::ready(
+                SnapshotRevision::initial(),
+                RelayConfiguration::default(),
+                vec![second.clone()],
+                Some(second.public_key()),
+                SessionState::SignedOut,
+                Some(ActiveAccountSnapshot::new(
+                    second,
+                    RelayConnectionState::Disconnected,
+                    ProfileLoadState::Empty,
+                    None,
+                )),
+                None,
+            ),
+        ] {
+            assert!(result.is_err());
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 //! Frozen NIP-09 projection, admission, and suppression semantics.
 
+#[cfg(feature = "json")]
 pub mod admission {
     //! Frozen NIP-09 request-admission semantics for reconciliation v1.
 
@@ -139,6 +140,7 @@ pub mod admission {
     mod tests;
 }
 
+#[cfg(feature = "json")]
 pub mod evaluator {
     //! Frozen NIP-09 suppression semantics for reconciliation v1.
 

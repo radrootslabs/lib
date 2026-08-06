@@ -315,4 +315,44 @@ mod tests {
         assert!(!removal.impact().deletes_local_credential());
         assert!(!removal.impact().signs_out());
     }
+
+    #[test]
+    fn removal_confirmation_rejects_every_tampered_authority_field() {
+        let core = AppCore::in_memory(RelayConfiguration::default());
+        let public_key = crate::test_support::valid_test_public_key(7).expect("public key");
+        let other_key = crate::test_support::valid_test_public_key(8).expect("other key");
+        let account = AccountSummary::new(
+            AccountIdentity::derive(public_key).expect("identity"),
+            LocalSignerBinding::new(public_key, BindingAvailability::Available),
+            None,
+            AccountCreatedAt::new(UnixTimestamp::from_seconds(1).expect("time")),
+            None,
+        )
+        .expect("account");
+        core.apply_transition(StateTransition::BootstrapRegistry {
+            accounts: vec![account],
+            selected: Some(public_key),
+        })
+        .expect("registry");
+
+        let now = UnixTimestamp::from_seconds(2).expect("now");
+        let mut wrong_key = core.issue_removal_token(public_key, now).expect("token");
+        wrong_key.public_key = other_key;
+        assert!(core.consume_removal_token(wrong_key, now).is_err());
+
+        let mut wrong_revision = core.issue_removal_token(public_key, now).expect("token");
+        wrong_revision.revision = crate::SnapshotRevision::initial();
+        assert!(core.consume_removal_token(wrong_revision, now).is_err());
+
+        let mut wrong_expiry = core.issue_removal_token(public_key, now).expect("token");
+        wrong_expiry.expires_at = UnixTimestamp::from_seconds(999).expect("expiry");
+        assert!(core.consume_removal_token(wrong_expiry, now).is_err());
+
+        let mut wrong_impact = core.issue_removal_token(public_key, now).expect("token");
+        wrong_impact.impact = super::RemovalImpact {
+            deletes_local_credential: false,
+            signs_out: false,
+        };
+        assert!(core.consume_removal_token(wrong_impact, now).is_err());
+    }
 }

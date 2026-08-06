@@ -197,6 +197,26 @@ mod tests {
             error.code(),
             radroots_studio_domain::SafeErrorCode::CredentialMissing
         );
+        secrets
+            .put(
+                second,
+                input("7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7"),
+            )
+            .expect("mismatched credential");
+        let invalid = core
+            .activate_account(
+                second,
+                &accounts,
+                &accounts,
+                &profiles,
+                &secrets,
+                &FixedClock,
+            )
+            .expect_err("mismatched credential");
+        assert_eq!(
+            invalid.code(),
+            radroots_studio_domain::SafeErrorCode::InvalidSecretKey
+        );
         assert_eq!(core.snapshot().session(), SessionState::Active);
         assert_eq!(
             core.snapshot()

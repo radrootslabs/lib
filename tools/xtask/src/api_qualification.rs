@@ -11,13 +11,23 @@ struct Contract {
     release_type: String,
     feature_policy: String,
     packages: Vec<String>,
+    baseline_override: Vec<BaselineOverride>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BaselineOverride {
+    package: String,
+    revision: String,
 }
 
 pub fn run(root: &Path) -> Result<(), String> {
     let contract = load(root)?;
-    validate(&contract, 17)?;
+    validate(&contract, 19)?;
     verify_tool(&contract)?;
     verify_revision(root, &contract.baseline_revision)?;
+    for baseline in &contract.baseline_override {
+        verify_revision(root, &baseline.revision)?;
+    }
     for package in &contract.packages {
         let args = invocation(&contract, package);
         eprintln!("cargo {}", args.join(" "));
@@ -60,6 +70,21 @@ fn validate(contract: &Contract, expected_packages: usize) -> Result<(), String>
             "public API contract requires exactly {expected_packages} unique packages"
         ));
     }
+    let overrides = contract
+        .baseline_override
+        .iter()
+        .map(|baseline| baseline.package.as_str())
+        .collect::<BTreeSet<_>>();
+    if overrides != BTreeSet::from(["radroots", "radroots_sdk"])
+        || contract
+            .baseline_override
+            .iter()
+            .any(|baseline| baseline.revision.len() != 40)
+    {
+        return Err(
+            "public API baseline overrides must identify the two imported front doors".to_owned(),
+        );
+    }
     Ok(())
 }
 
@@ -101,13 +126,20 @@ fn verify_revision(root: &Path, revision: &str) -> Result<(), String> {
 }
 
 fn invocation(contract: &Contract, package: &str) -> Vec<String> {
+    let baseline = contract
+        .baseline_override
+        .iter()
+        .find(|baseline| baseline.package == package)
+        .map_or(contract.baseline_revision.as_str(), |baseline| {
+            baseline.revision.as_str()
+        });
     vec![
         "semver-checks".to_owned(),
         "check-release".to_owned(),
         "--package".to_owned(),
         package.to_owned(),
         "--baseline-rev".to_owned(),
-        contract.baseline_revision.clone(),
+        baseline.to_owned(),
         "--all-features".to_owned(),
         "--release-type".to_owned(),
         contract.release_type.clone(),
@@ -125,7 +157,7 @@ mod tests {
             .and_then(std::path::Path::parent)
             .expect("workspace root");
         let contract = load(root).expect("contract");
-        validate(&contract, 17).expect("valid contract");
+        validate(&contract, 19).expect("valid contract");
         let invocation = invocation(&contract, "radroots_core");
         assert!(invocation.contains(&"--all-features".to_owned()));
         assert!(invocation.ends_with(&["--release-type".to_owned(), "major".to_owned()]));

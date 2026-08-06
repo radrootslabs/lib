@@ -238,6 +238,34 @@ mod tests {
             .expect_err("empty relay list");
 
         assert_eq!(error.code(), SafeErrorCode::InvalidRelayConfiguration);
+
+        let relay = RelayUrl::parse("wss://relay.example.test", RelayDestinationPolicy::Public)
+            .expect("relay URL");
+        let too_many = vec![relay; radroots_studio_application::MAX_CONFIGURED_RELAYS + 1];
+        let error = SdkNostrClient::new(Duration::from_millis(10))
+            .fetch_profile(
+                PublicKey::from_bytes([7; 32]).expect("valid public key"),
+                &too_many,
+                std::time::Instant::now() + Duration::from_millis(10),
+            )
+            .await
+            .expect_err("oversized relay list");
+        assert_eq!(error.code(), SafeErrorCode::InvalidRelayConfiguration);
+    }
+
+    #[tokio::test]
+    async fn sdk_client_fails_when_no_configured_relay_completes() {
+        let relay = RelayUrl::parse("ws://127.0.0.1:1", RelayDestinationPolicy::Local)
+            .expect("unavailable relay");
+        let error = SdkNostrClient::new(Duration::from_millis(25))
+            .fetch_profile(
+                PublicKey::from_bytes([7; 32]).expect("valid public key"),
+                &[relay],
+                std::time::Instant::now() + Duration::from_millis(50),
+            )
+            .await
+            .expect_err("all relays unavailable");
+        assert_eq!(error.code(), SafeErrorCode::RelayConnectionFailed);
     }
 
     #[tokio::test]
@@ -292,6 +320,20 @@ mod tests {
         assert_eq!(
             super::canonical_policy(RelayDestinationPolicy::PrivateNetwork),
             radroots_transport_nostr::RelayUrlPolicy::PrivateNetwork
+        );
+        assert_eq!(super::timeout_millis(Duration::ZERO), 1);
+        assert_eq!(
+            super::timeout_millis(Duration::from_secs(1_000_000)),
+            120_000
+        );
+        assert!(super::unix_deadline(Duration::from_secs(1)).is_ok());
+        assert_eq!(
+            super::invalid_relay_configuration().code(),
+            SafeErrorCode::InvalidRelayConfiguration
+        );
+        assert_eq!(
+            super::relay_connection_failed().code(),
+            SafeErrorCode::RelayConnectionFailed
         );
     }
 }

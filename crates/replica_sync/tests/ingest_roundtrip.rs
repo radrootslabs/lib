@@ -1,4 +1,4 @@
-use nostr::Keys;
+use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
 use radroots_event::envelope::kind::{
     KIND_FARM, KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE,
 };
@@ -16,6 +16,7 @@ use radroots_event_codec::encode::farm as farm_list_sets;
 use radroots_event_codec::encode::list_set as list_set_encode;
 use radroots_event_codec::encode::plot as plot_encode;
 use radroots_event_codec::{decode::EventParseError, encode::EventEncodeError};
+use radroots_nostr::event::from_nostr;
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
 use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
@@ -980,7 +981,7 @@ fn sample_gcs(lat: f64, lng: f64, geohash: &str) -> GcsLocation {
 }
 
 fn profile_event(
-    id: u64,
+    _id: u64,
     author: &str,
     created_at: u32,
     profile_type: Option<ProfileType>,
@@ -1004,14 +1005,22 @@ fn profile_event(
             radroots_profile_type_tag_value(kind).to_string(),
         ]);
     }
-    event_with_parts(
-        id,
-        author,
-        created_at,
-        KIND_PROFILE,
-        profile.to_string(),
-        tags,
-    )
+    let keys = (1_u8..=u8::MAX)
+        .find_map(|seed| {
+            let keys = Keys::parse(&format!("{seed:064x}")).ok()?;
+            (keys.public_key().to_hex() == author).then_some(keys)
+        })
+        .expect("profile author must resolve to a fixture signing key");
+    let tags = tags
+        .into_iter()
+        .map(|tag| Tag::parse(tag).expect("profile tag"))
+        .collect::<Vec<_>>();
+    let event = EventBuilder::new(Kind::Metadata, profile.to_string())
+        .tags(tags)
+        .custom_created_at(Timestamp::from_secs(u64::from(created_at)))
+        .sign_with_keys(&keys)
+        .expect("signed profile event");
+    from_nostr(&event).expect("profile event adapter")
 }
 
 fn farm_event(
@@ -1117,25 +1126,35 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         radroots_replica_ingest_event(&exec, &profile_older).expect("profile skip older"),
         RadrootsReplicaIngestOutcome::Skipped
     );
-    let profile_same_time_higher_id = profile_event(
-        103,
-        &profile_pubkey,
-        10,
-        Some(ProfileType::Individual),
-        "alice-updated",
-    );
+    let profile_same_time_higher_id = (0_u32..1_024)
+        .map(|index| {
+            profile_event(
+                u64::from(index),
+                &profile_pubkey,
+                10,
+                Some(ProfileType::Individual),
+                &format!("alice-higher-{index}"),
+            )
+        })
+        .find(|event| event.id_hex() > profile_create.id_hex())
+        .expect("same-time fixture with a higher event id");
     assert_eq!(
         radroots_replica_ingest_event(&exec, &profile_same_time_higher_id)
             .expect("profile skip same timestamp higher id"),
         RadrootsReplicaIngestOutcome::Skipped
     );
-    let profile_same_time_lower_id = profile_event(
-        100,
-        &profile_pubkey,
-        10,
-        Some(ProfileType::Individual),
-        "alice-lower-id",
-    );
+    let profile_same_time_lower_id = (0_u32..1_024)
+        .map(|index| {
+            profile_event(
+                u64::from(index),
+                &profile_pubkey,
+                10,
+                Some(ProfileType::Individual),
+                &format!("alice-lower-{index}"),
+            )
+        })
+        .find(|event| event.id_hex() < profile_create.id_hex())
+        .expect("same-time fixture with a lower event id");
     assert_eq!(
         radroots_replica_ingest_event(&exec, &profile_same_time_lower_id)
             .expect("profile apply same timestamp lower id"),

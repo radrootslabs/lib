@@ -629,6 +629,65 @@ mod tests {
                 )
                 .is_err()
         );
+        let missing_request = DurableRequestId::parse("import:test:missing").expect("request");
+        assert!(
+            database
+                .finalize_durable_operation(
+                    &missing_request,
+                    DurableOperationPhase::IntentRecorded,
+                    DurableTerminalOutcome::Completed,
+                    None,
+                    UnixTimestamp::from_seconds(17).expect("time"),
+                )
+                .is_err()
+        );
+        assert!(
+            database
+                .begin_durable_operation(
+                    &request,
+                    DurableOperationKind::Repair,
+                    public_key(8),
+                    Some(4),
+                    prior,
+                    UnixTimestamp::from_seconds(11).expect("time"),
+                )
+                .is_err()
+        );
+        assert!(
+            database
+                .begin_durable_operation(
+                    &request,
+                    DurableOperationKind::Repair,
+                    account,
+                    Some(5),
+                    prior,
+                    UnixTimestamp::from_seconds(11).expect("time"),
+                )
+                .is_err()
+        );
+        assert!(
+            database
+                .begin_durable_operation(
+                    &request,
+                    DurableOperationKind::Repair,
+                    account,
+                    Some(4),
+                    OperationPriorState::new(None, None),
+                    UnixTimestamp::from_seconds(11).expect("time"),
+                )
+                .is_err()
+        );
+        assert!(
+            database
+                .advance_durable_operation(
+                    &request,
+                    DurableOperationPhase::CredentialDeleted,
+                    DurableOperationPhase::Finalized,
+                    UnixTimestamp::from_seconds(11).expect("time"),
+                    None,
+                )
+                .is_err()
+        );
         database
             .advance_durable_operation(
                 &request,
@@ -662,9 +721,54 @@ mod tests {
         );
         assert!(
             database
+                .finalize_durable_operation(
+                    &request,
+                    DurableOperationPhase::CredentialWritten,
+                    DurableTerminalOutcome::Cancelled,
+                    Some(5),
+                    UnixTimestamp::from_seconds(14).expect("time"),
+                )
+                .is_err()
+        );
+        assert!(
+            database
+                .finalize_durable_operation(
+                    &request,
+                    DurableOperationPhase::CredentialWritten,
+                    DurableTerminalOutcome::Completed,
+                    Some(6),
+                    UnixTimestamp::from_seconds(14).expect("time"),
+                )
+                .is_err()
+        );
+        let overflow_request = DurableRequestId::parse("import:test:overflow").expect("request");
+        database
+            .begin_durable_operation(
+                &overflow_request,
+                DurableOperationKind::Import,
+                account,
+                None,
+                OperationPriorState::new(None, None),
+                UnixTimestamp::from_seconds(15).expect("time"),
+            )
+            .expect("begin overflow operation");
+        assert!(
+            database
+                .finalize_durable_operation(
+                    &overflow_request,
+                    DurableOperationPhase::IntentRecorded,
+                    DurableTerminalOutcome::Completed,
+                    Some(u64::MAX),
+                    UnixTimestamp::from_seconds(16).expect("time"),
+                )
+                .is_err()
+        );
+        assert!(
+            database
                 .list_unfinished_durable_operations()
                 .expect("unfinished")
-                .is_empty()
+                .iter()
+                .any(|operation| operation.request_id() == &overflow_request)
         );
     }
 }

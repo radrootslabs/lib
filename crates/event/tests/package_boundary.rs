@@ -24,8 +24,6 @@ const ADMISSION: &str = include_str!("../src/admission.rs");
 const VERIFICATION: &str = include_str!("../src/verification.rs");
 const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event.txt");
 const CODEC_MANIFEST: &str = include_str!("../../event_codec/Cargo.toml");
-const CODEC_POST_DECODE: &str = include_str!("../../event_codec/src/post/decode.rs");
-const CODEC_PROFILE: &str = include_str!("../../event_codec/src/profile/mod.rs");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -205,15 +203,18 @@ fn public_native_items_do_not_retain_the_legacy_radroots_prefix() {
 }
 
 #[test]
-fn lossy_legacy_projections_are_quarantined_until_codec_retirement() {
+fn event_codec_has_no_lossy_post_or_profile_projection_surface() {
     assert!(CODEC_MANIFEST.contains("publish = [\"crates-io\"]"));
-    for (source, compatibility_type) in [
-        (CODEC_POST_DECODE, "pub struct LegacyPost"),
-        (CODEC_PROFILE, "pub struct LegacyProfile"),
-    ] {
-        assert!(source.contains(compatibility_type));
-        assert!(source.contains("superseded codec APIs in Step 087"));
+    let codec_root = include_str!("../../event_codec/src/lib.rs");
+    let post_module = include_str!("../../event_codec/src/post/mod.rs");
+    let profile_module = include_str!("../../event_codec/src/profile/mod.rs");
+    for source in [codec_root, post_module, profile_module] {
+        assert!(!source.contains("LegacyPost"));
+        assert!(!source.contains("LegacyProfile"));
+        assert!(!source.contains("RadrootsProfileData"));
     }
+    assert!(!post_module.contains("pub mod decode;"));
+    assert!(!profile_module.contains("pub mod decode;"));
 }
 
 #[test]

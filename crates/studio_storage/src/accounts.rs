@@ -400,4 +400,117 @@ mod tests {
 
         assert_eq!(database.load_selected_account().expect("selection"), None);
     }
+
+    #[test]
+    fn account_mutations_reject_missing_and_corrupt_rows() {
+        let database = Database::in_memory().expect("database");
+        let missing = account(3, 30);
+        assert_eq!(
+            database
+                .update_account(&missing)
+                .expect_err("missing update")
+                .code(),
+            SafeErrorCode::AccountNotFound
+        );
+        assert_eq!(
+            database
+                .remove_account(missing.public_key())
+                .expect_err("missing removal")
+                .code(),
+            SafeErrorCode::AccountNotFound
+        );
+        assert_eq!(
+            database.find_account(missing.public_key()).expect("find"),
+            None
+        );
+
+        database.insert_account(&missing).expect("insert");
+        database.update_account(&missing).expect("update");
+        database
+            .connection()
+            .execute(
+                "DELETE FROM local_signer_bindings WHERE account_public_key = ?1",
+                [missing.public_key().to_hex()],
+            )
+            .expect("delete binding");
+        assert_eq!(
+            database
+                .update_account(&missing)
+                .expect_err("missing binding must fail")
+                .code(),
+            SafeErrorCode::StorageCorrupt
+        );
+        database
+            .connection()
+            .execute(
+                "INSERT INTO local_signer_bindings (account_public_key, binding_public_key, binding_kind, availability) VALUES (?1, ?1, 'local_secret', 'available')",
+                [missing.public_key().to_hex()],
+            )
+            .expect("restore binding");
+        database
+            .connection()
+            .pragma_update(None, "ignore_check_constraints", "ON")
+            .expect("disable check constraints for corruption fixture");
+        database
+            .connection()
+            .execute(
+                "UPDATE local_signer_bindings SET binding_kind = 'remote' WHERE account_public_key = ?1",
+                [missing.public_key().to_hex()],
+            )
+            .expect("corrupt binding kind");
+        assert_eq!(
+            database
+                .list_accounts()
+                .expect_err("corrupt binding must fail")
+                .code(),
+            SafeErrorCode::StorageCorrupt
+        );
+
+        let database = Database::in_memory().expect("database");
+        database.insert_account(&missing).expect("insert");
+        database
+            .connection()
+            .pragma_update(None, "ignore_check_constraints", "ON")
+            .expect("disable check constraints for corruption fixture");
+        database
+            .connection()
+            .execute(
+                "UPDATE local_signer_bindings SET availability = 'invalid' WHERE account_public_key = ?1",
+                [missing.public_key().to_hex()],
+            )
+            .expect("corrupt availability");
+        assert_eq!(
+            database
+                .find_account(missing.public_key())
+                .expect_err("corrupt availability must fail")
+                .code(),
+            SafeErrorCode::StorageUnavailable
+        );
+
+        let database = Database::in_memory().expect("database");
+        database
+            .connection()
+            .execute("DELETE FROM runtime_state", [])
+            .expect("delete runtime singleton");
+        assert_eq!(
+            database
+                .save_selected_account(None)
+                .expect_err("missing runtime singleton must fail")
+                .code(),
+            SafeErrorCode::StorageCorrupt
+        );
+
+        let read_only = Database::in_memory().expect("read-only database");
+        read_only
+            .connection()
+            .pragma_update(None, "query_only", "ON")
+            .expect("enable query-only mode");
+        assert_eq!(
+            read_only
+                .insert_account(&missing)
+                .expect_err("non-constraint insertion failure must fail closed")
+                .code(),
+            SafeErrorCode::StorageUnavailable
+        );
+    }
 }

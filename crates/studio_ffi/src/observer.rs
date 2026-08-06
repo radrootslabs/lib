@@ -11,30 +11,32 @@ use crate::{AppSnapshotDto, StudioAppCore, StudioError};
 const OBSERVER_CHANGE_CAPACITY: NonZeroUsize = NonZeroUsize::MIN.saturating_add(63);
 const MAX_OBSERVERS: usize = 32;
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct SnapshotChangeDto {
     pub snapshot: AppSnapshotDto,
     pub previous_revision: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct ShutdownReceiptDto {
     pub final_revision: u64,
     pub closed: bool,
 }
 
-#[uniffi::export(callback_interface)]
+#[cfg_attr(not(coverage_nightly), uniffi::export(callback_interface))]
 pub trait StudioChangeObserver: Send + Sync {
     fn on_change(&self, change: SnapshotChangeDto);
 }
 
-#[derive(uniffi::Object)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Object))]
 pub struct ObserverSubscription {
     core: Weak<RuntimeCore>,
     id: Mutex<Option<ChangeSubscriptionId>>,
 }
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 impl ObserverSubscription {
     pub async fn unsubscribe(&self) {
         let id = self
@@ -59,7 +61,7 @@ impl ObserverSubscription {
     }
 }
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 impl StudioAppCore {
     /// Subscribes to ordered revision changes including predecessor metadata.
     ///
@@ -207,6 +209,7 @@ fn observer_registration_error() -> StudioError {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::num::NonZeroUsize;
     use std::sync::{Arc, Mutex};
@@ -291,7 +294,6 @@ mod tests {
                 .subscribe_changes_v2(Box::new(ArcObserver(observer.clone())))
                 .await
                 .expect("subscribe");
-
             wait_for_snapshot_count(&observer, 1).await;
             core.inner
                 .actor
@@ -299,6 +301,7 @@ mod tests {
                 .await
                 .expect("idempotent bootstrap");
             assert_eq!(observer.snapshots.lock().expect("snapshots").len(), 1);
+            subscription.unsubscribe().await;
             subscription.unsubscribe().await;
             core.inner.actor.sign_out().await.expect("sign out");
             assert_eq!(observer.snapshots.lock().expect("snapshots").len(), 1);
@@ -310,12 +313,32 @@ mod tests {
         runtime().expect("runtime").block_on(async {
             let core = core().await;
             let observer = Arc::new(RecordingObserver::default());
-            let _subscription = core
+            let subscription = core
                 .subscribe_changes_v2(Box::new(ArcObserver(observer.clone())))
                 .await
                 .expect("subscribe");
+            let _active_subscription = core
+                .subscribe_changes_v2(Box::new(ArcObserver(observer.clone())))
+                .await
+                .expect("second subscription");
+            let id = subscription
+                .id
+                .lock()
+                .expect("subscription id")
+                .expect("active subscription id");
+            let handle = core
+                .inner
+                .observers
+                .lock()
+                .expect("observers")
+                .get_mut(&id)
+                .expect("registered observer")
+                .take()
+                .expect("observer task");
+            handle.abort();
 
             core.shutdown_v2().await.expect("shutdown");
+            assert!(core.shutdown_v2().await.is_err());
 
             assert!(
                 core.subscribe_changes_v2(Box::new(ArcObserver(observer)))
@@ -323,6 +346,22 @@ mod tests {
                     .is_err()
             );
             assert!(core.inner.observers.lock().expect("observers").is_empty());
+        });
+    }
+
+    #[test]
+    fn subscription_unsubscribe_tolerates_a_dropped_runtime_core() {
+        runtime().expect("runtime").block_on(async {
+            let core = core().await;
+            let observer = Arc::new(RecordingObserver::default());
+            let subscription = core
+                .subscribe_changes_v2(Box::new(ArcObserver(observer.clone())))
+                .await
+                .expect("subscribe");
+            wait_for_snapshot_count(&observer, 1).await;
+
+            drop(core);
+            subscription.unsubscribe().await;
         });
     }
 

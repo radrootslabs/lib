@@ -22,4 +22,14 @@ packages = [
   "radroots_trade",
   "radroots_transport",
   "radroots_transport_nostr",
+  "radroots_sdk",
+  "radroots",
 ]
+
+[[baseline_override]]
+package = "radroots_sdk"
+revision = "865378c0bdefc74fae2320e41ea5f5727d444cee"
+
+[[baseline_override]]
+package = "radroots"
+revision = "865378c0bdefc74fae2320e41ea5f5727d444cee"

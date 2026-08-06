@@ -168,4 +168,22 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn namespace_rejects_oversized_and_control_character_values() {
+        let database = Database::in_memory().expect("database");
+        let owner = public_key(3);
+        database.insert_account(&account(3)).expect("account");
+        let oversized = "a".repeat(super::MAX_VALUE_CHARS + 1);
+        assert!(
+            database
+                .set_value(owner, AccountPreferenceKey::NamespaceProbe, &oversized)
+                .is_err()
+        );
+        assert!(
+            database
+                .set_value(owner, AccountPreferenceKey::NamespaceProbe, "line\nbreak")
+                .is_err()
+        );
+    }
 }

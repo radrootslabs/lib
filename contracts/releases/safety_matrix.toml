@@ -1,0 +1,69 @@
+schema_version = 1
+toolchain = "nightly-2026-07-16"
+miri_flags = ["-Zmiri-strict-provenance", "-Zmiri-disable-isolation"]
+
+[[miri]]
+package = "radroots_core"
+filter = "money::invariant_tests::internal_nonnegative_invariant_covers_invalid_and_signed_zero_states"
+authority = "numeric-invariants"
+
+[[miri]]
+package = "radroots_identity"
+filter = "key::tests::public_keys_reject_invalid_encodings_and_curve_points"
+authority = "identity-validation"
+
+[[miri]]
+package = "radroots_protocol"
+filter = "error::v1::tests::native_source_messages_are_redacted_and_secrets_are_rejected"
+authority = "secret-safe-errors"
+
+[[miri]]
+package = "radroots_event"
+filter = "admission::tests::positive_vector_traverses_the_complete_transition_graph"
+authority = "event-admission-state"
+
+[[miri]]
+package = "radroots_event_codec"
+filter = "reply::inbound::registry_v7::tests::inbound_relay_syntax_and_tag_element_budgets_remain_separate"
+authority = "inbound-event-parsing"
+
+[[miri]]
+package = "radroots_trade"
+filter = "trade_contract_v1::tests::reducer_projection_is_identical_for_every_three_record_permutation"
+authority = "trade-state-reduction"
+
+[[miri]]
+package = "radroots_secrets"
+filter = "envelope::tests::decode_and_validation_reject_every_bounded_wire_failure"
+authority = "secret-envelope-decoding"
+
+[[miri]]
+package = "radroots_transport"
+filter = "outcome::tests::outcome_classes_cover_success_failure_retry_and_detail_branches"
+authority = "transport-outcome-policy"
+
+[[sanitizer]]
+kind = "address"
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+]
+packages = [
+  "radroots_sdk_ffi",
+  "radroots_storage_sqlite",
+  "radroots_runtime_manager",
+]
+authority = "native-ffi-runtime-storage"
+
+[[exception]]
+lane = "sanitizer"
+targets = [
+  "aarch64-pc-windows-msvc",
+  "x86_64-pc-windows-msvc",
+  "wasm32-unknown-unknown",
+]
+owner = "radroots-security"
+expires = "2026-10-01"
+reason = "the pinned Rust sanitizer runtime is unavailable for these target families"

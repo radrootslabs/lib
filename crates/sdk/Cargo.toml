@@ -95,6 +95,7 @@ uuid = { workspace = true, optional = true, features = ["v4"] }
 
 [dev-dependencies]
 nostr = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 

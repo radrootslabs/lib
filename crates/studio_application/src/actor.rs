@@ -765,6 +765,7 @@ mod tests {
         assert!(degraded.allows(RuntimeCommandClass::MutateLocalState));
         assert!(!degraded.allows(RuntimeCommandClass::UseRelay));
         degraded.restore_ready().expect("restored");
+        assert!(LifecycleGate::opening().restore_ready().is_err());
 
         let mut fatal = LifecycleGate::opening();
         fatal.fail(problem);

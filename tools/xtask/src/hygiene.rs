@@ -242,6 +242,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         "removed identifier 'tangle' must not reappear",
         &[
             "contracts/consolidation/baseline.v1.toml",
+            "contracts/consolidation/imports/studio_app.commit-map.v1.json",
             "tools/xtask/src/sdk_generation/package_matrix.rs",
             "tools/xtask/src/hygiene.rs",
         ],

@@ -72,7 +72,7 @@ mod tests {
 
     use radroots_studio_application::KeyMaterialProvider;
 
-    use super::NostrKeyMaterialProvider;
+    use super::{NostrKeyMaterialProvider, invalid_public_key, invalid_secret_key};
 
     const SECRET_HEX: &str = "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7";
     const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
@@ -119,5 +119,7 @@ mod tests {
             .err()
             .expect("invalid checksum");
         assert_eq!(error.code(), SafeErrorCode::InvalidSecretKey);
+        assert_eq!(invalid_secret_key().code(), SafeErrorCode::InvalidSecretKey);
+        assert_eq!(invalid_public_key().code(), SafeErrorCode::InvalidPublicKey);
     }
 }

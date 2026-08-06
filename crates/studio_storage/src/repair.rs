@@ -258,3 +258,146 @@ const fn storage_error() -> SafeError {
         SafeMessage::new("The database repair operation could not be completed."),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io::Write;
+
+    use rusqlite::Connection;
+    use tempfile::tempdir;
+
+    use super::{
+        REPAIR_DOMAIN, RepairAuthorization, RepairCandidate, authenticate, authenticate_candidate,
+        copy_secure, digest_file, ensure_new_destination, export_quarantined, hex,
+        install_candidate, secure_read,
+    };
+    use crate::Database;
+
+    fn quarantined_database(path: &std::path::Path) {
+        drop(Database::open(path).expect("current database"));
+        let connection = Connection::open(path).expect("open database");
+        connection
+            .execute(
+                "INSERT INTO account_identities (public_key, npub, created_at) VALUES (?1, ?2, 1)",
+                [
+                    "00".repeat(32),
+                    "npub1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qursnvjvl7".to_owned(),
+                ],
+            )
+            .expect("invalid identity fixture");
+        connection
+            .execute(
+                "INSERT INTO local_signer_bindings (account_public_key, binding_public_key, binding_kind, availability) VALUES (?1, ?1, 'local_secret', 'available')",
+                ["00".repeat(32)],
+            )
+            .expect("binding fixture");
+    }
+
+    #[test]
+    fn repair_authority_and_candidate_reject_invalid_states() {
+        assert!(RepairAuthorization::from_bytes(vec![0_u8; 31]).is_err());
+        assert!(RepairAuthorization::from_bytes(vec![0_u8; 33]).is_err());
+        let authorization = RepairAuthorization::from_bytes(vec![0x41; 32]).expect("authorization");
+        assert_eq!(
+            authenticate(&authorization, b"domain", "digest")
+                .expect("authentication tag")
+                .len(),
+            64
+        );
+        assert_eq!(hex(&[0, 15, 255]), "000fff");
+
+        let directory = tempdir().expect("temporary directory");
+        let ready = directory.path().join("ready.sqlite3");
+        drop(Database::open(&ready).expect("ready database"));
+        let candidate = authenticate_candidate(&ready, &authorization).expect("candidate");
+        assert_eq!(candidate.path(), ready);
+
+        let missing = directory.path().join("missing.sqlite3");
+        assert!(authenticate_candidate(&missing, &authorization).is_err());
+        let export = directory.path().join("export.sqlite3");
+        assert!(export_quarantined(&ready, &export, &authorization).is_err());
+        assert!(install_candidate(&ready, &candidate, &authorization).is_err());
+    }
+
+    #[test]
+    fn repair_file_boundaries_reject_existing_non_file_and_missing_parent_paths() {
+        let directory = tempdir().expect("temporary directory");
+        let regular = directory.path().join("regular");
+        fs::write(&regular, b"repair material").expect("write regular file");
+        let child = directory.path().join("child");
+        fs::create_dir(&child).expect("create child directory");
+
+        assert!(ensure_new_destination(&regular).is_err());
+        assert!(ensure_new_destination(&regular.join("nested")).is_err());
+        assert!(secure_read(&child).is_err());
+        assert_eq!(digest_file(&regular).expect("digest").len(), 64);
+
+        let copied = directory.path().join("copied");
+        copy_secure(&regular, &copied).expect("secure copy");
+        assert_eq!(fs::read(&copied).expect("copied bytes"), b"repair material");
+        assert!(copy_secure(&regular, &copied).is_err());
+        assert!(copy_secure(&child, &directory.path().join("invalid-copy")).is_err());
+    }
+
+    #[test]
+    fn repair_installation_rejects_tampering_quarantined_candidates_and_staging_collisions() {
+        let directory = tempdir().expect("temporary directory");
+        let authorization = RepairAuthorization::from_bytes(vec![0x41; 32]).expect("authorization");
+        let target = directory.path().join("studio.sqlite3");
+        quarantined_database(&target);
+        let candidate_path = directory.path().join("candidate.sqlite3");
+        drop(Database::open(&candidate_path).expect("candidate database"));
+        let candidate = authenticate_candidate(&candidate_path, &authorization).expect("candidate");
+
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&candidate_path)
+            .expect("open candidate")
+            .write_all(b"tamper")
+            .expect("tamper candidate");
+        assert!(install_candidate(&target, &candidate, &authorization).is_err());
+
+        let quarantined_candidate_path = directory.path().join("quarantined-candidate.sqlite3");
+        quarantined_database(&quarantined_candidate_path);
+        let digest = digest_file(&quarantined_candidate_path).expect("candidate digest");
+        let quarantined_candidate = RepairCandidate {
+            path: quarantined_candidate_path,
+            sha256: digest.clone(),
+            authentication_tag: authenticate(&authorization, REPAIR_DOMAIN, &digest)
+                .expect("candidate tag"),
+        };
+        assert!(install_candidate(&target, &quarantined_candidate, &authorization).is_err());
+
+        let candidate_path = directory.path().join("candidate-two.sqlite3");
+        drop(Database::open(&candidate_path).expect("candidate database"));
+        let candidate = authenticate_candidate(&candidate_path, &authorization).expect("candidate");
+        let replacement = directory.path().join(".authenticated-repair.tmp");
+        fs::write(&replacement, b"occupied").expect("occupied replacement");
+        assert!(install_candidate(&target, &candidate, &authorization).is_err());
+        fs::remove_file(&replacement).expect("remove occupied replacement");
+
+        let retained = directory.path().join("studio.sqlite3.quarantined-evidence");
+        fs::write(&retained, b"occupied").expect("occupied retained evidence");
+        assert!(install_candidate(&target, &candidate, &authorization).is_err());
+        assert!(!replacement.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repair_file_boundaries_reject_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempdir().expect("temporary directory");
+        let regular = directory.path().join("regular");
+        fs::write(&regular, b"repair material").expect("write regular file");
+        let link = directory.path().join("link");
+        symlink(&regular, &link).expect("create file symlink");
+        assert!(secure_read(&link).is_err());
+        assert!(digest_file(&link).is_err());
+
+        let directory_link = directory.path().join("directory-link");
+        symlink(directory.path(), &directory_link).expect("create directory symlink");
+        assert!(ensure_new_destination(&directory_link.join("export")).is_err());
+    }
+}

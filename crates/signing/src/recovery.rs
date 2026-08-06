@@ -49,3 +49,56 @@ pub const fn recovery_disposition(
         (ReplayCapability::NonReplayable, RemoteEffect::None) => RecoveryDisposition::Failed,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_decision_table_is_exhaustive() {
+        for replay in [
+            ReplayCapability::ExactReplayByRequestId,
+            ReplayCapability::LocalReplaySafe,
+            ReplayCapability::NonReplayable,
+        ] {
+            for remote_effect in [RemoteEffect::None, RemoteEffect::MayHaveOccurred] {
+                assert_eq!(
+                    recovery_disposition(replay, remote_effect, false),
+                    RecoveryDisposition::Failed
+                );
+            }
+        }
+        assert_eq!(
+            recovery_disposition(
+                ReplayCapability::ExactReplayByRequestId,
+                RemoteEffect::MayHaveOccurred,
+                true,
+            ),
+            RecoveryDisposition::RetryExactRequest
+        );
+        assert_eq!(
+            recovery_disposition(ReplayCapability::LocalReplaySafe, RemoteEffect::None, true,),
+            RecoveryDisposition::RetryLocal
+        );
+        assert_eq!(
+            recovery_disposition(
+                ReplayCapability::LocalReplaySafe,
+                RemoteEffect::MayHaveOccurred,
+                true,
+            ),
+            RecoveryDisposition::Indeterminate
+        );
+        assert_eq!(
+            recovery_disposition(
+                ReplayCapability::NonReplayable,
+                RemoteEffect::MayHaveOccurred,
+                true,
+            ),
+            RecoveryDisposition::Indeterminate
+        );
+        assert_eq!(
+            recovery_disposition(ReplayCapability::NonReplayable, RemoteEffect::None, true,),
+            RecoveryDisposition::Failed
+        );
+    }
+}

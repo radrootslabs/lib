@@ -19,6 +19,7 @@ struct Contract {
     tools: Tools,
     sbom: Sbom,
     advisory_exception: Vec<AdvisoryException>,
+    git_source: Vec<GitSource>,
     package: Vec<Package>,
 }
 
@@ -26,6 +27,7 @@ struct Contract {
 struct Tools {
     cargo_deny: String,
     cargo_cyclonedx: String,
+    cargo_vet: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +57,14 @@ struct Package {
 }
 
 #[derive(Debug, Deserialize)]
+struct GitSource {
+    url: String,
+    revision: String,
+    packages: Vec<String>,
+    removal_when: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct Metadata {
     packages: Vec<MetadataPackage>,
 }
@@ -78,9 +88,10 @@ impl Drop for GeneratedSboms {
 
 pub fn run(root: &Path) -> Result<(), String> {
     let contract = load(root)?;
-    validate(root, &contract, 17)?;
+    validate(root, &contract, 19)?;
     verify_tools(&contract)?;
     let metadata = load_metadata(root)?;
+    qualify_git_sources(root, &contract)?;
     qualify_dependencies(root, &contract)?;
     let sbom_hashes = qualify_sboms(root, &contract, &metadata)?;
     let provenance = build_provenance(root, &contract, &sbom_hashes)?;
@@ -106,6 +117,7 @@ fn validate(root: &Path, contract: &Contract, expected_packages: usize) -> Resul
         || contract.package_version != "0.1.0-alpha"
         || contract.tools.cargo_deny != "0.19.8"
         || contract.tools.cargo_cyclonedx != "0.5.9"
+        || contract.tools.cargo_vet != "0.10.2"
         || contract.sbom.format != "json"
         || contract.sbom.spec_version != "1.5"
         || contract.sbom.target != "all"
@@ -113,6 +125,18 @@ fn validate(root: &Path, contract: &Contract, expected_packages: usize) -> Resul
         || contract.sbom.source_date_epoch != 0
     {
         return Err("invalid supply-chain qualification contract".to_owned());
+    }
+
+    if contract.git_source.len() != 1 {
+        return Err("supply-chain contract requires exactly one retained Git source".to_owned());
+    }
+    let source = &contract.git_source[0];
+    if source.url != "https://github.com/rust-nostr/nostr.git"
+        || source.revision != "5bba5163eb77107f82c4a8262cf29d7f33a73219"
+        || source.packages != ["nostr", "nostr-relay-builder", "nostr-sdk"]
+        || source.removal_when != "nostr 0.45 stable satisfies Studio compatibility tests"
+    {
+        return Err("retained Git source authority drifted".to_owned());
     }
 
     let names = contract
@@ -157,6 +181,121 @@ fn validate(root: &Path, contract: &Contract, expected_packages: usize) -> Resul
     }
 
     validate_exceptions(root, contract)
+}
+
+fn qualify_git_sources(root: &Path, contract: &Contract) -> Result<(), String> {
+    let approved = contract
+        .git_source
+        .iter()
+        .map(|source| (source.url.clone(), source.revision.clone()))
+        .collect::<BTreeSet<_>>();
+    let mut seen = BTreeSet::new();
+    for entry in walkdir::WalkDir::new(root.join("crates")) {
+        let entry = entry.map_err(|error| format!("failed to walk manifests: {error}"))?;
+        if entry.file_name() != "Cargo.toml" {
+            continue;
+        }
+        let raw = fs::read_to_string(entry.path())
+            .map_err(|error| format!("failed to read {}: {error}", entry.path().display()))?;
+        let manifest: toml::Value = toml::from_str(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", entry.path().display()))?;
+        inspect_git_dependencies(&manifest, entry.path(), &approved, &mut seen)?;
+    }
+    if seen != approved {
+        return Err("approved Git source set is stale or incomplete".to_owned());
+    }
+    let deny_raw = fs::read_to_string(root.join(DENY_PATH))
+        .map_err(|error| format!("failed to read {DENY_PATH}: {error}"))?;
+    let deny = toml::from_str::<toml::Value>(&deny_raw)
+        .map_err(|error| format!("failed to parse {DENY_PATH}: {error}"))?;
+    let deny_git_sources = deny
+        .get("sources")
+        .and_then(|sources| sources.get("allow-git"))
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "deny.toml sources.allow-git is missing".to_owned())?
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    let approved_urls = contract
+        .git_source
+        .iter()
+        .map(|source| source.url.as_str())
+        .collect::<BTreeSet<_>>();
+    if deny_git_sources != approved_urls {
+        return Err(
+            "cargo-deny Git source authority differs from the exact-revision policy".to_owned(),
+        );
+    }
+    let lock = fs::read_to_string(root.join("Cargo.lock"))
+        .map_err(|error| format!("failed to read Cargo.lock: {error}"))?;
+    for source in lock.lines().filter_map(|line| {
+        line.trim()
+            .strip_prefix("source = \"")
+            .and_then(|value| value.strip_suffix('"'))
+            .filter(|value| value.starts_with("git+"))
+    }) {
+        let (url_and_query, commit) = source
+            .rsplit_once('#')
+            .ok_or_else(|| format!("Git lock source has no commit: {source}"))?;
+        let (url, revision) = url_and_query
+            .strip_prefix("git+")
+            .and_then(|value| value.split_once("?rev="))
+            .ok_or_else(|| format!("Git lock source is not exact-rev pinned: {source}"))?;
+        if commit != revision || !approved.contains(&(url.to_owned(), revision.to_owned())) {
+            return Err(format!(
+                "Git lock source is not approved and immutable: {source}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn inspect_git_dependencies(
+    value: &toml::Value,
+    path: &Path,
+    approved: &BTreeSet<(String, String)>,
+    seen: &mut BTreeSet<(String, String)>,
+) -> Result<(), String> {
+    match value {
+        toml::Value::Table(table) => {
+            if let Some(url) = table.get("git").and_then(toml::Value::as_str) {
+                let revision = table.get("rev").and_then(toml::Value::as_str);
+                if table.contains_key("branch")
+                    || table.contains_key("tag")
+                    || revision.is_none_or(|revision| {
+                        revision.len() != 40
+                            || !revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    })
+                {
+                    return Err(format!(
+                        "{} contains a branch, tag, or non-full Git revision",
+                        path.display()
+                    ));
+                }
+                let authority = (
+                    url.to_owned(),
+                    revision.expect("checked revision").to_owned(),
+                );
+                if !approved.contains(&authority) {
+                    return Err(format!(
+                        "{} contains unapproved Git source {url}",
+                        path.display()
+                    ));
+                }
+                seen.insert(authority);
+            }
+            for child in table.values() {
+                inspect_git_dependencies(child, path, approved, seen)?;
+            }
+        }
+        toml::Value::Array(values) => {
+            for child in values {
+                inspect_git_dependencies(child, path, approved, seen)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn validate_exceptions(root: &Path, contract: &Contract) -> Result<(), String> {
@@ -291,6 +430,11 @@ fn verify_tools(contract: &Contract) -> Result<(), String> {
         &["cyclonedx", "--version"],
         "cargo-cyclonedx",
         &contract.tools.cargo_cyclonedx,
+    )?;
+    verify_tool(
+        &["vet", "--version"],
+        "cargo-vet",
+        &contract.tools.cargo_vet,
     )
 }
 
@@ -329,6 +473,12 @@ fn load_metadata(root: &Path) -> Result<Metadata, String> {
 }
 
 fn qualify_dependencies(root: &Path, contract: &Contract) -> Result<(), String> {
+    run_command(
+        root,
+        "cargo",
+        vec!["vet", "--locked"],
+        "cargo-vet policy failed",
+    )?;
     let mut saw_governed_yank = false;
     for package in &contract.package {
         let manifest = root.join(&package.manifest_path);
@@ -677,7 +827,7 @@ mod tests {
     fn current_contract_is_exact_and_exception_bound() {
         let root = root();
         let contract = load(&root).expect("contract");
-        validate(&root, &contract, 17).expect("valid contract");
+        validate(&root, &contract, 19).expect("valid contract");
     }
 
     #[test]

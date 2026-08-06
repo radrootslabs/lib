@@ -18,7 +18,8 @@ use radroots_signing::{
     authorization::ManagedSigningPolicy,
     error::Kind,
     recovery::{RecoveryDisposition, RemoteEffect, ReplayCapability, recovery_disposition},
-    request::{CancellationPolicy, CancellationSignal, SignPolicy},
+    request::{CancellationPolicy, CancellationSignal, ProgressObserver, SignPolicy},
+    status::{SignProgress, SignProgressStage},
 };
 
 const SECRET: &str = "7e0112ad58b2d2d13fb80532625195dc169b86d72b0e1db48347837a785cae90";
@@ -84,9 +85,26 @@ fn request() -> SignRequest {
 }
 
 fn signed_event() -> radroots_event::SignedEvent {
-    let event = EventBuilder::new(NostrKind::Custom(20_000), "exact signing plan")
-        .custom_created_at(Timestamp::from_secs(CREATED_AT))
-        .sign_with_keys(&keys())
+    signed_event_with(
+        &keys(),
+        20_000,
+        "exact signing plan",
+        CREATED_AT,
+        Vec::new(),
+    )
+}
+
+fn signed_event_with(
+    signer: &Keys,
+    kind: u16,
+    content: &str,
+    created_at: u64,
+    tags: Vec<nostr::Tag>,
+) -> radroots_event::SignedEvent {
+    let event = EventBuilder::new(NostrKind::Custom(kind), content)
+        .tags(tags)
+        .custom_created_at(Timestamp::from_secs(created_at))
+        .sign_with_keys(signer)
         .expect("signed fixture");
     let raw = event.as_json();
     let wire = Nip01EventWire::parse_json(&raw).expect("wire");
@@ -221,6 +239,12 @@ fn authorization_enforces_key_role_and_host_provenance() {
 fn request_identity_deadline_and_cancellation_are_exact() {
     let request = request();
     let replay = request.clone();
+    assert_eq!(request.operation_kind(), OperationId::SyncPush);
+    assert_eq!(request.intent_id(), intent(1, 2));
+    assert_eq!(request.actor().public_key(), public_key());
+    assert_eq!(request.plan().digest(), plan().digest());
+    assert_eq!(request.policy(), policy());
+    assert!(!request.cancellation_signal().is_cancelled());
     assert_eq!(request.signer_request_id(), replay.signer_request_id());
     let other_artifact = SignRequest::new(
         OperationId::SyncPush,
@@ -247,6 +271,17 @@ fn request_identity_deadline_and_cancellation_are_exact() {
         cancelled.ensure_active(DEADLINE_MS - 1).unwrap_err().kind(),
         Kind::SignerCancelled
     );
+
+    struct Counter(std::sync::atomic::AtomicUsize);
+    impl ProgressObserver for Counter {
+        fn on_progress(&self, _progress: &SignProgress) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    let observer = std::sync::Arc::new(Counter(std::sync::atomic::AtomicUsize::new(0)));
+    let observed = request.with_progress_observer(observer.clone());
+    observed.report_progress(&SignProgress::stage(SignProgressStage::Validating).unwrap());
+    assert_eq!(observer.0.load(std::sync::atomic::Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -258,6 +293,48 @@ fn receipt_requires_exact_fields_and_a_valid_schnorr_signature() {
     assert_eq!(receipt.signer_request_id(), request.signer_request_id());
     assert_eq!(receipt.operation_kind(), OperationId::SyncPush);
     assert_eq!(receipt.completed_at_unix_ms(), DEADLINE_MS - 1);
+    assert_eq!(receipt.signed_event().id(), signed_event().id());
+
+    let other_keys = Keys::generate();
+    let mismatches = [
+        signed_event_with(
+            &other_keys,
+            20_000,
+            "exact signing plan",
+            CREATED_AT,
+            Vec::new(),
+        ),
+        signed_event_with(
+            &keys(),
+            20_000,
+            "exact signing plan",
+            CREATED_AT + 1,
+            Vec::new(),
+        ),
+        signed_event_with(
+            &keys(),
+            20_001,
+            "exact signing plan",
+            CREATED_AT,
+            Vec::new(),
+        ),
+        signed_event_with(
+            &keys(),
+            20_000,
+            "exact signing plan",
+            CREATED_AT,
+            vec![nostr::Tag::parse(["t", "mismatch"]).expect("tag")],
+        ),
+        signed_event_with(&keys(), 20_000, "different content", CREATED_AT, Vec::new()),
+    ];
+    for mismatch in mismatches {
+        assert_eq!(
+            SignReceipt::from_signed_event(&request, mismatch, DEADLINE_MS - 1)
+                .expect_err("mismatched exact plan must fail")
+                .kind(),
+            Kind::SignerOutputInvalid
+        );
+    }
 
     let valid = signed_event();
     let mut wire = valid.wire().clone();

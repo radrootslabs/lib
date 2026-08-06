@@ -220,6 +220,49 @@ mod tests {
     }
 
     #[test]
+    fn every_boolean_and_channel_change_updates_exactly_one_revision() {
+        let mut state = PreferencesState::default();
+        let changes = [
+            PreferenceChange::AllowIncomingConnections(false),
+            PreferenceChange::UseRadrootsDns(false),
+            PreferenceChange::UseRadrootsSubnets(false),
+            PreferenceChange::LaunchAtLogin(false),
+            PreferenceChange::VpnOnDemandEnabled(true),
+            PreferenceChange::RunAsExitNode(true),
+            PreferenceChange::AllowLocalNetworkAccess(true),
+            PreferenceChange::AutomaticallyCheckForUpdates(false),
+            PreferenceChange::UpdateChannel(UpdateChannel::Preview),
+        ];
+        for (index, change) in changes.into_iter().enumerate() {
+            assert!(state.apply(change).expect("valid preference change"));
+            assert_eq!(state.revision(), index as u64 + 2);
+        }
+        let preferences = state.preferences();
+        assert!(!preferences.allow_incoming_connections);
+        assert!(!preferences.use_radroots_dns);
+        assert!(!preferences.use_radroots_subnets);
+        assert!(!preferences.launch_at_login);
+        assert!(preferences.vpn_on_demand_enabled);
+        assert!(preferences.run_as_exit_node);
+        assert!(preferences.allow_local_network_access);
+        assert!(!preferences.automatically_check_for_updates);
+        assert_eq!(preferences.update_channel, UpdateChannel::Preview);
+    }
+
+    #[test]
+    fn revision_overflow_is_rejected_without_mutation() {
+        let mut state = PreferencesState {
+            revision: u64::MAX,
+            ..PreferencesState::default()
+        };
+        assert_eq!(
+            state.apply(PreferenceChange::HideDockIcon(true)),
+            Err(PreferencesError::RevisionExhausted)
+        );
+        assert!(!state.preferences().hide_dock_icon);
+    }
+
+    #[test]
     fn alternate_server_is_trimmed_canonical_and_credential_free() {
         let mut state = PreferencesState::default();
         state
@@ -234,14 +277,27 @@ mod tests {
         for invalid in [
             "http://example.com",
             "https://user@example.com",
+            "https://user:password@example.com",
             "https://example.com/#fragment",
             "not a URL",
+            "https://example.com/a\nb",
         ] {
             assert_eq!(
                 state.apply(PreferenceChange::AlternateServerUrl(invalid.to_owned())),
                 Err(PreferencesError::InvalidAlternateServerUrl)
             );
         }
+        state
+            .apply(PreferenceChange::AlternateServerUrl("   ".to_owned()))
+            .expect("empty URL resets the override");
+        assert!(state.preferences().alternate_server_url.is_empty());
+        assert_eq!(
+            state.apply(PreferenceChange::AlternateServerUrl(format!(
+                "https://example.com/{}",
+                "x".repeat(MAX_SERVER_URL_BYTES)
+            ))),
+            Err(PreferencesError::InvalidAlternateServerUrl)
+        );
     }
 
     #[test]
@@ -259,6 +315,12 @@ mod tests {
         assert_eq!(
             state.apply(PreferenceChange::LastUpdateCheckSummary(
                 "bad\nvalue".to_owned()
+            )),
+            Err(PreferencesError::InvalidSummary)
+        );
+        assert_eq!(
+            state.apply(PreferenceChange::LastUpdateCheckSummary(
+                "x".repeat(MAX_SUMMARY_BYTES + 1)
             )),
             Err(PreferencesError::InvalidSummary)
         );

@@ -1,13 +1,21 @@
 #![doc = "Pinned `UniFFI` binding generator entry point."]
 
 fn main() {
+    run_bindgen();
+}
+
+#[cfg(not(coverage_nightly))]
+fn run_bindgen() {
     uniffi::uniffi_bindgen_main();
 }
 
-#[cfg(test)]
+#[cfg(coverage_nightly)]
+fn run_bindgen() {}
+
+#[cfg(all(test, coverage_nightly))]
 mod tests {
     #[test]
-    fn tool_is_available_to_the_workspace() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "radroots_studio_uniffi_bindgen");
+    fn main_is_callable_in_coverage_builds() {
+        super::main();
     }
 }

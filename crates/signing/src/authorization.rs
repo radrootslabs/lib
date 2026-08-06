@@ -78,3 +78,47 @@ impl ManagedSigningPolicy {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use radroots_event::contract::AuthorRole;
+    use radroots_identity::{AccountId, PublicKey};
+
+    use super::*;
+
+    const KEY: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+
+    #[test]
+    fn managed_signing_policy_covers_every_provenance_class() {
+        let public_key = PublicKey::from_hex(KEY).expect("public key");
+        let account_id = AccountId::from_hex(KEY).expect("account ID");
+        let explicit = Actor::new(
+            public_key,
+            ActorSource::ExplicitPublicKey,
+            [AuthorRole::Any],
+        )
+        .expect("explicit actor");
+        let local = Actor::new(
+            public_key,
+            ActorSource::LocalAccount(account_id),
+            [AuthorRole::Any],
+        )
+        .expect("local actor");
+        let remote = Actor::new(
+            public_key,
+            ActorSource::RemoteSigner(account_id),
+            [AuthorRole::Any],
+        )
+        .expect("remote actor");
+
+        for actor in [&explicit, &local, &remote] {
+            assert!(ManagedSigningPolicy::AnyValidatedSource.permits(actor));
+        }
+        assert!(!ManagedSigningPolicy::AccountBackedOnly.permits(&explicit));
+        assert!(ManagedSigningPolicy::AccountBackedOnly.permits(&local));
+        assert!(ManagedSigningPolicy::AccountBackedOnly.permits(&remote));
+        assert!(!ManagedSigningPolicy::LocalAccountOnly.permits(&explicit));
+        assert!(ManagedSigningPolicy::LocalAccountOnly.permits(&local));
+        assert!(!ManagedSigningPolicy::LocalAccountOnly.permits(&remote));
+    }
+}

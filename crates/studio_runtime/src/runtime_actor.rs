@@ -1370,15 +1370,18 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use radroots_studio_application::{
-        BoxFuture, Clock, FailureSecretStore, InMemorySecretStore, NostrClient, ProfileFetchResult,
-        RelayConfiguration, RuntimeLifecycle, SecretStore, SecretStoreOperation, SessionState,
+        BoxFuture, Clock, DurableRequestId, FailureSecretStore, ForegroundSessionBinding,
+        InMemorySecretStore, NostrClient, ProfileFetchResult, RelayConfiguration, RuntimeLifecycle,
+        SecretStore, SecretStoreOperation, SessionGeneration, SessionState, SnapshotRevision,
     };
     use radroots_studio_domain::{
-        PublicKey, RelayDestinationPolicy, RelayUrl, SafeError, SafeErrorCode, SecretKeyInput,
-        UnixTimestamp,
+        AccountIdentity, BindingAvailability, LocalSignerBinding, PublicKey,
+        RelayDestinationPolicy, RelayUrl, SafeError, SafeErrorCode, SecretKeyInput, UnixTimestamp,
     };
 
-    use super::{RuntimeActorHandle, RuntimeDependencies};
+    use super::{
+        DEFAULT_COMMAND_TIMEOUT, RuntimeActorHandle, RuntimeDependencies, command_unavailable,
+    };
     use crate::{InstallationIdentity, InstallationIdentitySource, UuidInstallationIdentitySource};
 
     struct FixedInstallationIdentity(&'static str);
@@ -1619,6 +1622,86 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn public_actor_commands_cover_generation_selection_and_empty_profile_refresh() {
+        let (actor, _) = actor().await;
+        let unchanged = actor
+            .refresh_active_profile()
+            .await
+            .expect("refresh without an active account");
+        assert!(unchanged.active_account().is_none());
+
+        let generated = actor
+            .generate_account(
+                DurableRequestId::parse("test:generate:public-surface").expect("request"),
+                actor.snapshot().revision(),
+                DEFAULT_COMMAND_TIMEOUT,
+            )
+            .await
+            .expect("generate account");
+        let selected = actor
+            .select_account(generated.account().public_key())
+            .await
+            .expect("select generated account");
+        assert_eq!(
+            selected.selected_account(),
+            Some(generated.account().public_key())
+        );
+
+        let missing =
+            PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+                .expect("public key");
+        let error = match actor.request_account_removal(missing).await {
+            Ok(_) => panic!("unknown account removal must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), SafeErrorCode::AccountNotFound);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn staged_recovery_rejects_a_stale_expected_revision_before_commit() {
+        let (actor, _) = actor().await;
+        let handle = actor
+            .begin_generated_key_stage()
+            .await
+            .expect("generated key stage");
+        let stale = SnapshotRevision::from_value(actor.snapshot().revision().value() + 1);
+        let error = actor
+            .acknowledge_generated_key_stage(
+                handle.id(),
+                DurableRequestId::parse("test:generate:stale-revision").expect("request"),
+                stale,
+                DEFAULT_COMMAND_TIMEOUT,
+            )
+            .await
+            .expect_err("stale revision must conflict");
+        assert_eq!(
+            error.message().as_str(),
+            "The command conflicts with newer application state."
+        );
+        assert!(actor.cancel_generated_key_stage().await.expect("cancel"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fatal_lifecycle_rejects_commands_before_execution() {
+        let (actor, _) = actor().await;
+        actor
+            .lifecycle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .fail(command_unavailable());
+
+        let error = actor
+            .bootstrap()
+            .await
+            .expect_err("fatal lifecycle must reject command admission");
+        assert_eq!(
+            error.message().as_str(),
+            "The command is unavailable in the current runtime state."
+        );
+        assert!(matches!(actor.lifecycle(), RuntimeLifecycle::Fatal(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn generated_key_stage_is_exclusive_cancelable_and_snapshot_free() {
         let (actor, secrets) = actor().await;
         let initial = actor.snapshot();
@@ -1759,6 +1842,143 @@ mod tests {
         assert_eq!(signed_out.session(), SessionState::SignedOut);
         assert_eq!(cancelled.session(), SessionState::SignedOut);
         assert!(cancelled.active_account().is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn profile_refresh_rejects_stale_bindings_and_discards_stale_completions() {
+        let client = Arc::new(BlockingNostr::new());
+        let actor = RuntimeActorHandle::in_memory(
+            RelayConfiguration::new(vec![
+                RelayUrl::parse("ws://localhost:8080", RelayDestinationPolicy::Local)
+                    .expect("relay"),
+            ])
+            .expect("relay configuration"),
+            dependencies(Arc::new(InMemorySecretStore::default()), client.clone()),
+            NonZeroUsize::new(8).expect("capacity"),
+            &tokio::runtime::Handle::current(),
+        )
+        .await
+        .expect("actor");
+        let imported = actor
+            .import_secret_key_test(secret(
+                "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
+            ))
+            .await
+            .expect("import");
+        let public_key = imported.account().public_key();
+        actor.activate_account(public_key).await.expect("activate");
+        let binding = actor.foreground_session().expect("foreground binding");
+        let stale_binding = ForegroundSessionBinding::new(
+            AccountIdentity::derive(public_key).expect("identity"),
+            LocalSignerBinding::new(public_key, BindingAvailability::Available),
+            SessionGeneration::from_value(binding.generation().value() + 1),
+        )
+        .expect("stale binding fixture");
+        let other_public_key =
+            PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
+                .expect("other public key");
+        let other_binding = ForegroundSessionBinding::new(
+            AccountIdentity::derive(other_public_key).expect("other identity"),
+            LocalSignerBinding::new(other_public_key, BindingAvailability::Available),
+            binding.generation(),
+        )
+        .expect("other binding fixture");
+
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(stale_binding.clone());
+        let error = actor
+            .refresh_active_profile()
+            .await
+            .expect_err("stale generation must reject before relay work");
+        assert_eq!(
+            error.message().as_str(),
+            "The active account binding changed before profile refresh."
+        );
+
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(other_binding.clone());
+        let error = actor
+            .refresh_active_profile()
+            .await
+            .expect_err("different account binding must reject before relay work");
+        assert_eq!(
+            error.message().as_str(),
+            "The active account binding changed before profile refresh."
+        );
+
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(binding.clone());
+        let refresh_actor = actor.clone();
+        let refresh = tokio::spawn(async move { refresh_actor.refresh_active_profile().await });
+        let started = client.started.acquire().await.expect("refresh started");
+        started.forget();
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(stale_binding);
+        client.release.add_permits(1);
+        let unchanged = refresh
+            .await
+            .expect("refresh task")
+            .expect("stale completion returns current snapshot");
+        assert_eq!(unchanged.revision(), actor.snapshot().revision());
+
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(binding.clone());
+        let refresh_actor = actor.clone();
+        let refresh = tokio::spawn(async move { refresh_actor.refresh_active_profile().await });
+        let started = client
+            .started
+            .acquire()
+            .await
+            .expect("second refresh started");
+        started.forget();
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        client.release.add_permits(1);
+        let unchanged = refresh
+            .await
+            .expect("refresh task")
+            .expect("missing binding returns current snapshot");
+        assert_eq!(unchanged.revision(), actor.snapshot().revision());
+
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(binding.clone());
+        let refresh_actor = actor.clone();
+        let refresh = tokio::spawn(async move { refresh_actor.refresh_active_profile().await });
+        let started = client
+            .started
+            .acquire()
+            .await
+            .expect("third refresh started");
+        started.forget();
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(other_binding);
+        client.release.add_permits(1);
+        let unchanged = refresh
+            .await
+            .expect("refresh task")
+            .expect("different account binding returns current snapshot");
+        assert_eq!(unchanged.revision(), actor.snapshot().revision());
+
+        *actor
+            .foreground_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(binding);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1903,6 +2123,12 @@ mod tests {
                 .unsubscribe_changes(subscription.id())
                 .await
                 .expect("unsubscribe")
+        );
+        assert!(
+            !actor
+                .unsubscribe_changes(subscription.id())
+                .await
+                .expect("second unsubscribe")
         );
     }
 

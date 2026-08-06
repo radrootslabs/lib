@@ -281,6 +281,7 @@ uuid = { version = "1.22.0", features = ["v4", "v7"] }
 uniffi = { version = "0.29.4" }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-test = { version = "0.3" }
+walkdir = { version = "2" }
 x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1" }

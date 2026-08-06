@@ -115,3 +115,57 @@ impl fmt::Debug for SignerRequestId {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stable_identities_reject_zero_and_expose_exact_bytes() {
+        assert_eq!(
+            SigningOperationId::new([0; 16])
+                .expect_err("zero operation ID must fail")
+                .kind(),
+            Kind::InvalidArgument
+        );
+        assert_eq!(
+            AuthoredArtifactId::new([0; 16])
+                .expect_err("zero artifact ID must fail")
+                .kind(),
+            Kind::InvalidArgument
+        );
+
+        let operation = SigningOperationId::new([1; 16]).expect("operation ID");
+        let artifact = AuthoredArtifactId::new([2; 16]).expect("artifact ID");
+        assert_eq!(operation.as_bytes(), &[1; 16]);
+        assert_eq!(artifact.as_bytes(), &[2; 16]);
+        assert_eq!(operation.to_hex(), "01".repeat(16));
+        assert_eq!(artifact.to_hex(), "02".repeat(16));
+        assert_eq!(
+            format!("{operation:?}"),
+            format!("SigningOperationId(\"{}\")", "01".repeat(16))
+        );
+        assert_eq!(
+            format!("{artifact:?}"),
+            format!("AuthoredArtifactId(\"{}\")", "02".repeat(16))
+        );
+
+        let intent = SigningIntentId::new(operation, artifact);
+        assert_eq!(intent.operation_id(), operation);
+        assert_eq!(intent.artifact_id(), artifact);
+    }
+
+    #[test]
+    fn signer_request_identity_is_deterministic_and_domain_separated() {
+        let artifact = AuthoredArtifactId::new([3; 16]).expect("artifact ID");
+        let digest = PlanDigest::from_bytes([4; 32]);
+        let request = SignerRequestId::derive(artifact, digest);
+        assert_eq!(request.as_bytes().len(), 32);
+        assert_eq!(request.to_hex().len(), 64);
+        assert_eq!(request, SignerRequestId::derive(artifact, digest));
+        assert_eq!(
+            format!("{request:?}"),
+            format!("SignerRequestId(\"{}\")", request.to_hex())
+        );
+    }
+}

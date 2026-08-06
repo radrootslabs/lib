@@ -6,7 +6,8 @@ use radroots_studio_domain::{
     AccountSummary, BindingAvailability, ProfileMetadata, SafeError, SafeErrorCode,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum WireErrorCode {
     InvalidPublicKey,
     InvalidSecretKey,
@@ -33,7 +34,8 @@ pub enum WireErrorCode {
     Internal,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum WireErrorCategory {
     Input,
     Conflict,
@@ -45,7 +47,8 @@ pub enum WireErrorCategory {
     Internal,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum WireRecoveryAction {
     None,
     Retry,
@@ -58,7 +61,8 @@ pub enum WireRecoveryAction {
     UpdateApplication,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct SafeErrorDto {
     pub code: WireErrorCode,
     pub category: WireErrorCategory,
@@ -67,7 +71,8 @@ pub struct SafeErrorDto {
     pub message: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum AppLifecycleDto {
     Opening,
     CompatibilityChecking,
@@ -82,7 +87,8 @@ pub enum AppLifecycleDto {
     Fatal,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum SessionStateDto {
     SignedOut,
     Activating,
@@ -91,7 +97,8 @@ pub enum SessionStateDto {
     Failed,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum RelayConnectionStateDto {
     Disconnected,
     Connecting,
@@ -100,7 +107,8 @@ pub enum RelayConnectionStateDto {
     Error,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum ProfileLoadStateDto {
     Empty,
     Loading,
@@ -109,14 +117,16 @@ pub enum ProfileLoadStateDto {
     Error,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum SignerKindDto {
     LocalSecret,
     WatchOnly,
     RemoteNip46,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Enum))]
 pub enum KeyAvailabilityDto {
     Available,
     CredentialMissing,
@@ -124,7 +134,8 @@ pub enum KeyAvailabilityDto {
     NotRequired,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct ProfileDto {
     pub name: Option<String>,
     pub display_name: Option<String>,
@@ -133,7 +144,8 @@ pub struct ProfileDto {
     pub picture: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct AccountDto {
     pub public_key_hex: String,
     pub npub: String,
@@ -144,7 +156,8 @@ pub struct AccountDto {
     pub last_used_at_seconds: Option<i64>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct ActiveAccountDto {
     pub account: AccountDto,
     pub relay_state: RelayConnectionStateDto,
@@ -152,7 +165,8 @@ pub struct ActiveAccountDto {
     pub profile: Option<ProfileDto>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(not(coverage_nightly), derive(uniffi::Record))]
 pub struct AppSnapshotDto {
     pub revision: u64,
     pub lifecycle: AppLifecycleDto,
@@ -427,15 +441,26 @@ impl From<ProfileLoadState> for ProfileLoadStateDto {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::sync::Arc;
 
-    use radroots_studio_application::{AppCore, RelayConfiguration};
+    use radroots_studio_application::{
+        AppCore, ProfileLoadState, RelayConfiguration, RelayConnectionState, RuntimeLifecycle,
+    };
     use radroots_studio_nostr::NostrKeyMaterialProvider;
 
-    use radroots_studio_domain::{SafeErrorCode, SafeMessage};
+    use radroots_studio_domain::{BindingAvailability, SafeError, SafeErrorCode, SafeMessage};
 
-    use super::{AppSnapshotDto, SafeErrorDto, WireErrorCode, WireRecoveryAction};
+    use super::{
+        AppLifecycleDto, AppSnapshotDto, KeyAvailabilityDto, ProfileLoadStateDto,
+        RelayConnectionStateDto, SafeErrorDto, WireErrorCategory, WireErrorCode,
+        WireRecoveryAction, error_policy,
+    };
+
+    fn safe_error(code: SafeErrorCode) -> SafeError {
+        SafeError::new(code, SafeMessage::new("Safe compatibility failure."))
+    }
 
     #[test]
     fn snapshot_dto_is_revisioned_public_and_secret_free() {
@@ -485,6 +510,220 @@ mod tests {
             assert_eq!(dto.code, expected_code);
             assert_eq!(dto.recovery_action, expected_recovery);
             assert!(!dto.retryable);
+        }
+    }
+
+    #[test]
+    fn every_safe_error_has_an_explicit_wire_code_and_policy() {
+        let cases = [
+            (
+                SafeErrorCode::InvalidPublicKey,
+                WireErrorCode::InvalidPublicKey,
+            ),
+            (
+                SafeErrorCode::InvalidSecretKey,
+                WireErrorCode::InvalidSecretKey,
+            ),
+            (
+                SafeErrorCode::InvalidAccountMetadata,
+                WireErrorCode::InvalidAccountMetadata,
+            ),
+            (
+                SafeErrorCode::InvalidProfileMetadata,
+                WireErrorCode::InvalidProfileMetadata,
+            ),
+            (
+                SafeErrorCode::InvalidApplicationState,
+                WireErrorCode::InvalidApplicationState,
+            ),
+            (
+                SafeErrorCode::AccountAlreadyExists,
+                WireErrorCode::AccountAlreadyExists,
+            ),
+            (
+                SafeErrorCode::AccountNotFound,
+                WireErrorCode::AccountNotFound,
+            ),
+            (
+                SafeErrorCode::KeyringUnavailable,
+                WireErrorCode::KeyringUnavailable,
+            ),
+            (
+                SafeErrorCode::CredentialMissing,
+                WireErrorCode::CredentialMissing,
+            ),
+            (
+                SafeErrorCode::StorageUnavailable,
+                WireErrorCode::StorageUnavailable,
+            ),
+            (SafeErrorCode::StorageCorrupt, WireErrorCode::StorageCorrupt),
+            (
+                SafeErrorCode::StorageQuarantined,
+                WireErrorCode::StorageQuarantined,
+            ),
+            (
+                SafeErrorCode::StorageBackupInvalid,
+                WireErrorCode::StorageBackupInvalid,
+            ),
+            (
+                SafeErrorCode::UnsupportedSchemaVersion,
+                WireErrorCode::UnsupportedSchemaVersion,
+            ),
+            (
+                SafeErrorCode::RepairUnauthorized,
+                WireErrorCode::RepairUnauthorized,
+            ),
+            (
+                SafeErrorCode::PendingOperationRecoveryRequired,
+                WireErrorCode::PendingOperationRecoveryRequired,
+            ),
+            (
+                SafeErrorCode::InvalidRelayConfiguration,
+                WireErrorCode::InvalidRelayConfiguration,
+            ),
+            (
+                SafeErrorCode::RelayConnectionFailed,
+                WireErrorCode::RelayConnectionFailed,
+            ),
+            (
+                SafeErrorCode::ProfileRefreshFailed,
+                WireErrorCode::ProfileRefreshFailed,
+            ),
+            (
+                SafeErrorCode::ObserverRegistrationFailed,
+                WireErrorCode::ObserverRegistrationFailed,
+            ),
+            (
+                SafeErrorCode::NativeLibraryLoadFailed,
+                WireErrorCode::NativeLibraryLoadFailed,
+            ),
+        ];
+        for (code, expected_wire_code) in cases {
+            let dto = SafeErrorDto::from(safe_error(code));
+            assert_eq!(dto.code, expected_wire_code);
+            assert_eq!(
+                (dto.category, dto.retryable, dto.recovery_action),
+                error_policy(code)
+            );
+        }
+        assert_eq!(
+            error_policy(SafeErrorCode::KeyringUnavailable),
+            (
+                WireErrorCategory::Credential,
+                true,
+                WireRecoveryAction::Retry,
+            )
+        );
+        assert_eq!(
+            error_policy(SafeErrorCode::NativeLibraryLoadFailed),
+            (
+                WireErrorCategory::Internal,
+                false,
+                WireRecoveryAction::RestartApplication,
+            )
+        );
+    }
+
+    #[test]
+    fn runtime_and_connection_states_map_exhaustively_to_wire_states() {
+        let core = AppCore::new(
+            RelayConfiguration::default(),
+            Arc::new(NostrKeyMaterialProvider),
+        );
+        let snapshot = core.bootstrap().expect("bootstrap");
+        for (runtime, expected) in [
+            (RuntimeLifecycle::Opening, AppLifecycleDto::Opening),
+            (
+                RuntimeLifecycle::CompatibilityChecking,
+                AppLifecycleDto::CompatibilityChecking,
+            ),
+            (
+                RuntimeLifecycle::AcquiringOwnership,
+                AppLifecycleDto::AcquiringOwnership,
+            ),
+            (RuntimeLifecycle::Migrating, AppLifecycleDto::Migrating),
+            (RuntimeLifecycle::Recovering, AppLifecycleDto::Recovering),
+            (RuntimeLifecycle::Ready, AppLifecycleDto::Ready),
+            (
+                RuntimeLifecycle::Degraded(safe_error(SafeErrorCode::RelayConnectionFailed)),
+                AppLifecycleDto::Degraded,
+            ),
+            (
+                RuntimeLifecycle::Blocked(safe_error(SafeErrorCode::StorageUnavailable)),
+                AppLifecycleDto::Blocked,
+            ),
+            (
+                RuntimeLifecycle::ShuttingDown,
+                AppLifecycleDto::ShuttingDown,
+            ),
+            (RuntimeLifecycle::Closed, AppLifecycleDto::Closed),
+            (
+                RuntimeLifecycle::Fatal(safe_error(SafeErrorCode::StorageCorrupt)),
+                AppLifecycleDto::Fatal,
+            ),
+        ] {
+            let dto = AppSnapshotDto::from_runtime(&snapshot, runtime);
+            assert_eq!(dto.lifecycle, expected);
+            assert_eq!(
+                dto.lifecycle_error.is_some(),
+                matches!(
+                    expected,
+                    AppLifecycleDto::Degraded | AppLifecycleDto::Blocked | AppLifecycleDto::Fatal
+                )
+            );
+        }
+
+        for (source, expected) in [
+            (
+                BindingAvailability::Available,
+                KeyAvailabilityDto::Available,
+            ),
+            (
+                BindingAvailability::CredentialMissing,
+                KeyAvailabilityDto::CredentialMissing,
+            ),
+            (
+                BindingAvailability::StoreUnavailable,
+                KeyAvailabilityDto::StoreUnavailable,
+            ),
+        ] {
+            assert_eq!(KeyAvailabilityDto::from(source), expected);
+        }
+        for (source, expected) in [
+            (
+                RelayConnectionState::Disconnected,
+                RelayConnectionStateDto::Disconnected,
+            ),
+            (
+                RelayConnectionState::Connecting,
+                RelayConnectionStateDto::Connecting,
+            ),
+            (
+                RelayConnectionState::Connected,
+                RelayConnectionStateDto::Connected,
+            ),
+            (
+                RelayConnectionState::Degraded,
+                RelayConnectionStateDto::Degraded,
+            ),
+            (
+                RelayConnectionState::Error(safe_error(SafeErrorCode::RelayConnectionFailed)),
+                RelayConnectionStateDto::Error,
+            ),
+        ] {
+            assert_eq!(RelayConnectionStateDto::from(source), expected);
+        }
+        for (source, expected) in [
+            (ProfileLoadState::Empty, ProfileLoadStateDto::Empty),
+            (ProfileLoadState::Loading, ProfileLoadStateDto::Loading),
+            (ProfileLoadState::Cached, ProfileLoadStateDto::Cached),
+            (ProfileLoadState::Fresh, ProfileLoadStateDto::Fresh),
+            (
+                ProfileLoadState::Error(safe_error(SafeErrorCode::ProfileRefreshFailed)),
+                ProfileLoadStateDto::Error,
+            ),
+        ] {
+            assert_eq!(ProfileLoadStateDto::from(source), expected);
         }
     }
 }

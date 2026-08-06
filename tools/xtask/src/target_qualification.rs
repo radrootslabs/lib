@@ -19,18 +19,15 @@ struct OperatingSystem {
 }
 
 #[derive(Debug, Deserialize)]
-struct Architecture {
-    repositories: Repositories,
+struct Catalog {
+    package: Vec<CatalogPackage>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Repositories {
-    lib: Repository,
-}
-
-#[derive(Debug, Deserialize)]
-struct Repository {
-    packages: Vec<String>,
+struct CatalogPackage {
+    name: String,
+    state: String,
+    groups: Vec<String>,
 }
 
 pub fn run(workspace_root: &Path) -> Result<(), String> {
@@ -76,14 +73,21 @@ fn load(workspace_root: &Path) -> Result<(TargetMatrix, Vec<String>), String> {
         .map_err(|error| format!("failed to parse {}: {error}", matrix_path.display()))?;
     validate(&matrix)?;
 
-    let architecture_path = workspace_root.join("docs/specs/radroots_crates_release_v1.toml");
-    let architecture = toml::from_str::<Architecture>(&read(&architecture_path)?)
-        .map_err(|error| format!("failed to parse {}: {error}", architecture_path.display()))?;
-    let mut packages = architecture.repositories.lib.packages;
+    let catalog_path = workspace_root.join("contracts/crates/catalog.v1.toml");
+    let catalog = toml::from_str::<Catalog>(&read(&catalog_path)?)
+        .map_err(|error| format!("failed to parse {}: {error}", catalog_path.display()))?;
+    let mut packages = catalog
+        .package
+        .into_iter()
+        .filter(|package| {
+            package.state == "active" && package.groups.iter().any(|group| group == "public_native")
+        })
+        .map(|package| package.name)
+        .collect::<Vec<_>>();
     packages.sort();
-    if packages.len() != 17 {
+    if packages.len() != 19 {
         return Err(format!(
-            "target qualification requires exactly 17 library packages, found {}",
+            "target qualification requires exactly 19 public packages, found {}",
             packages.len()
         ));
     }
@@ -195,6 +199,6 @@ mod tests {
         assert_eq!(matrix.msrv_toolchain, "1.97.1");
         assert_eq!(matrix.current_toolchain, "stable");
         assert_eq!(matrix.operating_system.len(), 3);
-        assert_eq!(packages.len(), 17);
+        assert_eq!(packages.len(), 19);
     }
 }

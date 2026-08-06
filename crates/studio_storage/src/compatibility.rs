@@ -328,3 +328,147 @@ pub(crate) const fn quarantined_storage_error() -> SafeError {
         SafeMessage::new("The application database requires authenticated repair."),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{Connection, params};
+    use tempfile::tempdir;
+
+    use super::{
+        DatabasePreflight, PersistedIdentityIssueKind, column_exists, preflight,
+        scan_display_identities, scan_public_key_column,
+    };
+    use crate::Database;
+    use radroots_studio_domain::{AccountIdentity, PublicKey, SafeErrorCode};
+
+    #[test]
+    fn preflight_rejects_non_files_missing_schema_zero_version_and_unknown_tables() {
+        let directory = tempdir().expect("temporary directory");
+        let missing = directory.path().join("missing.sqlite3");
+        assert_eq!(
+            preflight(&missing).expect("fresh preflight"),
+            DatabasePreflight::Fresh
+        );
+        assert_eq!(
+            preflight(directory.path())
+                .expect_err("directory must fail")
+                .code(),
+            SafeErrorCode::StorageCorrupt
+        );
+        let regular_parent = directory.path().join("regular-parent");
+        std::fs::write(&regular_parent, b"not a directory").expect("write regular parent");
+        assert_eq!(
+            preflight(&regular_parent.join("nested.sqlite3"))
+                .expect_err("non-directory parent must fail")
+                .code(),
+            SafeErrorCode::StorageCorrupt
+        );
+
+        let no_schema = directory.path().join("no-schema.sqlite3");
+        drop(Connection::open(&no_schema).expect("blank sqlite database"));
+        assert_eq!(
+            preflight(&no_schema)
+                .expect_err("missing schema history")
+                .code(),
+            SafeErrorCode::UnsupportedSchemaVersion
+        );
+
+        let zero_schema = directory.path().join("zero-schema.sqlite3");
+        let connection = Connection::open(&zero_schema).expect("zero schema database");
+        connection
+            .execute(
+                "CREATE TABLE refinery_schema_history (version INTEGER NOT NULL)",
+                [],
+            )
+            .expect("schema history");
+        connection
+            .execute(
+                "INSERT INTO refinery_schema_history (version) VALUES (0)",
+                [],
+            )
+            .expect("zero version");
+        drop(connection);
+        assert_eq!(
+            preflight(&zero_schema)
+                .expect_err("zero schema version")
+                .code(),
+            SafeErrorCode::UnsupportedSchemaVersion
+        );
+
+        let unknown = directory.path().join("unknown-table.sqlite3");
+        drop(Database::open(&unknown).expect("current database"));
+        let connection = Connection::open(&unknown).expect("open current database");
+        connection
+            .execute("CREATE TABLE ungoverned_table (value INTEGER)", [])
+            .expect("unknown table");
+        drop(connection);
+        assert_eq!(
+            preflight(&unknown)
+                .expect_err("unknown table must fail")
+                .code(),
+            SafeErrorCode::StorageCorrupt
+        );
+    }
+
+    #[test]
+    fn identity_scans_classify_all_persisted_key_and_display_failures() {
+        let connection = Connection::open_in_memory().expect("database");
+        connection
+            .execute("CREATE TABLE identities (public_key TEXT, npub TEXT)", [])
+            .expect("identity table");
+        let canonical =
+            PublicKey::from_hex("585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df")
+                .expect("canonical key");
+        let npub = AccountIdentity::derive(canonical)
+            .expect("identity")
+            .npub()
+            .as_str()
+            .to_owned();
+        let values = [
+            (canonical.to_hex(), npub),
+            (canonical.to_hex().to_uppercase(), "invalid-npub".to_owned()),
+            ("bad".to_owned(), "invalid-npub".to_owned()),
+            ("00".repeat(32), "invalid-npub".to_owned()),
+            (canonical.to_hex(), "invalid-npub".to_owned()),
+        ];
+        for (public_key, npub) in values {
+            connection
+                .execute(
+                    "INSERT INTO identities (public_key, npub) VALUES (?1, ?2)",
+                    params![public_key, npub],
+                )
+                .expect("identity row");
+        }
+
+        assert!(column_exists(&connection, "identities", "public_key").expect("column"));
+        assert!(!column_exists(&connection, "missing", "public_key").expect("missing table"));
+        assert!(!column_exists(&connection, "identities", "missing").expect("missing column"));
+        let mut issues = Vec::new();
+        scan_public_key_column(&connection, "identities", "public_key", &mut issues)
+            .expect("scan public keys");
+        scan_display_identities(&connection, "identities", "public_key", "npub", &mut issues)
+            .expect("scan display identities");
+        scan_display_identities(&connection, "missing", "public_key", "npub", &mut issues)
+            .expect("skip missing table");
+        connection
+            .execute("CREATE TABLE key_only (public_key TEXT)", [])
+            .expect("key-only table");
+        scan_display_identities(&connection, "key_only", "public_key", "npub", &mut issues)
+            .expect("skip missing display column");
+
+        for kind in [
+            PersistedIdentityIssueKind::MalformedEncoding,
+            PersistedIdentityIssueKind::NonCanonicalEncoding,
+            PersistedIdentityIssueKind::InvalidCurvePoint,
+            PersistedIdentityIssueKind::DisplayIdentityMismatch,
+        ] {
+            assert!(issues.iter().any(|issue| issue.kind() == kind));
+        }
+        for issue in &issues {
+            assert_eq!(issue.table(), "identities");
+            assert!(matches!(issue.column(), "public_key" | "npub"));
+            assert!(issue.row_id() > 0);
+            assert_ne!(issue.fingerprint(), &[0_u8; 32]);
+        }
+    }
+}

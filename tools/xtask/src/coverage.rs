@@ -154,7 +154,7 @@ struct LlvmCovFunction {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct FunctionCoverageKey {
-    filenames: Vec<String>,
+    filename: String,
     definition: RegionCoverageKey,
 }
 
@@ -293,6 +293,7 @@ struct CoverageProfileRaw {
     no_default_features: Option<bool>,
     features: Option<Vec<String>>,
     test_threads: Option<u32>,
+    test_packages: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -300,6 +301,7 @@ struct CoverageProfile {
     no_default_features: bool,
     features: Vec<String>,
     test_threads: Option<u32>,
+    test_packages: Vec<String>,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -384,8 +386,11 @@ fn read_detailed_summary(
             continue;
         }
         let region = function.regions[0];
+        let Some(filename) = region_filename(function, &region) else {
+            continue;
+        };
         let key = FunctionCoverageKey {
-            filenames: function.filenames.clone(),
+            filename: filename.to_owned(),
             definition: RegionCoverageKey {
                 line_start: region[0],
                 column_start: region[1],
@@ -1175,6 +1180,9 @@ fn merge_coverage_profile(
             .features
             .unwrap_or_else(|| base.features.unwrap_or_default()),
         test_threads: overlay.test_threads.or(base.test_threads),
+        test_packages: overlay
+            .test_packages
+            .unwrap_or_else(|| base.test_packages.unwrap_or_default()),
     }
 }
 
@@ -1190,6 +1198,7 @@ fn read_coverage_profile(
             no_default_features: false,
             features: Vec::new(),
             test_threads: None,
+            test_packages: Vec::new(),
         });
     }
     let parsed = parse_toml::<CoverageProfilesFile>(&path)?;
@@ -1214,6 +1223,37 @@ fn read_coverage_profile(
         return Err(format!(
             "coverage profile for {crate_name} must set test_threads > 0"
         ));
+    }
+    let workspace_packages = if resolved.test_packages.is_empty() {
+        BTreeSet::new()
+    } else {
+        read_workspace_packages(workspace_root)?
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<BTreeSet<_>>()
+    };
+    let mut seen_test_packages = BTreeSet::new();
+    for package in &resolved.test_packages {
+        if package.trim().is_empty() {
+            return Err(format!(
+                "coverage profile for {crate_name} includes an empty test package"
+            ));
+        }
+        if package == crate_name {
+            return Err(format!(
+                "coverage profile for {crate_name} repeats the target as a test package"
+            ));
+        }
+        if !workspace_packages.contains(package) {
+            return Err(format!(
+                "coverage profile for {crate_name} references unknown test package {package}"
+            ));
+        }
+        if !seen_test_packages.insert(package) {
+            return Err(format!(
+                "coverage profile for {crate_name} repeats test package {package}"
+            ));
+        }
     }
     Ok(resolved)
 }
@@ -1729,6 +1769,9 @@ fn run_crate_with_runner_at_root(
         {
             let mut cmd = coverage_llvm_cov_command();
             cmd.arg("-p").arg(&crate_name);
+            for package in &profile.test_packages {
+                cmd.arg("-p").arg(package);
+            }
             apply_coverage_profile_flags(&mut cmd, &profile);
             cmd.arg("--no-report")
                 .arg("--branch")
@@ -2796,6 +2839,16 @@ pub fn production() {}
             assert!(lines[line - 1], "annotated item line {line}");
         }
         assert!(!lines[6], "following production item remains measured");
+    }
+
+    #[test]
+    fn coverage_off_source_lines_cover_annotated_non_block_items() {
+        let source = "#[cfg_attr(coverage_nightly, coverage(off))]\nconst GENERATED: bool = true;\npub fn policy() -> bool { true }\n";
+        let lines = coverage_off_source_lines(source);
+
+        assert!(lines[0], "coverage attribute is excluded");
+        assert!(lines[1], "annotated non-block item is excluded");
+        assert!(!lines[2], "following production item remains measured");
     }
 
     #[test]
@@ -3983,6 +4036,7 @@ fn measured() {}
         assert!(!profile.no_default_features);
         assert!(profile.features.is_empty());
         assert_eq!(profile.test_threads, None);
+        assert!(profile.test_packages.is_empty());
         fs::remove_dir_all(root).expect("remove root");
     }
 
@@ -4009,11 +4063,13 @@ features = ["rt"]
         assert!(app_profile.no_default_features);
         assert_eq!(app_profile.features, vec!["rt".to_string()]);
         assert_eq!(app_profile.test_threads, Some(2));
+        assert!(app_profile.test_packages.is_empty());
 
         let other_profile = read_coverage_profile(&root, "radroots_core").expect("other profile");
         assert!(!other_profile.no_default_features);
         assert_eq!(other_profile.features, vec!["std".to_string()]);
         assert_eq!(other_profile.test_threads, Some(2));
+        assert!(other_profile.test_packages.is_empty());
 
         fs::remove_dir_all(root).expect("remove root");
     }
@@ -4034,6 +4090,61 @@ test_threads = 4
             read_coverage_profile(&root, "radroots_log").expect("valid positive thread profile");
         assert_eq!(profile.test_threads, Some(4));
         fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn coverage_profiles_resolve_validated_downstream_test_packages() {
+        let root = workspace_root();
+        let runtime = read_coverage_profile(&root, "radroots_studio_runtime")
+            .expect("runtime coverage profile");
+        assert_eq!(
+            runtime.test_packages,
+            vec!["radroots_studio_ffi".to_string()]
+        );
+        let storage = read_coverage_profile(&root, "radroots_studio_storage")
+            .expect("storage coverage profile");
+        assert_eq!(
+            storage.test_packages,
+            vec![
+                "radroots_studio_runtime".to_string(),
+                "radroots_studio_ffi".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn coverage_profiles_reject_invalid_downstream_test_packages() {
+        let root = temp_dir_path("profile_invalid_test_packages");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\n",
+        );
+        write_file(
+            &root.join("crates/a/Cargo.toml"),
+            "[package]\nname = \"radroots_a\"\nversion = \"0.1.0-alpha\"\n",
+        );
+        write_file(
+            &root.join("crates/b/Cargo.toml"),
+            "[package]\nname = \"radroots_b\"\nversion = \"0.1.0-alpha\"\n",
+        );
+        let profiles = root.join("contracts/coverage-profiles.toml");
+
+        for (test_packages, expected) in [
+            ("[\"\"]", "empty test package"),
+            ("[\"radroots_a\"]", "repeats the target"),
+            ("[\"radroots_unknown\"]", "unknown test package"),
+            ("[\"radroots_b\", \"radroots_b\"]", "repeats test package"),
+        ] {
+            write_file(
+                &profiles,
+                &format!("[profiles.crates.\"radroots_a\"]\ntest_packages = {test_packages}\n"),
+            );
+            let err = read_coverage_profile(&root, "radroots_a")
+                .expect_err("invalid downstream test package");
+            assert!(err.contains(expected), "unexpected error: {err}");
+        }
+
+        fs::remove_dir_all(root).expect("remove invalid test package root");
     }
 
     #[test]
@@ -4440,6 +4551,7 @@ test_threads = 0
             no_default_features: true,
             features: vec!["std".to_string(), "serde".to_string()],
             test_threads: Some(2),
+            test_packages: Vec::new(),
         };
         let mut command = Command::new("cargo");
         apply_coverage_profile_flags(&mut command, &profile);
@@ -4505,6 +4617,42 @@ test_threads = 0
                 .all(|rendered| rendered.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX))
         );
         fs::remove_dir_all(out).expect("remove run crate output dir");
+    }
+
+    #[test]
+    fn run_crate_credits_declared_downstream_tests_only_to_the_target_report() {
+        let out = temp_dir_path("run_crate_downstream_tests");
+        let args = vec![
+            "--crate".to_string(),
+            "radroots_studio_runtime".to_string(),
+            "--out".to_string(),
+            out.display().to_string(),
+        ];
+        let mut rendered_commands = Vec::new();
+        let mut runner = |cmd: Command, _name: &str| {
+            rendered_commands.push(
+                cmd.get_args()
+                    .map(|arg| arg.to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            );
+            Ok(())
+        };
+        run_crate_with_runner(&args, &mut runner).expect("run crate with downstream tests");
+        let test_command = rendered_commands
+            .iter()
+            .find(|command| command.contains("--no-report"))
+            .expect("coverage test command");
+        assert!(test_command.contains("-p radroots_studio_runtime"));
+        assert!(test_command.contains("-p radroots_studio_ffi"));
+        for report_command in rendered_commands
+            .iter()
+            .filter(|command| command.starts_with("report "))
+        {
+            assert!(report_command.contains("-p radroots_studio_runtime"));
+            assert!(!report_command.contains("-p radroots_studio_ffi"));
+        }
+        fs::remove_dir_all(out).expect("remove downstream test output dir");
     }
 
     #[test]

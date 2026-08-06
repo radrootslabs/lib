@@ -16,8 +16,6 @@ pub use crate::codec_adapters::{
     to_job_result_index, to_job_result_metadata,
 };
 #[cfg(feature = "events")]
-pub use crate::event_adapters::{to_post_event_metadata, to_profile_event_metadata};
-#[cfg(feature = "events")]
 pub use crate::event_verify::{
     NostrSignatureVerifier as SignatureVerifier, Verification, verify_event as verify,
     verify_event_id as verify_id,

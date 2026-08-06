@@ -931,8 +931,10 @@ mod tests {
     use super::InMemoryAccountRepository;
     use crate::{
         AccountOperationPhase, AccountRepository, AppCore, AppStateRepository, Clock,
-        FailureSecretStore, InMemoryOperationJournal, InMemorySecretStore, OperationJournal,
+        DurableOperationKind, DurableOperationPhase, FailureSecretStore, InMemoryOperationJournal,
+        InMemorySecretStore, OperationJournal, ProfileRefreshStatus, ProfileRepository,
         RelayConfiguration, SecretStore, SecretStoreOperation, SessionState, StateTransition,
+        recovery::tests::{TestDurableRepository, operation as durable_operation},
     };
 
     struct FixedClock;
@@ -948,6 +950,71 @@ mod tests {
     impl Clock for LateClock {
         fn now(&self) -> UnixTimestamp {
             UnixTimestamp::from_seconds(311).expect("time")
+        }
+    }
+
+    struct EmptyProfiles;
+
+    impl ProfileRepository for EmptyProfiles {
+        fn load_profile(
+            &self,
+            _public_key: PublicKey,
+        ) -> Result<Option<crate::CachedProfile>, SafeError> {
+            Ok(None)
+        }
+
+        fn save_profile(&self, _profile: &crate::CachedProfile) -> Result<(), SafeError> {
+            Ok(())
+        }
+
+        fn record_refresh_status(
+            &self,
+            _public_key: PublicKey,
+            _refreshed_at: UnixTimestamp,
+            _status: ProfileRefreshStatus,
+        ) -> Result<(), SafeError> {
+            Ok(())
+        }
+
+        fn remove_profile(&self, _public_key: PublicKey) -> Result<(), SafeError> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct FailingUpdateJournal(InMemoryOperationJournal);
+
+    impl OperationJournal for FailingUpdateJournal {
+        fn begin_operation(
+            &self,
+            kind: crate::AccountOperationKind,
+            subject: PublicKey,
+            updated_at: UnixTimestamp,
+        ) -> Result<crate::OperationId, SafeError> {
+            self.0.begin_operation(kind, subject, updated_at)
+        }
+
+        fn update_operation(
+            &self,
+            _id: crate::OperationId,
+            _phase: AccountOperationPhase,
+            _updated_at: UnixTimestamp,
+            _diagnostic: Option<crate::OperationDiagnostic>,
+        ) -> Result<(), SafeError> {
+            Err(SafeError::new(
+                SafeErrorCode::StorageUnavailable,
+                SafeMessage::new("The test journal is unavailable."),
+            ))
+        }
+
+        fn list_pending_operations(
+            &self,
+        ) -> Result<Vec<crate::PendingAccountOperation>, SafeError> {
+            self.0.list_pending_operations()
+        }
+
+        fn finalize_operation(&self, id: crate::OperationId) -> Result<(), SafeError> {
+            self.0.finalize_operation(id)
         }
     }
 
@@ -1413,5 +1480,343 @@ mod tests {
             .expect("replacement plan");
         assert!(core.cancel_account_removal(cancelled));
         assert_eq!(core.snapshot().accounts().len(), 1);
+    }
+
+    #[test]
+    fn import_rejects_orphan_credentials_and_durable_nonterminal_replays() {
+        const SECRET: &str = "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7";
+        let core = AppCore::in_memory(RelayConfiguration::default());
+        let accounts = InMemoryAccountRepository::default();
+        let secrets = InMemorySecretStore::default();
+        let journal = InMemoryOperationJournal::default();
+        core.bootstrap().expect("bootstrap");
+        let material = core
+            .key_material()
+            .import(SecretKeyInput::parse(SECRET.to_owned()).expect("secret"))
+            .expect("key material");
+        let (public_key, _npub, secret) = material.into_parts();
+        secrets.put(public_key, secret).expect("orphan credential");
+
+        assert_eq!(
+            core.import_secret_key(
+                SecretKeyInput::parse(SECRET.to_owned()).expect("secret"),
+                &accounts,
+                &accounts,
+                &secrets,
+                &journal,
+                &FixedClock,
+            )
+            .expect_err("orphan credential must fail")
+            .code(),
+            SafeErrorCode::AccountAlreadyExists
+        );
+
+        let pending = durable_operation(
+            DurableOperationKind::Import,
+            DurableOperationPhase::IntentRecorded,
+            public_key,
+            None,
+        );
+        let request_id = pending.request_id().clone();
+        let operations = TestDurableRepository::new(pending);
+        assert_eq!(
+            core.import_secret_key_durable(
+                &request_id,
+                core.snapshot().revision().value(),
+                SecretKeyInput::parse(SECRET.to_owned()).expect("secret"),
+                &accounts,
+                &accounts,
+                &secrets,
+                &operations,
+                &FixedClock,
+            )
+            .expect_err("unfinished replay must require recovery")
+            .code(),
+            SafeErrorCode::PendingOperationRecoveryRequired
+        );
+    }
+
+    #[test]
+    fn durable_import_covers_new_and_missing_credential_repair_paths() {
+        const SECRET: &str = "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7";
+        for repair in [false, true] {
+            let core = AppCore::in_memory(RelayConfiguration::default());
+            let accounts = InMemoryAccountRepository::default();
+            let secrets = InMemorySecretStore::default();
+            let material = core
+                .key_material()
+                .import(SecretKeyInput::parse(SECRET.to_owned()).expect("secret"))
+                .expect("key material");
+            let (public_key, npub, secret) = material.into_parts();
+            drop(secret);
+            if repair {
+                let account = AccountSummary::new(
+                    AccountIdentity::verify(public_key, npub.as_str().to_owned())
+                        .expect("identity"),
+                    LocalSignerBinding::new(public_key, BindingAvailability::CredentialMissing),
+                    None,
+                    AccountCreatedAt::new(FixedClock.now()),
+                    None,
+                )
+                .expect("account");
+                accounts.insert_account(&account).expect("insert account");
+                accounts
+                    .save_selected_account(Some(public_key))
+                    .expect("selection");
+                core.apply_transition(StateTransition::BootstrapRegistry {
+                    accounts: vec![account],
+                    selected: Some(public_key),
+                })
+                .expect("registry");
+            } else {
+                core.bootstrap().expect("bootstrap");
+            }
+            let kind = if repair {
+                DurableOperationKind::Repair
+            } else {
+                DurableOperationKind::Import
+            };
+            let pending = durable_operation(
+                kind,
+                DurableOperationPhase::IntentRecorded,
+                public_key,
+                repair.then_some(BindingAvailability::CredentialMissing),
+            );
+            let request_id = pending.request_id().clone();
+            let operations = TestDurableRepository::fresh(pending);
+            let receipt = core
+                .import_secret_key_durable(
+                    &request_id,
+                    core.snapshot().revision().value(),
+                    SecretKeyInput::parse(SECRET.to_owned()).expect("secret"),
+                    &accounts,
+                    &accounts,
+                    &secrets,
+                    &operations,
+                    &FixedClock,
+                )
+                .expect("durable import");
+            assert_eq!(receipt.account().public_key(), public_key);
+            assert_eq!(
+                operations.operation().phase(),
+                DurableOperationPhase::Finalized
+            );
+        }
+    }
+
+    #[test]
+    fn removal_of_unselected_account_preserves_the_current_selection() {
+        let core = AppCore::in_memory(RelayConfiguration::default());
+        let accounts = InMemoryAccountRepository::default();
+        let secrets = InMemorySecretStore::default();
+        let journal = InMemoryOperationJournal::default();
+        core.bootstrap().expect("bootstrap");
+        let first = core
+            .generate_account(&accounts, &accounts, &secrets, &journal, &FixedClock)
+            .expect("first")
+            .account()
+            .public_key();
+        let second = core
+            .generate_account(&accounts, &accounts, &secrets, &journal, &FixedClock)
+            .expect("second")
+            .account()
+            .public_key();
+        let token = core
+            .request_account_removal(first, &FixedClock)
+            .expect("removal token");
+        let snapshot = core
+            .confirm_account_removal(token, &accounts, &accounts, &secrets, &journal, &FixedClock)
+            .expect("remove unselected account");
+        assert_eq!(snapshot.selected_account(), Some(second));
+
+        let missing = crate::test_support::valid_test_public_key(99).expect("missing key");
+        assert!(accounts.insert_account(&snapshot.accounts()[0]).is_err());
+        assert!(accounts.save_selected_account(Some(missing)).is_err());
+
+        let third = core
+            .generate_account(&accounts, &accounts, &secrets, &journal, &FixedClock)
+            .expect("third")
+            .account()
+            .public_key();
+        let token = core
+            .request_account_removal(second, &FixedClock)
+            .expect("durable removal token");
+        let pending = durable_operation(
+            DurableOperationKind::Remove,
+            DurableOperationPhase::IntentRecorded,
+            second,
+            Some(BindingAvailability::Available),
+        );
+        let request_id = pending.request_id().clone();
+        let operations = TestDurableRepository::fresh(pending);
+        let snapshot = core
+            .confirm_account_removal_durable(
+                &request_id,
+                token,
+                &accounts,
+                &accounts,
+                &secrets,
+                &operations,
+                &FixedClock,
+            )
+            .expect("durable unselected removal");
+        assert_eq!(snapshot.selected_account(), Some(third));
+    }
+
+    #[test]
+    fn duplicate_missing_binding_with_orphan_credential_fails_closed() {
+        const SECRET: &str = "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7";
+        let core = AppCore::in_memory(RelayConfiguration::default());
+        let accounts = InMemoryAccountRepository::default();
+        let secrets = InMemorySecretStore::default();
+        let journal = InMemoryOperationJournal::default();
+        let material = core
+            .key_material()
+            .import(SecretKeyInput::parse(SECRET.to_owned()).expect("secret"))
+            .expect("key material");
+        let (public_key, npub, secret) = material.into_parts();
+        let account = AccountSummary::new(
+            AccountIdentity::verify(public_key, npub.as_str().to_owned()).expect("identity"),
+            LocalSignerBinding::new(public_key, BindingAvailability::CredentialMissing),
+            None,
+            AccountCreatedAt::new(FixedClock.now()),
+            None,
+        )
+        .expect("account");
+        accounts.insert_account(&account).expect("insert account");
+        accounts
+            .save_selected_account(Some(public_key))
+            .expect("selection");
+        secrets.put(public_key, secret).expect("credential");
+        core.apply_transition(StateTransition::BootstrapRegistry {
+            accounts: vec![account],
+            selected: Some(public_key),
+        })
+        .expect("registry");
+
+        assert_eq!(
+            core.import_secret_key(
+                SecretKeyInput::parse(SECRET.to_owned()).expect("secret"),
+                &accounts,
+                &accounts,
+                &secrets,
+                &journal,
+                &FixedClock,
+            )
+            .expect_err("orphan credential must fail")
+            .code(),
+            SafeErrorCode::AccountAlreadyExists
+        );
+        let pending = durable_operation(
+            DurableOperationKind::Repair,
+            DurableOperationPhase::IntentRecorded,
+            public_key,
+            Some(BindingAvailability::CredentialMissing),
+        );
+        let request_id = pending.request_id().clone();
+        let operations = TestDurableRepository::fresh(pending);
+        assert_eq!(
+            core.import_secret_key_durable(
+                &request_id,
+                core.snapshot().revision().value(),
+                SecretKeyInput::parse(SECRET.to_owned()).expect("secret"),
+                &accounts,
+                &accounts,
+                &secrets,
+                &operations,
+                &FixedClock,
+            )
+            .expect_err("orphan durable credential must fail")
+            .code(),
+            SafeErrorCode::AccountAlreadyExists
+        );
+    }
+
+    #[test]
+    fn removing_an_active_account_signs_out_for_legacy_and_durable_requests() {
+        for durable in [false, true] {
+            let core = AppCore::in_memory(RelayConfiguration::default());
+            let accounts = InMemoryAccountRepository::default();
+            let secrets = InMemorySecretStore::default();
+            let journal = InMemoryOperationJournal::default();
+            core.bootstrap().expect("bootstrap");
+            let public_key = core
+                .import_secret_key(
+                    SecretKeyInput::parse(
+                        "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7"
+                            .to_owned(),
+                    )
+                    .expect("secret"),
+                    &accounts,
+                    &accounts,
+                    &secrets,
+                    &journal,
+                    &FixedClock,
+                )
+                .expect("account")
+                .account()
+                .public_key();
+            core.activate_account(
+                public_key,
+                &accounts,
+                &accounts,
+                &EmptyProfiles,
+                &secrets,
+                &FixedClock,
+            )
+            .expect("activate account");
+            let token = core
+                .request_account_removal(public_key, &FixedClock)
+                .expect("removal token");
+            let snapshot = if durable {
+                let pending = durable_operation(
+                    DurableOperationKind::Remove,
+                    DurableOperationPhase::IntentRecorded,
+                    public_key,
+                    Some(BindingAvailability::Available),
+                );
+                let request_id = pending.request_id().clone();
+                let operations = TestDurableRepository::fresh(pending);
+                core.confirm_account_removal_durable(
+                    &request_id,
+                    token,
+                    &accounts,
+                    &accounts,
+                    &secrets,
+                    &operations,
+                    &FixedClock,
+                )
+                .expect("durable removal")
+            } else {
+                core.confirm_account_removal(
+                    token,
+                    &accounts,
+                    &accounts,
+                    &secrets,
+                    &journal,
+                    &FixedClock,
+                )
+                .expect("removal")
+            };
+            assert_eq!(snapshot.session(), SessionState::SignedOut);
+        }
+    }
+
+    #[test]
+    fn account_transaction_compensates_a_journal_phase_failure() {
+        let core = AppCore::in_memory(RelayConfiguration::default());
+        let accounts = InMemoryAccountRepository::default();
+        let secrets = InMemorySecretStore::default();
+        let journal = FailingUpdateJournal::default();
+        core.bootstrap().expect("bootstrap");
+
+        assert_eq!(
+            core.generate_account(&accounts, &accounts, &secrets, &journal, &FixedClock)
+                .err()
+                .expect("journal failure must be returned")
+                .code(),
+            SafeErrorCode::StorageUnavailable
+        );
+        assert!(accounts.list_accounts().unwrap().is_empty());
     }
 }

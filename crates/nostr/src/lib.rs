@@ -39,9 +39,6 @@ pub mod nip17;
 pub mod signing;
 
 #[cfg(feature = "events")]
-mod event_adapters;
-
-#[cfg(feature = "events")]
 mod event_convert;
 #[cfg(feature = "events")]
 mod event_verify;

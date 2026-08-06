@@ -164,5 +164,19 @@ mod tests {
                 .code(),
             SafeErrorCode::InvalidProfileMetadata
         );
+        assert_eq!(
+            parse_verified_kind0(&"x".repeat(64 * 1_024 + 1), author)
+                .expect_err("oversized event")
+                .code(),
+            SafeErrorCode::ProfileRefreshFailed
+        );
+        assert_eq!(
+            super::invalid_event().code(),
+            SafeErrorCode::ProfileRefreshFailed
+        );
+        assert_eq!(
+            super::invalid_metadata().code(),
+            SafeErrorCode::InvalidProfileMetadata
+        );
     }
 }

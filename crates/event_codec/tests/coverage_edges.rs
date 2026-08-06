@@ -99,15 +99,6 @@ fn parsed_wrappers_propagate_invalid_kind_errors() {
 
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(
-        radroots_event_codec::decode::profile::parsed_from_event(
-            id, author, created_at, kind, content, tags, sig,
-        ),
-        "0",
-        KIND_POST,
-    );
-
-    let (id, author, created_at, kind, content, tags, sig) = parsed_args();
-    assert_invalid_kind(
         radroots_event_codec::decode::reaction::parsed_from_event(
             id, author, created_at, kind, content, tags, sig,
         ),

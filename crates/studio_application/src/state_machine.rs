@@ -506,4 +506,111 @@ mod tests {
         assert_eq!(signed_out.session(), SessionState::SignedOut);
         assert!(signed_out.active_account().is_none());
     }
+
+    #[test]
+    fn activation_state_policy_rejects_every_stale_or_mismatched_transition() {
+        let first = account(1);
+        let second = account(2);
+        let relays = RelayConfiguration::default();
+        let problem = SafeError::new(
+            SafeErrorCode::CredentialMissing,
+            SafeMessage::new("The account credential is missing."),
+        );
+        let mut machine = StateMachine::booting();
+        machine
+            .apply(
+                StateTransition::BootstrapRegistry {
+                    accounts: vec![first.clone(), second.clone()],
+                    selected: Some(first.public_key()),
+                },
+                &relays,
+            )
+            .expect("registry");
+        let unchanged = machine
+            .apply(
+                StateTransition::BootstrapRegistry {
+                    accounts: Vec::new(),
+                    selected: None,
+                },
+                &relays,
+            )
+            .expect("repeated bootstrap is idempotent");
+        assert_eq!(unchanged.accounts().len(), 2);
+
+        assert!(
+            machine
+                .apply(
+                    StateTransition::ActivationSucceeded(Box::new(active(first.clone()))),
+                    &relays,
+                )
+                .is_err()
+        );
+        assert!(
+            machine
+                .apply(StateTransition::ActivationFailed(problem), &relays)
+                .is_err()
+        );
+        machine
+            .apply(
+                StateTransition::BeginActivation(first.public_key()),
+                &relays,
+            )
+            .expect("begin activation");
+        assert!(
+            machine
+                .apply(
+                    StateTransition::BeginActivation(second.public_key()),
+                    &relays,
+                )
+                .is_err()
+        );
+        assert!(
+            machine
+                .apply(
+                    StateTransition::ActivationSucceeded(Box::new(active(second.clone()))),
+                    &relays,
+                )
+                .is_err()
+        );
+        machine
+            .apply(
+                StateTransition::ActivationSucceeded(Box::new(active(first.clone()))),
+                &relays,
+            )
+            .expect("activate first");
+
+        for (expected, candidate) in [
+            (second.public_key(), first.clone()),
+            (first.public_key(), second.clone()),
+        ] {
+            assert!(
+                machine
+                    .apply(
+                        StateTransition::UpdateActiveAccount {
+                            expected,
+                            active_account: Box::new(active(candidate)),
+                            problem: None,
+                        },
+                        &relays,
+                    )
+                    .is_err()
+            );
+        }
+
+        machine
+            .apply(StateTransition::SignOut, &relays)
+            .expect("sign out");
+        assert!(
+            machine
+                .apply(
+                    StateTransition::UpdateActiveAccount {
+                        expected: first.public_key(),
+                        active_account: Box::new(active(first)),
+                        problem: None,
+                    },
+                    &relays,
+                )
+                .is_err()
+        );
+    }
 }

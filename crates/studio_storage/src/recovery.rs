@@ -511,3 +511,182 @@ const fn backup_invalid() -> SafeError {
         SafeMessage::new("The application database recovery backup is invalid."),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use rusqlite::Connection;
+    use tempfile::tempdir;
+
+    use super::{
+        AUTHENTICATION_KEY_FILENAME, MANIFEST_FORMAT, MigrationRecovery, atomic_secure_write,
+        constant_time_eq, create_recovery_directory, decode_hex_32, file_digest, hex, hex_nibble,
+        load_authentication_key, load_or_create_authentication_key, parse_field, read_bounded_file,
+        recovery_directory, replace_with_backup, secure_read,
+    };
+
+    fn sqlite_database(path: &Path) {
+        let connection = Connection::open(path).expect("open sqlite database");
+        connection
+            .execute("CREATE TABLE durable_probe (value INTEGER NOT NULL)", [])
+            .expect("create probe table");
+        connection
+            .execute("INSERT INTO durable_probe (value) VALUES (7)", [])
+            .expect("insert probe row");
+    }
+
+    #[test]
+    fn migration_recovery_authenticates_finishes_reopens_and_restores() {
+        let directory = tempdir().expect("temporary directory");
+        let database = directory.path().join("studio.sqlite3");
+        sqlite_database(&database);
+
+        let recovery = MigrationRecovery::prepare(&database, 5, 10).expect("prepare recovery");
+        MigrationRecovery::verify_evidence(&database, 5, 10).expect("prepared evidence");
+        assert!(recovery.finish(9).is_err());
+
+        MigrationRecovery::prepare(&database, 5, 10)
+            .expect("reopen prepared recovery")
+            .finish(10)
+            .expect("finish recovery");
+        MigrationRecovery::verify_evidence(&database, 5, 10).expect("complete evidence");
+
+        MigrationRecovery::prepare(&database, 5, 10)
+            .expect("reopen complete recovery")
+            .finish(10)
+            .expect("finish reopened recovery");
+        fs::write(&database, b"not sqlite").expect("corrupt active database");
+        MigrationRecovery::restore(&database, 5, 10).expect("restore authenticated backup");
+        let connection = Connection::open(&database).expect("open restored database");
+        let value: i64 = connection
+            .query_row("SELECT value FROM durable_probe", [], |row| row.get(0))
+            .expect("restored row");
+        assert_eq!(value, 7);
+    }
+
+    #[test]
+    fn recovery_manifest_rejects_every_tampered_authority_field() {
+        let directory = tempdir().expect("temporary directory");
+        let database = directory.path().join("studio.sqlite3");
+        sqlite_database(&database);
+        let recovery = MigrationRecovery::prepare(&database, 5, 10).expect("prepare recovery");
+        let original = fs::read_to_string(&recovery.marker).expect("read marker");
+        let backup_name = recovery
+            .backup
+            .file_name()
+            .expect("backup name")
+            .to_string_lossy();
+        let cases = [
+            original.replacen(MANIFEST_FORMAT, "wrong-format", 1),
+            original.replacen("source_schema=5", "source_schema=4", 1),
+            original.replacen("target_schema=10", "target_schema=11", 1),
+            original.replacen(&format!("backup={backup_name}"), "backup=other.sqlite3", 1),
+            original.replacen("sha256=", "unexpected=value\nsha256=", 1),
+            original.replacen("state=prepared", "state=invalid", 1),
+            original.replacen("sha256=", "sha256=00", 1),
+            original.replacen("hmac_sha256=", "hmac_sha256=gg", 1),
+            {
+                let mut lines = original.lines().map(str::to_owned).collect::<Vec<_>>();
+                let tag = lines
+                    .iter_mut()
+                    .find(|line| line.starts_with("hmac_sha256="))
+                    .expect("tag field");
+                let replacement = if tag.ends_with('0') { '1' } else { '0' };
+                tag.pop();
+                tag.push(replacement);
+                format!("{}\n", lines.join("\n"))
+            },
+        ];
+        for tampered in cases {
+            fs::write(&recovery.marker, tampered).expect("write tampered marker");
+            assert!(MigrationRecovery::verify_evidence(&database, 5, 10).is_err());
+        }
+        fs::write(&recovery.marker, original).expect("restore marker");
+        MigrationRecovery::verify_evidence(&database, 5, 10).expect("restored evidence");
+    }
+
+    #[test]
+    fn recovery_helpers_reject_invalid_paths_sizes_and_encodings() {
+        let directory = tempdir().expect("temporary directory");
+        let regular = directory.path().join("regular");
+        fs::write(&regular, b"abc").expect("write regular file");
+        let child = directory.path().join("child");
+        fs::create_dir(&child).expect("create child directory");
+
+        assert!(recovery_directory(Path::new("/")).is_err());
+        assert!(create_recovery_directory(&regular).is_err());
+        assert!(create_recovery_directory(&regular.join("nested")).is_err());
+        assert!(secure_read(&child).is_err());
+        assert!(file_digest(&child).is_err());
+        assert!(read_bounded_file(&child, 4).is_err());
+        assert!(read_bounded_file(&regular, 2).is_err());
+        assert_eq!(
+            read_bounded_file(&regular, 3).expect("bounded read"),
+            b"abc"
+        );
+
+        let missing_key_dir = directory.path().join("missing-key");
+        fs::create_dir(&missing_key_dir).expect("create missing key directory");
+        assert!(load_authentication_key(&missing_key_dir).is_err());
+        fs::write(
+            missing_key_dir.join(AUTHENTICATION_KEY_FILENAME),
+            [0_u8; 31],
+        )
+        .expect("write short key");
+        assert!(load_authentication_key(&missing_key_dir).is_err());
+
+        assert!(decode_hex_32("00").is_err());
+        assert!(decode_hex_32(&format!("g0{}", "00".repeat(31))).is_err());
+        assert!(decode_hex_32(&format!("0g{}", "00".repeat(31))).is_err());
+        let zeros = decode_hex_32(&"00".repeat(32)).expect("decode zeros");
+        assert!(constant_time_eq(&zeros, &[0_u8; 32]));
+        assert!(!constant_time_eq(&zeros, &[1_u8; 32]));
+        assert_eq!(hex(&[0, 15, 255]), "000fff");
+        assert_eq!(hex_nibble(b'9'), Some(9));
+        assert_eq!(hex_nibble(b'f'), Some(15));
+        assert_eq!(hex_nibble(b'G'), None);
+
+        let mut valid = ["field=value"].into_iter();
+        assert_eq!(parse_field(&mut valid, "field").expect("field"), "value");
+        let mut invalid = ["other=value"].into_iter();
+        assert!(parse_field(&mut invalid, "field").is_err());
+        let mut missing = std::iter::empty();
+        assert!(parse_field(&mut missing, "field").is_err());
+
+        let absent_parent = directory.path().join("absent").join("marker");
+        assert!(atomic_secure_write(&absent_parent, b"marker").is_err());
+
+        let orphan_database = directory.path().join("orphan.sqlite3");
+        sqlite_database(&orphan_database);
+        let orphan_directory = recovery_directory(&orphan_database).expect("recovery directory");
+        create_recovery_directory(&orphan_directory).expect("create recovery directory");
+        load_or_create_authentication_key(&orphan_directory).expect("authentication key");
+        fs::write(
+            orphan_directory.join("migration-v5-to-v10.sqlite3"),
+            b"orphan backup",
+        )
+        .expect("orphan backup");
+        assert!(MigrationRecovery::prepare(&orphan_database, 5, 10).is_err());
+
+        let missing_database = directory.path().join("missing-database.sqlite3");
+        assert!(replace_with_backup(&missing_database, &regular).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_helpers_reject_symlink_inputs() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempdir().expect("temporary directory");
+        let regular = directory.path().join("regular");
+        fs::write(&regular, b"abc").expect("write regular file");
+        let link = directory.path().join("link");
+        symlink(&regular, &link).expect("create symlink");
+        assert!(secure_read(&link).is_err());
+        assert!(file_digest(&link).is_err());
+        assert!(read_bounded_file(&link, 3).is_err());
+        assert!(create_recovery_directory(&link).is_err());
+    }
+}

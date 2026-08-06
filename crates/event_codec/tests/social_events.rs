@@ -18,7 +18,7 @@ use radroots_event_codec::{
     decode::EventParseError, decode::article::article_from_event, decode::farm::farm_from_event,
     decode::farm_file::farm_file_metadata_from_event,
     decode::file_metadata::file_metadata_from_event, decode::group::group_metadata_from_event,
-    decode::operational_listing::operational_listing_from_event, decode::post::post_from_event,
+    decode::operational_listing::operational_listing_from_event,
     encode::farm_file::to_wire_parts as farm_file_to_wire_parts,
     encode::file_metadata::to_wire_parts as public_file_to_wire_parts,
     encode::group::group_metadata_to_wire_parts,
@@ -67,13 +67,6 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
     assert!(matches!(
         farm_from_event(KIND_FARM, &farm_tags, &private_content),
         Err(EventParseError::InvalidJson("content"))
-    ));
-    assert!(matches!(
-        post_from_event(KIND_FARM_CRDT_CHANGE, &[], "farm task"),
-        Err(EventParseError::InvalidKind {
-            expected: "1",
-            got: KIND_FARM_CRDT_CHANGE
-        })
     ));
     assert!(matches!(
         article_from_event(KIND_FARM_CRDT_CHANGE, &[], "farm task"),

@@ -5,6 +5,7 @@ package_version = "0.1.0-alpha"
 [tools]
 cargo_deny = "0.19.8"
 cargo_cyclonedx = "0.5.9"
+cargo_vet = "0.10.2"
 
 [sbom]
 format = "json"
@@ -39,6 +40,12 @@ introduced_by = "sqlx 0.9.0 via flume 0.12.0"
 classification = "yanked"
 mitigation = "The package has no RustSec vulnerability; the gate rejects every yanked name/version except this exact transitive dependency."
 remove_when = "sqlx no longer resolves flume 0.12.0 with spin 0.9.8"
+
+[[git_source]]
+url = "https://github.com/rust-nostr/nostr.git"
+revision = "5bba5163eb77107f82c4a8262cf29d7f33a73219"
+packages = ["nostr", "nostr-relay-builder", "nostr-sdk"]
+removal_when = "nostr 0.45 stable satisfies Studio compatibility tests"
 
 [[package]]
 name = "radroots_core"
@@ -107,3 +114,11 @@ manifest_path = "crates/sync/Cargo.toml"
 [[package]]
 name = "radroots_geonames"
 manifest_path = "crates/geonames/Cargo.toml"
+
+[[package]]
+name = "radroots_sdk"
+manifest_path = "crates/sdk/Cargo.toml"
+
+[[package]]
+name = "radroots"
+manifest_path = "crates/radroots/Cargo.toml"

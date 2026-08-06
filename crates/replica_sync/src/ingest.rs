@@ -29,10 +29,14 @@ use radroots_event::listing::operational::{
     OperationalListing, OperationalListingAvailability, OperationalListingBin,
     OperationalListingStatus,
 };
+use radroots_event::profile::{
+    ProfileType, RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_from_tag_value,
+};
 use radroots_event::{
     envelope::EventEnvelope,
     listing::classified::{ClassifiedListingPartition, classify_classified_listing_tags},
 };
+use radroots_event_codec::admission::profile::admit_verified_profile_event;
 use radroots_event_codec::decode::farm as farm_decode;
 use radroots_event_codec::decode::food_availability::{
     RadrootsFoodAvailabilityProjectionOutcome, project_verified_food_availability_event,
@@ -40,7 +44,6 @@ use radroots_event_codec::decode::food_availability::{
 use radroots_event_codec::decode::list_set as list_set_decode;
 use radroots_event_codec::decode::operational_listing as listing_decode;
 use radroots_event_codec::decode::plot as plot_decode;
-use radroots_event_codec::decode::profile as profile_decode;
 use radroots_event_codec::verify::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::{
@@ -144,9 +147,9 @@ pub(crate) mod failpoints {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsReplicaIngestOutcome {
-    /// The selected event updated its supported legacy projection and raw head.
+    /// The selected event updated its supported replica projection and raw head.
     Applied,
-    /// The selected raw head belongs to a valid profile this legacy projection excludes.
+    /// The selected raw head belongs to a valid profile this replica excludes.
     Excluded,
     /// The selected raw head is invalid or ambiguous for its declared profile.
     Rejected,
@@ -171,10 +174,7 @@ impl RadrootsReplicaIdFactory for RadrootsReplicaDefaultIdFactory {
 }
 
 #[cfg(feature = "std")]
-/// Ingests an envelope through the legacy replica projection.
-///
-/// The Profile branch currently requires a legacy Profile marker tag and is
-/// not the strict Profile inbound-admission boundary.
+/// Verifies and ingests an envelope through its supported replica projection.
 pub fn radroots_replica_ingest_event(
     exec: &dyn SqlExecutor,
     event: &EventEnvelope,
@@ -182,19 +182,15 @@ pub fn radroots_replica_ingest_event(
     radroots_replica_ingest_event_with_factory(exec, event, &RadrootsReplicaDefaultIdFactory)
 }
 
-/// Ingests an envelope through the legacy replica projection with an ID source.
-///
-/// The Profile branch currently requires a legacy Profile marker tag and is
-/// not the strict Profile inbound-admission boundary.
+/// Verifies and ingests an envelope with an explicit replica ID source.
 pub fn radroots_replica_ingest_event_with_factory(
     exec: &dyn SqlExecutor,
     event: &EventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let verified_classified_listing = if event.kind_u32() == KIND_CLASSIFIED_LISTING {
-        Some(verify_nip01_event(event.clone())?)
-    } else {
-        None
+    let verified_event = match event.kind_u32() {
+        KIND_PROFILE | KIND_CLASSIFIED_LISTING => Some(verify_nip01_event(event.clone())?),
+        _ => None,
     };
 
     if let Err(err) = exec.begin() {
@@ -203,7 +199,7 @@ pub fn radroots_replica_ingest_event_with_factory(
         )));
     }
 
-    match ingest_event_inner(exec, event, factory, verified_classified_listing.as_ref()) {
+    match ingest_event_inner(exec, event, factory, verified_event.as_ref()) {
         Ok(outcome) => {
             if let Err(err) = exec.commit() {
                 return Err(RadrootsReplicaEventsError::from(ReplicaSchemaError::from(
@@ -223,14 +219,21 @@ fn ingest_event_inner(
     exec: &dyn SqlExecutor,
     event: &EventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
-    verified_classified_listing: Option<&RadrootsSignatureVerifiedEvent>,
+    verified_event: Option<&RadrootsSignatureVerifiedEvent>,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     match event.kind_u32() {
-        KIND_PROFILE => ingest_profile_event(exec, event),
+        KIND_PROFILE => {
+            let verified_event = verified_event.ok_or_else(|| {
+                RadrootsReplicaEventsError::InvalidData(
+                    "profile verification invariant missing".to_string(),
+                )
+            })?;
+            ingest_profile_event(exec, verified_event)
+        }
         KIND_FARM => ingest_farm_event(exec, event, factory),
         KIND_PLOT => ingest_plot_event(exec, event, factory),
         KIND_CLASSIFIED_LISTING => {
-            let verified_event = verified_classified_listing.ok_or_else(|| {
+            let verified_event = verified_event.ok_or_else(|| {
                 RadrootsReplicaEventsError::InvalidData(
                     "classified listing verification invariant missing".to_string(),
                 )
@@ -249,18 +252,13 @@ fn ingest_event_inner(
 
 fn ingest_profile_event(
     exec: &dyn SqlExecutor,
-    event: &EventEnvelope,
+    verified_event: &RadrootsSignatureVerifiedEvent,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let data_result = profile_decode::data_from_event(
-        event.id_hex(),
-        event.author().to_hex().to_owned(),
-        event.created_at_u64(),
-        event.kind_u32(),
-        event.content().to_owned(),
-        event.tags_as_vec(),
-    );
-    let data = data_result?;
-    let profile_type = match data.data.profile_type {
+    let admitted = admit_verified_profile_event(verified_event.clone())
+        .map_err(|error| RadrootsReplicaEventsError::InvalidData(error.to_string()))?;
+    let event = admitted.event();
+    let metadata = admitted.metadata();
+    let profile_type = match profile_type_from_event(event) {
         Some(profile_type) => profile_type,
         None => {
             return Err(RadrootsReplicaEventsError::InvalidData(
@@ -286,7 +284,7 @@ fn ingest_profile_event(
         exec,
         &INostrProfileFindOne::On(INostrProfileFindOneArgs {
             on: NostrProfileQueryBindValues::PublicKey {
-                public_key: data.author.clone(),
+                public_key: event.author().to_hex().to_owned(),
             },
         }),
     );
@@ -297,15 +295,15 @@ fn ingest_profile_event(
             let fields = INostrProfileFieldsPartial {
                 public_key: None,
                 profile_type: Some(Value::from(profile_type)),
-                name: Some(Value::from(data.data.profile.name)),
-                display_name: to_value_opt(data.data.profile.display_name),
-                about: to_value_opt(data.data.profile.about),
-                website: to_value_opt(data.data.profile.website),
-                picture: to_value_opt(data.data.profile.picture),
-                banner: to_value_opt(data.data.profile.banner),
-                nip05: to_value_opt(data.data.profile.nip05),
-                lud06: to_value_opt(data.data.profile.lud06),
-                lud16: to_value_opt(data.data.profile.lud16),
+                name: Some(Value::from(required_profile_name(metadata)?)),
+                display_name: to_value_opt(metadata.display_name().map(str::to_owned)),
+                about: to_value_opt(metadata.about().map(str::to_owned)),
+                website: to_value_opt(profile_string_field(metadata, "website")),
+                picture: to_value_opt(metadata.picture().map(|value| value.as_str().to_owned())),
+                banner: to_value_opt(metadata.banner().map(|value| value.as_str().to_owned())),
+                nip05: to_value_opt(metadata.nip05().map(|value| value.as_str().to_owned())),
+                lud06: to_value_opt(profile_string_field(metadata, "lud06")),
+                lud16: to_value_opt(profile_string_field(metadata, "lud16")),
             };
             let update_result = nostr_profile::update(
                 exec,
@@ -318,17 +316,17 @@ fn ingest_profile_event(
         }
         None => {
             let fields = INostrProfileFields {
-                public_key: data.author.clone(),
+                public_key: event.author().to_hex().to_owned(),
                 profile_type: profile_type.to_string(),
-                name: data.data.profile.name,
-                display_name: data.data.profile.display_name,
-                about: data.data.profile.about,
-                website: data.data.profile.website,
-                picture: data.data.profile.picture,
-                banner: data.data.profile.banner,
-                nip05: data.data.profile.nip05,
-                lud06: data.data.profile.lud06,
-                lud16: data.data.profile.lud16,
+                name: required_profile_name(metadata)?,
+                display_name: metadata.display_name().map(str::to_owned),
+                about: metadata.about().map(str::to_owned),
+                website: profile_string_field(metadata, "website"),
+                picture: metadata.picture().map(|value| value.as_str().to_owned()),
+                banner: metadata.banner().map(|value| value.as_str().to_owned()),
+                nip05: metadata.nip05().map(|value| value.as_str().to_owned()),
+                lud06: profile_string_field(metadata, "lud06"),
+                lud16: profile_string_field(metadata, "lud16"),
             };
             let _ = nostr_profile::create(exec, &fields)?;
         }
@@ -336,6 +334,38 @@ fn ingest_profile_event(
 
     upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
+}
+
+fn profile_type_from_event(event: &EventEnvelope) -> Option<ProfileType> {
+    event
+        .tags_as_vec()
+        .into_iter()
+        .filter(|tag| {
+            tag.first()
+                .is_some_and(|key| key == RADROOTS_PROFILE_TYPE_TAG_KEY)
+        })
+        .filter_map(|tag| tag.get(1).cloned())
+        .find_map(|value| radroots_profile_type_from_tag_value(&value))
+}
+
+fn required_profile_name(
+    metadata: &radroots_event_codec::decode::profile::RadrootsInboundProfileMetadata,
+) -> Result<String, RadrootsReplicaEventsError> {
+    metadata
+        .name()
+        .map(str::to_owned)
+        .ok_or_else(|| RadrootsReplicaEventsError::InvalidData("profile name required".to_string()))
+}
+
+fn profile_string_field(
+    metadata: &radroots_event_codec::decode::profile::RadrootsInboundProfileMetadata,
+    field: &'static str,
+) -> Option<String> {
+    metadata
+        .raw_fields()
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
 }
 
 fn ingest_farm_event(
@@ -1703,6 +1733,19 @@ mod tests {
         test_event_with_parts(event, event.kind_u32(), event.tags_as_vec(), content)
     }
 
+    fn test_event_with_id(event: &EventEnvelope, id: String) -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
+            id,
+            author: event.author().to_hex().to_owned(),
+            created_at: event.created_at_u64(),
+            kind: event.kind_u32(),
+            tags: event.tags_as_vec(),
+            content: event.content().to_owned(),
+            sig: event.signature_hex(),
+        })
+        .expect("test event id")
+    }
+
     struct FixedFactory;
 
     impl RadrootsReplicaIdFactory for FixedFactory {
@@ -1915,6 +1958,46 @@ mod tests {
             tags,
             profile.to_string(),
         )
+    }
+
+    fn test_keys_for_author(author: &str) -> Keys {
+        if author == FIXTURE_ALICE_PUBLIC_KEY_HEX {
+            return Keys::parse(FIXTURE_ALICE_SECRET_KEY_HEX).expect("fixture signing key");
+        }
+        (1_u8..=u8::MAX)
+            .find_map(|seed| {
+                let keys = Keys::parse(&format!("{seed:064x}")).ok()?;
+                (keys.public_key().to_hex() == author).then_some(keys)
+            })
+            .expect("test author must resolve to a fixture signing key")
+    }
+
+    fn sign_test_event(event: &EventEnvelope) -> EventEnvelope {
+        let keys = test_keys_for_author(&event.author().to_hex());
+        let tags = event
+            .tags_as_vec()
+            .into_iter()
+            .map(|tag| Tag::parse(tag).expect("test event tag"))
+            .collect::<Vec<_>>();
+        let event = EventBuilder::new(
+            Kind::Custom(u16::try_from(event.kind_u32()).expect("test event kind")),
+            event.content(),
+        )
+        .tags(tags)
+        .allow_self_tagging()
+        .custom_created_at(Timestamp::from_secs(event.created_at_u64()))
+        .sign_with_keys(&keys)
+        .expect("signed test event");
+        from_nostr(&event).expect("test event adapter")
+    }
+
+    fn ingest_test_profile(
+        exec: &dyn SqlExecutor,
+        event: &EventEnvelope,
+    ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
+        let verified =
+            verify_nip01_event(sign_test_event(event)).expect("verified profile fixture");
+        ingest_profile_event(exec, &verified)
     }
 
     fn farm_event(
@@ -2483,9 +2566,10 @@ mod tests {
             "alice",
         );
         let profile_no_type = profile_event(9, &profile_pubkey, 0, None, "alice-none");
-        assert!(ingest_profile_event(&exec, &profile_no_type).is_err());
+        assert!(ingest_test_profile(&exec, &profile_no_type).is_err());
+        let signed_profile = sign_test_event(&profile);
         assert_eq!(
-            radroots_replica_ingest_event(&exec, &profile).expect("ingest wrapper"),
+            radroots_replica_ingest_event(&exec, &signed_profile).expect("ingest wrapper"),
             RadrootsReplicaIngestOutcome::Applied
         );
         let profile_update = profile_event(
@@ -2496,11 +2580,11 @@ mod tests {
             "alice-2",
         );
         assert_eq!(
-            ingest_profile_event(&exec, &profile_update).expect("profile update"),
+            ingest_test_profile(&exec, &profile_update).expect("profile update"),
             RadrootsReplicaIngestOutcome::Applied
         );
         assert_eq!(
-            ingest_profile_event(&exec, &profile_update).expect("profile skip"),
+            ingest_test_profile(&exec, &profile_update).expect("profile skip"),
             RadrootsReplicaIngestOutcome::Skipped
         );
         let profile_older = profile_event(
@@ -2512,24 +2596,15 @@ mod tests {
         );
         let decision_old = event_head_decision(&exec, &profile_older).expect("decision old");
         assert!(!decision_old.apply);
-        let decision_same = event_head_decision(&exec, &profile_update).expect("decision same");
+        let signed_profile_update = sign_test_event(&profile_update);
+        let decision_same =
+            event_head_decision(&exec, &signed_profile_update).expect("decision same");
         assert!(!decision_same.apply);
-        let profile_same_time_higher_id = profile_event(
-            12,
-            &profile_pubkey,
-            2,
-            Some(ProfileType::Individual),
-            "alice-3",
-        );
+        let profile_same_time_higher_id =
+            test_event_with_id(&signed_profile_update, "f".repeat(64));
         let decision = event_head_decision(&exec, &profile_same_time_higher_id).expect("decision");
         assert!(!decision.apply);
-        let profile_same_time_lower_id = profile_event(
-            10,
-            &profile_pubkey,
-            2,
-            Some(ProfileType::Individual),
-            "alice-0",
-        );
+        let profile_same_time_lower_id = test_event_with_id(&signed_profile_update, "0".repeat(64));
         let decision = event_head_decision(&exec, &profile_same_time_lower_id).expect("decision");
         assert!(decision.apply);
 
@@ -3476,13 +3551,14 @@ mod tests {
             Some(ProfileType::Individual),
             "pass-profile",
         );
+        let signed_profile = sign_test_event(&profile);
         assert_eq!(
-            radroots_replica_ingest_event_with_factory(&pass, &profile, &FixedFactory)
+            radroots_replica_ingest_event_with_factory(&pass, &signed_profile, &FixedFactory)
                 .expect("profile ingest"),
             RadrootsReplicaIngestOutcome::Applied
         );
         assert_eq!(
-            ingest_profile_event(&pass, &profile).expect("profile skip"),
+            ingest_test_profile(&pass, &profile).expect("profile skip"),
             RadrootsReplicaIngestOutcome::Skipped
         );
 
@@ -3715,17 +3791,18 @@ mod tests {
             "txn-profile",
         );
         assert_eq!(
-            ingest_profile_event(&pass_txn, &profile_event_row).expect("txn profile"),
+            ingest_test_profile(&pass_txn, &profile_event_row).expect("txn profile"),
             RadrootsReplicaIngestOutcome::Applied
         );
+        let signed_profile_event_row = sign_test_event(&profile_event_row);
         let profile_decision =
-            event_head_decision(&pass_txn, &profile_event_row).expect("profile decision");
+            event_head_decision(&pass_txn, &signed_profile_event_row).expect("profile decision");
         assert!(!profile_decision.apply);
-        assert!(radroots_replica_ingest_event_head(&pass_txn, &profile_event_row).is_ok());
+        assert!(radroots_replica_ingest_event_head(&pass_txn, &signed_profile_event_row).is_ok());
         assert_eq!(
             radroots_replica_ingest_event_with_factory(
                 &pass_txn,
-                &profile_event_row,
+                &signed_profile_event_row,
                 &FixedFactory
             )
             .expect("txn wrapper"),
@@ -3825,12 +3902,17 @@ mod tests {
             rollback_count,
         };
 
-        assert!(ingest_profile_event(&txn, &profile_event_row).is_err());
+        assert!(ingest_test_profile(&txn, &profile_event_row).is_err());
         assert!(event_head_decision(&txn, &profile_event_row).is_err());
         assert!(radroots_replica_ingest_event_head(&txn, &profile_event_row).is_err());
+        let signed_profile_event_row = sign_test_event(&profile_event_row);
         assert!(
-            radroots_replica_ingest_event_with_factory(&txn, &profile_event_row, &FixedFactory)
-                .is_err()
+            radroots_replica_ingest_event_with_factory(
+                &txn,
+                &signed_profile_event_row,
+                &FixedFactory
+            )
+            .is_err()
         );
 
         assert!(ingest_farm_event(&txn, &farm_event_row, &FixedFactory).is_err());
@@ -3897,17 +3979,17 @@ mod tests {
             "profile-base",
         );
         let profile_bad_content = test_event_with_content(&profile, "{".to_string());
-        assert!(ingest_profile_event(&exec, &profile_bad_content).is_err());
+        assert!(ingest_test_profile(&exec, &profile_bad_content).is_err());
 
         let profile_query_fail = QueryFailExecutor {
             inner: &exec,
             needle: "nostr_profile",
             err: SqlError::Internal,
         };
-        assert!(ingest_profile_event(&profile_query_fail, &profile).is_err());
+        assert!(ingest_test_profile(&profile_query_fail, &profile).is_err());
 
         assert_eq!(
-            ingest_profile_event(&exec, &profile).expect("profile seed"),
+            ingest_test_profile(&exec, &profile).expect("profile seed"),
             RadrootsReplicaIngestOutcome::Applied
         );
         let profile_update = profile_event(
@@ -3922,7 +4004,7 @@ mod tests {
             needle: "update nostr_profile",
             err: SqlError::Internal,
         };
-        assert!(ingest_profile_event(&profile_update_fail, &profile_update).is_err());
+        assert!(ingest_test_profile(&profile_update_fail, &profile_update).is_err());
 
         let profile_create_fail = QueryFailExecutor {
             inner: &exec,
@@ -3936,7 +4018,7 @@ mod tests {
             Some(ProfileType::Individual),
             "profile-new",
         );
-        assert!(ingest_profile_event(&profile_create_fail, &profile_new).is_err());
+        assert!(ingest_test_profile(&profile_create_fail, &profile_new).is_err());
 
         let profile_state_fail = QueryFailExecutor {
             inner: &exec,
@@ -3950,7 +4032,7 @@ mod tests {
             Some(ProfileType::Individual),
             "profile-state",
         );
-        assert!(ingest_profile_event(&profile_state_fail, &profile_state_event).is_err());
+        assert!(ingest_test_profile(&profile_state_fail, &profile_state_event).is_err());
 
         let farm_seed = farm_event(
             810,
@@ -4455,7 +4537,7 @@ mod tests {
             needle: "insert into nostr_event_head",
             err: SqlError::Internal,
         };
-        assert!(ingest_profile_event(&state_insert_fail, &profile).is_err());
+        assert!(ingest_test_profile(&state_insert_fail, &profile).is_err());
 
         let farm_state = farm_event(
             901,

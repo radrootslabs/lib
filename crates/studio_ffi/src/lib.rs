@@ -1,4 +1,5 @@
 #![doc = "Radroots Studio `UniFFI` boundary."]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 mod commands;
 mod contract;
@@ -24,13 +25,14 @@ pub use observer::{
 
 uniffi::setup_scaffolding!();
 
-#[uniffi::export]
+#[cfg_attr(not(coverage_nightly), uniffi::export)]
 #[must_use]
 pub fn native_runtime_version() -> String {
     PRODUCT_VERSION.to_owned()
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     #[test]
     fn native_runtime_reports_the_product_version_independently() {

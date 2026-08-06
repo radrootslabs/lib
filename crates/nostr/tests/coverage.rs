@@ -14,7 +14,7 @@ use radroots_nostr::event::build_nip10_reply as build_nip10_reply_event;
 use radroots_nostr::event::{
     ApplicationHandlerSpec, EventAdapter, build_application_handler, metadata_has_fields,
     to_job_feedback_index, to_job_feedback_metadata, to_job_request_index, to_job_request_metadata,
-    to_job_result_index, to_job_result_metadata, to_post_event_metadata, to_profile_event_metadata,
+    to_job_result_index, to_job_result_metadata,
 };
 use radroots_nostr::event::{Kind as RadrootsNostrKind, Timestamp as RadrootsNostrTimestamp};
 use radroots_nostr::event::{
@@ -398,55 +398,6 @@ fn event_and_job_adapters_cover_native_value_boundaries() {
     let ordinary_adapter = EventAdapter::new(&profile_event);
     assert_eq!(JobEventLike::raw_kind(&ordinary_adapter), 0);
     assert_eq!(JobEventBorrow::raw_kind(&ordinary_adapter), 0);
-    assert_eq!(
-        to_post_event_metadata(&profile_event).data.content,
-        profile_event.content
-    );
-    assert!(to_profile_event_metadata(&profile_event).is_some());
-    let unrelated_tag_profile =
-        nostr::EventBuilder::new(RadrootsNostrKind::Metadata, profile_event.content.clone())
-            .tag(RadrootsNostrTag::custom(
-                RadrootsNostrTagKind::Custom(Cow::Borrowed("x")),
-                vec!["ignored".to_string()],
-            ))
-            .sign_with_keys(&keys)
-            .unwrap();
-    assert!(to_profile_event_metadata(&unrelated_tag_profile).is_some());
-    let typed_profile =
-        nostr::EventBuilder::new(RadrootsNostrKind::Metadata, profile_event.content.clone())
-            .tag(RadrootsNostrTag::custom(
-                RadrootsNostrTagKind::Custom(Cow::Borrowed("t")),
-                vec!["radroots:type:farm".to_string()],
-            ))
-            .sign_with_keys(&keys)
-            .unwrap();
-    assert!(
-        to_profile_event_metadata(&typed_profile)
-            .expect("typed profile")
-            .data
-            .profile_type
-            .is_some()
-    );
-    let unknown_profile_type =
-        nostr::EventBuilder::new(RadrootsNostrKind::Metadata, profile_event.content.clone())
-            .tag(RadrootsNostrTag::custom(
-                RadrootsNostrTagKind::Custom(Cow::Borrowed("t")),
-                vec!["radroots:type:unknown".to_string()],
-            ))
-            .sign_with_keys(&keys)
-            .unwrap();
-    assert_eq!(
-        to_profile_event_metadata(&unknown_profile_type)
-            .expect("profile with unknown type")
-            .data
-            .profile_type,
-        None
-    );
-    let invalid_profile = nostr::EventBuilder::new(RadrootsNostrKind::Metadata, "not-json")
-        .sign_with_keys(&keys)
-        .unwrap();
-    assert!(to_profile_event_metadata(&invalid_profile).is_none());
-
     let _ = to_job_request_metadata(&event);
     let _ = to_job_request_index(&event);
     let _ = to_job_result_metadata(&event);

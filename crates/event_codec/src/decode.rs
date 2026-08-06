@@ -116,15 +116,12 @@ pub mod order {
 }
 
 pub mod post {
-    pub use crate::post::decode::*;
     pub use crate::post::inbound::*;
 }
 
 #[cfg(feature = "json")]
 pub mod profile {
-    pub use crate::profile::decode::*;
     pub use crate::profile::inbound::*;
-    pub use crate::profile::{LegacyProfile, RadrootsProfileData};
 }
 
 pub mod reply {

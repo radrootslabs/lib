@@ -1118,7 +1118,10 @@ fn sync_parent(path: &Path, operation: &'static str) -> Result<(), Error> {
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn create_private_directory(path: &Path, operation: &'static str) -> Result<(), Error> {
+    #[cfg(unix)]
     let mut builder = fs::DirBuilder::new();
+    #[cfg(not(unix))]
+    let builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -2432,18 +2435,22 @@ mod tests {
                 .await
                 .expect("finalize restore")
         });
-        for _ in 0..10_000 {
-            if store
-                .storage_status()
-                .await
-                .expect("restoring status")
-                .shutdown()
-                == ShutdownState::Closing
-            {
-                break;
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                if store
+                    .storage_status()
+                    .await
+                    .expect("restoring status")
+                    .shutdown()
+                    == ShutdownState::Closing
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
             }
-            tokio::task::yield_now().await;
-        }
+        })
+        .await
+        .expect("restore enters closing state");
         assert!(!finalization.is_finished());
         assert_eq!(
             store

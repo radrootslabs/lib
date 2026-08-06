@@ -384,7 +384,10 @@ mod tests {
     use refinery::Target;
     use rusqlite::Connection;
 
-    use super::{CURRENT_SCHEMA_VERSION, Database, configure, migrations};
+    use super::{
+        CURRENT_SCHEMA_VERSION, Database, configure, create_secure_directory, migrations,
+        restrict_sqlite_sidecars,
+    };
     use crate::{DatabasePreflight, PersistedIdentityIssueKind, RepairAuthorization};
 
     #[test]
@@ -399,6 +402,20 @@ mod tests {
             database.schema_version().expect("repeat schema version"),
             CURRENT_SCHEMA_VERSION
         );
+    }
+
+    #[test]
+    fn database_path_guards_reject_files_as_directories_and_sidecars() {
+        let directory = tempdir().expect("temporary directory");
+        let regular = directory.path().join("regular");
+        fs::write(&regular, b"file").expect("write regular file");
+        assert!(create_secure_directory(&regular).is_err());
+
+        let database = directory.path().join("studio.sqlite3");
+        fs::write(&database, b"database").expect("write database file");
+        fs::create_dir(directory.path().join("studio.sqlite3-wal"))
+            .expect("create invalid WAL sidecar");
+        assert!(restrict_sqlite_sidecars(&database).is_err());
     }
 
     #[test]

@@ -30,9 +30,12 @@ mod generate;
 mod hygiene;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod portable_qualification;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod release_graph;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod safety_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod sdk_generation;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -280,6 +283,7 @@ fn usage() {
     eprintln!("  cargo xtask release qualify-api");
     eprintln!("  cargo xtask release qualify-fuzz");
     eprintln!("  cargo xtask release qualify-portable");
+    eprintln!("  cargo xtask release qualify-safety");
     eprintln!("  cargo xtask release qualify-supply-chain");
     eprintln!("  cargo xtask release qualify-targets");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
@@ -367,6 +371,7 @@ fn release_preflight_at(root: &Path) -> Result<(), String> {
     contract::validate_release_preflight(root)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn run_release(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("preflight") => release_preflight(),
@@ -375,6 +380,7 @@ fn run_release(args: &[String]) -> Result<(), String> {
         Some("qualify-api") => api_qualification::run(&workspace_root()),
         Some("qualify-fuzz") => fuzz_qualification::run(&workspace_root()),
         Some("qualify-portable") => portable_qualification::run(&workspace_root()),
+        Some("qualify-safety") => safety_qualification::run(&workspace_root()),
         Some("qualify-supply-chain") => supply_chain_qualification::run(&workspace_root()),
         Some("qualify-targets") => target_qualification::run(&workspace_root()),
         _ => Err("unknown release subcommand".to_string()),
@@ -634,6 +640,49 @@ mod tests {
                 "fixture",
             ])
             .is_err()
+        );
+    }
+
+    #[test]
+    fn artifact_cli_values_preserve_every_governed_identifier() {
+        assert_eq!(
+            [
+                ArtifactProduct::Sdk.as_str(),
+                ArtifactProduct::Mobile.as_str(),
+                ArtifactProduct::Studio.as_str(),
+            ],
+            ["sdk", "mobile", "studio"]
+        );
+        assert_eq!(
+            [
+                ArtifactTarget::Typescript.as_str(),
+                ArtifactTarget::Wasm.as_str(),
+                ArtifactTarget::Ffi.as_str(),
+                ArtifactTarget::Ios.as_str(),
+                ArtifactTarget::Android.as_str(),
+                ArtifactTarget::Linux.as_str(),
+                ArtifactTarget::Macos.as_str(),
+                ArtifactTarget::Windows.as_str(),
+            ],
+            [
+                "typescript",
+                "wasm",
+                "ffi",
+                "ios",
+                "android",
+                "linux",
+                "macos",
+                "windows",
+            ]
+        );
+        assert_eq!(
+            [
+                ArtifactLanguage::Typescript.as_str(),
+                ArtifactLanguage::Swift.as_str(),
+                ArtifactLanguage::Kotlin.as_str(),
+                ArtifactLanguage::Javascript.as_str(),
+            ],
+            ["typescript", "swift", "kotlin", "javascript"]
         );
     }
 

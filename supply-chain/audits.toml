@@ -1,0 +1,20 @@
+
+# cargo-vet audits file
+
+[criteria.build-execution-reviewed]
+description = "The package's build-time process execution, generated inputs, environment handling, filesystem writes, and output paths were reviewed for hermetic, bounded operation."
+implies = "safe-to-deploy"
+
+[criteria.crypto-reviewed]
+description = "The package's cryptographic algorithms, key material handling, randomness, constant-time expectations, and protocol composition were reviewed for the Radroots use case."
+implies = "safe-to-deploy"
+
+[criteria.network-parser-reviewed]
+description = "The package's untrusted network parsing, canonicalization, size limits, recursion limits, and malformed-input behavior were reviewed for fail-closed operation."
+implies = "safe-to-deploy"
+
+[criteria.secret-handling-reviewed]
+description = "The package's secret lifecycle, redaction, zeroization, persistence, keyring boundary, and error behavior were reviewed for the Radroots use case."
+implies = "safe-to-deploy"
+
+[audits]

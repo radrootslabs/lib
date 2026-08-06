@@ -4,7 +4,11 @@
 use alloc::{boxed::Box, string::String, string::ToString, vec::Vec};
 
 use core::fmt;
-use radroots_blossom::{BlobUrl, Sha256};
+#[cfg(feature = "json")]
+use radroots_blossom::BlobUrl;
+use radroots_blossom::Sha256;
+#[cfg(feature = "json")]
+use radroots_event::wire::DEFAULT_RAW_JSON_MAX_BYTES;
 use radroots_event::{
     envelope::EventTags,
     envelope::kind::KIND_CLASSIFIED_LISTING,
@@ -15,11 +19,11 @@ use radroots_event::{
         food_media_http_url_is_valid,
     },
     listing::classified::ClassifiedListingPartition,
-    wire::DEFAULT_RAW_JSON_MAX_BYTES,
 };
 
 use crate::verification::v1::RadrootsSignatureVerifiedEvent;
 
+#[cfg(feature = "json")]
 const FOOD_SIGNED_EVENT_FIXED_BYTES: usize = "{\"id\":\"".len()
     + 64
     + "\",\"pubkey\":\"".len()
@@ -492,11 +496,13 @@ fn normalize_decimal(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(feature = "json")]
 pub(crate) struct RadrootsStrictFoodAvailabilityProjection {
     identifier: FoodIdentifier,
     published_at: FoodPublishedAt,
 }
 
+#[cfg(feature = "json")]
 impl RadrootsStrictFoodAvailabilityProjection {
     pub(crate) fn identifier(&self) -> &FoodIdentifier {
         &self.identifier
@@ -507,6 +513,7 @@ impl RadrootsStrictFoodAvailabilityProjection {
     }
 }
 
+#[cfg(feature = "json")]
 fn canonical_food_signed_event_size(tags: &[Vec<String>], content: &str, created_at: u64) -> usize {
     let mut tags_bytes = 2usize;
     for (tag_index, tag) in tags.iter().enumerate() {
@@ -527,6 +534,7 @@ fn canonical_food_signed_event_size(tags: &[Vec<String>], content: &str, created
         .saturating_add(canonical_json_string_bytes(content))
 }
 
+#[cfg(feature = "json")]
 fn decimal_u64_bytes(mut value: u64) -> usize {
     let mut bytes = 1usize;
     while value >= 10 {
@@ -536,6 +544,7 @@ fn decimal_u64_bytes(mut value: u64) -> usize {
     bytes
 }
 
+#[cfg(feature = "json")]
 fn canonical_json_string_bytes(value: &str) -> usize {
     value.chars().fold(2usize, |total, character| {
         total.saturating_add(match character {
@@ -550,6 +559,7 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 ///
 /// This does not construct signable parts or elevate inbound media to verified
 /// media typestate. It exists solely for comparing already signed revisions.
+#[cfg(feature = "json")]
 pub(crate) fn project_strict_verified_food_availability_event(
     verified_event: &RadrootsSignatureVerifiedEvent,
 ) -> Result<RadrootsStrictFoodAvailabilityProjection, RadrootsFoodAvailabilityProjectionError> {
