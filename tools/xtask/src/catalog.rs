@@ -18,6 +18,7 @@ const CONSOLIDATION_RELATIVE: &str = "contracts/consolidation/architecture.v1.to
 const GROUPS_RELATIVE: &str = "contracts/crates/generated/package_groups.v1.toml";
 const PLATFORMS_RELATIVE: &str = "contracts/crates/generated/platform_inventory.v1.toml";
 const RELEASE_INVENTORY_RELATIVE: &str = "contracts/crates/generated/release_inventory.v2.toml";
+const COVERAGE_RELATIVE: &str = "contracts/coverage.toml";
 const CATALOG_SCHEMA: &str = "radroots.workspace.catalog.v1";
 const RELEASE_ID: &str = "radroots.crates.release.v2";
 const CONSOLIDATION_ID: &str = "radroots.rust.consolidation.v1";
@@ -104,6 +105,16 @@ struct ConsolidationV1 {
 }
 
 #[derive(Debug, Deserialize)]
+struct CoveragePolicy {
+    required: CoverageRequired,
+}
+
+#[derive(Debug, Deserialize)]
+struct CoverageRequired {
+    crates: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct CargoMetadata {
     packages: Vec<CargoPackage>,
     workspace_members: Vec<String>,
@@ -138,7 +149,45 @@ pub fn run(args: &[String], workspace_root: &Path) -> Result<(), String> {
 }
 
 pub(crate) fn check(workspace_root: &Path) -> Result<(), String> {
-    let loaded = load_and_validate(workspace_root)?;
+    check_with_provenance(workspace_root, true)
+}
+
+pub(crate) fn check_source_export(workspace_root: &Path) -> Result<(), String> {
+    check_with_provenance(workspace_root, false)
+}
+
+pub(crate) fn active_group(workspace_root: &Path, group: &str) -> Result<Vec<String>, String> {
+    validate_identifier(group, "package group")?;
+    active_packages_matching(workspace_root, |package| {
+        package.groups.iter().any(|candidate| candidate == group)
+    })
+}
+
+pub(crate) fn active_packages(workspace_root: &Path) -> Result<Vec<String>, String> {
+    active_packages_matching(workspace_root, |_| true)
+}
+
+fn active_packages_matching(
+    workspace_root: &Path,
+    predicate: impl Fn(&CatalogPackage) -> bool,
+) -> Result<Vec<String>, String> {
+    let catalog = parse_file::<Catalog>(workspace_root, CATALOG_RELATIVE)?;
+    validate_catalog(&catalog)?;
+    let mut packages = catalog
+        .package
+        .iter()
+        .filter(|package| package.state == "active" && predicate(package))
+        .map(|package| package.name.clone())
+        .collect::<Vec<_>>();
+    packages.sort_unstable();
+    Ok(packages)
+}
+
+fn check_with_provenance(
+    workspace_root: &Path,
+    require_git_provenance: bool,
+) -> Result<(), String> {
+    let loaded = load_and_validate(workspace_root, require_git_provenance)?;
     for artifact in render_projections(&loaded.catalog, &loaded.catalog_digest) {
         let current = read_regular_file(workspace_root, artifact.relative)?;
         if current != artifact.contents {
@@ -152,7 +201,7 @@ pub(crate) fn check(workspace_root: &Path) -> Result<(), String> {
 }
 
 fn write(workspace_root: &Path) -> Result<(), String> {
-    let loaded = load_and_validate(workspace_root)?;
+    let loaded = load_and_validate(workspace_root, true)?;
     let artifacts = render_projections(&loaded.catalog, &loaded.catalog_digest);
     with_artifact_bundle_transaction(workspace_root, |transaction| transaction.write(artifacts))
 }
@@ -162,18 +211,25 @@ struct LoadedCatalog {
     catalog_digest: String,
 }
 
-fn load_and_validate(workspace_root: &Path) -> Result<LoadedCatalog, String> {
+fn load_and_validate(
+    workspace_root: &Path,
+    require_git_provenance: bool,
+) -> Result<LoadedCatalog, String> {
     let catalog_bytes = read_regular_file(workspace_root, CATALOG_RELATIVE)?;
     let catalog = parse_toml::<Catalog>(CATALOG_RELATIVE, &catalog_bytes)?;
     let release = parse_file::<ReleaseV2>(workspace_root, RELEASE_RELATIVE)?;
     let consolidation = parse_file::<ConsolidationV1>(workspace_root, CONSOLIDATION_RELATIVE)?;
+    let coverage = parse_file::<CoveragePolicy>(workspace_root, COVERAGE_RELATIVE)?;
     validate_catalog(&catalog)?;
+    validate_coverage_authority(&catalog, &coverage)?;
     validate_release(&release, &catalog, workspace_root)?;
     validate_consolidation(&consolidation)?;
     validate_workspace_manifest(&catalog, workspace_root)?;
     let metadata = cargo_metadata(workspace_root)?;
     validate_metadata(&catalog, &metadata, workspace_root)?;
-    validate_active_source_provenance(&catalog, workspace_root)?;
+    if require_git_provenance {
+        validate_active_source_provenance(&catalog, workspace_root)?;
+    }
     Ok(LoadedCatalog {
         catalog,
         catalog_digest: sha256(&catalog_bytes),
@@ -342,6 +398,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
     }
     let required_groups = BTreeSet::from([
         "boundaries",
+        "coverage_required",
         "mobile",
         "portable",
         "preview",
@@ -401,6 +458,37 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         || xtasks[0].state != "active"
     {
         return Err("catalog must contain exactly one canonical xtask".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_coverage_authority(catalog: &Catalog, coverage: &CoveragePolicy) -> Result<(), String> {
+    let catalog_required = catalog
+        .package
+        .iter()
+        .filter(|package| {
+            package.state == "active"
+                && package
+                    .groups
+                    .iter()
+                    .any(|group| group == "coverage_required")
+        })
+        .map(|package| package.name.as_str())
+        .collect::<BTreeSet<_>>();
+    let policy_required = coverage
+        .required
+        .crates
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    if policy_required.len() != coverage.required.crates.len() {
+        return Err("coverage policy contains duplicate required packages".to_owned());
+    }
+    if catalog_required != policy_required {
+        return Err(
+            "coverage required packages must exactly match the catalog coverage_required group"
+                .to_owned(),
+        );
     }
     Ok(())
 }
@@ -546,6 +634,32 @@ fn validate_workspace_manifest(catalog: &Catalog, workspace_root: &Path) -> Resu
     {
         return Err(
             "Cargo workspace members must exactly match explicit active catalog paths".to_owned(),
+        );
+    }
+    let default_members = workspace
+        .get("default-members")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "Cargo.toml lacks explicit default members".to_owned())?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .ok_or_else(|| "default member must be a string".to_owned())
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let expected_defaults = catalog
+        .package
+        .iter()
+        .filter(|package| {
+            package.state == "active"
+                && (package.groups.iter().any(|group| group == "portable")
+                    || package.name == "xtask")
+        })
+        .map(|package| package.path.as_str())
+        .collect::<BTreeSet<_>>();
+    if default_members != expected_defaults {
+        return Err(
+            "Cargo default members must match active portable packages plus xtask".to_owned(),
         );
     }
     if workspace.get("resolver").and_then(toml::Value::as_str) != Some("3") {
@@ -722,6 +836,8 @@ fn validate_active_source_provenance(
 
 fn render_projections(catalog: &Catalog, digest: &str) -> Vec<GeneratedArtifact> {
     let mut groups = BTreeMap::<&str, Vec<&str>>::new();
+    let mut active_groups = BTreeMap::<&str, Vec<&str>>::new();
+    let mut reserved_groups = BTreeMap::<&str, Vec<&str>>::new();
     let mut platforms = BTreeMap::<&str, Vec<&str>>::new();
     let mut public = Vec::new();
     let mut private = Vec::new();
@@ -729,6 +845,14 @@ fn render_projections(catalog: &Catalog, digest: &str) -> Vec<GeneratedArtifact>
     for package in &catalog.package {
         for group in &package.groups {
             groups.entry(group).or_default().push(&package.name);
+            if package.state == "active" {
+                active_groups.entry(group).or_default().push(&package.name);
+            } else {
+                reserved_groups
+                    .entry(group)
+                    .or_default()
+                    .push(&package.name);
+            }
         }
         for platform in &package.platforms {
             platforms.entry(platform).or_default().push(&package.name);
@@ -743,6 +867,8 @@ fn render_projections(catalog: &Catalog, digest: &str) -> Vec<GeneratedArtifact>
         }
     }
     sort_map_values(&mut groups);
+    sort_map_values(&mut active_groups);
+    sort_map_values(&mut reserved_groups);
     sort_map_values(&mut platforms);
     public.sort_unstable();
     private.sort_unstable();
@@ -750,11 +876,11 @@ fn render_projections(catalog: &Catalog, digest: &str) -> Vec<GeneratedArtifact>
     vec![
         GeneratedArtifact {
             relative: GROUPS_RELATIVE,
-            contents: render_map_projection(
-                "radroots.workspace.package-groups.v1",
+            contents: render_group_projection(
                 digest,
-                "group",
                 &groups,
+                &active_groups,
+                &reserved_groups,
             )
             .into_bytes(),
         },
@@ -779,6 +905,26 @@ fn render_projections(catalog: &Catalog, digest: &str) -> Vec<GeneratedArtifact>
             .into_bytes(),
         },
     ]
+}
+
+fn render_group_projection(
+    digest: &str,
+    groups: &BTreeMap<&str, Vec<&str>>,
+    active: &BTreeMap<&str, Vec<&str>>,
+    reserved: &BTreeMap<&str, Vec<&str>>,
+) -> String {
+    let mut output = format!(
+        "schema = \"radroots.workspace.package-groups.v1\"\ncatalog_sha256 = \"{digest}\"\n"
+    );
+    for (id, packages) in groups {
+        output.push_str(&format!(
+            "\n[[group]]\nid = \"{id}\"\npackages = {}\nactive_packages = {}\nreserved_packages = {}\n",
+            toml_array(packages),
+            toml_array(active.get(id).map(Vec::as_slice).unwrap_or_default()),
+            toml_array(reserved.get(id).map(Vec::as_slice).unwrap_or_default()),
+        ));
+    }
+    output
 }
 
 fn render_map_projection(

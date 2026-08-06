@@ -1108,6 +1108,7 @@ fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
     read_coverage_policy(path)?.required_crates()
 }
 
+#[cfg(test)]
 fn read_workspace_crates(workspace_root: &Path) -> Result<Vec<String>, String> {
     let packages = read_workspace_packages(workspace_root)?;
     Ok(packages.into_iter().map(|(name, _)| name).collect())
@@ -2049,12 +2050,16 @@ fn read_gate_report(path: &Path) -> Result<CoverageGateReport, String> {
 
 fn list_required_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
     let required_path = coverage_policy_path(root);
-    let crates = read_required_crates(&required_path)?;
+    let policy_crates = read_required_crates(&required_path)?;
+    let crates = crate::catalog::active_group(root, "coverage_required")?;
+    if crates.iter().collect::<BTreeSet<_>>() != policy_crates.iter().collect::<BTreeSet<_>>() {
+        return Err("coverage policy required crates drifted from the catalog".to_owned());
+    }
     write_crate_names_output(writer, crates, "required crates")
 }
 
 fn list_workspace_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
-    let crates = read_workspace_crates(root)?;
+    let crates = crate::catalog::active_packages(root)?;
     write_crate_names_output(writer, crates, "workspace crates")
 }
 
@@ -5528,7 +5533,7 @@ test_threads = 0
 
         let workspace_err = list_workspace_crates_with_root(&root, &mut output)
             .expect_err("missing workspace manifest should fail");
-        assert!(workspace_err.contains("failed to read"));
+        assert!(workspace_err.contains("inspect artifact path"));
 
         fs::remove_dir_all(root).expect("remove list helper root");
     }

@@ -10,6 +10,7 @@ publish = false
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 
 [dependencies]
+clap = { workspace = true, features = ["derive"] }
 dto_bindgen_core = { workspace = true }
 fs2 = { workspace = true }
 hex = { workspace = true }

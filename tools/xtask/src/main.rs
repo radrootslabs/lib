@@ -12,6 +12,8 @@ mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod build_control;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod catalog;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod consolidation;
@@ -36,16 +38,228 @@ mod supply_chain_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod target_qualification;
 
+use clap::{Parser, Subcommand, ValueEnum};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+#[derive(Debug, Parser)]
+#[command(name = "xtask", disable_help_subcommand = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: XtaskCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum XtaskCommand {
+    Architecture,
+    ArchitectureCi,
+    ArchitectureSourceExportCi,
+    CheckApiBoundaries,
+    CheckDependencyBoundaries,
+    Check {
+        #[arg(long)]
+        group: String,
+        #[arg(long, value_enum, default_value_t = GroupOperation::Check)]
+        operation: GroupOperation,
+        #[arg(long)]
+        execute: bool,
+        #[arg(long)]
+        include_reserved: bool,
+    },
+    Catalog {
+        #[command(subcommand)]
+        command: CatalogCommand,
+    },
+    #[command(trailing_var_arg = true)]
+    Contract {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(trailing_var_arg = true)]
+    Consolidation {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(trailing_var_arg = true)]
+    Coverage {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(name = "dto-roots", trailing_var_arg = true)]
+    DtoRoots {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(trailing_var_arg = true)]
+    Generate {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(trailing_var_arg = true)]
+    Hygiene {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(trailing_var_arg = true)]
+    Release {
+        #[arg(allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    SourceLock {
+        #[arg(long)]
+        consumer_root: PathBuf,
+    },
+    Source {
+        #[command(subcommand)]
+        command: SourceCommand,
+    },
+    Artifact {
+        #[arg(long, value_enum)]
+        product: ArtifactProduct,
+        #[arg(long, value_enum)]
+        target: ArtifactTarget,
+        #[arg(long, value_enum)]
+        language: ArtifactLanguage,
+        #[arg(long, value_enum)]
+        mode: ArtifactMode,
+        #[arg(long)]
+        consumer_root: PathBuf,
+        #[arg(long)]
+        source_root: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        source_date_epoch: u64,
+        #[arg(long)]
+        builder_id: String,
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Subcommand)]
+enum CatalogCommand {
+    Check,
+    Write,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum GroupOperation {
+    Check,
+    Test,
+    Clippy,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ArtifactMode {
+    Check,
+    Write,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum SourceMode {
+    Prefetch,
+    Offline,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ArtifactProduct {
+    Sdk,
+    Mobile,
+    Studio,
+}
+
+impl ArtifactProduct {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Sdk => "sdk",
+            Self::Mobile => "mobile",
+            Self::Studio => "studio",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ArtifactTarget {
+    Typescript,
+    Wasm,
+    Ffi,
+    Ios,
+    Android,
+    Linux,
+    Macos,
+    Windows,
+}
+
+impl ArtifactTarget {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Typescript => "typescript",
+            Self::Wasm => "wasm",
+            Self::Ffi => "ffi",
+            Self::Ios => "ios",
+            Self::Android => "android",
+            Self::Linux => "linux",
+            Self::Macos => "macos",
+            Self::Windows => "windows",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ArtifactLanguage {
+    Typescript,
+    Swift,
+    Kotlin,
+    Javascript,
+}
+
+impl ArtifactLanguage {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Typescript => "typescript",
+            Self::Swift => "swift",
+            Self::Kotlin => "kotlin",
+            Self::Javascript => "javascript",
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum SourceCommand {
+    Materialize {
+        #[arg(long)]
+        consumer_root: PathBuf,
+        #[arg(long)]
+        cache_root: PathBuf,
+        #[arg(long, value_enum)]
+        mode: SourceMode,
+    },
+    ArchiveVerify {
+        #[arg(long)]
+        archive: PathBuf,
+        #[arg(long)]
+        sha256: String,
+    },
+    ArchiveCreate {
+        #[arg(long)]
+        source_root: PathBuf,
+        #[arg(long)]
+        revision: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
 
 fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask architecture");
     eprintln!("  cargo xtask architecture-ci");
+    eprintln!("  cargo xtask architecture-source-export-ci");
     eprintln!("  cargo xtask check-api-boundaries");
     eprintln!("  cargo xtask check-dependency-boundaries");
+    eprintln!("  cargo xtask check --group <group> [--operation check|test|clippy] [--execute]");
     eprintln!("  cargo xtask catalog check|write");
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
@@ -76,6 +290,17 @@ fn usage() {
         "  cargo xtask coverage refresh-summary [--reports-root <dir>] [--out <file>] [--status-out <file>]"
     );
     eprintln!("  cargo xtask hygiene forbidden-identifiers");
+    eprintln!("  cargo xtask source-lock --consumer-root <absolute-directory>");
+    eprintln!(
+        "  cargo xtask source materialize --consumer-root <absolute-directory> --cache-root <absolute-directory> --mode <prefetch|offline>"
+    );
+    eprintln!("  cargo xtask source archive-verify --archive <bundle> --sha256 <digest>");
+    eprintln!(
+        "  cargo xtask source archive-create --source-root <absolute-directory> --revision <full-sha> --output <absolute-bundle>"
+    );
+    eprintln!(
+        "  cargo xtask artifact --product <sdk|mobile|studio> --target <target> --language <language> --mode <check|write> --consumer-root <absolute-directory> --source-root <absolute-directory> --output <relative-path> --source-date-epoch <seconds> --builder-id <id>"
+    );
 }
 
 fn workspace_root_with_override(override_root: Option<&str>) -> PathBuf {
@@ -127,6 +352,10 @@ fn release_preflight() -> Result<(), String> {
 }
 
 fn release_preflight_at(root: &Path) -> Result<(), String> {
+    catalog::check(root)?;
+    for group in ["public_native", "preview", "tools"] {
+        build_control::group_plan(root, group, build_control::Operation::Check, false)?;
+    }
     dto_roots::check(root)?;
     generate::protocol::check(root)?;
     contract::validate_artifact_contracts(root)?;
@@ -172,28 +401,112 @@ fn run_contract(args: &[String]) -> Result<(), String> {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
-    match args.first().map(String::as_str) {
-        Some("architecture") if args.len() == 1 => architecture::validate(&workspace_root()),
-        Some("architecture-ci") if args.len() == 1 => {
+    let cli = Cli::try_parse_from(std::iter::once("xtask").chain(args.iter().map(String::as_str)))
+        .map_err(|error| error.to_string())?;
+    match cli.command {
+        XtaskCommand::Architecture => architecture::validate(&workspace_root()),
+        XtaskCommand::ArchitectureCi => {
             catalog::check(&workspace_root())?;
             architecture::validate_ci(&workspace_root())?;
             validate_contract()
         }
-        Some("check-api-boundaries") if args.len() == 1 => {
+        XtaskCommand::ArchitectureSourceExportCi => {
+            catalog::check_source_export(&workspace_root())?;
+            architecture::validate_ci(&workspace_root())?;
+            validate_contract()
+        }
+        XtaskCommand::CheckApiBoundaries => {
             architecture::validate_api_boundaries(&workspace_root())
         }
-        Some("check-dependency-boundaries") if args.len() == 1 => {
+        XtaskCommand::CheckDependencyBoundaries => {
             architecture::validate_dependency_boundaries(&workspace_root())
         }
-        Some("catalog") => catalog::run(&args[1..], &workspace_root()),
-        Some("contract") => run_contract(&args[1..]),
-        Some("consolidation") => consolidation::run(&args[1..], &workspace_root()),
-        Some("coverage") => coverage::run(&args[1..]),
-        Some("dto-roots") => dto_roots::run(&args[1..], &workspace_root()),
-        Some("generate") => generate::run(&args[1..], &workspace_root()),
-        Some("hygiene") => hygiene::run(&args[1..], &workspace_root()),
-        Some("release") => run_release(&args[1..]),
-        _ => Err("unknown command".to_string()),
+        XtaskCommand::Check {
+            group,
+            operation,
+            execute,
+            include_reserved,
+        } => {
+            let operation = match operation {
+                GroupOperation::Check => build_control::Operation::Check,
+                GroupOperation::Test => build_control::Operation::Test,
+                GroupOperation::Clippy => build_control::Operation::Clippy,
+            };
+            let root = workspace_root();
+            let plan = build_control::group_plan(&root, &group, operation, include_reserved)?;
+            if execute {
+                build_control::execute_group_plan(&root, &plan)
+            } else {
+                build_control::print_plan(&plan);
+                Ok(())
+            }
+        }
+        XtaskCommand::Catalog { command } => match command {
+            CatalogCommand::Check => catalog::run(&["check".to_owned()], &workspace_root()),
+            CatalogCommand::Write => catalog::run(&["write".to_owned()], &workspace_root()),
+        },
+        XtaskCommand::Contract { args } => run_contract(&args),
+        XtaskCommand::Consolidation { args } => consolidation::run(&args, &workspace_root()),
+        XtaskCommand::Coverage { args } => coverage::run(&args),
+        XtaskCommand::DtoRoots { args } => dto_roots::run(&args, &workspace_root()),
+        XtaskCommand::Generate { args } => generate::run(&args, &workspace_root()),
+        XtaskCommand::Hygiene { args } => hygiene::run(&args, &workspace_root()),
+        XtaskCommand::Release { args } => run_release(&args),
+        XtaskCommand::SourceLock { consumer_root } => {
+            build_control::validate_consumer(&consumer_root).map(|_| ())
+        }
+        XtaskCommand::Source { command } => match command {
+            SourceCommand::Materialize {
+                consumer_root,
+                cache_root,
+                mode,
+            } => build_control::materialize(
+                &consumer_root,
+                &cache_root,
+                matches!(mode, SourceMode::Offline),
+            )
+            .map(|path| {
+                println!("{}", path.display());
+            }),
+            SourceCommand::ArchiveVerify { archive, sha256 } => {
+                build_control::verify_source_archive(&archive, &sha256)
+            }
+            SourceCommand::ArchiveCreate {
+                source_root,
+                revision,
+                output,
+            } => build_control::create_source_archive(&source_root, &revision, &output).map(
+                |digest| {
+                    println!("{digest}");
+                },
+            ),
+        },
+        XtaskCommand::Artifact {
+            product,
+            target,
+            language,
+            mode,
+            consumer_root,
+            source_root,
+            output,
+            source_date_epoch,
+            builder_id,
+            features,
+        } => build_control::artifact(
+            product.as_str(),
+            target.as_str(),
+            language.as_str(),
+            match mode {
+                ArtifactMode::Check => build_control::Mode::Check,
+                ArtifactMode::Write => build_control::Mode::Write,
+            },
+            &consumer_root,
+            &source_root,
+            &output,
+            source_date_epoch,
+            &builder_id,
+            &features,
+        ),
     }
 }
 
@@ -263,6 +576,47 @@ mod tests {
     }
 
     #[test]
+    fn typed_build_control_cli_requires_explicit_modes_and_known_values() {
+        let source_args = [
+            "xtask",
+            "source",
+            "materialize",
+            "--consumer-root",
+            "/tmp/consumer",
+            "--cache-root",
+            "/tmp/cache",
+        ];
+        assert!(Cli::try_parse_from(source_args).is_err());
+        assert!(Cli::try_parse_from(source_args.into_iter().chain(["--mode", "prefetch"])).is_ok());
+
+        assert!(
+            Cli::try_parse_from([
+                "xtask",
+                "artifact",
+                "--product",
+                "unknown",
+                "--target",
+                "wasm",
+                "--language",
+                "javascript",
+                "--mode",
+                "check",
+                "--consumer-root",
+                "/tmp/consumer",
+                "--source-root",
+                "/tmp/source",
+                "--output",
+                "generated/manifest.json",
+                "--source-date-epoch",
+                "1",
+                "--builder-id",
+                "fixture",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
     fn run_release_and_dispatchers_cover_error_paths() {
         let unknown_release =
             run_release(&["unknown".to_string()]).expect_err("unknown release subcommand");
@@ -278,7 +632,7 @@ mod tests {
         .expect_err("invalid registry-v7 mode");
         assert!(invalid_registry.contains("exactly --write"));
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
-        assert!(unknown_root.contains("unknown command"));
+        assert!(unknown_root.contains("unrecognized subcommand"));
 
         run(&["architecture".to_string()]).expect("architecture ledger validates");
 
@@ -291,15 +645,15 @@ mod tests {
 
         let removed_sdk = run(&["sdk".to_string(), "validate".to_string()])
             .expect_err("removed sdk command namespace");
-        assert!(removed_sdk.contains("unknown command"));
+        assert!(removed_sdk.contains("unrecognized subcommand"));
     }
 
     #[test]
-    fn release_preflight_checks_dto_root_authority_first() {
+    fn release_preflight_checks_catalog_authority_first() {
         let workspace = tempfile::TempDir::new().expect("create empty workspace");
         let error = release_preflight_at(workspace.path())
-            .expect_err("missing DTO root authority must fail first");
-        assert!(error.contains("DTO root authority"));
+            .expect_err("missing catalog authority must fail first");
+        assert!(error.contains("inspect artifact path") && error.contains("contracts"));
     }
 
     #[test]

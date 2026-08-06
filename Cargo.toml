@@ -38,6 +38,26 @@ members = [
   "crates/mesh_agent_proto",
   "tools/xtask",
 ]
+default-members = [
+  "crates/core",
+  "crates/identity",
+  "crates/blossom",
+  "crates/protocol",
+  "crates/event",
+  "crates/event_codec",
+  "crates/trade",
+  "crates/signing",
+  "crates/transport",
+  "crates/nostr",
+  "crates/nostr_connect",
+  "crates/secrets",
+  "crates/storage",
+  "crates/storage_sqlite",
+  "crates/transport_nostr",
+  "crates/sync",
+  "crates/geonames",
+  "tools/xtask",
+]
 resolver = "3"
 
 [workspace.package]

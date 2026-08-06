@@ -7,6 +7,18 @@
 let
   root = ../..;
   cargoToml = builtins.fromTOML (builtins.readFile ../../Cargo.toml);
+  packageGroupProjection = builtins.fromTOML (
+    builtins.readFile ../../contracts/crates/generated/package_groups.v1.toml
+  );
+  packageGroups = builtins.listToAttrs (
+    map (group: {
+      name = group.id;
+      value = group.active_packages;
+    }) packageGroupProjection.group
+  );
+  cargoArgsFor = packages: lib.concatStringsSep " " (map (package: "-p ${package}") packages);
+  publicNativeCargoArgs = cargoArgsFor packageGroups.public_native;
+  previewCargoArgs = cargoArgsFor packageGroups.preview;
   version = cargoToml.workspace.package.version;
   darwinBuildInputs = lib.optionals pkgs.stdenv.isDarwin [
     pkgs.libiconv
@@ -22,14 +34,16 @@ let
         ../../CHANGELOG.md
         ../../LICENSE-APACHE
         ../../LICENSE-MIT
-        ../../README
+        ../../README.md
         ../../dto_bindgen.toml
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates
+        ../../docs/api
         ../../docs/decisions
         ../../docs/implementation
         ../../docs/specs
+        ../../fuzz
         ../../tools
       ]
     );
@@ -93,23 +107,7 @@ let
     cargoLlvmCov
   ];
   releaseRuntimeInputs = coverageRuntimeInputs;
-  coreContractCrates = [
-    "xtask"
-    "radroots_blossom"
-    "radroots_core"
-    "radroots_event"
-    "radroots_trade"
-    "radroots_identity"
-    "radroots_replica_schema"
-    "radroots_event_codec"
-    "radroots_event_store"
-    "radroots_nostr"
-    "radroots_nostr_connect"
-    "radroots_nostr_signer"
-  ];
-  coreContractCargoArgs =
-    lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates)
-    + " --features radroots_event_codec/json,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events";
+  coreContractCargoArgs = publicNativeCargoArgs;
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;
   commonCraneArgs = {
     inherit version;
@@ -184,7 +182,8 @@ let
     export RADROOTS_WORKSPACE_ROOT="$PWD"
   '';
   checkCommand = ''
-    cargo check --workspace --all-targets
+    cargo check --locked --all-targets ${publicNativeCargoArgs}
+    cargo check --locked --all-targets ${previewCargoArgs}
   '';
   architectureCommand = ''
     cargo run --locked -q -p xtask -- architecture-ci
@@ -196,7 +195,8 @@ let
     cargo run -q -p xtask -- contract validate
   '';
   releasePreflightCommand = ''
-    cargo check -q
+    cargo check -q --locked ${publicNativeCargoArgs}
+    cargo check -q --locked ${previewCargoArgs}
     cargo test -q -p xtask
     cargo run -q -p xtask -- contract validate
 
@@ -365,6 +365,7 @@ in
 {
   inherit
     architectureCommand
+    cargoArgsFor
     cargoLlvmCov
     cargoArtifacts
     checkCommand
@@ -377,6 +378,9 @@ in
     mkRepoCheck
     releasePreflightCommand
     coreContractCargoArgs
+    packageGroups
+    previewCargoArgs
+    publicNativeCargoArgs
     sharedEnv
     version
     xtaskPackage

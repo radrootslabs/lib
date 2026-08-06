@@ -8,7 +8,8 @@ let
       pname = "radroots-cargo-check";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo check --workspace --all-targets
+        cargo check --locked --all-targets ${common.publicNativeCargoArgs}
+        cargo check --locked --all-targets ${common.previewCargoArgs}
       '';
       installPhaseCommand = "mkdir -p $out";
     }
@@ -20,7 +21,10 @@ let
       pname = "radroots-cargo-test";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo test ${common.coreContractCargoArgs}
+        cargo test --locked ${common.coreContractCargoArgs}
+        cargo test --locked ${common.previewCargoArgs}
+        cargo clippy --locked --all-targets ${common.publicNativeCargoArgs} -- -D warnings
+        cargo clippy --locked --all-targets ${common.previewCargoArgs} -- -D warnings
       '';
       installPhaseCommand = "mkdir -p $out";
     }
@@ -194,7 +198,7 @@ in
       pname = "radroots-architecture";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo run --locked -q -p xtask -- architecture-ci
+        cargo run --locked -q -p xtask -- architecture-source-export-ci
       '';
       installPhaseCommand = "mkdir -p $out";
     }
