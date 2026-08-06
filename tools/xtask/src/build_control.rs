@@ -67,7 +67,13 @@ pub struct SourceLock {
     pub workspace_catalog_sha256: String,
     pub version: String,
     pub source_archive_sha256: Option<String>,
+    #[serde(default = "default_consumer_lockfile")]
+    pub lockfile: String,
     pub lockfile_sha256: String,
+}
+
+fn default_consumer_lockfile() -> String {
+    "Cargo.lock".to_owned()
 }
 
 #[derive(Clone, Debug)]
@@ -663,6 +669,7 @@ fn validate_source_lock(source_lock: &SourceLock) -> Result<(), String> {
         "source lock catalog digest",
     )?;
     validate_sha256(&source_lock.lockfile_sha256, "source lock lockfile digest")?;
+    validate_relative_path(Path::new(&source_lock.lockfile), "source lock lockfile")?;
     if let Some(digest) = &source_lock.source_archive_sha256 {
         validate_sha256(digest, "source lock archive digest")?;
     }
@@ -670,7 +677,9 @@ fn validate_source_lock(source_lock: &SourceLock) -> Result<(), String> {
 }
 
 fn validate_consumer_files(root: &Path, source_lock: &SourceLock) -> Result<(), String> {
-    let lockfile = root.join("Cargo.lock");
+    let lockfile_relative = Path::new(&source_lock.lockfile);
+    ensure_no_symlink_components(root, lockfile_relative)?;
+    let lockfile = root.join(lockfile_relative);
     let lockfile_bytes = read_regular_no_follow(&lockfile)?;
     if sha256(&lockfile_bytes) != source_lock.lockfile_sha256 {
         return Err("consumer Cargo.lock digest drifted".to_owned());
@@ -736,7 +745,16 @@ fn collect_manifests(root: &Path, current: &Path, output: &mut Vec<PathBuf>) -> 
         if file_type.is_dir() {
             if matches!(
                 name.to_str(),
-                Some(".git" | "target" | "node_modules" | ".radroots")
+                Some(
+                    ".git"
+                        | ".gradle"
+                        | ".kotlin"
+                        | ".radroots"
+                        | "build"
+                        | "node_modules"
+                        | "out"
+                        | "target"
+                )
             ) {
                 continue;
             }
@@ -1110,6 +1128,7 @@ mod tests {
                 workspace_catalog_sha256: catalog_sha256,
                 version: VERSION.to_owned(),
                 source_archive_sha256: None,
+                lockfile: default_consumer_lockfile(),
                 lockfile_sha256: sha256(consumer_lock.as_bytes()),
             };
             fs::write(
@@ -1140,6 +1159,31 @@ mod tests {
             "[package]\nname = \"consumer\"\nversion = \"0.1.0\"\n\n[dependencies]\nradroots_core = { git = \"https://github.com/radrootslabs/lib\", branch = \"master\", version = \"*\" }\n",
         )
         .expect("floating manifest");
+        assert!(ConsumerRoot::open(&fixture.consumer).is_err());
+    }
+
+    #[test]
+    fn source_lock_supports_a_contained_nested_lockfile() {
+        let mut fixture = Fixture::new("studio");
+        let core = fixture.consumer.join("core");
+        fs::create_dir(&core).expect("create nested capsule");
+        fs::rename(fixture.consumer.join("Cargo.lock"), core.join("Cargo.lock"))
+            .expect("move lockfile");
+        fixture.source_lock.lockfile = "core/Cargo.lock".to_owned();
+        fs::write(
+            fixture.consumer.join(SOURCE_LOCK_NAME),
+            toml::to_string(&fixture.source_lock).expect("serialize nested source lock"),
+        )
+        .expect("write nested source lock");
+
+        ConsumerRoot::open(&fixture.consumer).expect("nested lockfile is valid");
+
+        fixture.source_lock.lockfile = "../Cargo.lock".to_owned();
+        fs::write(
+            fixture.consumer.join(SOURCE_LOCK_NAME),
+            toml::to_string(&fixture.source_lock).expect("serialize escaping source lock"),
+        )
+        .expect("write escaping source lock");
         assert!(ConsumerRoot::open(&fixture.consumer).is_err());
     }
 
