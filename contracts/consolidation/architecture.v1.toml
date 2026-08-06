@@ -1,0 +1,28 @@
+schema_version = 1
+consolidation_id = "radroots.rust.consolidation.v1"
+architecture = "radroots.crates.release.v2"
+canonical_rust_repository = "https://github.com/radrootslabs/lib"
+donor_repositories = [
+  "https://github.com/radrootslabs/sdk",
+  "https://github.com/radrootslabs/app_rt",
+  "https://github.com/radrootslabs/studio_app",
+]
+consumer_repositories = [
+  "https://github.com/radrootslabs/sdk",
+  "https://github.com/radrootslabs/studio_app",
+]
+source_retirement_requires = [
+  "canonical_import_committed",
+  "history_evidence_green",
+  "compatibility_evidence_green",
+  "consumer_cutover_green",
+  "rollback_rehearsal_green",
+  "explicit_retirement_authorization",
+]
+repository_archival_requires = [
+  "all_mobile_consumers_canonical",
+  "zero_reusable_source",
+  "remote_master_reconciled",
+  "rollback_bundle_verified",
+  "explicit_archival_authorization",
+]

@@ -1,0 +1,1250 @@
+schema_version = 1
+schema = "radroots.workspace.catalog.v1"
+architecture = "radroots.crates.release.v2"
+consolidation = "radroots.rust.consolidation.v1"
+version = "0.1.0-alpha"
+rust_version = "1.97.1"
+edition = "2024"
+resolver = "3"
+public_package_count = 19
+package_count = 60
+digest_algorithm = "sha256-raw-bytes-v1"
+source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
+source_provenance_policy = "immutable_after_source_retirement"
+provenance_correction_contract = "approved_correction_record_required"
+retired_packages = [
+  "radroots_app_core",
+  "radroots_app_ffi",
+  "radroots_app_wasm",
+  "radroots_app_bindgen",
+  "radroots-studio-domain",
+  "radroots-studio-application",
+  "radroots-studio-nostr",
+  "radroots-studio-storage",
+  "radroots-studio-ffi",
+  "radroots-studio-uniffi-bindgen",
+  "radroots_sdk_xtask",
+]
+
+[[package]]
+name = "radroots_core"
+path = "crates/core"
+state = "active"
+tier = "foundation"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["core"]
+permitted_dependency_tiers = ["foundation"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/core"
+source_tree_sha256 = "2b1c006eb548b1e3671d4bae1cf0202900909c40affe224e4f5dd098de3fe7c7"
+compatibility = ["rust_api", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_identity"
+path = "crates/identity"
+state = "active"
+tier = "foundation"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["identity"]
+permitted_dependency_tiers = ["foundation"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/identity"
+source_tree_sha256 = "6da935d01da21254f13477cfa45fc44e3bc48dc3e3a8786f7dd8d528fc51b5b9"
+compatibility = ["rust_api", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_blossom"
+path = "crates/blossom"
+state = "active"
+tier = "foundation"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["protocol"]
+permitted_dependency_tiers = ["foundation"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/blossom"
+source_tree_sha256 = "09cd49bdca7432ba0bab915950a6c7fe882ee75f6e70c8916c1f04030f27745d"
+compatibility = ["rust_api", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_protocol"
+path = "crates/protocol"
+state = "active"
+tier = "foundation"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["protocol"]
+permitted_dependency_tiers = ["foundation"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/protocol"
+source_tree_sha256 = "05f7c372daec2da2c2e249bc10a645fbe11bb36ca4f45b7ebb52094fb39dc593"
+compatibility = ["rust_api", "wire", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_event"
+path = "crates/event"
+state = "active"
+tier = "domain"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["event"]
+permitted_dependency_tiers = ["foundation", "domain"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/event"
+source_tree_sha256 = "bfe3e6ece4d728ba9e5b6476376c172d621a310788c420e33f81a4cdfc3067ef"
+compatibility = ["rust_api", "wire", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_event_codec"
+path = "crates/event_codec"
+state = "active"
+tier = "domain"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["event"]
+permitted_dependency_tiers = ["foundation", "domain"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/event_codec"
+source_tree_sha256 = "6b51309e57b163d7577ec4b7f0fd8e28b2c98aa44cb7fe51a38346300e6078f7"
+compatibility = ["rust_api", "wire", "generated", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_trade"
+path = "crates/trade"
+state = "active"
+tier = "domain"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["trade"]
+permitted_dependency_tiers = ["foundation", "domain"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/trade"
+source_tree_sha256 = "10c873d05c12255ebbdba57772688bb033a183f569959184f1fe9dac248b9bda"
+compatibility = ["rust_api", "behavior", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_signing"
+path = "crates/signing"
+state = "active"
+tier = "spi"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["signing"]
+permitted_dependency_tiers = ["foundation", "domain", "spi"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/signing"
+source_tree_sha256 = "55d4e9f719358a3bb5287688947a34773646aabc7b902a6da790b5c4c0d72026"
+compatibility = ["rust_api", "security", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_transport"
+path = "crates/transport"
+state = "active"
+tier = "spi"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["transport"]
+permitted_dependency_tiers = ["foundation", "domain", "spi"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/transport"
+source_tree_sha256 = "4f39941e5a3c7ec82e179198900541dfcd66ef6bfcffcc7de7e89b604461598a"
+compatibility = ["rust_api", "wire", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_secrets"
+path = "crates/secrets"
+state = "active"
+tier = "spi"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["portable", "public_native"]
+owners = ["security"]
+permitted_dependency_tiers = ["foundation", "domain", "spi"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/secrets"
+source_tree_sha256 = "f20923b87e73a65db157f75342fa6814a0b90707e2210f387f9aaddbd2705cf2"
+compatibility = ["rust_api", "security", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_storage"
+path = "crates/storage"
+state = "active"
+tier = "spi"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["portable", "public_native"]
+owners = ["storage"]
+permitted_dependency_tiers = ["foundation", "domain", "spi"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/storage"
+source_tree_sha256 = "383e648daaded9c02d8bf64164697fbd23f0c9a82887b0210a487c1803ccdf91"
+compatibility = ["rust_api", "data", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_nostr"
+path = "crates/nostr"
+state = "active"
+tier = "adapter"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["nostr"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/nostr"
+source_tree_sha256 = "5d526e5aa8c98b71218a341346a70250d278866b6818204b8a78b9772508bb0e"
+compatibility = ["rust_api", "wire", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_nostr_connect"
+path = "crates/nostr_connect"
+state = "active"
+tier = "adapter"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native"]
+owners = ["nostr"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/nostr_connect"
+source_tree_sha256 = "10cb6c86a37d11fdf09aa8f47486e504b7ad94d2e0ba92f241442ec10a4578b5"
+compatibility = ["rust_api", "wire", "security", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_storage_sqlite"
+path = "crates/storage_sqlite"
+state = "active"
+tier = "adapter"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["portable", "public_native"]
+owners = ["storage"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/storage_sqlite"
+source_tree_sha256 = "1ba1c8adc6741e931220eae5fdcef7a05894e3d8276a869448ab6583b13b93e9"
+compatibility = ["rust_api", "data", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_transport_nostr"
+path = "crates/transport_nostr"
+state = "active"
+tier = "adapter"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["portable", "public_native"]
+owners = ["transport"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/transport_nostr"
+source_tree_sha256 = "1f8b471ee468200dc61e8452184d213906d3ca4b13e64b311aca7ad40fdacac6"
+compatibility = ["rust_api", "network", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_geonames"
+path = "crates/geonames"
+state = "active"
+tier = "adapter"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["portable", "public_native"]
+owners = ["geonames"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/geonames"
+source_tree_sha256 = "1ae21934d6b6dadf4baebad3f4658c6cfe04d4abb4b36f869644c87cebacdc3a"
+compatibility = ["rust_api", "data", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_sync"
+path = "crates/sync"
+state = "active"
+tier = "orchestration"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["portable", "public_native"]
+owners = ["sync"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/sync"
+source_tree_sha256 = "23a16aaddc8366fd7ad6461e97103de03593d23a16687a7a2b6f86fc3a683c53"
+compatibility = ["rust_api", "behavior", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_nostrdb"
+path = "crates/nostrdb"
+state = "active"
+tier = "preview"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/nostrdb"
+source_tree_sha256 = "f1824eb3fe9f02046aabe40319d2c346de499c74a90aca11fe648e76bc8e744b"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_transport_reticulum"
+path = "crates/transport_reticulum"
+state = "active"
+tier = "preview"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/transport_reticulum"
+source_tree_sha256 = "590a69dabb65e891900884e5b67636d0a2e83f40a8d92fc4fdf3fb68bf9ac493"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_simplex_app_store"
+path = "crates/simplex_app_store"
+state = "active"
+tier = "preview"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/simplex_app_store"
+source_tree_sha256 = "43d51e5601d16666faa32607da732e8c48d9c75dee8c308c782b90da5fa8fdf5"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_simplex_agent_proto"
+path = "crates/simplex_agent_proto"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/simplex_agent_proto"
+source_tree_sha256 = "9ba0704f166f7cd3aa08f4cb8c3548f0da4d641266f5c6ac3691db0ebb2576f2"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_simplex_chat_proto"
+path = "crates/simplex_chat_proto"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/simplex_chat_proto"
+source_tree_sha256 = "1ba255a084e8962c472c5d0fb89592b8e775cc1017827ff13d18315e6bebf0d9"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_simplex_smp_crypto"
+path = "crates/simplex_smp_crypto"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/simplex_smp_crypto"
+source_tree_sha256 = "618926bd97e2b8e68732aff55b56817ee942ae66fbd4670a8a87ce9c28f37a93"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_simplex_smp_proto"
+path = "crates/simplex_smp_proto"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/simplex_smp_proto"
+source_tree_sha256 = "4d3580ab580ec4008af0f1b6c45cfaf418b8f8f112d80e2c6338c83aba44c730"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_simplex_smp_transport"
+path = "crates/simplex_smp_transport"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/simplex_smp_transport"
+source_tree_sha256 = "50d902c20901de5647e8a3dbe359b9d79eb336d8952c363b914f51ee39240f24"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_replica_schema"
+path = "crates/replica_schema"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/replica_schema"
+source_tree_sha256 = "65c91da5221a98f33d134ff19d760dc7185c33985574c127e7e3ffe9b6636538"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_replica_store"
+path = "crates/replica_store"
+state = "active"
+tier = "preview"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/replica_store"
+source_tree_sha256 = "6b4761d89269e5468b924c30d2b1f9da4ae42adcb5c6ae85bd65c2c47a565e08"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_replica_sync"
+path = "crates/replica_sync"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "fixture"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/replica_sync"
+source_tree_sha256 = "8c957b0bc99c690c40d74cf747ece37b9f5b2d6a4849171fc2d0cce675850c90"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_mesh"
+path = "crates/mesh"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/mesh"
+source_tree_sha256 = "2aa1e901b21ecaa135e7af10ef96270aeae0a19eff5e5006ffdcd1aca62e7979"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_mesh_agent_client"
+path = "crates/mesh_agent_client"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/mesh_agent_client"
+source_tree_sha256 = "37a7a74761d6922264787d9dfc22c01453c423e0dfcece854a37ee9df725232a"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_mesh_agent_proto"
+path = "crates/mesh_agent_proto"
+state = "active"
+tier = "preview"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["preview"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/mesh_agent_proto"
+source_tree_sha256 = "85767b6a613bd1e167484bb60221107c43648472e4cebfdcbeda7e4bc38f9c57"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_runtime_paths"
+path = "crates/runtime_paths"
+state = "active"
+tier = "runtime"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["runtime"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/runtime_paths"
+source_tree_sha256 = "59ed1e101555715827c33e7781ff4993149b2177011ab1401f5cd832a1666120"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_runtime_distribution"
+path = "crates/runtime_distribution"
+state = "active"
+tier = "runtime"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["runtime"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/runtime_distribution"
+source_tree_sha256 = "412a69a157253216fc08daa967e3de4f980b35cb6ef098baa4a77d74175ba193"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_runtime_manager"
+path = "crates/runtime_manager"
+state = "active"
+tier = "runtime"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["preview"]
+owners = ["runtime"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/runtime_manager"
+source_tree_sha256 = "d6df1cfee50affc1e8bb3fcfbf283873c0442031d90db08da31bf3d668547809"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_sql_core"
+path = "crates/sql_core"
+state = "active"
+tier = "adapter"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native", "wasm32"]
+groups = ["preview", "wasm"]
+owners = ["storage"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/sql_core"
+source_tree_sha256 = "18e107bdeeee8761f731a1c389e475e5caebbd2a958c0646d0c6aa5f8c95b8dc"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_test_fixtures"
+path = "crates/test_fixtures"
+state = "active"
+tier = "fixture"
+visibility = "private_fixture"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["preview"]
+owners = ["testing"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime", "fixture"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "crates/test_fixtures"
+source_tree_sha256 = "763e4af22fbf5e7f11709c1b00f55569dbe3ebf8b679bdb937d462d576f02524"
+compatibility = ["fixtures"]
+replaces = []
+
+[[package]]
+name = "xtask"
+path = "tools/xtask"
+state = "active"
+tier = "tool"
+visibility = "private_tool"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["tools"]
+owners = ["architecture"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "runtime", "fixture", "tool"]
+source_repository = "https://github.com/radrootslabs/lib"
+source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
+source_path = "tools/xtask"
+source_tree_sha256 = "2846b559151c835b1a561153166074625a8430130b2f1adcaf1a358eb0da20ff"
+compatibility = ["command_surface"]
+replaces = []
+
+[[package]]
+name = "radroots_sdk"
+path = "crates/sdk"
+state = "reserved_import"
+tier = "sdk"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native", "sdk"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/sdk"
+source_tree_sha256 = "6cc78f544bd0a0d74783cbba118ea4815ce4b4bd094433193844621352411efb"
+compatibility = ["rust_api", "features", "package", "product"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots"
+path = "crates/radroots"
+state = "reserved_import"
+tier = "facade"
+visibility = "public_release"
+publish = true
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["portable", "public_native", "sdk"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/radroots"
+source_tree_sha256 = "7c9b4392eb7e8d8e799f4a62c9886f349161bad440659beb0d1a739911ab1425"
+compatibility = ["rust_api", "features", "package", "product"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_core_bindings"
+path = "crates/core_bindings"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/core_bindings"
+source_tree_sha256 = "f1a72bde7364179687bbdf6c4dacddacd504c52a884af941ce3557bae27ee981"
+compatibility = ["generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_event_bindings"
+path = "crates/event_bindings"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/event_bindings"
+source_tree_sha256 = "32f23a76a5c135de841cae623a28de3424dace3b6ba46af8c2cccc35b7c62f09"
+compatibility = ["generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_identity_bindings"
+path = "crates/identity_bindings"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/identity_bindings"
+source_tree_sha256 = "a0cf1539805704195cf82f9ffffa06e443a9c1cabd90a47bfcf6110f20549acd"
+compatibility = ["generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_trade_bindings"
+path = "crates/trade_bindings"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "codegen"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/trade_bindings"
+source_tree_sha256 = "28a60e08d65a891961189d5e614bbc008fe36574b3823333375339c589236342"
+compatibility = ["generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_replica_schema_bindings"
+path = "crates/replica_schema_bindings"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "sdk", "facade", "codegen"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/replica_schema_bindings"
+source_tree_sha256 = "41aeb6520962da64f13e09449d03b6df901b788965732eff439b282fe8f8abb1"
+compatibility = ["generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_event_codec_wasm"
+path = "crates/event_codec_wasm"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["sdk", "wasm", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "boundary"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/event_codec_wasm"
+source_tree_sha256 = "698abf3b77aa87b6460432342908b475c55bb55d285dc9aef24e27239e4cfa3c"
+compatibility = ["wasm", "generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_replica_store_wasm"
+path = "crates/replica_store_wasm"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["sdk", "wasm", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "sdk", "facade", "boundary"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/replica_store_wasm"
+source_tree_sha256 = "59cb050d0493047b57aebc4e1bb3adfd5af2fcd464de1f76ffabc1dfabe2baad"
+compatibility = ["wasm", "generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_replica_sync_wasm"
+path = "crates/replica_sync_wasm"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["sdk", "wasm", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "preview", "sdk", "facade", "boundary"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/replica_sync_wasm"
+source_tree_sha256 = "95f2a291066bab18c744f50a910feecc913dd50a4a3b6c9a464247695d8faffc"
+compatibility = ["wasm", "generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_sdk_ffi"
+path = "crates/sdk_ffi"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "boundary"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/ffi"
+source_tree_sha256 = "f07e2087f0506b146848476048b32b01584905e2928fe56a36d4f90663590e33"
+compatibility = ["ffi", "generated", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_sdk_sql_wasm_runtime"
+path = "crates/sdk_sql_wasm_runtime"
+state = "reserved_import"
+tier = "adapter"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["sdk", "wasm"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+source_repository = "https://github.com/radrootslabs/sdk"
+source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
+source_path = "crates/sql_wasm_runtime"
+source_tree_sha256 = "6ca1dca6f248c50b6bcd4c684b4ad31acd17b8bfc36a8b0072872f6db927c303"
+compatibility = ["wasm", "data", "package_private"]
+removal_gate = "sdk_history_import_verified"
+replaces = []
+
+[[package]]
+name = "radroots_mobile_core"
+path = "crates/mobile_core"
+state = "reserved_import"
+tier = "runtime"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-or-later"
+platforms = ["native", "wasm32"]
+groups = ["mobile"]
+owners = ["mobile"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime"]
+source_repository = "https://github.com/radrootslabs/app_rt"
+source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+source_path = "crates/core"
+source_tree_sha256 = "8ae546ee60a97bfc145c12ea94dcd6d528bf5f49e974159442738c29eb3d6ee1"
+compatibility = ["product", "lifecycle", "package_private"]
+removal_gate = "mobile_history_import_verified"
+replaces = ["radroots_app_core"]
+
+[[package]]
+name = "radroots_mobile_ffi"
+path = "crates/mobile_ffi"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-or-later"
+platforms = ["apple", "android"]
+groups = ["mobile", "boundaries"]
+owners = ["mobile"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime", "boundary"]
+source_repository = "https://github.com/radrootslabs/app_rt"
+source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+source_path = "crates/ffi"
+source_tree_sha256 = "9a38699ad6d39b9f8764fed6a67bd55908ff54cb2e3cae9a3890ce1a46789b2b"
+compatibility = ["ffi", "swift", "kotlin", "lifecycle", "package_private"]
+removal_gate = "mobile_history_import_verified"
+replaces = ["radroots_app_ffi"]
+
+[[package]]
+name = "radroots_mobile_wasm"
+path = "crates/mobile_wasm"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-or-later"
+platforms = ["wasm32"]
+groups = ["mobile", "wasm", "boundaries"]
+owners = ["mobile"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime", "boundary"]
+source_repository = "https://github.com/radrootslabs/app_rt"
+source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+source_path = "crates/wasm"
+source_tree_sha256 = "8c65c867eafc0643ca9fd86150766af4f4ab2f0f8321d66306418261a8f43124"
+compatibility = ["wasm", "lifecycle", "package_private"]
+removal_gate = "mobile_history_import_verified"
+replaces = ["radroots_app_wasm"]
+
+[[package]]
+name = "radroots_mobile_bindgen"
+path = "crates/mobile_bindgen"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-or-later"
+platforms = ["native"]
+groups = ["mobile", "boundaries"]
+owners = ["mobile"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "runtime", "boundary", "codegen"]
+source_repository = "https://github.com/radrootslabs/app_rt"
+source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
+source_path = "crates/bindgen"
+source_tree_sha256 = "f0a9d7ec9794257bc56063117208e6e83a34efe1b852e8af6d6a56a1693d27fa"
+compatibility = ["generated", "swift", "kotlin", "package_private"]
+removal_gate = "mobile_history_import_verified"
+replaces = ["radroots_app_bindgen"]
+
+[[package]]
+name = "radroots_studio_domain"
+path = "crates/studio_domain"
+state = "reserved_import"
+tier = "application_domain"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["native"]
+groups = ["studio"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/crates/domain"
+source_tree_sha256 = "25f8abe2f8f4e9dfeb6450116be67eb3faad53f2d3879a4c142796238f74b0a9"
+compatibility = ["product", "data", "package_private"]
+removal_gate = "studio_history_import_verified"
+replaces = ["radroots-studio-domain"]
+
+[[package]]
+name = "radroots_studio_application"
+path = "crates/studio_application"
+state = "reserved_import"
+tier = "application"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["native"]
+groups = ["studio"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/crates/application"
+source_tree_sha256 = "8b0b5d4d74dde0af3c5fb3dac979b0cf57cccf073d597f7bd35b1e73a711fe0b"
+compatibility = ["product", "behavior", "package_private"]
+removal_gate = "studio_history_import_verified"
+replaces = ["radroots-studio-application"]
+
+[[package]]
+name = "radroots_studio_nostr"
+path = "crates/studio_nostr"
+state = "reserved_import"
+tier = "application_adapter"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["native"]
+groups = ["studio"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/crates/nostr"
+source_tree_sha256 = "2ce5ce0227ab190102a94ffdf80d95b37ed35f5ef62286c4e3e19cd42a777115"
+compatibility = ["network", "security", "package_private"]
+removal_gate = "studio_history_import_verified"
+replaces = ["radroots-studio-nostr"]
+
+[[package]]
+name = "radroots_studio_storage"
+path = "crates/studio_storage"
+state = "reserved_import"
+tier = "application_adapter"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["native"]
+groups = ["studio"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/crates/storage"
+source_tree_sha256 = "f3addecbd7f6dbccda4a438597b4e433443a34b48a6c4ef9efa90e49e8f05c4b"
+compatibility = ["data", "keyring", "package_private"]
+removal_gate = "studio_history_import_verified"
+replaces = ["radroots-studio-storage"]
+
+[[package]]
+name = "radroots_studio_runtime"
+path = "crates/studio_runtime"
+state = "reserved_refactor"
+tier = "runtime_composition"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["native"]
+groups = ["studio"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter", "runtime_composition"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/crates/ffi"
+source_tree_sha256 = "0bb1d02eb963a606a288d9c35fb418de7bfd914dc5e2c4a38112af64c643151c"
+compatibility = ["product", "lifecycle", "package_private"]
+removal_gate = "studio_runtime_extraction_verified"
+replaces = []
+
+[[package]]
+name = "radroots_studio_ffi"
+path = "crates/studio_ffi"
+state = "reserved_import"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["linux", "macos", "windows"]
+groups = ["studio", "boundaries"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter", "runtime_composition", "boundary"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/crates/ffi"
+source_tree_sha256 = "0bb1d02eb963a606a288d9c35fb418de7bfd914dc5e2c4a38112af64c643151c"
+compatibility = ["ffi", "kotlin", "product", "lifecycle", "package_private"]
+removal_gate = "studio_history_import_verified"
+replaces = ["radroots-studio-ffi"]
+
+[[package]]
+name = "radroots_studio_uniffi_bindgen"
+path = "crates/studio_uniffi_bindgen"
+state = "reserved_import"
+tier = "codegen"
+visibility = "private_codegen"
+publish = false
+version = "0.1.0-alpha"
+license = "GPL-3.0-only"
+platforms = ["native"]
+groups = ["studio", "boundaries"]
+owners = ["studio"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration", "sdk", "facade", "application_domain", "application", "application_adapter", "runtime_composition", "boundary", "codegen"]
+source_repository = "https://github.com/radrootslabs/studio_app"
+source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+source_path = "core/tools/uniffi-bindgen"
+source_tree_sha256 = "0eedd47c17fc7b2b84d953f2c4613aecf96575df466eb106450c7d7eee25ca9b"
+compatibility = ["generated", "kotlin", "package_private"]
+removal_gate = "studio_history_import_verified"
+replaces = ["radroots-studio-uniffi-bindgen"]

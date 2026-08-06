@@ -14,9 +14,9 @@ const TRANSACTION_DIRECTORY: &str = ".radroots-contract-artifact-transaction-v1"
 const TRANSACTION_JOURNAL: &str = "journal.json";
 const LOCK_DIRECTORY: &str = "radroots-xtask-contract-artifact-locks-v1";
 
-pub(super) struct GeneratedArtifact {
-    pub(super) relative: &'static str,
-    pub(super) contents: Vec<u8>,
+pub(crate) struct GeneratedArtifact {
+    pub(crate) relative: &'static str,
+    pub(crate) contents: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -57,17 +57,17 @@ enum SimulatedInterruption {
     AfterCommits(usize),
 }
 
-pub(super) struct ArtifactBundleTransaction<'a> {
+pub(crate) struct ArtifactBundleTransaction<'a> {
     workspace_root: &'a Path,
 }
 
 impl ArtifactBundleTransaction<'_> {
-    pub(super) fn write(&self, artifacts: Vec<GeneratedArtifact>) -> Result<(), String> {
+    pub(crate) fn write(&self, artifacts: Vec<GeneratedArtifact>) -> Result<(), String> {
         write_artifact_bundle_impl(self.workspace_root, artifacts, None)
     }
 }
 
-pub(super) fn read_regular_file(workspace_root: &Path, relative: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn read_regular_file(workspace_root: &Path, relative: &str) -> Result<Vec<u8>, String> {
     let path = validate_workspace_path(workspace_root, relative, false)?;
     fs::read(path).map_err(|error| format!("read {relative}: {error}"))
 }
@@ -99,7 +99,7 @@ pub(super) fn validate_sha256_artifact(relative: &str, bytes: &[u8]) -> Result<(
     Ok(())
 }
 
-pub(super) fn with_artifact_bundle_transaction<T>(
+pub(crate) fn with_artifact_bundle_transaction<T>(
     workspace_root: &Path,
     operation: impl FnOnce(&ArtifactBundleTransaction<'_>) -> Result<T, String>,
 ) -> Result<T, String> {

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod admission_authority;
-mod artifact_bundle;
+pub(crate) mod artifact_bundle;
 mod comment_authority;
 mod deletion_authority;
 mod registry_v7;

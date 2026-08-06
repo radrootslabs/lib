@@ -12,6 +12,8 @@ mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod catalog;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod consolidation;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod contract;
@@ -44,6 +46,7 @@ fn usage() {
     eprintln!("  cargo xtask architecture-ci");
     eprintln!("  cargo xtask check-api-boundaries");
     eprintln!("  cargo xtask check-dependency-boundaries");
+    eprintln!("  cargo xtask catalog check|write");
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
@@ -172,6 +175,7 @@ fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("architecture") if args.len() == 1 => architecture::validate(&workspace_root()),
         Some("architecture-ci") if args.len() == 1 => {
+            catalog::check(&workspace_root())?;
             architecture::validate_ci(&workspace_root())?;
             validate_contract()
         }
@@ -181,6 +185,7 @@ fn run(args: &[String]) -> Result<(), String> {
         Some("check-dependency-boundaries") if args.len() == 1 => {
             architecture::validate_dependency_boundaries(&workspace_root())
         }
+        Some("catalog") => catalog::run(&args[1..], &workspace_root()),
         Some("contract") => run_contract(&args[1..]),
         Some("consolidation") => consolidation::run(&args[1..], &workspace_root()),
         Some("coverage") => coverage::run(&args[1..]),

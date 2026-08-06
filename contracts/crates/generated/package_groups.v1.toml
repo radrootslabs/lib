@@ -1,0 +1,38 @@
+schema = "radroots.workspace.package-groups.v1"
+catalog_sha256 = "1a244e2e7f14a20ee21917a246c03277920c927c138796440483bf7837555fcf"
+
+[[group]]
+id = "boundaries"
+packages = ["radroots_core_bindings", "radroots_event_bindings", "radroots_event_codec_wasm", "radroots_identity_bindings", "radroots_mobile_bindgen", "radroots_mobile_ffi", "radroots_mobile_wasm", "radroots_replica_schema_bindings", "radroots_replica_store_wasm", "radroots_replica_sync_wasm", "radroots_sdk_ffi", "radroots_studio_ffi", "radroots_studio_uniffi_bindgen", "radroots_trade_bindings"]
+
+[[group]]
+id = "mobile"
+packages = ["radroots_mobile_bindgen", "radroots_mobile_core", "radroots_mobile_ffi", "radroots_mobile_wasm"]
+
+[[group]]
+id = "portable"
+packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
+
+[[group]]
+id = "preview"
+packages = ["radroots_mesh", "radroots_mesh_agent_client", "radroots_mesh_agent_proto", "radroots_nostrdb", "radroots_replica_schema", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_simplex_agent_proto", "radroots_simplex_app_store", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_test_fixtures", "radroots_transport_reticulum"]
+
+[[group]]
+id = "public_native"
+packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
+
+[[group]]
+id = "sdk"
+packages = ["radroots", "radroots_core_bindings", "radroots_event_bindings", "radroots_event_codec_wasm", "radroots_identity_bindings", "radroots_replica_schema_bindings", "radroots_replica_store_wasm", "radroots_replica_sync_wasm", "radroots_sdk", "radroots_sdk_ffi", "radroots_sdk_sql_wasm_runtime", "radroots_trade_bindings"]
+
+[[group]]
+id = "studio"
+packages = ["radroots_studio_application", "radroots_studio_domain", "radroots_studio_ffi", "radroots_studio_nostr", "radroots_studio_runtime", "radroots_studio_storage", "radroots_studio_uniffi_bindgen"]
+
+[[group]]
+id = "tools"
+packages = ["xtask"]
+
+[[group]]
+id = "wasm"
+packages = ["radroots_event_codec_wasm", "radroots_mobile_wasm", "radroots_replica_store_wasm", "radroots_replica_sync_wasm", "radroots_sdk_sql_wasm_runtime", "radroots_sql_core"]
