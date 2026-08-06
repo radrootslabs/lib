@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn secret_store_puts_loads_checks_and_deletes_redacted_credentials() {
         let store = InMemorySecretStore::default();
-        let public_key = PublicKey::from_bytes([1; 32]);
+        let public_key = PublicKey::from_bytes([7; 32]).expect("valid public key");
         assert!(!store.contains(public_key).expect("contains"));
         store
             .put(
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn secret_store_rejects_duplicates_and_reports_missing_credentials() {
         let store = InMemorySecretStore::default();
-        let public_key = PublicKey::from_bytes([2; 32]);
+        let public_key = PublicKey::from_bytes([7; 32]).expect("valid public key");
         let Err(missing) = store.load(public_key) else {
             panic!("missing credential was returned");
         };
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn failure_secret_store_injects_each_boundary_without_mutating_state() {
         let store = FailureSecretStore::default();
-        let public_key = PublicKey::from_bytes([3; 32]);
+        let public_key = PublicKey::from_bytes([7; 32]).expect("valid public key");
         store.fail_next(SecretStoreOperation::Put);
         let error = store
             .put(
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn failure_secret_store_call_log_contains_only_public_identity() {
         let store = FailureSecretStore::default();
-        let public_key = PublicKey::from_bytes([4; 32]);
+        let public_key = PublicKey::from_bytes([7; 32]).expect("valid public key");
         store
             .put(
                 public_key,

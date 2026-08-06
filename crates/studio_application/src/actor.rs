@@ -572,9 +572,7 @@ mod tests {
     use std::num::NonZeroUsize;
     use std::time::{Duration, Instant};
 
-    use radroots_studio_domain::{
-        AccountIdentity, BindingAvailability, LocalSignerBinding, PublicKey,
-    };
+    use radroots_studio_domain::{AccountIdentity, BindingAvailability, LocalSignerBinding};
 
     use crate::{
         ActorMailbox, CommandContext, CommandReceipt, CommandRejection, CommandResult,
@@ -592,7 +590,7 @@ mod tests {
 
     #[test]
     fn foreground_session_requires_matching_available_binding_and_generation() {
-        let public_key = PublicKey::from_bytes([3_u8; 32]);
+        let public_key = crate::test_support::valid_test_public_key(3).expect("valid public key");
         let identity = AccountIdentity::derive(public_key).expect("identity");
         let generation = SessionGeneration::from_value(4);
         let session = ForegroundSessionBinding::new(
@@ -622,7 +620,10 @@ mod tests {
             ForegroundSessionBinding::new(
                 identity.clone(),
                 LocalSignerBinding::new(
-                    PublicKey::from_bytes([4_u8; 32]),
+                    radroots_studio_domain::PublicKey::from_hex(
+                        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+                    )
+                    .expect("different valid public key"),
                     BindingAvailability::Available,
                 ),
                 generation,

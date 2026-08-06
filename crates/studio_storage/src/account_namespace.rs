@@ -86,8 +86,17 @@ mod tests {
 
     use crate::Database;
 
+    fn public_key(byte: u8) -> PublicKey {
+        let value = match byte {
+            1 => "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            2 => "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+            _ => "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
+        };
+        PublicKey::from_hex(value).expect("valid public key")
+    }
+
     fn account(byte: u8) -> AccountSummary {
-        let public_key = PublicKey::from_bytes([byte; 32]);
+        let public_key = public_key(byte);
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),
@@ -101,8 +110,8 @@ mod tests {
     #[test]
     fn namespace_partitions_same_typed_key_by_owner_and_selection() {
         let database = Database::in_memory().expect("database");
-        let owner_a = PublicKey::from_bytes([1; 32]);
-        let owner_b = PublicKey::from_bytes([2; 32]);
+        let owner_a = public_key(1);
+        let owner_b = public_key(2);
         database.insert_account(&account(1)).expect("account a");
         database.insert_account(&account(2)).expect("account b");
         database
@@ -136,7 +145,7 @@ mod tests {
     #[test]
     fn namespace_updates_and_cascades_with_owner_removal() {
         let database = Database::in_memory().expect("database");
-        let owner = PublicKey::from_bytes([3; 32]);
+        let owner = public_key(3);
         database.insert_account(&account(3)).expect("account");
         database
             .set_value(owner, AccountPreferenceKey::NamespaceProbe, "before")

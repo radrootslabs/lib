@@ -43,8 +43,7 @@ impl NostrClient for SdkNostrClient {
                 return Err(invalid_relay_configuration());
             }
 
-            let author = radroots_identity::PublicKey::from_bytes(*public_key.as_bytes())
-                .map_err(|_| profile_refresh_failed())?;
+            let author = public_key.canonical();
             let deadline = deadline.min(Instant::now() + self.timeout);
             let mut candidates = Vec::new();
             let mut successful_relays = 0usize;
@@ -169,13 +168,6 @@ const fn relay_connection_failed() -> SafeError {
     )
 }
 
-const fn profile_refresh_failed() -> SafeError {
-    SafeError::new(
-        SafeErrorCode::ProfileRefreshFailed,
-        SafeMessage::new("The Nostr profile could not be refreshed."),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -211,7 +203,8 @@ mod tests {
         let adapter = SdkNostrClient::new(Duration::from_secs(2));
         let domain_relay = RelayUrl::parse(relay_url.as_str(), RelayDestinationPolicy::Local)
             .expect("domain relay URL");
-        let public_key = PublicKey::from_bytes(keys.public_key().to_bytes());
+        let public_key =
+            PublicKey::from_bytes(keys.public_key().to_bytes()).expect("valid public key");
         let fetched = adapter
             .fetch_profile(
                 public_key,
@@ -237,7 +230,7 @@ mod tests {
     async fn sdk_client_rejects_empty_configuration_without_network_access() {
         let error = SdkNostrClient::new(Duration::from_millis(10))
             .fetch_profile(
-                PublicKey::from_bytes([1; 32]),
+                PublicKey::from_bytes([7; 32]).expect("valid public key"),
                 &[],
                 std::time::Instant::now() + Duration::from_millis(10),
             )
@@ -270,7 +263,7 @@ mod tests {
         ];
         let fetched = SdkNostrClient::new(Duration::from_millis(250))
             .fetch_profile(
-                PublicKey::from_bytes(keys.public_key().to_bytes()),
+                PublicKey::from_bytes(keys.public_key().to_bytes()).expect("valid public key"),
                 &configured,
                 std::time::Instant::now() + Duration::from_secs(1),
             )

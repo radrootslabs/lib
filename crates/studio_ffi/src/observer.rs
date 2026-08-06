@@ -1,4 +1,5 @@
 use std::num::NonZeroUsize;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -8,6 +9,7 @@ use crate::commands::RuntimeCore;
 use crate::{AppSnapshotDto, StudioAppCore, StudioError};
 
 const OBSERVER_CHANGE_CAPACITY: NonZeroUsize = NonZeroUsize::MIN.saturating_add(63);
+const MAX_OBSERVERS: usize = 32;
 
 #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
 pub struct SnapshotChangeDto {
@@ -49,7 +51,7 @@ impl ObserverSubscription {
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .remove(&id)
         };
-        if let Some(task) = task {
+        if let Some(Some(task)) = task {
             task.abort();
             let _ = task.await;
         }
@@ -80,12 +82,33 @@ impl StudioAppCore {
         let id = subscription.id();
         let observer: Arc<dyn StudioChangeObserver> = Arc::from(observer);
         let runtime_core = Arc::downgrade(&self.inner);
+        let admitted = {
+            let mut observers = self
+                .inner
+                .observers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if self.inner.closed.load(Ordering::Acquire) || observers.len() >= MAX_OBSERVERS {
+                false
+            } else {
+                observers.insert(id, None);
+                true
+            }
+        };
+        if !admitted {
+            self.inner
+                .actor
+                .unsubscribe_changes(id)
+                .await
+                .map_err(StudioError::from)?;
+            return Err(observer_registration_error());
+        }
         let task = crate::commands::runtime()?.spawn(async move {
             while let Some(change) = subscription.receive().await {
                 let Some(runtime_core) = runtime_core.upgrade() else {
                     break;
                 };
-                observer.on_change(SnapshotChangeDto {
+                let delivery = SnapshotChangeDto {
                     snapshot: AppSnapshotDto::from_runtime(
                         change.snapshot(),
                         runtime_core.effective_lifecycle(),
@@ -93,14 +116,38 @@ impl StudioAppCore {
                     previous_revision: change
                         .previous_revision()
                         .map(radroots_studio_application::SnapshotRevision::value),
-                });
+                };
+                if catch_unwind(AssertUnwindSafe(|| observer.on_change(delivery))).is_err() {
+                    break;
+                }
+            }
+            if let Some(runtime_core) = runtime_core.upgrade() {
+                let _ = runtime_core.actor.unsubscribe_changes(id).await;
+                runtime_core
+                    .observers
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&id);
             }
         });
-        self.inner
-            .observers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(id, task);
+        let retained = {
+            let mut observers = self
+                .inner
+                .observers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(slot) = observers.get_mut(&id) {
+                *slot = Some(task);
+                true
+            } else {
+                task.abort();
+                false
+            }
+        };
+        if !retained {
+            let _ = self.inner.actor.unsubscribe_changes(id).await;
+            return Err(closed_error());
+        }
         Ok(Arc::new(ObserverSubscription {
             core: Arc::downgrade(&self.inner),
             id: Mutex::new(Some(id)),
@@ -124,8 +171,10 @@ impl StudioAppCore {
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         );
         for (_, task) in handles {
-            task.abort();
-            let _ = task.await;
+            if let Some(task) = task {
+                task.abort();
+                let _ = task.await;
+            }
         }
         self.inner.actor.close().await.map_err(StudioError::from)?;
         Ok(ShutdownReceiptDto {
@@ -143,6 +192,17 @@ fn closed_error() -> StudioError {
         recovery_action: crate::WireRecoveryAction::None,
         correlation_id: None,
         safe_message: "The application runtime is closed.".to_owned(),
+    }
+}
+
+fn observer_registration_error() -> StudioError {
+    StudioError::Failure {
+        code: crate::WireErrorCode::ObserverRegistrationFailed,
+        category: crate::WireErrorCategory::Lifecycle,
+        retryable: true,
+        recovery_action: crate::WireRecoveryAction::Retry,
+        correlation_id: None,
+        safe_message: "The change observer could not be registered.".to_owned(),
     }
 }
 
@@ -173,6 +233,14 @@ mod tests {
     struct RecordingObserver {
         snapshots: Mutex<Vec<AppSnapshotDto>>,
         core: Mutex<Option<Arc<StudioAppCore>>>,
+    }
+
+    struct PanickingObserver;
+
+    impl StudioChangeObserver for PanickingObserver {
+        fn on_change(&self, _change: SnapshotChangeDto) {
+            panic!("injected host callback failure");
+        }
     }
 
     impl StudioChangeObserver for RecordingObserver {
@@ -254,6 +322,39 @@ mod tests {
                     .await
                     .is_err()
             );
+            assert!(core.inner.observers.lock().expect("observers").is_empty());
+        });
+    }
+
+    #[test]
+    fn observer_registration_is_bounded_and_callback_panics_are_contained() {
+        runtime().expect("runtime").block_on(async {
+            let core = core().await;
+            let panic_subscription = core
+                .subscribe_changes_v2(Box::new(PanickingObserver))
+                .await
+                .expect("panic observer registration");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            assert!(core.inner.observers.lock().expect("observers").is_empty());
+            panic_subscription.unsubscribe().await;
+
+            let observer = Arc::new(RecordingObserver::default());
+            let mut subscriptions = Vec::new();
+            for _ in 0..super::MAX_OBSERVERS {
+                subscriptions.push(
+                    core.subscribe_changes_v2(Box::new(ArcObserver(observer.clone())))
+                        .await
+                        .expect("bounded observer registration"),
+                );
+            }
+            assert!(
+                core.subscribe_changes_v2(Box::new(ArcObserver(observer)))
+                    .await
+                    .is_err()
+            );
+            for subscription in subscriptions {
+                subscription.unsubscribe().await;
+            }
             assert!(core.inner.observers.lock().expect("observers").is_empty());
         });
     }

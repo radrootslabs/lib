@@ -3975,6 +3975,7 @@ name = "radroots_studio_domain"
 version = "0.1.0-alpha"
 dependencies = [
  "bech32",
+ "radroots_identity",
  "secrecy",
  "url",
  "zeroize",
@@ -3988,11 +3989,14 @@ dependencies = [
  "nostr 0.44.1",
  "nostr-relay-builder",
  "nostr-sdk 0.44.0",
+ "quote",
  "radroots_studio_application",
  "radroots_studio_domain",
  "radroots_studio_nostr",
  "radroots_studio_runtime",
  "radroots_studio_storage",
+ "sha2",
+ "syn 2.0.117",
  "tempfile",
  "tokio",
  "uniffi 0.32.0",
@@ -4041,11 +4045,15 @@ name = "radroots_studio_storage"
 version = "0.1.0-alpha"
 dependencies = [
  "fs2",
+ "getrandom 0.2.17",
+ "hmac",
  "keyring 4.1.6",
  "radroots_studio_application",
  "radroots_studio_domain",
  "refinery",
  "rusqlite",
+ "rustix 1.1.4",
+ "sha2",
  "tempfile",
  "zeroize",
 ]

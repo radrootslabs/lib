@@ -30,7 +30,7 @@ fn redaction_guards_sqlite_schema_and_non_secret_records() {
     let path = directory.path().join("studio.sqlite3");
     {
         let database = Database::open(&path).expect("database");
-        let public_key = PublicKey::from_bytes([2; 32]);
+        let public_key = PublicKey::from_bytes([7; 32]).expect("valid public key");
         let account = AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),

@@ -722,7 +722,7 @@ mod tests {
         let request = DurableRequestId::parse("create:desktop:0001").expect("request id");
         let receipt = DurableOperationReceipt::new(
             request.clone(),
-            PublicKey::from_bytes([3; 32]),
+            PublicKey::from_bytes([7; 32]).expect("valid public key"),
             DurableTerminalOutcome::Completed,
             Some(42),
         );
@@ -874,11 +874,13 @@ mod tests {
 
         let ports = FakePorts::default();
         ports
-            .save_selected_account(Some(PublicKey::from_bytes([1_u8; 32])))
+            .save_selected_account(Some(
+                PublicKey::from_bytes([7_u8; 32]).expect("valid public key"),
+            ))
             .expect("save selection");
         assert_eq!(
             ports.load_selected_account().expect("load selection"),
-            Some(PublicKey::from_bytes([1_u8; 32]))
+            Some(PublicKey::from_bytes([7_u8; 32]).expect("valid public key"))
         );
         assert_eq!(ports.now().as_seconds(), 1);
     }

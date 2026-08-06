@@ -135,6 +135,7 @@ impl SecretKeyInput {
     /// Returns a safe invalid-secret-key error when the input is neither an
     /// nsec-looking value nor exactly 64 lowercase hexadecimal characters.
     pub fn parse(value: String) -> Result<Self, SafeError> {
+        let mut value = Zeroizing::new(value);
         let kind = if value.len() == PUBLIC_KEY_HEX_LENGTH
             && value
                 .bytes()
@@ -148,7 +149,7 @@ impl SecretKeyInput {
         };
 
         Ok(Self {
-            value: SecretString::from(value),
+            value: SecretString::from(std::mem::take(&mut *value)),
             kind,
         })
     }
@@ -164,12 +165,27 @@ impl SecretKeyInput {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PublicKey([u8; PUBLIC_KEY_BYTE_LENGTH]);
+pub struct PublicKey(radroots_identity::PublicKey);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PersistedPublicKeyClassification {
+    Canonical(PublicKey),
+    NonCanonicalEncoding,
+    InvalidCurvePoint,
+    MalformedEncoding,
+}
 
 impl PublicKey {
-    #[must_use]
-    pub const fn from_bytes(bytes: [u8; PUBLIC_KEY_BYTE_LENGTH]) -> Self {
-        Self(bytes)
+    /// Validates canonical x-only secp256k1 public-key bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe invalid-public-key error when the bytes are not a valid
+    /// x-only secp256k1 point.
+    pub fn from_bytes(bytes: [u8; PUBLIC_KEY_BYTE_LENGTH]) -> Result<Self, SafeError> {
+        radroots_identity::PublicKey::from_bytes(bytes)
+            .map(Self)
+            .map_err(|_| invalid_public_key())
     }
 
     /// Parses a canonical lowercase hexadecimal Nostr public key.
@@ -187,29 +203,29 @@ impl PublicKey {
             return Err(invalid_public_key());
         }
 
-        let mut bytes = [0_u8; PUBLIC_KEY_BYTE_LENGTH];
-        for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
-            let high = decode_hex_digit(pair[0]).ok_or_else(invalid_public_key)?;
-            let low = decode_hex_digit(pair[1]).ok_or_else(invalid_public_key)?;
-            bytes[index] = (high << 4) | low;
-        }
-        Ok(Self(bytes))
+        radroots_identity::PublicKey::from_hex(value)
+            .map(Self)
+            .map_err(|_| invalid_public_key())
     }
 
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; PUBLIC_KEY_BYTE_LENGTH] {
-        &self.0
+        self.0.as_bytes()
+    }
+
+    #[must_use]
+    pub const fn canonical(self) -> radroots_identity::PublicKey {
+        self.0
+    }
+
+    #[must_use]
+    pub const fn from_canonical(public_key: radroots_identity::PublicKey) -> Self {
+        Self(public_key)
     }
 
     #[must_use]
     pub fn to_hex(self) -> String {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        let mut output = String::with_capacity(PUBLIC_KEY_HEX_LENGTH);
-        for byte in self.0 {
-            output.push(char::from(HEX[usize::from(byte >> 4)]));
-            output.push(char::from(HEX[usize::from(byte & 0x0f)]));
-        }
-        output
+        self.0.to_hex()
     }
 
     #[must_use]
@@ -225,9 +241,15 @@ impl Display for PublicKey {
     }
 }
 
-impl From<[u8; PUBLIC_KEY_BYTE_LENGTH]> for PublicKey {
-    fn from(bytes: [u8; PUBLIC_KEY_BYTE_LENGTH]) -> Self {
-        Self::from_bytes(bytes)
+impl From<radroots_identity::PublicKey> for PublicKey {
+    fn from(value: radroots_identity::PublicKey) -> Self {
+        Self::from_canonical(value)
+    }
+}
+
+impl From<PublicKey> for radroots_identity::PublicKey {
+    fn from(value: PublicKey) -> Self {
+        value.canonical()
     }
 }
 
@@ -253,11 +275,20 @@ const fn invalid_secret_key() -> SafeError {
     )
 }
 
-const fn decode_hex_digit(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        _ => None,
+#[must_use]
+pub fn classify_persisted_public_key(value: &str) -> PersistedPublicKeyClassification {
+    if value.len() != PUBLIC_KEY_HEX_LENGTH || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return PersistedPublicKeyClassification::MalformedEncoding;
+    }
+    if !value
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return PersistedPublicKeyClassification::NonCanonicalEncoding;
+    }
+    match PublicKey::from_hex(value) {
+        Ok(public_key) => PersistedPublicKeyClassification::Canonical(public_key),
+        Err(_) => PersistedPublicKeyClassification::InvalidCurvePoint,
     }
 }
 
@@ -274,8 +305,9 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        MAX_SECRET_KEY_INPUT_BYTES, Npub, Nsec, PUBLIC_KEY_BYTE_LENGTH, PublicKey, SecretKeyInput,
-        SecretKeyInputKind,
+        MAX_SECRET_KEY_INPUT_BYTES, Npub, Nsec, PUBLIC_KEY_BYTE_LENGTH,
+        PersistedPublicKeyClassification, PublicKey, SecretKeyInput, SecretKeyInputKind,
+        classify_persisted_public_key,
     };
     use crate::SafeErrorCode;
 
@@ -290,7 +322,10 @@ mod tests {
         assert_eq!(key.to_hex(), HEX);
         assert_eq!(key.to_string(), HEX);
         assert_eq!(key.short_hex(), "7e7e9c42…2107f6d7");
-        assert_eq!(PublicKey::from_bytes(*key.as_bytes()), key);
+        assert_eq!(
+            PublicKey::from_bytes(*key.as_bytes()).expect("valid bytes"),
+            key
+        );
         assert_eq!(key.as_bytes().len(), PUBLIC_KEY_BYTE_LENGTH);
     }
 
@@ -302,6 +337,7 @@ mod tests {
             "7E7E9C42A91BFEF19FA7EA99D52D8AFDB67D893A8FEFBA1F5CB9793F2107F6D7",
             "ze7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
             " 7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
+            "00e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
         ] {
             let error = PublicKey::from_hex(value).expect_err("invalid public key");
             assert_eq!(error.code(), SafeErrorCode::InvalidPublicKey);
@@ -310,10 +346,34 @@ mod tests {
 
     #[test]
     fn public_keys_are_ordered_by_canonical_bytes() {
-        let low = PublicKey::from_bytes([0_u8; PUBLIC_KEY_BYTE_LENGTH]);
-        let high = PublicKey::from_bytes([1_u8; PUBLIC_KEY_BYTE_LENGTH]);
+        let low =
+            PublicKey::from_hex("585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df")
+                .expect("low key");
+        let high =
+            PublicKey::from_hex("e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af")
+                .expect("high key");
 
         assert!(low < high);
+    }
+
+    #[test]
+    fn persisted_public_key_classification_is_explicit_and_fail_closed() {
+        assert!(matches!(
+            classify_persisted_public_key(HEX),
+            PersistedPublicKeyClassification::Canonical(_)
+        ));
+        assert_eq!(
+            classify_persisted_public_key(HEX.to_ascii_uppercase().as_str()),
+            PersistedPublicKeyClassification::NonCanonicalEncoding
+        );
+        assert_eq!(
+            classify_persisted_public_key(&"00".repeat(PUBLIC_KEY_BYTE_LENGTH)),
+            PersistedPublicKeyClassification::InvalidCurvePoint
+        );
+        assert_eq!(
+            classify_persisted_public_key("not-a-public-key"),
+            PersistedPublicKeyClassification::MalformedEncoding
+        );
     }
 
     #[test]

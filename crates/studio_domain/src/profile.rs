@@ -233,7 +233,7 @@ mod tests {
     fn candidate(id_byte: u8, created_at: i64, name: &str) -> Kind0ProfileCandidate {
         Kind0ProfileCandidate::new(
             EventId::from_bytes([id_byte; 32]),
-            PublicKey::from_bytes([9_u8; 32]),
+            PublicKey::from_bytes([7_u8; 32]).expect("valid public key"),
             UnixTimestamp::from_seconds(created_at).expect("valid timestamp"),
             profile(name),
         )
@@ -280,7 +280,10 @@ mod tests {
 
         assert_eq!(selected.metadata().name(), Some("low-id"));
         assert_eq!(selected.event_id().as_bytes(), [1_u8; 32]);
-        assert_eq!(selected.author(), PublicKey::from_bytes([9_u8; 32]));
+        assert_eq!(
+            selected.author(),
+            PublicKey::from_bytes([7_u8; 32]).expect("valid public key")
+        );
         assert_eq!(selected.created_at().as_seconds(), 20);
     }
 

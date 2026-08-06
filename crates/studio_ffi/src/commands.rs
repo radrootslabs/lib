@@ -20,6 +20,10 @@ use radroots_studio_storage::OsKeyringSecretStore;
 
 use crate::{
     AccountDto, AppSnapshotDto, WireErrorCategory, WireErrorCode, WireRecoveryAction,
+    contract::{
+        FFI_CONTRACT_HASH, FFI_CONTRACT_MAJOR, FFI_CONTRACT_MINOR, MINIMUM_SCHEMA_VERSION,
+        PRODUCT_VERSION,
+    },
     dto::error_policy,
 };
 
@@ -29,9 +33,6 @@ const DATABASE_APPLICATION: &str = "studio";
 const DATABASE_FILENAME: &str = "studio.sqlite3";
 const DEVELOPMENT_DATA_DIR_ENVIRONMENT: &str = "RADROOTS_STUDIO_DEVELOPMENT_DATA_DIR";
 pub(crate) const ACTOR_MAILBOX_CAPACITY: usize = 64;
-pub const FFI_CONTRACT_MAJOR: u16 = 2;
-pub const FFI_CONTRACT_MINOR: u16 = 0;
-pub const FFI_CONTRACT_HASH: &str = "radroots-studio-native-v2-2026-08-03";
 const MAX_COMMAND_DEADLINE_MILLIS: u64 = 30_000;
 
 #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
@@ -50,6 +51,8 @@ pub struct AccountCommandReceiptDto {
 
 #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
 pub struct CompatibilityDescriptor {
+    pub product_version: String,
+    pub cargo_package_version: String,
     pub contract_major: u16,
     pub contract_minor: u16,
     pub contract_hash: String,
@@ -69,10 +72,12 @@ pub struct CompatibilityExpectation {
 #[uniffi::export]
 pub fn compatibility_descriptor() -> CompatibilityDescriptor {
     CompatibilityDescriptor {
+        product_version: PRODUCT_VERSION.to_owned(),
+        cargo_package_version: env!("CARGO_PKG_VERSION").to_owned(),
         contract_major: FFI_CONTRACT_MAJOR,
         contract_minor: FFI_CONTRACT_MINOR,
         contract_hash: FFI_CONTRACT_HASH.to_owned(),
-        minimum_schema_version: 5,
+        minimum_schema_version: MINIMUM_SCHEMA_VERSION,
         current_schema_version: radroots_studio_storage::CURRENT_SCHEMA_VERSION,
     }
 }
@@ -187,7 +192,10 @@ impl RemovalRequest {
 pub(crate) struct RuntimeCore {
     pub(crate) actor: RuntimeActorHandle,
     pub(crate) observers: Mutex<
-        BTreeMap<radroots_studio_application::ChangeSubscriptionId, tokio::task::JoinHandle<()>>,
+        BTreeMap<
+            radroots_studio_application::ChangeSubscriptionId,
+            Option<tokio::task::JoinHandle<()>>,
+        >,
     >,
     pub(crate) closed: AtomicBool,
     pub(crate) startup_relay_problem: Option<SafeError>,

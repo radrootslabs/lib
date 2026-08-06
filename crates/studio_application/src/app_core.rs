@@ -263,7 +263,7 @@ const fn account_not_found() -> SafeError {
 mod tests {
     use radroots_studio_domain::{
         AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
-        PublicKey, UnixTimestamp,
+        UnixTimestamp,
     };
 
     use crate::{AppCore, AppLifecycle, RelayConfiguration, StateTransition};
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn removal_impact_matches_missing_local_binding() {
         let core = AppCore::in_memory(RelayConfiguration::default());
-        let public_key = PublicKey::from_bytes([9; 32]);
+        let public_key = crate::test_support::valid_test_public_key(9).expect("valid public key");
         let account = AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::CredentialMissing),

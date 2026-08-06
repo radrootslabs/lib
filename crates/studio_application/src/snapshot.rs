@@ -296,7 +296,7 @@ const fn invalid_snapshot() -> SafeError {
 mod tests {
     use radroots_studio_domain::{
         AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
-        PublicKey, RelayDestinationPolicy, RelayUrl, SafeErrorCode, UnixTimestamp,
+        RelayDestinationPolicy, RelayUrl, SafeErrorCode, UnixTimestamp,
     };
 
     use super::{
@@ -305,7 +305,8 @@ mod tests {
     };
 
     fn account(key_byte: u8) -> AccountSummary {
-        let public_key = PublicKey::from_bytes([key_byte; 32]);
+        let public_key =
+            crate::test_support::valid_test_public_key(key_byte).expect("valid public key");
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),

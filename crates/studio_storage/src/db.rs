@@ -5,9 +5,16 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 use fs2::FileExt;
-use radroots_studio_domain::{AccountIdentity, PublicKey, SafeError, SafeErrorCode, SafeMessage};
+use radroots_studio_domain::{SafeError, SafeErrorCode, SafeMessage};
 use refinery::embed_migrations;
 use rusqlite::{Connection, OpenFlags};
+
+use crate::compatibility::{DatabasePreflight, preflight, quarantined_storage_error};
+use crate::recovery::MigrationRecovery;
+use crate::repair::{
+    QuarantineExportReceipt, RepairAuthorization, RepairCandidate, authenticate_candidate,
+    export_quarantined, install_candidate,
+};
 
 pub const CURRENT_SCHEMA_VERSION: u32 = 10;
 
@@ -40,21 +47,67 @@ impl Database {
     /// Returns a safe storage error when the file, connection configuration,
     /// permission update, or migration cannot complete.
     pub fn open(path: &Path) -> Result<Self, SafeError> {
+        let preflight = preflight(path)?;
+        if matches!(&preflight, DatabasePreflight::Quarantined { .. }) {
+            return Err(quarantined_storage_error());
+        }
         let parent = path.parent().ok_or_else(storage_error)?;
         create_secure_directory(parent)?;
+        restrict_sqlite_sidecars(path)?;
         let ownership = WritableOwnership::acquire(path)?;
+        let recovery_source_schema = match &preflight {
+            DatabasePreflight::Ready { schema_version }
+                if *schema_version < CURRENT_SCHEMA_VERSION =>
+            {
+                Some(*schema_version)
+            }
+            _ => None,
+        };
+        let recovery = match preflight {
+            DatabasePreflight::Ready { schema_version }
+                if schema_version < CURRENT_SCHEMA_VERSION =>
+            {
+                Some(MigrationRecovery::prepare(
+                    path,
+                    schema_version,
+                    CURRENT_SCHEMA_VERSION,
+                )?)
+            }
+            DatabasePreflight::Fresh | DatabasePreflight::Ready { .. } => None,
+            DatabasePreflight::Quarantined { .. } => unreachable!("handled above"),
+        };
         let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
             | OpenFlags::SQLITE_OPEN_CREATE
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | OpenFlags::SQLITE_OPEN_NOFOLLOW;
         let mut connection =
             Connection::open_with_flags(path, flags).map_err(|_| storage_error())?;
         configure(&connection).map_err(|_| corrupt_storage_error())?;
-        validate_legacy_account_identities(&connection)?;
-        migrations::migrations::runner()
+        if migrations::migrations::runner()
             .run(&mut connection)
+            .is_err()
+        {
+            drop(connection);
+            if let Some(source_schema) = recovery_source_schema {
+                MigrationRecovery::restore(path, source_schema, CURRENT_SCHEMA_VERSION)?;
+            }
+            return Err(corrupt_storage_error());
+        }
+        let schema_version = connection
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM refinery_schema_history",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
             .map_err(|_| corrupt_storage_error())?;
+        if schema_version != CURRENT_SCHEMA_VERSION {
+            return Err(corrupt_storage_error());
+        }
         restrict_file_permissions(path)?;
         restrict_sqlite_sidecars(path)?;
+        if let Some(recovery) = recovery {
+            recovery.finish(schema_version)?;
+        }
         Ok(Self {
             connection: Mutex::new(connection),
             path: Some(path.to_path_buf()),
@@ -78,6 +131,80 @@ impl Database {
             path: None,
             _ownership: None,
         })
+    }
+
+    /// Inspects schema and persisted identities without mutating the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe corrupt or unsupported-schema error when the database
+    /// cannot be classified.
+    pub fn preflight(path: &Path) -> Result<DatabasePreflight, SafeError> {
+        preflight(path)
+    }
+
+    /// Verifies the authenticated, immutable backup retained for a migration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe backup error when any manifest, digest, authentication
+    /// tag, schema identity, or SQLite integrity check fails.
+    pub fn verify_migration_backup(path: &Path, source_schema: u32) -> Result<(), SafeError> {
+        MigrationRecovery::verify_evidence(path, source_schema, CURRENT_SCHEMA_VERSION)
+    }
+
+    /// Restores an authenticated pre-migration backup while retaining the
+    /// displaced database as recovery evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe storage or backup error without replacing the database
+    /// when authentication or the atomic replacement fails.
+    pub fn restore_migration_backup(path: &Path, source_schema: u32) -> Result<(), SafeError> {
+        let _ownership = WritableOwnership::acquire(path)?;
+        MigrationRecovery::restore(path, source_schema, CURRENT_SCHEMA_VERSION)
+    }
+
+    /// Exports a quarantined database without mutating it and authenticates
+    /// the resulting SQLite artifact with a caller-owned repair capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe state, authorization, or storage error.
+    pub fn export_quarantined(
+        path: &Path,
+        destination: &Path,
+        authorization: &RepairAuthorization,
+    ) -> Result<QuarantineExportReceipt, SafeError> {
+        export_quarantined(path, destination, authorization)
+    }
+
+    /// Validates and authenticates a canonical repaired database candidate.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe compatibility or storage error for an invalid candidate.
+    pub fn authenticate_repair_candidate(
+        path: &Path,
+        authorization: &RepairAuthorization,
+    ) -> Result<RepairCandidate, SafeError> {
+        authenticate_candidate(path, authorization)
+    }
+
+    /// Atomically installs an authenticated candidate over a quarantined
+    /// database while retaining the original as immutable evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe authorization, ownership, or storage error without
+    /// replacing the target when any gate fails.
+    pub fn install_repair_candidate(
+        path: &Path,
+        candidate: &RepairCandidate,
+        authorization: &RepairAuthorization,
+    ) -> Result<(), SafeError> {
+        let _ownership = WritableOwnership::acquire(path)?;
+        install_candidate(path, candidate, authorization)
     }
 
     /// Returns the highest successfully applied migration version.
@@ -131,13 +258,16 @@ impl Drop for DatabaseConnection<'_> {
 impl WritableOwnership {
     fn acquire(database_path: &Path) -> Result<Self, SafeError> {
         let lock_path = database_path.with_extension("sqlite3.lock");
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(|_| storage_error())?;
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(
+                (rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::CLOEXEC).bits() as i32,
+            );
+        }
+        let file = options.open(&lock_path).map_err(|_| storage_error())?;
         restrict_file_permissions(&lock_path)?;
         file.try_lock_exclusive().map_err(|_| ownership_error())?;
         Ok(Self { _file: file })
@@ -145,7 +275,26 @@ impl WritableOwnership {
 }
 
 fn create_secure_directory(path: &Path) -> Result<(), SafeError> {
+    let mut existing = path;
+    loop {
+        match fs::symlink_metadata(existing) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(storage_error());
+                }
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                existing = existing.parent().ok_or_else(storage_error)?;
+            }
+            Err(_) => return Err(storage_error()),
+        }
+    }
     fs::create_dir_all(path).map_err(|_| storage_error())?;
+    let metadata = fs::symlink_metadata(path).map_err(|_| storage_error())?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(storage_error());
+    }
     restrict_directory_permissions(path)
 }
 
@@ -161,79 +310,42 @@ fn configure(connection: &Connection) -> Result<(), SafeError> {
         .map_err(|_| storage_error())
 }
 
-fn validate_legacy_account_identities(connection: &Connection) -> Result<(), SafeError> {
-    let has_accounts = connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'accounts')",
-            [],
-            |row| row.get::<_, bool>(0),
-        )
-        .map_err(|_| corrupt_storage_error())?;
-    if !has_accounts {
-        return Ok(());
-    }
-
-    let mut statement = connection
-        .prepare("SELECT pubkey, npub, signer_kind, key_availability FROM accounts")
-        .map_err(|_| corrupt_storage_error())?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })
-        .map_err(|_| corrupt_storage_error())?;
-    for row in rows {
-        let (public_key, npub, signer_kind, availability) =
-            row.map_err(|_| corrupt_storage_error())?;
-        let public_key = PublicKey::from_hex(&public_key).map_err(|_| corrupt_storage_error())?;
-        AccountIdentity::verify(public_key, npub).map_err(|_| corrupt_storage_error())?;
-        if signer_kind != "local_secret"
-            || !matches!(
-                availability.as_str(),
-                "available" | "credential_missing" | "store_unavailable"
-            )
-        {
-            return Err(corrupt_storage_error());
-        }
-    }
-    Ok(())
-}
-
 fn restrict_sqlite_sidecars(path: &Path) -> Result<(), SafeError> {
     for suffix in ["-wal", "-shm"] {
         let sidecar = PathBuf::from(format!("{}{suffix}", path.display()));
-        if sidecar.exists() {
-            restrict_file_permissions(&sidecar)?;
+        match fs::symlink_metadata(&sidecar) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(storage_error());
+            }
+            Ok(_) => restrict_file_permissions(&sidecar)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(storage_error()),
         }
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn restrict_file_permissions(path: &Path) -> Result<(), SafeError> {
+pub(crate) fn restrict_file_permissions(path: &Path) -> Result<(), SafeError> {
     use std::os::unix::fs::PermissionsExt;
 
     fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|_| storage_error())
 }
 
 #[cfg(unix)]
-fn restrict_directory_permissions(path: &Path) -> Result<(), SafeError> {
+pub(crate) fn restrict_directory_permissions(path: &Path) -> Result<(), SafeError> {
     use std::os::unix::fs::PermissionsExt;
 
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|_| storage_error())
 }
 
 #[cfg(not(unix))]
-fn restrict_file_permissions(_path: &Path) -> Result<(), SafeError> {
+pub(crate) fn restrict_file_permissions(_path: &Path) -> Result<(), SafeError> {
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn restrict_directory_permissions(_path: &Path) -> Result<(), SafeError> {
+pub(crate) fn restrict_directory_permissions(_path: &Path) -> Result<(), SafeError> {
     Ok(())
 }
 
@@ -261,17 +373,19 @@ const fn ownership_error() -> SafeError {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Write;
     use std::path::Path;
     use std::process::Command;
 
     use tempfile::tempdir;
 
     use radroots_studio_application::{AccountRepository, AppStateRepository};
-    use radroots_studio_domain::PublicKey;
+    use radroots_studio_domain::{PublicKey, SafeErrorCode};
     use refinery::Target;
     use rusqlite::Connection;
 
     use super::{CURRENT_SCHEMA_VERSION, Database, configure, migrations};
+    use crate::{DatabasePreflight, PersistedIdentityIssueKind, RepairAuthorization};
 
     #[test]
     fn migration_opens_fresh_memory_database_once() {
@@ -387,7 +501,7 @@ mod tests {
         assert_eq!(database.list_accounts().expect("accounts").len(), 1);
         assert_eq!(
             database.load_selected_account().expect("selection"),
-            Some(PublicKey::from_bytes([7; 32]))
+            Some(PublicKey::from_bytes([7; 32]).expect("valid public key"))
         );
         let connection = database.connection();
         let migrated: (i64, i64, i64) = connection
@@ -398,6 +512,31 @@ mod tests {
             )
             .expect("migrated inventory");
         assert_eq!(migrated, (1, 1, 1));
+        drop(connection);
+        drop(database);
+
+        Database::verify_migration_backup(&path, 5).expect("authenticated backup");
+        Database::restore_migration_backup(&path, 5).expect("authenticated restore");
+        assert_eq!(
+            Database::preflight(&path).expect("restored preflight"),
+            DatabasePreflight::Ready { schema_version: 5 }
+        );
+        let retried = Database::open(&path).expect("idempotent migration retry");
+        assert_eq!(retried.schema_version().expect("retried version"), 10);
+        drop(retried);
+
+        let backup = directory
+            .path()
+            .join("studio.sqlite3.recovery/migration-v5-to-v10.sqlite3");
+        fs::OpenOptions::new()
+            .append(true)
+            .open(backup)
+            .expect("open backup")
+            .write_all(b"tamper")
+            .expect("tamper backup");
+        let error =
+            Database::verify_migration_backup(&path, 5).expect_err("tampered backup must fail");
+        assert_eq!(error.code(), SafeErrorCode::StorageBackupInvalid);
     }
 
     #[test]
@@ -435,6 +574,123 @@ mod tests {
     }
 
     #[test]
+    fn invalid_curve_identity_is_quarantined_without_mutation() {
+        let directory = tempdir().expect("temporary directory");
+        let path = directory.path().join("studio.sqlite3");
+        {
+            let mut connection = Connection::open(&path).expect("legacy database");
+            configure(&connection).expect("configuration");
+            migrations::migrations::runner()
+                .set_target(Target::Version(5))
+                .run(&mut connection)
+                .expect("V5 schema");
+            connection
+                .execute(
+                    "INSERT INTO accounts (pubkey, npub, signer_kind, key_availability, created_at) VALUES (?1, ?2, 'local_secret', 'available', 10)",
+                    ["00".repeat(32), "npub1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qursnvjvl7".to_owned()],
+                )
+                .expect("invalid-curve fixture");
+            connection
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .expect("checkpoint");
+        }
+        let before = fs::read(&path).expect("before bytes");
+
+        let DatabasePreflight::Quarantined {
+            schema_version,
+            issues,
+        } = Database::preflight(&path).expect("classified preflight")
+        else {
+            panic!("invalid identity was not quarantined");
+        };
+        assert_eq!(schema_version, 5);
+        assert!(issues.iter().any(|issue| {
+            issue.table() == "accounts"
+                && issue.column() == "pubkey"
+                && issue.kind() == PersistedIdentityIssueKind::InvalidCurvePoint
+        }));
+        let error = Database::open(&path)
+            .err()
+            .expect("quarantined open must fail");
+        assert_eq!(error.code(), SafeErrorCode::StorageQuarantined);
+        assert_eq!(fs::read(&path).expect("after bytes"), before);
+        assert!(!path.with_extension("sqlite3.lock").exists());
+
+        let authorization = RepairAuthorization::from_bytes(vec![0x41; 32])
+            .unwrap_or_else(|_| panic!("repair authorization"));
+        let export_path = directory.path().join("quarantine-export.sqlite3");
+        let export = Database::export_quarantined(&path, &export_path, &authorization)
+            .expect("authenticated quarantine export");
+        assert_eq!(export.path(), export_path);
+        assert_eq!(export.sha256().len(), 64);
+        assert_eq!(export.authentication_tag().len(), 64);
+        assert_eq!(fs::read(&path).expect("post-export bytes"), before);
+
+        let candidate_path = directory.path().join("repaired.sqlite3");
+        drop(Database::open(&candidate_path).expect("canonical repair candidate"));
+        let candidate = Database::authenticate_repair_candidate(&candidate_path, &authorization)
+            .expect("authenticate candidate");
+        let wrong_authorization = RepairAuthorization::from_bytes(vec![0x42; 32])
+            .unwrap_or_else(|_| panic!("wrong authorization shape"));
+        let error = Database::install_repair_candidate(&path, &candidate, &wrong_authorization)
+            .expect_err("wrong repair authorization");
+        assert_eq!(error.code(), SafeErrorCode::RepairUnauthorized);
+        assert_eq!(fs::read(&path).expect("unauthorized bytes"), before);
+
+        Database::install_repair_candidate(&path, &candidate, &authorization)
+            .expect("authenticated repair install");
+        assert!(matches!(
+            Database::preflight(&path).expect("repaired preflight"),
+            DatabasePreflight::Ready {
+                schema_version: CURRENT_SCHEMA_VERSION
+            }
+        ));
+        assert!(
+            directory
+                .path()
+                .join("studio.sqlite3.quarantined-evidence")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn newer_and_mixed_schema_inventory_fail_before_mutation() {
+        let directory = tempdir().expect("temporary directory");
+        let newer_path = directory.path().join("newer.sqlite3");
+        {
+            let database = Database::open(&newer_path).expect("current database");
+            database
+                .connection()
+                .execute(
+                    "UPDATE refinery_schema_history SET version = ?1 WHERE version = ?2",
+                    [CURRENT_SCHEMA_VERSION + 1, CURRENT_SCHEMA_VERSION],
+                )
+                .expect("future schema row");
+        }
+        let newer_before = fs::read(&newer_path).expect("newer bytes");
+        let error = Database::preflight(&newer_path).expect_err("newer schema");
+        assert_eq!(error.code(), SafeErrorCode::UnsupportedSchemaVersion);
+        assert_eq!(fs::read(&newer_path).expect("newer after"), newer_before);
+
+        let mixed_path = directory.path().join("mixed.sqlite3");
+        {
+            let mut connection = Connection::open(&mixed_path).expect("legacy database");
+            configure(&connection).expect("configuration");
+            migrations::migrations::runner()
+                .set_target(Target::Version(5))
+                .run(&mut connection)
+                .expect("V5 schema");
+            connection
+                .execute("CREATE TABLE installation_identity (singleton INTEGER)", [])
+                .expect("mixed table");
+        }
+        let mixed_before = fs::read(&mixed_path).expect("mixed bytes");
+        let error = Database::preflight(&mixed_path).expect_err("mixed schema");
+        assert_eq!(error.code(), SafeErrorCode::StorageCorrupt);
+        assert_eq!(fs::read(&mixed_path).expect("mixed after"), mixed_before);
+    }
+
+    #[test]
     fn failed_v5_copy_rolls_back_the_active_migration() {
         let directory = tempdir().expect("temporary directory");
         let path = directory.path().join("studio.sqlite3");
@@ -469,12 +725,14 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("migration version");
-        let copied: i64 = connection
-            .query_row("SELECT COUNT(*) FROM account_identities", [], |row| {
-                row.get(0)
-            })
-            .expect("normalized accounts");
-        assert_eq!((version, copied), (6, 0));
+        assert_eq!(version, 5);
+        assert!(!connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'account_identities')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )
+            .expect("normalized table inventory"));
     }
 
     #[test]
@@ -586,5 +844,47 @@ mod tests {
                 & 0o777;
             assert_eq!(sidecar_mode, 0o600);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn database_lock_sidecar_and_recovery_symlinks_fail_closed() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempdir().expect("temporary directory");
+        let victim = directory.path().join("victim");
+        fs::write(&victim, b"unchanged").expect("victim");
+
+        let database_link = directory.path().join("database-link.sqlite3");
+        symlink(&victim, &database_link).expect("database symlink");
+        assert!(Database::open(&database_link).is_err());
+        assert_eq!(fs::read(&victim).expect("victim bytes"), b"unchanged");
+
+        let lock_path = directory.path().join("locked.sqlite3");
+        symlink(&victim, lock_path.with_extension("sqlite3.lock")).expect("lock symlink");
+        assert!(Database::open(&lock_path).is_err());
+        assert_eq!(fs::read(&victim).expect("victim bytes"), b"unchanged");
+
+        let sidecar_path = directory.path().join("sidecar.sqlite3");
+        let wal = std::path::PathBuf::from(format!("{}-wal", sidecar_path.display()));
+        symlink(&victim, wal).expect("WAL symlink");
+        assert!(Database::open(&sidecar_path).is_err());
+        assert_eq!(fs::read(&victim).expect("victim bytes"), b"unchanged");
+
+        let legacy_path = directory.path().join("legacy.sqlite3");
+        {
+            let mut connection = Connection::open(&legacy_path).expect("legacy database");
+            configure(&connection).expect("configuration");
+            migrations::migrations::runner()
+                .set_target(Target::Version(5))
+                .run(&mut connection)
+                .expect("V5 schema");
+        }
+        symlink(
+            directory.path().join("not-present"),
+            directory.path().join("legacy.sqlite3.recovery"),
+        )
+        .expect("recovery symlink");
+        assert!(Database::open(&legacy_path).is_err());
     }
 }

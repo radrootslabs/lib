@@ -9,7 +9,8 @@ license = "GPL-3.0-only"
 repository.workspace = true
 homepage.workspace = true
 publish = false
-include = ["src/**", "uniffi.toml", "Cargo.toml"]
+build = "build.rs"
+include = ["build.rs", "src/**", "uniffi.toml", "Cargo.toml"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -23,6 +24,11 @@ radroots_studio_runtime.workspace = true
 radroots_studio_storage.workspace = true
 tokio = { version = "=1.47.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 uniffi = "=0.32.0"
+
+[build-dependencies]
+quote.workspace = true
+sha2.workspace = true
+syn.workspace = true
 
 [dev-dependencies]
 nostr = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr" }

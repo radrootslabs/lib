@@ -513,10 +513,19 @@ mod tests {
 
     use crate::Database;
 
+    fn public_key(discriminator: u8) -> PublicKey {
+        let value = match discriminator {
+            7 => "0707070707070707070707070707070707070707070707070707070707070707",
+            8 => "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            _ => "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+        };
+        PublicKey::from_hex(value).expect("valid public key")
+    }
+
     #[test]
     fn journal_creates_advances_loads_and_finalizes_pending_operations() {
         let database = Database::in_memory().expect("database");
-        let subject = PublicKey::from_bytes([7; 32]);
+        let subject = public_key(7);
         let id = database
             .begin_operation(
                 AccountOperationKind::Import,
@@ -561,7 +570,7 @@ mod tests {
         database
             .begin_operation(
                 AccountOperationKind::Remove,
-                PublicKey::from_bytes([8; 32]),
+                public_key(8),
                 UnixTimestamp::from_seconds(12).expect("time"),
             )
             .expect("begin");
@@ -581,9 +590,9 @@ mod tests {
     fn durable_repository_replays_matching_requests_and_retains_terminal_receipts() {
         let database = Database::in_memory().expect("database");
         let request = DurableRequestId::parse("import:test:1").expect("request");
-        let account = PublicKey::from_bytes([9; 32]);
+        let account = public_key(9);
         let prior = OperationPriorState::new(
-            Some(PublicKey::from_bytes([8; 32])),
+            Some(public_key(8)),
             Some(BindingAvailability::CredentialMissing),
         );
         let started = database

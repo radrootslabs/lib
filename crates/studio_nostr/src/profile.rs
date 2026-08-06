@@ -93,7 +93,8 @@ mod tests {
     #[test]
     fn profile_event_verifies_signature_author_kind_and_metadata() {
         let (keys, json) = signed_profile();
-        let expected_author = PublicKey::from_bytes(keys.public_key().to_bytes());
+        let expected_author =
+            PublicKey::from_bytes(keys.public_key().to_bytes()).expect("valid public key");
 
         let candidate = parse_verified_kind0(&json, expected_author).expect("verified profile");
 
@@ -111,8 +112,10 @@ mod tests {
     #[test]
     fn profile_event_rejects_tampering_wrong_author_kind_and_oversize_content() {
         let (keys, json) = signed_profile();
-        let expected_author = PublicKey::from_bytes(keys.public_key().to_bytes());
-        let wrong_author = PublicKey::from_bytes(Keys::generate().public_key().to_bytes());
+        let expected_author =
+            PublicKey::from_bytes(keys.public_key().to_bytes()).expect("valid public key");
+        let wrong_author = PublicKey::from_bytes(Keys::generate().public_key().to_bytes())
+            .expect("valid public key");
         let tampered = json.replace("Local grower", "Remote grower");
         let note = EventBuilder::text_note("not metadata")
             .sign_with_keys(&keys)
@@ -147,7 +150,7 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("signed invalid metadata")
             .as_json();
-        let author = PublicKey::from_bytes(keys.public_key().to_bytes());
+        let author = PublicKey::from_bytes(keys.public_key().to_bytes()).expect("valid public key");
 
         assert_eq!(
             parse_verified_kind0(&malformed, author)

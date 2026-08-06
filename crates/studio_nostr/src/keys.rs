@@ -25,7 +25,7 @@ impl KeyMaterialProvider for NostrKeyMaterialProvider {
             .with_exposed_secret(Keys::parse)
             .map_err(|_| invalid_secret_key())?;
         drop(input);
-        let public_key = PublicKey::from_bytes(keys.public_key().to_bytes());
+        let public_key = PublicKey::from_bytes(keys.public_key().to_bytes())?;
         let npub = keys
             .public_key()
             .to_bech32()
@@ -37,7 +37,7 @@ impl KeyMaterialProvider for NostrKeyMaterialProvider {
 }
 
 fn encode_keys(keys: &Keys) -> Result<(PublicKey, Npub, SecretKeyInput, Nsec), SafeError> {
-    let public_key = PublicKey::from_bytes(keys.public_key().to_bytes());
+    let public_key = PublicKey::from_bytes(keys.public_key().to_bytes())?;
     let npub = keys
         .public_key()
         .to_bech32()

@@ -106,16 +106,23 @@ mod tests {
 
     #[test]
     fn keyring_coordinates_are_stable_and_public() {
-        let public_key = PublicKey::from_bytes([0xab; 32]);
+        let public_key =
+            PublicKey::from_hex("7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7")
+                .expect("valid public key");
         assert_eq!(CREDENTIAL_SERVICE, "org.radroots.studio.nostr");
-        assert_eq!(public_key.to_hex(), "ab".repeat(32));
+        assert_eq!(
+            public_key.to_hex(),
+            "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7"
+        );
     }
 
     #[test]
     #[ignore = "mutates the current user's operating-system credential store"]
     fn real_keyring_smoke_round_trips_and_deletes() {
         let store = OsKeyringSecretStore::default();
-        let public_key = PublicKey::from_bytes([0xcd; 32]);
+        let public_key =
+            PublicKey::from_hex("7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7")
+                .expect("valid public key");
         let _ = store.delete(public_key);
         store
             .put(

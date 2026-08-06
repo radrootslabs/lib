@@ -13,8 +13,12 @@ pub(crate) struct TestKeyMaterialProvider {
 
 impl KeyMaterialProvider for TestKeyMaterialProvider {
     fn generate(&self) -> Result<GeneratedKeyMaterial, SafeError> {
-        let candidate = self.next.fetch_add(1, Ordering::Relaxed).wrapping_add(9);
-        let public_key = PublicKey::from_bytes([candidate; 32]);
+        let public_key = (0..=u8::MAX)
+            .find_map(|_| {
+                let candidate = self.next.fetch_add(1, Ordering::Relaxed).wrapping_add(9);
+                PublicKey::from_bytes([candidate; 32]).ok()
+            })
+            .ok_or_else(invalid_secret_key)?;
         let secret_byte = public_key.as_bytes()[0];
         Ok(GeneratedKeyMaterial::new(
             public_key,
@@ -31,13 +35,19 @@ impl KeyMaterialProvider for TestKeyMaterialProvider {
         if input.with_exposed_secret(|value| value.starts_with("nsec1qq")) {
             return Err(invalid_secret_key());
         }
-        let public_key = PublicKey::from_bytes([discriminator; 32]);
+        let public_key = valid_test_public_key(discriminator)?;
         Ok(ImportedKeyMaterial::new(
             public_key,
             Npub::derive(public_key)?,
             input,
         ))
     }
+}
+
+pub(crate) fn valid_test_public_key(discriminator: u8) -> Result<PublicKey, SafeError> {
+    (0..=u8::MAX)
+        .find_map(|offset| PublicKey::from_bytes([discriminator.wrapping_add(offset); 32]).ok())
+        .ok_or_else(invalid_secret_key)
 }
 
 const fn invalid_secret_key() -> SafeError {

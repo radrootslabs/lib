@@ -358,7 +358,7 @@ const fn account_not_found() -> SafeError {
 mod tests {
     use radroots_studio_domain::{
         AccountCreatedAt, AccountIdentity, AccountSummary, BindingAvailability, LocalSignerBinding,
-        PublicKey, SafeError, SafeErrorCode, SafeMessage, UnixTimestamp,
+        SafeError, SafeErrorCode, SafeMessage, UnixTimestamp,
     };
 
     use crate::{
@@ -367,7 +367,8 @@ mod tests {
     };
 
     fn account(key_byte: u8) -> AccountSummary {
-        let public_key = PublicKey::from_bytes([key_byte; 32]);
+        let public_key =
+            crate::test_support::valid_test_public_key(key_byte).expect("valid public key");
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),
@@ -477,7 +478,9 @@ mod tests {
 
         let error = machine
             .apply(
-                StateTransition::Select(PublicKey::from_bytes([9_u8; 32])),
+                StateTransition::Select(
+                    crate::test_support::valid_test_public_key(9).expect("valid public key"),
+                ),
                 &relays,
             )
             .expect_err("missing account");

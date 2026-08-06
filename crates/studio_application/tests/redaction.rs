@@ -17,9 +17,10 @@ fn assert_redacted(text: &str) {
 #[test]
 fn redaction_guards_public_snapshot_and_safe_error_debug() {
     let account = AccountSummary::new(
-        AccountIdentity::derive(PublicKey::from_bytes([2; 32])).expect("identity"),
+        AccountIdentity::derive(PublicKey::from_bytes([7; 32]).expect("valid public key"))
+            .expect("identity"),
         LocalSignerBinding::new(
-            PublicKey::from_bytes([2; 32]),
+            PublicKey::from_bytes([7; 32]).expect("valid public key"),
             BindingAvailability::Available,
         ),
         None,

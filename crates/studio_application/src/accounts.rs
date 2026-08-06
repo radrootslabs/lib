@@ -1328,7 +1328,14 @@ mod tests {
             Some(first)
         );
         let missing = core
-            .select_account(PublicKey::from_bytes([0xff; 32]), &accounts, &accounts)
+            .select_account(
+                PublicKey::from_hex(
+                    "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+                )
+                .expect("unknown public key"),
+                &accounts,
+                &accounts,
+            )
             .expect_err("missing account");
         assert_eq!(missing.code(), SafeErrorCode::AccountNotFound);
         assert_eq!(core.snapshot(), selected);

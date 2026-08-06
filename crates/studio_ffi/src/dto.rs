@@ -19,6 +19,10 @@ pub enum WireErrorCode {
     CredentialMissing,
     StorageUnavailable,
     StorageCorrupt,
+    StorageQuarantined,
+    StorageBackupInvalid,
+    UnsupportedSchemaVersion,
+    RepairUnauthorized,
     PendingOperationRecoveryRequired,
     InvalidRelayConfiguration,
     RelayConnectionFailed,
@@ -46,6 +50,9 @@ pub enum WireRecoveryAction {
     None,
     Retry,
     RepairCredential,
+    Authenticate,
+    RepairStorage,
+    RestoreBackup,
     CheckConfiguration,
     RestartApplication,
     UpdateApplication,
@@ -295,6 +302,10 @@ impl From<SafeErrorCode> for WireErrorCode {
             SafeErrorCode::CredentialMissing => Self::CredentialMissing,
             SafeErrorCode::StorageUnavailable => Self::StorageUnavailable,
             SafeErrorCode::StorageCorrupt => Self::StorageCorrupt,
+            SafeErrorCode::StorageQuarantined => Self::StorageQuarantined,
+            SafeErrorCode::StorageBackupInvalid => Self::StorageBackupInvalid,
+            SafeErrorCode::UnsupportedSchemaVersion => Self::UnsupportedSchemaVersion,
+            SafeErrorCode::RepairUnauthorized => Self::RepairUnauthorized,
             SafeErrorCode::PendingOperationRecoveryRequired => {
                 Self::PendingOperationRecoveryRequired
             }
@@ -303,7 +314,6 @@ impl From<SafeErrorCode> for WireErrorCode {
             SafeErrorCode::ProfileRefreshFailed => Self::ProfileRefreshFailed,
             SafeErrorCode::ObserverRegistrationFailed => Self::ObserverRegistrationFailed,
             SafeErrorCode::NativeLibraryLoadFailed => Self::NativeLibraryLoadFailed,
-            _ => Self::Internal,
         }
     }
 }
@@ -341,6 +351,26 @@ pub(crate) const fn error_policy(
             false,
             WireRecoveryAction::RestartApplication,
         ),
+        SafeErrorCode::StorageQuarantined => (
+            WireErrorCategory::Storage,
+            false,
+            WireRecoveryAction::RepairStorage,
+        ),
+        SafeErrorCode::StorageBackupInvalid => (
+            WireErrorCategory::Storage,
+            false,
+            WireRecoveryAction::RestoreBackup,
+        ),
+        SafeErrorCode::UnsupportedSchemaVersion => (
+            WireErrorCategory::Compatibility,
+            false,
+            WireRecoveryAction::UpdateApplication,
+        ),
+        SafeErrorCode::RepairUnauthorized => (
+            WireErrorCategory::Credential,
+            false,
+            WireRecoveryAction::Authenticate,
+        ),
         SafeErrorCode::InvalidRelayConfiguration => (
             WireErrorCategory::Network,
             false,
@@ -359,7 +389,6 @@ pub(crate) const fn error_policy(
             false,
             WireRecoveryAction::RestartApplication,
         ),
-        _ => (WireErrorCategory::Internal, false, WireRecoveryAction::None),
     }
 }
 
@@ -404,7 +433,9 @@ mod tests {
     use radroots_studio_application::{AppCore, RelayConfiguration};
     use radroots_studio_nostr::NostrKeyMaterialProvider;
 
-    use super::AppSnapshotDto;
+    use radroots_studio_domain::{SafeErrorCode, SafeMessage};
+
+    use super::{AppSnapshotDto, SafeErrorDto, WireErrorCode, WireRecoveryAction};
 
     #[test]
     fn snapshot_dto_is_revisioned_public_and_secret_free() {
@@ -421,5 +452,39 @@ mod tests {
         assert!(!debug.contains("nsec"));
         assert!(!debug.contains("secret_key"));
         assert!(!debug.contains("server_url"));
+    }
+
+    #[test]
+    fn security_errors_have_explicit_stable_wire_mappings() {
+        for (code, expected_code, expected_recovery) in [
+            (
+                SafeErrorCode::StorageQuarantined,
+                WireErrorCode::StorageQuarantined,
+                WireRecoveryAction::RepairStorage,
+            ),
+            (
+                SafeErrorCode::StorageBackupInvalid,
+                WireErrorCode::StorageBackupInvalid,
+                WireRecoveryAction::RestoreBackup,
+            ),
+            (
+                SafeErrorCode::UnsupportedSchemaVersion,
+                WireErrorCode::UnsupportedSchemaVersion,
+                WireRecoveryAction::UpdateApplication,
+            ),
+            (
+                SafeErrorCode::RepairUnauthorized,
+                WireErrorCode::RepairUnauthorized,
+                WireRecoveryAction::Authenticate,
+            ),
+        ] {
+            let dto = SafeErrorDto::from(radroots_studio_domain::SafeError::new(
+                code,
+                SafeMessage::new("Safe compatibility failure."),
+            ));
+            assert_eq!(dto.code, expected_code);
+            assert_eq!(dto.recovery_action, expected_recovery);
+            assert!(!dto.retryable);
+        }
     }
 }

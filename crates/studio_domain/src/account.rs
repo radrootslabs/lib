@@ -311,8 +311,12 @@ mod tests {
     const DERIVED_NPUB: &str = "npub1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qursnvjvl7";
     const MISMATCHED_NPUB: &str = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg";
 
+    fn public_key() -> PublicKey {
+        PublicKey::from_bytes([7_u8; 32]).expect("valid public key")
+    }
+
     fn account(label: Option<AccountLabel>) -> AccountSummary {
-        let public_key = PublicKey::from_bytes([7_u8; 32]);
+        let public_key = public_key();
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),
@@ -354,7 +358,7 @@ mod tests {
         assert!(account.label().is_none());
         assert!(account.last_used_at().is_none());
         assert_eq!(account.created_at().timestamp().as_seconds(), 10);
-        assert_eq!(account.public_key(), PublicKey::from_bytes([7_u8; 32]));
+        assert_eq!(account.public_key(), public_key());
         assert_eq!(account.npub().as_str(), DERIVED_NPUB);
         assert!(!debug.contains("nsec1"));
         assert!(!debug.contains(&"11".repeat(32)));
@@ -362,7 +366,7 @@ mod tests {
 
     #[test]
     fn account_identity_derives_npub_and_rejects_mismatched_persisted_forms() {
-        let public_key = PublicKey::from_bytes([7_u8; 32]);
+        let public_key = public_key();
         let identity = AccountIdentity::derive(public_key).expect("identity");
         assert_eq!(identity.public_key(), public_key);
         assert_eq!(identity.npub().as_str(), DERIVED_NPUB);
@@ -373,7 +377,10 @@ mod tests {
         assert!(AccountIdentity::verify(public_key, MISMATCHED_NPUB.to_owned()).is_err());
         assert!(
             AccountIdentity::verify(
-                PublicKey::from_bytes([8_u8; 32]),
+                PublicKey::from_hex(
+                    "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
+                )
+                .expect("second public key"),
                 MISMATCHED_NPUB.to_owned()
             )
             .is_err()
@@ -382,7 +389,7 @@ mod tests {
 
     #[test]
     fn local_signer_binding_carries_only_canonical_account_identity() {
-        let public_key = PublicKey::from_bytes([9_u8; 32]);
+        let public_key = public_key();
         let identity = AccountIdentity::derive(public_key).expect("identity");
         let binding = LocalSignerBinding::new(public_key, BindingAvailability::Available);
 
@@ -392,7 +399,7 @@ mod tests {
 
     #[test]
     fn local_binding_repair_transitions_are_typed_and_fail_closed() {
-        let public_key = PublicKey::from_bytes([9_u8; 32]);
+        let public_key = public_key();
         let mut binding = LocalSignerBinding::new(public_key, BindingAvailability::Available);
         assert_eq!(binding.repair_action(), None);
         assert!(binding.repair_credential().is_err());

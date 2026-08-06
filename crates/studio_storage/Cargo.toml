@@ -17,8 +17,14 @@ keyring = "=4.1.6"
 radroots_studio_application.workspace = true
 radroots_studio_domain.workspace = true
 refinery = { version = "=0.9.2", default-features = false, features = ["rusqlite"] }
-rusqlite = { version = "=0.39.0", features = ["bundled"] }
+getrandom.workspace = true
+hmac.workspace = true
+rusqlite = { version = "=0.39.0", features = ["backup", "bundled"] }
+sha2.workspace = true
 zeroize = "=1.9.0"
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
 
 [dev-dependencies]
 tempfile = "=3.23.0"

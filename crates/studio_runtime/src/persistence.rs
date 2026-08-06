@@ -333,7 +333,7 @@ mod tests {
     use super::PersistentAppCore;
 
     fn account() -> AccountSummary {
-        let public_key = PublicKey::from_bytes([4; 32]);
+        let public_key = PublicKey::from_bytes([7; 32]).expect("valid public key");
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),

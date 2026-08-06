@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
 pub enum SafeErrorCode {
     InvalidPublicKey,
     InvalidSecretKey,
@@ -15,6 +14,10 @@ pub enum SafeErrorCode {
     CredentialMissing,
     StorageUnavailable,
     StorageCorrupt,
+    StorageQuarantined,
+    StorageBackupInvalid,
+    UnsupportedSchemaVersion,
+    RepairUnauthorized,
     PendingOperationRecoveryRequired,
     InvalidRelayConfiguration,
     RelayConnectionFailed,

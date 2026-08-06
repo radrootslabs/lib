@@ -156,6 +156,10 @@ mod tests {
 
     use crate::Database;
 
+    fn public_key() -> PublicKey {
+        PublicKey::from_bytes([7; 32]).expect("valid public key")
+    }
+
     fn account(public_key: PublicKey) -> AccountSummary {
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
@@ -184,7 +188,7 @@ mod tests {
     #[test]
     fn profile_cache_round_trips_and_records_refresh_status() {
         let database = Database::in_memory().expect("database");
-        let public_key = PublicKey::from_bytes([1; 32]);
+        let public_key = public_key();
         database
             .insert_account(&account(public_key))
             .expect("account");
@@ -211,7 +215,7 @@ mod tests {
     #[test]
     fn profile_cache_keeps_newest_then_lowest_event_id() {
         let database = Database::in_memory().expect("database");
-        let public_key = PublicKey::from_bytes([2; 32]);
+        let public_key = public_key();
         database
             .insert_account(&account(public_key))
             .expect("account");
@@ -236,7 +240,7 @@ mod tests {
     #[test]
     fn profile_cache_cascades_with_account_removal() {
         let database = Database::in_memory().expect("database");
-        let public_key = PublicKey::from_bytes([3; 32]);
+        let public_key = public_key();
         database
             .insert_account(&account(public_key))
             .expect("account");

@@ -309,8 +309,17 @@ mod tests {
 
     use crate::Database;
 
+    fn public_key(key_byte: u8) -> PublicKey {
+        let value = match key_byte {
+            1 => "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            2 => "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+            _ => "7e7e9c42a91bfef19fa7ea99d52d8afdb67d893a8fefba1f5cb9793f2107f6d7",
+        };
+        PublicKey::from_hex(value).expect("valid public key")
+    }
+
     fn account(key_byte: u8, created_at: i64) -> AccountSummary {
-        let public_key = PublicKey::from_bytes([key_byte; 32]);
+        let public_key = public_key(key_byte);
         AccountSummary::new(
             AccountIdentity::derive(public_key).expect("identity"),
             LocalSignerBinding::new(public_key, BindingAvailability::Available),
