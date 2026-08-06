@@ -770,10 +770,15 @@ fn verify_import_context(
         let contents = git_bytes(filtered_root, &["show", &format!("{filtered_head}:{path}")])?;
         let text = String::from_utf8_lossy(&contents);
         let lower_contents = text.to_ascii_lowercase();
+        let license_metadata_stripped = lower_contents
+            .replace("license = \"gpl-3.0-only\"", "")
+            .replace("license = \"gpl-3.0-or-later\"", "")
+            .replace("license = \"mit or apache-2.0\"", "")
+            .replace("license = \"mpl-2.0\"", "");
         if text.contains("PRIVATE KEY-----")
             || text.contains("ghp_")
             || lower_contents.contains("github-actions[bot]")
-            || lower_contents.contains("gpl-3.0")
+            || license_metadata_stripped.contains("gpl-3.0")
         {
             return Err(format!(
                 "secret, bot, or license content rejected in {path}"

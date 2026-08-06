@@ -67,6 +67,16 @@ bytes = 66361
 final_tree_sha256 = "4813f4b5296dbb48ac890a967f9c6cf7a50dc762e92508696ac15ef900bbe616"
 path_map_sha256 = "149adae50385ec89862093341d9ad74709fe690c46bf2cb163758809ae41fad6"
 
+[[import]]
+source_id = "studio_app"
+frozen_commit = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
+filtered_head = "382dde207e3706a2f2abe3872e075f3c2a5cb942"
+artifact = "studio_app.commit-map.v1.json"
+sha256 = "978df5d208506860467d58f28cbf2626949f3e8bb79bf0ec96497f64eecdcd91"
+bytes = 986718
+final_tree_sha256 = "8158d9dd59199fa28faca31327ff20d8fe654dc15cc38dc2f2ce2adc9c049b32"
+path_map_sha256 = "7b0302d616114ddc769d88eee05309ddaa5fb978a683ac5f7e49692ce810a7be"
+
 [[archive]]
 source_id = "sdk"
 kind = "git_bundle"
@@ -108,9 +118,9 @@ sha256 = "27917b71b12392cb005d7125726853c51e56aa615d014a6caa087d4cbd261849"
 bytes = 8772591
 source_commit_count = 1230
 source_path_commit_count = 95
-rewritten_commit_count = 93
+rewritten_commit_count = 94
 topology_support_commit_count = 0
-omitted_empty_commit_count = 2
+omitted_empty_commit_count = 1
 source_object_count = 16143
 refname = "refs/heads/master"
 bot_identity_scan = true
@@ -266,6 +276,14 @@ target = "crates/mobile_bindgen"
 package = "radroots_mobile_bindgen"
 license = "GPL-3.0-or-later"
 disposition = "retain_private"
+
+[[path_map]]
+source_id = "studio_app"
+source = "core/Cargo.toml"
+target = "imports/studio_workspace/Cargo.toml"
+package = "studio_workspace_import"
+license = "GPL-3.0-only"
+disposition = "merge_then_retire"
 
 [[path_map]]
 source_id = "studio_app"

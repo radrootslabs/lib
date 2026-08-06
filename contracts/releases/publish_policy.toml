@@ -52,6 +52,7 @@ external_packages = []
 
 [workspace_classification]
 private = [
+  "radroots_mobile_core",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
@@ -63,6 +64,9 @@ build_codegen = [
   "radroots_event_bindings",
   "radroots_event_codec_wasm",
   "radroots_identity_bindings",
+  "radroots_mobile_bindgen",
+  "radroots_mobile_ffi",
+  "radroots_mobile_wasm",
   "radroots_replica_schema_bindings",
   "radroots_replica_store_wasm",
   "radroots_replica_sync_wasm",
