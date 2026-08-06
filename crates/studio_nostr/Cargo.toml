@@ -1,14 +1,19 @@
 [package]
-name = "radroots-studio-nostr"
-version.workspace = true
+name = "radroots_studio_nostr"
+description = "Private Nostr adapter for Radroots Studio"
+version = "0.1.0-alpha"
 edition.workspace = true
+authors.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "GPL-3.0-only"
 repository.workspace = true
+homepage.workspace = true
+publish = false
+include = ["src/**", "Cargo.toml"]
 
 [dependencies]
-nostr.workspace = true
-radroots-studio-domain = { path = "../domain" }
+nostr = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr" }
+radroots_studio_domain.workspace = true
 
 [lints]
 workspace = true

@@ -1,22 +1,26 @@
 [package]
-name = "radroots-studio-application"
-version.workspace = true
+name = "radroots_studio_application"
+description = "Private application policy and ports for Radroots Studio"
+version = "0.1.0-alpha"
 edition.workspace = true
+authors.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "GPL-3.0-only"
 repository.workspace = true
+homepage.workspace = true
+publish = false
+include = ["src/**", "tests/**", "Cargo.toml"]
 
 [dependencies]
-nostr.workspace = true
-nostr-sdk.workspace = true
-radroots-studio-domain = { path = "../domain" }
-radroots-studio-nostr = { path = "../nostr" }
-secrecy.workspace = true
-tokio.workspace = true
+nostr = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr" }
+nostr-sdk = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr-sdk" }
+radroots_studio_domain.workspace = true
+radroots_studio_nostr.workspace = true
+secrecy = "=0.10.3"
+tokio = { version = "=1.47.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
-nostr-relay-builder.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+nostr-relay-builder = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr-relay-builder" }
 
 [lints]
 workspace = true

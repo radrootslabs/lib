@@ -1377,14 +1377,14 @@ replaces = ["radroots_app_bindgen"]
 [[package]]
 name = "radroots_studio_domain"
 path = "crates/studio_domain"
-state = "reserved_import"
+state = "active"
 tier = "application_domain"
 visibility = "private_runtime"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-only"
 platforms = ["native"]
-groups = ["studio"]
+groups = ["coverage_required", "studio"]
 owners = ["studio"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1401,20 +1401,19 @@ source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/domain"
 source_tree_sha256 = "25f8abe2f8f4e9dfeb6450116be67eb3faad53f2d3879a4c142796238f74b0a9"
 compatibility = ["product", "data", "package_private"]
-removal_gate = "studio_history_import_verified"
 replaces = ["radroots-studio-domain"]
 
 [[package]]
 name = "radroots_studio_application"
 path = "crates/studio_application"
-state = "reserved_import"
+state = "active"
 tier = "application"
 visibility = "private_runtime"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-only"
 platforms = ["native"]
-groups = ["studio"]
+groups = ["coverage_required", "studio"]
 owners = ["studio"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1432,20 +1431,19 @@ source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/application"
 source_tree_sha256 = "8b0b5d4d74dde0af3c5fb3dac979b0cf57cccf073d597f7bd35b1e73a711fe0b"
 compatibility = ["product", "behavior", "package_private"]
-removal_gate = "studio_history_import_verified"
 replaces = ["radroots-studio-application"]
 
 [[package]]
 name = "radroots_studio_nostr"
 path = "crates/studio_nostr"
-state = "reserved_import"
+state = "active"
 tier = "application_adapter"
 visibility = "private_adapter"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-only"
 platforms = ["native"]
-groups = ["studio"]
+groups = ["coverage_required", "studio"]
 owners = ["studio"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1464,20 +1462,19 @@ source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/nostr"
 source_tree_sha256 = "2ce5ce0227ab190102a94ffdf80d95b37ed35f5ef62286c4e3e19cd42a777115"
 compatibility = ["network", "security", "package_private"]
-removal_gate = "studio_history_import_verified"
 replaces = ["radroots-studio-nostr"]
 
 [[package]]
 name = "radroots_studio_storage"
 path = "crates/studio_storage"
-state = "reserved_import"
+state = "active"
 tier = "application_adapter"
 visibility = "private_adapter"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-only"
 platforms = ["native"]
-groups = ["studio"]
+groups = ["coverage_required", "studio"]
 owners = ["studio"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1496,7 +1493,6 @@ source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/storage"
 source_tree_sha256 = "f3addecbd7f6dbccda4a438597b4e433443a34b48a6c4ef9efa90e49e8f05c4b"
 compatibility = ["data", "keyring", "package_private"]
-removal_gate = "studio_history_import_verified"
 replaces = ["radroots-studio-storage"]
 
 [[package]]
@@ -1535,14 +1531,14 @@ replaces = []
 [[package]]
 name = "radroots_studio_ffi"
 path = "crates/studio_ffi"
-state = "reserved_import"
+state = "active"
 tier = "boundary"
 visibility = "private_boundary"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-only"
 platforms = ["linux", "macos", "windows"]
-groups = ["studio", "boundaries"]
+groups = ["coverage_required", "studio", "boundaries"]
 owners = ["studio"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1563,20 +1559,19 @@ source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/ffi"
 source_tree_sha256 = "0bb1d02eb963a606a288d9c35fb418de7bfd914dc5e2c4a38112af64c643151c"
 compatibility = ["ffi", "kotlin", "product", "lifecycle", "package_private"]
-removal_gate = "studio_history_import_verified"
 replaces = ["radroots-studio-ffi"]
 
 [[package]]
 name = "radroots_studio_uniffi_bindgen"
 path = "crates/studio_uniffi_bindgen"
-state = "reserved_import"
+state = "active"
 tier = "codegen"
 visibility = "private_codegen"
 publish = false
 version = "0.1.0-alpha"
 license = "GPL-3.0-only"
 platforms = ["native"]
-groups = ["studio", "boundaries"]
+groups = ["coverage_required", "studio", "boundaries"]
 owners = ["studio"]
 permitted_dependency_tiers = [
   "foundation",
@@ -1598,5 +1593,4 @@ source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/tools/uniffi-bindgen"
 source_tree_sha256 = "0eedd47c17fc7b2b84d953f2c4613aecf96575df466eb106450c7d7eee25ca9b"
 compatibility = ["generated", "kotlin", "package_private"]
-removal_gate = "studio_history_import_verified"
 replaces = ["radroots-studio-uniffi-bindgen"]

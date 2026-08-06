@@ -58,6 +58,10 @@ private = [
   "radroots_runtime_paths",
   "radroots_sdk_ffi",
   "radroots_sql_core",
+  "radroots_studio_application",
+  "radroots_studio_domain",
+  "radroots_studio_nostr",
+  "radroots_studio_storage",
 ]
 build_codegen = [
   "radroots_core_bindings",
@@ -71,6 +75,8 @@ build_codegen = [
   "radroots_replica_store_wasm",
   "radroots_replica_sync_wasm",
   "radroots_sdk_sql_wasm_runtime",
+  "radroots_studio_ffi",
+  "radroots_studio_uniffi_bindgen",
   "radroots_trade_bindings",
   "xtask",
 ]

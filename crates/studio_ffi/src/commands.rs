@@ -794,7 +794,8 @@ mod tests {
 
     #[test]
     fn v5_compatibility_fixture_preserves_external_coordinates() {
-        let fixture = include_str!("../../../compatibility/v5-baseline.properties");
+        let fixture =
+            include_str!("../../../contracts/compatibility/studio/v5-baseline.properties");
         let property = |key: &str| {
             fixture.lines().find_map(|line| {
                 line.split_once('=')
