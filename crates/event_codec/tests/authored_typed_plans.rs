@@ -8,6 +8,7 @@ use std::{
 
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
+    calendar::{AuthoredCalendarDateEvent, AuthoredCalendarTimeEvent, CalendarDate},
     contract::{EventAuthoringPolicy, all_event_contracts},
     envelope::kind::KIND_CLASSIFIED_LISTING,
     food::availability::{
@@ -26,9 +27,10 @@ use radroots_event::{
     profile::AuthoredProfile,
 };
 use radroots_event_codec::authoring::{
-    AuthoredEventPlan, PlanWireV1, REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS,
+    AuthoredEventPlan, PlanDecodeError, PlanWireV1, REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS,
 };
 use serde::Deserialize;
+use serde_json::Value;
 
 const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 const OTHER_AUTHOR: &str = "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
@@ -133,6 +135,51 @@ fn every_typed_plan_is_byte_identical_to_the_frozen_authored_wire_corpus() {
     }
 }
 
+#[test]
+fn calendar_plan_history_rejects_tolerated_or_noncanonical_inbound_shapes() {
+    let plans = typed_plans();
+
+    let date = plans
+        .get("radroots.calendar.date_event.v1")
+        .expect("date plan");
+    let reordered = mutate_plan_wire(date, |value| {
+        value["tags"].as_array_mut().expect("date tags").swap(0, 1);
+    });
+    assert!(matches!(
+        PlanWireV1::from_json(&reordered),
+        Err(PlanDecodeError::HistoricalShape(_))
+    ));
+    let deprecated_name = mutate_plan_wire(date, |value| {
+        value["tags"][1][0] = Value::String("name".to_owned());
+    });
+    assert!(matches!(
+        PlanWireV1::from_json(&deprecated_name),
+        Err(PlanDecodeError::HistoricalShape(_))
+    ));
+
+    let time = plans
+        .get("radroots.calendar.time_event.v1")
+        .expect("time plan");
+    let incomplete_day_coverage = mutate_plan_wire(time, |value| {
+        value["tags"]
+            .as_array_mut()
+            .expect("time tags")
+            .retain(|tag| tag[0] != "D");
+    });
+    assert!(matches!(
+        PlanWireV1::from_json(&incomplete_day_coverage),
+        Err(PlanDecodeError::HistoricalShape(_))
+    ));
+}
+
+fn mutate_plan_wire(plan: &AuthoredEventPlan, mutator: impl FnOnce(&mut Value)) -> Vec<u8> {
+    let mut value =
+        serde_json::from_slice::<Value>(&PlanWireV1::from_plan(plan).to_json().expect("plan wire"))
+            .expect("plan wire value");
+    mutator(&mut value);
+    serde_json::to_vec(&value).expect("mutated plan wire")
+}
+
 fn typed_plans() -> BTreeMap<&'static str, AuthoredEventPlan> {
     let mut plans = BTreeMap::new();
     let profile = AuthoredProfile::new("Alice \"Sprout\"")
@@ -207,6 +254,42 @@ fn typed_plans() -> BTreeMap<&'static str, AuthoredEventPlan> {
     plans.insert(
         "radroots.social.comment.v1",
         AuthoredEventPlan::from_nip22_comment(&comment, CREATED_AT, AUTHOR).expect("comment plan"),
+    );
+
+    let date = AuthoredCalendarDateEvent::new(
+        "market-day",
+        "Saturday Market",
+        CalendarDate::parse("2026-08-08").expect("calendar date"),
+    )
+    .expect("date event")
+    .with_end(CalendarDate::parse("2026-08-09").expect("calendar end"))
+    .expect("date end")
+    .with_description("Farmers market and seed swap.")
+    .expect("date description")
+    .with_locations(vec!["Central Saanich, BC".to_owned()])
+    .expect("date location")
+    .with_summary("Local food and seeds")
+    .expect("date summary");
+    plans.insert(
+        "radroots.calendar.date_event.v1",
+        AuthoredEventPlan::from_calendar_date_event(&date, CREATED_AT, AUTHOR)
+            .expect("calendar date plan"),
+    );
+
+    let time = AuthoredCalendarTimeEvent::new("farm-tour", "Farm Tour", 1_784_380_800)
+        .expect("time event")
+        .with_end(1_784_387_900)
+        .expect("time end")
+        .with_description("Walk the fields and meet the growers.")
+        .expect("time description")
+        .with_start_tzid("America/Vancouver")
+        .expect("time zone")
+        .with_locations(vec!["Saanich Peninsula".to_owned()])
+        .expect("time location");
+    plans.insert(
+        "radroots.calendar.time_event.v1",
+        AuthoredEventPlan::from_calendar_time_event(&time, CREATED_AT, AUTHOR)
+            .expect("calendar time plan"),
     );
 
     plans.insert(

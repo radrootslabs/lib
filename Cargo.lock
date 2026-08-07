@@ -3568,6 +3568,7 @@ dependencies = [
  "chrono",
  "hex",
  "nostr 0.44.7",
+ "radroots_blossom",
  "radroots_event",
  "radroots_event_codec",
  "radroots_sdk",

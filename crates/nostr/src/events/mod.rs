@@ -7,6 +7,8 @@
 #[cfg(feature = "events")]
 pub mod application_handler;
 #[cfg(feature = "events")]
+pub mod calendar;
+#[cfg(feature = "events")]
 pub mod comment;
 #[cfg(feature = "events")]
 pub mod deletion;

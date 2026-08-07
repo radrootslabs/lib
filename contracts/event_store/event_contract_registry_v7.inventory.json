@@ -3998,13 +3998,13 @@
       "contract_id": "radroots.calendar.date_event.v1",
       "kind": 31922,
       "name": "Calendar Date Event",
-      "payload_type": "RadrootsAdmittedCalendarDateEvent",
+      "payload_type": "RadrootsAuthoredCalendarDateEvent / RadrootsParsedNip52CalendarDateEvent / RadrootsAdmittedCalendarDateEvent",
       "class": "addressable",
       "stability": "stable",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "plain_text",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "kind_only"
       },
@@ -4110,13 +4110,13 @@
       "contract_id": "radroots.calendar.time_event.v1",
       "kind": 31923,
       "name": "Calendar Time Event",
-      "payload_type": "RadrootsAdmittedCalendarTimeEvent",
+      "payload_type": "RadrootsAuthoredCalendarTimeEvent / RadrootsParsedNip52CalendarTimeEvent / RadrootsAdmittedCalendarTimeEvent",
       "class": "addressable",
       "stability": "stable",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "plain_text",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "kind_only"
       },

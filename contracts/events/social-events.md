@@ -171,7 +171,8 @@ by the verified projection/admission boundary.
 
 The event-contract registry assigns an explicit authoring policy to every
 contract. Strict Profile, Update, PhotoUpdate, Ask, NIP-10 Reply, NIP-22
-Comment, and NIP-09 Deletion Request contracts are `TypedOnly`;
+Comment, NIP-09 Deletion Request, NIP-52 date Event, NIP-52 time Event, and
+FoodAvailability contracts are `TypedOnly`;
 `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft contracts
 remain `GenericDraft`.
 `GenericEventDraft::new` therefore rejects the strict Profile contract and
@@ -181,7 +182,8 @@ and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
 authored-plan signing boundary repeats that validation, so stale version-`1`
 through version-`6` drafts must be rebuilt. Typed root posts, Replies,
-Comments, and Deletion Requests enter Nostr signing only through opaque typed
+Comments, Deletion Requests, date/time Events, and FoodAvailability values
+enter Nostr signing only through opaque typed
 builders that expose timestamp selection and signing, but no raw tag/content
 mutation or public conversion to the upstream builder. Publication remains a
 transport concern operating on signed events. The opaque generic builder
@@ -819,6 +821,14 @@ canonical decimal timestamps and the exact, ascending, duplicate-free sequence o
 index covered by the interval, where `D = floor(unix_seconds / 86400)` and `end` is exclusive.
 Authoring derives this sequence rather than accepting it from callers. Strict authored and admitted
 time events cover at most 366 UTC days.
+
+Registry-v7 marks both Event contracts `TypedOnly`. Their authored models
+convert through the same immutable authored-plan boundary as every other
+strict product profile, and sealed Nostr builders allow local or opaque-host
+signing without exposing kind or tag mutation. Historical plan decoding
+re-runs tolerant parsing, strict admission, and exact authored tag-order
+validation; deprecated `name`, reordered tags, incomplete day coverage, and
+other inbound-tolerated spellings cannot become strict outbound plans.
 
 Strict kind-`31924` and kind-`31925` identifiers are syntax-valid 128-bit values encoded as exactly
 22 unpadded base64url characters. This shape does not prove uniqueness; an authoring runtime must

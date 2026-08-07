@@ -13,6 +13,7 @@ use core::fmt;
 #[cfg(feature = "json")]
 use radroots_event::profile::AuthoredProfile;
 use radroots_event::{
+    calendar::{AuthoredCalendarDateEvent, AuthoredCalendarTimeEvent},
     contract::{ContractIdentityError, ContractKey, EventAuthoringPolicy},
     envelope::{EventEnvelopeError, EventTags},
     food::availability::FoodAvailabilityDetails,
@@ -32,6 +33,7 @@ use crate::profile::authored::{
     RadrootsAuthoredProfileEncodeError, authored_profile_to_wire_parts,
 };
 use crate::{
+    calendar::encode::{date_to_wire_parts, time_to_wire_parts},
     comment::authored::authored_nip22_comment_to_wire_parts,
     deletion::authored::authored_nip09_deletion_request_to_wire_parts,
     food_availability::authored::{
@@ -56,7 +58,7 @@ use crate::{
 
 use super::{AuthoredEventBody, AuthoredEventPlan};
 
-pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 8] = [
+pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 10] = [
     "radroots.profile.metadata.v1",
     "radroots.social.update.v1",
     "radroots.social.photo_update.v1",
@@ -64,6 +66,8 @@ pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 8] = [
     "radroots.social.reply.v1",
     "radroots.social.deletion_request.v1",
     "radroots.social.comment.v1",
+    "radroots.calendar.date_event.v1",
+    "radroots.calendar.time_event.v1",
     "radroots.food.availability.v1",
 ];
 
@@ -88,6 +92,7 @@ pub enum AuthoredPlanError {
     #[cfg(feature = "json")]
     Profile(RadrootsAuthoredProfileEncodeError),
     FoodAvailability(RadrootsFoodAvailabilityEncodeError),
+    Calendar(crate::encode::EventEncodeError),
 }
 
 impl AuthoredPlanError {
@@ -104,6 +109,7 @@ impl AuthoredPlanError {
             #[cfg(feature = "json")]
             Self::Profile(error) => error.code(),
             Self::FoodAvailability(error) => error.code(),
+            Self::Calendar(error) => error.code(),
         }
     }
 }
@@ -134,6 +140,7 @@ impl fmt::Display for AuthoredPlanError {
             #[cfg(feature = "json")]
             Self::Profile(error) => write!(formatter, "{error}"),
             Self::FoodAvailability(error) => write!(formatter, "{error}"),
+            Self::Calendar(error) => write!(formatter, "{error}"),
         }
     }
 }
@@ -196,6 +203,20 @@ impl AuthoredEventBody {
         let wire = authored_food_availability_to_wire_parts(details, created_at)
             .map_err(AuthoredPlanError::FoodAvailability)?;
         build_typed_body("radroots.food.availability.v1", wire)
+    }
+
+    pub fn from_calendar_date_event(
+        event: &AuthoredCalendarDateEvent,
+    ) -> Result<Self, AuthoredPlanError> {
+        let wire = date_to_wire_parts(event).map_err(AuthoredPlanError::Calendar)?;
+        build_typed_body("radroots.calendar.date_event.v1", wire)
+    }
+
+    pub fn from_calendar_time_event(
+        event: &AuthoredCalendarTimeEvent,
+    ) -> Result<Self, AuthoredPlanError> {
+        let wire = time_to_wire_parts(event).map_err(AuthoredPlanError::Calendar)?;
+        build_typed_body("radroots.calendar.time_event.v1", wire)
     }
 }
 
@@ -319,6 +340,30 @@ impl AuthoredEventPlan {
             expected_author,
         )
     }
+
+    pub fn from_calendar_date_event(
+        event: &AuthoredCalendarDateEvent,
+        created_at: u64,
+        expected_author: impl AsRef<str>,
+    ) -> Result<Self, AuthoredPlanError> {
+        Self::bind(
+            AuthoredEventBody::from_calendar_date_event(event)?,
+            created_at,
+            expected_author,
+        )
+    }
+
+    pub fn from_calendar_time_event(
+        event: &AuthoredCalendarTimeEvent,
+        created_at: u64,
+        expected_author: impl AsRef<str>,
+    ) -> Result<Self, AuthoredPlanError> {
+        Self::bind(
+            AuthoredEventBody::from_calendar_time_event(event)?,
+            created_at,
+            expected_author,
+        )
+    }
 }
 
 fn build_typed_body(
@@ -376,6 +421,8 @@ pub(super) fn validate_historical_typed_profile(
         "radroots.social.deletion_request.v1" => validate_deletion(created_at, kind, tags, content),
         "radroots.social.comment.v1" => validate_comment(created_at, kind, tags, content),
         "radroots.food.availability.v1" => validate_food(created_at, kind, tags, content),
+        "radroots.calendar.date_event.v1" => validate_calendar_date(kind, tags, content),
+        "radroots.calendar.time_event.v1" => validate_calendar_time(kind, tags, content),
         _ => Err("historical_typed_profile_unavailable".to_string()),
     }
 }
@@ -754,6 +801,132 @@ fn validate_food(
         return Err("food_tags_noncanonical".to_string());
     }
     Ok(())
+}
+
+#[cfg(feature = "json")]
+fn validate_calendar_date(kind: u32, tags: &[Vec<String>], content: &str) -> Result<(), String> {
+    let parsed = crate::calendar::decode::parse_nip52_calendar_date_event(kind, tags, content)
+        .map_err(|error| error.to_string())?;
+    crate::calendar::decode::admit_radroots_calendar_date_event(parsed.clone())
+        .map_err(|error| error.code().to_string())?;
+    if canonical_calendar_date_tags(&parsed) != tags {
+        return Err("calendar_date_tags_noncanonical".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(feature = "json")]
+fn validate_calendar_time(kind: u32, tags: &[Vec<String>], content: &str) -> Result<(), String> {
+    let parsed = crate::calendar::decode::parse_nip52_calendar_time_event(kind, tags, content)
+        .map_err(|error| error.to_string())?;
+    crate::calendar::decode::admit_radroots_calendar_time_event(parsed.clone())
+        .map_err(|error| error.code().to_string())?;
+    if canonical_calendar_time_tags(&parsed) != tags {
+        return Err("calendar_time_tags_noncanonical".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(feature = "json")]
+fn canonical_calendar_date_tags(
+    event: &radroots_event::calendar::ParsedNip52CalendarDateEvent,
+) -> Vec<Vec<String>> {
+    let common = event.common();
+    let mut tags = vec![
+        tag("d", common.d_tag()),
+        tag("title", common.title()),
+        tag("start", event.start().as_str()),
+    ];
+    if let Some(end) = event.end() {
+        tags.push(tag("end", end.as_str()));
+    }
+    push_canonical_calendar_common_tags(&mut tags, common);
+    tags
+}
+
+#[cfg(feature = "json")]
+fn canonical_calendar_time_tags(
+    event: &radroots_event::calendar::ParsedNip52CalendarTimeEvent,
+) -> Vec<Vec<String>> {
+    let common = event.common();
+    let mut tags = vec![
+        tag("d", common.d_tag()),
+        tag("title", common.title()),
+        tag("start", &event.start().to_string()),
+    ];
+    if let Some(end) = event.end() {
+        tags.push(tag("end", &end.to_string()));
+    }
+    tags.extend(
+        event
+            .observed_day_indices()
+            .iter()
+            .map(|day| tag("D", &day.index().to_string())),
+    );
+    if let Some(tzid) = event.start_tzid() {
+        tags.push(tag("start_tzid", tzid.as_str()));
+    }
+    if let Some(tzid) = event.end_tzid() {
+        tags.push(tag("end_tzid", tzid.as_str()));
+    }
+    push_canonical_calendar_common_tags(&mut tags, common);
+    tags
+}
+
+#[cfg(feature = "json")]
+fn push_canonical_calendar_common_tags(
+    tags: &mut Vec<Vec<String>>,
+    common: &radroots_event::calendar::ParsedNip52CalendarCommon,
+) {
+    tags.extend(
+        common
+            .locations()
+            .iter()
+            .map(|location| tag("location", location)),
+    );
+    if let Some(geohash) = common.geohash() {
+        tags.push(tag("g", geohash));
+    }
+    if let Some(summary) = common.summary() {
+        tags.push(tag("summary", summary));
+    }
+    if let Some(image) = common.image() {
+        tags.push(tag("image", image.as_str()));
+    }
+    for participant in common.participants() {
+        let mut participant_tag = vec!["p".to_string(), participant.pubkey.clone()];
+        if let Some(role) = participant.role.as_ref() {
+            participant_tag.push(participant.relay.clone().unwrap_or_default());
+            participant_tag.push(role.clone());
+        } else if let Some(relay) = participant.relay.as_ref() {
+            participant_tag.push(relay.clone());
+        }
+        tags.push(participant_tag);
+    }
+    tags.extend(
+        common
+            .categories()
+            .iter()
+            .map(|category| tag("t", category)),
+    );
+    tags.extend(
+        common
+            .references()
+            .iter()
+            .map(|reference| tag("r", reference.as_str())),
+    );
+    for request in common.calendar_requests() {
+        let mut request_tag = tag("a", request.calendar().as_str());
+        if let Some(relay) = request.relay() {
+            request_tag.push(relay.to_string());
+        }
+        tags.push(request_tag);
+    }
+}
+
+#[cfg(feature = "json")]
+fn tag(key: &str, value: &str) -> Vec<String> {
+    vec![key.to_string(), value.to_string()]
 }
 
 #[cfg(feature = "json")]

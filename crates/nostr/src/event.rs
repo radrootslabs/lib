@@ -26,6 +26,10 @@ pub use crate::events::{
         ApplicationHandlerSpec, build_application_handler_event as build_application_handler,
         metadata_has_fields,
     },
+    calendar::{
+        CalendarEventBuilder, build_calendar_date_event as build_calendar_date,
+        build_calendar_time_event as build_calendar_time,
+    },
     comment::{Nip22CommentBuilder, build_nip22_comment_event as build_nip22_comment},
     deletion::{
         Nip09DeletionRequestBuilder,

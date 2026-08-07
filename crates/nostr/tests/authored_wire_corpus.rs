@@ -9,6 +9,7 @@ use nostr::{
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     GenericEventDraft,
+    calendar::{AuthoredCalendarDateEvent, AuthoredCalendarTimeEvent, CalendarDate},
     envelope::kind::KIND_CLASSIFIED_LISTING,
     food::availability::{
         FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityStatus, FoodContent,
@@ -38,9 +39,9 @@ use radroots_event_codec::encode::trade::trade_mutation_event_build;
 use radroots_identity::PublicKey;
 use radroots_nostr::{
     event::{
-        GenericBuilder, Kind, Timestamp, build_ask, build_food_availability,
-        build_nip09_deletion_request, build_nip10_reply, build_nip22_comment, build_photo_update,
-        build_profile, build_update,
+        GenericBuilder, Kind, Timestamp, build_ask, build_calendar_date, build_calendar_time,
+        build_food_availability, build_nip09_deletion_request, build_nip10_reply,
+        build_nip22_comment, build_photo_update, build_profile, build_update,
     },
     tag::Tag,
 };
@@ -114,7 +115,7 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
         );
     }
     assert_eq!(actual, expected);
-    assert_eq!(actual.vectors.len(), 10);
+    assert_eq!(actual.vectors.len(), 12);
     assert_eq!(APPROVED_FIXTURE_NAMESPACE, "radroots-approved-fixture-v1");
     assert_eq!(
         actual
@@ -122,7 +123,7 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
             .iter()
             .filter(|vector| vector.input.authoring == "typed")
             .count(),
-        8
+        10
     );
     assert!(actual.vectors.iter().all(|vector| {
         !vector
@@ -146,7 +147,7 @@ fn authored_post_content_boundary_is_exact_without_bloating_the_corpus() {
 fn authored_wire_vectors() -> Vec<WireVector> {
     let keys = fixture_keys();
     let created_at = Timestamp::from_secs(CREATED_AT);
-    let mut vectors = Vec::with_capacity(10);
+    let mut vectors = Vec::with_capacity(12);
 
     let profile = AuthoredProfile::new("Alice \"Sprout\"")
         .expect("profile name")
@@ -288,6 +289,36 @@ fn authored_wire_vectors() -> Vec<WireVector> {
                 .expect("food builder")
                 .sign_with_keys(&keys)
                 .expect("food event"),
+            &keys,
+        ),
+    ));
+
+    let date = authored_calendar_date_event();
+    vectors.push(vector(
+        "typed_calendar_date_event_011",
+        "radroots.calendar.date_event.v1",
+        "typed",
+        deterministic_event(
+            build_calendar_date(&date)
+                .expect("calendar date builder")
+                .custom_created_at(created_at)
+                .sign_with_keys(&keys)
+                .expect("calendar date event"),
+            &keys,
+        ),
+    ));
+
+    let time = authored_calendar_time_event();
+    vectors.push(vector(
+        "typed_calendar_time_event_012",
+        "radroots.calendar.time_event.v1",
+        "typed",
+        deterministic_event(
+            build_calendar_time(&time)
+                .expect("calendar time builder")
+                .custom_created_at(created_at)
+                .sign_with_keys(&keys)
+                .expect("calendar time event"),
             &keys,
         ),
     ));
@@ -496,6 +527,36 @@ fn food_details() -> FoodAvailabilityDetails {
         images: Vec::new(),
     })
     .expect("food details")
+}
+
+fn authored_calendar_date_event() -> AuthoredCalendarDateEvent {
+    AuthoredCalendarDateEvent::new(
+        "market-day",
+        "Saturday Market",
+        CalendarDate::parse("2026-08-08").expect("calendar date"),
+    )
+    .expect("date event")
+    .with_end(CalendarDate::parse("2026-08-09").expect("calendar end"))
+    .expect("date end")
+    .with_description("Farmers market and seed swap.")
+    .expect("date description")
+    .with_locations(vec!["Central Saanich, BC".to_owned()])
+    .expect("date location")
+    .with_summary("Local food and seeds")
+    .expect("date summary")
+}
+
+fn authored_calendar_time_event() -> AuthoredCalendarTimeEvent {
+    AuthoredCalendarTimeEvent::new("farm-tour", "Farm Tour", 1_784_380_800)
+        .expect("time event")
+        .with_end(1_784_387_900)
+        .expect("time end")
+        .with_description("Walk the fields and meet the growers.")
+        .expect("time description")
+        .with_start_tzid("America/Vancouver")
+        .expect("time zone")
+        .with_locations(vec!["Saanich Peninsula".to_owned()])
+        .expect("time location")
 }
 
 fn operational_listing_tags() -> Vec<Vec<String>> {

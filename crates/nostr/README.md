@@ -62,8 +62,8 @@ projection belong to `radroots_event_codec`. This crate performs the explicit
 translation to or from Nostr protocol values.
 
 With `events`, typed builders cover the supported Profile, Update,
-PhotoUpdate, Ask, Reply, Comment, deletion-request, and FoodAvailability
-authoring profiles. Sealed focused builders fix the event kind and canonical
+PhotoUpdate, Ask, Reply, Comment, deletion-request, NIP-52 date/time Event, and
+FoodAvailability authoring profiles. Sealed focused builders fix the event kind and canonical
 tag model before signer access. Generic builders reject reserved typed kinds;
 relaying an already signed event is a transport operation and does not grant a
 typed Radroots authoring claim.

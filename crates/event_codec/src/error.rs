@@ -57,7 +57,7 @@ impl From<radroots_event::envelope::EventEnvelopeError> for EventParseError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventEncodeError {
     InvalidKind(u32),
     EmptyRequiredField(&'static str),

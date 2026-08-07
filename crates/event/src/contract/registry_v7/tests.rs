@@ -259,8 +259,12 @@ fn every_event_contract_is_listed_by_its_kind_contract() {
 #[test]
 fn calendar_contracts_expose_current_nip52_types_content_and_tags() {
     let date = event_contract("radroots.calendar.date_event.v1").expect("calendar date");
-    assert_eq!(date.payload_type, "RadrootsAdmittedCalendarDateEvent");
+    assert_eq!(
+        date.payload_type,
+        "RadrootsAuthoredCalendarDateEvent / RadrootsParsedNip52CalendarDateEvent / RadrootsAdmittedCalendarDateEvent"
+    );
     assert_eq!(date.content_schema, ContentSchema::PlainText);
+    assert_eq!(date.authoring_policy(), EventAuthoringPolicy::TypedOnly);
     assert!(
         date.tags
             .iter()
@@ -279,8 +283,12 @@ fn calendar_contracts_expose_current_nip52_types_content_and_tags() {
     assert!(!date.tags.iter().any(|tag| tag.name == "D"));
 
     let time = event_contract("radroots.calendar.time_event.v1").expect("calendar time");
-    assert_eq!(time.payload_type, "RadrootsAdmittedCalendarTimeEvent");
+    assert_eq!(
+        time.payload_type,
+        "RadrootsAuthoredCalendarTimeEvent / RadrootsParsedNip52CalendarTimeEvent / RadrootsAdmittedCalendarTimeEvent"
+    );
     assert_eq!(time.content_schema, ContentSchema::PlainText);
+    assert_eq!(time.authoring_policy(), EventAuthoringPolicy::TypedOnly);
     assert!(time.tags.iter().any(|tag| {
         tag.name == "D"
             && tag.cardinality == TagCardinality::RequiredMany

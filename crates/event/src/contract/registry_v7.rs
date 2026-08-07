@@ -3191,28 +3191,30 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         WIKI_REDIRECT_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.calendar.date_event.v1",
         KIND_CALENDAR_DATE_EVENT,
         "Calendar Date Event",
-        "RadrootsAdmittedCalendarDateEvent",
+        "RadrootsAuthoredCalendarDateEvent / RadrootsParsedNip52CalendarDateEvent / RadrootsAdmittedCalendarDateEvent",
         EventClass::Addressable,
         EventPrivacy::Public,
         AuthorRole::Any,
         ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::KindOnly,
         CALENDAR_DATE_EVENT_TAGS,
         CALENDAR_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.calendar.time_event.v1",
         KIND_CALENDAR_TIME_EVENT,
         "Calendar Time Event",
-        "RadrootsAdmittedCalendarTimeEvent",
+        "RadrootsAuthoredCalendarTimeEvent / RadrootsParsedNip52CalendarTimeEvent / RadrootsAdmittedCalendarTimeEvent",
         EventClass::Addressable,
         EventPrivacy::Public,
         AuthorRole::Any,
         ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::KindOnly,
         CALENDAR_TIME_EVENT_TAGS,
         CALENDAR_REDUCERS
