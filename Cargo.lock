@@ -3566,9 +3566,14 @@ name = "radroots_mobile_core"
 version = "0.1.0-alpha"
 dependencies = [
  "chrono",
+ "hex",
+ "nostr 0.44.7",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_sdk",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tokio",
 ]
