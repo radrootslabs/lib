@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 12;
+pub const CURRENT_VERSION: u32 = 13;
 
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
@@ -22,6 +22,7 @@ const PROJECTION_REBUILD_SOURCE_BINDING_V10_SQL: &str =
 const AUTHORED_OPERATIONS_V11_SQL: &str = include_str!("0011_authored_operations.up.sql");
 const MATERIALIZED_PROJECTION_DOCUMENTS_V12_SQL: &str =
     include_str!("0012_materialized_projection_documents.up.sql");
+const AUTHORED_DRAFT_REVISIONS_V13_SQL: &str = include_str!("0013_authored_draft_revisions.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -477,6 +478,83 @@ const RUNTIME_V12_OBJECTS: &[&str] = &[
     "radroots_runtime_source_generations_sequence_guard",
 ];
 
+const RUNTIME_V13_OBJECTS: &[&str] = &[
+    "radroots_runtime_atomic_commits",
+    "radroots_runtime_authored_artifacts",
+    "radroots_runtime_authored_artifacts_admission_ready_idx",
+    "radroots_runtime_authored_artifacts_signing_ready_idx",
+    "radroots_runtime_authored_atomic_commits",
+    "radroots_runtime_authored_atomic_commits_delete_guard",
+    "radroots_runtime_authored_atomic_commits_update_guard",
+    "radroots_runtime_authored_delivery_attempts",
+    "radroots_runtime_authored_delivery_plans",
+    "radroots_runtime_authored_delivery_ready_idx",
+    "radroots_runtime_authored_delivery_targets",
+    "radroots_runtime_authored_draft_author_head_idx",
+    "radroots_runtime_authored_draft_revisions",
+    "radroots_runtime_authored_draft_revisions_delete_guard",
+    "radroots_runtime_authored_draft_revisions_update_guard",
+    "radroots_runtime_authored_migration_evidence",
+    "radroots_runtime_authored_migration_evidence_delete_guard",
+    "radroots_runtime_authored_migration_evidence_update_guard",
+    "radroots_runtime_authored_operations",
+    "radroots_runtime_delivery_evidence",
+    "radroots_runtime_delivery_evidence_item_idx",
+    "radroots_runtime_event_index_checkpoints",
+    "radroots_runtime_event_index_manifests",
+    "radroots_runtime_event_index_shards",
+    "radroots_runtime_event_provenance",
+    "radroots_runtime_event_provenance_observed_idx",
+    "radroots_runtime_events",
+    "radroots_runtime_events_admission_idx",
+    "radroots_runtime_events_contract_metadata_guard",
+    "radroots_runtime_events_contract_metadata_insert_guard",
+    "radroots_runtime_events_delete_guard",
+    "radroots_runtime_events_event_id_idx",
+    "radroots_runtime_events_raw_update_guard",
+    "radroots_runtime_journal_idempotency_idx",
+    "radroots_runtime_journal_operations",
+    "radroots_runtime_journal_recovery_idx",
+    "radroots_runtime_legacy_event_staging",
+    "radroots_runtime_legacy_event_staging_delete_guard",
+    "radroots_runtime_legacy_event_staging_insert_guard",
+    "radroots_runtime_legacy_event_staging_update_guard",
+    "radroots_runtime_legacy_import_commit_delete_guard",
+    "radroots_runtime_legacy_import_commit_update_guard",
+    "radroots_runtime_legacy_import_commits",
+    "radroots_runtime_legacy_import_delete_guard",
+    "radroots_runtime_legacy_import_identity_guard",
+    "radroots_runtime_legacy_import_member_delete_guard",
+    "radroots_runtime_legacy_import_member_identity_guard",
+    "radroots_runtime_legacy_import_member_state_guard",
+    "radroots_runtime_legacy_import_members",
+    "radroots_runtime_legacy_import_state_guard",
+    "radroots_runtime_legacy_import_state_idx",
+    "radroots_runtime_legacy_imports",
+    "radroots_runtime_legacy_outbox_staging",
+    "radroots_runtime_legacy_outbox_staging_delete_guard",
+    "radroots_runtime_legacy_outbox_staging_insert_guard",
+    "radroots_runtime_legacy_outbox_staging_parent_idx",
+    "radroots_runtime_legacy_outbox_staging_update_guard",
+    "radroots_runtime_outbox_items",
+    "radroots_runtime_outbox_operation_idx",
+    "radroots_runtime_outbox_ready_idx",
+    "radroots_runtime_outbox_targets",
+    "radroots_runtime_projection_checkpoints",
+    "radroots_runtime_projection_documents",
+    "radroots_runtime_projection_invalidations",
+    "radroots_runtime_projection_rebuilds",
+    "radroots_runtime_projection_rebuilds_stage_idx",
+    "radroots_runtime_projection_snapshots",
+    "radroots_runtime_projection_snapshots_created_idx",
+    "radroots_runtime_projection_snapshots_update_guard",
+    "radroots_runtime_source_generations",
+    "radroots_runtime_source_generations_active_idx",
+    "radroots_runtime_source_generations_delete_guard",
+    "radroots_runtime_source_generations_identity_guard",
+    "radroots_runtime_source_generations_sequence_guard",
+];
+
 /// Ordered, immutable runtime migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -551,6 +629,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "c5a083ed078d2d1d9623b8c7fd6521055a59c6f4c099318779c9fa32fa17b211",
         owned_objects: RUNTIME_V12_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 13,
+        name: "authored_draft_revisions",
+        up_sha256: "7bb6466a14c7ca601b76852addf4a19996ee9ffd62436bdac8e9bf631dc46785",
+        owned_objects: RUNTIME_V13_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
@@ -567,6 +651,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         10 => Some(PROJECTION_REBUILD_SOURCE_BINDING_V10_SQL),
         11 => Some(AUTHORED_OPERATIONS_V11_SQL),
         12 => Some(MATERIALIZED_PROJECTION_DOCUMENTS_V12_SQL),
+        13 => Some(AUTHORED_DRAFT_REVISIONS_V13_SQL),
         _ => None,
     }
 }
@@ -610,8 +695,8 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 12);
-        assert_eq!(MIGRATIONS.len(), 12);
+        assert_eq!(CURRENT_VERSION, 13);
+        assert_eq!(MIGRATIONS.len(), 13);
         let migration = MIGRATIONS[8];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");
@@ -639,7 +724,7 @@ mod tests {
             let sql = migration_sql(migration.version()).expect("registered SQL");
             assert_eq!(format!("{:x}", Sha256::digest(sql)), migration.up_sha256());
         }
-        assert_eq!(migration_sql(13), None);
+        assert_eq!(migration_sql(14), None);
     }
 
     #[tokio::test]

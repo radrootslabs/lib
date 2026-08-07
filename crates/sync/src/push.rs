@@ -26,7 +26,7 @@ use radroots_storage::{
     },
     authored_delivery::{
         AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId,
-        DELIVERY_PLAN_ATTEMPTS_MAX, DeliveryAttemptOutcome,
+        AuthoredDeliveryState, DELIVERY_PLAN_ATTEMPTS_MAX, DeliveryAttemptOutcome,
     },
     event::{AdmissionDisposition, EventAdmission, EventStore},
     journal::{IdempotencyKey, OperationInstanceId},
@@ -216,6 +216,22 @@ pub struct DeliveryExecutionReceipt {
     replay: bool,
 }
 
+/// Durable result of cancelling all still-cancellable phases of one push.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PushCancellationReceipt {
+    status: PushStatus,
+    changed: bool,
+}
+
+impl PushCancellationReceipt {
+    pub const fn status(&self) -> &PushStatus {
+        &self.status
+    }
+    pub const fn changed(&self) -> bool {
+        self.changed
+    }
+}
+
 impl DeliveryExecutionReceipt {
     pub const fn plan(&self) -> &AuthoredDeliveryPlan {
         &self.plan
@@ -344,6 +360,83 @@ impl Engine {
             delivery_plan,
             settlement,
         }))
+    }
+
+    /// Cancels every remaining local phase without discarding signed bytes or
+    /// delivery evidence. Re-entry after a phase-boundary crash finishes any
+    /// remaining cancellation and terminal replays are no-ops.
+    pub async fn cancel_push(
+        &self,
+        operation_id: SyncId,
+    ) -> Result<PushCancellationReceipt, Error> {
+        let mut status = self
+            .push_status(operation_id)
+            .await?
+            .ok_or(Error::StorageFailed)?;
+        let mut changed = false;
+        let now = self
+            .clock
+            .now_unix_ms()?
+            .max(status.artifact.updated_at_unix_ms())
+            .max(status.delivery_plan.updated_at_unix_ms());
+
+        let artifact_target = match status.artifact.signing_state() {
+            SigningState::Planned | SigningState::Retryable => Some(
+                CancelAuthoredTarget::ArtifactSigning(status.artifact.artifact_id()),
+            ),
+            SigningState::Signed
+                if matches!(
+                    status.artifact.admission_state(),
+                    AdmissionState::Pending | AdmissionState::Retryable
+                ) =>
+            {
+                Some(CancelAuthoredTarget::ArtifactAdmission(
+                    status.artifact.artifact_id(),
+                ))
+            }
+            SigningState::Signed
+            | SigningState::Indeterminate
+            | SigningState::FailedTerminal
+            | SigningState::Cancelled => None,
+        };
+        if let Some(target) = artifact_target {
+            self.storage
+                .execute_authored(AuthoredAtomicCommand::Cancel(
+                    CancelAuthoredWork::new(target, status.artifact.revision(), now)
+                        .map_err(map_storage_error)?,
+                ))
+                .await
+                .map_err(map_storage_error)?;
+            changed = true;
+            status = self
+                .push_status(operation_id)
+                .await?
+                .ok_or(Error::StorageFailed)?;
+        }
+
+        if matches!(
+            status.delivery_plan.state(),
+            AuthoredDeliveryState::Pending | AuthoredDeliveryState::Retryable
+        ) {
+            self.storage
+                .execute_authored(AuthoredAtomicCommand::Cancel(
+                    CancelAuthoredWork::new(
+                        CancelAuthoredTarget::DeliveryPlan(status.delivery_plan.plan_id()),
+                        status.delivery_plan.revision(),
+                        now,
+                    )
+                    .map_err(map_storage_error)?,
+                ))
+                .await
+                .map_err(map_storage_error)?;
+            changed = true;
+            status = self
+                .push_status(operation_id)
+                .await?
+                .ok_or(Error::StorageFailed)?;
+        }
+
+        Ok(PushCancellationReceipt { status, changed })
     }
 
     /// Claims and executes one prepared signing artifact.

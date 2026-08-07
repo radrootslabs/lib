@@ -17,6 +17,10 @@ use crate::{
         AuthoredWorkTarget, CancelAuthoredTarget, ClaimAuthoredTarget,
     },
     authored_delivery::DeliveryAttemptOutcome,
+    authored_draft::{
+        AUTHORED_DRAFT_QUERY_LIMIT_MAX, AuthoredDraft, AuthoredDraftId, AuthoredDraftRevision,
+        AuthoredDraftStore, DraftAppendDisposition, DraftAppendReceipt,
+    },
     backup::{
         BackupId, BackupOperation, BackupPlan, BackupTransition, ReliabilityRevision,
         RestoreOperation, RestorePlan, RestoreTransition, StorageReliability,
@@ -82,6 +86,7 @@ struct State {
     authored_artifacts: Vec<crate::authored::AuthoredArtifact>,
     authored_delivery_plans: Vec<crate::authored_delivery::AuthoredDeliveryPlan>,
     authored_atomic_receipts: Vec<AuthoredAtomicReceipt>,
+    authored_drafts: Vec<AuthoredDraft>,
     closed: bool,
 }
 
@@ -115,6 +120,7 @@ impl MemoryStorage {
                 authored_artifacts: Vec::new(),
                 authored_delivery_plans: Vec::new(),
                 authored_atomic_receipts: Vec::new(),
+                authored_drafts: Vec::new(),
                 closed: false,
             }),
         }
@@ -1772,6 +1778,117 @@ impl AuthoredAtomicStorage for MemoryStorage {
                 .iter()
                 .find(|plan| plan.plan_id() == plan_id)
                 .cloned())
+        })
+    }
+}
+
+impl AuthoredDraftStore for MemoryStorage {
+    fn append_authored_draft(
+        &self,
+        draft: AuthoredDraft,
+        expected_head: Option<AuthoredDraftRevision>,
+    ) -> BoxFuture<'_, Result<DraftAppendReceipt, Error>> {
+        Box::pin(async move {
+            draft.validate()?;
+            let mut state = self.state()?;
+            if let Some(existing) = state.authored_drafts.iter().find(|existing| {
+                existing.draft_id() == draft.draft_id() && existing.revision() == draft.revision()
+            }) {
+                return if existing == &draft {
+                    Ok(DraftAppendReceipt::new(
+                        existing.clone(),
+                        DraftAppendDisposition::Replay,
+                    ))
+                } else {
+                    Err(Error::DraftRevisionConflict)
+                };
+            }
+            let head = state
+                .authored_drafts
+                .iter()
+                .filter(|existing| existing.draft_id() == draft.draft_id())
+                .max_by_key(|existing| existing.revision());
+            match (head, expected_head) {
+                (None, None) if draft.revision() == AuthoredDraftRevision::INITIAL => {}
+                (Some(previous), Some(expected)) if previous.revision() == expected => {
+                    draft.validate_successor_of(previous)?;
+                }
+                _ => return Err(Error::DraftRevisionConflict),
+            }
+            state.authored_drafts.push(draft.clone());
+            Ok(DraftAppendReceipt::new(
+                draft,
+                DraftAppendDisposition::Inserted,
+            ))
+        })
+    }
+
+    fn authored_draft_head(
+        &self,
+        draft_id: AuthoredDraftId,
+    ) -> BoxFuture<'_, Result<Option<AuthoredDraft>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .authored_drafts
+                .iter()
+                .filter(|draft| draft.draft_id() == draft_id)
+                .max_by_key(|draft| draft.revision())
+                .cloned())
+        })
+    }
+
+    fn authored_draft_revision(
+        &self,
+        draft_id: AuthoredDraftId,
+        revision: AuthoredDraftRevision,
+    ) -> BoxFuture<'_, Result<Option<AuthoredDraft>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .authored_drafts
+                .iter()
+                .find(|draft| draft.draft_id() == draft_id && draft.revision() == revision)
+                .cloned())
+        })
+    }
+
+    fn authored_draft_heads(
+        &self,
+        author: [u8; 32],
+        limit: u16,
+    ) -> BoxFuture<'_, Result<Vec<AuthoredDraft>, Error>> {
+        Box::pin(async move {
+            if author.iter().all(|byte| *byte == 0)
+                || limit == 0
+                || limit > AUTHORED_DRAFT_QUERY_LIMIT_MAX
+            {
+                return Err(Error::InvalidAuthoredDraft);
+            }
+            let state = self.state()?;
+            let mut heads = state
+                .authored_drafts
+                .iter()
+                .filter(|draft| draft.author() == &author)
+                .fold(Vec::<AuthoredDraft>::new(), |mut heads, draft| {
+                    match heads
+                        .iter_mut()
+                        .find(|head| head.draft_id() == draft.draft_id())
+                    {
+                        Some(head) if draft.revision() > head.revision() => *head = draft.clone(),
+                        None => heads.push(draft.clone()),
+                        Some(_) => {}
+                    }
+                    heads
+                });
+            heads.sort_by(|left, right| {
+                right
+                    .updated_at_unix_ms()
+                    .cmp(&left.updated_at_unix_ms())
+                    .then_with(|| left.draft_id().cmp(&right.draft_id()))
+            });
+            heads.truncate(usize::from(limit));
+            Ok(heads)
         })
     }
 }

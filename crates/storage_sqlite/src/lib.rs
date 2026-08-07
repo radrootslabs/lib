@@ -13,6 +13,7 @@ pub mod status;
 
 mod atomic;
 mod authored;
+mod authored_draft;
 mod event;
 mod journal;
 mod outbox;

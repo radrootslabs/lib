@@ -5,6 +5,7 @@ pub mod atomic;
 pub mod authored;
 pub mod authored_atomic;
 pub mod authored_delivery;
+pub mod authored_draft;
 pub mod backup;
 mod error;
 pub mod event;
@@ -34,6 +35,7 @@ pub trait Storage:
     + backup::StorageReliability
     + atomic::AtomicStorage
     + authored_atomic::AuthoredAtomicStorage
+    + authored_draft::AuthoredDraftStore
 {
 }
 
@@ -46,5 +48,6 @@ impl<T> Storage for T where
         + backup::StorageReliability
         + atomic::AtomicStorage
         + authored_atomic::AuthoredAtomicStorage
+        + authored_draft::AuthoredDraftStore
 {
 }

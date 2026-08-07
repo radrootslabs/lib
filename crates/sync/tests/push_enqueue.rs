@@ -1010,6 +1010,88 @@ fn preparation_is_atomic_status_visible_and_replays_without_external_effects() {
 }
 
 #[test]
+fn phase_aware_cancellation_preserves_signed_artifacts_and_is_reentrant() {
+    let unsigned_signer = Arc::new(MockSigner::new(SignBehavior::Pending));
+    let (unsigned_engine, _) = setup_engine(unsigned_signer.clone());
+    let unsigned = request(61, "wss://relay.example");
+    block_on(unsigned_engine.prepare_push(unsigned.clone())).expect("prepare unsigned");
+    let cancelled = block_on(unsigned_engine.cancel_push(unsigned.operation_id()))
+        .expect("cancel unsigned operation");
+    assert!(cancelled.changed());
+    assert_eq!(
+        cancelled.status().artifact().signing_state(),
+        radroots_storage::authored::SigningState::Cancelled
+    );
+    assert_eq!(
+        cancelled.status().delivery_plan().state(),
+        AuthoredDeliveryState::Cancelled
+    );
+    assert!(cancelled.status().settlement().is_settled());
+    let replay = block_on(unsigned_engine.cancel_push(unsigned.operation_id()))
+        .expect("replay cancellation");
+    assert!(!replay.changed());
+    assert_eq!(replay.status(), cancelled.status());
+    assert_eq!(unsigned_signer.calls.load(Ordering::Relaxed), 0);
+
+    let signed_signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_010,
+    }));
+    let (signed_engine, _) = setup_engine(signed_signer);
+    let signed = request(62, "wss://relay.example");
+    block_on(signed_engine.sign_prepared(signed.clone())).expect("sign operation");
+    let before = block_on(signed_engine.push_status(signed.operation_id()))
+        .unwrap()
+        .unwrap();
+    let raw = before
+        .artifact()
+        .signed()
+        .expect("exact signed artifact")
+        .event()
+        .raw_json()
+        .to_owned();
+    let cancelled = block_on(signed_engine.cancel_push(signed.operation_id()))
+        .expect("cancel signed operation");
+    assert_eq!(
+        cancelled.status().artifact().admission_state(),
+        radroots_storage::authored::AdmissionState::Cancelled
+    );
+    assert_eq!(
+        cancelled
+            .status()
+            .artifact()
+            .signed()
+            .expect("signed bytes retained")
+            .event()
+            .raw_json(),
+        raw
+    );
+    assert_eq!(
+        cancelled.status().delivery_plan().state(),
+        AuthoredDeliveryState::Cancelled
+    );
+
+    let admitted_signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_010,
+    }));
+    let (admitted_engine, _) = setup_engine(admitted_signer);
+    let admitted = request(63, "wss://relay.example");
+    execute_to_admitted(&admitted_engine, &admitted);
+    let cancelled = block_on(admitted_engine.cancel_push(admitted.operation_id()))
+        .expect("cancel admitted delivery");
+    assert!(
+        cancelled
+            .status()
+            .artifact()
+            .admission_state()
+            .is_admitted()
+    );
+    assert_eq!(
+        cancelled.status().delivery_plan().state(),
+        AuthoredDeliveryState::Cancelled
+    );
+}
+
+#[test]
 fn authored_storage_outcome_contracts_fail_closed_at_each_orchestration_phase() {
     let storage = Arc::new(FaultStorage::new(84));
     storage.fault_next_prepared();

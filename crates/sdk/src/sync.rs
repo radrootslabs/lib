@@ -12,8 +12,8 @@ use radroots_sync::{
     policy::Error,
     projection::{Reducer, RefreshReceipt, RefreshRequest},
     push::{
-        AdmissionRunReceipt, DeliveryExecutionReceipt, PushPreparation, PushStatus,
-        SigningRunReceipt,
+        AdmissionRunReceipt, DeliveryExecutionReceipt, PushCancellationReceipt, PushPreparation,
+        PushStatus, SigningRunReceipt,
     },
 };
 #[cfg(feature = "sync")]
@@ -162,6 +162,14 @@ impl<'a> Operations<'a> {
         operation_id: radroots_sync::policy::SyncId,
     ) -> Result<Option<PushStatus>, Error> {
         self.engine.push_status(operation_id).await
+    }
+
+    /// Cancels every remaining local phase while preserving durable evidence.
+    pub async fn cancel_push(
+        &self,
+        operation_id: radroots_sync::policy::SyncId,
+    ) -> Result<PushCancellationReceipt, Error> {
+        self.engine.cancel_push(operation_id).await
     }
 
     /// Runs one bounded signing phase for an exactly prepared operation.
