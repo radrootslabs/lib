@@ -3592,8 +3592,17 @@ dependencies = [
 name = "radroots_mobile_ffi"
 version = "0.1.0-alpha"
 dependencies = [
+ "async-trait",
+ "hex",
+ "radroots_blossom",
+ "radroots_event",
  "radroots_mobile_core",
+ "radroots_sdk",
+ "radroots_signing",
+ "radroots_storage",
  "rustix 1.1.4",
+ "secp256k1",
+ "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",

@@ -114,6 +114,7 @@ todo = "deny"
 unimplemented = "deny"
 
 [workspace.dependencies]
+async-trait = { version = "0.1.89" }
 dto_bindgen = { version = "0.1.0" }
 dto_bindgen_backend_ts = { version = "0.1.0" }
 dto_bindgen_core = { version = "0.1.0" }
