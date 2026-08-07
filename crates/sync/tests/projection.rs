@@ -173,19 +173,19 @@ fn setup() -> (Engine, Arc<MemoryStorage>, ProjectionId) {
 
 fn signed_event(created_at: u64) -> SignedEvent {
     let tags: Vec<Vec<String>> = vec![];
-    let id = compute_canonical_nip01_event_id(PUBKEY, created_at, 0, &tags, CONTENT)
+    let id = compute_canonical_nip01_event_id(PUBKEY, created_at, 1, &tags, CONTENT)
         .expect("event id")
         .to_hex();
     let signature = "42".repeat(64);
     let raw_json = format!(
-        "{{\"id\":\"{id}\",\"pubkey\":\"{PUBKEY}\",\"created_at\":{created_at},\"kind\":0,\"tags\":[],\"content\":{content:?},\"sig\":\"{signature}\"}}",
+        "{{\"id\":\"{id}\",\"pubkey\":\"{PUBKEY}\",\"created_at\":{created_at},\"kind\":1,\"tags\":[],\"content\":{content:?},\"sig\":\"{signature}\"}}",
         content = CONTENT,
     );
     SignedEvent::new(SignedEventParts {
         id,
         pubkey: PUBKEY.to_owned(),
         created_at,
-        kind: 0,
+        kind: 1,
         tags,
         content: CONTENT.to_owned(),
         sig: signature,

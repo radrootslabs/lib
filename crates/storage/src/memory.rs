@@ -25,6 +25,7 @@ use crate::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPage,
         EventPosition, EventQuery, EventQueryBounds, EventSequence, SourceGeneration,
         StoredEventProvenance, StoredRawEvent, StoredVerifiedEvent, StoredVisibleEvent,
+        VisibilityEvaluation, VisibilityInput, VisibilitySnapshot, evaluate_visibility,
     },
     journal::{
         IdempotencyKey, JournalStage, JournalTransition, OperationInstanceId, OperationRecord,
@@ -130,7 +131,12 @@ impl MemoryStorage {
         self.state.lock().map_err(|_| Error::BackendUnavailable)
     }
 
-    fn selected(&self, state: &State, query: &EventQuery) -> Result<Vec<EventEntry>, Error> {
+    fn selected(
+        &self,
+        state: &State,
+        query: &EventQuery,
+        mut eligible: impl FnMut(&EventEntry) -> bool,
+    ) -> Result<(Vec<EventEntry>, Option<EventPosition>), Error> {
         if query
             .bounds()
             .cursor()
@@ -142,15 +148,37 @@ impl MemoryStorage {
             .bounds()
             .cursor()
             .map_or(0, |cursor| cursor.sequence().get());
-        Ok(state
+        let mut selected = state
             .events
             .iter()
             .filter(|entry| {
-                entry.position.sequence().get() > after && query.selects(entry.admission.event_id())
+                entry.position.sequence().get() > after
+                    && query.selects(entry.admission.event_id())
+                    && eligible(entry)
             })
-            .take(usize::from(query.bounds().limit()))
+            .take(usize::from(query.bounds().limit()) + 1)
             .cloned()
-            .collect())
+            .collect::<Vec<_>>();
+        let next = if selected.len() > usize::from(query.bounds().limit()) {
+            selected.truncate(usize::from(query.bounds().limit()));
+            selected.last().map(|entry| entry.position)
+        } else {
+            None
+        };
+        Ok((selected, next))
+    }
+
+    fn visibility_locked(&self, state: &State) -> Result<VisibilityEvaluation, Error> {
+        evaluate_visibility(
+            self.generation,
+            state.events.iter().map(|entry| {
+                VisibilityInput::new(
+                    entry.position,
+                    entry.admission.event(),
+                    entry.admission.stage(),
+                )
+            }),
+        )
     }
 
     fn admit_locked(
@@ -374,11 +402,10 @@ impl EventStore for MemoryStorage {
             )
             .map_err(|_| Error::CorruptStoredEvent)?;
             let visible = u64::try_from(
-                state
-                    .events
-                    .iter()
-                    .filter(|entry| entry.admission.stage() == AdmissionStage::Visible)
-                    .count(),
+                self.visibility_locked(&state)?
+                    .snapshot()
+                    .visible_event_ids()
+                    .len(),
             )
             .map_err(|_| Error::CorruptStoredEvent)?;
             EventStoreStatus::new(
@@ -405,8 +432,8 @@ impl EventStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<EventPage<StoredRawEvent>, Error>> {
         Box::pin(async move {
             let state = self.state()?;
-            let items = self
-                .selected(&state, &query)?
+            let (entries, next) = self.selected(&state, &query, |_| true)?;
+            let items = entries
                 .into_iter()
                 .map(|entry| {
                     StoredRawEvent::new(
@@ -416,7 +443,7 @@ impl EventStore for MemoryStorage {
                     )
                 })
                 .collect();
-            EventPage::new(self.generation, items, None, query.bounds())
+            EventPage::new(self.generation, items, next, query.bounds())
         })
     }
 
@@ -426,16 +453,16 @@ impl EventStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<EventPage<StoredVerifiedEvent>, Error>> {
         Box::pin(async move {
             let state = self.state()?;
-            let items = self
-                .selected(&state, &query)?
+            let (entries, next) = self.selected(&state, &query, |entry| {
+                entry.admission.stage() >= AdmissionStage::Verified
+            })?;
+            let items = entries
                 .into_iter()
-                .filter_map(|entry| {
-                    (entry.admission.stage() >= AdmissionStage::Verified).then(|| {
-                        StoredVerifiedEvent::new(entry.position, entry.admission.event().clone())
-                    })
+                .map(|entry| {
+                    StoredVerifiedEvent::new(entry.position, entry.admission.event().clone())
                 })
                 .collect();
-            EventPage::new(self.generation, items, None, query.bounds())
+            EventPage::new(self.generation, items, next, query.bounds())
         })
     }
 
@@ -445,16 +472,24 @@ impl EventStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
         Box::pin(async move {
             let state = self.state()?;
-            let items = self
-                .selected(&state, &query)?
+            let visibility = self.visibility_locked(&state)?;
+            let (entries, next) = self.selected(&state, &query, |entry| {
+                visibility.is_visible(entry.admission.event_id())
+            })?;
+            let items = entries
                 .into_iter()
-                .filter_map(|entry| {
-                    (entry.admission.stage() == AdmissionStage::Visible).then(|| {
-                        StoredVisibleEvent::new(entry.position, entry.admission.event().clone())
-                    })
+                .map(|entry| {
+                    StoredVisibleEvent::new(entry.position, entry.admission.event().clone())
                 })
                 .collect();
-            EventPage::new(self.generation, items, None, query.bounds())
+            EventPage::new(self.generation, items, next, query.bounds())
+        })
+    }
+
+    fn rebuild_visibility(&self) -> BoxFuture<'_, Result<VisibilitySnapshot, Error>> {
+        Box::pin(async move {
+            let state = self.state()?;
+            Ok(self.visibility_locked(&state)?.into_snapshot())
         })
     }
 

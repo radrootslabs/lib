@@ -1,3 +1,4 @@
+use radroots_event::SignedEvent;
 use radroots_event_codec::Codec;
 use radroots_storage::{
     Error, EventStore,
@@ -5,7 +6,8 @@ use radroots_storage::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, BoxFuture, EventAdmission,
         EventCursor, EventId, EventPage, EventPosition, EventQuery, EventQueryBounds,
         EventSequence, SourceGeneration, StoredEventProvenance, StoredRawEvent,
-        StoredVerifiedEvent, StoredVisibleEvent,
+        StoredVerifiedEvent, StoredVisibleEvent, VisibilityEvaluation, VisibilityInput,
+        VisibilitySnapshot, evaluate_visibility,
     },
     status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
 };
@@ -33,6 +35,7 @@ pub struct SqliteStorage {
 struct StoredEventRow {
     position: EventPosition,
     raw_json: String,
+    event: SignedEvent,
     stage: AdmissionStage,
 }
 
@@ -130,8 +133,10 @@ impl SqliteStorage {
         let mut builder = QueryBuilder::<Sqlite>::new(
             "SELECT source_generation, source_sequence, signed_event, admission_stage, \
                     admitted_contract_id, admitted_registry_version \
-             FROM radroots_runtime_events WHERE source_sequence > ",
+             FROM radroots_runtime_events WHERE source_generation = ",
         );
+        builder.push_bind(self.generation.as_bytes().as_slice());
+        builder.push(" AND source_sequence > ");
         builder.push_bind(i64_from_u64(after)?);
         if minimum_stage == AdmissionStage::Verified {
             builder.push(" AND admission_stage IN ('verified', 'visible')");
@@ -167,6 +172,29 @@ impl SqliteStorage {
         Ok((decoded, next))
     }
 
+    async fn current_event_rows(&self) -> Result<Vec<StoredEventRow>, Error> {
+        let rows = sqlx::query(
+            "SELECT source_generation, source_sequence, signed_event, admission_stage,
+                    admitted_contract_id, admitted_registry_version
+             FROM radroots_runtime_events
+             WHERE source_generation = ?
+             ORDER BY source_sequence",
+        )
+        .bind(self.generation.as_bytes().as_slice())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_backend)?;
+        rows.iter().map(|row| self.decode_event_row(row)).collect()
+    }
+
+    fn visibility_for_rows(&self, rows: &[StoredEventRow]) -> Result<VisibilityEvaluation, Error> {
+        evaluate_visibility(
+            self.generation,
+            rows.iter()
+                .map(|row| VisibilityInput::new(row.position, &row.event, row.stage)),
+        )
+    }
+
     fn validate_cursor(&self, query: &EventQuery) -> Result<(), Error> {
         if query
             .bounds()
@@ -198,10 +226,15 @@ impl SqliteStorage {
             .map(|value| u32::try_from(value).map_err(|_| Error::CorruptStoredEvent))
             .transpose()?;
         if contract_id.is_some() != registry_version.is_some()
+            || registry_version.is_some_and(|version| {
+                version != radroots_event::contract::RegistryVersion::CURRENT.get()
+            })
             || contract_id.as_deref().is_some_and(|stored| {
-                contract_metadata(&event).is_none_or(|(contract, version)| {
-                    stored != contract || Some(version) != registry_version
-                })
+                radroots_event::contract::registry_v7::validate_event_contract_for_admission(
+                    event.envelope(),
+                    stored,
+                )
+                .is_err()
             })
         {
             return Err(Error::CorruptStoredEvent);
@@ -209,6 +242,7 @@ impl SqliteStorage {
         Ok(StoredEventRow {
             position: EventPosition::new(generation, sequence),
             raw_json,
+            event,
             stage,
         })
     }
@@ -252,7 +286,7 @@ impl SqliteStorage {
 
         let (position, disposition) = if let Some(row) = existing {
             let stored = self.decode_event_row(&row)?;
-            let metadata = contract_metadata(admission.event());
+            let metadata = admission_contract_metadata(&admission);
             if stored.raw_json.as_bytes() != admission.event().raw_json().as_bytes() {
                 return Err(Error::EventConflict);
             }
@@ -281,7 +315,7 @@ impl SqliteStorage {
             };
             (stored.position, disposition)
         } else {
-            let metadata = contract_metadata(admission.event());
+            let metadata = admission_contract_metadata(&admission);
             let next = sqlx::query_scalar::<_, i64>(
                 "UPDATE radroots_runtime_source_generations
                  SET sequence_head = sequence_head + 1
@@ -329,15 +363,13 @@ impl SqliteStorage {
     }
 }
 
-fn contract_metadata(event: &radroots_event::SignedEvent) -> Option<(&'static str, u32)> {
-    radroots_event::contract::registry_v7::validate_event_contract_registry_v7(event.envelope())
-        .ok()
-        .map(|contract| {
-            (
-                contract.id,
-                radroots_event::contract::RegistryVersion::CURRENT.get(),
-            )
-        })
+fn admission_contract_metadata(admission: &EventAdmission) -> Option<(&'static str, u32)> {
+    admission.visible_event().map(|event| {
+        (
+            event.admitted_event().validated_event().contract_id(),
+            radroots_event::contract::RegistryVersion::CURRENT.get(),
+        )
+    })
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -348,22 +380,28 @@ impl EventStore for SqliteStorage {
                 "SELECT
                    COUNT(*) AS raw_events,
                    COALESCE(SUM(CASE WHEN admission_stage IN ('verified', 'visible') THEN 1 ELSE 0 END), 0)
-                     AS verified_events,
-                   COALESCE(SUM(CASE WHEN admission_stage = 'visible' THEN 1 ELSE 0 END), 0)
-                     AS visible_events
+                     AS verified_events
                  FROM radroots_runtime_events WHERE source_generation = ?",
             )
             .bind(self.generation.as_bytes().as_slice())
             .fetch_one(&self.pool)
             .await
             .map_err(map_backend)?;
+            let visibility_rows = self.current_event_rows().await?;
+            let visible_events = u64::try_from(
+                self.visibility_for_rows(&visibility_rows)?
+                    .snapshot()
+                    .visible_event_ids()
+                    .len(),
+            )
+            .map_err(|_| Error::CorruptStoredEvent)?;
             EventStoreStatus::new(
                 self.generation,
                 self.mode,
                 EventStoreHealth::Available,
                 u64_from_i64(row.try_get("raw_events").map_err(map_corrupt)?)?,
                 u64_from_i64(row.try_get("verified_events").map_err(map_corrupt)?)?,
-                u64_from_i64(row.try_get("visible_events").map_err(map_corrupt)?)?,
+                visible_events,
             )
         })
     }
@@ -392,12 +430,8 @@ impl EventStore for SqliteStorage {
             let (rows, next) = self.selected(&query, AdmissionStage::Raw).await?;
             let items = rows
                 .into_iter()
-                .map(|row| {
-                    let event = Codec::decode_signed_event(row.raw_json.as_str())
-                        .map_err(|_| Error::CorruptStoredEvent)?;
-                    Ok(StoredRawEvent::new(row.position, event, row.stage))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
+                .map(|row| StoredRawEvent::new(row.position, row.event, row.stage))
+                .collect();
             EventPage::new(self.generation, items, next, query.bounds())
         })
     }
@@ -410,12 +444,8 @@ impl EventStore for SqliteStorage {
             let (rows, next) = self.selected(&query, AdmissionStage::Verified).await?;
             let items = rows
                 .into_iter()
-                .map(|row| {
-                    let event = Codec::decode_signed_event(row.raw_json.as_str())
-                        .map_err(|_| Error::CorruptStoredEvent)?;
-                    Ok(StoredVerifiedEvent::new(row.position, event))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
+                .map(|row| StoredVerifiedEvent::new(row.position, row.event))
+                .collect();
             EventPage::new(self.generation, items, next, query.bounds())
         })
     }
@@ -425,16 +455,40 @@ impl EventStore for SqliteStorage {
         query: EventQuery,
     ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
         Box::pin(async move {
-            let (rows, next) = self.selected(&query, AdmissionStage::Visible).await?;
-            let items = rows
+            self.validate_cursor(&query)?;
+            let after = query
+                .bounds()
+                .cursor()
+                .map_or(0, |cursor| cursor.sequence().get());
+            let rows = self.current_event_rows().await?;
+            let visibility = self.visibility_for_rows(&rows)?;
+            let mut selected = rows
                 .into_iter()
-                .map(|row| {
-                    let event = Codec::decode_signed_event(row.raw_json.as_str())
-                        .map_err(|_| Error::CorruptStoredEvent)?;
-                    Ok(StoredVisibleEvent::new(row.position, event))
+                .filter(|row| {
+                    row.position.sequence().get() > after
+                        && query.selects(row.event.id())
+                        && visibility.is_visible(row.event.id())
                 })
-                .collect::<Result<Vec<_>, Error>>()?;
+                .take(usize::from(query.bounds().limit()) + 1)
+                .collect::<Vec<_>>();
+            let next = if selected.len() > usize::from(query.bounds().limit()) {
+                selected.truncate(usize::from(query.bounds().limit()));
+                selected.last().map(|row| row.position)
+            } else {
+                None
+            };
+            let items = selected
+                .into_iter()
+                .map(|row| StoredVisibleEvent::new(row.position, row.event))
+                .collect();
             EventPage::new(self.generation, items, next, query.bounds())
+        })
+    }
+
+    fn rebuild_visibility(&self) -> BoxFuture<'_, Result<VisibilitySnapshot, Error>> {
+        Box::pin(async move {
+            let rows = self.current_event_rows().await?;
+            Ok(self.visibility_for_rows(&rows)?.into_snapshot())
         })
     }
 
@@ -638,12 +692,22 @@ mod tests {
     }
 
     fn signed_event(content: &str, pretty: bool) -> SignedEvent {
+        signed_event_with(content, pretty, 1_800_000_100, 0, vec![])
+    }
+
+    fn signed_event_with(
+        content: &str,
+        pretty: bool,
+        created_at: u64,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+    ) -> SignedEvent {
         let mut wire = Nip01EventWire {
             id: "0".repeat(64),
             pubkey: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_owned(),
-            created_at: 1_800_000_100,
-            kind: 0,
-            tags: vec![],
+            created_at,
+            kind,
+            tags,
             content: content.to_owned(),
             sig: "42".repeat(64),
             extra: Default::default(),
@@ -689,9 +753,15 @@ mod tests {
     }
 
     fn visible(event: &SignedEvent) -> VisibleEvent {
-        verified(event)
-            .validate_contract()
-            .expect("contract")
+        let verified = verified(event);
+        let validated = if event.envelope().kind_u32() == 5 {
+            verified
+                .validate_contract_for_admission("radroots.social.deletion_request.v1")
+                .expect("admission-selected contract")
+        } else {
+            verified.validate_contract().expect("contract")
+        };
+        validated
             .admit_with(&Allow)
             .expect("admission")
             .make_visible_with(&Allow)
@@ -876,6 +946,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn visibility_rebuild_survives_reopen_and_matches_current_head_deletion_queries() {
+        let generation = SourceGeneration::new([18; 32]).expect("generation");
+        let store = store(generation).await;
+        let old = signed_event_with(
+            r#"{"display_name":"Old Farm","bot":false}"#,
+            false,
+            1_800_000_100,
+            0,
+            vec![],
+        );
+        let current = signed_event_with(
+            r#"{"display_name":"Current Farm","bot":false}"#,
+            false,
+            1_800_000_200,
+            0,
+            vec![],
+        );
+        let deletion = signed_event_with(
+            "retired profile",
+            false,
+            1_800_000_300,
+            5,
+            vec![vec!["e".to_owned(), current.id().to_hex()]],
+        );
+        for (event, observed_at) in [
+            (old.clone(), 100),
+            (current.clone(), 200),
+            (deletion.clone(), 300),
+        ] {
+            store
+                .admit(
+                    EventAdmission::visible(
+                        observed(event.clone(), observed_at, None),
+                        visible(&event),
+                    )
+                    .expect("visible admission"),
+                )
+                .await
+                .expect("admit visible event");
+        }
+
+        let before = store
+            .rebuild_visibility()
+            .await
+            .expect("visibility rebuild");
+        let reopened =
+            SqliteStorage::new(store.pool.clone(), generation, EventStoreMode::ReadWrite);
+        let after = reopened
+            .rebuild_visibility()
+            .await
+            .expect("reopened visibility rebuild");
+        assert_eq!(before, after);
+        assert_eq!(after.current_heads()[0].event_id, *current.id());
+        assert_eq!(after.visible_event_ids(), &[*deletion.id()]);
+        assert_eq!(after.suppressed_event_ids(), &[*current.id()]);
+        assert_eq!(after.superseded_event_ids(), &[*old.id()]);
+        let page = reopened
+            .query_visible(EventQuery::all(
+                EventQueryBounds::first(10).expect("bounds"),
+            ))
+            .await
+            .expect("visible page");
+        assert_eq!(page.items().len(), 1);
+        assert_eq!(page.items()[0].event().id(), deletion.id());
+        assert_eq!(reopened.status().await.expect("status").visible_events(), 1);
+    }
+
+    #[tokio::test]
     async fn corrupt_rows_fail_closed_and_source_history_is_immutable() {
         let generation = SourceGeneration::new([10; 32]).expect("generation");
         let store = store(generation).await;
@@ -884,9 +1022,22 @@ mod tests {
             false,
         );
         store
-            .admit(EventAdmission::raw(observed(event, 30, None)))
+            .admit(EventAdmission::raw(observed(event.clone(), 30, None)))
             .await
             .expect("event");
+
+        let wrong_generation = SourceGeneration::new([11; 32]).expect("generation");
+        let mismatched_store = SqliteStorage::new(
+            store.pool.clone(),
+            wrong_generation,
+            EventStoreMode::ReadWrite,
+        );
+        assert_eq!(
+            mismatched_store
+                .admit(EventAdmission::raw(observed(event, 31, None)))
+                .await,
+            Err(Error::CorruptStoredEvent)
+        );
 
         assert!(
             sqlx::query("DELETE FROM radroots_runtime_events")
@@ -911,6 +1062,33 @@ mod tests {
         .execute(&store.pool)
         .await
         .expect("forge contract metadata");
+        assert_eq!(
+            store
+                .query_raw(EventQuery::all(EventQueryBounds::first(1).expect("bounds"),))
+                .await,
+            Err(Error::CorruptStoredEvent)
+        );
+        sqlx::query(
+            "UPDATE radroots_runtime_events
+             SET admitted_contract_id = 'radroots.social.geochat.v1',
+                 admitted_registry_version = 7",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("forge mismatched selected contract");
+        assert_eq!(
+            store
+                .query_raw(EventQuery::all(EventQueryBounds::first(1).expect("bounds"),))
+                .await,
+            Err(Error::CorruptStoredEvent)
+        );
+        sqlx::query(
+            "UPDATE radroots_runtime_events
+             SET admitted_registry_version = 6",
+        )
+        .execute(&store.pool)
+        .await
+        .expect("forge registry version");
         assert_eq!(
             store
                 .query_raw(EventQuery::all(EventQueryBounds::first(1).expect("bounds"),))

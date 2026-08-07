@@ -10,6 +10,7 @@ use radroots_storage::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPage,
         EventPosition, EventQuery, EventQueryBounds, EventSequence, SourceGeneration,
         StoredEventProvenance, StoredRawEvent, StoredVerifiedEvent, StoredVisibleEvent,
+        VisibilityInput, VisibilitySnapshot, evaluate_visibility,
     },
     status::{EventStoreHealth, EventStoreMode, EventStoreStatus},
 };
@@ -188,6 +189,23 @@ impl EventStore for MemoryEventStore {
                 })
                 .collect();
             EventPage::new(self.generation, items, None, query.bounds())
+        })
+    }
+
+    fn rebuild_visibility(&self) -> BoxFuture<'_, Result<VisibilitySnapshot, Error>> {
+        Box::pin(async move {
+            let entries = self.entries.lock().expect("test store lock");
+            evaluate_visibility(
+                self.generation,
+                entries.iter().map(|entry| {
+                    VisibilityInput::new(
+                        entry.position,
+                        entry.admission.event(),
+                        entry.admission.stage(),
+                    )
+                }),
+            )
+            .map(|evaluation| evaluation.into_snapshot())
         })
     }
 

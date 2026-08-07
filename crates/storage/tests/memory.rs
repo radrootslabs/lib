@@ -1,7 +1,12 @@
 #![cfg(feature = "memory")]
 
 use futures_executor::block_on;
-use radroots_event::{SignedEvent, wire::Nip01EventWire};
+use radroots_event::{
+    SignedEvent,
+    admission::{AdmissionPolicy, RawEvent, SignatureVerifier, VisibilityPolicy},
+    envelope::EventEnvelope,
+    wire::Nip01EventWire,
+};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_storage::{
     Error, EventStore, Journal, Outbox, ProjectionStore,
@@ -41,13 +46,22 @@ use radroots_transport::{
 };
 
 fn signed_event() -> SignedEvent {
+    signed_event_with(1_800_000_100, 0, vec![], "memory-backend")
+}
+
+fn signed_event_with(
+    created_at: u64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: &str,
+) -> SignedEvent {
     let mut wire = Nip01EventWire {
         id: "0".repeat(64),
         pubkey: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_owned(),
-        created_at: 1_800_000_100,
-        kind: 0,
-        tags: vec![],
-        content: "memory-backend".to_owned(),
+        created_at,
+        kind,
+        tags,
+        content: content.to_owned(),
         sig: "42".repeat(64),
         extra: Default::default(),
     };
@@ -65,11 +79,138 @@ fn signed_event() -> SignedEvent {
     SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
 }
 
+struct Allow;
+
+impl SignatureVerifier for Allow {
+    fn verify_signature(&self, _event: &EventEnvelope) -> Result<(), radroots_event::Error> {
+        Ok(())
+    }
+}
+
+impl AdmissionPolicy for Allow {
+    type Error = core::convert::Infallible;
+
+    fn policy_id(&self) -> &'static str {
+        "test.storage-memory.admission.v1"
+    }
+
+    fn admit(
+        &self,
+        _event: &radroots_event::admission::ContractValidatedEvent,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl VisibilityPolicy for Allow {
+    type Error = core::convert::Infallible;
+
+    fn policy_id(&self) -> &'static str {
+        "test.storage-memory.visibility.v1"
+    }
+
+    fn make_visible(
+        &self,
+        _event: &radroots_event::admission::AdmittedEvent,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
 fn admission(event: SignedEvent, at: u64) -> EventAdmission {
     let target = Target::new(TransportId::NOSTR, "wss://relay.example").expect("target");
     let provenance = EventProvenance::new(TransportId::NOSTR, target.fingerprint().clone(), at)
         .expect("provenance");
     EventAdmission::raw(ObservedEvent::new(event, provenance))
+}
+
+fn visible_admission(event: SignedEvent, at: u64) -> EventAdmission {
+    let verified = RawEvent::new(event.envelope().clone())
+        .verify_id()
+        .expect("event id")
+        .verify_signature(&Allow)
+        .expect("signature");
+    let validated = if event.envelope().kind_u32() == 5 {
+        verified
+            .validate_contract_for_admission("radroots.social.deletion_request.v1")
+            .expect("admission-selected contract")
+    } else {
+        verified.validate_contract().expect("contract")
+    };
+    let visible = validated
+        .admit_with(&Allow)
+        .expect("admission")
+        .make_visible_with(&Allow)
+        .expect("visibility");
+    let target = Target::new(TransportId::NOSTR, "wss://relay.example").expect("target");
+    let provenance = EventProvenance::new(TransportId::NOSTR, target.fingerprint().clone(), at)
+        .expect("provenance");
+    EventAdmission::visible(ObservedEvent::new(event, provenance), visible)
+        .expect("visible admission")
+}
+
+#[test]
+fn memory_visibility_rebuild_is_current_delete_aware_and_atomic_parity_safe() {
+    let generation = SourceGeneration::new([17; 32]).expect("generation");
+    let direct = MemoryStorage::new(generation);
+    let atomic_store = MemoryStorage::new(generation);
+    let old = signed_event_with(
+        1_800_000_100,
+        0,
+        vec![],
+        r#"{"display_name":"Old Farm","bot":false}"#,
+    );
+    let current = signed_event_with(
+        1_800_000_200,
+        0,
+        vec![],
+        r#"{"display_name":"Current Farm","bot":false}"#,
+    );
+    let deletion = signed_event_with(
+        1_800_000_300,
+        5,
+        vec![vec!["e".to_owned(), current.id().to_hex()]],
+        "retired profile",
+    );
+    let admissions = [
+        visible_admission(old.clone(), 100),
+        visible_admission(current.clone(), 200),
+        visible_admission(deletion.clone(), 300),
+    ];
+
+    for admission in admissions.clone() {
+        block_on(direct.admit(admission)).expect("direct admission");
+    }
+    for (index, admission) in admissions.into_iter().enumerate() {
+        let identity = u8::try_from(index).expect("commit identity") + 20;
+        block_on(atomic_store.commit(atomic(
+            identity,
+            identity,
+            AtomicWorkflow::Ingested(Box::new(CommitIngested::new(admission, None))),
+        )))
+        .expect("atomic admission");
+    }
+
+    let snapshot = block_on(direct.rebuild_visibility()).expect("visibility rebuild");
+    let atomic_snapshot =
+        block_on(atomic_store.rebuild_visibility()).expect("atomic visibility rebuild");
+    assert_eq!(snapshot, atomic_snapshot);
+    assert_eq!(snapshot.current_heads()[0].event_id, *current.id());
+    assert_eq!(snapshot.visible_event_ids(), &[*deletion.id()]);
+    assert_eq!(snapshot.suppressed_event_ids(), &[*current.id()]);
+    assert_eq!(snapshot.superseded_event_ids(), &[*old.id()]);
+    let page = block_on(direct.query_visible(EventQuery::all(
+        EventQueryBounds::first(10).expect("bounds"),
+    )))
+    .expect("visible page");
+    assert_eq!(page.items().len(), 1);
+    assert_eq!(page.items()[0].event().id(), deletion.id());
+    assert_eq!(
+        block_on(EventStore::status(&direct))
+            .expect("status")
+            .visible_events(),
+        1
+    );
 }
 
 fn prepare(instance: OperationInstanceId) -> PrepareOperation {

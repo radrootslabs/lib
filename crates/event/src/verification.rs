@@ -9,7 +9,8 @@ use core::fmt;
 
 use crate::{
     contract::registry_v7::{
-        ContractValidationError, EventContract, validate_event_contract_registry_v7,
+        ContractValidationError, EventContract, validate_event_contract_for_admission,
+        validate_event_contract_registry_v7,
     },
     envelope::EventEnvelope,
     id::EventId,
@@ -132,6 +133,23 @@ impl SignatureVerifiedEvent {
     pub fn validate_contract(self) -> Result<ContractValidatedEvent, Error> {
         let contract =
             validate_event_contract_registry_v7(&self.0).map_err(Error::ContractValidation)?;
+        Ok(ContractValidatedEvent {
+            event: self,
+            contract,
+        })
+    }
+
+    /// Validates a contract selected explicitly by the admission boundary.
+    ///
+    /// This transition supports profiles such as root updates, replies,
+    /// comments, and deletion requests that intentionally cannot be selected
+    /// solely from their public Nostr wire shape.
+    pub fn validate_contract_for_admission(
+        self,
+        contract_id: &str,
+    ) -> Result<ContractValidatedEvent, Error> {
+        let contract = validate_event_contract_for_admission(&self.0, contract_id)
+            .map_err(Error::ContractValidation)?;
         Ok(ContractValidatedEvent {
             event: self,
             contract,

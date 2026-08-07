@@ -154,6 +154,14 @@ impl EventStore for FaultStorage {
     > {
         EventStore::query_visible(self.inner.as_ref(), value)
     }
+    fn rebuild_visibility(
+        &self,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>,
+    > {
+        EventStore::rebuild_visibility(self.inner.as_ref())
+    }
     fn query_provenance(
         &self,
         id: radroots_storage::event::EventId,
@@ -1427,13 +1435,17 @@ async fn sqlite_signing_and_admission_recover_across_every_reopen_boundary() {
             .expect("admission replay");
         assert!(replay.is_replay());
         assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
-        let visible = store
-            .query_visible(EventQuery::all(
+        let admitted_events = store
+            .query_raw(EventQuery::all(
                 EventQueryBounds::first(10).expect("bounds"),
             ))
             .await
-            .expect("visible events");
-        assert_eq!(visible.items().len(), 1);
+            .expect("admitted events");
+        assert_eq!(admitted_events.items().len(), 1);
+        assert_eq!(
+            admitted_events.items()[0].stage(),
+            radroots_storage::event::AdmissionStage::Visible
+        );
     }
 
     let store = Arc::new(

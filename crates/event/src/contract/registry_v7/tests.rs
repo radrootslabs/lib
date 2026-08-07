@@ -1088,6 +1088,27 @@ fn nip09_deletion_request_contract_is_typed_and_admission_only() {
             contract_id: "radroots.social.deletion_request.v1",
         })
     );
+    let selected = unsigned_event(
+        KIND_DELETION_REQUEST,
+        vec![vec![
+            "e",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ]],
+        "superseded",
+    );
+    assert_eq!(
+        validate_event_contract_for_admission(&selected, contract.id),
+        Ok(contract)
+    );
+    assert_eq!(
+        validate_event_contract_for_admission(
+            &unsigned_event(KIND_DELETION_REQUEST, vec![], "superseded"),
+            contract.id,
+        ),
+        Err(ContractValidationError::ContractMatch {
+            error: ContractMatchError::UnsupportedShape(KIND_DELETION_REQUEST),
+        })
+    );
 }
 
 #[test]
@@ -1165,13 +1186,13 @@ fn supports_content_field_discriminators() {
             discriminator,
             ..base
         };
-        assert!(validate_discriminator_parts(r#"{"type":"proposal"}"#, &contract).is_ok());
+        assert!(validate_discriminator_parts(r#"{"type":"proposal"}"#, &contract, false).is_ok());
         assert!(matches!(
-            validate_discriminator_parts(r#"{"type":"decision"}"#, &contract),
+            validate_discriminator_parts(r#"{"type":"decision"}"#, &contract, false),
             Err(ContractValidationError::ContentFieldMismatch { .. })
         ));
         assert!(matches!(
-            validate_discriminator_parts("{}", &contract),
+            validate_discriminator_parts("{}", &contract, false),
             Err(ContractValidationError::MissingContentField { .. })
         ));
     }
@@ -1179,7 +1200,7 @@ fn supports_content_field_discriminators() {
         discriminator: EventDiscriminator::KindOnly,
         ..base
     };
-    assert!(validate_discriminator_parts("not-json", &contract).is_ok());
+    assert!(validate_discriminator_parts("not-json", &contract, false).is_ok());
 }
 
 #[test]

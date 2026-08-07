@@ -3926,6 +3926,7 @@ fn validate_event_contract_in_registry(
         event.content(),
         contract,
         event_contracts,
+        false,
     )?;
     Ok(contract)
 }
@@ -3936,6 +3937,31 @@ pub fn validate_event_contract_shape(
 ) -> Result<(), ContractValidationError> {
     let tags = event.tags_as_vec();
     validate_event_contract_parts(event.kind_u32(), &tags, event.content(), contract_id)
+}
+
+/// Validates a contract selected explicitly by an admission boundary.
+///
+/// This is the required path for contracts whose discriminator is
+/// [`EventDiscriminator::AdmissionOnly`]. The selected contract's kind,
+/// content, tags, and custom invariants are still validated in full.
+pub fn validate_event_contract_for_admission(
+    event: &EventEnvelope,
+    contract_id: &str,
+) -> Result<&'static EventContract, ContractValidationError> {
+    let contract =
+        event_contract(contract_id).ok_or_else(|| ContractValidationError::UnknownContract {
+            contract_id: contract_id.to_owned(),
+        })?;
+    let tags = event.tags_as_vec();
+    validate_event_contract_parts_in_registry(
+        event.kind_u32(),
+        &tags,
+        event.content(),
+        contract,
+        EVENT_CONTRACTS_REGISTRY_V7,
+        true,
+    )?;
+    Ok(contract)
 }
 
 pub fn validate_event_contract_parts(
@@ -3954,6 +3980,7 @@ pub fn validate_event_contract_parts(
         content,
         contract,
         EVENT_CONTRACTS_REGISTRY_V7,
+        false,
     )
 }
 
@@ -3963,6 +3990,7 @@ fn validate_event_contract_parts_in_registry(
     content: &str,
     contract: &EventContract,
     event_contracts: &'static [EventContract],
+    admission_selected: bool,
 ) -> Result<(), ContractValidationError> {
     crate::require_invariant(kind == contract.kind, &|| {
         ContractValidationError::KindMismatch {
@@ -3971,7 +3999,7 @@ fn validate_event_contract_parts_in_registry(
         }
     })?;
     crate::require_invariant(
-        !matches!(contract.discriminator, EventDiscriminator::AdmissionOnly),
+        admission_selected || !matches!(contract.discriminator, EventDiscriminator::AdmissionOnly),
         &|| ContractValidationError::AdmissionRequired {
             contract_id: contract.id,
         },
@@ -3979,9 +4007,30 @@ fn validate_event_contract_parts_in_registry(
     validate_classified_listing_partition_parts(tags, contract)?;
     validate_content_shape_parts(content, contract)?;
     validate_contract_tags_parts_in_registry(tags, contract, event_contracts)?;
-    validate_discriminator_parts(content, contract)?;
+    if admission_selected {
+        validate_admission_selected_contract_parts(kind, tags, contract)?;
+    }
+    validate_discriminator_parts(content, contract, admission_selected)?;
     validate_custom_calendar_contract_parts(tags, contract)?;
     validate_custom_knowledge_contract_parts(content, contract)?;
+    Ok(())
+}
+
+fn validate_admission_selected_contract_parts(
+    kind: u32,
+    tags: &[Vec<String>],
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
+    if contract.id == "radroots.social.deletion_request.v1"
+        && !tags.iter().any(|tag| {
+            tag.first()
+                .is_some_and(|name| matches!(name.as_str(), "e" | "a"))
+        })
+    {
+        return Err(ContractValidationError::ContractMatch {
+            error: ContractMatchError::UnsupportedShape(kind),
+        });
+    }
     Ok(())
 }
 
@@ -4939,9 +4988,10 @@ fn validate_custom_knowledge_contract_parts(
 fn validate_discriminator_parts(
     content: &str,
     contract: &EventContract,
+    admission_selected: bool,
 ) -> Result<(), ContractValidationError> {
     crate::require_invariant(
-        !matches!(contract.discriminator, EventDiscriminator::AdmissionOnly),
+        admission_selected || !matches!(contract.discriminator, EventDiscriminator::AdmissionOnly),
         &|| ContractValidationError::AdmissionRequired {
             contract_id: contract.id,
         },

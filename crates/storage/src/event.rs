@@ -12,6 +12,10 @@ use std::collections::BTreeSet;
 
 use crate::{Error, status::EventStoreStatus};
 
+mod visibility;
+#[doc(hidden)]
+pub use visibility::{VisibilityEvaluation, VisibilityInput, evaluate_visibility};
+
 /// Maximum events returned by one storage query.
 pub const EVENT_QUERY_LIMIT_MAX: u16 = 1_000;
 /// Maximum explicit event identifiers in one storage query.
@@ -401,6 +405,87 @@ pub struct StoredVisibleEvent {
     event: SignedEvent,
 }
 
+/// Deterministic digest of one complete visibility rebuild.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct VisibilityDigest([u8; 32]);
+
+impl VisibilityDigest {
+    /// Returns the canonical SHA-256 bytes for the rebuilt visibility state.
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    pub(crate) const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
+/// Complete deterministic result of rebuilding current event visibility.
+///
+/// Current heads remain listed even when their selected event is suppressed.
+/// This prevents a deleted head from resurrecting an older revision.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VisibilitySnapshot {
+    generation: SourceGeneration,
+    current_heads: Vec<radroots_event::envelope::event_head::CurrentEventHead>,
+    deletion_request_ids: Vec<EventId>,
+    visible_event_ids: Vec<EventId>,
+    suppressed_event_ids: Vec<EventId>,
+    superseded_event_ids: Vec<EventId>,
+    digest: VisibilityDigest,
+}
+
+impl VisibilitySnapshot {
+    pub(crate) const fn new(
+        generation: SourceGeneration,
+        current_heads: Vec<radroots_event::envelope::event_head::CurrentEventHead>,
+        deletion_request_ids: Vec<EventId>,
+        visible_event_ids: Vec<EventId>,
+        suppressed_event_ids: Vec<EventId>,
+        superseded_event_ids: Vec<EventId>,
+        digest: VisibilityDigest,
+    ) -> Self {
+        Self {
+            generation,
+            current_heads,
+            deletion_request_ids,
+            visible_event_ids,
+            suppressed_event_ids,
+            superseded_event_ids,
+            digest,
+        }
+    }
+
+    pub const fn generation(&self) -> SourceGeneration {
+        self.generation
+    }
+
+    pub fn current_heads(&self) -> &[radroots_event::envelope::event_head::CurrentEventHead] {
+        self.current_heads.as_slice()
+    }
+
+    pub fn deletion_request_ids(&self) -> &[EventId] {
+        self.deletion_request_ids.as_slice()
+    }
+
+    pub fn visible_event_ids(&self) -> &[EventId] {
+        self.visible_event_ids.as_slice()
+    }
+
+    pub fn suppressed_event_ids(&self) -> &[EventId] {
+        self.suppressed_event_ids.as_slice()
+    }
+
+    pub fn superseded_event_ids(&self) -> &[EventId] {
+        self.superseded_event_ids.as_slice()
+    }
+
+    pub const fn digest(&self) -> VisibilityDigest {
+        self.digest
+    }
+}
+
 impl StoredVisibleEvent {
     pub const fn new(position: EventPosition, event: SignedEvent) -> Self {
         Self { position, event }
@@ -534,6 +619,11 @@ pub trait EventStore: Send + Sync {
         &self,
         query: EventQuery,
     ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>>;
+
+    /// Rebuilds current visibility from immutable retained event truth.
+    ///
+    /// Implementations must use the same reducer as [`Self::query_visible`].
+    fn rebuild_visibility(&self) -> BoxFuture<'_, Result<VisibilitySnapshot, Error>>;
 
     /// Queries bounded provenance for one event.
     fn query_provenance(
