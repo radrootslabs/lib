@@ -59,6 +59,9 @@ serde = { workspace = true, default-features = false, features = [
 ], optional = true }
 
 [dev-dependencies]
+radroots_blossom = { workspace = true, default-features = false, features = [
+  "std",
+] }
 serde_json = { workspace = true, features = ["std"] }
 nostr = { workspace = true, features = ["std"] }
 

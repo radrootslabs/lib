@@ -26,6 +26,12 @@ The authoritative package charter is the
 5. The implementation creates a [`SignReceipt`] from the originating request.
    Receipt construction rejects plan drift and invalid Schnorr signatures.
 
+The same SPI supports a purpose-tagged, HTTP-only
+`BlossomAuthorizationPlan`. `SigningPurpose` keeps that BUD-11 credential
+distinct from registry-authored relay events, while receipt verification still
+binds the exact author, timestamp, kind, tags, content, event ID, deadline, and
+cancellation signal.
+
 [`Actor`]: crate::Actor
 [`Signer`]: crate::Signer
 [`SignRequest`]: crate::SignRequest
@@ -136,6 +142,9 @@ secret material in it.
   authorization and never invokes a signer on failure.
 - A successful receipt proves exact equality of author, timestamp, kind, tags,
   content, and event ID with the exact request plan, plus a valid signature.
+- Callers at a persistence or HTTP boundary must revalidate an untrusted host
+  signer's returned event against their retained request and locally observed
+  completion time before committing or transmitting it.
 - `Error` display/debug output and protocol reports are redacted. Under `std`,
   a caller may explicitly inspect a preserved native error source locally.
 - `AuthChallenge` debug output redacts its URI; the value accepts only bounded

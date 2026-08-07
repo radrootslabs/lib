@@ -3572,6 +3572,8 @@ dependencies = [
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",
+ "radroots_nostr",
+ "radroots_protocol",
  "radroots_sdk",
  "radroots_signing",
  "radroots_storage",
@@ -3783,6 +3785,7 @@ name = "radroots_sdk"
 version = "0.1.0-alpha"
 dependencies = [
  "nostr 0.44.7",
+ "radroots_blossom",
  "radroots_core",
  "radroots_event",
  "radroots_event_codec",
@@ -3850,6 +3853,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "hex",
  "nostr 0.44.7",
+ "radroots_blossom",
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",

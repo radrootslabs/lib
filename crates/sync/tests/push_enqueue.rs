@@ -798,6 +798,55 @@ impl Signer for MockSigner {
     }
 }
 
+#[derive(Clone, Copy)]
+enum BoundaryViolation {
+    CompletesAfterDeadline,
+    CancelsBeforeReturn,
+}
+
+struct BoundaryViolatingSigner {
+    violation: BoundaryViolation,
+    clock: Arc<TestClock>,
+}
+
+impl Signer for BoundaryViolatingSigner {
+    fn status(
+        &self,
+    ) -> radroots_signing::signer::BoxFuture<'_, Result<SignerStatus, SigningError>> {
+        Box::pin(async {
+            Ok(SignerStatus::new(
+                SignerAvailability::Ready,
+                vec![SignerCapability::new(
+                    SignerKind::Remote,
+                    ReplayCapability::ExactReplayByRequestId,
+                    CancellationSupport::BeforeAndAfterPublication,
+                    false,
+                    false,
+                )],
+                None,
+            ))
+        })
+    }
+
+    fn sign(
+        &self,
+        request: SignRequest,
+    ) -> radroots_signing::signer::BoxFuture<'_, Result<SignReceipt, SigningError>> {
+        Box::pin(async move {
+            let deadline = request.policy().deadline_unix_ms();
+            let receipt =
+                SignReceipt::from_signed_event(&request, signed_event(&request), deadline - 1)?;
+            match self.violation {
+                BoundaryViolation::CompletesAfterDeadline => {
+                    self.clock.0.store(deadline, Ordering::Release);
+                }
+                BoundaryViolation::CancelsBeforeReturn => request.cancellation_signal().cancel(),
+            }
+            Ok(receipt)
+        })
+    }
+}
+
 fn signing_keypair() -> Keypair {
     let secret = SecretKey::from_slice(&[1; 32]).expect("secret key");
     Keypair::from_secret_key(&Secp256k1::new(), &secret)
@@ -808,29 +857,28 @@ fn public_key_hex() -> String {
 }
 
 fn signed_event(request: &SignRequest) -> SignedEvent {
-    let plan = request.plan();
-    let id = plan.expected_event_id().to_hex();
+    let id = request.expected_event_id().to_hex();
     let pubkey = public_key_hex();
     let signature = Secp256k1::new()
         .sign_schnorr_no_aux_rand(
-            &Message::from_digest(*plan.expected_event_id().as_bytes()),
+            &Message::from_digest(*request.expected_event_id().as_bytes()),
             &signing_keypair(),
         )
         .to_string();
     let raw_json = format!(
         "{{\"id\":\"{id}\",\"pubkey\":\"{pubkey}\",\"created_at\":{},\"kind\":{},\"tags\":{:?},\"content\":{content:?},\"sig\":\"{signature}\"}}",
-        plan.created_at(),
-        plan.body().kind(),
-        plan.body().tags(),
-        content = plan.body().content(),
+        request.created_at(),
+        request.kind(),
+        request.tags(),
+        content = request.content(),
     );
     SignedEvent::new(SignedEventParts {
         id,
         pubkey,
-        created_at: plan.created_at(),
-        kind: plan.body().kind(),
-        tags: plan.body().tags().to_vec(),
-        content: plan.body().content().to_owned(),
+        created_at: request.created_at(),
+        kind: request.kind(),
+        tags: request.tags().to_vec(),
+        content: request.content().to_owned(),
         sig: signature,
         raw_json,
     })
@@ -952,6 +1000,50 @@ fn fault_engine(
 fn execute_to_admitted(engine: &Engine, push: &PushRequest) {
     block_on(engine.sign_prepared(push.clone())).expect("sign prepared push");
     block_on(engine.admit_signed(push.operation_id())).expect("admit signed push");
+}
+
+#[test]
+fn caller_revalidates_late_and_cancelled_signer_success_before_persistence() {
+    for (byte, violation, expected) in [
+        (
+            55,
+            BoundaryViolation::CompletesAfterDeadline,
+            Error::SignerDeadlineExceeded,
+        ),
+        (
+            56,
+            BoundaryViolation::CancelsBeforeReturn,
+            Error::SigningCancelled,
+        ),
+    ] {
+        let storage = Arc::new(MemoryStorage::new(
+            SourceGeneration::new([byte; 32]).expect("generation"),
+        ));
+        let capability: Arc<dyn SyncStorage> = storage;
+        let clock = Arc::new(TestClock(AtomicU64::new(1_800_000_200_000)));
+        let signer: Arc<dyn Signer> = Arc::new(BoundaryViolatingSigner {
+            violation,
+            clock: Arc::clone(&clock),
+        });
+        let engine = Engine::builder(
+            capability,
+            clock,
+            Arc::new(TestIds(AtomicU64::new(10))),
+            DeadlinePolicy::new(10_000, 10_000, 10_000).expect("deadlines"),
+        )
+        .sink(Arc::new(MockSink))
+        .signer(signer)
+        .build()
+        .expect("engine");
+        let push = request(byte, "wss://relay.example");
+
+        assert_eq!(block_on(engine.sign_prepared(push.clone())), Err(expected));
+        let status = block_on(engine.push_status(push.operation_id()))
+            .expect("status")
+            .expect("prepared operation");
+        assert!(status.artifact().signed().is_none());
+        assert!(status.delivery_plan().attempts().is_empty());
+    }
 }
 
 #[test]

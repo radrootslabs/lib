@@ -1,0 +1,518 @@
+pub mod radroots_sdk
+pub mod radroots_sdk::capability
+pub enum radroots_sdk::capability::Availability
+pub radroots_sdk::capability::Availability::Available
+pub radroots_sdk::capability::Availability::Degraded
+pub radroots_sdk::capability::Availability::Unavailable
+pub radroots_sdk::capability::Availability::Unsupported
+pub enum radroots_sdk::capability::Maturity
+pub radroots_sdk::capability::Maturity::Experimental
+pub radroots_sdk::capability::Maturity::Preview
+pub radroots_sdk::capability::Maturity::Stable
+pub struct radroots_sdk::capability::CapabilityId(_)
+impl radroots_sdk::capability::CapabilityId
+pub const radroots_sdk::capability::CapabilityId::BACKUP_RESTORE: Self
+pub const radroots_sdk::capability::CapabilityId::CANONICAL_STORAGE: Self
+pub const radroots_sdk::capability::CapabilityId::DAEMON_DELIVERY: Self
+pub const radroots_sdk::capability::CapabilityId::FARM_PUBLICATION: Self
+pub const radroots_sdk::capability::CapabilityId::KNOWLEDGE_EVENTS: Self
+pub const radroots_sdk::capability::CapabilityId::LISTING_PUBLICATION: Self
+pub const radroots_sdk::capability::CapabilityId::LOCAL_SIGNING: Self
+pub const radroots_sdk::capability::CapabilityId::MESH_TRANSPORT: Self
+pub const radroots_sdk::capability::CapabilityId::NIP46_SIGNING: Self
+pub const radroots_sdk::capability::CapabilityId::NOSTR_DELIVERY: Self
+pub const radroots_sdk::capability::CapabilityId::NOSTR_FETCH: Self
+pub const radroots_sdk::capability::CapabilityId::PERSISTENT_STORAGE: Self
+pub const radroots_sdk::capability::CapabilityId::RETICULUM_DELIVERY: Self
+pub const radroots_sdk::capability::CapabilityId::RETICULUM_FETCH: Self
+pub const radroots_sdk::capability::CapabilityId::SIMPLEX_TRANSPORT: Self
+pub const radroots_sdk::capability::CapabilityId::SYNC_PULL: Self
+pub const radroots_sdk::capability::CapabilityId::SYNC_PUSH: Self
+pub const radroots_sdk::capability::CapabilityId::TRADE_COMMANDS: Self
+pub const radroots_sdk::capability::CapabilityId::TRADE_QUERIES: Self
+pub const fn radroots_sdk::capability::CapabilityId::as_str(self) -> &'static str
+impl core::fmt::Display for radroots_sdk::capability::CapabilityId
+pub fn radroots_sdk::capability::CapabilityId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::capability::CapabilityReport
+impl radroots_sdk::capability::CapabilityReport
+pub fn radroots_sdk::capability::CapabilityReport::get(&self, radroots_sdk::capability::CapabilityId) -> core::option::Option<radroots_sdk::capability::CapabilityStatus>
+pub fn radroots_sdk::capability::CapabilityReport::iter(&self) -> impl core::iter::traits::exact_size::ExactSizeIterator<Item = &radroots_sdk::capability::CapabilityStatus>
+pub struct radroots_sdk::capability::CapabilityStatus
+impl radroots_sdk::capability::CapabilityStatus
+pub const fn radroots_sdk::capability::CapabilityStatus::availability(self) -> radroots_sdk::capability::Availability
+pub const fn radroots_sdk::capability::CapabilityStatus::id(self) -> radroots_sdk::capability::CapabilityId
+pub const fn radroots_sdk::capability::CapabilityStatus::is_compiled(self) -> bool
+pub const fn radroots_sdk::capability::CapabilityStatus::is_configured(self) -> bool
+pub const fn radroots_sdk::capability::CapabilityStatus::maturity(self) -> radroots_sdk::capability::Maturity
+pub mod radroots_sdk::client
+pub struct radroots_sdk::client::Client
+impl radroots_sdk::client::Client
+pub fn radroots_sdk::client::Client::capabilities(&self) -> radroots_sdk::capability::CapabilityReport
+pub async fn radroots_sdk::client::Client::close(&self) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::client::Client::farm(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::farm::Operations<'_>>>
+pub fn radroots_sdk::client::Client::is_closed(&self) -> bool
+pub fn radroots_sdk::client::Client::listing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::listing::Operations<'_>>>
+pub fn radroots_sdk::client::Client::signer(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_signing::signer::Signer>>
+pub fn radroots_sdk::client::Client::signing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::signing::Operations<'_>>>
+pub fn radroots_sdk::client::Client::sink(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_transport::sink::EventSink>>
+pub fn radroots_sdk::client::Client::source(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_transport::source::EventSource>>
+pub fn radroots_sdk::client::Client::storage(&self) -> radroots_sdk::error::Result<&dyn radroots_storage::Storage>
+pub async fn radroots_sdk::client::Client::storage_integrity(&self) -> radroots_sdk::error::Result<radroots_sdk::storage::IntegrityStatus>
+pub fn radroots_sdk::client::Client::storage_operations(&self) -> radroots_sdk::error::Result<radroots_sdk::storage::Operations<'_>>
+pub async fn radroots_sdk::client::Client::storage_status(&self) -> radroots_sdk::error::Result<radroots_sdk::storage::Status>
+pub fn radroots_sdk::client::Client::sync(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::sync::Operations<'_>>>
+pub fn radroots_sdk::client::Client::trade(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::trade::Operations<'_>>>
+impl core::fmt::Debug for radroots_sdk::client::Client
+pub fn radroots_sdk::client::Client::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::client::ClientBuilder
+impl radroots_sdk::client::ClientBuilder
+pub fn radroots_sdk::client::ClientBuilder::build(self) -> radroots_sdk::error::Result<radroots_sdk::client::Client>
+pub fn radroots_sdk::client::ClientBuilder::capability_availability(self, radroots_sdk::capability::CapabilityId, radroots_sdk::capability::Availability) -> Self
+pub fn radroots_sdk::client::ClientBuilder::host_sync(self, radroots_sdk::sync::HostPolicy) -> Self
+pub fn radroots_sdk::client::ClientBuilder::memory(radroots_storage::event::SourceGeneration) -> Self
+pub fn radroots_sdk::client::ClientBuilder::memory_default() -> Self
+pub fn radroots_sdk::client::ClientBuilder::new() -> Self
+pub fn radroots_sdk::client::ClientBuilder::nostr(self, radroots_sdk::transport::NostrSlot) -> Self
+pub fn radroots_sdk::client::ClientBuilder::signer(self, alloc::sync::Arc<dyn radroots_signing::signer::Signer>) -> Self
+pub fn radroots_sdk::client::ClientBuilder::signing(self, radroots_sdk::signing::Provider) -> Self
+pub fn radroots_sdk::client::ClientBuilder::sink(self, alloc::sync::Arc<dyn radroots_transport::sink::EventSink>) -> Self
+pub fn radroots_sdk::client::ClientBuilder::source(self, alloc::sync::Arc<dyn radroots_transport::source::EventSource>) -> Self
+pub async fn radroots_sdk::client::ClientBuilder::sqlite(radroots_sdk::storage::SqliteOptions) -> radroots_sdk::error::Result<Self>
+pub fn radroots_sdk::client::ClientBuilder::storage(self, alloc::sync::Arc<dyn radroots_storage::Storage>) -> Self
+pub fn radroots_sdk::client::ClientBuilder::sync_engine(self, radroots_sync::engine::Engine) -> Self
+impl core::fmt::Debug for radroots_sdk::client::ClientBuilder
+pub fn radroots_sdk::client::ClientBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_sdk::diagnostics
+pub struct radroots_sdk::diagnostics::Report
+impl radroots_sdk::diagnostics::Report
+pub const fn radroots_sdk::diagnostics::Report::capabilities(&self) -> &radroots_sdk::capability::CapabilityReport
+pub const fn radroots_sdk::diagnostics::Report::storage(&self) -> radroots_storage::status::StorageStatus
+pub async fn radroots_sdk::diagnostics::inspect(&radroots_sdk::client::Client) -> radroots_sdk::error::Result<radroots_sdk::diagnostics::Report>
+pub mod radroots_sdk::error
+#[non_exhaustive] pub enum radroots_sdk::error::ErrorKind
+pub radroots_sdk::error::ErrorKind::ClientClosed
+pub radroots_sdk::error::ErrorKind::ClientClosing
+pub radroots_sdk::error::ErrorKind::CloseInProgress
+pub radroots_sdk::error::ErrorKind::InvalidHostConfiguration
+pub radroots_sdk::error::ErrorKind::MissingStorage
+pub radroots_sdk::error::ErrorKind::SharedOperationUnavailable
+pub radroots_sdk::error::ErrorKind::StorageBusy
+pub radroots_sdk::error::ErrorKind::StorageCloseFailed
+pub radroots_sdk::error::ErrorKind::StorageInspectionFailed
+pub radroots_sdk::error::ErrorKind::StorageOpenFailed
+pub radroots_sdk::error::ErrorKind::StorageSchemaTooNew
+pub radroots_sdk::error::ErrorKind::StorageUnsupportedSchema
+impl radroots_sdk::error::ErrorKind
+pub const radroots_sdk::error::ErrorKind::ALL: &'static [Self]
+pub const fn radroots_sdk::error::ErrorKind::descriptor(self) -> radroots_sdk::error::ErrorDescriptor
+pub struct radroots_sdk::error::Error
+impl radroots_sdk::error::Error
+pub const fn radroots_sdk::error::Error::descriptor(&self) -> radroots_sdk::error::ErrorDescriptor
+pub const fn radroots_sdk::error::Error::kind(&self) -> radroots_sdk::error::ErrorKind
+pub fn radroots_sdk::error::Error::to_report(&self) -> radroots_protocol::error::v1::ErrorReport
+impl core::error::Error for radroots_sdk::error::Error
+pub fn radroots_sdk::error::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_sdk::error::Error
+pub fn radroots_sdk::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::error::Error
+pub fn radroots_sdk::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::error::ErrorDescriptor
+impl radroots_sdk::error::ErrorDescriptor
+pub const fn radroots_sdk::error::ErrorDescriptor::capability(self) -> core::option::Option<radroots_sdk::capability::CapabilityId>
+pub const fn radroots_sdk::error::ErrorDescriptor::class(self) -> radroots_protocol::error::v1::Class
+pub const fn radroots_sdk::error::ErrorDescriptor::code(self) -> radroots_protocol::error::v1::KnownCode
+pub const fn radroots_sdk::error::ErrorDescriptor::kind(self) -> radroots_sdk::error::ErrorKind
+pub const fn radroots_sdk::error::ErrorDescriptor::message(self) -> &'static str
+pub const fn radroots_sdk::error::ErrorDescriptor::operation(self) -> core::option::Option<radroots_protocol::runtime::v1::OperationId>
+pub const fn radroots_sdk::error::ErrorDescriptor::recovery_actions(self) -> &'static [radroots_protocol::error::v1::RecoveryAction]
+pub const fn radroots_sdk::error::ErrorDescriptor::retryable(self) -> bool
+pub const fn radroots_sdk::error::ErrorDescriptor::safe_detail_keys(self) -> &'static [&'static str]
+pub const radroots_sdk::error::CATALOG: &[radroots_sdk::error::ErrorDescriptor]
+pub type radroots_sdk::error::Result<T> = core::result::Result<T, radroots_sdk::error::Error>
+pub mod radroots_sdk::farm
+#[non_exhaustive] pub enum radroots_sdk::farm::PrepareErrorKind
+pub radroots_sdk::farm::PrepareErrorKind::Coordinate
+pub radroots_sdk::farm::PrepareErrorKind::Draft
+pub radroots_sdk::farm::PrepareErrorKind::Encode
+pub radroots_sdk::farm::PrepareErrorKind::UnauthorizedActor
+pub struct radroots_sdk::farm::EnqueueRequest
+impl radroots_sdk::farm::EnqueueRequest
+pub const fn radroots_sdk::farm::EnqueueRequest::new(radroots_sync::policy::SyncId, radroots_storage::journal::IdempotencyKey, radroots_sdk::farm::Plan, radroots_sdk::transport::Profile, u64, radroots_signing::request::CancellationPolicy) -> Self
+pub struct radroots_sdk::farm::Operations<'a>
+impl<'a> radroots_sdk::farm::Operations<'a>
+pub async fn radroots_sdk::farm::Operations<'a>::enqueue(&self, radroots_sdk::farm::EnqueueRequest) -> core::result::Result<radroots_sync::push::PushStatus, radroots_sync::policy::Error>
+pub struct radroots_sdk::farm::Plan
+impl radroots_sdk::farm::Plan
+pub const fn radroots_sdk::farm::Plan::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_sdk::farm::Plan::authored_event(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_sdk::farm::Plan::coordinate(&self) -> &radroots_event::id::AddressableCoordinate
+pub struct radroots_sdk::farm::PrepareError
+impl radroots_sdk::farm::PrepareError
+pub const fn radroots_sdk::farm::PrepareError::kind(&self) -> radroots_sdk::farm::PrepareErrorKind
+impl core::error::Error for radroots_sdk::farm::PrepareError
+pub fn radroots_sdk::farm::PrepareError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_sdk::farm::PrepareError
+pub fn radroots_sdk::farm::PrepareError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::farm::PrepareError
+pub fn radroots_sdk::farm::PrepareError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::farm::PrepareRequest
+impl radroots_sdk::farm::PrepareRequest
+pub const fn radroots_sdk::farm::PrepareRequest::new(radroots_signing::actor::Actor, radroots_event::farm::Farm, u64) -> Self
+pub fn radroots_sdk::farm::prepare(radroots_sdk::farm::PrepareRequest) -> core::result::Result<radroots_sdk::farm::Plan, radroots_sdk::farm::PrepareError>
+pub mod radroots_sdk::listing
+#[non_exhaustive] pub enum radroots_sdk::listing::Action
+pub radroots_sdk::listing::Action::Publish
+pub radroots_sdk::listing::Action::Update
+#[non_exhaustive] pub enum radroots_sdk::listing::PrepareErrorKind
+pub radroots_sdk::listing::PrepareErrorKind::Edit
+pub radroots_sdk::listing::PrepareErrorKind::Mutation
+pub radroots_sdk::listing::PrepareErrorKind::UnauthorizedActor
+pub enum radroots_sdk::listing::RadrootsOperationalListingEditError
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::DuplicateBinId
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::DuplicateBinId::bin_id: radroots_event::id::InventoryBinId
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::FarmPubkeyMismatch
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::FarmPubkeyMismatch::actual_pubkey: radroots_identity::key::PublicKey
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::FarmPubkeyMismatch::expected_pubkey: radroots_identity::key::PublicKey
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::InvalidClassifiedListingAddress(radroots_event::id::ParseError)
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::InvalidFarmPubkey(radroots_identity::error::Error)
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::InvalidModel(radroots_event::trade::validation::OperationalListingValidationError)
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::MissingPrimaryBin
+pub radroots_sdk::listing::RadrootsOperationalListingEditError::MissingPrimaryBin::primary_bin_id: radroots_event::id::InventoryBinId
+impl core::error::Error for radroots_sdk::listing::RadrootsOperationalListingEditError
+impl core::fmt::Display for radroots_sdk::listing::RadrootsOperationalListingEditError
+pub fn radroots_sdk::listing::RadrootsOperationalListingEditError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_sdk::listing::RadrootsOperationalListingLifecycleState
+pub radroots_sdk::listing::RadrootsOperationalListingLifecycleState::Draft
+pub radroots_sdk::listing::RadrootsOperationalListingLifecycleState::Published
+pub enum radroots_sdk::listing::RadrootsOperationalListingMutation
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::Archive
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::Archive::listing_addr: radroots_event::id::ClassifiedListingAddress
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::Publish
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::Publish::draft: radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::SaveDraft
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::SaveDraft::draft: radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::Update
+pub radroots_sdk::listing::RadrootsOperationalListingMutation::Update::draft: radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit
+impl radroots_sdk::listing::RadrootsOperationalListingMutation
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::archive(radroots_event::id::ClassifiedListingAddress) -> Self
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::canonical_draft(&self) -> core::result::Result<&radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit, radroots_sdk::listing::RadrootsOperationalListingMutationError>
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::lifecycle_state(&self) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingLifecycleState, radroots_sdk::listing::RadrootsOperationalListingMutationError>
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::listing_addr(&self) -> core::result::Result<&radroots_event::id::ClassifiedListingAddress, radroots_sdk::listing::RadrootsOperationalListingMutationError>
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::publish(radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit) -> Self
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::save_draft(radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit) -> Self
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutation::update(radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit) -> Self
+pub enum radroots_sdk::listing::RadrootsOperationalListingMutationError
+pub radroots_sdk::listing::RadrootsOperationalListingMutationError::AuthoredPlan(radroots_event::draft::DraftError)
+pub radroots_sdk::listing::RadrootsOperationalListingMutationError::EncodeListing(alloc::string::String)
+pub radroots_sdk::listing::RadrootsOperationalListingMutationError::UnsupportedMutation
+impl core::error::Error for radroots_sdk::listing::RadrootsOperationalListingMutationError
+impl core::fmt::Display for radroots_sdk::listing::RadrootsOperationalListingMutationError
+pub fn radroots_sdk::listing::RadrootsOperationalListingMutationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::listing::EnqueueRequest
+impl radroots_sdk::listing::EnqueueRequest
+pub const fn radroots_sdk::listing::EnqueueRequest::new(radroots_sync::policy::SyncId, radroots_storage::journal::IdempotencyKey, radroots_sdk::listing::Plan, radroots_sdk::transport::Profile, u64, radroots_signing::request::CancellationPolicy) -> Self
+pub struct radroots_sdk::listing::Operations<'a>
+impl<'a> radroots_sdk::listing::Operations<'a>
+pub async fn radroots_sdk::listing::Operations<'a>::enqueue(&self, radroots_sdk::listing::EnqueueRequest) -> core::result::Result<radroots_sync::push::PushStatus, radroots_sync::policy::Error>
+pub struct radroots_sdk::listing::Plan
+impl radroots_sdk::listing::Plan
+pub const fn radroots_sdk::listing::Plan::action(&self) -> radroots_sdk::listing::Action
+pub const fn radroots_sdk::listing::Plan::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_sdk::listing::Plan::address(&self) -> &radroots_event::id::ClassifiedListingAddress
+pub const fn radroots_sdk::listing::Plan::authored_event(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_sdk::listing::Plan::lifecycle(&self) -> radroots_sdk::listing::RadrootsOperationalListingLifecycleState
+pub struct radroots_sdk::listing::PrepareError
+impl radroots_sdk::listing::PrepareError
+pub const fn radroots_sdk::listing::PrepareError::kind(&self) -> radroots_sdk::listing::PrepareErrorKind
+impl core::error::Error for radroots_sdk::listing::PrepareError
+pub fn radroots_sdk::listing::PrepareError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_sdk::listing::PrepareError
+pub fn radroots_sdk::listing::PrepareError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::listing::PrepareError
+pub fn radroots_sdk::listing::PrepareError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::listing::PrepareRequest
+impl radroots_sdk::listing::PrepareRequest
+pub const fn radroots_sdk::listing::PrepareRequest::publish(radroots_signing::actor::Actor, radroots_sdk::listing::RadrootsOperationalListingEditDocumentV1, u64) -> Self
+pub const fn radroots_sdk::listing::PrepareRequest::update(radroots_signing::actor::Actor, radroots_sdk::listing::RadrootsOperationalListingEditDocumentV1, u64) -> Self
+pub struct radroots_sdk::listing::RadrootsClassifiedListingAddressParts
+pub radroots_sdk::listing::RadrootsClassifiedListingAddressParts::address: radroots_event::id::ClassifiedListingAddress
+pub radroots_sdk::listing::RadrootsClassifiedListingAddressParts::kind: u32
+pub radroots_sdk::listing::RadrootsClassifiedListingAddressParts::listing_id: radroots_event::id::DTag
+pub radroots_sdk::listing::RadrootsClassifiedListingAddressParts::seller_pubkey: radroots_identity::key::PublicKey
+impl radroots_sdk::listing::RadrootsClassifiedListingAddressParts
+pub fn radroots_sdk::listing::RadrootsClassifiedListingAddressParts::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event::id::ParseError>
+pub struct radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit
+impl radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit
+pub fn radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit::listing(&self) -> &radroots_event::listing::operational::OperationalListing
+pub fn radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit::new(radroots_event::listing::operational::OperationalListing, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_sdk::listing::RadrootsOperationalListingEditError>
+pub fn radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit::public_listing_addr(&self) -> &radroots_event::id::ClassifiedListingAddress
+pub fn radroots_sdk::listing::RadrootsOperationalListingCanonicalEdit::seller_pubkey(&self) -> &radroots_identity::key::PublicKey
+pub struct radroots_sdk::listing::RadrootsOperationalListingEditDocumentV1
+pub radroots_sdk::listing::RadrootsOperationalListingEditDocumentV1::listing: radroots_event::listing::operational::OperationalListing
+impl radroots_sdk::listing::RadrootsOperationalListingEditDocumentV1
+pub fn radroots_sdk::listing::RadrootsOperationalListingEditDocumentV1::new(radroots_event::listing::operational::OperationalListing) -> Self
+pub struct radroots_sdk::listing::RadrootsOperationalListingSubtotal
+pub radroots_sdk::listing::RadrootsOperationalListingSubtotal::price_amount: radroots_core::money::Money
+pub radroots_sdk::listing::RadrootsOperationalListingSubtotal::price_currency: radroots_core::currency::Currency
+pub radroots_sdk::listing::RadrootsOperationalListingSubtotal::quantity_amount: radroots_core::decimal::Decimal
+pub radroots_sdk::listing::RadrootsOperationalListingSubtotal::quantity_unit: radroots_core::unit::Unit
+pub struct radroots_sdk::listing::RadrootsOperationalListingTotal
+pub radroots_sdk::listing::RadrootsOperationalListingTotal::price_amount: radroots_core::money::Money
+pub radroots_sdk::listing::RadrootsOperationalListingTotal::price_currency: radroots_core::currency::Currency
+pub radroots_sdk::listing::RadrootsOperationalListingTotal::quantity_amount: radroots_core::decimal::Decimal
+pub radroots_sdk::listing::RadrootsOperationalListingTotal::quantity_unit: radroots_core::unit::Unit
+pub struct radroots_sdk::listing::RadrootsOperationalListingTradeProjection
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::availability: radroots_event::listing::operational::OperationalListingAvailability
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::bin_quantity: radroots_core::quantity::Quantity
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::delivery_method: radroots_event::listing::operational::OperationalListingDeliveryMethod
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::description: alloc::string::String
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::inventory_available: radroots_core::decimal::Decimal
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::listing: radroots_event::listing::operational::OperationalListing
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::listing_addr: radroots_event::id::ClassifiedListingAddress
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::listing_id: alloc::string::String
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::location: radroots_event::listing::operational::OperationalListingPublicLocation
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::primary_bin_id: alloc::string::String
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::product_type: alloc::string::String
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::seller_pubkey: alloc::string::String
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::title: alloc::string::String
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::unit: radroots_core::unit::Unit
+pub radroots_sdk::listing::RadrootsOperationalListingTradeProjection::unit_price: radroots_core::money::Money
+pub struct radroots_sdk::listing::RadrootsPublicClassifiedListingAddress
+pub radroots_sdk::listing::RadrootsPublicClassifiedListingAddress::address: radroots_event::id::ClassifiedListingAddress
+pub radroots_sdk::listing::RadrootsPublicClassifiedListingAddress::kind: u32
+pub radroots_sdk::listing::RadrootsPublicClassifiedListingAddress::listing_id: radroots_event::id::DTag
+pub radroots_sdk::listing::RadrootsPublicClassifiedListingAddress::seller_pubkey: radroots_identity::key::PublicKey
+impl radroots_sdk::listing::RadrootsPublicClassifiedListingAddress
+pub fn radroots_sdk::listing::RadrootsPublicClassifiedListingAddress::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event::id::ParseError>
+pub trait radroots_sdk::listing::BinPricingTryExt
+pub fn radroots_sdk::listing::BinPricingTryExt::try_subtotal_for_count(&self, u32) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingSubtotal, radroots_core::quantity_price::Error>
+pub fn radroots_sdk::listing::BinPricingTryExt::try_total_for_count(&self, u32) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingTotal, radroots_core::quantity_price::Error>
+impl radroots_sdk::listing::BinPricingTryExt for radroots_event::listing::operational::OperationalListingBin
+pub fn radroots_event::listing::operational::OperationalListingBin::try_subtotal_for_count(&self, u32) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingSubtotal, radroots_core::quantity_price::Error>
+pub fn radroots_event::listing::operational::OperationalListingBin::try_total_for_count(&self, u32) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingTotal, radroots_core::quantity_price::Error>
+pub fn radroots_sdk::listing::parse_classified_listing_address(impl core::convert::AsRef<str>) -> core::result::Result<radroots_sdk::listing::RadrootsClassifiedListingAddressParts, radroots_event::id::ParseError>
+pub fn radroots_sdk::listing::parse_operational_listing_event(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event::listing::operational::OperationalListing, radroots_event::listing::operational::OperationalListingParseError>
+pub fn radroots_sdk::listing::parse_public_classified_listing_address(impl core::convert::AsRef<str>) -> core::result::Result<radroots_sdk::listing::RadrootsPublicClassifiedListingAddress, radroots_event::id::ParseError>
+pub fn radroots_sdk::listing::prepare(radroots_sdk::listing::PrepareRequest) -> core::result::Result<radroots_sdk::listing::Plan, radroots_sdk::listing::PrepareError>
+pub fn radroots_sdk::listing::validate_operational_listing_event(&radroots_event_codec::verification::v1::RadrootsSignatureVerifiedEvent) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingTradeProjection, radroots_event::trade::validation::OperationalListingValidationError>
+pub fn radroots_sdk::listing::validate_operational_listing_model(radroots_event::listing::operational::OperationalListing, &radroots_identity::key::PublicKey) -> core::result::Result<radroots_sdk::listing::RadrootsOperationalListingTradeProjection, radroots_event::trade::validation::OperationalListingValidationError>
+pub mod radroots_sdk::signing
+pub use radroots_sdk::signing::AuthorizationHeader
+pub use radroots_sdk::signing::BlossomAuthorizationPlan
+#[non_exhaustive] pub enum radroots_sdk::signing::BlossomSigningError
+pub radroots_sdk::signing::BlossomSigningError::Encoding(radroots_nostr::blossom::AuthorizationError)
+pub radroots_sdk::signing::BlossomSigningError::Signing(radroots_signing::error::Error)
+pub radroots_sdk::signing::BlossomSigningError::WrongPurpose
+impl core::error::Error for radroots_sdk::signing::BlossomSigningError
+pub fn radroots_sdk::signing::BlossomSigningError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_sdk::signing::BlossomSigningError
+pub fn radroots_sdk::signing::BlossomSigningError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_sdk::signing::Mode
+pub radroots_sdk::signing::Mode::Host
+pub radroots_sdk::signing::Mode::Local
+pub radroots_sdk::signing::Mode::Nip46
+pub struct radroots_sdk::signing::Operations<'a>
+impl<'a> radroots_sdk::signing::Operations<'a>
+pub async fn radroots_sdk::signing::Operations<'a>::authorize_blossom_upload(&self, radroots_signing::request::SignRequest) -> core::result::Result<radroots_nostr::blossom::AuthorizationHeader, radroots_sdk::signing::BlossomSigningError>
+pub async fn radroots_sdk::signing::Operations<'a>::sign(&self, radroots_signing::request::SignRequest) -> core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>
+impl core::fmt::Debug for radroots_sdk::signing::Operations<'_>
+pub fn radroots_sdk::signing::Operations<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::signing::Provider
+impl radroots_sdk::signing::Provider
+pub fn radroots_sdk::signing::Provider::as_signer(&self) -> &dyn radroots_signing::signer::Signer
+pub fn radroots_sdk::signing::Provider::host(alloc::sync::Arc<dyn radroots_signing::signer::Signer>) -> Self
+pub fn radroots_sdk::signing::Provider::local(radroots_nostr::signing::LocalSigner) -> Self
+pub const fn radroots_sdk::signing::Provider::mode(&self) -> radroots_sdk::signing::Mode
+pub fn radroots_sdk::signing::Provider::nip46(alloc::sync::Arc<dyn radroots_signing::signer::Signer>) -> Self
+pub async fn radroots_sdk::signing::Provider::sign(&self, radroots_signing::request::SignRequest) -> core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>
+pub async fn radroots_sdk::signing::Provider::status(&self) -> core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>
+impl core::fmt::Debug for radroots_sdk::signing::Provider
+pub fn radroots_sdk::signing::Provider::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_sdk::signing::blossom_upload_request(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::BlossomAuthorizationPlan, radroots_signing::request::SignPolicy) -> core::result::Result<radroots_signing::request::SignRequest, radroots_signing::error::Error>
+pub mod radroots_sdk::storage
+pub struct radroots_sdk::storage::Operations<'a>
+impl<'a> radroots_sdk::storage::Operations<'a>
+pub async fn radroots_sdk::storage::Operations<'a>::begin_backup(&self, radroots_storage::backup::BackupPlan) -> core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::error::Error>
+pub async fn radroots_sdk::storage::Operations<'a>::begin_restore(&self, radroots_storage::backup::RestorePlan) -> core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::error::Error>
+pub async fn radroots_sdk::storage::Operations<'a>::integrity(&self) -> core::result::Result<radroots_sdk::storage::IntegrityStatus, radroots_storage::error::Error>
+pub async fn radroots_sdk::storage::Operations<'a>::status(&self) -> core::result::Result<radroots_sdk::storage::Status, radroots_storage::error::Error>
+pub async fn radroots_sdk::storage::Operations<'a>::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::error::Error>
+pub async fn radroots_sdk::storage::Operations<'a>::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::error::Error>
+impl core::fmt::Debug for radroots_sdk::storage::Operations<'_>
+pub fn radroots_sdk::storage::Operations<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub type radroots_sdk::storage::IntegrityStatus = radroots_storage::status::IntegrityStatus
+pub type radroots_sdk::storage::SqliteOpenMode = radroots_storage_sqlite::open::OpenMode
+pub type radroots_sdk::storage::SqliteOptions = radroots_storage_sqlite::config::OpenOptions
+pub type radroots_sdk::storage::SqlitePaths = radroots_storage_sqlite::open::Paths
+pub type radroots_sdk::storage::Status = radroots_storage::status::StorageStatus
+pub mod radroots_sdk::sync
+pub struct radroots_sdk::sync::HostPolicy
+impl radroots_sdk::sync::HostPolicy
+pub fn radroots_sdk::sync::HostPolicy::new(u64, u64, u64) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub fn radroots_sdk::sync::HostPolicy::standard() -> Self
+impl core::default::Default for radroots_sdk::sync::HostPolicy
+pub fn radroots_sdk::sync::HostPolicy::default() -> Self
+pub struct radroots_sdk::sync::Operations<'a>
+impl<'a> radroots_sdk::sync::Operations<'a>
+pub async fn radroots_sdk::sync::Operations<'a>::admit_signed(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::AdmissionRunReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::cancel_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::PushCancellationReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::deliver_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::DeliveryExecutionReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::ingest(&self, radroots_transport::source::ObservedEvent, &dyn radroots_sync::ingest::AdmissionPolicy) -> core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::ingest_batch(&self, alloc::vec::Vec<radroots_transport::source::ObservedEvent>, &dyn radroots_sync::ingest::AdmissionPolicy) -> radroots_sync::ingest::IngestBatchReceipt
+pub async fn radroots_sdk::sync::Operations<'a>::prepare_push(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::PushPreparation, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::pull(&self, radroots_sync::pull::PullRequest, &dyn radroots_sync::ingest::AdmissionPolicy) -> core::result::Result<radroots_sync::pull::PullReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::push_status(&self, radroots_sync::policy::SyncId) -> core::result::Result<core::option::Option<radroots_sync::push::PushStatus>, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::refresh_projection(&self, radroots_sync::projection::RefreshRequest, &dyn radroots_sync::projection::Reducer) -> core::result::Result<radroots_sync::projection::RefreshReceipt, radroots_sync::policy::Error>
+pub fn radroots_sdk::sync::Operations<'a>::retry_decision(&self, &radroots_storage::authored_delivery::AuthoredDeliveryPlan, u64) -> core::result::Result<radroots_protocol::runtime::v1::SyncRetryDecision, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::sign_prepared(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::SigningRunReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::status(&self, &[radroots_storage::projection::ProjectionId]) -> core::result::Result<radroots_sync::status::SyncStatus, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::submit_push(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::PushStatus, radroots_sync::policy::Error>
+impl core::fmt::Debug for radroots_sdk::sync::Operations<'_>
+pub fn radroots_sdk::sync::Operations<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_sdk::trade
+#[non_exhaustive] pub enum radroots_sdk::trade::PrepareErrorKind
+pub radroots_sdk::trade::PrepareErrorKind::CanonicalMutation
+pub radroots_sdk::trade::PrepareErrorKind::Draft
+pub radroots_sdk::trade::PrepareErrorKind::Encode
+pub radroots_sdk::trade::PrepareErrorKind::UnauthorizedActor
+pub radroots_sdk::trade::PrepareErrorKind::Workflow
+#[non_exhaustive] pub enum radroots_sdk::trade::PrivateTermsError
+pub radroots_sdk::trade::PrivateTermsError::EvidenceMismatch
+pub radroots_sdk::trade::PrivateTermsError::NotRequired
+pub radroots_sdk::trade::PrivateTermsError::Storage
+pub struct radroots_sdk::trade::EnqueueRequest
+impl radroots_sdk::trade::EnqueueRequest
+pub const fn radroots_sdk::trade::EnqueueRequest::new(radroots_sync::policy::SyncId, radroots_storage::journal::IdempotencyKey, radroots_sdk::trade::Plan, radroots_sdk::transport::Profile, u64, radroots_signing::request::CancellationPolicy) -> Self
+pub struct radroots_sdk::trade::Operations<'a>
+impl<'a> radroots_sdk::trade::Operations<'a>
+pub async fn radroots_sdk::trade::Operations<'a>::enqueue(&self, radroots_sdk::trade::EnqueueRequest) -> core::result::Result<radroots_sync::push::PushStatus, radroots_sync::policy::Error>
+pub async fn radroots_sdk::trade::Operations<'a>::private_artifact(&self, radroots_storage::private_artifact::PrivateArtifactId) -> core::result::Result<core::option::Option<radroots_storage::private_artifact::PrivateArtifactMetadata>, radroots_storage::error::Error>
+pub async fn radroots_sdk::trade::Operations<'a>::query_visible(&self, radroots_storage::event::EventQuery) -> core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::error::Error>
+pub async fn radroots_sdk::trade::Operations<'a>::verify_private_terms(&self, &radroots_sdk::trade::Plan, radroots_storage::private_artifact::PrivateArtifactId) -> core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_sdk::trade::PrivateTermsError>
+impl core::fmt::Debug for radroots_sdk::trade::Operations<'_>
+pub fn radroots_sdk::trade::Operations<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::trade::Plan
+impl radroots_sdk::trade::Plan
+pub const fn radroots_sdk::trade::Plan::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_sdk::trade::Plan::authored_event(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_sdk::trade::Plan::workflow(&self) -> &radroots_trade::workflow::WorkflowPlan
+pub struct radroots_sdk::trade::PrepareError
+impl radroots_sdk::trade::PrepareError
+pub const fn radroots_sdk::trade::PrepareError::kind(&self) -> radroots_sdk::trade::PrepareErrorKind
+impl core::error::Error for radroots_sdk::trade::PrepareError
+pub fn radroots_sdk::trade::PrepareError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_sdk::trade::PrepareError
+pub fn radroots_sdk::trade::PrepareError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::trade::PrepareError
+pub fn radroots_sdk::trade::PrepareError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::trade::PrepareRequest
+impl radroots_sdk::trade::PrepareRequest
+pub const fn radroots_sdk::trade::PrepareRequest::new(radroots_signing::actor::Actor, radroots_event::trade::TradeMutationEnvelopeV1) -> Self
+pub fn radroots_sdk::trade::prepare(radroots_sdk::trade::PrepareRequest) -> core::result::Result<radroots_sdk::trade::Plan, radroots_sdk::trade::PrepareError>
+pub fn radroots_sdk::trade::project(radroots_trade::trade_contract_v1::RadrootsTradeReductionInputV1) -> radroots_trade::trade_contract_v1::RadrootsTradeProjectionV1
+pub mod radroots_sdk::transport
+pub use radroots_sdk::transport::RelayUrlPolicy
+#[non_exhaustive] pub enum radroots_sdk::transport::DaemonAuth
+pub radroots_sdk::transport::DaemonAuth::BearerToken(alloc::string::String)
+pub radroots_sdk::transport::DaemonAuth::None
+impl core::fmt::Debug for radroots_sdk::transport::DaemonAuth
+pub fn radroots_sdk::transport::DaemonAuth::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_sdk::transport::DaemonErrorKind
+pub radroots_sdk::transport::DaemonErrorKind::Authentication
+pub radroots_sdk::transport::DaemonErrorKind::InvalidRequest
+pub radroots_sdk::transport::DaemonErrorKind::InvalidResponse
+pub radroots_sdk::transport::DaemonErrorKind::Rpc
+pub radroots_sdk::transport::DaemonErrorKind::Transport
+pub struct radroots_sdk::transport::DaemonConfig
+impl radroots_sdk::transport::DaemonConfig
+pub fn radroots_sdk::transport::DaemonConfig::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_sdk::transport::DaemonConfig::with_auth(self, radroots_sdk::transport::DaemonAuth) -> Self
+pub const fn radroots_sdk::transport::DaemonConfig::with_timeout(self, core::time::Duration) -> Self
+pub struct radroots_sdk::transport::DaemonDelivery
+impl radroots_sdk::transport::DaemonDelivery
+pub async fn radroots_sdk::transport::DaemonDelivery::deliver(&self, radroots_event::draft::SignedEvent, radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy, radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy, core::option::Option<alloc::string::String>, core::option::Option<u64>) -> core::result::Result<radroots_protocol::radrootsd::transport_publish::v5::EventResponse, radroots_sdk::transport::DaemonError>
+pub fn radroots_sdk::transport::DaemonDelivery::new(radroots_sdk::transport::DaemonConfig) -> Self
+pub struct radroots_sdk::transport::DaemonError
+impl radroots_sdk::transport::DaemonError
+pub const fn radroots_sdk::transport::DaemonError::kind(&self) -> radroots_sdk::transport::DaemonErrorKind
+impl core::error::Error for radroots_sdk::transport::DaemonError
+pub fn radroots_sdk::transport::DaemonError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_sdk::transport::DaemonError
+pub fn radroots_sdk::transport::DaemonError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::transport::DaemonError
+pub fn radroots_sdk::transport::DaemonError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::transport::NostrSlot
+impl radroots_sdk::transport::NostrSlot
+pub fn radroots_sdk::transport::NostrSlot::clear(&self)
+pub fn radroots_sdk::transport::NostrSlot::configure<I, S>(&self, I) -> radroots_sdk::error::Result<()> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub fn radroots_sdk::transport::NostrSlot::new(radroots_transport_nostr::relay::RelayUrlPolicy) -> Self
+pub fn radroots_sdk::transport::NostrSlot::targets(&self) -> core::option::Option<radroots_transport::target::TargetSet>
+impl core::fmt::Debug for radroots_sdk::transport::NostrSlot
+pub fn radroots_sdk::transport::NostrSlot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl radroots_transport::sink::EventSink for radroots_sdk::transport::NostrSlot
+pub fn radroots_sdk::transport::NostrSlot::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_sdk::transport::NostrSlot::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SinkStatus, radroots_transport::error::Error>>
+impl radroots_transport::source::EventSource for radroots_sdk::transport::NostrSlot
+pub fn radroots_sdk::transport::NostrSlot::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
+pub fn radroots_sdk::transport::NostrSlot::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SourceStatus, radroots_transport::error::Error>>
+pub struct radroots_sdk::transport::Profile
+impl radroots_sdk::transport::Profile
+pub fn radroots_sdk::transport::Profile::delivery(radroots_transport::target::TargetSet, radroots_transport::policy::SatisfactionPolicy) -> core::result::Result<Self, radroots_transport::error::Error>
+pub const fn radroots_sdk::transport::Profile::is_local_only(&self) -> bool
+pub const fn radroots_sdk::transport::Profile::local_only() -> Self
+pub const fn radroots_sdk::transport::Profile::satisfaction(&self) -> core::option::Option<&radroots_transport::policy::SatisfactionPolicy>
+pub const fn radroots_sdk::transport::Profile::sink_status(&self) -> core::option::Option<&radroots_transport::status::SinkStatus>
+pub const fn radroots_sdk::transport::Profile::source_status(&self) -> core::option::Option<&radroots_transport::status::SourceStatus>
+pub const fn radroots_sdk::transport::Profile::targets(&self) -> core::option::Option<&radroots_transport::target::TargetSet>
+pub fn radroots_sdk::transport::Profile::unavailable_preview(radroots_transport::id::TransportId) -> Self
+impl core::default::Default for radroots_sdk::transport::Profile
+pub fn radroots_sdk::transport::Profile::default() -> Self
+pub struct radroots_sdk::Client
+impl radroots_sdk::client::Client
+pub fn radroots_sdk::client::Client::capabilities(&self) -> radroots_sdk::capability::CapabilityReport
+pub async fn radroots_sdk::client::Client::close(&self) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::client::Client::farm(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::farm::Operations<'_>>>
+pub fn radroots_sdk::client::Client::is_closed(&self) -> bool
+pub fn radroots_sdk::client::Client::listing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::listing::Operations<'_>>>
+pub fn radroots_sdk::client::Client::signer(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_signing::signer::Signer>>
+pub fn radroots_sdk::client::Client::signing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::signing::Operations<'_>>>
+pub fn radroots_sdk::client::Client::sink(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_transport::sink::EventSink>>
+pub fn radroots_sdk::client::Client::source(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_transport::source::EventSource>>
+pub fn radroots_sdk::client::Client::storage(&self) -> radroots_sdk::error::Result<&dyn radroots_storage::Storage>
+pub async fn radroots_sdk::client::Client::storage_integrity(&self) -> radroots_sdk::error::Result<radroots_sdk::storage::IntegrityStatus>
+pub fn radroots_sdk::client::Client::storage_operations(&self) -> radroots_sdk::error::Result<radroots_sdk::storage::Operations<'_>>
+pub async fn radroots_sdk::client::Client::storage_status(&self) -> radroots_sdk::error::Result<radroots_sdk::storage::Status>
+pub fn radroots_sdk::client::Client::sync(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::sync::Operations<'_>>>
+pub fn radroots_sdk::client::Client::trade(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::trade::Operations<'_>>>
+impl core::fmt::Debug for radroots_sdk::client::Client
+pub fn radroots_sdk::client::Client::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::ClientBuilder
+impl radroots_sdk::client::ClientBuilder
+pub fn radroots_sdk::client::ClientBuilder::build(self) -> radroots_sdk::error::Result<radroots_sdk::client::Client>
+pub fn radroots_sdk::client::ClientBuilder::capability_availability(self, radroots_sdk::capability::CapabilityId, radroots_sdk::capability::Availability) -> Self
+pub fn radroots_sdk::client::ClientBuilder::host_sync(self, radroots_sdk::sync::HostPolicy) -> Self
+pub fn radroots_sdk::client::ClientBuilder::memory(radroots_storage::event::SourceGeneration) -> Self
+pub fn radroots_sdk::client::ClientBuilder::memory_default() -> Self
+pub fn radroots_sdk::client::ClientBuilder::new() -> Self
+pub fn radroots_sdk::client::ClientBuilder::nostr(self, radroots_sdk::transport::NostrSlot) -> Self
+pub fn radroots_sdk::client::ClientBuilder::signer(self, alloc::sync::Arc<dyn radroots_signing::signer::Signer>) -> Self
+pub fn radroots_sdk::client::ClientBuilder::signing(self, radroots_sdk::signing::Provider) -> Self
+pub fn radroots_sdk::client::ClientBuilder::sink(self, alloc::sync::Arc<dyn radroots_transport::sink::EventSink>) -> Self
+pub fn radroots_sdk::client::ClientBuilder::source(self, alloc::sync::Arc<dyn radroots_transport::source::EventSource>) -> Self
+pub async fn radroots_sdk::client::ClientBuilder::sqlite(radroots_sdk::storage::SqliteOptions) -> radroots_sdk::error::Result<Self>
+pub fn radroots_sdk::client::ClientBuilder::storage(self, alloc::sync::Arc<dyn radroots_storage::Storage>) -> Self
+pub fn radroots_sdk::client::ClientBuilder::sync_engine(self, radroots_sync::engine::Engine) -> Self
+impl core::fmt::Debug for radroots_sdk::client::ClientBuilder
+pub fn radroots_sdk::client::ClientBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::Error
+impl radroots_sdk::error::Error
+pub const fn radroots_sdk::error::Error::descriptor(&self) -> radroots_sdk::error::ErrorDescriptor
+pub const fn radroots_sdk::error::Error::kind(&self) -> radroots_sdk::error::ErrorKind
+pub fn radroots_sdk::error::Error::to_report(&self) -> radroots_protocol::error::v1::ErrorReport
+impl core::error::Error for radroots_sdk::error::Error
+pub fn radroots_sdk::error::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_sdk::error::Error
+pub fn radroots_sdk::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::error::Error
+pub fn radroots_sdk::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub type radroots_sdk::Result<T> = core::result::Result<T, radroots_sdk::error::Error>

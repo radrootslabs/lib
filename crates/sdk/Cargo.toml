@@ -30,6 +30,7 @@ autoexamples = false
 features = [
   "memory",
   "sync",
+  "blossom",
   "nostr",
   "nip46",
   "local-signing",
@@ -45,7 +46,8 @@ default = ["memory"]
 memory = ["radroots_storage/memory"]
 sqlite = ["dep:radroots_storage_sqlite"]
 sync = ["dep:radroots_sync", "dep:uuid"]
-nostr = ["sync", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
+nostr = ["sync", "blossom", "dep:radroots_transport_nostr"]
+blossom = ["dep:radroots_nostr", "radroots_nostr/blossom"]
 nip46 = ["nostr", "dep:radroots_nostr_connect"]
 local-signing = [
   "dep:radroots_nostr",
@@ -95,6 +97,7 @@ uuid = { workspace = true, optional = true, features = ["v4"] }
 
 [dev-dependencies]
 nostr = { workspace = true, features = ["std"] }
+radroots_blossom = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

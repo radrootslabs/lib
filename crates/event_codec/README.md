@@ -16,6 +16,7 @@ New code should enter through these modules:
 
 | Module | Responsibility |
 | --- | --- |
+| `authoring` | Freeze exact registry-authored event plans and distinct HTTP-only Blossom authorization plans with semantic digests. |
 | `canonical` | Compute canonical NIP-01 preimages and event identifiers without asserting trust. |
 | `decode` | Parse bounded wire data and domain projections without silently verifying later stages. |
 | `encode` | Produce deterministic JSON, tags, and unsigned wire parts from validated native inputs. |
@@ -85,6 +86,9 @@ guarantees.
   declared ID.
 - Domain encoders accept checked `radroots_event` inputs and emit unsigned
   wire parts. Signing and publication belong to the owning runtime.
+- `authoring::BlossomAuthorizationPlan` binds a strict BUD-11 upload claim to
+  an expected author and event ID under a domain-separated digest. Its
+  distinct type cannot be passed to relay push APIs.
 - Manifest JSON and digests are generated from versioned contract authority;
   a manifest feature does not grant storage or publication authority.
 

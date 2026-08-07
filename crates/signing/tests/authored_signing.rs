@@ -1,4 +1,8 @@
 use nostr::{EventBuilder, JsonUtil, Keys, Kind as NostrKind, SecretKey, Timestamp};
+use radroots_blossom::{
+    Sha256 as BlossomSha256,
+    authorization::{AuthoredUploadClaim, AuthorizationContent, ServerDomain},
+};
 use radroots_event::{
     GenericEventDraft,
     contract::AuthorRole,
@@ -8,12 +12,12 @@ use radroots_event::{
     },
     wire::Nip01EventWire,
 };
-use radroots_event_codec::authoring::AuthoredEventPlan;
+use radroots_event_codec::authoring::{AuthoredEventPlan, BlossomAuthorizationPlan};
 use radroots_identity::{AccountId, PublicKey};
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
     Actor, AuthoredArtifactId, CurrentAuthoringAuthority, CurrentAuthoringDecision, Error,
-    SignReceipt, SignRequest, SigningIntentId, SigningOperationId,
+    SignReceipt, SignRequest, SigningIntentId, SigningOperationId, SigningPurpose,
     actor::ActorSource,
     authorization::ManagedSigningPolicy,
     error::Kind,
@@ -82,6 +86,29 @@ fn request() -> SignRequest {
         policy(),
     )
     .expect("request")
+}
+
+fn blossom_plan() -> BlossomAuthorizationPlan {
+    let claim = AuthoredUploadClaim::new(
+        AuthorizationContent::parse("Upload exact image").expect("content"),
+        ServerDomain::parse("media.example").expect("server"),
+        BlossomSha256::digest(b"exact-image"),
+        CREATED_AT,
+        60,
+    )
+    .expect("upload claim");
+    BlossomAuthorizationPlan::for_upload(&claim, public_key()).expect("authorization plan")
+}
+
+fn blossom_request() -> SignRequest {
+    SignRequest::blossom_upload(
+        OperationId::SyncPush,
+        intent(9, 10),
+        actor(ActorSource::ExplicitPublicKey, [AuthorRole::Any]),
+        blossom_plan(),
+        policy(),
+    )
+    .expect("Blossom request")
 }
 
 fn signed_event() -> radroots_event::SignedEvent {
@@ -158,7 +185,7 @@ fn authorization_decisions_are_current_and_explicit() {
     .expect("explicitly allowed deprecated plan");
     assert!(matches!(
         allowed.authorization(),
-        CurrentAuthoringDecision::AllowedDeprecated { .. }
+        Some(CurrentAuthoringDecision::AllowedDeprecated { .. })
     ));
 }
 
@@ -236,13 +263,127 @@ fn authorization_enforces_key_role_and_host_provenance() {
 }
 
 #[test]
+fn blossom_request_is_http_only_domain_separated_and_author_bound() {
+    let request = blossom_request();
+    assert_eq!(
+        request.purpose(),
+        SigningPurpose::BlossomUploadAuthorization
+    );
+    assert!(request.authored_plan().is_none());
+    assert_eq!(request.blossom_authorization_plan(), Some(&blossom_plan()));
+    assert_eq!(request.authorization(), None);
+    assert_eq!(request.kind(), 24_242);
+
+    let wrong_key =
+        PublicKey::from_hex("e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af")
+            .expect("other public key");
+    let wrong_actor =
+        Actor::new(wrong_key, ActorSource::ExplicitPublicKey, [AuthorRole::Any]).expect("actor");
+    assert_eq!(
+        SignRequest::blossom_upload(
+            OperationId::SyncPush,
+            intent(9, 10),
+            wrong_actor,
+            blossom_plan(),
+            policy(),
+        )
+        .expect_err("author mismatch")
+        .kind(),
+        Kind::AuthorizationDenied
+    );
+}
+
+#[test]
+fn blossom_receipt_rejects_mismatch_lateness_and_cancellation() {
+    let request = blossom_request();
+    let tags = request
+        .tags()
+        .iter()
+        .cloned()
+        .map(nostr::Tag::parse)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("BUD-11 tags");
+    let valid = signed_event_with(
+        &keys(),
+        24_242,
+        request.content(),
+        request.created_at(),
+        tags.clone(),
+    );
+    SignReceipt::from_signed_event(&request, valid, DEADLINE_MS - 1)
+        .expect("verified BUD-11 receipt");
+
+    let mismatched = signed_event_with(
+        &keys(),
+        24_242,
+        "Upload a different image",
+        request.created_at(),
+        tags,
+    );
+    assert_eq!(
+        SignReceipt::from_signed_event(&request, mismatched, DEADLINE_MS - 1)
+            .expect_err("mismatched output")
+            .kind(),
+        Kind::SignerOutputInvalid
+    );
+    assert_eq!(
+        SignReceipt::from_signed_event(
+            &request,
+            signed_event_with(
+                &keys(),
+                24_242,
+                request.content(),
+                request.created_at(),
+                request
+                    .tags()
+                    .iter()
+                    .cloned()
+                    .map(nostr::Tag::parse)
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("BUD-11 tags"),
+            ),
+            DEADLINE_MS,
+        )
+        .expect_err("late output")
+        .kind(),
+        Kind::DeadlineExceeded
+    );
+
+    let signal = CancellationSignal::new();
+    let cancelled = request.with_cancellation_signal(signal.clone());
+    signal.cancel();
+    assert_eq!(
+        SignReceipt::from_signed_event(
+            &cancelled,
+            signed_event_with(
+                &keys(),
+                24_242,
+                cancelled.content(),
+                cancelled.created_at(),
+                cancelled
+                    .tags()
+                    .iter()
+                    .cloned()
+                    .map(nostr::Tag::parse)
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("BUD-11 tags"),
+            ),
+            DEADLINE_MS - 1,
+        )
+        .expect_err("cancelled output")
+        .kind(),
+        Kind::SignerCancelled
+    );
+}
+
+#[test]
 fn request_identity_deadline_and_cancellation_are_exact() {
     let request = request();
     let replay = request.clone();
     assert_eq!(request.operation_kind(), OperationId::SyncPush);
     assert_eq!(request.intent_id(), intent(1, 2));
     assert_eq!(request.actor().public_key(), public_key());
-    assert_eq!(request.plan().digest(), plan().digest());
+    assert_eq!(request.plan_digest(), plan().digest());
     assert_eq!(request.policy(), policy());
     assert!(!request.cancellation_signal().is_cancelled());
     assert_eq!(request.signer_request_id(), replay.signer_request_id());

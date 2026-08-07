@@ -165,6 +165,141 @@ pub fn radroots_event_codec::admission::RadrootsEventAdmissionError::source(&sel
 impl core::fmt::Display for radroots_event_codec::admission::RadrootsEventAdmissionError
 pub fn radroots_event_codec::admission::RadrootsEventAdmissionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn radroots_event_codec::admission::admit_verified_event(crate::verification::RadrootsSignatureVerifiedEvent) -> core::result::Result<radroots_event_codec::admission::RadrootsAdmittedEvent, radroots_event_codec::admission::RadrootsEventAdmissionError>
+pub mod radroots_event_codec::authoring
+#[non_exhaustive] pub enum radroots_event_codec::authoring::AuthoredPlanError
+pub radroots_event_codec::authoring::AuthoredPlanError::Calendar(radroots_event_codec::encode::EventEncodeError)
+pub radroots_event_codec::authoring::AuthoredPlanError::CanonicalEventId(radroots_event::wire::v1::CanonicalEventIdError)
+pub radroots_event_codec::authoring::AuthoredPlanError::ContentTooLarge
+pub radroots_event_codec::authoring::AuthoredPlanError::ContentTooLarge::actual: usize
+pub radroots_event_codec::authoring::AuthoredPlanError::ContentTooLarge::max: usize
+pub radroots_event_codec::authoring::AuthoredPlanError::ContractIdentity(radroots_event::contract::ContractIdentityError)
+pub radroots_event_codec::authoring::AuthoredPlanError::ContractKindMismatch
+pub radroots_event_codec::authoring::AuthoredPlanError::ContractKindMismatch::actual: u32
+pub radroots_event_codec::authoring::AuthoredPlanError::ContractKindMismatch::expected: u32
+pub radroots_event_codec::authoring::AuthoredPlanError::ContractNotTyped
+pub radroots_event_codec::authoring::AuthoredPlanError::ContractNotTyped::contract_id: alloc::string::String
+pub radroots_event_codec::authoring::AuthoredPlanError::Envelope(radroots_event::envelope::EventEnvelopeError)
+pub radroots_event_codec::authoring::AuthoredPlanError::FoodAvailability(radroots_event_codec::encode::food_availability::RadrootsFoodAvailabilityEncodeError)
+pub radroots_event_codec::authoring::AuthoredPlanError::InvalidAuthor(radroots_identity::error::Error)
+pub radroots_event_codec::authoring::AuthoredPlanError::Profile(radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError)
+impl radroots_event_codec::authoring::AuthoredPlanError
+pub const fn radroots_event_codec::authoring::AuthoredPlanError::code(&self) -> &'static str
+impl core::error::Error for radroots_event_codec::authoring::AuthoredPlanError
+impl core::fmt::Display for radroots_event_codec::authoring::AuthoredPlanError
+pub fn radroots_event_codec::authoring::AuthoredPlanError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_event_codec::authoring::PlanDecodeError
+pub radroots_event_codec::authoring::PlanDecodeError::ContractIdentity(radroots_event::contract::ContractIdentityError)
+pub radroots_event_codec::authoring::PlanDecodeError::ContractKindMismatch
+pub radroots_event_codec::authoring::PlanDecodeError::ContractKindMismatch::actual: u32
+pub radroots_event_codec::authoring::PlanDecodeError::ContractKindMismatch::expected: u32
+pub radroots_event_codec::authoring::PlanDecodeError::EventIdMismatch
+pub radroots_event_codec::authoring::PlanDecodeError::EventIdMismatch::computed: alloc::string::String
+pub radroots_event_codec::authoring::PlanDecodeError::EventIdMismatch::declared: alloc::string::String
+pub radroots_event_codec::authoring::PlanDecodeError::ExpectedAuthor(alloc::string::String)
+pub radroots_event_codec::authoring::PlanDecodeError::ExpectedEventId(alloc::string::String)
+pub radroots_event_codec::authoring::PlanDecodeError::HistoricalProfileUnavailable
+pub radroots_event_codec::authoring::PlanDecodeError::HistoricalProfileUnavailable::contract_id: alloc::string::String
+pub radroots_event_codec::authoring::PlanDecodeError::HistoricalShape(alloc::string::String)
+pub radroots_event_codec::authoring::PlanDecodeError::Json(alloc::string::String)
+pub radroots_event_codec::authoring::PlanDecodeError::NonCanonicalExpectedAuthor
+pub radroots_event_codec::authoring::PlanDecodeError::NonCanonicalExpectedEventId
+pub radroots_event_codec::authoring::PlanDecodeError::PlanDigest(radroots_event_codec::authoring::PlanDigestError)
+pub radroots_event_codec::authoring::PlanDecodeError::PlanDigestMismatch
+pub radroots_event_codec::authoring::PlanDecodeError::PlanDigestMismatch::computed: alloc::string::String
+pub radroots_event_codec::authoring::PlanDecodeError::PlanDigestMismatch::declared: alloc::string::String
+pub radroots_event_codec::authoring::PlanDecodeError::RawJsonTooLarge
+pub radroots_event_codec::authoring::PlanDecodeError::RawJsonTooLarge::actual: usize
+pub radroots_event_codec::authoring::PlanDecodeError::RawJsonTooLarge::max: usize
+pub radroots_event_codec::authoring::PlanDecodeError::UnsupportedSchemaVersion
+pub radroots_event_codec::authoring::PlanDecodeError::UnsupportedSchemaVersion::actual: u32
+impl core::error::Error for radroots_event_codec::authoring::PlanDecodeError
+impl core::fmt::Display for radroots_event_codec::authoring::PlanDecodeError
+pub fn radroots_event_codec::authoring::PlanDecodeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_event_codec::authoring::PlanRegistryRelation
+pub radroots_event_codec::authoring::PlanRegistryRelation::Current
+pub radroots_event_codec::authoring::PlanRegistryRelation::Historical
+pub struct radroots_event_codec::authoring::AuthoredEventBody
+impl radroots_event_codec::authoring::AuthoredEventBody
+pub fn radroots_event_codec::authoring::AuthoredEventBody::content(&self) -> &str
+pub const fn radroots_event_codec::authoring::AuthoredEventBody::contract(&self) -> &radroots_event::contract::ContractKey
+pub const fn radroots_event_codec::authoring::AuthoredEventBody::kind(&self) -> u32
+pub fn radroots_event_codec::authoring::AuthoredEventBody::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
+impl radroots_event_codec::authoring::AuthoredEventBody
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_ask(&radroots_event::post::AuthoredAsk) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_calendar_date_event(&radroots_event::calendar::AuthoredCalendarDateEvent) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_calendar_time_event(&radroots_event::calendar::AuthoredCalendarTimeEvent) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_food_availability(&radroots_event::food::availability::FoodAvailabilityDetails, u64) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip09_deletion_request(&radroots_event::post::deletion::AuthoredNip09DeletionRequest) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip10_reply(&radroots_event::post::reply::AuthoredNip10Reply) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip22_comment(&radroots_event::post::comment::AuthoredNip22Comment) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_photo_update(&radroots_event::post::AuthoredPhotoUpdate) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_profile(&radroots_event::profile::AuthoredProfile) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_update(&radroots_event::post::AuthoredUpdate) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub struct radroots_event_codec::authoring::AuthoredEventPlan
+impl radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_event_codec::authoring::AuthoredEventPlan::author(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_event_codec::authoring::AuthoredEventPlan::body(&self) -> &radroots_event_codec::authoring::AuthoredEventBody
+pub const fn radroots_event_codec::authoring::AuthoredEventPlan::created_at(&self) -> u64
+pub const fn radroots_event_codec::authoring::AuthoredEventPlan::digest(&self) -> radroots_event_codec::authoring::PlanDigest
+pub const fn radroots_event_codec::authoring::AuthoredEventPlan::expected_event_id(&self) -> &radroots_event::id::EventId
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_generic(radroots_event::generic_draft::GenericEventDraft) -> core::result::Result<Self, radroots_event::draft::DraftError>
+impl radroots_event_codec::authoring::AuthoredEventPlan
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::bind(radroots_event_codec::authoring::AuthoredEventBody, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_ask(&radroots_event::post::AuthoredAsk, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_calendar_date_event(&radroots_event::calendar::AuthoredCalendarDateEvent, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_calendar_time_event(&radroots_event::calendar::AuthoredCalendarTimeEvent, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_food_availability(&radroots_event::food::availability::FoodAvailabilityDetails, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip09_deletion_request(&radroots_event::post::deletion::AuthoredNip09DeletionRequest, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip10_reply(&radroots_event::post::reply::AuthoredNip10Reply, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip22_comment(&radroots_event::post::comment::AuthoredNip22Comment, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_photo_update(&radroots_event::post::AuthoredPhotoUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_profile(&radroots_event::profile::AuthoredProfile, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_update(&radroots_event::post::AuthoredUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan
+impl radroots_event_codec::authoring::BlossomAuthorizationPlan
+pub const fn radroots_event_codec::authoring::BlossomAuthorizationPlan::author(&self) -> &radroots_identity::key::PublicKey
+pub fn radroots_event_codec::authoring::BlossomAuthorizationPlan::content(&self) -> &str
+pub const fn radroots_event_codec::authoring::BlossomAuthorizationPlan::created_at(&self) -> u64
+pub const fn radroots_event_codec::authoring::BlossomAuthorizationPlan::digest(&self) -> radroots_event_codec::authoring::PlanDigest
+pub const fn radroots_event_codec::authoring::BlossomAuthorizationPlan::expected_event_id(&self) -> &radroots_event::id::EventId
+pub fn radroots_event_codec::authoring::BlossomAuthorizationPlan::for_upload(&radroots_blossom::authorization::AuthoredUploadClaim, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_event::wire::v1::CanonicalEventIdError>
+pub const fn radroots_event_codec::authoring::BlossomAuthorizationPlan::kind(&self) -> u32
+pub fn radroots_event_codec::authoring::BlossomAuthorizationPlan::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
+pub struct radroots_event_codec::authoring::HistoricalPlanIntegrity
+impl radroots_event_codec::authoring::HistoricalPlanIntegrity
+pub fn radroots_event_codec::authoring::HistoricalPlanIntegrity::into_plan(self) -> radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_event_codec::authoring::HistoricalPlanIntegrity::plan(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub fn radroots_event_codec::authoring::HistoricalPlanIntegrity::registry_relation(&self, radroots_event::contract::RegistryVersion) -> radroots_event_codec::authoring::PlanRegistryRelation
+pub struct radroots_event_codec::authoring::PlanDigest(_)
+impl radroots_event_codec::authoring::PlanDigest
+pub const radroots_event_codec::authoring::PlanDigest::BYTE_LENGTH: usize
+pub const fn radroots_event_codec::authoring::PlanDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_event_codec::authoring::PlanDigest::from_bytes([u8; 32]) -> Self
+pub fn radroots_event_codec::authoring::PlanDigest::parse_hex(&str) -> core::result::Result<Self, radroots_event_codec::authoring::PlanDigestError>
+pub fn radroots_event_codec::authoring::PlanDigest::to_hex(self) -> alloc::string::String
+pub struct radroots_event_codec::authoring::PlanDigestError
+impl core::error::Error for radroots_event_codec::authoring::PlanDigestError
+impl core::fmt::Display for radroots_event_codec::authoring::PlanDigestError
+pub fn radroots_event_codec::authoring::PlanDigestError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_event_codec::authoring::PlanWireV1
+impl radroots_event_codec::authoring::PlanWireV1
+pub fn radroots_event_codec::authoring::PlanWireV1::content(&self) -> &str
+pub const fn radroots_event_codec::authoring::PlanWireV1::contract(&self) -> &radroots_event::contract::ContractKey
+pub const fn radroots_event_codec::authoring::PlanWireV1::created_at(&self) -> u64
+pub const fn radroots_event_codec::authoring::PlanWireV1::expected_author(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_event_codec::authoring::PlanWireV1::expected_event_id(&self) -> &radroots_event::id::EventId
+pub fn radroots_event_codec::authoring::PlanWireV1::from_json(&[u8]) -> core::result::Result<radroots_event_codec::authoring::HistoricalPlanIntegrity, radroots_event_codec::authoring::PlanDecodeError>
+pub fn radroots_event_codec::authoring::PlanWireV1::from_plan(&radroots_event_codec::authoring::AuthoredEventPlan) -> Self
+pub const fn radroots_event_codec::authoring::PlanWireV1::kind(&self) -> u32
+pub const fn radroots_event_codec::authoring::PlanWireV1::plan_digest(&self) -> radroots_event_codec::authoring::PlanDigest
+pub const fn radroots_event_codec::authoring::PlanWireV1::schema_version(&self) -> u32
+pub fn radroots_event_codec::authoring::PlanWireV1::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
+pub fn radroots_event_codec::authoring::PlanWireV1::to_json(&self) -> core::result::Result<alloc::vec::Vec<u8>, radroots_event_codec::authoring::PlanDecodeError>
+impl serde_core::ser::Serialize for radroots_event_codec::authoring::PlanWireV1
+pub fn radroots_event_codec::authoring::PlanWireV1::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub const radroots_event_codec::authoring::PLAN_WIRE_MAX_BYTES: usize
+pub const radroots_event_codec::authoring::PLAN_WIRE_VERSION_V1: u32
+pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 10]
 pub mod radroots_event_codec::canonical
 pub fn radroots_event_codec::canonical::id(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event::id::EventId, radroots_event_codec::canonical::CanonicalError>
 pub fn radroots_event_codec::canonical::id_preimage(&radroots_event::envelope::EventEnvelope) -> core::result::Result<alloc::string::String, radroots_event_codec::canonical::CanonicalError>
@@ -446,36 +581,7 @@ pub fn radroots_event_codec::decode::plot::data_from_event(alloc::string::String
 pub fn radroots_event_codec::decode::plot::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event::farm::plot::Plot>, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::plot::plot_from_event(u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event::farm::plot::Plot, radroots_event_codec::decode::EventParseError>
 pub mod radroots_event_codec::decode::post
-pub struct radroots_event_codec::decode::post::LegacyPost
-pub radroots_event_codec::decode::post::LegacyPost::address_refs: core::option::Option<alloc::vec::Vec<radroots_event::social::SocialTarget>>
-pub radroots_event_codec::decode::post::LegacyPost::content: alloc::string::String
-pub radroots_event_codec::decode::post::LegacyPost::farm: core::option::Option<radroots_event::social::SocialFarmAnchor>
-pub radroots_event_codec::decode::post::LegacyPost::location: core::option::Option<radroots_event::social::SocialLocation>
-pub radroots_event_codec::decode::post::LegacyPost::media: core::option::Option<alloc::vec::Vec<radroots_event::social::SocialMediaMetadata>>
-pub radroots_event_codec::decode::post::LegacyPost::quote_refs: core::option::Option<alloc::vec::Vec<radroots_event::social::SocialTarget>>
-pub radroots_event_codec::decode::post::LegacyPost::topics: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-pub fn radroots_event_codec::decode::post::data_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedData<radroots_event_codec::decode::post::LegacyPost>, radroots_event_codec::decode::EventParseError>
-pub fn radroots_event_codec::decode::post::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event_codec::decode::post::LegacyPost>, radroots_event_codec::decode::EventParseError>
-pub fn radroots_event_codec::decode::post::post_from_content(u32, &str) -> core::result::Result<radroots_event_codec::decode::post::LegacyPost, radroots_event_codec::decode::EventParseError>
-pub fn radroots_event_codec::decode::post::post_from_event(u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event_codec::decode::post::LegacyPost, radroots_event_codec::decode::EventParseError>
 pub mod radroots_event_codec::decode::profile
-pub struct radroots_event_codec::decode::profile::LegacyProfile
-pub radroots_event_codec::decode::profile::LegacyProfile::about: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::banner: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::bot: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::display_name: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::lud06: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::lud16: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::name: alloc::string::String
-pub radroots_event_codec::decode::profile::LegacyProfile::nip05: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::picture: core::option::Option<alloc::string::String>
-pub radroots_event_codec::decode::profile::LegacyProfile::website: core::option::Option<alloc::string::String>
-pub struct radroots_event_codec::decode::profile::RadrootsProfileData
-pub radroots_event_codec::decode::profile::RadrootsProfileData::profile: radroots_event_codec::decode::profile::LegacyProfile
-pub radroots_event_codec::decode::profile::RadrootsProfileData::profile_type: core::option::Option<radroots_event::profile::ProfileType>
-pub fn radroots_event_codec::decode::profile::data_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedData<radroots_event_codec::decode::profile::RadrootsProfileData>, radroots_event_codec::decode::EventParseError>
-pub fn radroots_event_codec::decode::profile::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event_codec::decode::profile::RadrootsProfileData>, radroots_event_codec::decode::EventParseError>
-pub fn radroots_event_codec::decode::profile::profile_from_content(&str) -> core::result::Result<radroots_event_codec::decode::profile::LegacyProfile, radroots_event_codec::decode::EventParseError>
 pub mod radroots_event_codec::decode::reaction
 pub fn radroots_event_codec::decode::reaction::data_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedData<radroots_event::post::reaction::Reaction>, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::reaction::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event::post::reaction::Reaction>, radroots_event_codec::decode::EventParseError>

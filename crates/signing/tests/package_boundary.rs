@@ -48,7 +48,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
     );
     assert_eq!(
         table_keys(MANIFEST, "[dev-dependencies]"),
-        BTreeSet::from(["nostr", "serde_json"])
+        BTreeSet::from(["nostr", "radroots_blossom", "serde_json"])
     );
     for forbidden in [
         "async-trait",
@@ -115,7 +115,7 @@ fn crate_root_declares_the_approved_module_skeleton() {
         "pub use error::Error;",
         "pub use identity::{AuthoredArtifactId, SignerRequestId, SigningIntentId, SigningOperationId};",
         "pub use receipt::SignReceipt;",
-        "pub use request::SignRequest;",
+        "pub use request::{SignRequest, SigningPurpose};",
         "pub use signer::Signer;",
         "pub use status::SignerStatus;",
     ] {
@@ -132,7 +132,7 @@ fn crate_root_declares_the_approved_module_skeleton() {
             "pub use error::Error;",
             "pub use identity::{AuthoredArtifactId, SignerRequestId, SigningIntentId, SigningOperationId};",
             "pub use receipt::SignReceipt;",
-            "pub use request::SignRequest;",
+            "pub use request::{SignRequest, SigningPurpose};",
             "pub use signer::Signer;",
             "pub use status::SignerStatus;",
         ])
@@ -172,6 +172,8 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub mod radroots_signing::request",
         "pub mod radroots_signing::signer",
         "pub mod radroots_signing::status",
+        "pub enum radroots_signing::request::SigningPurpose",
+        "pub radroots_signing::request::SigningPurpose::BlossomUploadAuthorization",
         "pub trait radroots_signing::Signer",
     ] {
         assert!(

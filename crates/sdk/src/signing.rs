@@ -1,10 +1,19 @@
 //! Generic signer composition without protocol or relay ownership.
 
-use std::sync::Arc;
-#[cfg(feature = "local-signing")]
-use std::sync::RwLock;
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use radroots_signing::{SignReceipt, SignRequest, Signer, SignerStatus};
+#[cfg(feature = "blossom")]
+use radroots_signing::SigningPurpose;
+use radroots_signing::{
+    Actor, SignReceipt, SignRequest, Signer, SignerStatus, SigningIntentId, request::SignPolicy,
+};
+
+pub use radroots_event_codec::authoring::BlossomAuthorizationPlan;
+#[cfg(feature = "blossom")]
+pub use radroots_nostr::blossom::AuthorizationHeader;
 
 /// Host-visible signer composition mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -23,8 +32,97 @@ pub enum Mode {
 pub struct Provider {
     mode: Mode,
     signer: Arc<dyn Signer>,
-    #[cfg(feature = "local-signing")]
-    slot: Option<Slot>,
+}
+
+/// Borrowed high-level signing operations over one configured opaque signer.
+#[derive(Clone, Copy)]
+pub struct Operations<'a> {
+    signer: &'a dyn Signer,
+}
+
+impl<'a> Operations<'a> {
+    pub(crate) const fn new(signer: &'a dyn Signer) -> Self {
+        Self { signer }
+    }
+
+    /// Delegates an already authorized exact request to the opaque signer.
+    pub async fn sign(&self, request: SignRequest) -> Result<SignReceipt, radroots_signing::Error> {
+        sign_checked(self.signer, request).await
+    }
+
+    /// Signs one HTTP-only BUD-11 upload plan and returns its canonical header.
+    #[cfg(feature = "blossom")]
+    pub async fn authorize_blossom_upload(
+        &self,
+        request: SignRequest,
+    ) -> Result<radroots_nostr::blossom::AuthorizationHeader, BlossomSigningError> {
+        if request.purpose() != SigningPurpose::BlossomUploadAuthorization {
+            return Err(BlossomSigningError::WrongPurpose);
+        }
+        let receipt = self
+            .sign(request)
+            .await
+            .map_err(BlossomSigningError::Signing)?;
+        radroots_nostr::blossom::encode_signed_event_authorization_header(receipt.signed_event())
+            .map_err(BlossomSigningError::Encoding)
+    }
+}
+
+impl std::fmt::Debug for Operations<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Operations")
+            .field("signer", &"<borrowed opaque signer>")
+            .finish()
+    }
+}
+
+/// Creates one domain-separated BUD-11 request from an exact HTTP-only plan.
+pub fn blossom_upload_request(
+    operation_kind: radroots_protocol::runtime::v1::OperationId,
+    intent_id: SigningIntentId,
+    actor: Actor,
+    plan: BlossomAuthorizationPlan,
+    policy: SignPolicy,
+) -> Result<SignRequest, radroots_signing::Error> {
+    SignRequest::blossom_upload(operation_kind, intent_id, actor, plan, policy)
+}
+
+/// Failure while producing a BUD-11 HTTP authorization header.
+#[cfg(feature = "blossom")]
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum BlossomSigningError {
+    /// The caller supplied a relay-authoring request to the HTTP-only method.
+    WrongPurpose,
+    /// The opaque signer rejected or failed the exact request.
+    Signing(radroots_signing::Error),
+    /// The verified signer result could not be encoded as BUD-11.
+    Encoding(radroots_nostr::blossom::AuthorizationError),
+}
+
+#[cfg(feature = "blossom")]
+impl std::fmt::Display for BlossomSigningError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongPurpose => {
+                formatter.write_str("signing request is not BUD-11 HTTP authorization")
+            }
+            Self::Signing(error) => error.fmt(formatter),
+            Self::Encoding(error) => error.fmt(formatter),
+        }
+    }
+}
+
+#[cfg(feature = "blossom")]
+impl std::error::Error for BlossomSigningError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::WrongPurpose => None,
+            Self::Signing(error) => Some(error),
+            Self::Encoding(error) => Some(error),
+        }
+    }
 }
 
 impl Provider {
@@ -34,8 +132,6 @@ impl Provider {
         Self {
             mode: Mode::Host,
             signer,
-            #[cfg(feature = "local-signing")]
-            slot: None,
         }
     }
 
@@ -46,21 +142,6 @@ impl Provider {
         Self {
             mode: Mode::Local,
             signer: Arc::new(signer),
-            slot: None,
-        }
-    }
-
-    /// Wraps a host-controlled local signer slot.
-    ///
-    /// The slot starts inert and can be populated or cleared without rebuilding
-    /// the client. Secret persistence remains entirely host-owned.
-    #[cfg(feature = "local-signing")]
-    #[must_use]
-    pub fn slot(slot: Slot) -> Self {
-        Self {
-            mode: Mode::Local,
-            signer: Arc::new(slot.clone()),
-            slot: Some(slot),
         }
     }
 
@@ -75,8 +156,6 @@ impl Provider {
         Self {
             mode: Mode::Nip46,
             signer,
-            #[cfg(feature = "local-signing")]
-            slot: None,
         }
     }
 
@@ -99,195 +178,37 @@ impl Provider {
 
     /// Delegates one already-authorized request to the canonical SPI.
     pub async fn sign(&self, request: SignRequest) -> Result<SignReceipt, radroots_signing::Error> {
-        self.signer.sign(request).await
+        sign_checked(self.signer.as_ref(), request).await
     }
 
-    #[cfg(feature = "local-signing")]
-    pub(crate) fn into_parts(self) -> (Arc<dyn Signer>, Option<Slot>) {
-        (self.signer, self.slot)
-    }
-
-    #[cfg(not(feature = "local-signing"))]
     pub(crate) fn into_signer(self) -> Arc<dyn Signer> {
         self.signer
     }
 }
 
-/// Public identity controlled by an installed local signer.
-#[cfg(feature = "local-signing")]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LocalIdentity {
-    public_key: radroots_identity::PublicKey,
-    npub: String,
+async fn sign_checked(
+    signer: &dyn Signer,
+    request: SignRequest,
+) -> Result<SignReceipt, radroots_signing::Error> {
+    let expected = request.clone();
+    let returned = signer.sign(request).await?;
+    SignReceipt::from_signed_event(
+        &expected,
+        returned.signed_event().clone(),
+        system_time_unix_ms()?,
+    )
 }
 
-#[cfg(feature = "local-signing")]
-impl LocalIdentity {
-    fn from_public_key(
-        public_key: radroots_identity::PublicKey,
-    ) -> Result<Self, radroots_nostr::Error> {
-        Ok(Self {
-            public_key,
-            npub: radroots_nostr::key::public_key_to_npub(public_key)?,
-        })
-    }
-
-    /// Returns the canonical lowercase public-key hexadecimal form.
-    #[must_use]
-    pub fn public_key_hex(&self) -> String {
-        self.public_key.to_hex()
-    }
-
-    /// Returns the canonical NIP-19 public identity.
-    #[must_use]
-    pub fn npub(&self) -> &str {
-        self.npub.as_str()
-    }
-
-    #[cfg(any(test, all(feature = "sync", feature = "nostr")))]
-    pub(crate) const fn public_key(&self) -> radroots_identity::PublicKey {
-        self.public_key
-    }
-}
-
-/// Mutable, client-shareable local signer selected by the host.
-///
-/// The slot never persists key material and its debug output never observes
-/// the installed signer. Installing and clearing are explicit host actions.
-#[cfg(feature = "local-signing")]
-#[derive(Clone, Default)]
-pub struct Slot {
-    state: Arc<RwLock<Option<SlotState>>>,
-}
-
-#[cfg(feature = "local-signing")]
-struct SlotState {
-    signer: Arc<dyn Signer>,
-    identity: LocalIdentity,
-}
-
-#[cfg(feature = "local-signing")]
-impl Slot {
-    /// Creates an empty signer slot.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Validates and installs one host-supplied hexadecimal or `nsec` secret.
-    pub fn install(&self, encoded: &str) -> Result<LocalIdentity, radroots_nostr::Error> {
-        let secret = radroots_nostr::key::SecretKey::parse(encoded)?;
-        self.install_secret(secret)
-    }
-
-    /// Generates, installs, and returns one secret for immediate host custody.
-    ///
-    /// The SDK retains only the opaque signer. The returned `nsec` is the sole
-    /// persistence handoff and must be moved into host secure storage.
-    pub fn generate(&self) -> Result<(String, LocalIdentity), radroots_nostr::Error> {
-        let secret = radroots_nostr::key::SecretKey::generate();
-        let encoded = radroots_nostr::key::secret_key_to_nsec(&secret);
-        let identity = self.install_secret(secret)?;
-        Ok((encoded, identity))
-    }
-
-    /// Removes the active signer from this process.
-    pub fn clear(&self) {
-        if let Ok(mut state) = self.state.write() {
-            *state = None;
-        }
-    }
-
-    /// Returns the currently installed public identity.
-    #[must_use]
-    pub fn identity(&self) -> Option<LocalIdentity> {
-        self.state
-            .read()
-            .ok()
-            .and_then(|state| state.as_ref().map(|state| state.identity.clone()))
-    }
-
-    fn install_secret(
-        &self,
-        secret: radroots_nostr::key::SecretKey,
-    ) -> Result<LocalIdentity, radroots_nostr::Error> {
-        let public_key = secret.public_key()?;
-        let identity = LocalIdentity::from_public_key(public_key)?;
-        let signer: Arc<dyn Signer> = Arc::new(radroots_nostr::signing::LocalSigner::new(secret)?);
-        if let Ok(mut state) = self.state.write() {
-            *state = Some(SlotState {
-                signer,
-                identity: identity.clone(),
-            });
-        }
-        Ok(identity)
-    }
-
-    fn signer(&self) -> Result<Arc<dyn Signer>, radroots_signing::Error> {
-        self.state
-            .read()
-            .map_err(|source| {
-                radroots_signing::Error::with_source(
-                    radroots_signing::error::Kind::InternalError,
-                    LockFailure(source.to_string()),
-                )
-            })?
-            .as_ref()
-            .map(|state| Arc::clone(&state.signer))
-            .ok_or_else(|| {
-                radroots_signing::Error::new(radroots_signing::error::Kind::SignerUnavailable)
+fn system_time_unix_ms() -> Result<u64, radroots_signing::Error> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| radroots_signing::Error::new(radroots_signing::error::Kind::InternalError))
+        .and_then(|duration| {
+            u64::try_from(duration.as_millis()).map_err(|_| {
+                radroots_signing::Error::new(radroots_signing::error::Kind::InternalError)
             })
-    }
-}
-
-#[cfg(feature = "local-signing")]
-impl Signer for Slot {
-    fn status(
-        &self,
-    ) -> radroots_signing::signer::BoxFuture<'_, Result<SignerStatus, radroots_signing::Error>>
-    {
-        Box::pin(async move {
-            match self.signer() {
-                Ok(signer) => signer.status().await,
-                Err(error) if error.kind() == radroots_signing::error::Kind::SignerUnavailable => {
-                    Ok(SignerStatus::unavailable())
-                }
-                Err(error) => Err(error),
-            }
         })
-    }
-
-    fn sign(
-        &self,
-        request: SignRequest,
-    ) -> radroots_signing::signer::BoxFuture<'_, Result<SignReceipt, radroots_signing::Error>> {
-        Box::pin(async move { self.signer()?.sign(request).await })
-    }
 }
-
-#[cfg(feature = "local-signing")]
-impl std::fmt::Debug for Slot {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Slot")
-            .field("installed", &self.identity().is_some())
-            .finish()
-    }
-}
-
-#[cfg(feature = "local-signing")]
-#[derive(Debug)]
-struct LockFailure(String);
-
-#[cfg(feature = "local-signing")]
-impl std::fmt::Display for LockFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.0.as_str())
-    }
-}
-
-#[cfg(feature = "local-signing")]
-impl std::error::Error for LockFailure {}
 
 impl std::fmt::Debug for Provider {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -330,6 +251,8 @@ mod tests {
     use super::*;
 
     const PUBLIC_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    #[cfg(feature = "local-signing")]
+    const SECRET_KEY: &str = "7e0112ad58b2d2d13fb80532625195dc169b86d72b0e1db48347837a785cae90";
 
     struct ScriptedSigner {
         status: SignerStatus,
@@ -353,9 +276,9 @@ mod tests {
         }
     }
 
-    fn request() -> SignRequest {
+    fn request_for(public_key: PublicKey, artifact: u8, deadline_unix_ms: u64) -> SignRequest {
         let actor = Actor::new(
-            PublicKey::from_hex(PUBLIC_KEY).expect("public key"),
+            public_key,
             ActorSource::ExplicitPublicKey,
             [AuthorRole::Any],
         )
@@ -367,7 +290,7 @@ mod tests {
                 1_700_000_000,
                 Vec::new(),
                 "frozen-content",
-                PUBLIC_KEY,
+                public_key.to_hex(),
             )
             .expect("draft"),
         )
@@ -376,14 +299,67 @@ mod tests {
             OperationId::SyncPush,
             SigningIntentId::new(
                 SigningOperationId::new([1; 16]).expect("operation id"),
-                AuthoredArtifactId::new([2; 16]).expect("artifact id"),
+                AuthoredArtifactId::new([artifact; 16]).expect("artifact id"),
             ),
             actor,
             plan,
-            SignPolicy::new(1_700_000_100, CancellationPolicy::PreservePublishedRequest)
-                .expect("policy"),
+            SignPolicy::new(
+                deadline_unix_ms,
+                CancellationPolicy::PreservePublishedRequest,
+            )
+            .expect("policy"),
         )
         .expect("request")
+    }
+
+    fn request() -> SignRequest {
+        request_for(
+            PublicKey::from_hex(PUBLIC_KEY).expect("public key"),
+            2,
+            1_700_000_100,
+        )
+    }
+
+    #[cfg(feature = "local-signing")]
+    fn local_signer() -> radroots_nostr::signing::LocalSigner {
+        radroots_nostr::signing::LocalSigner::new(
+            radroots_nostr::key::SecretKey::parse(SECRET_KEY).expect("secret fixture"),
+        )
+        .expect("local signer")
+    }
+
+    #[cfg(all(feature = "local-signing", feature = "blossom"))]
+    fn blossom_request_for(public_key: PublicKey) -> SignRequest {
+        use radroots_blossom::{
+            Sha256,
+            authorization::{AuthoredUploadClaim, AuthorizationContent, ServerDomain},
+        };
+
+        let claim = AuthoredUploadClaim::new(
+            AuthorizationContent::parse("Upload exact SDK image").expect("content"),
+            ServerDomain::parse("media.example").expect("server"),
+            Sha256::digest(b"exact-sdk-image"),
+            1_700_000_000,
+            60,
+        )
+        .expect("claim");
+        let actor = Actor::new(
+            public_key,
+            ActorSource::ExplicitPublicKey,
+            [AuthorRole::Any],
+        )
+        .expect("actor");
+        blossom_upload_request(
+            OperationId::SyncPush,
+            SigningIntentId::new(
+                SigningOperationId::new([9; 16]).expect("operation id"),
+                AuthoredArtifactId::new([10; 16]).expect("artifact id"),
+            ),
+            actor,
+            BlossomAuthorizationPlan::for_upload(&claim, public_key).expect("plan"),
+            SignPolicy::new(u64::MAX, CancellationPolicy::LocalCooperative).expect("policy"),
+        )
+        .expect("Blossom request")
     }
 
     #[cfg(feature = "nip46")]
@@ -412,61 +388,75 @@ mod tests {
         assert_eq!(status.capabilities()[0].kind(), SignerKind::Local);
     }
 
-    #[cfg(feature = "local-signing")]
+    #[cfg(all(feature = "local-signing", feature = "blossom"))]
     #[tokio::test]
-    async fn local_slot_hands_secret_to_host_and_supports_lock_restore() {
-        let slot = Slot::new();
-        assert!(slot.identity().is_none());
-        assert_eq!(
-            slot.status().await.expect("empty status").availability(),
-            SignerAvailability::Unavailable
-        );
+    async fn focused_operations_sign_exact_events_and_bud11_without_secret_surface() {
+        use radroots_blossom::{
+            Sha256,
+            authorization::{AuthorizationTarget, AuthorizationValidation, ServerDomain},
+        };
 
-        let (secret, generated) = slot.generate().expect("generated identity");
-        assert!(secret.starts_with("nsec1"));
-        assert_eq!(slot.identity().expect("installed"), generated);
-        assert!(!format!("{slot:?}").contains(secret.as_str()));
+        let signer = local_signer();
+        let public_key = signer.public_key();
+        let provider = Provider::local(signer);
+        let operations = Operations::new(provider.as_signer());
+        assert!(format!("{provider:?}").contains("signer: \"<opaque>\""));
+        assert!(format!("{operations:?}").contains("borrowed opaque signer"));
 
-        slot.clear();
-        assert!(slot.identity().is_none());
-        let restored = slot.install(secret.as_str()).expect("restored identity");
-        assert_eq!(restored, generated);
-        assert_eq!(restored.public_key_hex(), restored.public_key().to_hex());
-        assert!(restored.npub().starts_with("npub1"));
+        let receipt = operations
+            .sign(request_for(public_key, 3, u64::MAX))
+            .await
+            .expect("focused sign");
+        assert_eq!(receipt.signed_event().pubkey(), &public_key);
+        let provider_receipt = provider
+            .sign(request_for(public_key, 4, u64::MAX))
+            .await
+            .expect("provider sign");
+        assert_eq!(provider_receipt.signed_event().pubkey(), &public_key);
 
-        let provider = Provider::slot(slot.clone());
-        assert_eq!(provider.mode(), Mode::Local);
-        assert!(format!("{provider:?}").contains("<opaque>"));
-        let (_signer, provider_slot) = provider.into_parts();
-        assert!(provider_slot.is_some());
+        let wrong_purpose = operations
+            .authorize_blossom_upload(request_for(public_key, 5, u64::MAX))
+            .await
+            .expect_err("relay event cannot become an HTTP credential");
+        assert!(matches!(wrong_purpose, BlossomSigningError::WrongPurpose));
 
-        slot.clear();
-        assert_eq!(
-            slot.sign(request()).await.expect_err("empty slot").kind(),
-            Kind::SignerUnavailable
-        );
+        let header = operations
+            .authorize_blossom_upload(blossom_request_for(public_key))
+            .await
+            .expect("BUD-11 authorization");
+        let hash = Sha256::digest(b"exact-sdk-image");
+        let verified = radroots_nostr::blossom::decode_verify_authorization_header(
+            header.as_str(),
+            &AuthorizationValidation::bud11(
+                AuthorizationTarget::Upload(hash),
+                ServerDomain::parse("media.example").expect("server"),
+                1_700_000_001,
+            ),
+        )
+        .expect("verify BUD-11 header");
+        assert_eq!(verified.author().to_hex(), public_key.to_hex());
     }
 
-    #[cfg(feature = "local-signing")]
-    #[tokio::test]
-    async fn poisoned_local_slot_fails_closed_without_exposing_key_state() {
-        let slot = Slot::new();
-        let state = Arc::clone(&slot.state);
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _guard = state.write().expect("write lock");
-            panic!("poison signer slot");
-        }));
+    #[cfg(feature = "blossom")]
+    #[test]
+    fn blossom_errors_are_typed_and_preserve_only_explicit_sources() {
+        use std::error::Error as _;
 
-        slot.clear();
-        assert!(slot.identity().is_none());
-        let (_secret, identity) = slot.generate().expect("secret remains host-owned");
-        assert!(!identity.public_key_hex().is_empty());
+        let wrong = BlossomSigningError::WrongPurpose;
+        assert!(wrong.source().is_none());
+        assert!(!wrong.to_string().is_empty());
+
+        let signing = BlossomSigningError::Signing(Error::new(Kind::SignerRejected));
+        assert!(signing.source().is_some());
+        assert_eq!(signing.to_string(), "signer rejected the request");
+
+        let encoding = BlossomSigningError::Encoding(
+            radroots_nostr::blossom::AuthorizationError::InvalidEventSignature,
+        );
+        assert!(encoding.source().is_some());
         assert_eq!(
-            slot.sign(request())
-                .await
-                .expect_err("poisoned slot")
-                .kind(),
-            Kind::InternalError
+            encoding.to_string(),
+            "invalid Blossom authorization event signature"
         );
     }
 

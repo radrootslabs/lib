@@ -170,6 +170,9 @@ pub mod radroots_signing::request
 #[non_exhaustive] pub enum radroots_signing::request::CancellationPolicy
 pub radroots_signing::request::CancellationPolicy::LocalCooperative
 pub radroots_signing::request::CancellationPolicy::PreservePublishedRequest
+#[non_exhaustive] pub enum radroots_signing::request::SigningPurpose
+pub radroots_signing::request::SigningPurpose::AuthoredEvent
+pub radroots_signing::request::SigningPurpose::BlossomUploadAuthorization
 pub struct radroots_signing::request::CancellationSignal(_)
 impl radroots_signing::request::CancellationSignal
 pub fn radroots_signing::request::CancellationSignal::cancel(&self)
@@ -189,17 +192,27 @@ pub fn radroots_signing::request::SignPolicy::deserialize<D>(D) -> core::result:
 pub struct radroots_signing::request::SignRequest
 impl radroots_signing::request::SignRequest
 pub const fn radroots_signing::request::SignRequest::actor(&self) -> &radroots_signing::actor::Actor
-pub const fn radroots_signing::request::SignRequest::authorization(&self) -> radroots_signing::authorization::CurrentAuthoringDecision
+pub const fn radroots_signing::request::SignRequest::authored_plan(&self) -> core::option::Option<&radroots_event_codec::authoring::AuthoredEventPlan>
+pub const fn radroots_signing::request::SignRequest::authorization(&self) -> core::option::Option<radroots_signing::authorization::CurrentAuthoringDecision>
+pub const fn radroots_signing::request::SignRequest::blossom_authorization_plan(&self) -> core::option::Option<&radroots_event_codec::authoring::BlossomAuthorizationPlan>
+pub fn radroots_signing::request::SignRequest::blossom_upload(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::BlossomAuthorizationPlan, radroots_signing::request::SignPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
 pub const fn radroots_signing::request::SignRequest::cancellation_signal(&self) -> &radroots_signing::request::CancellationSignal
+pub fn radroots_signing::request::SignRequest::content(&self) -> &str
+pub const fn radroots_signing::request::SignRequest::created_at(&self) -> u64
 pub fn radroots_signing::request::SignRequest::ensure_active(&self, u64) -> core::result::Result<(), radroots_signing::error::Error>
+pub const fn radroots_signing::request::SignRequest::expected_author(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_signing::request::SignRequest::expected_event_id(&self) -> &radroots_event::id::EventId
 pub const fn radroots_signing::request::SignRequest::intent_id(&self) -> radroots_signing::identity::SigningIntentId
+pub const fn radroots_signing::request::SignRequest::kind(&self) -> u32
 pub fn radroots_signing::request::SignRequest::new(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::AuthoredEventPlan, radroots_signing::request::SignPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
 pub fn radroots_signing::request::SignRequest::new_with_authority(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::AuthoredEventPlan, radroots_signing::request::SignPolicy, &dyn radroots_signing::authorization::CurrentAuthoringAuthority) -> core::result::Result<Self, radroots_signing::error::Error>
 pub const fn radroots_signing::request::SignRequest::operation_kind(&self) -> radroots_protocol::runtime::v1::OperationId
-pub const fn radroots_signing::request::SignRequest::plan(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_signing::request::SignRequest::plan_digest(&self) -> radroots_event_codec::authoring::PlanDigest
 pub const fn radroots_signing::request::SignRequest::policy(&self) -> radroots_signing::request::SignPolicy
+pub const fn radroots_signing::request::SignRequest::purpose(&self) -> radroots_signing::request::SigningPurpose
 pub fn radroots_signing::request::SignRequest::report_progress(&self, &radroots_signing::status::SignProgress)
 pub const fn radroots_signing::request::SignRequest::signer_request_id(&self) -> radroots_signing::identity::SignerRequestId
+pub fn radroots_signing::request::SignRequest::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
 pub fn radroots_signing::request::SignRequest::with_cancellation_signal(self, radroots_signing::request::CancellationSignal) -> Self
 pub fn radroots_signing::request::SignRequest::with_progress_observer(self, alloc::sync::Arc<dyn radroots_signing::request::ProgressObserver>) -> Self
 impl core::fmt::Debug for radroots_signing::request::SignRequest
@@ -259,6 +272,9 @@ pub radroots_signing::CurrentAuthoringDecision::Blocked
 pub radroots_signing::CurrentAuthoringDecision::Blocked::code: &'static str
 pub radroots_signing::CurrentAuthoringDecision::Revoked
 pub radroots_signing::CurrentAuthoringDecision::Revoked::code: &'static str
+#[non_exhaustive] pub enum radroots_signing::SigningPurpose
+pub radroots_signing::SigningPurpose::AuthoredEvent
+pub radroots_signing::SigningPurpose::BlossomUploadAuthorization
 pub struct radroots_signing::Actor
 impl radroots_signing::actor::Actor
 pub const fn radroots_signing::actor::Actor::account_id(&self) -> core::option::Option<radroots_identity::account::AccountId>
@@ -309,17 +325,27 @@ pub fn radroots_signing::receipt::SignReceipt::fmt(&self, &mut core::fmt::Format
 pub struct radroots_signing::SignRequest
 impl radroots_signing::request::SignRequest
 pub const fn radroots_signing::request::SignRequest::actor(&self) -> &radroots_signing::actor::Actor
-pub const fn radroots_signing::request::SignRequest::authorization(&self) -> radroots_signing::authorization::CurrentAuthoringDecision
+pub const fn radroots_signing::request::SignRequest::authored_plan(&self) -> core::option::Option<&radroots_event_codec::authoring::AuthoredEventPlan>
+pub const fn radroots_signing::request::SignRequest::authorization(&self) -> core::option::Option<radroots_signing::authorization::CurrentAuthoringDecision>
+pub const fn radroots_signing::request::SignRequest::blossom_authorization_plan(&self) -> core::option::Option<&radroots_event_codec::authoring::BlossomAuthorizationPlan>
+pub fn radroots_signing::request::SignRequest::blossom_upload(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::BlossomAuthorizationPlan, radroots_signing::request::SignPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
 pub const fn radroots_signing::request::SignRequest::cancellation_signal(&self) -> &radroots_signing::request::CancellationSignal
+pub fn radroots_signing::request::SignRequest::content(&self) -> &str
+pub const fn radroots_signing::request::SignRequest::created_at(&self) -> u64
 pub fn radroots_signing::request::SignRequest::ensure_active(&self, u64) -> core::result::Result<(), radroots_signing::error::Error>
+pub const fn radroots_signing::request::SignRequest::expected_author(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_signing::request::SignRequest::expected_event_id(&self) -> &radroots_event::id::EventId
 pub const fn radroots_signing::request::SignRequest::intent_id(&self) -> radroots_signing::identity::SigningIntentId
+pub const fn radroots_signing::request::SignRequest::kind(&self) -> u32
 pub fn radroots_signing::request::SignRequest::new(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::AuthoredEventPlan, radroots_signing::request::SignPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
 pub fn radroots_signing::request::SignRequest::new_with_authority(radroots_protocol::runtime::v1::OperationId, radroots_signing::identity::SigningIntentId, radroots_signing::actor::Actor, radroots_event_codec::authoring::AuthoredEventPlan, radroots_signing::request::SignPolicy, &dyn radroots_signing::authorization::CurrentAuthoringAuthority) -> core::result::Result<Self, radroots_signing::error::Error>
 pub const fn radroots_signing::request::SignRequest::operation_kind(&self) -> radroots_protocol::runtime::v1::OperationId
-pub const fn radroots_signing::request::SignRequest::plan(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_signing::request::SignRequest::plan_digest(&self) -> radroots_event_codec::authoring::PlanDigest
 pub const fn radroots_signing::request::SignRequest::policy(&self) -> radroots_signing::request::SignPolicy
+pub const fn radroots_signing::request::SignRequest::purpose(&self) -> radroots_signing::request::SigningPurpose
 pub fn radroots_signing::request::SignRequest::report_progress(&self, &radroots_signing::status::SignProgress)
 pub const fn radroots_signing::request::SignRequest::signer_request_id(&self) -> radroots_signing::identity::SignerRequestId
+pub fn radroots_signing::request::SignRequest::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
 pub fn radroots_signing::request::SignRequest::with_cancellation_signal(self, radroots_signing::request::CancellationSignal) -> Self
 pub fn radroots_signing::request::SignRequest::with_progress_observer(self, alloc::sync::Arc<dyn radroots_signing::request::ProgressObserver>) -> Self
 impl core::fmt::Debug for radroots_signing::request::SignRequest

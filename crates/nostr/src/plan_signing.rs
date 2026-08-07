@@ -10,6 +10,8 @@ use crate::{
     },
 };
 use radroots_event_codec::authoring::AuthoredEventPlan;
+#[cfg(feature = "signing")]
+use radroots_signing::SignRequest;
 
 #[cfg(feature = "signing")]
 use nostr::JsonUtil;
@@ -51,12 +53,43 @@ pub(crate) fn unsigned_event_from_plan(
 }
 
 #[cfg(feature = "signing")]
-pub(crate) fn sign_authored_plan(
+fn unsigned_event_from_request(request: &SignRequest) -> Result<nostr::UnsignedEvent, Error> {
+    let kind = u16::try_from(request.kind()).map_err(|_| Error::KindOutOfRange {
+        kind: request.kind(),
+        max: u16::MAX,
+    })?;
+    let tags = request
+        .tags()
+        .iter()
+        .cloned()
+        .map(RadrootsNostrTag::parse)
+        .collect::<Result<alloc::vec::Vec<_>, _>>()
+        .map_err(|_| Error::TagConversion)?;
+    let expected_event_id =
+        RadrootsNostrEventId::from_slice(request.expected_event_id().as_bytes()).map_err(|_| {
+            Error::EventConversion {
+                field: "expected_event_id",
+            }
+        })?;
+    let expected_public_key =
+        RadrootsNostrPublicKey::from_slice(request.expected_author().as_bytes())
+            .map_err(|_| Error::EventConversion { field: "author" })?;
+    Ok(nostr::UnsignedEvent {
+        id: Some(expected_event_id),
+        pubkey: expected_public_key,
+        created_at: RadrootsNostrTimestamp::from_secs(request.created_at()),
+        kind: RadrootsNostrKind::Custom(kind),
+        tags: nostr::Tags::from_list(tags),
+        content: request.content().into(),
+    })
+}
+
+#[cfg(feature = "signing")]
+pub(crate) fn sign_request(
     keys: &nostr::Keys,
-    plan: &AuthoredEventPlan,
+    request: &SignRequest,
 ) -> Result<SignedEvent, Error> {
-    let event = unsigned_event_from_plan(plan)?.sign_with_keys(keys)?;
-    validate_signed_event_matches_plan(&event, plan)?;
+    let event = unsigned_event_from_request(request)?.sign_with_keys(keys)?;
     let raw_json = event.as_json();
     let wire = Nip01EventWire::parse_json(&raw_json)?;
     SignedEvent::from_wire_verified_id(wire, raw_json).map_err(Into::into)

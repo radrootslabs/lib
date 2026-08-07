@@ -45,3 +45,5 @@ expand a package beyond its charter.
 | `radroots_storage` | [`radroots_storage.txt`](radroots_storage.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_transport_nostr` | [`radroots_transport_nostr.txt`](radroots_transport_nostr.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_geonames` | [`radroots_geonames.txt`](radroots_geonames.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots_sdk` | [`radroots_sdk.txt`](radroots_sdk.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots` | [`radroots.txt`](radroots.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |

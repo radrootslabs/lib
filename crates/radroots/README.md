@@ -62,6 +62,7 @@ are Rust paths, not a second persistence format.
 | --- | --- |
 | `client` | safe memory-backed client; the default |
 | `native` | explicit SQLite, sync, and local-signing SDK capabilities |
+| `blossom` | HTTP-only BUD-11 upload authorization through an opaque host signer |
 | `nostr` | explicit Nostr source/sink composition |
 | `nip46` | host-owned NIP-46 signer composition; implies `nostr` |
 | `radrootsd` | explicitly invoked daemon delivery |
@@ -91,4 +92,4 @@ use radroots::sdk;
 The normative package charter is the [`radroots` release-v1
 specification](../../docs/specs/radroots_crates_release_v1.md#19-radroots).
 The reviewed pre-release public API is recorded in the
-[`radroots` baseline](../../docs/api/radroots-0.1.0-alpha.txt).
+[`radroots` baseline](../../docs/api/radroots.txt).

@@ -23,6 +23,7 @@ fn manifest_has_final_identity_and_dependency_boundary() {
 
     let dependencies = dependency_names(MANIFEST);
     let expected = BTreeSet::from([
+        "radroots_blossom",
         "radroots_core",
         "radroots_event",
         "radroots_event_codec",
@@ -72,6 +73,7 @@ fn manifest_has_exact_feature_vocabulary_and_explicit_optional_activation() {
     assert_eq!(
         features,
         BTreeSet::from([
+            "blossom",
             "default",
             "full",
             "geonames",

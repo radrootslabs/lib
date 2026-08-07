@@ -196,12 +196,14 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
     assert!(PUBLIC_API.starts_with("pub mod radroots_event_codec\n"));
     for item in [
         "pub mod radroots_event_codec::admission",
+        "pub mod radroots_event_codec::authoring",
         "pub mod radroots_event_codec::canonical",
         "pub mod radroots_event_codec::decode",
         "pub mod radroots_event_codec::encode",
         "pub mod radroots_event_codec::manifest",
         "pub mod radroots_event_codec::verify",
         "pub use radroots_event_codec::VerificationError",
+        "pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan",
     ] {
         assert!(PUBLIC_API.contains(item), "API baseline is missing {item}");
     }

@@ -100,10 +100,11 @@ persistence commit point: the only successful result is the value returned to
 the caller. A transport or host that later publishes or stores that value owns
 its own cancellation and commit semantics.
 
-The `blossom` module creates and verifies signed `Authorization: Nostr` values
-but never sends an HTTP request. The `nip17` module creates and opens gift-wrap
-events. It does not select relays, deliver events, retry operations, or persist
-message state.
+The `blossom` module converts exact, verified signer output into and from
+signed `Authorization: Nostr` values but never sends an HTTP request. BUD-11
+plans remain distinct from relay-authored plans. The `nip17` module creates and
+opens gift-wrap events. It does not select relays, deliver events, retry
+operations, or persist message state.
 
 ## Serialization contract
 

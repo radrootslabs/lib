@@ -49,6 +49,28 @@ impl fmt::Debug for SignedAuthorization {
 }
 
 impl SignedAuthorization {
+    /// Converts an already verified exact signer result into an HTTP-only
+    /// authorization value, rejecting every non-BUD-11 event.
+    pub fn from_signed_event(
+        signed_event: &radroots_event::SignedEvent,
+    ) -> Result<Self, AuthorizationError> {
+        if signed_event.kind() != u32::from(RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND) {
+            return Err(AuthorizationError::InvalidEventKind {
+                actual: u64::from(signed_event.kind()),
+            });
+        }
+        let event: RadrootsNostrEvent = serde_json::from_str(signed_event.raw_json())
+            .map_err(|_| AuthorizationError::InvalidEventJson)?;
+        // `SignedEvent` has already verified that its retained wire ID matches
+        // the canonical event preimage. Repeating that invariant here would
+        // create an unreachable failure branch; the signature remains an
+        // intentionally separate verification stage on that type.
+        if !event.verify_signature() {
+            return Err(AuthorizationError::InvalidEventSignature);
+        }
+        Ok(Self { event })
+    }
+
     pub fn event_id(&self) -> RadrootsNostrEventId {
         self.event.id
     }
@@ -267,6 +289,15 @@ pub fn encode_authorization_header(authorization: &SignedAuthorization) -> Autho
         .expect("Nostr event JSON serialization is infallible");
     let payload = URL_SAFE_NO_PAD.encode(json);
     AuthorizationHeader(format!("{AUTHORIZATION_SCHEME}{payload}"))
+}
+
+/// Converts one verified generic signer receipt into a canonical BUD-11 HTTP
+/// authorization value without exposing or accepting secret key material.
+pub fn encode_signed_event_authorization_header(
+    signed_event: &radroots_event::SignedEvent,
+) -> Result<AuthorizationHeader, AuthorizationError> {
+    SignedAuthorization::from_signed_event(signed_event)
+        .map(|authorization| encode_authorization_header(&authorization))
 }
 
 /// Decode, authenticate, parse, and validate a BUD-11 authorization value.

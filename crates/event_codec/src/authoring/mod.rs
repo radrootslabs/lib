@@ -6,12 +6,21 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use std::{borrow::ToOwned, string::String, vec::Vec};
 
 use core::fmt;
-use radroots_event::{GenericEventDraft, contract::ContractKey, draft::DraftError, id::EventId};
+use radroots_blossom::authorization::AuthoredUploadClaim;
+use radroots_event::{
+    GenericEventDraft,
+    contract::ContractKey,
+    draft::DraftError,
+    id::EventId,
+    wire::{CanonicalEventIdError, compute_canonical_nip01_event_id},
+};
 use radroots_identity::PublicKey;
 use sha2::{Digest, Sha256};
 
 pub const PLAN_WIRE_VERSION_V1: u32 = 1;
 const PLAN_DIGEST_DOMAIN: &[u8] = b"radroots.authored_event_plan.v1";
+const BLOSSOM_AUTHORIZATION_PLAN_DIGEST_DOMAIN: &[u8] =
+    b"radroots.blossom_upload_authorization_plan.v1";
 
 mod typed;
 mod wire;
@@ -135,6 +144,94 @@ pub struct AuthoredEventPlan {
     digest: PlanDigest,
 }
 
+/// Exact BUD-11 upload-authorization event plan for HTTP use only.
+///
+/// This type is deliberately distinct from [`AuthoredEventPlan`]. It cannot be
+/// accepted by relay push APIs and therefore cannot accidentally publish a
+/// short-lived Blossom authorization token as a Nostr event.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlossomAuthorizationPlan {
+    author: PublicKey,
+    created_at: u64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    expected_event_id: EventId,
+    digest: PlanDigest,
+}
+
+impl BlossomAuthorizationPlan {
+    /// Binds one validated upload claim to the exact expected signer identity.
+    pub fn for_upload(
+        claim: &AuthoredUploadClaim,
+        author: PublicKey,
+    ) -> Result<Self, CanonicalEventIdError> {
+        let wire = claim.wire_parts();
+        let kind = u32::from(wire.kind());
+        let tags = wire.tags().to_vec();
+        let content = wire.content().to_owned();
+        let expected_event_id = compute_canonical_nip01_event_id(
+            author.to_hex().as_str(),
+            wire.created_at(),
+            kind,
+            &tags,
+            content.as_str(),
+        )?;
+        let digest = compute_blossom_authorization_plan_digest(
+            &author,
+            wire.created_at(),
+            kind,
+            &tags,
+            content.as_str(),
+            &expected_event_id,
+        );
+        Ok(Self {
+            author,
+            created_at: wire.created_at(),
+            kind,
+            tags,
+            content,
+            expected_event_id,
+            digest,
+        })
+    }
+
+    #[must_use]
+    pub const fn author(&self) -> &PublicKey {
+        &self.author
+    }
+
+    #[must_use]
+    pub const fn created_at(&self) -> u64 {
+        self.created_at
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> u32 {
+        self.kind
+    }
+
+    #[must_use]
+    pub fn tags(&self) -> &[Vec<String>] {
+        &self.tags
+    }
+
+    #[must_use]
+    pub fn content(&self) -> &str {
+        self.content.as_str()
+    }
+
+    #[must_use]
+    pub const fn expected_event_id(&self) -> &EventId {
+        &self.expected_event_id
+    }
+
+    #[must_use]
+    pub const fn digest(&self) -> PlanDigest {
+        self.digest
+    }
+}
+
 impl AuthoredEventPlan {
     /// Converts the generic-only event input into its immutable authored plan.
     pub fn from_generic(draft: GenericEventDraft) -> Result<Self, DraftError> {
@@ -219,6 +316,31 @@ fn compute_plan_digest(
     encoder.finish()
 }
 
+fn compute_blossom_authorization_plan_digest(
+    author: &PublicKey,
+    created_at: u64,
+    kind: u32,
+    tags: &[Vec<String>],
+    content: &str,
+    expected_event_id: &EventId,
+) -> PlanDigest {
+    let mut encoder = DigestEncoder::new();
+    encoder.bytes(BLOSSOM_AUTHORIZATION_PLAN_DIGEST_DOMAIN);
+    encoder.bytes(author.as_bytes());
+    encoder.u64(created_at);
+    encoder.u32(kind);
+    encoder.u32(tags.len() as u32);
+    for tag in tags {
+        encoder.u32(tag.len() as u32);
+        for element in tag {
+            encoder.bytes(element.as_bytes());
+        }
+    }
+    encoder.bytes(content.as_bytes());
+    encoder.bytes(expected_event_id.as_bytes());
+    encoder.finish()
+}
+
 struct DigestEncoder(Sha256);
 
 impl DigestEncoder {
@@ -247,6 +369,10 @@ impl DigestEncoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_blossom::{
+        Sha256 as BlossomSha256,
+        authorization::{AuthorizationContent, ServerDomain},
+    };
     use radroots_event::envelope::kind::KIND_GEOCHAT;
 
     const ALICE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -314,6 +440,84 @@ mod tests {
                 "hello",
             ),
             plan(ALICE, 1_700_000_000, Vec::new(), "hello!"),
+        ];
+        for variant in variants {
+            assert_ne!(variant.expected_event_id(), base.expected_event_id());
+            assert_ne!(variant.digest(), base.digest());
+        }
+    }
+
+    fn blossom_plan(
+        author: &str,
+        created_at: u64,
+        content: &str,
+        server: &str,
+        payload: &[u8],
+    ) -> BlossomAuthorizationPlan {
+        let claim = AuthoredUploadClaim::new(
+            AuthorizationContent::parse(content).expect("content"),
+            ServerDomain::parse(server).expect("server"),
+            BlossomSha256::digest(payload),
+            created_at,
+            60,
+        )
+        .expect("upload claim");
+        BlossomAuthorizationPlan::for_upload(&claim, PublicKey::from_hex(author).expect("author"))
+            .expect("authorization plan")
+    }
+
+    #[test]
+    fn blossom_upload_plan_binds_every_http_authorization_field() {
+        let base = blossom_plan(
+            ALICE,
+            1_700_000_000,
+            "Upload exact image",
+            "media.example",
+            b"exact-image",
+        );
+        assert_eq!(base.kind(), 24_242);
+        assert_eq!(base.author().to_hex(), ALICE);
+        assert_eq!(base.created_at(), 1_700_000_000);
+        assert_eq!(base.content(), "Upload exact image");
+        assert_eq!(base.tags().len(), 4);
+        assert_eq!(base.digest().to_hex().len(), 64);
+
+        let variants = [
+            blossom_plan(
+                BOB,
+                1_700_000_000,
+                "Upload exact image",
+                "media.example",
+                b"exact-image",
+            ),
+            blossom_plan(
+                ALICE,
+                1_700_000_001,
+                "Upload exact image",
+                "media.example",
+                b"exact-image",
+            ),
+            blossom_plan(
+                ALICE,
+                1_700_000_000,
+                "Upload another image",
+                "media.example",
+                b"exact-image",
+            ),
+            blossom_plan(
+                ALICE,
+                1_700_000_000,
+                "Upload exact image",
+                "uploads.example",
+                b"exact-image",
+            ),
+            blossom_plan(
+                ALICE,
+                1_700_000_000,
+                "Upload exact image",
+                "media.example",
+                b"different-image",
+            ),
         ];
         for variant in variants {
             assert_ne!(variant.expected_event_id(), base.expected_event_id());

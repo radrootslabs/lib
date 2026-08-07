@@ -580,6 +580,15 @@ fn superseded_surface_retirement_is_explicit_and_release_bounded() {
             "reviewed API baseline retains forbidden surface `{forbidden}`"
         );
     }
+    for required in [
+        "pub fn radroots_nostr::blossom::SignedAuthorization::from_signed_event",
+        "pub fn radroots_nostr::blossom::encode_signed_event_authorization_header",
+    ] {
+        assert!(
+            PUBLIC_API.contains(required),
+            "reviewed API baseline is missing `{required}`"
+        );
+    }
 }
 
 fn rust_sources(root: &Path) -> Vec<PathBuf> {

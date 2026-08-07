@@ -68,19 +68,20 @@ are activated only by their owning feature.
 The supported qualification matrix is:
 
 ```sh
-cargo check -p radroots_sdk --all-targets --no-default-features
+cargo check -p radroots_sdk --lib --no-default-features
 cargo check -p radroots_sdk --all-targets
-cargo check -p radroots_sdk --all-targets --no-default-features --features memory
-cargo check -p radroots_sdk --all-targets --no-default-features --features sqlite
-cargo check -p radroots_sdk --all-targets --no-default-features --features sync
-cargo check -p radroots_sdk --all-targets --no-default-features --features nostr
-cargo check -p radroots_sdk --all-targets --no-default-features --features nip46
-cargo check -p radroots_sdk --all-targets --no-default-features --features local-signing
-cargo check -p radroots_sdk --all-targets --no-default-features --features radrootsd
-cargo check -p radroots_sdk --all-targets --no-default-features --features geonames
-cargo check -p radroots_sdk --all-targets --no-default-features --features knowledge
-cargo check -p radroots_sdk --all-targets --no-default-features --features native
-cargo check -p radroots_sdk --all-targets --no-default-features --features full
+cargo check -p radroots_sdk --lib --no-default-features --features memory
+cargo check -p radroots_sdk --lib --no-default-features --features sqlite
+cargo check -p radroots_sdk --lib --no-default-features --features sync
+cargo check -p radroots_sdk --lib --no-default-features --features blossom
+cargo check -p radroots_sdk --lib --no-default-features --features nostr
+cargo check -p radroots_sdk --lib --no-default-features --features nip46
+cargo check -p radroots_sdk --lib --no-default-features --features local-signing
+cargo check -p radroots_sdk --lib --no-default-features --features radrootsd
+cargo check -p radroots_sdk --lib --no-default-features --features geonames
+cargo check -p radroots_sdk --lib --no-default-features --features knowledge
+cargo check -p radroots_sdk --lib --no-default-features --features native
+cargo check -p radroots_sdk --lib --no-default-features --features full
 cargo check -p radroots_sdk --all-targets --all-features
 ```
 
@@ -92,20 +93,22 @@ feature or constructing an empty builder creates no resource. Signers, event
 sources, event sinks, and the sync engine are injected separately.
 
 Native mobile hosts can retain one client while changing host-owned identity
-and relay selection. `signing::Slot` accepts a key restored from secure host
-storage or generates a one-time `nsec` handoff; it never persists that secret.
-`transport::NostrSlot` validates a complete relay set before atomically
-installing it. `ClientBuilder::host_sync(sync::HostPolicy)` explicitly opts
-SDK-created memory or SQLite storage into system-clock and random operation-ID
-policy without creating a runtime, timer, retry loop, or worker.
+and relay selection. The host injects one opaque implementation of the
+canonical `radroots_signing::Signer` SPI; the SDK has no mutable secret slot and
+accepts no secret string. `transport::NostrSlot` validates a complete relay set
+before atomically installing it. `ClientBuilder::host_sync(sync::HostPolicy)`
+explicitly opts SDK-created memory or SQLite storage into system-clock and
+random operation-ID policy without creating a runtime, timer, retry loop, or
+worker.
 
-With `sync`, `nostr`, and `local-signing`, `Client::social()` exposes bounded
-profile/post fetch and publish operations. Fetch verifies and durably ingests
-each accepted event. Publish durably commits a signed event, then performs one
-explicit delivery pass and reports whether delivery remains pending. Host UI
-lifecycle code owns polling, background policy, keychain access, and any later
-retry. Profile authoring is deliberately media-free until the host can supply
-the canonical byte-verified media descriptor required by the event contract.
+`Client::signing()` exposes focused operations over that opaque signer. Every
+returned event is independently rebound to the exact request, expected public
+key, caller-observed deadline, cancellation signal, event ID, fields, and
+signature. The `blossom` feature adds a domain-separated BUD-11 upload plan and
+canonical HTTP authorization header; this credential type cannot enter the
+relay push API and is never persisted by the SDK. Durable authored relay work
+continues through the canonical sync operations. Host UI lifecycle code owns
+polling, background policy, native key custody, and explicit retry.
 
 Transport profiles are explicit. `Profile::local_only()` contains no target.
 `Profile::delivery(...)` retains the exact canonical target set and
@@ -146,12 +149,12 @@ errors and daemon failures use stable, redacted classifications while retaining
 private source chains for local diagnostics.
 
 Signer material and bearer credentials are caller-owned capabilities. The SDK
-does not read a keyring, persist secrets, or include credentials
-in `Debug`, `Display`, diagnostics, receipts, or public error text. Hosts remain
-responsible for protecting source chains and any lower-level logs they choose
-to expose. When explicitly requested, `signing::Slot::generate` creates one
-ephemeral key and immediately hands its only persistence representation to the
-host for secure custody.
+does not read a keyring, accept or generate secret strings, persist secrets, or
+include credentials in `Debug`, `Display`, diagnostics, receipts, or public
+error text. A concrete local adapter may be composed explicitly outside the
+mobile surface, but its key remains opaque. Hosts remain responsible for
+native custody and for protecting source chains and lower-level logs they
+choose to expose.
 
 ## Daemon execution
 
@@ -168,4 +171,4 @@ publication remains blocked pending the approval packet and a separately
 authorized operator step. The crate is licensed under `MIT OR Apache-2.0`.
 
 The reviewed all-features public API baseline is recorded at
-[`docs/api/radroots_sdk-0.1.0-alpha.txt`](../../docs/api/radroots_sdk-0.1.0-alpha.txt).
+[`docs/api/radroots_sdk.txt`](../../docs/api/radroots_sdk.txt).

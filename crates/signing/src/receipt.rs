@@ -83,13 +83,12 @@ impl SignReceipt {
 }
 
 fn verify_exact_plan(event: &SignedEvent, request: &SignRequest) -> Result<(), Error> {
-    let plan = request.plan();
-    if event.pubkey() != plan.author()
-        || event.created_at() != plan.created_at()
-        || event.kind() != plan.body().kind()
-        || event.tags_as_vec() != plan.body().tags()
-        || event.content() != plan.body().content()
-        || event.id() != plan.expected_event_id()
+    if event.pubkey() != request.expected_author()
+        || event.created_at() != request.created_at()
+        || event.kind() != request.kind()
+        || event.tags_as_vec() != request.tags()
+        || event.content() != request.content()
+        || event.id() != request.expected_event_id()
     {
         return Err(Error::new(Kind::SignerOutputInvalid));
     }

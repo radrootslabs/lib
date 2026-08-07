@@ -88,10 +88,10 @@ impl Signer for LocalSigner {
                 &SignProgress::stage(SignProgressStage::Validating)
                     .expect("validating has no challenge"),
             );
-            if request.plan().author() != &self.public_key {
+            if request.expected_author() != &self.public_key {
                 return Err(SigningError::new(Kind::AuthorizationDenied));
             }
-            let signed_event = crate::plan_signing::sign_authored_plan(&self.keys, request.plan())
+            let signed_event = crate::plan_signing::sign_request(&self.keys, &request)
                 .map_err(normalize_nostr_error)?;
             request.report_progress(
                 &SignProgress::stage(SignProgressStage::VerifyingOutput)
@@ -205,7 +205,7 @@ mod tests {
             ReplayCapability::LocalReplaySafe
         );
         let request = request();
-        let expected_id = request.plan().expected_event_id().to_hex();
+        let expected_id = request.expected_event_id().to_hex();
         let receipt = signer.sign(request).await.unwrap();
         assert_eq!(receipt.signed_event().id_str(), expected_id);
         assert_eq!(receipt.completed_at_unix_ms(), DEADLINE_MS - 1);

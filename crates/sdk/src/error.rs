@@ -71,13 +71,6 @@ error_catalog! {
         message: "SDK storage capability is not configured",
         safe_detail_keys: []
     },
-    SignerWithoutSink => {
-        code: SignerWithoutSink,
-        operation: None,
-        capability: None,
-        message: "SDK signer requires an outbound event sink",
-        safe_detail_keys: []
-    },
     CloseInProgress => {
         code: ClientCloseInProgress,
         operation: None,
@@ -153,13 +146,6 @@ error_catalog! {
         operation: None,
         capability: None,
         message: "SDK shared network operation is unavailable",
-        safe_detail_keys: []
-    },
-    SharedOperationFailed => {
-        code: SyncPartial,
-        operation: None,
-        capability: None,
-        message: "SDK shared network operation failed",
         safe_detail_keys: []
     },
 }
@@ -242,10 +228,6 @@ impl Error {
         Self::without_source(ErrorKind::MissingStorage)
     }
 
-    pub(crate) fn signer_without_sink() -> Self {
-        Self::without_source(ErrorKind::SignerWithoutSink)
-    }
-
     pub(crate) fn close_in_progress() -> Self {
         Self::without_source(ErrorKind::CloseInProgress)
     }
@@ -319,21 +301,6 @@ impl Error {
     #[cfg(any(feature = "sync", feature = "nostr"))]
     pub(crate) fn shared_operation_unavailable() -> Self {
         Self::without_source(ErrorKind::SharedOperationUnavailable)
-    }
-
-    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
-    pub(crate) fn shared_operation_failed(
-        source: impl error::Error + Send + Sync + 'static,
-    ) -> Self {
-        Self {
-            kind: ErrorKind::SharedOperationFailed,
-            source: Some(Box::new(source)),
-        }
-    }
-
-    #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
-    pub(crate) fn shared_operation_failed_without_source() -> Self {
-        Self::without_source(ErrorKind::SharedOperationFailed)
     }
 
     fn without_source(kind: ErrorKind) -> Self {
@@ -450,7 +417,6 @@ mod tests {
     fn native_constructor_and_descriptor_surface_is_complete() {
         let source_free = [
             Error::missing_storage(),
-            Error::signer_without_sink(),
             Error::close_in_progress(),
             Error::client_closing(),
             Error::client_closed(),
@@ -491,17 +457,5 @@ mod tests {
                 .source()
                 .is_none()
         );
-
-        #[cfg(all(feature = "sync", feature = "nostr", feature = "local-signing"))]
-        {
-            let failed = Error::shared_operation_failed(std::io::Error::other("private"));
-            assert_eq!(failed.kind(), ErrorKind::SharedOperationFailed);
-            assert!(failed.source().is_some());
-            assert!(
-                Error::shared_operation_failed_without_source()
-                    .source()
-                    .is_none()
-            );
-        }
     }
 }

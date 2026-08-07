@@ -11,9 +11,10 @@ use radroots_blossom::{
         ServerDomain, ServerScopeRequirement,
     },
 };
+use radroots_event::{SignedEvent, wire::Nip01EventWire};
 use radroots_nostr::blossom::{
-    AuthorizationError, decode_verify_authorization_header, encode_authorization_header,
-    sign_authorization,
+    AuthorizationError, SignedAuthorization, decode_verify_authorization_header,
+    encode_authorization_header, encode_signed_event_authorization_header, sign_authorization,
 };
 use radroots_nostr::{
     event::{
@@ -359,6 +360,12 @@ fn sign_raw(kind: u16, content: &str, tags: Vec<RadrootsNostrTag>) -> RadrootsNo
         .expect("raw test event signs")
 }
 
+fn exact_signed_event(event: &RadrootsNostrEvent) -> SignedEvent {
+    let raw_json = serde_json::to_string(event).expect("test event JSON");
+    let wire = Nip01EventWire::parse_json(&raw_json).expect("test event wire");
+    SignedEvent::from_wire_verified_id(wire, raw_json).expect("test event has a verified ID")
+}
+
 #[test]
 fn blossom_authored_claim_signs_and_roundtrips_without_signature_assumptions() {
     let claim = authored_claim();
@@ -403,6 +410,44 @@ fn blossom_authored_claim_signs_and_roundtrips_without_signature_assumptions() {
     assert_eq!(verified.claim().server_domains(), &[server()]);
     assert_eq!(verified.claim().hashes(), &[hash()]);
     assert!(!format!("{verified:?}").contains(&event.sig.to_string()));
+}
+
+#[test]
+fn opaque_signed_event_conversion_rechecks_kind_and_signature() {
+    let signed = sign_authorization(&keys(), &authored_claim()).expect("sign authorization");
+    let expected_header = encode_authorization_header(&signed);
+    let event = event_from_header(expected_header.as_str());
+    let exact_event = exact_signed_event(&event);
+
+    let converted =
+        SignedAuthorization::from_signed_event(&exact_event).expect("convert exact BUD-11 event");
+    assert_eq!(converted.event_id(), event.id);
+    assert_eq!(converted.author(), event.pubkey);
+    assert_eq!(converted.created_at(), event.created_at);
+    assert_eq!(
+        encode_signed_event_authorization_header(&exact_event).unwrap(),
+        expected_header
+    );
+
+    let wrong_kind = exact_signed_event(&sign_raw(1, "", Vec::new()));
+    assert_eq!(
+        SignedAuthorization::from_signed_event(&wrong_kind),
+        Err(AuthorizationError::InvalidEventKind { actual: 1 })
+    );
+
+    let mut invalid_signature = event;
+    invalid_signature.sig = sign_raw(
+        RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND,
+        "different",
+        Vec::new(),
+    )
+    .sig;
+    assert!(invalid_signature.verify_id());
+    assert!(!invalid_signature.verify_signature());
+    assert_eq!(
+        SignedAuthorization::from_signed_event(&exact_signed_event(&invalid_signature)),
+        Err(AuthorizationError::InvalidEventSignature)
+    );
 }
 
 #[test]

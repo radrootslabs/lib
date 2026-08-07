@@ -26,7 +26,7 @@ publish = ["crates-io"]
 autoexamples = false
 
 [package.metadata.docs.rs]
-features = ["client", "nostr", "nip46", "geonames", "knowledge"]
+features = ["client", "blossom", "nostr", "nip46", "geonames", "knowledge"]
 
 [lints]
 workspace = true
@@ -48,6 +48,7 @@ default = ["client"]
 client = ["radroots_sdk/default"]
 native = ["client", "radroots_sdk/native"]
 nostr = ["client", "radroots_sdk/nostr"]
+blossom = ["client", "radroots_sdk/blossom"]
 nip46 = ["nostr", "radroots_sdk/nip46"]
 radrootsd = ["client", "radroots_sdk/radrootsd"]
 geonames = ["client", "radroots_sdk/geonames"]

@@ -5,7 +5,8 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 use radroots_event::contract::event_contract;
-use radroots_event_codec::authoring::AuthoredEventPlan;
+use radroots_event_codec::authoring::{AuthoredEventPlan, BlossomAuthorizationPlan, PlanDigest};
+use radroots_identity::PublicKey;
 use radroots_protocol::runtime::v1::OperationId;
 
 #[cfg(not(feature = "std"))]
@@ -143,6 +144,91 @@ pub trait ProgressObserver: Send + Sync {
     fn on_progress(&self, progress: &SignProgress);
 }
 
+/// Domain-separated reason an exact Nostr event is being signed.
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SigningPurpose {
+    /// A registry-authorized event that may enter the durable relay pipeline.
+    AuthoredEvent,
+    /// A short-lived BUD-11 upload credential for an HTTP request only.
+    BlossomUploadAuthorization,
+}
+
+#[derive(Clone)]
+enum SigningPlan {
+    Authored(AuthoredEventPlan),
+    BlossomUpload(BlossomAuthorizationPlan),
+}
+
+impl SigningPlan {
+    const fn purpose(&self) -> SigningPurpose {
+        match self {
+            Self::Authored(_) => SigningPurpose::AuthoredEvent,
+            Self::BlossomUpload(_) => SigningPurpose::BlossomUploadAuthorization,
+        }
+    }
+
+    const fn author(&self) -> &PublicKey {
+        match self {
+            Self::Authored(plan) => plan.author(),
+            Self::BlossomUpload(plan) => plan.author(),
+        }
+    }
+
+    const fn created_at(&self) -> u64 {
+        match self {
+            Self::Authored(plan) => plan.created_at(),
+            Self::BlossomUpload(plan) => plan.created_at(),
+        }
+    }
+
+    const fn kind(&self) -> u32 {
+        match self {
+            Self::Authored(plan) => plan.body().kind(),
+            Self::BlossomUpload(plan) => plan.kind(),
+        }
+    }
+
+    fn tags(&self) -> &[alloc_or_std::Vec<alloc_or_std::String>] {
+        match self {
+            Self::Authored(plan) => plan.body().tags(),
+            Self::BlossomUpload(plan) => plan.tags(),
+        }
+    }
+
+    fn content(&self) -> &str {
+        match self {
+            Self::Authored(plan) => plan.body().content(),
+            Self::BlossomUpload(plan) => plan.content(),
+        }
+    }
+
+    const fn expected_event_id(&self) -> &radroots_event::EventId {
+        match self {
+            Self::Authored(plan) => plan.expected_event_id(),
+            Self::BlossomUpload(plan) => plan.expected_event_id(),
+        }
+    }
+
+    const fn digest(&self) -> PlanDigest {
+        match self {
+            Self::Authored(plan) => plan.digest(),
+            Self::BlossomUpload(plan) => plan.digest(),
+        }
+    }
+}
+
+#[cfg(not(feature = "std"))]
+mod alloc_or_std {
+    pub use alloc::{string::String, vec::Vec};
+}
+#[cfg(feature = "std")]
+mod alloc_or_std {
+    pub use std::{string::String, vec::Vec};
+}
+
 /// One currently authorized exact plan and bounded signer invocation.
 #[derive(Clone)]
 pub struct SignRequest {
@@ -150,8 +236,8 @@ pub struct SignRequest {
     intent_id: SigningIntentId,
     signer_request_id: SignerRequestId,
     actor: Actor,
-    plan: AuthoredEventPlan,
-    authorization: CurrentAuthoringDecision,
+    plan: SigningPlan,
+    authorization: Option<CurrentAuthoringDecision>,
     policy: SignPolicy,
     cancellation_signal: CancellationSignal,
     progress_observer: Option<Arc<dyn ProgressObserver>>,
@@ -185,6 +271,7 @@ impl SignRequest {
     ) -> Result<Self, Error> {
         let authorization = authority.evaluate(&plan);
         authorize(&actor, &plan, policy, authorization)?;
+        let plan = SigningPlan::Authored(plan);
         let signer_request_id = SignerRequestId::derive(intent_id.artifact_id(), plan.digest());
         Ok(Self {
             operation_kind,
@@ -192,7 +279,33 @@ impl SignRequest {
             signer_request_id,
             actor,
             plan,
-            authorization,
+            authorization: Some(authorization),
+            policy,
+            cancellation_signal: CancellationSignal::new(),
+            progress_observer: None,
+        })
+    }
+
+    /// Creates a bounded HTTP-only BUD-11 upload authorization request.
+    pub fn blossom_upload(
+        operation_kind: OperationId,
+        intent_id: SigningIntentId,
+        actor: Actor,
+        plan: BlossomAuthorizationPlan,
+        policy: SignPolicy,
+    ) -> Result<Self, Error> {
+        if actor.public_key() != *plan.author() || !policy.managed_signing().permits(&actor) {
+            return Err(Error::new(Kind::AuthorizationDenied));
+        }
+        let plan = SigningPlan::BlossomUpload(plan);
+        let signer_request_id = SignerRequestId::derive(intent_id.artifact_id(), plan.digest());
+        Ok(Self {
+            operation_kind,
+            intent_id,
+            signer_request_id,
+            actor,
+            plan,
+            authorization: None,
             policy,
             cancellation_signal: CancellationSignal::new(),
             progress_observer: None,
@@ -232,12 +345,65 @@ impl SignRequest {
     }
 
     #[must_use]
-    pub const fn plan(&self) -> &AuthoredEventPlan {
-        &self.plan
+    pub const fn purpose(&self) -> SigningPurpose {
+        self.plan.purpose()
+    }
+
+    /// Returns the registry-authored plan, if this is a relay-event request.
+    #[must_use]
+    pub const fn authored_plan(&self) -> Option<&AuthoredEventPlan> {
+        match &self.plan {
+            SigningPlan::Authored(plan) => Some(plan),
+            SigningPlan::BlossomUpload(_) => None,
+        }
+    }
+
+    /// Returns the HTTP-only upload-authorization plan, when applicable.
+    #[must_use]
+    pub const fn blossom_authorization_plan(&self) -> Option<&BlossomAuthorizationPlan> {
+        match &self.plan {
+            SigningPlan::Authored(_) => None,
+            SigningPlan::BlossomUpload(plan) => Some(plan),
+        }
     }
 
     #[must_use]
-    pub const fn authorization(&self) -> CurrentAuthoringDecision {
+    pub const fn expected_author(&self) -> &PublicKey {
+        self.plan.author()
+    }
+
+    #[must_use]
+    pub const fn created_at(&self) -> u64 {
+        self.plan.created_at()
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> u32 {
+        self.plan.kind()
+    }
+
+    #[must_use]
+    pub fn tags(&self) -> &[alloc_or_std::Vec<alloc_or_std::String>] {
+        self.plan.tags()
+    }
+
+    #[must_use]
+    pub fn content(&self) -> &str {
+        self.plan.content()
+    }
+
+    #[must_use]
+    pub const fn expected_event_id(&self) -> &radroots_event::EventId {
+        self.plan.expected_event_id()
+    }
+
+    #[must_use]
+    pub const fn plan_digest(&self) -> PlanDigest {
+        self.plan.digest()
+    }
+
+    #[must_use]
+    pub const fn authorization(&self) -> Option<CurrentAuthoringDecision> {
         self.authorization
     }
 
@@ -303,7 +469,8 @@ impl fmt::Debug for SignRequest {
             .field("intent_id", &self.intent_id)
             .field("signer_request_id", &self.signer_request_id)
             .field("actor", &self.actor)
-            .field("plan", &"[redacted authored event plan]")
+            .field("purpose", &self.purpose())
+            .field("plan", &"[redacted exact event plan]")
             .field("authorization", &self.authorization)
             .field("policy", &self.policy)
             .finish_non_exhaustive()

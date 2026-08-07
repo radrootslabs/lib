@@ -8,7 +8,8 @@ use radroots_event_codec::{
 };
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
-    Actor, AuthoredArtifactId as SigningArtifactId, SigningIntentId, SigningOperationId,
+    Actor, AuthoredArtifactId as SigningArtifactId, SignReceipt, SigningIntentId,
+    SigningOperationId,
     recovery::{RecoveryDisposition, ReplayCapability, recovery_disposition},
     request::{CancellationPolicy, SignPolicy},
 };
@@ -524,7 +525,22 @@ impl Engine {
         )
         .map_err(|_| Error::InvalidPushRequest)?;
 
-        match signer.sign(sign_request).await {
+        let expected_request = sign_request.clone();
+        let signer_result = match signer.sign(sign_request).await {
+            Ok(receipt) => match self.clock.now_unix_ms() {
+                Ok(observed_at_unix_ms) => SignReceipt::from_signed_event(
+                    &expected_request,
+                    receipt.signed_event().clone(),
+                    observed_at_unix_ms,
+                ),
+                Err(_) => Err(radroots_signing::Error::new(
+                    radroots_signing::error::Kind::InternalError,
+                )),
+            },
+            Err(error) => Err(error),
+        };
+
+        match signer_result {
             Ok(receipt) => {
                 let command = AuthoredAtomicCommand::ApplySigned(
                     ApplySignedArtifact::new(
@@ -550,6 +566,17 @@ impl Engine {
             }
             Err(error) => {
                 let applied_at = self.clock.now_unix_ms()?;
+                if error.kind() == radroots_signing::error::Kind::DeadlineExceeded
+                    && claimed
+                        .signing_claim()
+                        .is_some_and(|claim| applied_at >= claim.expires_at_unix_ms())
+                {
+                    // The signer result arrived after this worker's fence
+                    // expired. It is rejected, but this stale worker must not
+                    // mutate durable state; recovery will reclaim the exact
+                    // request under a fresh fence.
+                    return Err(Error::SignerDeadlineExceeded);
+                }
                 if error.kind() == radroots_signing::error::Kind::SignerCancelled {
                     let command = AuthoredAtomicCommand::Cancel(
                         CancelAuthoredWork::new(
