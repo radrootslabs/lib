@@ -42,9 +42,10 @@ use crate::{
         PrivateArtifactRevision, PrivateArtifactStage, PrivateArtifactStatus, PrivateArtifactStore,
     },
     projection::{
-        EventIndexCheckpoint, EventIndexManifest, ProjectionCheckpoint, ProjectionGeneration,
-        ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionStatus, RebuildStage,
-        RebuildTicket, RebuildTicketId, RebuildTransition,
+        EventIndexCheckpoint, EventIndexManifest, ProjectionCheckpoint, ProjectionDocument,
+        ProjectionGeneration, ProjectionHealth, ProjectionId, ProjectionInvalidation,
+        ProjectionSnapshot, ProjectionStatus, RebuildStage, RebuildTicket, RebuildTicketId,
+        RebuildTransition,
     },
     status::{
         EventStoreHealth, EventStoreMode, EventStoreStatus, IntegrityHealth, IntegrityStatus,
@@ -70,6 +71,8 @@ struct State {
     rebuilds: Vec<RebuildTicket>,
     event_index_manifests: Vec<EventIndexManifest>,
     event_index_checkpoints: Vec<EventIndexCheckpoint>,
+    projection_documents: Vec<(ProjectionId, ProjectionGeneration, ProjectionDocument)>,
+    projection_snapshots: Vec<ProjectionSnapshot>,
     private_artifacts: Vec<PrivateArtifactMetadata>,
     private_artifact_reseals: Vec<PrivateArtifactResealReceipt>,
     backups: Vec<BackupOperation>,
@@ -101,6 +104,8 @@ impl MemoryStorage {
                 rebuilds: Vec::new(),
                 event_index_manifests: Vec::new(),
                 event_index_checkpoints: Vec::new(),
+                projection_documents: Vec::new(),
+                projection_snapshots: Vec::new(),
                 private_artifacts: Vec::new(),
                 private_artifact_reseals: Vec::new(),
                 backups: Vec::new(),
@@ -991,6 +996,90 @@ impl ProjectionStore for MemoryStorage {
                 state.event_index_checkpoints.push(checkpoint);
             }
             Ok(())
+        })
+    }
+
+    fn put_projection_document(
+        &self,
+        projection_id: ProjectionId,
+        generation: ProjectionGeneration,
+        document: ProjectionDocument,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some((_, _, existing)) = state.projection_documents.iter_mut().find(
+                |(existing_id, existing_generation, existing)| {
+                    existing_id == &projection_id
+                        && *existing_generation == generation
+                        && existing.key() == document.key()
+                },
+            ) {
+                *existing = document;
+            } else {
+                state
+                    .projection_documents
+                    .push((projection_id, generation, document));
+            }
+            Ok(())
+        })
+    }
+
+    fn projection_document(
+        &self,
+        projection_id: ProjectionId,
+        generation: ProjectionGeneration,
+        key: String,
+    ) -> BoxFuture<'_, Result<Option<ProjectionDocument>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .projection_documents
+                .iter()
+                .find(|(existing_id, existing_generation, existing)| {
+                    existing_id == &projection_id
+                        && *existing_generation == generation
+                        && existing.key() == key
+                })
+                .map(|(_, _, document)| document.clone()))
+        })
+    }
+
+    fn put_projection_snapshot(
+        &self,
+        snapshot: ProjectionSnapshot,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            if let Some(existing) = state.projection_snapshots.iter().find(|existing| {
+                existing.projection_id() == snapshot.projection_id()
+                    && existing.snapshot_id() == snapshot.snapshot_id()
+            }) {
+                return if existing == &snapshot {
+                    Ok(())
+                } else {
+                    Err(Error::CorruptProjectionDocument)
+                };
+            }
+            state.projection_snapshots.push(snapshot);
+            Ok(())
+        })
+    }
+
+    fn projection_snapshot(
+        &self,
+        projection_id: ProjectionId,
+        snapshot_id: [u8; 32],
+    ) -> BoxFuture<'_, Result<Option<ProjectionSnapshot>, Error>> {
+        Box::pin(async move {
+            Ok(self
+                .state()?
+                .projection_snapshots
+                .iter()
+                .find(|snapshot| {
+                    snapshot.projection_id() == &projection_id
+                        && snapshot.snapshot_id() == &snapshot_id
+                })
+                .cloned())
         })
     }
 }

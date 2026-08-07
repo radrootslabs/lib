@@ -33,9 +33,10 @@ use radroots_storage::{
         PrivateArtifactRevision, PrivateArtifactStore, RetentionPolicy,
     },
     projection::{
-        InvalidationReason, ProjectionCheckpoint, ProjectionGeneration, ProjectionHealth,
-        ProjectionId, ProjectionInvalidation, ProjectionRevision, RawSourceDigest, RebuildStage,
-        RebuildTicket, RebuildTicketId, RebuildTransition,
+        InvalidationReason, ProjectionCheckpoint, ProjectionDocument, ProjectionGeneration,
+        ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionRevision,
+        ProjectionSnapshot, RawSourceDigest, RebuildStage, RebuildTicket, RebuildTicketId,
+        RebuildTransition,
     },
 };
 use radroots_transport::{
@@ -958,5 +959,86 @@ fn memory_atomic_replay_rejects_a_changed_digest_without_mutation() {
     assert_eq!(
         block_on(EventStore::status(&store)).unwrap().raw_events(),
         1
+    );
+}
+
+#[test]
+fn memory_materialized_documents_replace_and_snapshots_remain_immutable() {
+    let store = MemoryStorage::default();
+    let projection_id = ProjectionId::parse("memory.today").unwrap();
+    let generation = ProjectionGeneration::new([21; 32]).unwrap();
+    block_on(store.put_projection_document(
+        projection_id.clone(),
+        generation,
+        ProjectionDocument::new("context.one".into(), vec![1]).unwrap(),
+    ))
+    .unwrap();
+    block_on(store.put_projection_document(
+        projection_id.clone(),
+        generation,
+        ProjectionDocument::new("context.one".into(), vec![2]).unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(
+        block_on(store.projection_document(
+            projection_id.clone(),
+            generation,
+            "context.one".into(),
+        ))
+        .unwrap()
+        .unwrap()
+        .value(),
+        [2]
+    );
+    for (candidate_id, candidate_generation, candidate_key) in [
+        (
+            ProjectionId::parse("memory.other").unwrap(),
+            generation,
+            "context.one".to_owned(),
+        ),
+        (
+            projection_id.clone(),
+            ProjectionGeneration::new([23; 32]).unwrap(),
+            "context.one".to_owned(),
+        ),
+        (
+            projection_id.clone(),
+            generation,
+            "context.other".to_owned(),
+        ),
+    ] {
+        assert!(
+            block_on(store.projection_document(candidate_id, candidate_generation, candidate_key,))
+                .unwrap()
+                .is_none()
+        );
+    }
+    let snapshot =
+        ProjectionSnapshot::new(projection_id.clone(), [22; 32], generation, 100, vec![3]).unwrap();
+    block_on(store.put_projection_snapshot(snapshot.clone())).unwrap();
+    block_on(store.put_projection_snapshot(snapshot.clone())).unwrap();
+    assert_eq!(
+        block_on(store.projection_snapshot(projection_id.clone(), [22; 32])).unwrap(),
+        Some(snapshot)
+    );
+    assert_eq!(
+        block_on(store.put_projection_snapshot(
+            ProjectionSnapshot::new(projection_id, [22; 32], generation, 100, vec![4]).unwrap()
+        )),
+        Err(Error::CorruptProjectionDocument)
+    );
+    assert!(
+        block_on(
+            store.projection_snapshot(ProjectionId::parse("memory.other").unwrap(), [22; 32],)
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(
+        block_on(
+            store.projection_snapshot(ProjectionId::parse("memory.today").unwrap(), [23; 32],)
+        )
+        .unwrap()
+        .is_none()
     );
 }

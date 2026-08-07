@@ -5,6 +5,7 @@
 
 pub use radroots_event::EventId;
 pub use radroots_transport::BoxFuture;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 use crate::{
@@ -842,6 +843,147 @@ pub struct ProjectionStatus {
     active_rebuild: Option<RebuildTicketId>,
 }
 
+/// Maximum UTF-8 bytes in one materialized projection document key.
+pub const PROJECTION_DOCUMENT_KEY_MAX_BYTES: usize = 512;
+/// Maximum bytes in one materialized projection document value.
+pub const PROJECTION_DOCUMENT_VALUE_MAX_BYTES: usize = 16 * 1024 * 1024;
+
+/// One backend-neutral, opaque materialized projection document.
+///
+/// Projection owners define the value encoding. Storage verifies its digest
+/// and treats the bytes as opaque so product-specific DTOs do not leak into
+/// the generic persistence boundary.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectionDocument {
+    key: String,
+    value: Vec<u8>,
+    value_sha256: [u8; 32],
+}
+
+impl ProjectionDocument {
+    pub fn new(key: String, value: Vec<u8>) -> Result<Self, Error> {
+        if !valid_document_key(&key)
+            || value.is_empty()
+            || value.len() > PROJECTION_DOCUMENT_VALUE_MAX_BYTES
+        {
+            return Err(Error::InvalidProjectionDocument);
+        }
+        let value_sha256 = Sha256::digest(&value).into();
+        Ok(Self {
+            key,
+            value,
+            value_sha256,
+        })
+    }
+
+    pub fn from_stored_parts(
+        key: String,
+        value: Vec<u8>,
+        value_sha256: [u8; 32],
+    ) -> Result<Self, Error> {
+        let document = Self::new(key, value)?;
+        if document.value_sha256 != value_sha256 {
+            return Err(Error::CorruptProjectionDocument);
+        }
+        Ok(document)
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+
+    pub const fn value_sha256(&self) -> &[u8; 32] {
+        &self.value_sha256
+    }
+}
+
+/// One immutable, durable frozen-query snapshot.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectionSnapshot {
+    projection_id: ProjectionId,
+    snapshot_id: [u8; 32],
+    generation: ProjectionGeneration,
+    created_at_unix_ms: u64,
+    value: Vec<u8>,
+    value_sha256: [u8; 32],
+}
+
+impl ProjectionSnapshot {
+    pub fn new(
+        projection_id: ProjectionId,
+        snapshot_id: [u8; 32],
+        generation: ProjectionGeneration,
+        created_at_unix_ms: u64,
+        value: Vec<u8>,
+    ) -> Result<Self, Error> {
+        if snapshot_id.iter().all(|byte| *byte == 0)
+            || created_at_unix_ms == 0
+            || value.is_empty()
+            || value.len() > PROJECTION_DOCUMENT_VALUE_MAX_BYTES
+        {
+            return Err(Error::InvalidProjectionSnapshot);
+        }
+        let value_sha256 = Sha256::digest(&value).into();
+        Ok(Self {
+            projection_id,
+            snapshot_id,
+            generation,
+            created_at_unix_ms,
+            value,
+            value_sha256,
+        })
+    }
+
+    pub fn from_stored_parts(
+        projection_id: ProjectionId,
+        snapshot_id: [u8; 32],
+        generation: ProjectionGeneration,
+        created_at_unix_ms: u64,
+        value: Vec<u8>,
+        value_sha256: [u8; 32],
+    ) -> Result<Self, Error> {
+        let snapshot = Self::new(
+            projection_id,
+            snapshot_id,
+            generation,
+            created_at_unix_ms,
+            value,
+        )?;
+        if snapshot.value_sha256 != value_sha256 {
+            return Err(Error::CorruptProjectionDocument);
+        }
+        Ok(snapshot)
+    }
+
+    pub const fn projection_id(&self) -> &ProjectionId {
+        &self.projection_id
+    }
+
+    pub const fn snapshot_id(&self) -> &[u8; 32] {
+        &self.snapshot_id
+    }
+
+    pub const fn generation(&self) -> ProjectionGeneration {
+        self.generation
+    }
+
+    pub const fn created_at_unix_ms(&self) -> u64 {
+        self.created_at_unix_ms
+    }
+
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+
+    pub const fn value_sha256(&self) -> &[u8; 32] {
+        &self.value_sha256
+    }
+}
+
 impl ProjectionStatus {
     pub fn new(
         projection_id: ProjectionId,
@@ -928,6 +1070,31 @@ pub trait ProjectionStore: Send + Sync {
         &self,
         checkpoint: EventIndexCheckpoint,
     ) -> BoxFuture<'_, Result<(), Error>>;
+    /// Replaces one named materialized document for a projection generation.
+    fn put_projection_document(
+        &self,
+        projection_id: ProjectionId,
+        generation: ProjectionGeneration,
+        document: ProjectionDocument,
+    ) -> BoxFuture<'_, Result<(), Error>>;
+    /// Loads one named materialized document for an exact generation.
+    fn projection_document(
+        &self,
+        projection_id: ProjectionId,
+        generation: ProjectionGeneration,
+        key: String,
+    ) -> BoxFuture<'_, Result<Option<ProjectionDocument>, Error>>;
+    /// Persists one immutable frozen-query snapshot idempotently.
+    fn put_projection_snapshot(
+        &self,
+        snapshot: ProjectionSnapshot,
+    ) -> BoxFuture<'_, Result<(), Error>>;
+    /// Loads one immutable frozen-query snapshot by exact identity.
+    fn projection_snapshot(
+        &self,
+        projection_id: ProjectionId,
+        snapshot_id: [u8; 32],
+    ) -> BoxFuture<'_, Result<Option<ProjectionSnapshot>, Error>>;
 }
 
 fn valid_label(value: &str, max: usize) -> bool {
@@ -937,6 +1104,13 @@ fn valid_label(value: &str, max: usize) -> bool {
         && value.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         })
+}
+
+fn valid_document_key(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= PROJECTION_DOCUMENT_KEY_MAX_BYTES
+        && value == value.trim()
+        && !value.chars().any(char::is_control)
 }
 
 fn valid_artifact_path(value: &str) -> bool {
@@ -970,4 +1144,93 @@ const fn bytes32_are_zero(bytes: &[u8; 32]) -> bool {
         index += 1;
     }
     true
+}
+
+#[cfg(test)]
+mod materialized_tests {
+    use super::*;
+
+    #[test]
+    fn materialized_document_and_snapshot_bounds_and_digests_fail_closed() {
+        assert_eq!(
+            ProjectionDocument::new(String::new(), vec![1]),
+            Err(Error::InvalidProjectionDocument)
+        );
+        assert_eq!(
+            ProjectionDocument::new("key".into(), Vec::new()),
+            Err(Error::InvalidProjectionDocument)
+        );
+        assert_eq!(
+            ProjectionDocument::new("k".repeat(PROJECTION_DOCUMENT_KEY_MAX_BYTES + 1), vec![1],),
+            Err(Error::InvalidProjectionDocument)
+        );
+        assert_eq!(
+            ProjectionDocument::new(" key".into(), vec![1]),
+            Err(Error::InvalidProjectionDocument)
+        );
+        assert_eq!(
+            ProjectionDocument::new("key\npart".into(), vec![1]),
+            Err(Error::InvalidProjectionDocument)
+        );
+        assert_eq!(
+            ProjectionDocument::new(
+                "key".into(),
+                vec![0; PROJECTION_DOCUMENT_VALUE_MAX_BYTES + 1],
+            ),
+            Err(Error::InvalidProjectionDocument)
+        );
+        let document = ProjectionDocument::new("key".into(), vec![1, 2]).unwrap();
+        assert_eq!(document.key(), "key");
+        assert_eq!(document.value(), [1, 2]);
+        assert_eq!(document.value_sha256().len(), 32);
+        assert_eq!(
+            ProjectionDocument::from_stored_parts("key".into(), vec![1, 2], [9; 32]),
+            Err(Error::CorruptProjectionDocument)
+        );
+
+        let projection_id = ProjectionId::parse("today").unwrap();
+        let generation = ProjectionGeneration::new([1; 32]).unwrap();
+        assert_eq!(
+            ProjectionSnapshot::new(projection_id.clone(), [0; 32], generation, 1, vec![1]),
+            Err(Error::InvalidProjectionSnapshot)
+        );
+        assert_eq!(
+            ProjectionSnapshot::new(projection_id.clone(), [2; 32], generation, 0, vec![1]),
+            Err(Error::InvalidProjectionSnapshot)
+        );
+        assert_eq!(
+            ProjectionSnapshot::new(projection_id.clone(), [2; 32], generation, 1, Vec::new()),
+            Err(Error::InvalidProjectionSnapshot)
+        );
+        assert_eq!(
+            ProjectionSnapshot::new(
+                projection_id.clone(),
+                [2; 32],
+                generation,
+                1,
+                vec![0; PROJECTION_DOCUMENT_VALUE_MAX_BYTES + 1],
+            ),
+            Err(Error::InvalidProjectionSnapshot)
+        );
+        let snapshot =
+            ProjectionSnapshot::new(projection_id.clone(), [2; 32], generation, 1, vec![1])
+                .unwrap();
+        assert_eq!(snapshot.projection_id(), &projection_id);
+        assert_eq!(snapshot.snapshot_id(), &[2; 32]);
+        assert_eq!(snapshot.generation(), generation);
+        assert_eq!(snapshot.created_at_unix_ms(), 1);
+        assert_eq!(snapshot.value(), [1]);
+        assert_eq!(snapshot.value_sha256().len(), 32);
+        assert_eq!(
+            ProjectionSnapshot::from_stored_parts(
+                projection_id,
+                [2; 32],
+                generation,
+                1,
+                vec![1],
+                [9; 32],
+            ),
+            Err(Error::CorruptProjectionDocument)
+        );
+    }
 }

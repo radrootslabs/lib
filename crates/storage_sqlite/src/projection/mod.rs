@@ -5,10 +5,10 @@ use radroots_storage::{
     projection::{
         ArtifactDigest, BoxFuture, EVENT_INDEX_SHARDS_MAX, EventId, EventIdRange,
         EventIndexCheckpoint, EventIndexManifest, EventIndexShard, EventIndexShardCheckpoint,
-        EventIndexShardId, InvalidationReason, ProjectionCheckpoint, ProjectionGeneration,
-        ProjectionHealth, ProjectionId, ProjectionInvalidation, ProjectionRevision,
-        ProjectionStatus, RawSourceDigest, RebuildFailure, RebuildStage, RebuildTicket,
-        RebuildTicketId, RebuildTransition,
+        EventIndexShardId, InvalidationReason, ProjectionCheckpoint, ProjectionDocument,
+        ProjectionGeneration, ProjectionHealth, ProjectionId, ProjectionInvalidation,
+        ProjectionRevision, ProjectionSnapshot, ProjectionStatus, RawSourceDigest, RebuildFailure,
+        RebuildStage, RebuildTicket, RebuildTicketId, RebuildTransition,
     },
 };
 use sqlx::{Row, Sqlite, SqliteConnection};
@@ -445,6 +445,137 @@ impl ProjectionStore for SqliteStorage {
             .map_err(map_backend)?;
             transaction.commit().await.map_err(map_backend)?;
             Ok(())
+        })
+    }
+
+    fn put_projection_document(
+        &self,
+        projection_id: ProjectionId,
+        generation: ProjectionGeneration,
+        document: ProjectionDocument,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            self.require_projection_writer()?;
+            sqlx::query(
+                "INSERT INTO radroots_runtime_projection_documents (
+                   projection_id, generation, document_key, value, value_sha256
+                 ) VALUES (?, ?, ?, ?, ?)
+                 ON CONFLICT(projection_id, generation, document_key) DO UPDATE SET
+                   value = excluded.value,
+                   value_sha256 = excluded.value_sha256",
+            )
+            .bind(projection_id.as_str())
+            .bind(generation.as_bytes().as_slice())
+            .bind(document.key())
+            .bind(document.value())
+            .bind(document.value_sha256().as_slice())
+            .execute(self.pool())
+            .await
+            .map_err(map_backend)?;
+            Ok(())
+        })
+    }
+
+    fn projection_document(
+        &self,
+        projection_id: ProjectionId,
+        generation: ProjectionGeneration,
+        key: String,
+    ) -> BoxFuture<'_, Result<Option<ProjectionDocument>, Error>> {
+        Box::pin(async move {
+            sqlx::query(
+                "SELECT document_key, value, value_sha256
+                 FROM radroots_runtime_projection_documents
+                 WHERE projection_id = ? AND generation = ? AND document_key = ?",
+            )
+            .bind(projection_id.as_str())
+            .bind(generation.as_bytes().as_slice())
+            .bind(key)
+            .fetch_optional(self.pool())
+            .await
+            .map_err(map_backend)?
+            .map(|row| {
+                ProjectionDocument::from_stored_parts(
+                    row.try_get("document_key").map_err(map_corrupt)?,
+                    row.try_get("value").map_err(map_corrupt)?,
+                    array(row.try_get("value_sha256").map_err(map_corrupt)?)?,
+                )
+            })
+            .transpose()
+        })
+    }
+
+    fn put_projection_snapshot(
+        &self,
+        snapshot: ProjectionSnapshot,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            self.require_projection_writer()?;
+            let result = sqlx::query(
+                "INSERT INTO radroots_runtime_projection_snapshots (
+                   projection_id, snapshot_id, generation, created_at_unix_ms,
+                   value, value_sha256
+                 ) VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(projection_id, snapshot_id) DO NOTHING",
+            )
+            .bind(snapshot.projection_id().as_str())
+            .bind(snapshot.snapshot_id().as_slice())
+            .bind(snapshot.generation().as_bytes().as_slice())
+            .bind(i64_from_u64(snapshot.created_at_unix_ms())?)
+            .bind(snapshot.value())
+            .bind(snapshot.value_sha256().as_slice())
+            .execute(self.pool())
+            .await
+            .map_err(map_backend)?;
+            if result.rows_affected() == 1 {
+                return Ok(());
+            }
+            match self
+                .projection_snapshot(snapshot.projection_id().clone(), *snapshot.snapshot_id())
+                .await?
+            {
+                Some(existing) if existing == snapshot => Ok(()),
+                Some(_) => Err(Error::CorruptProjectionDocument),
+                None => Err(Error::CorruptProjectionDocument),
+            }
+        })
+    }
+
+    fn projection_snapshot(
+        &self,
+        projection_id: ProjectionId,
+        snapshot_id: [u8; 32],
+    ) -> BoxFuture<'_, Result<Option<ProjectionSnapshot>, Error>> {
+        Box::pin(async move {
+            sqlx::query(
+                "SELECT projection_id, snapshot_id, generation, created_at_unix_ms,
+                        value, value_sha256
+                 FROM radroots_runtime_projection_snapshots
+                 WHERE projection_id = ? AND snapshot_id = ?",
+            )
+            .bind(projection_id.as_str())
+            .bind(snapshot_id.as_slice())
+            .fetch_optional(self.pool())
+            .await
+            .map_err(map_backend)?
+            .map(|row| {
+                ProjectionSnapshot::from_stored_parts(
+                    ProjectionId::parse(
+                        row.try_get::<String, _>("projection_id")
+                            .map_err(map_corrupt)?,
+                    )
+                    .map_err(|_| Error::CorruptProjectionDocument)?,
+                    array(row.try_get("snapshot_id").map_err(map_corrupt)?)?,
+                    ProjectionGeneration::new(array(
+                        row.try_get("generation").map_err(map_corrupt)?,
+                    )?)
+                    .map_err(|_| Error::CorruptProjectionDocument)?,
+                    u64_from_i64(row.try_get("created_at_unix_ms").map_err(map_corrupt)?)?,
+                    row.try_get("value").map_err(map_corrupt)?,
+                    array(row.try_get("value_sha256").map_err(map_corrupt)?)?,
+                )
+            })
+            .transpose()
         })
     }
 }
@@ -1568,6 +1699,126 @@ mod tests {
                 Err(Error::CorruptProjectionRecord)
             );
         }
+    }
+
+    #[tokio::test]
+    async fn materialized_documents_and_frozen_snapshots_round_trip_and_fail_closed() {
+        let writer = store(EventStoreMode::ReadWrite).await;
+        let id = projection_id();
+        let generation = generation(12);
+        let first = ProjectionDocument::new("context.alpha".into(), b"{\"cards\":[]}".to_vec())
+            .expect("document");
+        writer
+            .put_projection_document(id.clone(), generation, first)
+            .await
+            .expect("put document");
+        assert_eq!(
+            writer
+                .projection_document(id.clone(), generation, "context.alpha".into(),)
+                .await
+                .expect("document lookup")
+                .expect("document")
+                .value(),
+            b"{\"cards\":[]}"
+        );
+        writer
+            .put_projection_document(
+                id.clone(),
+                generation,
+                ProjectionDocument::new("context.alpha".into(), b"{\"cards\":[1]}".to_vec())
+                    .expect("replacement"),
+            )
+            .await
+            .expect("replace document");
+        assert_eq!(
+            writer
+                .projection_document(id.clone(), generation, "context.alpha".into(),)
+                .await
+                .expect("document lookup")
+                .expect("document")
+                .value(),
+            b"{\"cards\":[1]}"
+        );
+
+        let snapshot = ProjectionSnapshot::new(
+            id.clone(),
+            [13; 32],
+            generation,
+            1_000,
+            b"{\"frozen\":true}".to_vec(),
+        )
+        .expect("snapshot");
+        writer
+            .put_projection_snapshot(snapshot.clone())
+            .await
+            .expect("put snapshot");
+        writer
+            .put_projection_snapshot(snapshot.clone())
+            .await
+            .expect("idempotent snapshot replay");
+        let concurrent_snapshot = ProjectionSnapshot::new(
+            id.clone(),
+            [14; 32],
+            generation,
+            1_001,
+            b"{\"frozen\":\"concurrent\"}".to_vec(),
+        )
+        .expect("concurrent snapshot");
+        let (left, right) = tokio::join!(
+            writer.put_projection_snapshot(concurrent_snapshot.clone()),
+            writer.put_projection_snapshot(concurrent_snapshot),
+        );
+        left.expect("concurrent left snapshot insert");
+        right.expect("concurrent right snapshot insert");
+        assert_eq!(
+            writer
+                .projection_snapshot(id.clone(), [13; 32])
+                .await
+                .expect("snapshot lookup"),
+            Some(snapshot)
+        );
+        assert_eq!(
+            writer
+                .put_projection_snapshot(
+                    ProjectionSnapshot::new(
+                        id.clone(),
+                        [13; 32],
+                        generation,
+                        1_000,
+                        b"{\"frozen\":false}".to_vec(),
+                    )
+                    .expect("conflicting snapshot"),
+                )
+                .await,
+            Err(Error::CorruptProjectionDocument)
+        );
+
+        sqlx::query(
+            "UPDATE radroots_runtime_projection_documents
+             SET value = X'00' WHERE projection_id = ?",
+        )
+        .bind(id.as_str())
+        .execute(writer.pool())
+        .await
+        .expect("forge corrupt document");
+        assert_eq!(
+            writer
+                .projection_document(id, generation, "context.alpha".into())
+                .await,
+            Err(Error::CorruptProjectionDocument)
+        );
+
+        let read_only = store(EventStoreMode::ReadOnly).await;
+        assert_eq!(
+            read_only
+                .put_projection_document(
+                    projection_id(),
+                    generation,
+                    ProjectionDocument::new("context.alpha".into(), vec![1]).expect("document"),
+                )
+                .await,
+            Err(Error::BackendUnavailable)
+        );
     }
 
     #[tokio::test]

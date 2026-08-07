@@ -3574,6 +3574,7 @@ dependencies = [
  "radroots_identity",
  "radroots_sdk",
  "radroots_storage",
+ "radroots_transport",
  "serde",
  "serde_json",
  "sha2",

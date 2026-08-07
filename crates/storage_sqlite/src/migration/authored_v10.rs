@@ -937,7 +937,7 @@ mod tests {
                 .fetch_one(&mut *connection)
                 .await
                 .expect("version after migration"),
-            11
+            i64::from(crate::migration::runtime::CURRENT_VERSION)
         );
         let raw = sqlx::query_scalar::<_, Vec<u8>>(
             "SELECT signed_raw_json FROM radroots_runtime_authored_artifacts",

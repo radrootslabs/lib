@@ -384,6 +384,46 @@ impl ProjectionStore for FaultStorage {
     ) -> radroots_transport::BoxFuture<'_, Result<(), radroots_storage::Error>> {
         ProjectionStore::put_event_index_checkpoint(self.inner.as_ref(), value)
     }
+    fn put_projection_document(
+        &self,
+        projection_id: radroots_storage::projection::ProjectionId,
+        generation: radroots_storage::projection::ProjectionGeneration,
+        document: radroots_storage::projection::ProjectionDocument,
+    ) -> radroots_transport::BoxFuture<'_, Result<(), radroots_storage::Error>> {
+        ProjectionStore::put_projection_document(
+            self.inner.as_ref(),
+            projection_id,
+            generation,
+            document,
+        )
+    }
+    fn projection_document(
+        &self,
+        projection_id: radroots_storage::projection::ProjectionId,
+        generation: radroots_storage::projection::ProjectionGeneration,
+        key: String,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::Error>,
+    > {
+        ProjectionStore::projection_document(self.inner.as_ref(), projection_id, generation, key)
+    }
+    fn put_projection_snapshot(
+        &self,
+        snapshot: radroots_storage::projection::ProjectionSnapshot,
+    ) -> radroots_transport::BoxFuture<'_, Result<(), radroots_storage::Error>> {
+        ProjectionStore::put_projection_snapshot(self.inner.as_ref(), snapshot)
+    }
+    fn projection_snapshot(
+        &self,
+        projection_id: radroots_storage::projection::ProjectionId,
+        snapshot_id: [u8; 32],
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::Error>,
+    > {
+        ProjectionStore::projection_snapshot(self.inner.as_ref(), projection_id, snapshot_id)
+    }
 }
 
 impl AtomicStorage for FaultStorage {
