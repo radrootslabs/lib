@@ -37,6 +37,10 @@ fn paths_reject_relative_traversal_and_wrong_owned_names() {
         ),
         Err(Error::UnexpectedFileName { .. })
     ));
+    assert!(matches!(
+        Paths::from_files("/", directory.path().join("private.sqlite")),
+        Err(Error::UnexpectedFileName { .. })
+    ));
 }
 
 #[test]

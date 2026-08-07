@@ -80,6 +80,15 @@ async fn fresh_store_requires_explicit_generation_and_exact_expectations() {
     .expect("complete fresh store");
     drop(store);
 
+    let exact_reopen = SqliteStorage::open(
+        OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting)
+            .with_source_generation(expected, 2_000)
+            .expect("exact expectation"),
+    )
+    .await
+    .expect("reopen with exact generation expectation");
+    drop(exact_reopen);
+
     assert!(matches!(
         SqliteStorage::open(
             OpenOptions::new(paths, OpenMode::ReadWriteExisting)

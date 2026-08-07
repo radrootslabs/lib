@@ -236,6 +236,9 @@ pub enum Error {
     DatabaseOpenFailed {
         database: &'static str,
     },
+    DatabaseCorrupt {
+        database: &'static str,
+    },
     DatabaseCloseFailed {
         database: &'static str,
     },
@@ -451,6 +454,9 @@ impl fmt::Display for Error {
                     formatter,
                     "failed to open governed SQLite database {database}"
                 )
+            }
+            Self::DatabaseCorrupt { database } => {
+                write!(formatter, "governed SQLite database {database} is corrupt")
             }
             Self::DatabaseCloseFailed { database } => write!(
                 formatter,
@@ -723,7 +729,7 @@ async fn connect(
 ) -> Result<SqliteConnection, Error> {
     SqliteConnection::connect_with(&options)
         .await
-        .map_err(|_| Error::DatabaseOpenFailed { database })
+        .map_err(|source| map_database_open_error(&source, database))
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -733,7 +739,20 @@ async fn pool(options: SqliteConnectOptions, database: &'static str) -> Result<S
         .min_connections(1)
         .connect_with(options)
         .await
-        .map_err(|_| Error::DatabaseOpenFailed { database })
+        .map_err(|source| map_database_open_error(&source, database))
+}
+
+pub(crate) fn map_database_open_error(source: &sqlx::Error, database: &'static str) -> Error {
+    let is_corrupt = source
+        .as_database_error()
+        .and_then(|error| error.code())
+        .and_then(|code| code.parse::<i32>().ok())
+        .is_some_and(|code| matches!(code & 0xff, 11 | 26));
+    if is_corrupt {
+        Error::DatabaseCorrupt { database }
+    } else {
+        Error::DatabaseOpenFailed { database }
+    }
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -833,7 +852,7 @@ async fn verify_pool(
     let mut connection = pool
         .acquire()
         .await
-        .map_err(|_| Error::DatabaseOpenFailed { database })?;
+        .map_err(|source| map_database_open_error(&source, database))?;
     verify_connection(&mut connection, database, busy_timeout).await
 }
 
@@ -884,6 +903,110 @@ impl StdError for Error {
             | Self::BackupFilesystem { source, .. } => Some(source),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod error_mapping_tests {
+    use super::*;
+    use sqlx::error::{DatabaseError, ErrorKind};
+    use std::borrow::Cow;
+
+    #[derive(Debug)]
+    struct CodedDatabaseError(Option<&'static str>);
+
+    impl std::fmt::Display for CodedDatabaseError {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("synthetic database error")
+        }
+    }
+
+    impl StdError for CodedDatabaseError {}
+
+    impl DatabaseError for CodedDatabaseError {
+        fn message(&self) -> &str {
+            "synthetic database error"
+        }
+
+        fn code(&self) -> Option<Cow<'_, str>> {
+            self.0.map(Cow::Borrowed)
+        }
+
+        fn as_error(&self) -> &(dyn StdError + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn StdError + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn StdError + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> ErrorKind {
+            ErrorKind::Other
+        }
+    }
+
+    fn coded_error(code: Option<&'static str>) -> sqlx::Error {
+        sqlx::Error::Database(Box::new(CodedDatabaseError(code)))
+    }
+
+    #[test]
+    fn database_open_errors_classify_primary_and_extended_corruption_codes() {
+        assert!(matches!(
+            map_database_open_error(&coded_error(Some("11")), RUNTIME_DATABASE_NAME),
+            Error::DatabaseCorrupt {
+                database: RUNTIME_DATABASE_NAME
+            }
+        ));
+        assert!(matches!(
+            map_database_open_error(&coded_error(Some("26")), RUNTIME_DATABASE_NAME),
+            Error::DatabaseCorrupt {
+                database: RUNTIME_DATABASE_NAME
+            }
+        ));
+        assert!(matches!(
+            map_database_open_error(&coded_error(Some("267")), RUNTIME_DATABASE_NAME),
+            Error::DatabaseCorrupt {
+                database: RUNTIME_DATABASE_NAME
+            }
+        ));
+        assert!(matches!(
+            map_database_open_error(&coded_error(Some("523")), RUNTIME_DATABASE_NAME),
+            Error::DatabaseCorrupt {
+                database: RUNTIME_DATABASE_NAME
+            }
+        ));
+    }
+
+    #[test]
+    fn database_open_errors_fail_closed_for_absent_malformed_and_other_codes() {
+        assert!(matches!(
+            map_database_open_error(&coded_error(None), PRIVATE_DATABASE_NAME),
+            Error::DatabaseOpenFailed {
+                database: PRIVATE_DATABASE_NAME
+            }
+        ));
+        assert!(matches!(
+            map_database_open_error(&coded_error(Some("not-a-number")), PRIVATE_DATABASE_NAME),
+            Error::DatabaseOpenFailed {
+                database: PRIVATE_DATABASE_NAME
+            }
+        ));
+        assert!(matches!(
+            map_database_open_error(&coded_error(Some("5")), PRIVATE_DATABASE_NAME),
+            Error::DatabaseOpenFailed {
+                database: PRIVATE_DATABASE_NAME
+            }
+        ));
+        assert!(matches!(
+            map_database_open_error(&sqlx::Error::PoolClosed, PRIVATE_DATABASE_NAME),
+            Error::DatabaseOpenFailed {
+                database: PRIVATE_DATABASE_NAME
+            }
+        ));
     }
 }
 

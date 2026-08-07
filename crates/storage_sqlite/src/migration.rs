@@ -16,9 +16,7 @@ pub async fn preflight_authored_v10(paths: &crate::Paths) -> Result<AuthoredV10P
             .read_only(true),
     )
     .await
-    .map_err(|_| Error::DatabaseOpenFailed {
-        database: RUNTIME_DATABASE,
-    })?;
+    .map_err(|source| crate::open::map_database_open_error(&source, RUNTIME_DATABASE))?;
     sqlx::raw_sql("PRAGMA query_only = ON")
         .execute(&mut connection)
         .await

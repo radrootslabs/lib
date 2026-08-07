@@ -113,6 +113,27 @@ error_catalog! {
         message: "SDK persistent storage open failed",
         safe_detail_keys: []
     },
+    StorageBusy => {
+        code: DatabaseBusy,
+        operation: None,
+        capability: Some(CapabilityId::PERSISTENT_STORAGE),
+        message: "SDK persistent storage writer is already active",
+        safe_detail_keys: []
+    },
+    StorageSchemaTooNew => {
+        code: SchemaTooNew,
+        operation: None,
+        capability: Some(CapabilityId::PERSISTENT_STORAGE),
+        message: "SDK persistent storage schema is newer than this runtime",
+        safe_detail_keys: []
+    },
+    StorageUnsupportedSchema => {
+        code: UnsupportedProfileSchema,
+        operation: None,
+        capability: Some(CapabilityId::PERSISTENT_STORAGE),
+        message: "SDK persistent storage schema is unsupported",
+        safe_detail_keys: []
+    },
     StorageInspectionFailed => {
         code: StorageIntegrityFailed,
         operation: None,
@@ -246,8 +267,29 @@ impl Error {
 
     #[cfg(feature = "sqlite")]
     pub(crate) fn storage_open_failed(source: radroots_storage_sqlite::Error) -> Self {
+        use radroots_storage_sqlite::Error as SqliteError;
+
+        let kind = match &source {
+            SqliteError::WriterAlreadyActive { .. } => ErrorKind::StorageBusy,
+            SqliteError::SchemaTooNew { .. } => ErrorKind::StorageSchemaTooNew,
+            SqliteError::SchemaTooOld { .. } | SqliteError::SchemaMigrationRequired { .. } => {
+                ErrorKind::StorageUnsupportedSchema
+            }
+            SqliteError::SchemaMetadataUnavailable { .. }
+            | SqliteError::DatabaseCorrupt { .. }
+            | SqliteError::SchemaIdentityMismatch { .. }
+            | SqliteError::UnrecognizedSchema { .. }
+            | SqliteError::SchemaCatalogMismatch { .. }
+            | SqliteError::SchemaMigrationFailed { .. }
+            | SqliteError::AuthoredMigrationBlocked { .. }
+            | SqliteError::SourceGenerationMismatch
+            | SqliteError::CorruptSourceGeneration
+            | SqliteError::RestoreMarkerCorrupt(_)
+            | SqliteError::RestoreRecoveryConflict(_) => ErrorKind::StorageInspectionFailed,
+            _ => ErrorKind::StorageOpenFailed,
+        };
         Self {
-            kind: ErrorKind::StorageOpenFailed,
+            kind,
             source: Some(Box::new(source)),
         }
     }
