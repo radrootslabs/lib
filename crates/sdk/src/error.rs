@@ -283,7 +283,7 @@ impl Error {
         }
     }
 
-    #[cfg(any(feature = "sync", feature = "nostr"))]
+    #[cfg(any(feature = "blossom", feature = "sync", feature = "nostr"))]
     pub(crate) fn invalid_host_configuration(
         source: impl error::Error + Send + Sync + 'static,
     ) -> Self {
@@ -298,7 +298,7 @@ impl Error {
         Self::without_source(ErrorKind::InvalidHostConfiguration)
     }
 
-    #[cfg(any(feature = "sync", feature = "nostr"))]
+    #[cfg(any(feature = "blossom", feature = "sync", feature = "nostr"))]
     pub(crate) fn shared_operation_unavailable() -> Self {
         Self::without_source(ErrorKind::SharedOperationUnavailable)
     }

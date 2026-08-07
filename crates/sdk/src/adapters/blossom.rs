@@ -1,0 +1,1611 @@
+use std::{net::SocketAddr, time::Duration};
+
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType};
+use reqwest::{
+    StatusCode,
+    header::{ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, LOCATION},
+};
+
+use crate::transport::{
+    BlossomCancellation, BlossomConfig, BlossomEndpoint, BlossomError, BlossomErrorKind,
+    BlossomImageDimensions, BlossomPhase, BlossomUploadReceipt, BlossomUploadRequest,
+};
+
+const MAX_RESOLVED_ADDRESSES: usize = 32;
+const X_SHA_256: &str = "x-sha-256";
+
+pub(crate) async fn upload(
+    config: BlossomConfig,
+    request: BlossomUploadRequest,
+    authorization: crate::signing::AuthorizationHeader,
+    cancellation: BlossomCancellation,
+) -> Result<BlossomUploadReceipt, BlossomError> {
+    upload_with_authorization(config, request, authorization.as_str(), cancellation).await
+}
+
+async fn upload_with_authorization(
+    config: BlossomConfig,
+    request: BlossomUploadRequest,
+    authorization: &str,
+    cancellation: BlossomCancellation,
+) -> Result<BlossomUploadReceipt, BlossomError> {
+    if request.byte_size() > config.max_blob_bytes() {
+        return Err(failure(
+            BlossomErrorKind::ResponseTooLarge,
+            BlossomPhase::Verification,
+            false,
+            false,
+            0,
+        ));
+    }
+    let endpoint = config
+        .profile()
+        .endpoint_for_blob(request.expected_url())
+        .cloned()
+        .ok_or_else(|| {
+            failure(
+                BlossomErrorKind::EndpointNotConfigured,
+                BlossomPhase::Configuration,
+                false,
+                false,
+                0,
+            )
+        })?;
+
+    let mut upload_attempts = 0_u8;
+    let descriptor = loop {
+        ensure_not_cancelled(&cancellation, BlossomPhase::Upload, upload_attempts, false)?;
+        upload_attempts = upload_attempts.saturating_add(1);
+        match upload_once(
+            &config,
+            &endpoint,
+            &request,
+            authorization,
+            &cancellation,
+            upload_attempts,
+        )
+        .await
+        {
+            Ok(descriptor) => break descriptor,
+            Err(error) if error.retryable() && upload_attempts < config.max_attempts() => {
+                retry_delay(&config, upload_attempts, &cancellation, true).await?;
+            }
+            Err(error) => return Err(error),
+        }
+    };
+
+    let verified_upload = verify_descriptor(&request, descriptor, upload_attempts)?;
+    let mut retrieval_attempts = 0_u8;
+    let retrieved = loop {
+        ensure_not_cancelled(
+            &cancellation,
+            BlossomPhase::Retrieval,
+            upload_attempts.saturating_add(retrieval_attempts),
+            true,
+        )?;
+        retrieval_attempts = retrieval_attempts.saturating_add(1);
+        match retrieve_once(
+            &config,
+            verified_upload.url().as_blob_url().clone(),
+            &request,
+            &cancellation,
+            upload_attempts.saturating_add(retrieval_attempts),
+        )
+        .await
+        {
+            Ok(bytes) => break bytes,
+            Err(error) if error.retryable() && retrieval_attempts < config.max_attempts() => {
+                retry_delay(&config, retrieval_attempts, &cancellation, true).await?;
+            }
+            Err(error) => return Err(error),
+        }
+    };
+
+    if retrieved.as_slice() != request.bytes() {
+        return Err(failure(
+            BlossomErrorKind::RetrievedBytesMismatch,
+            BlossomPhase::Verification,
+            false,
+            true,
+            upload_attempts.saturating_add(retrieval_attempts),
+        ));
+    }
+    verify_image(
+        retrieved.as_slice(),
+        request.media_type(),
+        request.dimensions(),
+    )
+    .map_err(|error| with_operation(error, true, upload_attempts + retrieval_attempts))?;
+    let verified_retrieval = verified_upload
+        .into_descriptor()
+        .approve_reference()
+        .and_then(|approved| approved.verify_bytes(retrieved.as_slice(), request.media_type()))
+        .map_err(|_| {
+            failure(
+                BlossomErrorKind::RetrievedBytesMismatch,
+                BlossomPhase::Verification,
+                false,
+                true,
+                upload_attempts.saturating_add(retrieval_attempts),
+            )
+        })?;
+
+    Ok(BlossomUploadReceipt::new(
+        verified_retrieval,
+        request.dimensions(),
+        upload_attempts.saturating_add(retrieval_attempts),
+        request.verified_at_unix_ms(),
+    ))
+}
+
+// Direct DNS/socket/HTTP behavior is verified by the local real-I/O suite;
+// deterministic coverage owns the surrounding retry, validation, and durable
+// state policy.
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn upload_once(
+    config: &BlossomConfig,
+    endpoint: &BlossomEndpoint,
+    request: &BlossomUploadRequest,
+    authorization: &str,
+    cancellation: &BlossomCancellation,
+    attempt: u8,
+) -> Result<BlobDescriptor, BlossomError> {
+    let client = hardened_client(
+        config,
+        endpoint,
+        cancellation,
+        BlossomPhase::Upload,
+        attempt,
+        false,
+    )
+    .await?;
+    let pending = client
+        .put(endpoint.upload_url())
+        .header(AUTHORIZATION, authorization)
+        .header(X_SHA_256, request.sha256().to_string())
+        .header(CONTENT_TYPE, request.media_type().as_str())
+        .header(ACCEPT, "application/json")
+        .header(ACCEPT_ENCODING, "identity")
+        .body(request.bytes().to_vec())
+        .send();
+    let response = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => {
+            return Err(failure(
+                BlossomErrorKind::Cancelled,
+                BlossomPhase::Upload,
+                true,
+                true,
+                attempt,
+            ));
+        }
+        response = pending => response.map_err(|error| request_error(error, BlossomPhase::Upload, true, attempt))?,
+    };
+
+    if response.status().is_redirection() {
+        return Err(failure(
+            BlossomErrorKind::UnsafeRedirect,
+            BlossomPhase::Upload,
+            false,
+            true,
+            attempt,
+        ));
+    }
+    if !matches!(response.status(), StatusCode::OK | StatusCode::CREATED) {
+        return Err(http_status_error(
+            response.status(),
+            BlossomPhase::Upload,
+            true,
+            attempt,
+        ));
+    }
+    {
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| {
+                failure(
+                    BlossomErrorKind::InvalidDescriptor,
+                    BlossomPhase::Descriptor,
+                    false,
+                    true,
+                    attempt,
+                )
+            })?;
+        if content_type
+            .split(';')
+            .next()
+            .is_none_or(|value| !value.trim().eq_ignore_ascii_case("application/json"))
+        {
+            return Err(failure(
+                BlossomErrorKind::InvalidDescriptor,
+                BlossomPhase::Descriptor,
+                false,
+                true,
+                attempt,
+            ));
+        }
+    }
+    let bytes = read_bounded(
+        response,
+        config.max_descriptor_bytes(),
+        cancellation,
+        BlossomPhase::Descriptor,
+        true,
+        attempt,
+    )
+    .await?;
+    serde_json::from_slice(bytes.as_slice()).map_err(|_| {
+        failure(
+            BlossomErrorKind::InvalidDescriptor,
+            BlossomPhase::Descriptor,
+            false,
+            true,
+            attempt,
+        )
+    })
+}
+
+fn verify_descriptor(
+    request: &BlossomUploadRequest,
+    descriptor: BlobDescriptor,
+    attempts: u8,
+) -> Result<radroots_blossom::ByteVerifiedDescriptor, BlossomError> {
+    // `BlobDescriptor` construction already binds `sha256` to the URL hash,
+    // so equality of the typed URL proves equality of that hash as well.
+    if descriptor.url() != request.expected_url()
+        || descriptor.size() != request.byte_size()
+        || descriptor.media_type() != request.media_type()
+    {
+        return Err(failure(
+            BlossomErrorKind::DescriptorMismatch,
+            BlossomPhase::Descriptor,
+            false,
+            true,
+            attempts,
+        ));
+    }
+    descriptor
+        .approve_reference()
+        .and_then(|approved| approved.verify_bytes(request.bytes(), request.media_type()))
+        .map_err(|_| {
+            failure(
+                BlossomErrorKind::DescriptorMismatch,
+                BlossomPhase::Descriptor,
+                false,
+                true,
+                attempts,
+            )
+        })
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn retrieve_once(
+    config: &BlossomConfig,
+    mut url: BlobUrl,
+    request: &BlossomUploadRequest,
+    cancellation: &BlossomCancellation,
+    attempt: u8,
+) -> Result<Vec<u8>, BlossomError> {
+    for redirects in 0..=config.max_redirects() {
+        let endpoint = config.profile().endpoint_for_blob(&url).ok_or_else(|| {
+            failure(
+                BlossomErrorKind::UnsafeRedirect,
+                BlossomPhase::Retrieval,
+                false,
+                true,
+                attempt,
+            )
+        })?;
+        let client = hardened_client(
+            config,
+            endpoint,
+            cancellation,
+            BlossomPhase::Retrieval,
+            attempt,
+            true,
+        )
+        .await?;
+        let pending = client
+            .get(url.as_str())
+            .header(ACCEPT, request.media_type().as_str())
+            .header(ACCEPT_ENCODING, "identity")
+            .send();
+        let response = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => {
+                return Err(failure(
+                    BlossomErrorKind::Cancelled,
+                    BlossomPhase::Retrieval,
+                    true,
+                    true,
+                    attempt,
+                ));
+            }
+            response = pending => response.map_err(|error| request_error(error, BlossomPhase::Retrieval, true, attempt))?,
+        };
+        if response.status().is_redirection() {
+            if redirects == config.max_redirects() {
+                return Err(failure(
+                    BlossomErrorKind::RedirectLimit,
+                    BlossomPhase::Retrieval,
+                    false,
+                    true,
+                    attempt,
+                ));
+            }
+            let location = response
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| {
+                    failure(
+                        BlossomErrorKind::UnsafeRedirect,
+                        BlossomPhase::Retrieval,
+                        false,
+                        true,
+                        attempt,
+                    )
+                })?;
+            let base = reqwest::Url::parse(url.as_str()).map_err(|_| {
+                failure(
+                    BlossomErrorKind::UnsafeRedirect,
+                    BlossomPhase::Retrieval,
+                    false,
+                    true,
+                    attempt,
+                )
+            })?;
+            let next = base.join(location).map_err(|_| {
+                failure(
+                    BlossomErrorKind::UnsafeRedirect,
+                    BlossomPhase::Retrieval,
+                    false,
+                    true,
+                    attempt,
+                )
+            })?;
+            let next = BlobUrl::parse(next.as_str()).map_err(|_| {
+                failure(
+                    BlossomErrorKind::UnsafeRedirect,
+                    BlossomPhase::Retrieval,
+                    false,
+                    true,
+                    attempt,
+                )
+            })?;
+            if next.hash_path().hash() != request.sha256()
+                || next.clone().approve().is_err()
+                || config.profile().endpoint_for_blob(&next).is_none()
+            {
+                return Err(failure(
+                    BlossomErrorKind::UnsafeRedirect,
+                    BlossomPhase::Retrieval,
+                    false,
+                    true,
+                    attempt,
+                ));
+            }
+            url = next;
+            continue;
+        }
+        if response.status() != StatusCode::OK {
+            return Err(http_status_error(
+                response.status(),
+                BlossomPhase::Retrieval,
+                true,
+                attempt,
+            ));
+        }
+        let actual_media_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| MediaType::parse(value).ok())
+            .ok_or_else(|| {
+                failure(
+                    BlossomErrorKind::MediaTypeMismatch,
+                    BlossomPhase::Verification,
+                    false,
+                    true,
+                    attempt,
+                )
+            })?;
+        if &actual_media_type != request.media_type() {
+            return Err(failure(
+                BlossomErrorKind::MediaTypeMismatch,
+                BlossomPhase::Verification,
+                false,
+                true,
+                attempt,
+            ));
+        }
+        if response
+            .headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .is_some_and(|size| size != request.byte_size() || size > config.max_blob_bytes())
+        {
+            return Err(failure(
+                BlossomErrorKind::ResponseTooLarge,
+                BlossomPhase::Retrieval,
+                false,
+                true,
+                attempt,
+            ));
+        }
+        return read_bounded(
+            response,
+            usize::try_from(config.max_blob_bytes()).unwrap_or(usize::MAX),
+            cancellation,
+            BlossomPhase::Retrieval,
+            true,
+            attempt,
+        )
+        .await;
+    }
+    Err(failure(
+        BlossomErrorKind::RedirectLimit,
+        BlossomPhase::Retrieval,
+        false,
+        true,
+        attempt,
+    ))
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn hardened_client(
+    config: &BlossomConfig,
+    endpoint: &BlossomEndpoint,
+    cancellation: &BlossomCancellation,
+    phase: BlossomPhase,
+    attempts: u8,
+    possible_orphan: bool,
+) -> Result<reqwest::Client, BlossomError> {
+    let addresses = resolve(
+        endpoint,
+        config.connect_timeout(),
+        cancellation,
+        phase,
+        attempts,
+        possible_orphan,
+    )
+    .await?;
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(config.connect_timeout())
+        .timeout(config.request_timeout())
+        .pool_max_idle_per_host(0);
+    if endpoint.host().parse::<std::net::IpAddr>().is_err() {
+        builder = builder.resolve(endpoint.host(), addresses[0]);
+    }
+    builder.build().map_err(|_| {
+        failure(
+            BlossomErrorKind::Transport,
+            phase,
+            true,
+            possible_orphan,
+            attempts,
+        )
+    })
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn resolve(
+    endpoint: &BlossomEndpoint,
+    timeout: Duration,
+    cancellation: &BlossomCancellation,
+    phase: BlossomPhase,
+    attempts: u8,
+    possible_orphan: bool,
+) -> Result<Vec<SocketAddr>, BlossomError> {
+    let lookup = tokio::net::lookup_host((endpoint.host(), endpoint.port()));
+    let mut resolved = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => {
+            return Err(failure(
+                BlossomErrorKind::Cancelled,
+                phase,
+                true,
+                possible_orphan,
+                attempts,
+            ));
+        }
+        result = tokio::time::timeout(timeout, lookup) => result
+            .map_err(|_| failure(
+                BlossomErrorKind::Timeout,
+                phase,
+                true,
+                possible_orphan,
+                attempts,
+            ))?
+            .map_err(|_| {
+            failure(
+                BlossomErrorKind::ResolutionFailed,
+                phase,
+                true,
+                possible_orphan,
+                attempts,
+            )
+        })?,
+    };
+    let addresses = resolved
+        .by_ref()
+        .take(MAX_RESOLVED_ADDRESSES + 1)
+        .collect::<Vec<_>>();
+    if addresses.is_empty() || addresses.len() > MAX_RESOLVED_ADDRESSES {
+        return Err(failure(
+            BlossomErrorKind::ResolutionFailed,
+            phase,
+            true,
+            possible_orphan,
+            attempts,
+        ));
+    }
+    endpoint
+        .validate_resolved_addresses(addresses.iter().map(SocketAddr::ip))
+        .map_err(|error| with_operation(error, possible_orphan, attempts))?;
+    Ok(addresses)
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn read_bounded(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+    cancellation: &BlossomCancellation,
+    phase: BlossomPhase,
+    possible_orphan: bool,
+    attempts: u8,
+) -> Result<Vec<u8>, BlossomError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(failure(
+            BlossomErrorKind::ResponseTooLarge,
+            phase,
+            false,
+            possible_orphan,
+            attempts,
+        ));
+    }
+    let mut bytes = Vec::with_capacity(
+        response
+            .content_length()
+            .and_then(|length| usize::try_from(length).ok())
+            .unwrap_or(0)
+            .min(max_bytes),
+    );
+    loop {
+        let pending = response.chunk();
+        let chunk = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => {
+                return Err(failure(
+                    BlossomErrorKind::Cancelled,
+                    phase,
+                    true,
+                    possible_orphan,
+                    attempts,
+                ));
+            }
+            chunk = pending => chunk.map_err(|error| request_error(error, phase, possible_orphan, attempts))?,
+        };
+        let Some(chunk) = chunk else {
+            break;
+        };
+        if bytes.len().saturating_add(chunk.len()) > max_bytes {
+            return Err(failure(
+                BlossomErrorKind::ResponseTooLarge,
+                phase,
+                false,
+                possible_orphan,
+                attempts,
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+async fn retry_delay(
+    config: &BlossomConfig,
+    attempt: u8,
+    cancellation: &BlossomCancellation,
+    possible_orphan: bool,
+) -> Result<(), BlossomError> {
+    let exponent = u32::from(attempt.saturating_sub(1)).min(16);
+    let factor = 1_u32 << exponent;
+    let delay = config
+        .initial_retry_delay()
+        .saturating_mul(factor)
+        .min(Duration::from_secs(30));
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(failure(
+            BlossomErrorKind::Cancelled,
+            BlossomPhase::Upload,
+            true,
+            possible_orphan,
+            attempt,
+        )),
+        _ = tokio::time::sleep(delay) => Ok(()),
+    }
+}
+
+fn ensure_not_cancelled(
+    cancellation: &BlossomCancellation,
+    phase: BlossomPhase,
+    attempts: u8,
+    possible_orphan: bool,
+) -> Result<(), BlossomError> {
+    if cancellation.is_cancelled() {
+        Err(failure(
+            BlossomErrorKind::Cancelled,
+            phase,
+            true,
+            possible_orphan,
+            attempts,
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn request_error(
+    error: reqwest::Error,
+    phase: BlossomPhase,
+    possible_orphan: bool,
+    attempts: u8,
+) -> BlossomError {
+    let kind = if error.is_timeout() {
+        BlossomErrorKind::Timeout
+    } else {
+        BlossomErrorKind::Transport
+    };
+    failure(kind, phase, true, possible_orphan, attempts)
+}
+
+fn http_status_error(
+    status: StatusCode,
+    phase: BlossomPhase,
+    possible_orphan: bool,
+    attempts: u8,
+) -> BlossomError {
+    let retryable = matches!(
+        status,
+        StatusCode::REQUEST_TIMEOUT
+            | StatusCode::TOO_EARLY
+            | StatusCode::TOO_MANY_REQUESTS
+            | StatusCode::INTERNAL_SERVER_ERROR
+            | StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT
+    );
+    failure(
+        BlossomErrorKind::HttpStatus,
+        phase,
+        retryable,
+        possible_orphan,
+        attempts,
+    )
+}
+
+fn with_operation(error: BlossomError, possible_orphan: bool, attempts: u8) -> BlossomError {
+    error.with_operation(possible_orphan, attempts)
+}
+
+fn failure(
+    kind: BlossomErrorKind,
+    phase: BlossomPhase,
+    retryable: bool,
+    possible_orphan: bool,
+    attempts: u8,
+) -> BlossomError {
+    BlossomError::new(kind, phase, retryable, possible_orphan, attempts)
+}
+
+pub(crate) fn verify_image(
+    bytes: &[u8],
+    media_type: &MediaType,
+    expected: BlossomImageDimensions,
+) -> Result<(), BlossomError> {
+    let detected = detect_image(bytes).ok_or_else(|| {
+        failure(
+            BlossomErrorKind::InvalidImageBytes,
+            BlossomPhase::Verification,
+            false,
+            false,
+            0,
+        )
+    })?;
+    let declared = match media_type.as_str() {
+        "image/png" => ImageKind::Png,
+        "image/jpeg" => ImageKind::Jpeg,
+        "image/gif" => ImageKind::Gif,
+        "image/webp" => ImageKind::Webp,
+        _ => {
+            return Err(failure(
+                BlossomErrorKind::UnsupportedMediaType,
+                BlossomPhase::Verification,
+                false,
+                false,
+                0,
+            ));
+        }
+    };
+    if declared != detected.0 {
+        return Err(failure(
+            BlossomErrorKind::MediaTypeMismatch,
+            BlossomPhase::Verification,
+            false,
+            false,
+            0,
+        ));
+    }
+    if detected.1 != expected {
+        return Err(failure(
+            BlossomErrorKind::DimensionMismatch,
+            BlossomPhase::Verification,
+            false,
+            false,
+            0,
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ImageKind {
+    Png,
+    Jpeg,
+    Gif,
+    Webp,
+}
+
+fn detect_image(bytes: &[u8]) -> Option<(ImageKind, BlossomImageDimensions)> {
+    detect_png(bytes)
+        .map(|dimensions| (ImageKind::Png, dimensions))
+        .or_else(|| detect_jpeg(bytes).map(|dimensions| (ImageKind::Jpeg, dimensions)))
+        .or_else(|| detect_gif(bytes).map(|dimensions| (ImageKind::Gif, dimensions)))
+        .or_else(|| detect_webp(bytes).map(|dimensions| (ImageKind::Webp, dimensions)))
+}
+
+fn detect_png(bytes: &[u8]) -> Option<BlossomImageDimensions> {
+    if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" || &bytes[12..16] != b"IHDR" {
+        return None;
+    }
+    BlossomImageDimensions::new(
+        u32::from_be_bytes(bytes[16..20].try_into().ok()?),
+        u32::from_be_bytes(bytes[20..24].try_into().ok()?),
+    )
+    .ok()
+}
+
+fn detect_gif(bytes: &[u8]) -> Option<BlossomImageDimensions> {
+    if bytes.len() < 10 || !matches!(&bytes[..6], b"GIF87a" | b"GIF89a") {
+        return None;
+    }
+    BlossomImageDimensions::new(
+        u32::from(u16::from_le_bytes(bytes[6..8].try_into().ok()?)),
+        u32::from(u16::from_le_bytes(bytes[8..10].try_into().ok()?)),
+    )
+    .ok()
+}
+
+fn detect_jpeg(bytes: &[u8]) -> Option<BlossomImageDimensions> {
+    if bytes.len() < 4 || bytes[..2] != [0xff, 0xd8] {
+        return None;
+    }
+    let mut offset = 2_usize;
+    while offset < bytes.len() {
+        while bytes.get(offset) == Some(&0xff) {
+            offset += 1;
+        }
+        let marker = *bytes.get(offset)?;
+        offset += 1;
+        if marker == 0xd9 || marker == 0xda {
+            return None;
+        }
+        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            continue;
+        }
+        let length = usize::from(u16::from_be_bytes([
+            *bytes.get(offset)?,
+            *bytes.get(offset + 1)?,
+        ]));
+        if length < 2 || offset.checked_add(length)? > bytes.len() {
+            return None;
+        }
+        if matches!(
+            marker,
+            0xc0 | 0xc1
+                | 0xc2
+                | 0xc3
+                | 0xc5
+                | 0xc6
+                | 0xc7
+                | 0xc9
+                | 0xca
+                | 0xcb
+                | 0xcd
+                | 0xce
+                | 0xcf
+        ) {
+            if length < 7 {
+                return None;
+            }
+            return BlossomImageDimensions::new(
+                u32::from(u16::from_be_bytes([
+                    *bytes.get(offset + 5)?,
+                    *bytes.get(offset + 6)?,
+                ])),
+                u32::from(u16::from_be_bytes([
+                    *bytes.get(offset + 3)?,
+                    *bytes.get(offset + 4)?,
+                ])),
+            )
+            .ok();
+        }
+        offset += length;
+    }
+    None
+}
+
+fn detect_webp(bytes: &[u8]) -> Option<BlossomImageDimensions> {
+    if bytes.len() < 30 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return None;
+    }
+    match &bytes[12..16] {
+        b"VP8X" => BlossomImageDimensions::new(
+            little_u24(&bytes[24..27])?.checked_add(1)?,
+            little_u24(&bytes[27..30])?.checked_add(1)?,
+        )
+        .ok(),
+        b"VP8L" if bytes.get(20) == Some(&0x2f) => {
+            let packed = u32::from_le_bytes(bytes[21..25].try_into().ok()?);
+            BlossomImageDimensions::new(
+                (packed & 0x3fff).checked_add(1)?,
+                ((packed >> 14) & 0x3fff).checked_add(1)?,
+            )
+            .ok()
+        }
+        b"VP8 " if bytes.get(23..26) == Some(&[0x9d, 0x01, 0x2a]) => BlossomImageDimensions::new(
+            u32::from(u16::from_le_bytes(bytes[26..28].try_into().ok()?) & 0x3fff),
+            u32::from(u16::from_le_bytes(bytes[28..30].try_into().ok()?) & 0x3fff),
+        )
+        .ok(),
+        _ => None,
+    }
+}
+
+fn little_u24(bytes: &[u8]) -> Option<u32> {
+    Some(
+        u32::from(*bytes.first()?)
+            | u32::from(*bytes.get(1)?) << 8
+            | u32::from(*bytes.get(2)?) << 16,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_blossom::Sha256;
+    use std::sync::Arc;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes
+    }
+
+    #[test]
+    fn image_headers_bind_mime_and_dimensions() {
+        let dimensions = BlossomImageDimensions::new(1200, 900).expect("dimensions");
+        let bytes = png(1200, 900);
+        assert!(verify_image(&bytes, &MediaType::parse("image/png").unwrap(), dimensions).is_ok());
+        assert_eq!(
+            verify_image(&bytes, &MediaType::parse("image/jpeg").unwrap(), dimensions)
+                .expect_err("wrong MIME")
+                .kind(),
+            BlossomErrorKind::MediaTypeMismatch
+        );
+        assert_eq!(
+            verify_image(
+                &bytes,
+                &MediaType::parse("image/png").unwrap(),
+                BlossomImageDimensions::new(1, 1).unwrap(),
+            )
+            .expect_err("wrong dimensions")
+            .kind(),
+            BlossomErrorKind::DimensionMismatch
+        );
+        assert_eq!(
+            verify_image(
+                b"not an image",
+                &MediaType::parse("image/png").unwrap(),
+                dimensions
+            )
+            .expect_err("invalid image")
+            .kind(),
+            BlossomErrorKind::InvalidImageBytes
+        );
+    }
+
+    #[test]
+    fn supported_image_headers_are_bounded_and_nonzero() {
+        let gif = b"GIF89a\x02\0\x03\0";
+        assert_eq!(
+            detect_gif(gif),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+
+        let jpeg = [
+            0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x03, 0x00, 0x02, 0x03, 0x01, 0x11,
+            0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
+        ];
+        assert_eq!(
+            detect_jpeg(&jpeg),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+
+        let mut webp = vec![0_u8; 30];
+        webp[..4].copy_from_slice(b"RIFF");
+        webp[8..12].copy_from_slice(b"WEBP");
+        webp[12..16].copy_from_slice(b"VP8X");
+        webp[24..27].copy_from_slice(&[1, 0, 0]);
+        webp[27..30].copy_from_slice(&[2, 0, 0]);
+        assert_eq!(
+            detect_webp(&webp),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+    }
+
+    #[test]
+    fn image_header_decoders_reject_every_malformed_boundary() {
+        let mut invalid_png_signature = vec![0_u8; 24];
+        invalid_png_signature[12..16].copy_from_slice(b"IHDR");
+        let mut invalid_png_chunk = png(2, 3);
+        invalid_png_chunk[12..16].copy_from_slice(b"NOPE");
+        let zero_png = png(0, 3);
+        assert_eq!(detect_png(b"short"), None);
+        assert_eq!(detect_png(&invalid_png_signature), None);
+        assert_eq!(detect_png(&invalid_png_chunk), None);
+        assert_eq!(detect_png(&zero_png), None);
+
+        assert_eq!(detect_gif(b"short"), None);
+        assert_eq!(detect_gif(b"GIF00a\x02\0\x03\0"), None);
+        assert_eq!(
+            detect_gif(b"GIF87a\x02\0\x03\0"),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+        assert_eq!(detect_gif(b"GIF89a\0\0\x03\0"), None);
+
+        for malformed in [
+            vec![0xff, 0xd8],
+            vec![0, 0, 0, 0],
+            vec![0xff, 0xd8, 0xff, 0xd9],
+            vec![0xff, 0xd8, 0xff, 0xda],
+            vec![0xff, 0xd8, 0x01],
+            vec![0xff, 0xd8, 0xd0],
+            vec![0xff, 0xd8, 0xff, 0xe0, 0, 1],
+            vec![0xff, 0xd8, 0xff, 0xe0, 0, 100],
+            vec![0xff, 0xd8, 0xff, 0xc0, 0, 6, 0, 0, 0, 0],
+        ] {
+            assert_eq!(detect_jpeg(&malformed), None, "{malformed:?}");
+        }
+        let jpeg_with_prefix = [
+            0xff, 0xd8, 0xff, 0xe0, 0, 2, 0xff, 0xc2, 0, 7, 8, 0, 3, 0, 2,
+        ];
+        assert_eq!(
+            detect_jpeg(&jpeg_with_prefix),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+
+        assert_eq!(detect_webp(b"short"), None);
+        let mut wrong_riff = vec![0_u8; 30];
+        wrong_riff[8..12].copy_from_slice(b"WEBP");
+        assert_eq!(detect_webp(&wrong_riff), None);
+        let mut wrong_webp = vec![0_u8; 30];
+        wrong_webp[..4].copy_from_slice(b"RIFF");
+        assert_eq!(detect_webp(&wrong_webp), None);
+
+        let mut lossless = vec![0_u8; 30];
+        lossless[..4].copy_from_slice(b"RIFF");
+        lossless[8..12].copy_from_slice(b"WEBP");
+        lossless[12..16].copy_from_slice(b"VP8L");
+        lossless[20] = 0x2f;
+        let packed = 1_u32 | (2_u32 << 14);
+        lossless[21..25].copy_from_slice(&packed.to_le_bytes());
+        assert_eq!(
+            detect_webp(&lossless),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+        lossless[20] = 0;
+        assert_eq!(detect_webp(&lossless), None);
+
+        let mut lossy = vec![0_u8; 30];
+        lossy[..4].copy_from_slice(b"RIFF");
+        lossy[8..12].copy_from_slice(b"WEBP");
+        lossy[12..16].copy_from_slice(b"VP8 ");
+        lossy[23..26].copy_from_slice(&[0x9d, 0x01, 0x2a]);
+        lossy[26..28].copy_from_slice(&2_u16.to_le_bytes());
+        lossy[28..30].copy_from_slice(&3_u16.to_le_bytes());
+        assert_eq!(
+            detect_webp(&lossy),
+            Some(BlossomImageDimensions::new(2, 3).unwrap())
+        );
+        lossy[23] = 0;
+        assert_eq!(detect_webp(&lossy), None);
+        lossy[12..16].copy_from_slice(b"NOPE");
+        assert_eq!(detect_webp(&lossy), None);
+
+        assert_eq!(little_u24(&[]), None);
+        assert_eq!(little_u24(&[1]), None);
+        assert_eq!(little_u24(&[1, 2]), None);
+        assert_eq!(little_u24(&[1, 2, 3]), Some(0x03_02_01));
+    }
+
+    #[test]
+    fn image_verification_supports_every_declared_mime() {
+        let gif = b"GIF89a\x02\0\x03\0";
+        assert!(
+            verify_image(
+                gif,
+                &MediaType::parse("image/gif").unwrap(),
+                BlossomImageDimensions::new(2, 3).unwrap(),
+            )
+            .is_ok()
+        );
+
+        let jpeg = [0xff, 0xd8, 0xff, 0xc0, 0, 7, 8, 0, 3, 0, 2];
+        assert!(
+            verify_image(
+                &jpeg,
+                &MediaType::parse("image/jpeg").unwrap(),
+                BlossomImageDimensions::new(2, 3).unwrap(),
+            )
+            .is_ok()
+        );
+
+        let mut webp = vec![0_u8; 30];
+        webp[..4].copy_from_slice(b"RIFF");
+        webp[8..12].copy_from_slice(b"WEBP");
+        webp[12..16].copy_from_slice(b"VP8X");
+        webp[24..27].copy_from_slice(&[1, 0, 0]);
+        webp[27..30].copy_from_slice(&[2, 0, 0]);
+        assert!(
+            verify_image(
+                &webp,
+                &MediaType::parse("image/webp").unwrap(),
+                BlossomImageDimensions::new(2, 3).unwrap(),
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            verify_image(
+                &webp,
+                &MediaType::parse("application/octet-stream").unwrap(),
+                BlossomImageDimensions::new(2, 3).unwrap(),
+            )
+            .expect_err("unsupported media type")
+            .kind(),
+            BlossomErrorKind::UnsupportedMediaType
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_and_error_classification_are_bounded_and_redacted() {
+        for status in [
+            StatusCode::REQUEST_TIMEOUT,
+            StatusCode::TOO_EARLY,
+            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::BAD_GATEWAY,
+            StatusCode::SERVICE_UNAVAILABLE,
+            StatusCode::GATEWAY_TIMEOUT,
+        ] {
+            assert!(http_status_error(status, BlossomPhase::Upload, true, 1).retryable());
+        }
+        assert!(
+            !http_status_error(StatusCode::BAD_REQUEST, BlossomPhase::Upload, false, 1).retryable()
+        );
+
+        let cancellation = BlossomCancellation::default();
+        assert!(ensure_not_cancelled(&cancellation, BlossomPhase::Upload, 0, false).is_ok());
+        cancellation.cancel();
+        assert_eq!(
+            ensure_not_cancelled(&cancellation, BlossomPhase::Retrieval, 2, true)
+                .expect_err("cancelled")
+                .kind(),
+            BlossomErrorKind::Cancelled
+        );
+
+        let profile =
+            crate::transport::BlossomProfile::simulator(["http://127.0.0.1:9"]).expect("profile");
+        let config = BlossomConfig::from_profile(profile)
+            .with_network_policy(
+                Duration::from_millis(10),
+                Duration::from_millis(10),
+                1,
+                Duration::from_millis(1),
+            )
+            .unwrap();
+        let delay = BlossomCancellation::default();
+        assert!(retry_delay(&config, 1, &delay, false).await.is_ok());
+        delay.cancel();
+        assert_eq!(
+            retry_delay(&config, 20, &delay, true)
+                .await
+                .expect_err("cancelled delay")
+                .kind(),
+            BlossomErrorKind::Cancelled
+        );
+
+        let transport_error = reqwest::Client::new()
+            .get("http://127.0.0.1:9")
+            .send()
+            .await
+            .expect_err("closed port");
+        assert_eq!(
+            request_error(transport_error, BlossomPhase::Upload, false, 1).kind(),
+            BlossomErrorKind::Transport
+        );
+
+        let bytes = png(2, 3);
+        let request = upload_request("http://127.0.0.1:9", bytes.clone());
+        let too_small = BlossomConfig::from_profile(
+            crate::transport::BlossomProfile::simulator(["http://127.0.0.1:9"]).unwrap(),
+        )
+        .with_limits(1, 100, 0)
+        .unwrap();
+        assert_eq!(
+            upload_with_authorization(
+                too_small,
+                request,
+                "Nostr redacted",
+                BlossomCancellation::default(),
+            )
+            .await
+            .expect_err("oversize request")
+            .kind(),
+            BlossomErrorKind::ResponseTooLarge
+        );
+        let unconfigured_request = upload_request("http://127.0.0.1:10", bytes);
+        assert_eq!(
+            upload_with_authorization(
+                config,
+                unconfigured_request,
+                "Nostr redacted",
+                BlossomCancellation::default(),
+            )
+            .await
+            .expect_err("unconfigured origin")
+            .kind(),
+            BlossomErrorKind::EndpointNotConfigured
+        );
+    }
+
+    #[test]
+    fn descriptor_verification_checks_each_identity_field() {
+        let bytes = png(2, 3);
+        let request = upload_request("http://127.0.0.1:3000", bytes);
+        let descriptor = |url: BlobUrl, size: u64, media_type: &str| {
+            BlobDescriptor::new(
+                url,
+                request.sha256(),
+                size,
+                MediaType::parse(media_type).unwrap(),
+                1,
+            )
+            .unwrap()
+        };
+        assert!(
+            verify_descriptor(
+                &request,
+                descriptor(
+                    BlobUrl::parse(
+                        format!("http://localhost:3000/{}.png", request.sha256()).as_str()
+                    )
+                    .unwrap(),
+                    request.byte_size(),
+                    "image/png",
+                ),
+                1,
+            )
+            .is_err()
+        );
+        assert!(
+            verify_descriptor(
+                &request,
+                descriptor(
+                    request.expected_url().clone(),
+                    request.byte_size() + 1,
+                    "image/png"
+                ),
+                1,
+            )
+            .is_err()
+        );
+        assert!(
+            verify_descriptor(
+                &request,
+                descriptor(
+                    request.expected_url().clone(),
+                    request.byte_size(),
+                    "image/jpeg",
+                ),
+                1,
+            )
+            .is_err()
+        );
+    }
+
+    #[derive(Clone, Copy)]
+    enum RetrievalResponse {
+        Exact,
+        Altered,
+        RedirectExternal,
+        WrongMime,
+        Oversize,
+        Stall,
+    }
+
+    async fn read_request(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
+        let mut request = Vec::new();
+        let header_end = loop {
+            let mut chunk = [0_u8; 1024];
+            let read = stream.read(&mut chunk).await.expect("request read");
+            assert_ne!(read, 0, "request ended before headers");
+            request.extend_from_slice(&chunk[..read]);
+            if let Some(end) = request.windows(4).position(|value| value == b"\r\n\r\n") {
+                break end + 4;
+            }
+            assert!(request.len() < 64 * 1024, "request headers are bounded");
+        };
+        let headers = String::from_utf8_lossy(&request[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                line.to_ascii_lowercase()
+                    .strip_prefix("content-length: ")
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+            })
+            .unwrap_or(0);
+        while request.len() - header_end < content_length {
+            let mut chunk = [0_u8; 1024];
+            let read = stream.read(&mut chunk).await.expect("body read");
+            assert_ne!(read, 0, "request ended before body");
+            request.extend_from_slice(&chunk[..read]);
+        }
+        request
+    }
+
+    async fn spawn_server(
+        bytes: Vec<u8>,
+        retrieval: RetrievalResponse,
+        bad_descriptor: bool,
+    ) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("address");
+        let origin = format!("http://{address}");
+        let expected_hash = Sha256::digest(bytes.as_slice());
+        let descriptor_hash = if bad_descriptor {
+            Sha256::digest(b"different")
+        } else {
+            expected_hash
+        };
+        let descriptor_url = format!("{origin}/{descriptor_hash}.png");
+        let descriptor = BlobDescriptor::new(
+            BlobUrl::parse(descriptor_url.as_str()).expect("url"),
+            descriptor_hash,
+            bytes.len() as u64,
+            MediaType::parse("image/png").expect("media type"),
+            1_900_000_000,
+        )
+        .expect("descriptor");
+        let descriptor_json = serde_json::to_vec(&descriptor).expect("descriptor json");
+        let task = tokio::spawn(async move {
+            let (mut upload, _) = listener.accept().await.expect("upload accept");
+            let upload_request = read_request(&mut upload).await;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                descriptor_json.len()
+            );
+            upload
+                .write_all(response.as_bytes())
+                .await
+                .expect("upload head");
+            upload
+                .write_all(&descriptor_json)
+                .await
+                .expect("upload body");
+            upload.shutdown().await.expect("upload close");
+
+            if bad_descriptor {
+                return upload_request;
+            }
+            let (mut retrieval_stream, _) = listener.accept().await.expect("retrieval accept");
+            let _ = read_request(&mut retrieval_stream).await;
+            match retrieval {
+                RetrievalResponse::Exact | RetrievalResponse::Altered => {
+                    let body = if matches!(retrieval, RetrievalResponse::Altered) {
+                        let mut altered = bytes.clone();
+                        altered[0] ^= 1;
+                        altered
+                    } else {
+                        bytes
+                    };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    retrieval_stream
+                        .write_all(response.as_bytes())
+                        .await
+                        .expect("retrieval head");
+                    retrieval_stream
+                        .write_all(&body)
+                        .await
+                        .expect("retrieval body");
+                }
+                RetrievalResponse::RedirectExternal => {
+                    let location = format!("https://example.com/{expected_hash}.png");
+                    let response = format!(
+                        "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    retrieval_stream
+                        .write_all(response.as_bytes())
+                        .await
+                        .expect("redirect");
+                }
+                RetrievalResponse::WrongMime => {
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        bytes.len()
+                    );
+                    retrieval_stream
+                        .write_all(response.as_bytes())
+                        .await
+                        .expect("wrong MIME");
+                    retrieval_stream
+                        .write_all(&bytes)
+                        .await
+                        .expect("retrieval body");
+                }
+                RetrievalResponse::Oversize => {
+                    retrieval_stream
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 999999\r\nConnection: close\r\n\r\n")
+                        .await
+                        .expect("oversize");
+                }
+                RetrievalResponse::Stall => {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+            retrieval_stream.shutdown().await.expect("retrieval close");
+            upload_request
+        });
+        (origin, task)
+    }
+
+    async fn spawn_retry_server(bytes: Vec<u8>) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("address");
+        let origin = format!("http://{address}");
+        let hash = Sha256::digest(bytes.as_slice());
+        let descriptor = BlobDescriptor::new(
+            BlobUrl::parse(format!("{origin}/{hash}.png").as_str()).expect("url"),
+            hash,
+            bytes.len() as u64,
+            MediaType::parse("image/png").expect("media type"),
+            1_900_000_000,
+        )
+        .expect("descriptor");
+        let descriptor_json = serde_json::to_vec(&descriptor).expect("descriptor JSON");
+        let task = tokio::spawn(async move {
+            for step in 0..4 {
+                let (mut stream, _) = listener.accept().await.expect("accept");
+                let _ = read_request(&mut stream).await;
+                match step {
+                    0 => {
+                        stream
+                            .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                            .await
+                            .expect("upload retry");
+                    }
+                    1 => {
+                        let head = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            descriptor_json.len()
+                        );
+                        stream
+                            .write_all(head.as_bytes())
+                            .await
+                            .expect("descriptor head");
+                        stream
+                            .write_all(&descriptor_json)
+                            .await
+                            .expect("descriptor body");
+                    }
+                    2 => {
+                        stream
+                            .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                            .await
+                            .expect("retrieval retry");
+                    }
+                    3 => {
+                        let head = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            bytes.len()
+                        );
+                        stream
+                            .write_all(head.as_bytes())
+                            .await
+                            .expect("retrieval head");
+                        stream.write_all(&bytes).await.expect("retrieval body");
+                    }
+                    _ => unreachable!(),
+                }
+                stream.shutdown().await.expect("close");
+            }
+        });
+        (origin, task)
+    }
+
+    fn upload_request(origin: &str, bytes: Vec<u8>) -> BlossomUploadRequest {
+        let hash = Sha256::digest(bytes.as_slice());
+        BlossomUploadRequest::new(
+            BlobUrl::parse(format!("{origin}/{hash}.png").as_str()).expect("blob URL"),
+            Arc::from(bytes),
+            MediaType::parse("image/png").expect("media type"),
+            BlossomImageDimensions::new(2, 3).expect("dimensions"),
+            1_900_000_000_000,
+        )
+        .expect("upload request")
+    }
+
+    fn config(origin: &str) -> BlossomConfig {
+        BlossomConfig::from_profile(
+            crate::transport::BlossomProfile::simulator([origin]).expect("profile"),
+        )
+        .with_network_policy(
+            Duration::from_millis(100),
+            Duration::from_millis(100),
+            1,
+            Duration::from_millis(1),
+        )
+        .expect("network policy")
+    }
+
+    #[tokio::test]
+    async fn loopback_upload_preserves_exact_bytes_and_verifies_retrieval() {
+        let bytes = png(2, 3);
+        let (origin, server) = spawn_server(bytes.clone(), RetrievalResponse::Exact, false).await;
+        let receipt = upload_with_authorization(
+            config(origin.as_str()),
+            upload_request(origin.as_str(), bytes.clone()),
+            "Nostr secret-token-value",
+            BlossomCancellation::default(),
+        )
+        .await
+        .expect("verified upload");
+        assert_eq!(receipt.descriptor().size(), bytes.len() as u64);
+        assert_eq!(
+            receipt.dimensions(),
+            BlossomImageDimensions::new(2, 3).unwrap()
+        );
+        let upload_wire = server.await.expect("server");
+        let header_end = upload_wire
+            .windows(4)
+            .position(|value| value == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        assert_eq!(&upload_wire[header_end..], bytes.as_slice());
+        let headers = String::from_utf8_lossy(&upload_wire[..header_end]);
+        assert!(headers.contains("authorization: Nostr secret-token-value"));
+        assert!(!format!("{receipt:?}").contains("secret-token-value"));
+    }
+
+    #[tokio::test]
+    async fn retryable_upload_and_retrieval_failures_recover_with_bounded_attempts() {
+        let bytes = png(2, 3);
+        let (origin, server) = spawn_retry_server(bytes.clone()).await;
+        let config = BlossomConfig::from_profile(
+            crate::transport::BlossomProfile::simulator([origin.as_str()]).expect("profile"),
+        )
+        .with_network_policy(
+            Duration::from_millis(100),
+            Duration::from_millis(100),
+            2,
+            Duration::from_millis(1),
+        )
+        .expect("network policy");
+        let receipt = upload_with_authorization(
+            config,
+            upload_request(origin.as_str(), bytes),
+            "Nostr redacted",
+            BlossomCancellation::default(),
+        )
+        .await
+        .expect("retry recovery");
+        assert_eq!(receipt.attempts(), 4);
+        server.await.expect("server");
+    }
+
+    #[tokio::test]
+    async fn descriptor_redirect_body_mime_timeout_and_cancellation_fail_closed() {
+        let cases = [
+            (
+                RetrievalResponse::Exact,
+                true,
+                BlossomErrorKind::DescriptorMismatch,
+            ),
+            (
+                RetrievalResponse::RedirectExternal,
+                false,
+                BlossomErrorKind::UnsafeRedirect,
+            ),
+            (
+                RetrievalResponse::Altered,
+                false,
+                BlossomErrorKind::RetrievedBytesMismatch,
+            ),
+            (
+                RetrievalResponse::WrongMime,
+                false,
+                BlossomErrorKind::MediaTypeMismatch,
+            ),
+            (
+                RetrievalResponse::Oversize,
+                false,
+                BlossomErrorKind::ResponseTooLarge,
+            ),
+            (RetrievalResponse::Stall, false, BlossomErrorKind::Timeout),
+        ];
+        for (response, bad_descriptor, expected) in cases {
+            let bytes = png(2, 3);
+            let (origin, server) = spawn_server(bytes.clone(), response, bad_descriptor).await;
+            let error = upload_with_authorization(
+                config(origin.as_str()),
+                upload_request(origin.as_str(), bytes),
+                "Nostr redacted",
+                BlossomCancellation::default(),
+            )
+            .await
+            .expect_err("must fail closed");
+            assert_eq!(error.kind(), expected);
+            assert!(error.possible_orphan());
+            assert!(!format!("{error:?}").contains("Nostr redacted"));
+            server.await.expect("server");
+        }
+
+        let cancellation = BlossomCancellation::default();
+        cancellation.cancel();
+        let bytes = png(2, 3);
+        let hash = Sha256::digest(bytes.as_slice());
+        let request = BlossomUploadRequest::new(
+            BlobUrl::parse(format!("http://127.0.0.1:9/{hash}.png").as_str()).unwrap(),
+            Arc::from(bytes),
+            MediaType::parse("image/png").unwrap(),
+            BlossomImageDimensions::new(2, 3).unwrap(),
+            1,
+        )
+        .unwrap();
+        let error = upload_with_authorization(
+            config("http://127.0.0.1:9"),
+            request,
+            "Nostr redacted",
+            cancellation,
+        )
+        .await
+        .expect_err("cancelled");
+        assert_eq!(error.kind(), BlossomErrorKind::Cancelled);
+        assert!(!error.possible_orphan());
+    }
+}

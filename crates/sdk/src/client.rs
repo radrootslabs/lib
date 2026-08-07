@@ -40,6 +40,8 @@ pub struct ClientBuilder {
     host_sync: Option<crate::sync::HostPolicy>,
     #[cfg(feature = "nostr")]
     nostr: Option<crate::transport::NostrSlot>,
+    #[cfg(feature = "blossom")]
+    blossom: Option<crate::transport::BlossomSlot>,
     capability_availability: BTreeMap<CapabilityId, Availability>,
     explicitly_configured_capabilities: BTreeSet<CapabilityId>,
 }
@@ -53,6 +55,8 @@ struct ClientInner {
     sync: Option<radroots_sync::Engine>,
     #[cfg(feature = "nostr")]
     nostr: Option<crate::transport::NostrSlot>,
+    #[cfg(feature = "blossom")]
+    blossom: Option<crate::transport::BlossomSlot>,
     capability_availability: BTreeMap<CapabilityId, Availability>,
     explicitly_configured_capabilities: BTreeSet<CapabilityId>,
     lifecycle: AtomicU8,
@@ -185,6 +189,14 @@ impl ClientBuilder {
         self
     }
 
+    /// Installs one host-reconfigurable Blossom HTTP adapter slot.
+    #[cfg(feature = "blossom")]
+    #[must_use]
+    pub fn blossom(mut self, slot: crate::transport::BlossomSlot) -> Self {
+        self.blossom = Some(slot);
+        self
+    }
+
     /// Injects an explicitly composed synchronization engine.
     #[cfg(feature = "sync")]
     #[must_use]
@@ -249,6 +261,8 @@ impl ClientBuilder {
                 sync: self.sync,
                 #[cfg(feature = "nostr")]
                 nostr: self.nostr,
+                #[cfg(feature = "blossom")]
+                blossom: self.blossom,
                 capability_availability: self.capability_availability,
                 explicitly_configured_capabilities: self.explicitly_configured_capabilities,
                 lifecycle: AtomicU8::new(OPEN),
@@ -387,6 +401,25 @@ impl Client {
             .configure(profile)
     }
 
+    /// Returns the explicitly composed Blossom adapter, when configured.
+    #[cfg(feature = "blossom")]
+    pub fn blossom(&self) -> Result<Option<&crate::transport::BlossomSlot>> {
+        self.require_open()?;
+        Ok(self.inner.blossom.as_ref())
+    }
+
+    /// Atomically replaces the active Blossom profile without network I/O.
+    #[cfg(feature = "blossom")]
+    pub fn configure_blossom(&self, config: crate::transport::BlossomConfig) -> Result<()> {
+        self.require_open()?;
+        self.inner
+            .blossom
+            .as_ref()
+            .ok_or_else(Error::shared_operation_unavailable)?
+            .configure(config)
+            .map_err(Error::invalid_host_configuration)
+    }
+
     /// Returns client-scoped canonical synchronization operations, when configured.
     #[cfg(feature = "sync")]
     pub fn sync(&self) -> Result<Option<crate::sync::Operations<'_>>> {
@@ -516,11 +549,14 @@ impl Drop for CloseAttempt {
 
 impl std::fmt::Debug for Client {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Client")
+        let mut debug = formatter.debug_struct("Client");
+        debug
             .field("signer", &self.inner.signer.is_some())
             .field("source", &self.inner.source.is_some())
-            .field("sink", &self.inner.sink.is_some())
+            .field("sink", &self.inner.sink.is_some());
+        #[cfg(feature = "blossom")]
+        debug.field("blossom", &self.inner.blossom.is_some());
+        debug
             .field("closed", &self.is_closed())
             .finish_non_exhaustive()
     }
@@ -528,13 +564,15 @@ impl std::fmt::Debug for Client {
 
 impl std::fmt::Debug for ClientBuilder {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("ClientBuilder")
+        let mut debug = formatter.debug_struct("ClientBuilder");
+        debug
             .field("storage", &self.storage.is_some())
             .field("signer", &self.signer.is_some())
             .field("source", &self.source.is_some())
-            .field("sink", &self.sink.is_some())
-            .finish_non_exhaustive()
+            .field("sink", &self.sink.is_some());
+        #[cfg(feature = "blossom")]
+        debug.field("blossom", &self.blossom.is_some());
+        debug.finish_non_exhaustive()
     }
 }
 
@@ -697,10 +735,12 @@ mod tests {
             .build()
             .expect("outbound client");
         assert!(client.signer().expect("signer capability").is_some());
-        assert_eq!(
-            format!("{client:?}"),
+        let expected = if cfg!(feature = "blossom") {
+            "Client { signer: true, source: false, sink: true, blossom: false, closed: false, .. }"
+        } else {
             "Client { signer: true, source: false, sink: true, closed: false, .. }"
-        );
+        };
+        assert_eq!(format!("{client:?}"), expected);
     }
 
     #[cfg(all(feature = "sync", feature = "nip46"))]

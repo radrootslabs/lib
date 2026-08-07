@@ -91,6 +91,7 @@ fn manifest_has_exact_feature_vocabulary_and_explicit_optional_activation() {
     for activation in [
         "dep:radroots_storage_sqlite",
         "dep:radroots_sync",
+        "dep:radroots_blossom",
         "dep:radroots_nostr",
         "dep:radroots_transport_nostr",
         "dep:radroots_nostr_connect",
@@ -98,6 +99,7 @@ fn manifest_has_exact_feature_vocabulary_and_explicit_optional_activation() {
         "dep:reqwest",
         "dep:serde",
         "dep:serde_json",
+        "dep:tokio",
         "dep:radroots_geonames",
     ] {
         assert!(
@@ -152,6 +154,7 @@ fn package_contains_only_reachable_sources_and_registered_targets() {
         rust_files(&root.join("src")),
         BTreeSet::from([
             "adapters/mod.rs".to_owned(),
+            "adapters/blossom.rs".to_owned(),
             "adapters/radrootsd.rs".to_owned(),
             "capability.rs".to_owned(),
             "client.rs".to_owned(),

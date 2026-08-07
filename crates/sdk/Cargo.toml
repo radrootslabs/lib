@@ -47,7 +47,14 @@ memory = ["radroots_storage/memory"]
 sqlite = ["dep:radroots_storage_sqlite"]
 sync = ["dep:radroots_sync", "dep:uuid"]
 nostr = ["sync", "blossom", "dep:radroots_transport_nostr"]
-blossom = ["dep:radroots_nostr", "radroots_nostr/blossom"]
+blossom = [
+  "dep:radroots_blossom",
+  "dep:radroots_nostr",
+  "dep:reqwest",
+  "dep:serde_json",
+  "dep:tokio",
+  "radroots_nostr/blossom",
+]
 nip46 = ["nostr", "dep:radroots_nostr_connect"]
 local-signing = [
   "dep:radroots_nostr",
@@ -80,6 +87,10 @@ radroots_trade = { workspace = true, default-features = false, features = [
 radroots_transport = { workspace = true, default-features = false }
 
 radroots_geonames = { workspace = true, optional = true, default-features = false }
+radroots_blossom = { workspace = true, optional = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
 radroots_nostr_connect = { workspace = true, optional = true, default-features = false }
 radroots_secrets = { workspace = true, optional = true, default-features = false }
@@ -90,17 +101,24 @@ radroots_transport_nostr = { workspace = true, optional = true, default-features
 reqwest = { workspace = true, optional = true, default-features = false, features = [
   "json",
   "rustls-tls",
+  "stream",
 ] }
 serde = { workspace = true, optional = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true, features = ["std"] }
 uuid = { workspace = true, optional = true, features = ["v4"] }
+tokio = { workspace = true, optional = true, features = [
+  "macros",
+  "net",
+  "sync",
+  "time",
+] }
 
 [dev-dependencies]
 nostr = { workspace = true, features = ["std"] }
 radroots_blossom = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread"] }
 
 [[test]]
 name = "package_boundary"
