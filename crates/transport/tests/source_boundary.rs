@@ -698,10 +698,10 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
     );
 
     let relay_source = read_source(crates_root.join("transport_nostr/src/relay.rs").as_path());
-    let client_source = read_source(crates_root.join("transport_nostr/src/client.rs").as_path());
+    let profile_source = read_source(crates_root.join("transport_nostr/src/profile.rs").as_path());
     for required in ["Target::nostr_relay(original)", "Error::DuplicateRelayUrl"] {
         let source = if required.contains("Duplicate") {
-            client_source.as_str()
+            profile_source.as_str()
         } else {
             relay_source.as_str()
         };

@@ -2,6 +2,7 @@
 
 use crate::{NostrTransport, RelayUrl, status};
 use core::time::Duration;
+use futures::{StreamExt, stream};
 use radroots_nostr::event::Event;
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure,
@@ -21,6 +22,7 @@ pub(crate) trait RelayClient: Send + Sync {
         &'a self,
         relays: Vec<RelayUrl>,
         event: Event,
+        max_connections: usize,
         connect_timeout: Duration,
         operation_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>>;
@@ -52,47 +54,51 @@ impl RelayClient for LiveRelayClient {
         &'a self,
         relays: Vec<RelayUrl>,
         event: Event,
+        max_connections: usize,
         connect_timeout: Duration,
         operation_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
         Box::pin(async move {
-            let mut results = Vec::with_capacity(relays.len());
-            for relay in relays {
-                let url = relay.as_str().to_owned();
-                let attempt = async {
-                    self.client.add_relay(url.as_str()).await?;
-                    self.client
-                        .try_connect_relay(url.as_str(), connect_timeout)
-                        .await?;
-                    self.client.send_event_to([url.as_str()], &event).await
-                };
-                let outcome = match tokio::time::timeout(operation_timeout, attempt).await {
-                    Err(_) => status::delivery_failure("timeout"),
-                    Ok(Err(error)) => status::delivery_failure(error.to_string().as_str()),
-                    Ok(Ok(output)) => output
-                        .success
-                        .iter()
-                        .any(|accepted| accepted.to_string().trim_end_matches('/') == url)
-                        .then(DeliveryOutcome::accepted)
-                        .or_else(|| {
-                            output.failed.iter().find_map(|(failed, message)| {
-                                (failed.to_string().trim_end_matches('/') == url)
-                                    .then(|| status::delivery_failure(message.as_str()))
+            stream::iter(relays.into_iter().map(|relay| {
+                let event = event.clone();
+                async move {
+                    let url = relay.as_str().to_owned();
+                    let attempt = async {
+                        self.client.add_relay(url.as_str()).await?;
+                        self.client
+                            .try_connect_relay(url.as_str(), connect_timeout)
+                            .await?;
+                        self.client.send_event_to([url.as_str()], &event).await
+                    };
+                    let outcome = match tokio::time::timeout(operation_timeout, attempt).await {
+                        Err(_) => status::delivery_failure("timeout"),
+                        Ok(Err(error)) => status::delivery_failure(error.to_string().as_str()),
+                        Ok(Ok(output)) => output
+                            .success
+                            .iter()
+                            .any(|accepted| accepted.to_string().trim_end_matches('/') == url)
+                            .then(DeliveryOutcome::accepted)
+                            .or_else(|| {
+                                output.failed.iter().find_map(|(failed, message)| {
+                                    (failed.to_string().trim_end_matches('/') == url)
+                                        .then(|| status::delivery_failure(message.as_str()))
+                                })
                             })
-                        })
-                        .unwrap_or_else(|| status::delivery_failure("relay omitted result")),
-                };
-                results.push(RelayPublishResult { relay, outcome });
-            }
-            results
+                            .unwrap_or_else(|| status::delivery_failure("relay omitted result")),
+                    };
+                    RelayPublishResult { relay, outcome }
+                }
+            }))
+            .buffered(max_connections)
+            .collect()
+            .await
         })
     }
 }
 
 impl EventSink for NostrTransport {
     fn status(&self) -> BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
-        let configured = !self.config().relays().is_empty();
-        Box::pin(async move { Ok(status::sink_status(&self.status, configured)) })
+        Box::pin(async move { Ok(status::sink_status(&self.status)) })
     }
 
     fn deliver(
@@ -100,14 +106,31 @@ impl EventSink for NostrTransport {
         request: DeliveryRequest,
     ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         Box::pin(async move {
+            let now_unix_ms = unix_time_ms();
             let mut requested = Vec::new();
             let mut skipped = Vec::new();
             for target in request.target_set().targets() {
-                match RelayUrl::from_target(target, self.config().relay_url_policy()) {
-                    Ok(relay) if self.config().relays().contains(&relay) => {
-                        requested.push((relay, target.clone()));
+                match self.config().endpoint_for_target(target) {
+                    Some(endpoint) if endpoint.access().can_write() => {
+                        let relay = endpoint.url().clone();
+                        if self.status.may_write(&relay, now_unix_ms) {
+                            requested.push((relay, target.clone()));
+                        } else {
+                            skipped.push(
+                                DeliveryTargetReceipt::skipped(
+                                    target.clone(),
+                                    DeliveryOutcome::unavailable()
+                                        .with_detail(
+                                            "reconnect_backoff",
+                                            "relay reconnect backoff is active",
+                                        )
+                                        .map_err(|_| SinkFailure::invalid_contract(&request))?,
+                                )
+                                .map_err(|_| SinkFailure::invalid_contract(&request))?,
+                            );
+                        }
                     }
-                    _ => skipped.push(
+                    None | Some(_) => skipped.push(
                         DeliveryTargetReceipt::skipped(
                             target.clone(),
                             DeliveryOutcome::rejected()
@@ -127,56 +150,61 @@ impl EventSink for NostrTransport {
                 Ok(event) => event,
                 Err(_) => return Err(SinkFailure::invalid_contract(&request)),
             };
-            let remaining_ms = request.deadline_unix_ms().saturating_sub(unix_time_ms());
+            let remaining_ms = request.deadline_unix_ms().saturating_sub(now_unix_ms);
             let operation_timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
             if operation_timeout_ms == 0 {
+                for (relay, _) in &requested {
+                    self.status.record_write(relay, false, true, now_unix_ms);
+                }
                 let timeout = status::delivery_failure("timeout");
                 skipped.extend(requested.into_iter().map(|(_, target)| {
                     DeliveryTargetReceipt::skipped(target, timeout.clone())
                         .expect("normalized timeout cannot satisfy delivery")
                 }));
-                self.status.record_sink(0, skipped.len(), Some("timeout"));
                 return DeliveryReceipt::for_request(&request, skipped)
                     .map_err(|_| SinkFailure::invalid_contract(&request));
             }
             let expected: BTreeSet<_> = requested.iter().map(|(relay, _)| relay.clone()).collect();
+            for (relay, _) in &requested {
+                self.status.begin_write(relay, now_unix_ms);
+            }
             let results = self
                 .client
                 .publish(
                     requested.iter().map(|(relay, _)| relay.clone()).collect(),
                     event,
+                    self.config().max_connections(),
                     Duration::from_millis(self.config().connect_timeout_ms()),
                     Duration::from_millis(operation_timeout_ms),
                 )
                 .await;
             let mut by_relay = BTreeMap::new();
+            let observed_at_unix_ms = unix_time_ms().max(now_unix_ms);
             for result in results {
-                if expected.contains(&result.relay)
-                    && by_relay.insert(result.relay, result.outcome).is_none()
-                {
-                    continue;
+                if !expected.contains(&result.relay) || by_relay.contains_key(&result.relay) {
+                    return Err(SinkFailure::invalid_contract(&request));
                 }
-                return Err(SinkFailure::invalid_contract(&request));
+                let succeeded = status::delivery_succeeded(&result.outcome);
+                self.status.record_write(
+                    &result.relay,
+                    succeeded,
+                    result.outcome.is_retryable(),
+                    observed_at_unix_ms,
+                );
+                by_relay.insert(result.relay, result.outcome);
             }
 
             let mut receipts = skipped;
             for (relay, target) in requested {
                 let outcome = by_relay.remove(&relay).unwrap_or_else(|| {
+                    self.status
+                        .record_write(&relay, false, true, observed_at_unix_ms);
                     DeliveryOutcome::unavailable()
                         .with_detail("missing_result", "relay returned no result")
                         .expect("static normalized outcome")
                 });
                 receipts.push(DeliveryTargetReceipt::attempted(target, outcome));
             }
-            let accepted = receipts
-                .iter()
-                .filter(|receipt| status::delivery_succeeded(receipt.outcome()))
-                .count();
-            let failed = receipts.len().saturating_sub(accepted);
-            let diagnostic = receipts
-                .iter()
-                .find_map(|receipt| receipt.outcome().message());
-            self.status.record_sink(accepted, failed, diagnostic);
             DeliveryReceipt::for_request(&request, receipts)
                 .map_err(|_| SinkFailure::invalid_contract(&request))
         })
@@ -194,7 +222,7 @@ fn unix_time_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, RelayUrlPolicy};
+    use crate::{Config, RelayProfile, RelayUrlPolicy};
     use radroots_transport::{
         Target, TargetSet,
         outcome::DeliveryOutcomeKind,
@@ -216,6 +244,7 @@ mod tests {
             &'a self,
             relays: Vec<RelayUrl>,
             _event: Event,
+            _max_connections: usize,
             _connect_timeout: Duration,
             _operation_timeout: Duration,
         ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
@@ -261,11 +290,9 @@ mod tests {
 
     #[test]
     fn sink_returns_normalized_per_relay_partial_success() {
-        let config = Config::new(
-            RelayUrlPolicy::Public,
-            ["wss://one.example", "wss://two.example"],
-        )
-        .expect("config");
+        let config = Config::from_profile(
+            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+        );
         let two = RelayUrl::parse("wss://two.example", RelayUrlPolicy::Public).expect("two");
         let client = MockRelayClient {
             outcomes: BTreeMap::from([(two, status::delivery_failure("rate limited"))]),
@@ -312,6 +339,7 @@ mod tests {
                 &'a self,
                 _relays: Vec<RelayUrl>,
                 _event: Event,
+                _max_connections: usize,
                 _connect_timeout: Duration,
                 _operation_timeout: Duration,
             ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
@@ -321,11 +349,9 @@ mod tests {
         }
 
         let calls = Arc::new(AtomicUsize::new(0));
-        let config = Config::new(
-            RelayUrlPolicy::Public,
-            ["wss://one.example", "wss://two.example"],
-        )
-        .expect("config");
+        let config = Config::from_profile(
+            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+        );
         let transport =
             NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
         let delivery = transport.deliver(request());
@@ -343,6 +369,7 @@ mod tests {
                 &'a self,
                 _relays: Vec<RelayUrl>,
                 _event: Event,
+                _max_connections: usize,
                 _connect_timeout: Duration,
                 _operation_timeout: Duration,
             ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
@@ -352,11 +379,9 @@ mod tests {
         }
 
         let calls = Arc::new(AtomicUsize::new(0));
-        let config = Config::new(
-            RelayUrlPolicy::Public,
-            ["wss://one.example", "wss://two.example"],
-        )
-        .expect("config");
+        let config = Config::from_profile(
+            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+        );
         let transport =
             NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
         let receipt = futures::executor::block_on(transport.deliver(request_with_deadline(1)))
@@ -378,6 +403,7 @@ mod tests {
             &'a self,
             _relays: Vec<RelayUrl>,
             _event: Event,
+            _max_connections: usize,
             _connect_timeout: Duration,
             _operation_timeout: Duration,
         ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
@@ -386,11 +412,9 @@ mod tests {
     }
 
     fn scripted(results: Vec<RelayPublishResult>) -> NostrTransport {
-        let config = Config::new(
-            RelayUrlPolicy::Public,
-            ["wss://one.example", "wss://two.example"],
-        )
-        .expect("config");
+        let config = Config::from_profile(
+            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+        );
         NostrTransport::with_client(config, Arc::new(ScriptedRelayClient(results)))
     }
 
@@ -459,6 +483,7 @@ mod tests {
         let results = futures::executor::block_on(client.publish(
             vec![],
             radroots_nostr::event::to_nostr(payload().event().envelope()).expect("nostr event"),
+            1,
             Duration::from_millis(1),
             Duration::from_millis(1),
         ));

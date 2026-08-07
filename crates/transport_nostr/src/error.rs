@@ -26,8 +26,15 @@ pub enum Error {
     InvalidTimeout { field: &'static str, value_ms: u64 },
     /// The per-operation connection limit is outside its governed bounds.
     InvalidConnectionLimit { value: usize },
+    /// The reconnect delay policy is empty, inverted, or exceeds its bound.
+    InvalidReconnectBackoff {
+        initial_delay_ms: u64,
+        max_delay_ms: u64,
+    },
     /// A transport-neutral target is not a Nostr target.
     UnexpectedTransport { actual: String },
+    /// A relay cursor contains a noncanonical event position.
+    InvalidRelayCursor,
     /// The generic transport target rejected the relay URL.
     Target(String),
     /// The relay challenge is empty, malformed, or outside its time bounds.
@@ -85,12 +92,20 @@ impl fmt::Display for Error {
             Self::InvalidConnectionLimit { value } => {
                 write!(formatter, "invalid connection limit: {value}")
             }
+            Self::InvalidReconnectBackoff {
+                initial_delay_ms,
+                max_delay_ms,
+            } => write!(
+                formatter,
+                "invalid reconnect backoff: initial={initial_delay_ms}ms max={max_delay_ms}ms"
+            ),
             Self::UnexpectedTransport { actual } => {
                 write!(
                     formatter,
                     "expected Nostr transport target, received `{actual}`"
                 )
             }
+            Self::InvalidRelayCursor => formatter.write_str("invalid relay cursor"),
             Self::Target(reason) => write!(formatter, "transport target error: {reason}"),
             Self::InvalidAuthChallenge => formatter.write_str("invalid NIP-42 challenge"),
             Self::AuthChallengeConflict => {
@@ -153,9 +168,14 @@ mod tests {
                 value_ms: 0,
             },
             Error::InvalidConnectionLimit { value: 0 },
+            Error::InvalidReconnectBackoff {
+                initial_delay_ms: 0,
+                max_delay_ms: 1,
+            },
             Error::UnexpectedTransport {
                 actual: "local".into(),
             },
+            Error::InvalidRelayCursor,
             Error::Target("invalid".into()),
             Error::InvalidAuthChallenge,
             Error::AuthChallengeConflict,

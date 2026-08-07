@@ -1,5 +1,5 @@
 use radroots_transport::{Target, TargetSet, source::FetchBounds};
-use radroots_transport_nostr::{Config, RelayUrl, RelayUrlPolicy};
+use radroots_transport_nostr::{RelayProfile, RelayUrl, RelayUrlPolicy};
 
 const WORKSPACE_MANIFEST: &str = include_str!("../../../Cargo.toml");
 const RELAY_SOURCE: &str = include_str!("../src/relay.rs");
@@ -43,7 +43,7 @@ fn page_and_target_limits_reject_oversized_requests() {
     assert!(TargetSet::new(targets).is_err());
 
     let relays = (0..=64).map(|index| format!("wss://r{index}.example.com"));
-    assert!(Config::new(RelayUrlPolicy::Public, relays).is_err());
+    assert!(RelayProfile::public(relays).is_err());
 }
 
 #[test]

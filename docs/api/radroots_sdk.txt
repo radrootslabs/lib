@@ -49,9 +49,11 @@ pub struct radroots_sdk::client::Client
 impl radroots_sdk::client::Client
 pub fn radroots_sdk::client::Client::capabilities(&self) -> radroots_sdk::capability::CapabilityReport
 pub async fn radroots_sdk::client::Client::close(&self) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::client::Client::configure_nostr(&self, radroots_transport_nostr::profile::RelayProfile) -> radroots_sdk::error::Result<()>
 pub fn radroots_sdk::client::Client::farm(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::farm::Operations<'_>>>
 pub fn radroots_sdk::client::Client::is_closed(&self) -> bool
 pub fn radroots_sdk::client::Client::listing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::listing::Operations<'_>>>
+pub fn radroots_sdk::client::Client::nostr_status(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_transport_nostr::status::RelayStatusReport>>
 pub fn radroots_sdk::client::Client::signer(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_signing::signer::Signer>>
 pub fn radroots_sdk::client::Client::signing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::signing::Operations<'_>>>
 pub fn radroots_sdk::client::Client::sink(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_transport::sink::EventSink>>
@@ -411,6 +413,19 @@ pub const fn radroots_sdk::trade::PrepareRequest::new(radroots_signing::actor::A
 pub fn radroots_sdk::trade::prepare(radroots_sdk::trade::PrepareRequest) -> core::result::Result<radroots_sdk::trade::Plan, radroots_sdk::trade::PrepareError>
 pub fn radroots_sdk::trade::project(radroots_trade::trade_contract_v1::RadrootsTradeReductionInputV1) -> radroots_trade::trade_contract_v1::RadrootsTradeProjectionV1
 pub mod radroots_sdk::transport
+pub use radroots_sdk::transport::DEFAULT_PUBLIC_RELAY
+pub use radroots_sdk::transport::ReconnectBackoff
+pub use radroots_sdk::transport::RelayAccess
+pub use radroots_sdk::transport::RelayAggregateState
+pub use radroots_sdk::transport::RelayCapabilityEvidence
+pub use radroots_sdk::transport::RelayCursor
+pub use radroots_sdk::transport::RelayEndpoint
+pub use radroots_sdk::transport::RelayEvidenceState
+pub use radroots_sdk::transport::RelayProfile
+pub use radroots_sdk::transport::RelayProfileKind
+pub use radroots_sdk::transport::RelayStatus
+pub use radroots_sdk::transport::RelayStatusReport
+pub use radroots_sdk::transport::RelayUrl
 pub use radroots_sdk::transport::RelayUrlPolicy
 #[non_exhaustive] pub enum radroots_sdk::transport::DaemonAuth
 pub radroots_sdk::transport::DaemonAuth::BearerToken(alloc::string::String)
@@ -444,9 +459,13 @@ pub fn radroots_sdk::transport::DaemonError::fmt(&self, &mut core::fmt::Formatte
 pub struct radroots_sdk::transport::NostrSlot
 impl radroots_sdk::transport::NostrSlot
 pub fn radroots_sdk::transport::NostrSlot::clear(&self)
-pub fn radroots_sdk::transport::NostrSlot::configure<I, S>(&self, I) -> radroots_sdk::error::Result<()> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
-pub fn radroots_sdk::transport::NostrSlot::new(radroots_transport_nostr::relay::RelayUrlPolicy) -> Self
-pub fn radroots_sdk::transport::NostrSlot::targets(&self) -> core::option::Option<radroots_transport::target::TargetSet>
+pub fn radroots_sdk::transport::NostrSlot::configure(&self, radroots_transport_nostr::profile::RelayProfile) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::transport::NostrSlot::new() -> Self
+pub fn radroots_sdk::transport::NostrSlot::read_targets(&self) -> core::option::Option<radroots_transport::target::TargetSet>
+pub fn radroots_sdk::transport::NostrSlot::relay_status(&self) -> core::option::Option<radroots_transport_nostr::status::RelayStatusReport>
+pub fn radroots_sdk::transport::NostrSlot::write_targets(&self) -> core::option::Option<radroots_transport::target::TargetSet>
+impl core::default::Default for radroots_sdk::transport::NostrSlot
+pub fn radroots_sdk::transport::NostrSlot::default() -> Self
 impl core::fmt::Debug for radroots_sdk::transport::NostrSlot
 pub fn radroots_sdk::transport::NostrSlot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl radroots_transport::sink::EventSink for radroots_sdk::transport::NostrSlot
@@ -471,9 +490,11 @@ pub struct radroots_sdk::Client
 impl radroots_sdk::client::Client
 pub fn radroots_sdk::client::Client::capabilities(&self) -> radroots_sdk::capability::CapabilityReport
 pub async fn radroots_sdk::client::Client::close(&self) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::client::Client::configure_nostr(&self, radroots_transport_nostr::profile::RelayProfile) -> radroots_sdk::error::Result<()>
 pub fn radroots_sdk::client::Client::farm(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::farm::Operations<'_>>>
 pub fn radroots_sdk::client::Client::is_closed(&self) -> bool
 pub fn radroots_sdk::client::Client::listing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::listing::Operations<'_>>>
+pub fn radroots_sdk::client::Client::nostr_status(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_transport_nostr::status::RelayStatusReport>>
 pub fn radroots_sdk::client::Client::signer(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_signing::signer::Signer>>
 pub fn radroots_sdk::client::Client::signing(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::signing::Operations<'_>>>
 pub fn radroots_sdk::client::Client::sink(&self) -> radroots_sdk::error::Result<core::option::Option<&dyn radroots_transport::sink::EventSink>>

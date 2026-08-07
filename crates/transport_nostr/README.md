@@ -8,9 +8,9 @@ explicit host-mediated NIP-42 authentication, and normalizes relay outcomes
 and passive status.
 
 The crate does not own event ingestion, persistence, outbox claiming,
-projection refresh, retry scheduling, SDK profiles, or a process runtime.
-Those policies belong to `radroots_sync` and host applications. Publication
-remains disabled during the `0.1.0-alpha` refactor.
+projection refresh, durable retry scheduling, or a process runtime. Those
+policies belong to `radroots_sync` and host applications. It does own bounded
+relay profiles, per-relay reconnect suppression, and evidence-based status.
 
 The authoritative package charter is the
 [`radroots_transport_nostr` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#15-radroots_transport_nostr).
@@ -24,12 +24,10 @@ Configuration is explicit, validated, and inert. Constructing
 
 ```rust
 use radroots_transport::{EventSink, EventSource};
-use radroots_transport_nostr::{Config, NostrTransport, RelayUrlPolicy};
+use radroots_transport_nostr::{Config, NostrTransport, RelayProfile};
 
-let config = Config::new(
-    RelayUrlPolicy::Public,
-    ["wss://relay.example.com"],
-)?.with_timeouts(5_000, 20_000, 2_000)?;
+let profile = RelayProfile::public(["wss://relay.example.com"])?;
+let config = Config::from_profile(profile).with_timeouts(5_000, 20_000, 2_000)?;
 let transport = NostrTransport::new(config);
 
 let source: &dyn EventSource = &transport;
@@ -47,22 +45,31 @@ and applies any retry or scheduling policy outside this crate.
 
 ## Public surface
 
-- [`Config`] validates a non-empty, duplicate-free relay set plus bounded
-  connection, request, status, and concurrency limits.
+- [`RelayProfile`] defines public, loopback-simulator, and physical-device
+  profiles with independent read-only/read-write authority per endpoint.
+- [`Config`] retains the validated profile plus bounded connection, request,
+  status, concurrency, and reconnect limits.
 - [`RelayUrl`] is a canonical Nostr relay URL that converts to and from the
   generic `radroots_transport::Target` model.
 - [`RelayUrlPolicy`] selects public-Internet, exact-loopback, or explicitly
   trusted private-network destination rules.
-- [`NostrTransport`] implements both transport SPIs and exposes explicit
-  NIP-42 challenge lifecycle methods.
+- [`RelayCursor`] provides the equal-timestamp-safe event ordering primitive
+  used by scoped fetch continuation cursors.
+- [`NostrTransport`] implements both transport SPIs, exposes passive typed
+  per-relay evidence, and provides explicit NIP-42 challenge lifecycle methods.
 - [`Error`] contains only package-owned validation and authentication errors;
   upstream failures are normalized before crossing the public boundary.
 
 All source modules are private implementation details. The crate root contains
-only the five reviewed exports above and does not expose an upstream client,
+only reviewed adapter-owned exports and does not expose an upstream client,
 relay pool, Tokio handle, signer, storage handle, or retry worker.
 
 ## Relay and network security
+
+The public profile always includes `wss://radroots.org` as read-only and
+requires separately configured public TLS relays for publication. The
+simulator profile admits exact loopback WebSockets only. The device profile
+requires explicit TLS endpoints and never reuses simulator loopback.
 
 `RelayUrlPolicy::Public` accepts TLS WebSocket URLs with public hostnames or
 global addresses. `Local` accepts exact loopback destinations and permits
@@ -81,22 +88,29 @@ check before handing control to another network boundary.
 
 ## Fetch, delivery, and outcome behavior
 
-Fetch accepts only configured Nostr targets, translates transport-neutral kind,
+Fetch accepts only configured readable Nostr targets, translates transport-neutral kind,
 author, and event-time selectors into Nostr filters, reapplies those selectors
 defensively, applies the request page bound, deduplicates events by event ID,
-preserves per-relay provenance, and emits an opaque versioned cursor when more
-results remain. Malformed relay events are ignored and reported as a partial
-target outcome rather than admitted.
+preserves per-relay provenance, and emits an opaque versioned cursor bound to
+the exact target set and selector when more results remain. Equal timestamps
+are ordered by event ID so overlap-safe reconnect pagination cannot skip peers.
+Malformed relay events are ignored and reported as a partial target outcome
+rather than admitted.
 
 Delivery converts an already validated signed Radroots event to Nostr, attempts
-each configured target once, and returns one normalized receipt entry per
+each configured writable target once, and returns one normalized receipt entry per
 requested target. Relay rejection, authentication requirements, rate limits,
 timeouts, connection failures, missing results, and partial acceptance remain
 explicit; this crate never retries, falls back to another transport, or
 rewrites an unknown result as success.
 
-Source and sink status are passive in-memory observations. Reading status does
-not connect to a relay, refresh DNS, or begin fetch or delivery work.
+Source and sink status are passive in-memory observations. A configured relay
+starts unobserved and never appears available before successful read or write
+evidence. Read and write evidence, failure counters, retry classes, and
+next-attempt times are independent. Aggregate status distinguishes configured,
+connecting, read-only, writable, degraded, offline, and terminally failed
+states. Reading status does not connect to a relay, refresh DNS, or begin fetch
+or delivery work.
 
 ## Deadlines, cancellation, and commit points
 

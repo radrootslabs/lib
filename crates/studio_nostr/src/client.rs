@@ -9,7 +9,7 @@ use radroots_transport::{
     outcome::FetchTargetState,
     source::{FetchBounds, FetchSelector},
 };
-use radroots_transport_nostr::{Config, NostrTransport, RelayUrlPolicy};
+use radroots_transport_nostr::{Config, NostrTransport, RelayProfile};
 
 use radroots_studio_application::{
     BoxFuture, MAX_CONFIGURED_RELAYS, NostrClient, ProfileFetchResult,
@@ -59,16 +59,14 @@ impl NostrClient for SdkNostrClient {
                 if policy_relays.is_empty() {
                     continue;
                 }
-                let config = Config::new(
-                    canonical_policy(policy),
-                    policy_relays.iter().map(|relay| relay.as_str()),
-                )
-                .and_then(|config| {
-                    let timeout_ms =
-                        timeout_millis(deadline.saturating_duration_since(Instant::now()));
-                    config.with_timeouts(timeout_ms, timeout_ms, timeout_ms)
-                })
-                .map_err(|_| invalid_relay_configuration())?;
+                let profile =
+                    relay_profile(policy, policy_relays.iter().map(|relay| relay.as_str()))
+                        .map_err(|_| invalid_relay_configuration())?;
+                let config = Config::from_profile(profile);
+                let timeout_ms = timeout_millis(deadline.saturating_duration_since(Instant::now()));
+                let config = config
+                    .with_timeouts(timeout_ms, timeout_ms, timeout_ms)
+                    .map_err(|_| invalid_relay_configuration())?;
                 let targets = policy_relays
                     .iter()
                     .map(|relay| Target::nostr_relay(relay.as_str()))
@@ -146,11 +144,18 @@ fn timeout_millis(timeout: Duration) -> u64 {
         .clamp(1, 120_000)
 }
 
-const fn canonical_policy(policy: RelayDestinationPolicy) -> RelayUrlPolicy {
+fn relay_profile<I, S>(
+    policy: RelayDestinationPolicy,
+    relays: I,
+) -> Result<RelayProfile, radroots_transport_nostr::Error>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
     match policy {
-        RelayDestinationPolicy::Public => RelayUrlPolicy::Public,
-        RelayDestinationPolicy::Local => RelayUrlPolicy::Local,
-        RelayDestinationPolicy::PrivateNetwork => RelayUrlPolicy::PrivateNetwork,
+        RelayDestinationPolicy::Public => RelayProfile::public(relays),
+        RelayDestinationPolicy::Local => RelayProfile::simulator(relays),
+        RelayDestinationPolicy::PrivateNetwork => RelayProfile::device(relays),
     }
 }
 
@@ -308,18 +313,27 @@ mod tests {
     }
 
     #[test]
-    fn studio_policy_maps_exactly_to_the_canonical_transport_policy() {
+    fn studio_policy_maps_exactly_to_the_canonical_transport_profile() {
+        let public = super::relay_profile(RelayDestinationPolicy::Public, ["wss://public.example"])
+            .expect("public profile");
+        let local = super::relay_profile(RelayDestinationPolicy::Local, ["ws://127.0.0.1:8080"])
+            .expect("local profile");
+        let device = super::relay_profile(
+            RelayDestinationPolicy::PrivateNetwork,
+            ["wss://10.0.0.5:7447"],
+        )
+        .expect("device profile");
         assert_eq!(
-            super::canonical_policy(RelayDestinationPolicy::Public),
-            radroots_transport_nostr::RelayUrlPolicy::Public
+            public.kind(),
+            radroots_transport_nostr::RelayProfileKind::Public
         );
         assert_eq!(
-            super::canonical_policy(RelayDestinationPolicy::Local),
-            radroots_transport_nostr::RelayUrlPolicy::Local
+            local.kind(),
+            radroots_transport_nostr::RelayProfileKind::Simulator
         );
         assert_eq!(
-            super::canonical_policy(RelayDestinationPolicy::PrivateNetwork),
-            radroots_transport_nostr::RelayUrlPolicy::PrivateNetwork
+            device.kind(),
+            radroots_transport_nostr::RelayProfileKind::Device
         );
         assert_eq!(super::timeout_millis(Duration::ZERO), 1);
         assert_eq!(

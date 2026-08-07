@@ -258,7 +258,7 @@ fn live_client_and_http_ownership_belongs_to_transport_nostr() {
         "mod sink;",
         "mod source;",
         "mod status;",
-        "pub use client::{Config, NostrTransport};",
+        "pub use client::{Config, NostrTransport, ReconnectBackoff};",
         "pub use relay::{RelayUrl, RelayUrlPolicy};",
     ] {
         assert!(

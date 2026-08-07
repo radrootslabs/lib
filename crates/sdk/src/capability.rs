@@ -209,6 +209,8 @@ pub(crate) struct Context<'a> {
     pub(crate) source: bool,
     pub(crate) sink: bool,
     pub(crate) sync: bool,
+    pub(crate) source_availability: Availability,
+    pub(crate) sink_availability: Availability,
     pub(crate) lifecycle_availability: Availability,
     pub(crate) explicitly_configured: &'a BTreeSet<CapabilityId>,
     pub(crate) overrides: &'a BTreeMap<CapabilityId, Availability>,
@@ -230,7 +232,7 @@ pub(crate) fn report(context: Context<'_>) -> CapabilityReport {
                     .overrides
                     .get(&definition.id)
                     .copied()
-                    .unwrap_or(context.lifecycle_availability)
+                    .unwrap_or_else(|| directional_availability(definition.id, &context))
             };
             CapabilityStatus {
                 id: definition.id,
@@ -242,6 +244,18 @@ pub(crate) fn report(context: Context<'_>) -> CapabilityReport {
         })
         .collect();
     CapabilityReport { statuses }
+}
+
+fn directional_availability(id: CapabilityId, context: &Context<'_>) -> Availability {
+    match id {
+        CapabilityId::NOSTR_FETCH | CapabilityId::SYNC_PULL => context.source_availability,
+        CapabilityId::NOSTR_DELIVERY
+        | CapabilityId::SYNC_PUSH
+        | CapabilityId::FARM_PUBLICATION
+        | CapabilityId::LISTING_PUBLICATION
+        | CapabilityId::TRADE_COMMANDS => context.sink_availability,
+        _ => context.lifecycle_availability,
+    }
 }
 
 fn configured(id: CapabilityId, context: &Context<'_>) -> bool {
@@ -291,6 +305,8 @@ mod tests {
             source: false,
             sink: false,
             sync: false,
+            source_availability: Availability::Unavailable,
+            sink_availability: Availability::Unavailable,
             lifecycle_availability: Availability::Available,
             explicitly_configured: &explicitly_configured,
             overrides: &overrides,
@@ -339,6 +355,8 @@ mod tests {
             source: true,
             sink: true,
             sync: true,
+            source_availability: Availability::Available,
+            sink_availability: Availability::Degraded,
             lifecycle_availability: Availability::Available,
             explicitly_configured: &explicitly_configured,
             overrides: &overrides,
@@ -348,6 +366,28 @@ mod tests {
                 .get(CapabilityId::SYNC_PULL)
                 .expect("pull")
                 .is_configured()
+        );
+        assert_eq!(
+            complete
+                .get(CapabilityId::SYNC_PUSH)
+                .expect("push")
+                .availability(),
+            if cfg!(feature = "sync") {
+                Availability::Degraded
+            } else {
+                Availability::Unsupported
+            }
+        );
+        assert_eq!(
+            complete
+                .get(CapabilityId::SYNC_PULL)
+                .expect("pull")
+                .availability(),
+            if cfg!(feature = "sync") {
+                Availability::Available
+            } else {
+                Availability::Unsupported
+            }
         );
         assert!(
             complete
@@ -379,6 +419,8 @@ mod tests {
             source: false,
             sink: false,
             sync: true,
+            source_availability: Availability::Unavailable,
+            sink_availability: Availability::Unavailable,
             lifecycle_availability: Availability::Degraded,
             explicitly_configured: &explicitly_configured,
             overrides: &overrides,

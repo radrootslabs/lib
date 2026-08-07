@@ -35,12 +35,14 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
     assert_eq!(
         private_modules(ROOT),
         BTreeSet::from([
-            "auth", "client", "error", "relay", "sink", "source", "status"
+            "auth", "client", "cursor", "error", "profile", "relay", "sink", "source", "status"
         ])
     );
     for export in [
-        "pub use client::{Config, NostrTransport};",
+        "pub use client::{Config, NostrTransport, ReconnectBackoff};",
+        "pub use cursor::RelayCursor;",
         "pub use error::Error;",
+        "pub use profile::{",
         "pub use relay::{RelayUrl, RelayUrlPolicy};",
     ] {
         assert!(ROOT.contains(export), "crate root is missing `{export}`");
@@ -65,8 +67,8 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         assert!(README.contains(required), "README is missing `{required}`");
     }
     for required in [
-        "Config::new(",
-        "RelayUrlPolicy::Public",
+        "Config::from_profile(",
+        "RelayProfile::public(",
         "NostrTransport::new(config)",
         "let source: &dyn EventSource",
         "let sink: &dyn EventSink",
@@ -81,6 +83,9 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
     for required in [
         "pub struct radroots_transport_nostr::Config",
         "pub struct radroots_transport_nostr::NostrTransport",
+        "pub enum radroots_transport_nostr::RelayAggregateState",
+        "pub struct radroots_transport_nostr::RelayProfile",
+        "pub struct radroots_transport_nostr::RelayStatusReport",
         "pub struct radroots_transport_nostr::RelayUrl(_)",
         "pub enum radroots_transport_nostr::RelayUrlPolicy",
         "pub enum radroots_transport_nostr::Error",
@@ -171,8 +176,10 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
         BTreeSet::from([
             "auth.rs".to_owned(),
             "client.rs".to_owned(),
+            "cursor.rs".to_owned(),
             "error.rs".to_owned(),
             "lib.rs".to_owned(),
+            "profile.rs".to_owned(),
             "relay.rs".to_owned(),
             "sink.rs".to_owned(),
             "source.rs".to_owned(),

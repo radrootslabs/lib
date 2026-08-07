@@ -38,6 +38,8 @@ pub struct ClientBuilder {
     sync: Option<radroots_sync::Engine>,
     #[cfg(feature = "sync")]
     host_sync: Option<crate::sync::HostPolicy>,
+    #[cfg(feature = "nostr")]
+    nostr: Option<crate::transport::NostrSlot>,
     capability_availability: BTreeMap<CapabilityId, Availability>,
     explicitly_configured_capabilities: BTreeSet<CapabilityId>,
 }
@@ -49,6 +51,8 @@ struct ClientInner {
     sink: Option<Arc<dyn EventSink>>,
     #[cfg(feature = "sync")]
     sync: Option<radroots_sync::Engine>,
+    #[cfg(feature = "nostr")]
+    nostr: Option<crate::transport::NostrSlot>,
     capability_availability: BTreeMap<CapabilityId, Availability>,
     explicitly_configured_capabilities: BTreeSet<CapabilityId>,
     lifecycle: AtomicU8,
@@ -177,6 +181,7 @@ impl ClientBuilder {
     pub fn nostr(mut self, slot: crate::transport::NostrSlot) -> Self {
         self.source = Some(Arc::new(slot.clone()));
         self.sink = Some(Arc::new(slot.clone()));
+        self.nostr = Some(slot);
         self
     }
 
@@ -242,6 +247,8 @@ impl ClientBuilder {
                 sink: self.sink,
                 #[cfg(feature = "sync")]
                 sync: self.sync,
+                #[cfg(feature = "nostr")]
+                nostr: self.nostr,
                 capability_availability: self.capability_availability,
                 explicitly_configured_capabilities: self.explicitly_configured_capabilities,
                 lifecycle: AtomicU8::new(OPEN),
@@ -254,21 +261,56 @@ impl Client {
     /// Returns a deterministic capability report without probing resources or
     /// performing filesystem, network, signing, or storage operations.
     #[must_use]
+    #[allow(unused_mut)]
     pub fn capabilities(&self) -> CapabilityReport {
         let lifecycle_availability = match self.inner.lifecycle.load(Ordering::Acquire) {
             OPEN => Availability::Available,
             CLOSING | CLOSE_RETRY_REQUIRED => Availability::Degraded,
             _ => Availability::Unavailable,
         };
+        let mut explicitly_configured = self.inner.explicitly_configured_capabilities.clone();
+        let mut overrides = self.inner.capability_availability.clone();
+        let mut source_configured = self.inner.source.is_some();
+        let mut sink_configured = self.inner.sink.is_some();
+        let mut source_availability = Availability::Unavailable;
+        let mut sink_availability = Availability::Unavailable;
+        #[cfg(feature = "nostr")]
+        if let Some(slot) = &self.inner.nostr {
+            match slot.relay_status() {
+                Some(status) => {
+                    source_configured = !status.relays().is_empty();
+                    sink_configured = status
+                        .relays()
+                        .iter()
+                        .any(|relay| relay.endpoint().access().can_write());
+                    source_availability = map_transport_availability(status.read_availability());
+                    sink_availability = map_transport_availability(status.write_availability());
+                    if source_configured {
+                        explicitly_configured.insert(CapabilityId::NOSTR_FETCH);
+                        overrides.insert(CapabilityId::NOSTR_FETCH, source_availability);
+                    }
+                    if sink_configured {
+                        explicitly_configured.insert(CapabilityId::NOSTR_DELIVERY);
+                        overrides.insert(CapabilityId::NOSTR_DELIVERY, sink_availability);
+                    }
+                }
+                None => {
+                    source_configured = false;
+                    sink_configured = false;
+                }
+            }
+        }
         crate::capability::report(crate::capability::Context {
             storage: true,
             signer: self.inner.signer.is_some(),
-            source: self.inner.source.is_some(),
-            sink: self.inner.sink.is_some(),
+            source: source_configured,
+            sink: sink_configured,
             sync: self.sync_is_configured(),
+            source_availability,
+            sink_availability,
             lifecycle_availability,
-            explicitly_configured: &self.inner.explicitly_configured_capabilities,
-            overrides: &self.inner.capability_availability,
+            explicitly_configured: &explicitly_configured,
+            overrides: &overrides,
         })
     }
 
@@ -320,6 +362,29 @@ impl Client {
     pub fn sink(&self) -> Result<Option<&dyn EventSink>> {
         self.require_open()?;
         Ok(self.inner.sink.as_deref())
+    }
+
+    /// Returns passive Nostr relay evidence when the concrete adapter is selected.
+    #[cfg(feature = "nostr")]
+    pub fn nostr_status(&self) -> Result<Option<crate::transport::RelayStatusReport>> {
+        self.require_open()?;
+        Ok(self
+            .inner
+            .nostr
+            .as_ref()
+            .and_then(crate::transport::NostrSlot::relay_status))
+    }
+
+    /// Atomically replaces the active Nostr relay profile after validating it.
+    /// This does not perform DNS lookup or open a socket.
+    #[cfg(feature = "nostr")]
+    pub fn configure_nostr(&self, profile: crate::transport::RelayProfile) -> Result<()> {
+        self.require_open()?;
+        self.inner
+            .nostr
+            .as_ref()
+            .ok_or_else(Error::shared_operation_unavailable)?
+            .configure(profile)
     }
 
     /// Returns client-scoped canonical synchronization operations, when configured.
@@ -406,6 +471,17 @@ impl Client {
     #[cfg(not(feature = "sync"))]
     fn sync_is_configured(&self) -> bool {
         false
+    }
+}
+
+#[cfg(feature = "nostr")]
+const fn map_transport_availability(
+    availability: radroots_transport::capability::Availability,
+) -> Availability {
+    match availability {
+        radroots_transport::capability::Availability::Available => Availability::Available,
+        radroots_transport::capability::Availability::Degraded => Availability::Degraded,
+        radroots_transport::capability::Availability::Unavailable => Availability::Unavailable,
     }
 }
 
@@ -572,6 +648,45 @@ mod tests {
             .expect("sink-only");
         assert!(sink.source().expect("source capability").is_none());
         assert!(sink.sink().expect("sink capability").is_some());
+    }
+
+    #[cfg(feature = "nostr")]
+    #[test]
+    fn nostr_capabilities_require_directional_profile_authority_and_evidence() {
+        let slot = crate::transport::NostrSlot::new();
+        slot.configure(
+            crate::transport::RelayProfile::public(Vec::<String>::new()).expect("public profile"),
+        )
+        .expect("configure slot");
+        let client = ClientBuilder::memory(generation())
+            .nostr(slot)
+            .build()
+            .expect("client");
+
+        let capabilities = client.capabilities();
+        let fetch = capabilities
+            .get(CapabilityId::NOSTR_FETCH)
+            .expect("fetch capability");
+        let delivery = capabilities
+            .get(CapabilityId::NOSTR_DELIVERY)
+            .expect("delivery capability");
+        assert!(fetch.is_configured());
+        assert_eq!(fetch.availability(), Availability::Unavailable);
+        assert!(!delivery.is_configured());
+        assert_eq!(delivery.availability(), Availability::Unavailable);
+
+        client
+            .configure_nostr(
+                crate::transport::RelayProfile::public(["wss://write.example"])
+                    .expect("writable profile"),
+            )
+            .expect("reconfigure");
+        let capabilities = client.capabilities();
+        let delivery = capabilities
+            .get(CapabilityId::NOSTR_DELIVERY)
+            .expect("delivery capability");
+        assert!(delivery.is_configured());
+        assert_eq!(delivery.availability(), Availability::Unavailable);
     }
 
     #[test]

@@ -43,15 +43,17 @@ radroots_nostr = { workspace = true, default-features = false, features = [
 radroots_protocol = { workspace = true, default-features = false }
 radroots_transport = { workspace = true, default-features = false }
 async-wsocket = { workspace = true }
+futures = { workspace = true }
 nostr-sdk = { workspace = true }
 nostr-relay-pool = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
+sha2 = { workspace = true, default-features = false }
 tokio = { workspace = true, features = ["net", "time"] }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-futures = { workspace = true }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
 
 [lints]
 workspace = true

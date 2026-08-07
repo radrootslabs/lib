@@ -13,7 +13,11 @@ use radroots_transport::{
 use std::sync::{Arc, RwLock};
 
 #[cfg(feature = "nostr")]
-pub use radroots_transport_nostr::RelayUrlPolicy;
+pub use radroots_transport_nostr::{
+    DEFAULT_PUBLIC_RELAY, ReconnectBackoff, RelayAccess, RelayAggregateState,
+    RelayCapabilityEvidence, RelayCursor, RelayEndpoint, RelayEvidenceState, RelayProfile,
+    RelayProfileKind, RelayStatus, RelayStatusReport, RelayUrl, RelayUrlPolicy,
+};
 
 const PREVIEW_UNAVAILABLE_MESSAGE: &str = "preview transport is unavailable in this SDK release";
 
@@ -145,7 +149,6 @@ impl Default for Profile {
 #[cfg(feature = "nostr")]
 #[derive(Clone)]
 pub struct NostrSlot {
-    policy: RelayUrlPolicy,
     state: Arc<RwLock<Option<NostrState>>>,
 }
 
@@ -153,40 +156,50 @@ pub struct NostrSlot {
 #[derive(Clone)]
 struct NostrState {
     transport: Arc<radroots_transport_nostr::NostrTransport>,
-    targets: TargetSet,
+    read_targets: TargetSet,
+    write_targets: Option<TargetSet>,
 }
 
 #[cfg(feature = "nostr")]
 impl NostrSlot {
-    /// Creates an inert slot with an explicit destination policy.
+    /// Creates an inert slot with no selected host profile.
     #[must_use]
-    pub fn new(policy: RelayUrlPolicy) -> Self {
+    pub fn new() -> Self {
         Self {
-            policy,
             state: Arc::new(RwLock::new(None)),
         }
     }
 
-    /// Validates and atomically installs the complete relay selection.
-    pub fn configure<I, S>(&self, relays: I) -> crate::Result<()>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let config = radroots_transport_nostr::Config::new(self.policy, relays)
-            .map_err(crate::Error::invalid_host_configuration)?;
-        let targets = TargetSet::new(
+    /// Atomically installs one completely validated relay profile.
+    pub fn configure(&self, profile: RelayProfile) -> crate::Result<()> {
+        let config = radroots_transport_nostr::Config::from_profile(profile);
+        let read_targets = TargetSet::new(
             config
-                .relays()
-                .iter()
+                .read_relays()
                 .map(radroots_transport_nostr::RelayUrl::to_target)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(crate::Error::invalid_host_configuration)?,
         )
         .map_err(|_| crate::Error::invalid_host_configuration_without_source())?;
+        let write_targets = {
+            let targets = config
+                .write_relays()
+                .map(radroots_transport_nostr::RelayUrl::to_target)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(crate::Error::invalid_host_configuration)?;
+            if targets.is_empty() {
+                None
+            } else {
+                Some(
+                    TargetSet::new(targets)
+                        .map_err(|_| crate::Error::invalid_host_configuration_without_source())?,
+                )
+            }
+        };
         let state = NostrState {
             transport: Arc::new(radroots_transport_nostr::NostrTransport::new(config)),
-            targets,
+            read_targets,
+            write_targets,
         };
         let mut current = self
             .state
@@ -203,10 +216,23 @@ impl NostrSlot {
         }
     }
 
-    /// Returns the currently selected canonical targets.
+    /// Returns the currently selected canonical read targets.
     #[must_use]
-    pub fn targets(&self) -> Option<TargetSet> {
-        self.snapshot().map(|state| state.targets)
+    pub fn read_targets(&self) -> Option<TargetSet> {
+        self.snapshot().map(|state| state.read_targets)
+    }
+
+    /// Returns writable targets, or `None` when the profile is intentionally
+    /// read-only.
+    #[must_use]
+    pub fn write_targets(&self) -> Option<TargetSet> {
+        self.snapshot().and_then(|state| state.write_targets)
+    }
+
+    /// Returns passive per-relay evidence without probing or opening sockets.
+    #[must_use]
+    pub fn relay_status(&self) -> Option<RelayStatusReport> {
+        self.snapshot().map(|state| state.transport.relay_status())
     }
 
     fn snapshot(&self) -> Option<NostrState> {
@@ -303,9 +329,16 @@ impl std::fmt::Debug for NostrSlot {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("NostrSlot")
-            .field("policy", &self.policy)
-            .field("configured", &self.targets().is_some())
+            .field("configured", &self.read_targets().is_some())
+            .field("writable", &self.write_targets().is_some())
             .finish()
+    }
+}
+
+#[cfg(feature = "nostr")]
+impl Default for NostrSlot {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -674,22 +707,30 @@ mod tests {
 
     #[cfg(feature = "nostr")]
     #[test]
-    fn nostr_slot_reconfiguration_is_validated_atomic_and_inert() {
-        let slot = NostrSlot::new(RelayUrlPolicy::Local);
-        assert!(slot.targets().is_none());
-        assert!(slot.configure(["ws://127.0.0.1:7447"]).is_ok());
-        let original = slot.targets().expect("configured targets");
-        assert!(slot.configure(Vec::<String>::new()).is_err());
-        assert_eq!(slot.targets(), Some(original));
+    fn nostr_slot_reconfiguration_is_atomic_directional_and_inert() {
+        let slot = NostrSlot::new();
+        assert!(slot.read_targets().is_none());
+        assert!(slot.relay_status().is_none());
+        assert!(
+            slot.configure(RelayProfile::simulator(["ws://127.0.0.1:7447"]).expect("profile"))
+                .is_ok()
+        );
+        let original = slot.read_targets().expect("configured targets");
+        assert_eq!(slot.write_targets(), Some(original.clone()));
+        let status = slot.relay_status().expect("status");
+        assert_eq!(status.profile_kind(), RelayProfileKind::Simulator);
+        assert_eq!(status.read_availability(), Availability::Unavailable);
+        assert_eq!(status.write_availability(), Availability::Unavailable);
         slot.clear();
-        assert!(slot.targets().is_none());
+        assert!(slot.read_targets().is_none());
+        assert!(slot.write_targets().is_none());
         assert!(format!("{slot:?}").contains("configured: false"));
     }
 
     #[cfg(feature = "nostr")]
     #[test]
     fn poisoned_nostr_slot_fails_closed_for_every_host_operation() {
-        let slot = NostrSlot::new(RelayUrlPolicy::Local);
+        let slot = NostrSlot::new();
         let state = Arc::clone(&slot.state);
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _guard = state.write().expect("write lock");
@@ -697,8 +738,11 @@ mod tests {
         }));
 
         slot.clear();
-        assert!(slot.targets().is_none());
-        assert!(slot.configure(["ws://127.0.0.1:7447"]).is_err());
+        assert!(slot.read_targets().is_none());
+        assert!(
+            slot.configure(RelayProfile::simulator(["ws://127.0.0.1:7447"]).expect("profile"))
+                .is_err()
+        );
     }
 
     #[cfg(feature = "nostr")]
@@ -709,7 +753,7 @@ mod tests {
             source::FetchBounds,
         };
 
-        let slot = NostrSlot::new(RelayUrlPolicy::Local);
+        let slot = NostrSlot::new();
         let source = radroots_transport::EventSource::status(&slot)
             .await
             .expect("source status");

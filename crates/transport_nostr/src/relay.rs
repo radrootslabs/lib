@@ -1,6 +1,6 @@
 //! Nostr relay identifiers and network policy.
 
-use crate::Error;
+use crate::{Error, RelayEndpoint};
 use async_wsocket::futures_util::stream::SplitSink;
 use async_wsocket::futures_util::{Sink, SinkExt, StreamExt, TryStreamExt};
 use async_wsocket::{Message, WebSocket};
@@ -10,7 +10,9 @@ use nostr_relay_pool::ConnectionMode;
 use nostr_relay_pool::transport::error::TransportError;
 use nostr_relay_pool::transport::websocket::{WebSocketSink, WebSocketStream, WebSocketTransport};
 use radroots_transport::{BoxFuture, Target, TransportId};
+use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::net::TcpStream;
@@ -97,14 +99,21 @@ impl fmt::Display for RelayUrl {
 
 /// WebSocket connector that validates and pins DNS results before opening a
 /// socket while retaining the original host name for TLS verification.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct HardenedWebsocketTransport {
-    policy: RelayUrlPolicy,
+    policies: Arc<BTreeMap<String, RelayUrlPolicy>>,
 }
 
 impl HardenedWebsocketTransport {
-    pub(crate) const fn new(policy: RelayUrlPolicy) -> Self {
-        Self { policy }
+    pub(crate) fn new(endpoints: &[RelayEndpoint]) -> Self {
+        Self {
+            policies: Arc::new(
+                endpoints
+                    .iter()
+                    .map(|endpoint| (endpoint.url().as_str().to_owned(), endpoint.policy()))
+                    .collect(),
+            ),
+        }
     }
 }
 
@@ -128,7 +137,14 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                     "proxy and Tor connection modes are not configured",
                 ));
             }
-            let relay = RelayUrl::parse(url.as_str(), self.policy)
+            let target = Target::nostr_relay(url.as_str())
+                .map_err(|_| policy_error("relay URL is invalid"))?;
+            let policy = self
+                .policies
+                .get(target.uri().as_str())
+                .copied()
+                .ok_or_else(|| policy_error("relay URL is not configured"))?;
+            let relay = RelayUrl::parse(target.uri().as_str(), policy)
                 .map_err(|_| policy_error("relay URL is denied by network policy"))?;
             let parsed =
                 Url::parse(relay.as_str()).map_err(|_| policy_error("relay URL is invalid"))?;
@@ -142,7 +158,7 @@ impl WebSocketTransport for HardenedWebsocketTransport {
             let connect = async {
                 let addresses = resolve_bounded(host, port).await?;
                 relay
-                    .validate_resolved_addresses(self.policy, addresses.iter().map(SocketAddr::ip))
+                    .validate_resolved_addresses(policy, addresses.iter().map(SocketAddr::ip))
                     .map_err(|_| policy_error("relay DNS result is denied by network policy"))?;
                 let tcp = connect_pinned(addresses.as_slice()).await?;
                 let (stream, _) = tokio_tungstenite::client_async_tls(relay.as_str(), tcp)
@@ -252,7 +268,7 @@ impl Sink<Message> for HardenedTransportSink {
 }
 
 /// Destination class authorized for relay connections.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum RelayUrlPolicy {
     /// TLS-only public Internet endpoints; resolved addresses must be global.
@@ -390,7 +406,8 @@ mod tests {
             RelayUrl::from_target(&local, RelayUrlPolicy::Public),
             Err(Error::UnexpectedTransport { .. })
         ));
-        assert!(HardenedWebsocketTransport::new(RelayUrlPolicy::Public).support_ping());
+        let profile = crate::RelayProfile::public(["wss://relay.example.com"]).expect("profile");
+        assert!(HardenedWebsocketTransport::new(profile.endpoints()).support_ping());
         assert!(!policy_error("denied").to_string().is_empty());
     }
 

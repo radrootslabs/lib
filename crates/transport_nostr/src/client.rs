@@ -1,61 +1,103 @@
 //! Concrete Nostr transport composition.
 
-use crate::{Error, RelayUrl, RelayUrlPolicy};
+use crate::{Error, RelayEndpoint, RelayProfile, RelayProfileKind, RelayStatusReport, RelayUrl};
 use core::fmt;
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// Maximum relay targets accepted by one transport instance.
 pub(crate) const MAX_RELAYS: usize = 64;
 const MAX_TIMEOUT_MS: u64 = 120_000;
 const MAX_CONNECTIONS: usize = 64;
+const MAX_RECONNECT_DELAY_MS: u64 = 15 * 60 * 1_000;
+
+/// Deterministic exponential reconnect policy applied independently per relay
+/// and capability direction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReconnectBackoff {
+    initial_delay_ms: u64,
+    max_delay_ms: u64,
+}
+
+impl ReconnectBackoff {
+    /// Creates a bounded reconnect policy.
+    pub fn new(initial_delay_ms: u64, max_delay_ms: u64) -> Result<Self, Error> {
+        if initial_delay_ms == 0
+            || max_delay_ms < initial_delay_ms
+            || max_delay_ms > MAX_RECONNECT_DELAY_MS
+        {
+            return Err(Error::InvalidReconnectBackoff {
+                initial_delay_ms,
+                max_delay_ms,
+            });
+        }
+        Ok(Self {
+            initial_delay_ms,
+            max_delay_ms,
+        })
+    }
+
+    /// Returns the first delay after a retryable failure.
+    #[must_use]
+    pub const fn initial_delay_ms(self) -> u64 {
+        self.initial_delay_ms
+    }
+
+    /// Returns the upper bound for any computed reconnect delay.
+    #[must_use]
+    pub const fn max_delay_ms(self) -> u64 {
+        self.max_delay_ms
+    }
+
+    pub(crate) fn delay_ms(self, consecutive_failures: u32) -> u64 {
+        let exponent = consecutive_failures.saturating_sub(1).min(63);
+        self.initial_delay_ms
+            .saturating_mul(1_u64 << exponent)
+            .min(self.max_delay_ms)
+    }
+}
+
+impl Default for ReconnectBackoff {
+    fn default() -> Self {
+        Self {
+            initial_delay_ms: 1_000,
+            max_delay_ms: 60_000,
+        }
+    }
+}
 
 /// Validated configuration for a concrete Nostr transport.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
+    profile_kind: RelayProfileKind,
+    endpoints: Vec<RelayEndpoint>,
     relays: Vec<RelayUrl>,
-    relay_url_policy: RelayUrlPolicy,
     connect_timeout_ms: u64,
     request_timeout_ms: u64,
     status_timeout_ms: u64,
     max_connections: usize,
+    reconnect_backoff: ReconnectBackoff,
 }
 
 impl Config {
-    /// Builds configuration from explicit relay and network policy inputs.
-    pub fn new<I, S>(relay_url_policy: RelayUrlPolicy, relays: I) -> Result<Self, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let mut canonical = Vec::new();
-        let mut seen = BTreeSet::new();
-        for relay in relays {
-            let relay = RelayUrl::parse(relay, relay_url_policy)?;
-            if !seen.insert(relay.clone()) {
-                return Err(Error::DuplicateRelayUrl {
-                    url: relay.to_string(),
-                });
-            }
-            canonical.push(relay);
-            if canonical.len() > MAX_RELAYS {
-                return Err(Error::TooManyRelays {
-                    max: MAX_RELAYS,
-                    actual: canonical.len(),
-                });
-            }
-        }
-        if canonical.is_empty() {
-            return Err(Error::EmptyRelaySet);
-        }
-        Ok(Self {
-            relays: canonical,
-            relay_url_policy,
+    /// Builds inert transport configuration from one validated host profile.
+    #[must_use]
+    pub fn from_profile(profile: RelayProfile) -> Self {
+        let relays: Vec<_> = profile
+            .endpoints()
+            .iter()
+            .map(|endpoint| endpoint.url().clone())
+            .collect();
+        let max_connections = 8.min(relays.len());
+        Self {
+            profile_kind: profile.kind(),
+            endpoints: profile.endpoints().to_vec(),
+            relays,
             connect_timeout_ms: 10_000,
             request_timeout_ms: 30_000,
             status_timeout_ms: 5_000,
-            max_connections: 8,
-        })
+            max_connections,
+            reconnect_backoff: ReconnectBackoff::default(),
+        }
     }
 
     /// Sets explicit bounded connection, request, and status timeouts.
@@ -83,14 +125,55 @@ impl Config {
         Ok(self)
     }
 
+    /// Sets the deterministic per-relay reconnect policy.
+    #[must_use]
+    pub const fn with_reconnect_backoff(mut self, value: ReconnectBackoff) -> Self {
+        self.reconnect_backoff = value;
+        self
+    }
+
+    /// Returns the selected host profile kind.
+    #[must_use]
+    pub const fn profile_kind(&self) -> RelayProfileKind {
+        self.profile_kind
+    }
+
+    /// Returns configured endpoints with directional access and network policy.
+    #[must_use]
+    pub fn endpoints(&self) -> &[RelayEndpoint] {
+        self.endpoints.as_slice()
+    }
+
     /// Returns relays in caller-specified order.
     pub fn relays(&self) -> &[RelayUrl] {
         self.relays.as_slice()
     }
 
-    /// Returns the network policy that must also be applied after DNS resolution.
-    pub const fn relay_url_policy(&self) -> RelayUrlPolicy {
-        self.relay_url_policy
+    /// Returns relays authorized for reads in deterministic profile order.
+    pub fn read_relays(&self) -> impl Iterator<Item = &RelayUrl> {
+        self.endpoints
+            .iter()
+            .filter_map(|endpoint| endpoint.access().can_read().then_some(endpoint.url()))
+    }
+
+    /// Returns relays authorized for publication in deterministic profile order.
+    pub fn write_relays(&self) -> impl Iterator<Item = &RelayUrl> {
+        self.endpoints
+            .iter()
+            .filter_map(|endpoint| endpoint.access().can_write().then_some(endpoint.url()))
+    }
+
+    pub(crate) fn endpoint_for_target(
+        &self,
+        target: &radroots_transport::Target,
+    ) -> Option<&RelayEndpoint> {
+        (*target.kind() == radroots_transport::TransportId::NOSTR)
+            .then(|| target.uri().as_str())
+            .and_then(|url| {
+                self.endpoints
+                    .iter()
+                    .find(|endpoint| endpoint.url().as_str() == url)
+            })
     }
 
     /// Returns the connection establishment deadline in milliseconds.
@@ -111,6 +194,12 @@ impl Config {
     /// Returns the maximum simultaneous relay connections.
     pub const fn max_connections(&self) -> usize {
         self.max_connections
+    }
+
+    /// Returns the per-relay reconnect policy.
+    #[must_use]
+    pub const fn reconnect_backoff(&self) -> ReconnectBackoff {
+        self.reconnect_backoff
     }
 }
 
@@ -136,10 +225,11 @@ impl NostrTransport {
     pub fn new(config: Config) -> Self {
         let client = nostr_sdk::Client::builder()
             .websocket_transport(crate::relay::HardenedWebsocketTransport::new(
-                config.relay_url_policy(),
+                config.endpoints(),
             ))
             .build();
         client.automatic_authentication(false);
+        let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
             client: Arc::new(crate::sink::LiveRelayClient::new(client.clone())),
@@ -147,7 +237,7 @@ impl NostrTransport {
             auth: Arc::new(crate::auth::AuthFlow::new(Arc::new(
                 crate::auth::LiveAuthClient::new(client),
             ))),
-            status: Arc::new(crate::status::StatusTracker::default()),
+            status,
         }
     }
 
@@ -156,14 +246,21 @@ impl NostrTransport {
         &self.config
     }
 
+    /// Returns passive per-relay and aggregate evidence without network I/O.
+    #[must_use]
+    pub fn relay_status(&self) -> RelayStatusReport {
+        self.status.report()
+    }
+
     #[cfg(test)]
     pub(crate) fn with_client(config: Config, client: Arc<dyn crate::sink::RelayClient>) -> Self {
+        let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
             client,
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
             auth: Arc::new(crate::auth::AuthFlow::isolated()),
-            status: Arc::new(crate::status::StatusTracker::default()),
+            status,
         }
     }
 
@@ -172,12 +269,13 @@ impl NostrTransport {
         config: Config,
         source_client: Arc<dyn crate::source::RelaySourceClient>,
     ) -> Self {
+        let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client,
             auth: Arc::new(crate::auth::AuthFlow::isolated()),
-            status: Arc::new(crate::status::StatusTracker::default()),
+            status,
         }
     }
 }
@@ -197,44 +295,51 @@ mod tests {
 
     #[test]
     fn config_rejects_empty_duplicate_and_excessive_relay_sets() {
-        assert!(Config::new(RelayUrlPolicy::Public, Vec::<String>::new()).is_err());
+        assert!(RelayProfile::simulator(Vec::<String>::new()).is_err());
         assert!(
-            Config::new(
-                RelayUrlPolicy::Public,
-                ["wss://relay.example.com", "wss://RELAY.EXAMPLE.COM:443/"],
-            )
-            .is_err()
+            RelayProfile::public(["wss://relay.example.com", "wss://RELAY.EXAMPLE.COM:443/",])
+                .is_err()
         );
-        let relays = (0..=MAX_RELAYS).map(|index| format!("wss://r{index}.example.com"));
-        assert!(Config::new(RelayUrlPolicy::Public, relays).is_err());
+        let relays = (0..MAX_RELAYS).map(|index| format!("wss://r{index}.example.com"));
+        assert!(RelayProfile::public(relays).is_err());
     }
 
     #[test]
     fn config_rejects_unbounded_limits() {
-        let config =
-            Config::new(RelayUrlPolicy::Public, ["wss://relay.example.com"]).expect("config");
+        let config = Config::from_profile(
+            RelayProfile::public(["wss://relay.example.com"]).expect("profile"),
+        );
         assert!(config.clone().with_timeouts(0, 1, 1).is_err());
         assert!(config.clone().with_timeouts(1, 120_001, 1).is_err());
-        assert!(config.with_max_connections(2).is_err());
+        assert!(config.with_max_connections(3).is_err());
     }
 
     #[test]
     fn valid_configuration_accessors_and_transport_debug_are_complete() {
-        let config = Config::new(
-            RelayUrlPolicy::Public,
-            ["wss://one.example", "wss://two.example"],
+        let config = Config::from_profile(
+            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
         )
-        .expect("config")
         .with_timeouts(1, 2, 3)
         .expect("timeouts")
         .with_max_connections(2)
         .expect("connections");
-        assert_eq!(config.relays().len(), 2);
-        assert_eq!(config.relay_url_policy(), RelayUrlPolicy::Public);
+        assert_eq!(config.relays().len(), 3);
+        assert_eq!(config.read_relays().count(), 3);
+        assert_eq!(config.write_relays().count(), 2);
+        assert_eq!(config.profile_kind(), RelayProfileKind::Public);
         assert_eq!(config.connect_timeout_ms(), 1);
         assert_eq!(config.request_timeout_ms(), 2);
         assert_eq!(config.status_timeout_ms(), 3);
         assert_eq!(config.max_connections(), 2);
+        assert_eq!(config.reconnect_backoff(), ReconnectBackoff::default());
+        assert!(ReconnectBackoff::new(0, 1).is_err());
+        assert!(ReconnectBackoff::new(2, 1).is_err());
+        assert!(ReconnectBackoff::new(1, MAX_RECONNECT_DELAY_MS + 1).is_err());
+        let backoff = ReconnectBackoff::new(2, 5).expect("backoff");
+        assert_eq!(backoff.delay_ms(0), 2);
+        assert_eq!(backoff.delay_ms(1), 2);
+        assert_eq!(backoff.delay_ms(2), 4);
+        assert_eq!(backoff.delay_ms(3), 5);
         assert!(config.clone().with_timeouts(120_001, 1, 1).is_err());
         assert!(config.clone().with_timeouts(1, 1, 0).is_err());
         assert!(config.clone().with_max_connections(0).is_err());
