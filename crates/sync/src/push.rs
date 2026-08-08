@@ -685,7 +685,14 @@ impl Engine {
             .ok_or(Error::InvalidSignerOutput)?
             .event()
             .clone();
-        let admission = match outbound_admission(&event, now) {
+        let persisted_plan = claimed
+            .plan()
+            .ok_or(Error::StorageFailed)?
+            .decode()
+            .map_err(map_storage_error)?
+            .into_plan();
+        let contract_id = persisted_plan.body().contract().contract_id().as_str();
+        let admission = match outbound_admission(&event, contract_id, now) {
             Ok(admission) => admission,
             Err(error) => {
                 let failure = WorkFailure::new(
@@ -1107,6 +1114,7 @@ fn delivery_retry_schedule(
 
 fn outbound_admission(
     event: &radroots_event::SignedEvent,
+    contract_id: &str,
     observed_at_unix_ms: u64,
 ) -> Result<EventAdmission, Error> {
     let verified = verify::signature(
@@ -1115,7 +1123,9 @@ fn outbound_admission(
         &Nip01SignatureVerifier,
     )
     .map_err(|_| Error::InvalidSignerOutput)?;
-    let validated = verify::contract(verified).map_err(|_| Error::InvalidSignerOutput)?;
+    let validated = verified
+        .validate_contract_for_admission(contract_id)
+        .map_err(|_| Error::InvalidSignerOutput)?;
     let policy = RegistryPolicy::visible();
     if policy.decide(&validated) != AdmissionDecision::Visible {
         return Err(Error::InvalidSignerOutput);

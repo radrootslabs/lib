@@ -9,7 +9,13 @@ use std::{
 use futures::{FutureExt, task::noop_waker_ref};
 use futures_executor::block_on;
 use radroots_event::{
-    GenericEventDraft, SignedEvent, contract::AuthorRole, draft::SignedEventParts,
+    GenericEventDraft, SignedEvent,
+    contract::AuthorRole,
+    draft::SignedEventParts,
+    food::availability::{
+        FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityStatus, FoodContent,
+        FoodCurrency, FoodIdentifier, FoodPrice, FoodPublishedAt, FoodText, FoodUnit,
+    },
 };
 use radroots_event_codec::authoring::AuthoredEventPlan;
 use radroots_protocol::runtime::v1::SyncRetryDecision;
@@ -894,6 +900,50 @@ fn request(operation_byte: u8, relay: &str) -> PushRequest {
     )
 }
 
+fn food_request(operation_byte: u8, relay: &str) -> PushRequest {
+    let created_at = 1_800_000_100;
+    let details = FoodAvailabilityDetails::new(FoodAvailabilityDetailsParts {
+        content: FoodContent::new("Carrots available this week.").expect("food content"),
+        identifier: FoodIdentifier::parse("nantes-carrots").expect("food identifier"),
+        title: FoodText::new("Nantes Carrots").expect("food title"),
+        summary: FoodText::new("Fresh bunches").expect("food summary"),
+        published_at: FoodPublishedAt::new(created_at).expect("published at"),
+        location: FoodText::new("Central Saanich, BC").expect("food location"),
+        price: FoodPrice::new(
+            "3",
+            FoodCurrency::parse("CAD").expect("currency"),
+            FoodUnit::Pound,
+        )
+        .expect("food price"),
+        quantity: None,
+        status: FoodAvailabilityStatus::Active,
+        images: Vec::new(),
+    })
+    .expect("food availability");
+    let plan = AuthoredEventPlan::from_food_availability(&details, created_at, public_key_hex())
+        .expect("typed food plan");
+    let actor = Actor::new(
+        *plan.author(),
+        ActorSource::ExplicitPublicKey,
+        [AuthorRole::Seller],
+    )
+    .expect("food actor");
+    PushRequest::new(
+        SyncId::new([operation_byte; 16]).expect("operation id"),
+        IdempotencyKey::parse(format!("food-push-{operation_byte}")).expect("idempotency key"),
+        actor,
+        plan,
+        TargetSet::new(vec![
+            Target::new(TransportId::NOSTR, relay).expect("target"),
+        ])
+        .expect("targets"),
+        SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::any()),
+        1_800_000_300_000,
+        CancellationPolicy::PreservePublishedRequest,
+    )
+    .expect("food push request")
+}
+
 fn request_with_policy(
     operation_byte: u8,
     relays: &[&str],
@@ -1000,6 +1050,26 @@ fn fault_engine(
 fn execute_to_admitted(engine: &Engine, push: &PushRequest) {
     block_on(engine.sign_prepared(push.clone())).expect("sign prepared push");
     block_on(engine.admit_signed(push.operation_id())).expect("admit signed push");
+}
+
+#[test]
+fn typed_only_authored_contract_identity_survives_signing_and_local_admission() {
+    let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+        completed_at_unix_ms: 1_800_000_200_500,
+    }));
+    let (engine, storage) = setup_engine(signer);
+    let push = food_request(9, "wss://relay.example");
+
+    block_on(engine.sign_prepared(push.clone())).expect("sign typed food plan");
+    let admitted = block_on(engine.admit_signed(push.operation_id()))
+        .expect("admit with the frozen typed contract identity");
+    assert!(admitted.artifact().admission_state().is_admitted());
+    let events = block_on(storage.query_visible(EventQuery::all(
+        EventQueryBounds::first(10).expect("bounds"),
+    )))
+    .expect("visible authored events");
+    assert_eq!(events.items().len(), 1);
+    assert_eq!(events.items()[0].event().kind(), 30_402);
 }
 
 #[test]

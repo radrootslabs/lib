@@ -2,7 +2,7 @@
 
 use radroots_event::admission::{
     AdmissionPolicy as EventAdmissionPolicy, AdmittedEvent, ContractValidatedEvent, RawEvent,
-    VisibilityPolicy,
+    SignatureVerifiedEvent, VisibilityPolicy,
 };
 use radroots_event_codec::verify::{self, Nip01SignatureVerifier};
 use radroots_storage::{
@@ -41,6 +41,13 @@ pub enum AdmissionDecision {
 pub trait AdmissionPolicy: Send + Sync {
     /// Stable policy identity retained in event typestate evidence.
     fn policy_id(&self) -> &'static str;
+
+    /// Selects a contract whose public wire shape requires an explicit
+    /// admission boundary. Returning `None` preserves ordinary registry
+    /// selection; any returned identity is still fully contract-validated.
+    fn select_contract(&self, _event: &SignatureVerifiedEvent) -> Option<&'static str> {
+        None
+    }
 
     /// Decides whether a contract-valid event is rejected, verified-only, or visible.
     fn decide(&self, event: &ContractValidatedEvent) -> AdmissionDecision;
@@ -143,8 +150,13 @@ impl Engine {
             &Nip01SignatureVerifier,
         )
         .map_err(|_| Error::VerificationFailed)?;
-        let validated =
-            verify::contract(verified.clone()).map_err(|_| Error::VerificationFailed)?;
+        let validated = match policy.select_contract(&verified) {
+            Some(contract_id) => verified
+                .clone()
+                .validate_contract_for_admission(contract_id),
+            None => verify::contract(verified.clone()),
+        }
+        .map_err(|_| Error::VerificationFailed)?;
         let decision = policy.decide(&validated);
         if decision == AdmissionDecision::Reject {
             return Err(Error::PolicyRejected);

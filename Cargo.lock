@@ -3594,6 +3594,9 @@ version = "0.1.0-alpha"
 dependencies = [
  "async-trait",
  "hex",
+ "nostr 0.44.1",
+ "nostr-relay-builder",
+ "nostr-sdk 0.44.0",
  "radroots_blossom",
  "radroots_event",
  "radroots_mobile_core",
