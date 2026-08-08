@@ -38,6 +38,7 @@ struct RequestEvidence {
     cursor: Option<String>,
     limit: u16,
     deadline_unix_ms: u64,
+    kinds: Vec<u32>,
 }
 
 struct ScriptedSource {
@@ -75,6 +76,7 @@ impl EventSource for ScriptedSource {
                     cursor: request.cursor().map(|cursor| cursor.as_str().to_owned()),
                     limit: request.bounds().limit(),
                     deadline_unix_ms: request.bounds().deadline_unix_ms(),
+                    kinds: request.selector().kinds().to_vec(),
                 });
             match self
                 .responses
@@ -200,6 +202,7 @@ fn single_and_multiple_pages_propagate_cursor_deadline_and_ingest_results() {
     assert_eq!(request.page_limit(), 20);
     assert_eq!(request.max_pages(), 1);
     assert!(request.cursor().is_none());
+    assert!(request.selector().kinds().is_empty());
     let receipt = block_on(single.pull(request, &RegistryPolicy::visible())).expect("pull");
     assert_eq!(receipt.termination(), PullTermination::Complete);
     assert_eq!(receipt.pages_fetched(), 1);
@@ -242,6 +245,42 @@ fn single_and_multiple_pages_propagate_cursor_deadline_and_ingest_results() {
     assert_eq!(requests[0].cursor.as_deref(), Some("starting"));
     assert_eq!(requests[1].cursor.as_deref(), Some(next.as_str()));
     assert_eq!(requests[0].deadline_unix_ms, requests[1].deadline_unix_ms);
+}
+
+#[test]
+fn pull_propagates_the_exact_selector_to_every_page() {
+    let next = FetchCursor::parse("page-2").expect("cursor");
+    let source = Arc::new(ScriptedSource::new(vec![
+        Response::Page {
+            events: vec![],
+            state: FetchTargetState::Partial,
+            next: NextPage::Cursor(next),
+        },
+        Response::Page {
+            events: vec![],
+            state: FetchTargetState::Complete,
+            next: NextPage::Complete,
+        },
+    ]));
+    let pull = engine(source.clone(), Arc::new(FixedClock(100)), 50);
+    let selector = radroots_transport::source::FetchSelector::all()
+        .with_kinds(vec![0, 1, 5, 1111, 30402, 31922, 31923])
+        .expect("selector");
+    let request = PullRequest::new(targets(), 20, 2)
+        .expect("request")
+        .with_selector(selector.clone());
+    assert_eq!(request.selector(), &selector);
+
+    let receipt = block_on(pull.pull(request, &RegistryPolicy::visible())).expect("pull");
+    assert_eq!(receipt.pages_fetched(), 2);
+    assert_eq!(
+        source
+            .requests()
+            .into_iter()
+            .map(|request| request.kinds)
+            .collect::<Vec<_>>(),
+        vec![selector.kinds().to_vec(), selector.kinds().to_vec()]
+    );
 }
 
 #[test]

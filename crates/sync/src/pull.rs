@@ -3,7 +3,7 @@
 use radroots_transport::{
     FetchRequest,
     outcome::FetchTargetOutcome,
-    source::{FETCH_PAGE_MAX_EVENTS, FetchBounds, FetchCursor, NextPage},
+    source::{FETCH_PAGE_MAX_EVENTS, FetchBounds, FetchCursor, FetchSelector, NextPage},
     target::TargetSet,
 };
 
@@ -24,6 +24,7 @@ pub struct PullRequest {
     page_limit: u16,
     max_pages: u16,
     cursor: Option<FetchCursor>,
+    selector: FetchSelector,
 }
 
 impl PullRequest {
@@ -40,6 +41,7 @@ impl PullRequest {
             page_limit,
             max_pages,
             cursor: None,
+            selector: FetchSelector::all(),
         })
     }
 
@@ -63,6 +65,18 @@ impl PullRequest {
 
     pub const fn cursor(&self) -> Option<&FetchCursor> {
         self.cursor.as_ref()
+    }
+
+    /// Applies explicit transport-neutral event constraints to every page.
+    #[must_use]
+    pub fn with_selector(mut self, selector: FetchSelector) -> Self {
+        self.selector = selector;
+        self
+    }
+
+    /// Returns the exact event constraints for this pull.
+    pub const fn selector(&self) -> &FetchSelector {
+        &self.selector
     }
 }
 
@@ -164,7 +178,8 @@ impl Engine {
                 request.targets.clone(),
                 bounds,
             )
-            .map_err(|_| Error::InvalidPullRequest)?;
+            .map_err(|_| Error::InvalidPullRequest)?
+            .with_selector(request.selector.clone());
             if let Some(current) = cursor.clone() {
                 fetch = fetch.with_cursor(current);
             }
@@ -250,6 +265,8 @@ impl<'de> serde::Deserialize<'de> for PullRequest {
             page_limit: u16,
             max_pages: u16,
             cursor: Option<FetchCursor>,
+            #[serde(default)]
+            selector: FetchSelector,
         }
 
         let wire = Wire::deserialize(deserializer)?;
@@ -258,6 +275,6 @@ impl<'de> serde::Deserialize<'de> for PullRequest {
         if let Some(cursor) = wire.cursor {
             request = request.with_cursor(cursor);
         }
-        Ok(request)
+        Ok(request.with_selector(wire.selector))
     }
 }
