@@ -17,7 +17,7 @@ use std::{
     collections::BTreeSet,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(feature = "blossom")]
@@ -444,6 +444,16 @@ fn append_fingerprint_field(material: &mut Vec<u8>, value: &[u8]) {
     material.extend_from_slice(value);
 }
 
+#[cfg(feature = "blossom")]
+fn blossom_now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+        .unwrap_or(u64::MAX)
+        .max(1)
+}
+
 /// Nonzero dimensions verified from the final image bytes.
 #[cfg(feature = "blossom")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -548,6 +558,175 @@ pub struct BlossomUploadTransaction {
     request: BlossomUploadRequest,
 }
 
+/// Security property observed for the configured primary transport.
+#[cfg(feature = "blossom")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum BlossomTransportSecurity {
+    /// Public HTTPS authenticated by the bundled platform WebPKI roots.
+    PublicWebPki,
+    /// Development HTTPS without a public-origin availability claim.
+    DevelopmentTls,
+    /// Simulator-only cleartext loopback HTTP.
+    DevelopmentCleartext,
+}
+
+/// Latest redacted evidence state for the configured primary Blossom origin.
+#[cfg(feature = "blossom")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum BlossomEvidenceState {
+    ConfiguredUnobserved,
+    DnsPolicyValidated,
+    TlsHttpObserved,
+    UploadVerified,
+    RetrievalVerified,
+    RetryableFailure,
+    TerminalFailure,
+}
+
+/// Versioned, passive, secret-safe evidence for one exact configuration.
+#[cfg(feature = "blossom")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BlossomEndpointEvidence {
+    origin: String,
+    config_fingerprint: BlossomConfigFingerprint,
+    state: BlossomEvidenceState,
+    last_successful_state: BlossomEvidenceState,
+    transport_security: BlossomTransportSecurity,
+    observed_at_unix_ms: Option<u64>,
+    http_status: Option<u16>,
+    error_code: Option<&'static str>,
+    error_phase: Option<BlossomPhase>,
+    retryable: bool,
+    possible_orphan: bool,
+    attempts: u8,
+}
+
+#[cfg(feature = "blossom")]
+impl BlossomEndpointEvidence {
+    const SCHEMA_VERSION: u16 = 1;
+
+    fn configured(config: &BlossomConfig) -> Self {
+        let primary = config.profile().primary();
+        Self {
+            origin: primary.origin().to_owned(),
+            config_fingerprint: config.fingerprint(),
+            state: BlossomEvidenceState::ConfiguredUnobserved,
+            last_successful_state: BlossomEvidenceState::ConfiguredUnobserved,
+            transport_security: match (
+                primary.origin().starts_with("https://"),
+                primary.authority(),
+            ) {
+                (true, BlossomEndpointAuthority::PublicWebPki) => {
+                    BlossomTransportSecurity::PublicWebPki
+                }
+                (true, _) => BlossomTransportSecurity::DevelopmentTls,
+                (false, _) => BlossomTransportSecurity::DevelopmentCleartext,
+            },
+            observed_at_unix_ms: None,
+            http_status: None,
+            error_code: None,
+            error_phase: None,
+            retryable: false,
+            possible_orphan: false,
+            attempts: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn schema_version(&self) -> u16 {
+        Self::SCHEMA_VERSION
+    }
+
+    #[must_use]
+    pub fn origin(&self) -> &str {
+        self.origin.as_str()
+    }
+
+    #[must_use]
+    pub const fn config_fingerprint(&self) -> BlossomConfigFingerprint {
+        self.config_fingerprint
+    }
+
+    #[must_use]
+    pub const fn state(&self) -> BlossomEvidenceState {
+        self.state
+    }
+
+    #[must_use]
+    pub const fn last_successful_state(&self) -> BlossomEvidenceState {
+        self.last_successful_state
+    }
+
+    #[must_use]
+    pub const fn transport_security(&self) -> BlossomTransportSecurity {
+        self.transport_security
+    }
+
+    #[must_use]
+    pub const fn observed_at_unix_ms(&self) -> Option<u64> {
+        self.observed_at_unix_ms
+    }
+
+    #[must_use]
+    pub const fn http_status(&self) -> Option<u16> {
+        self.http_status
+    }
+
+    #[must_use]
+    pub const fn error_code(&self) -> Option<&'static str> {
+        self.error_code
+    }
+
+    #[must_use]
+    pub const fn error_phase(&self) -> Option<BlossomPhase> {
+        self.error_phase
+    }
+
+    #[must_use]
+    pub const fn retryable(&self) -> bool {
+        self.retryable
+    }
+
+    #[must_use]
+    pub const fn possible_orphan(&self) -> bool {
+        self.possible_orphan
+    }
+
+    #[must_use]
+    pub const fn attempts(&self) -> u8 {
+        self.attempts
+    }
+
+    fn record_success(&mut self, state: BlossomEvidenceState, http_status: Option<u16>) {
+        self.state = state;
+        self.last_successful_state = state;
+        self.observed_at_unix_ms = Some(blossom_now_unix_ms());
+        self.http_status = http_status;
+        self.error_code = None;
+        self.error_phase = None;
+        self.retryable = false;
+        self.possible_orphan = false;
+        self.attempts = 0;
+    }
+
+    fn record_failure(&mut self, error: &BlossomError) {
+        self.state = if error.retryable() {
+            BlossomEvidenceState::RetryableFailure
+        } else {
+            BlossomEvidenceState::TerminalFailure
+        };
+        self.observed_at_unix_ms = Some(blossom_now_unix_ms());
+        self.http_status = error.http_status();
+        self.error_code = Some(error.code());
+        self.error_phase = Some(error.phase());
+        self.retryable = error.retryable();
+        self.possible_orphan = error.possible_orphan();
+        self.attempts = error.attempts();
+    }
+}
+
 #[cfg(feature = "blossom")]
 impl BlossomUploadTransaction {
     #[must_use]
@@ -648,6 +827,7 @@ impl BlossomCancellation {
 #[non_exhaustive]
 pub enum BlossomPhase {
     Configuration,
+    Probe,
     Authorization,
     Upload,
     Descriptor,
@@ -697,6 +877,7 @@ pub struct BlossomError {
     retryable: bool,
     possible_orphan: bool,
     attempts: u8,
+    http_status: Option<u16>,
 }
 
 #[cfg(feature = "blossom")]
@@ -714,6 +895,7 @@ impl BlossomError {
             retryable,
             possible_orphan,
             attempts,
+            http_status: None,
         }
     }
 
@@ -744,6 +926,11 @@ impl BlossomError {
     #[must_use]
     pub const fn attempts(&self) -> u8 {
         self.attempts
+    }
+
+    #[must_use]
+    pub const fn http_status(&self) -> Option<u16> {
+        self.http_status
     }
 
     #[must_use]
@@ -783,6 +970,11 @@ impl BlossomError {
         self.attempts = attempts;
         self
     }
+
+    pub(crate) const fn with_http_status(mut self, status: u16) -> Self {
+        self.http_status = Some(status);
+        self
+    }
 }
 
 #[cfg(feature = "blossom")]
@@ -802,6 +994,7 @@ impl std::fmt::Debug for BlossomError {
             .field("retryable", &self.retryable)
             .field("possible_orphan", &self.possible_orphan)
             .field("attempts", &self.attempts)
+            .field("http_status", &self.http_status)
             .finish()
     }
 }
@@ -865,7 +1058,14 @@ impl BlossomUploadReceipt {
 #[cfg(feature = "blossom")]
 #[derive(Clone, Default)]
 pub struct BlossomSlot {
-    config: Arc<RwLock<Option<BlossomConfig>>>,
+    state: Arc<RwLock<BlossomSlotState>>,
+}
+
+#[cfg(feature = "blossom")]
+#[derive(Default)]
+struct BlossomSlotState {
+    config: Option<BlossomConfig>,
+    evidence: Option<BlossomEndpointEvidence>,
 }
 
 #[cfg(feature = "blossom")]
@@ -877,17 +1077,20 @@ impl BlossomSlot {
 
     /// Atomically installs completely validated inert configuration.
     pub fn configure(&self, config: BlossomConfig) -> Result<(), BlossomError> {
-        let mut current = self
-            .config
+        let evidence = BlossomEndpointEvidence::configured(&config);
+        let mut state = self
+            .state
             .write()
             .map_err(|_| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
-        *current = Some(config);
+        state.config = Some(config);
+        state.evidence = Some(evidence);
         Ok(())
     }
 
     pub fn clear(&self) {
-        if let Ok(mut current) = self.config.write() {
-            *current = None;
+        if let Ok(mut state) = self.state.write() {
+            state.config = None;
+            state.evidence = None;
         }
     }
 
@@ -919,6 +1122,51 @@ impl BlossomSlot {
             let fingerprint = config.fingerprint();
             (config.profile, fingerprint)
         })
+    }
+
+    /// Returns the latest passive evidence without performing network I/O.
+    #[must_use]
+    pub fn evidence(&self) -> Option<BlossomEndpointEvidence> {
+        self.state
+            .read()
+            .ok()
+            .and_then(|state| state.evidence.clone())
+    }
+
+    /// Performs a bounded non-mutating primary-origin probe.
+    pub async fn probe(
+        &self,
+        cancellation: BlossomCancellation,
+    ) -> Result<BlossomEndpointEvidence, BlossomError> {
+        let config = self
+            .snapshot()
+            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        let fingerprint = config.fingerprint();
+        let result = crate::adapters::blossom::probe(
+            config.clone(),
+            config.profile().primary().clone(),
+            cancellation,
+        )
+        .await;
+        match result {
+            Ok(observation) => {
+                self.record_evidence(fingerprint, BlossomPhase::Probe, false, |evidence| {
+                    evidence.record_success(
+                        BlossomEvidenceState::TlsHttpObserved,
+                        Some(observation.http_status),
+                    );
+                })
+            }
+            Err(failure) => {
+                self.record_evidence(fingerprint, BlossomPhase::Probe, false, |evidence| {
+                    if failure.dns_policy_validated {
+                        evidence.last_successful_state = BlossomEvidenceState::DnsPolicyValidated;
+                    }
+                    evidence.record_failure(&failure.error);
+                })?;
+                Err(failure.error)
+            }
+        }
     }
 
     /// Binds verified bytes to the configured primary origin without network I/O.
@@ -980,7 +1228,31 @@ impl BlossomSlot {
         cancellation: BlossomCancellation,
     ) -> Result<BlossomUploadReceipt, BlossomError> {
         self.validate_transaction(&transaction)?;
-        crate::adapters::blossom::upload(transaction, authorization, cancellation).await
+        let fingerprint = transaction.config_fingerprint();
+        let result =
+            crate::adapters::blossom::upload(transaction, authorization, cancellation).await;
+        match result {
+            Ok(receipt) => {
+                self.record_evidence(fingerprint, BlossomPhase::Verification, true, |evidence| {
+                    evidence.record_success(BlossomEvidenceState::RetrievalVerified, None);
+                })?;
+                Ok(receipt)
+            }
+            Err(error) => {
+                self.record_evidence(fingerprint, BlossomPhase::Verification, true, |evidence| {
+                    if error.possible_orphan()
+                        && matches!(
+                            error.phase(),
+                            BlossomPhase::Retrieval | BlossomPhase::Verification
+                        )
+                    {
+                        evidence.last_successful_state = BlossomEvidenceState::UploadVerified;
+                    }
+                    evidence.record_failure(&error);
+                })?;
+                Err(error)
+            }
+        }
     }
 
     fn validate_transaction(
@@ -999,7 +1271,42 @@ impl BlossomSlot {
     }
 
     fn snapshot(&self) -> Option<BlossomConfig> {
-        self.config.read().ok().and_then(|config| config.clone())
+        self.state
+            .read()
+            .ok()
+            .and_then(|state| state.config.clone())
+    }
+
+    fn record_evidence(
+        &self,
+        fingerprint: BlossomConfigFingerprint,
+        drift_phase: BlossomPhase,
+        drift_possible_orphan: bool,
+        update: impl FnOnce(&mut BlossomEndpointEvidence),
+    ) -> Result<BlossomEndpointEvidence, BlossomError> {
+        let mut state = self
+            .state
+            .write()
+            .map_err(|_| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        let current = state
+            .config
+            .as_ref()
+            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        if current.fingerprint() != fingerprint {
+            return Err(BlossomError::new(
+                BlossomErrorKind::ConfigurationChanged,
+                drift_phase,
+                false,
+                drift_possible_orphan,
+                0,
+            ));
+        }
+        let evidence = state
+            .evidence
+            .as_mut()
+            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        update(evidence);
+        Ok(evidence.clone())
     }
 }
 
@@ -1817,6 +2124,99 @@ mod tests {
     }
 
     #[cfg(feature = "blossom")]
+    #[test]
+    fn blossom_evidence_is_versioned_passive_and_preserves_last_success() {
+        let slot = BlossomSlot::new();
+        assert!(slot.profile().is_none());
+        assert!(slot.configuration().is_none());
+        assert!(slot.evidence().is_none());
+
+        let public_config = BlossomConfig::from_profile(
+            public_blossom_profile("https://media.example").expect("public profile"),
+        );
+        let public_fingerprint = public_config.fingerprint();
+        slot.configure(public_config).expect("public config");
+        let initial = slot.evidence().expect("initial evidence");
+        assert_eq!(initial.schema_version(), 1);
+        assert_eq!(initial.origin(), "https://media.example");
+        assert_eq!(initial.config_fingerprint(), public_fingerprint);
+        assert_eq!(initial.state(), BlossomEvidenceState::ConfiguredUnobserved);
+        assert_eq!(
+            initial.last_successful_state(),
+            BlossomEvidenceState::ConfiguredUnobserved
+        );
+        assert_eq!(
+            initial.transport_security(),
+            BlossomTransportSecurity::PublicWebPki
+        );
+        assert_eq!(initial.observed_at_unix_ms(), None);
+        assert_eq!(initial.http_status(), None);
+        assert_eq!(initial.error_code(), None);
+        assert_eq!(initial.error_phase(), None);
+        assert!(!initial.retryable());
+        assert!(!initial.possible_orphan());
+        assert_eq!(initial.attempts(), 0);
+        assert_eq!(public_fingerprint.to_hex(), public_fingerprint.to_string());
+        assert_eq!(
+            slot.profile().expect("profile").primary().origin(),
+            initial.origin()
+        );
+        assert_eq!(
+            slot.configuration().expect("configuration").1,
+            public_fingerprint
+        );
+
+        let private_tls = BlossomConfig::from_profile(
+            device_blossom_profile("https://10.0.0.10:8443").expect("device profile"),
+        );
+        let mut evidence = BlossomEndpointEvidence::configured(&private_tls);
+        assert_eq!(
+            evidence.transport_security(),
+            BlossomTransportSecurity::DevelopmentTls
+        );
+        evidence.record_success(BlossomEvidenceState::UploadVerified, Some(201));
+        assert_eq!(evidence.state(), BlossomEvidenceState::UploadVerified);
+        assert_eq!(
+            evidence.last_successful_state(),
+            BlossomEvidenceState::UploadVerified
+        );
+        assert!(evidence.observed_at_unix_ms().is_some());
+        assert_eq!(evidence.http_status(), Some(201));
+
+        let failure = BlossomError::new(
+            BlossomErrorKind::HttpStatus,
+            BlossomPhase::Retrieval,
+            false,
+            true,
+            2,
+        )
+        .with_http_status(403);
+        evidence.record_failure(&failure);
+        assert_eq!(evidence.state(), BlossomEvidenceState::TerminalFailure);
+        assert_eq!(
+            evidence.last_successful_state(),
+            BlossomEvidenceState::UploadVerified
+        );
+        assert_eq!(evidence.http_status(), Some(403));
+        assert_eq!(evidence.error_code(), Some("blossom_http_status"));
+        assert_eq!(evidence.error_phase(), Some(BlossomPhase::Retrieval));
+        assert!(!evidence.retryable());
+        assert!(evidence.possible_orphan());
+        assert_eq!(evidence.attempts(), 2);
+
+        let cleartext = BlossomEndpointEvidence::configured(&BlossomConfig::from_profile(
+            simulator_blossom_profile("http://127.0.0.1:3000").expect("simulator profile"),
+        ));
+        assert_eq!(
+            cleartext.transport_security(),
+            BlossomTransportSecurity::DevelopmentCleartext
+        );
+
+        slot.clear();
+        assert!(slot.evidence().is_none());
+    }
+
+    #[cfg(feature = "blossom")]
     fn blossom_png(width: u32, height: u32) -> Vec<u8> {
         let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
         bytes.extend_from_slice(&width.to_be_bytes());
@@ -2447,7 +2847,7 @@ mod tests {
         assert_eq!(receipt.into_descriptor().size(), request.byte_size());
 
         let poisoned = BlossomSlot::new();
-        let state = Arc::clone(&poisoned.config);
+        let state = Arc::clone(&poisoned.state);
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _guard = state.write().expect("write lock");
             panic!("poison Blossom slot");

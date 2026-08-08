@@ -14,6 +14,192 @@ use crate::transport::{
 
 const MAX_RESOLVED_ADDRESSES: usize = 32;
 const X_SHA_256: &str = "x-sha-256";
+const BLOSSOM_PROBE_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+pub(crate) struct BlossomProbeObservation {
+    pub(crate) http_status: u16,
+}
+
+pub(crate) struct BlossomProbeFailure {
+    pub(crate) error: BlossomError,
+    pub(crate) dns_policy_validated: bool,
+}
+
+/// Performs one BUD-01-shaped GET for an impossible sentinel digest.
+///
+/// The request carries no authorization and cannot upload, delete, or mutate a
+/// server. Any terminal HTTP response proves only DNS-policy, transport, and
+/// HTTP reachability for the exact configured origin.
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub(crate) async fn probe(
+    config: BlossomConfig,
+    endpoint: BlossomEndpoint,
+    cancellation: BlossomCancellation,
+) -> Result<BlossomProbeObservation, BlossomProbeFailure> {
+    let mut url = BlobUrl::parse(format!("{}/{BLOSSOM_PROBE_HASH}", endpoint.origin()).as_str())
+        .map_err(|_| BlossomProbeFailure {
+            error: failure(
+                BlossomErrorKind::InvalidEndpoint,
+                BlossomPhase::Probe,
+                false,
+                false,
+                0,
+            ),
+            dns_policy_validated: false,
+        })?;
+    let mut dns_policy_validated = false;
+    for redirects in 0..=config.max_redirects() {
+        let current =
+            config
+                .profile()
+                .endpoint_for_blob(&url)
+                .ok_or_else(|| BlossomProbeFailure {
+                    error: failure(
+                        BlossomErrorKind::UnsafeRedirect,
+                        BlossomPhase::Probe,
+                        false,
+                        false,
+                        1,
+                    ),
+                    dns_policy_validated,
+                })?;
+        let addresses = resolve(
+            current,
+            config.connect_timeout(),
+            &cancellation,
+            BlossomPhase::Probe,
+            1,
+            false,
+        )
+        .await
+        .map_err(|error| BlossomProbeFailure {
+            error,
+            dns_policy_validated,
+        })?;
+        dns_policy_validated = true;
+        let client = hardened_client_with_addresses(
+            &config,
+            current,
+            addresses.as_slice(),
+            BlossomPhase::Probe,
+            1,
+            false,
+        )
+        .map_err(|error| BlossomProbeFailure {
+            error,
+            dns_policy_validated,
+        })?;
+        let pending = client
+            .get(url.as_str())
+            .header(ACCEPT, "*/*")
+            .header(ACCEPT_ENCODING, "identity")
+            .send();
+        let response = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => {
+                return Err(BlossomProbeFailure {
+                    error: failure(
+                        BlossomErrorKind::Cancelled,
+                        BlossomPhase::Probe,
+                        true,
+                        false,
+                        1,
+                    ),
+                    dns_policy_validated,
+                });
+            }
+            response = pending => response.map_err(|error| BlossomProbeFailure {
+                error: request_error(error, BlossomPhase::Probe, false, 1),
+                dns_policy_validated,
+            })?,
+        };
+        if response.status().is_redirection() {
+            if redirects == config.max_redirects() {
+                return Err(BlossomProbeFailure {
+                    error: failure(
+                        BlossomErrorKind::RedirectLimit,
+                        BlossomPhase::Probe,
+                        false,
+                        false,
+                        1,
+                    ),
+                    dns_policy_validated,
+                });
+            }
+            let location = response
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| BlossomProbeFailure {
+                    error: failure(
+                        BlossomErrorKind::UnsafeRedirect,
+                        BlossomPhase::Probe,
+                        false,
+                        false,
+                        1,
+                    ),
+                    dns_policy_validated,
+                })?;
+            let base = reqwest::Url::parse(url.as_str()).map_err(|_| BlossomProbeFailure {
+                error: failure(
+                    BlossomErrorKind::UnsafeRedirect,
+                    BlossomPhase::Probe,
+                    false,
+                    false,
+                    1,
+                ),
+                dns_policy_validated,
+            })?;
+            let next = base
+                .join(location)
+                .ok()
+                .and_then(|value| BlobUrl::parse(value.as_str()).ok())
+                .filter(|value| {
+                    value.hash_path().hash() == url.hash_path().hash()
+                        && config.profile().endpoint_for_blob(value).is_some()
+                })
+                .ok_or_else(|| BlossomProbeFailure {
+                    error: failure(
+                        BlossomErrorKind::UnsafeRedirect,
+                        BlossomPhase::Probe,
+                        false,
+                        false,
+                        1,
+                    ),
+                    dns_policy_validated,
+                })?;
+            url = next;
+            continue;
+        }
+        let status = response.status().as_u16();
+        read_bounded(
+            response,
+            config.max_descriptor_bytes(),
+            &cancellation,
+            BlossomPhase::Probe,
+            false,
+            1,
+        )
+        .await
+        .map_err(|error| BlossomProbeFailure {
+            error,
+            dns_policy_validated,
+        })?;
+        return Ok(BlossomProbeObservation {
+            http_status: status,
+        });
+    }
+    Err(BlossomProbeFailure {
+        error: failure(
+            BlossomErrorKind::RedirectLimit,
+            BlossomPhase::Probe,
+            false,
+            false,
+            1,
+        ),
+        dns_policy_validated,
+    })
+}
 
 pub(crate) async fn upload(
     transaction: BlossomUploadTransaction,
@@ -476,13 +662,40 @@ async fn hardened_client(
         possible_orphan,
     )
     .await?;
+    hardened_client_with_addresses(
+        config,
+        endpoint,
+        addresses.as_slice(),
+        phase,
+        attempts,
+        possible_orphan,
+    )
+}
+
+fn hardened_client_with_addresses(
+    config: &BlossomConfig,
+    endpoint: &BlossomEndpoint,
+    addresses: &[SocketAddr],
+    phase: BlossomPhase,
+    attempts: u8,
+    possible_orphan: bool,
+) -> Result<reqwest::Client, BlossomError> {
     let mut builder = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(config.connect_timeout())
         .timeout(config.request_timeout())
         .pool_max_idle_per_host(0);
     if endpoint.host().parse::<std::net::IpAddr>().is_err() {
-        builder = builder.resolve(endpoint.host(), addresses[0]);
+        let address = addresses.first().ok_or_else(|| {
+            failure(
+                BlossomErrorKind::ResolutionFailed,
+                phase,
+                true,
+                possible_orphan,
+                attempts,
+            )
+        })?;
+        builder = builder.resolve(endpoint.host(), *address);
     }
     builder.build().map_err(|_| {
         failure(
@@ -694,6 +907,7 @@ fn http_status_error(
         possible_orphan,
         attempts,
     )
+    .with_http_status(status.as_u16())
 }
 
 fn with_operation(error: BlossomError, possible_orphan: bool, attempts: u8) -> BlossomError {
@@ -1472,6 +1686,105 @@ mod tests {
             std::iter::empty::<&str>(),
         )
         .expect("profile")
+    }
+
+    #[tokio::test]
+    async fn non_mutating_probe_records_only_dns_transport_and_http_evidence() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0_u8; 2_048];
+            let count = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..count]);
+            assert!(request.starts_with(&format!("GET /{BLOSSOM_PROBE_HASH} HTTP/1.1")));
+            assert!(!request.to_ascii_lowercase().contains("authorization:"));
+            stream
+                .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+        let slot = crate::transport::BlossomSlot::new();
+        slot.configure(config(format!("http://{address}").as_str()))
+            .unwrap();
+        let initial = slot.evidence().unwrap();
+        assert_eq!(
+            initial.state(),
+            crate::transport::BlossomEvidenceState::ConfiguredUnobserved
+        );
+        assert!(initial.observed_at_unix_ms().is_none());
+
+        let observed = slot.probe(BlossomCancellation::default()).await.unwrap();
+        assert_eq!(
+            observed.state(),
+            crate::transport::BlossomEvidenceState::TlsHttpObserved
+        );
+        assert_eq!(observed.http_status(), Some(404));
+        assert!(observed.error_code().is_none());
+        assert!(observed.observed_at_unix_ms().is_some());
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_probe_is_retryable_redacted_and_never_claims_dns() {
+        let slot = crate::transport::BlossomSlot::new();
+        slot.configure(config("http://127.0.0.1:9")).unwrap();
+        let cancellation = BlossomCancellation::default();
+        cancellation.cancel();
+        let error = slot.probe(cancellation).await.unwrap_err();
+        assert_eq!(error.kind(), BlossomErrorKind::Cancelled);
+        let evidence = slot.evidence().unwrap();
+        assert_eq!(
+            evidence.state(),
+            crate::transport::BlossomEvidenceState::RetryableFailure
+        );
+        assert_eq!(
+            evidence.last_successful_state(),
+            crate::transport::BlossomEvidenceState::ConfiguredUnobserved
+        );
+        assert_eq!(evidence.error_code(), Some("blossom_cancelled"));
+        assert_eq!(evidence.error_phase(), Some(BlossomPhase::Probe));
+        assert!(!evidence.possible_orphan());
+    }
+
+    #[tokio::test]
+    async fn reconfiguration_during_probe_cannot_promote_stale_evidence() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0_u8; 2_048];
+            let _ = stream.read(&mut request).await.unwrap();
+            accepted_tx.send(()).unwrap();
+            release_rx.await.unwrap();
+            stream
+                .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+        let slot = crate::transport::BlossomSlot::new();
+        slot.configure(config(format!("http://{address}").as_str()))
+            .unwrap();
+        let probing = {
+            let slot = slot.clone();
+            tokio::spawn(async move { slot.probe(BlossomCancellation::default()).await })
+        };
+        accepted_rx.await.unwrap();
+        slot.configure(config("http://127.0.0.1:9")).unwrap();
+        release_tx.send(()).unwrap();
+        let error = probing.await.unwrap().unwrap_err();
+        assert_eq!(error.kind(), BlossomErrorKind::ConfigurationChanged);
+        assert_eq!(error.phase(), BlossomPhase::Probe);
+        assert!(!error.possible_orphan());
+        let evidence = slot.evidence().unwrap();
+        assert_eq!(evidence.origin(), "http://127.0.0.1:9");
+        assert_eq!(
+            evidence.state(),
+            crate::transport::BlossomEvidenceState::ConfiguredUnobserved
+        );
+        server.await.unwrap();
     }
 
     #[tokio::test]
