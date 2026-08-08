@@ -50,27 +50,30 @@ const MAX_BLOSSOM_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(feature = "blossom")]
 const MAX_BLOSSOM_RETRY_DELAY: Duration = Duration::from_secs(30);
 
-/// Network trust profile applied to one configured Blossom origin.
+/// Host environment executing Blossom operations.
 #[cfg(feature = "blossom")]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
-pub enum BlossomEndpointPolicy {
-    /// TLS-only public Internet origin with global DNS results.
-    Public,
-    /// Development-only HTTP or HTTPS origin resolving only to loopback.
+pub enum BlossomHostKind {
+    /// A non-mobile native host.
+    Native,
+    /// An Apple or Android simulator.
     Simulator,
-    /// Explicit TLS origin on a trusted physical-device network.
-    Device,
+    /// A physical mobile device.
+    PhysicalDevice,
 }
 
-/// Host environment whose trust rules produced a Blossom profile.
+/// Network authority applied independently to configured Blossom origins.
 #[cfg(feature = "blossom")]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
-pub enum BlossomProfileKind {
-    Public,
-    Simulator,
-    Device,
+pub enum BlossomEndpointAuthority {
+    /// Public HTTPS authenticated by the platform WebPKI roots.
+    PublicWebPki,
+    /// Development-only HTTP or HTTPS resolving exclusively to loopback.
+    LoopbackDevelopment,
+    /// Development-only HTTPS resolving to a non-loopback trusted network.
+    PrivateNetworkDevelopment,
 }
 
 /// One canonical configured Blossom origin.
@@ -80,12 +83,15 @@ pub struct BlossomEndpoint {
     origin: String,
     host: String,
     port: u16,
-    policy: BlossomEndpointPolicy,
+    authority: BlossomEndpointAuthority,
 }
 
 #[cfg(feature = "blossom")]
 impl BlossomEndpoint {
-    fn parse(value: impl AsRef<str>, policy: BlossomEndpointPolicy) -> Result<Self, BlossomError> {
+    fn parse(
+        value: impl AsRef<str>,
+        authority: BlossomEndpointAuthority,
+    ) -> Result<Self, BlossomError> {
         let value = value.as_ref();
         if value.is_empty() || !value.is_ascii() || value.chars().any(char::is_whitespace) {
             return Err(BlossomError::configuration(
@@ -111,12 +117,12 @@ impl BlossomEndpoint {
         let port = parsed
             .port_or_known_default()
             .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::InvalidEndpoint))?;
-        if port == 0 || !endpoint_scheme_is_allowed(parsed.scheme(), policy) {
+        if port == 0 || !endpoint_scheme_is_allowed(parsed.scheme(), authority) {
             return Err(BlossomError::configuration(
                 BlossomErrorKind::EndpointSchemeDenied,
             ));
         }
-        validate_blossom_host(host.as_str(), policy)?;
+        validate_blossom_host(host.as_str(), authority)?;
         ServerDomain::parse(host.as_str())
             .map_err(|_| BlossomError::configuration(BlossomErrorKind::InvalidEndpoint))?;
         // HTTP(S) URLs always have a tuple origin after the scheme and host
@@ -127,7 +133,7 @@ impl BlossomEndpoint {
             origin,
             host,
             port,
-            policy,
+            authority,
         })
     }
 
@@ -149,10 +155,10 @@ impl BlossomEndpoint {
         self.port
     }
 
-    /// Returns the policy used before and after DNS resolution.
+    /// Returns the authority used before and after DNS resolution.
     #[must_use]
-    pub const fn policy(&self) -> BlossomEndpointPolicy {
-        self.policy
+    pub const fn authority(&self) -> BlossomEndpointAuthority {
+        self.authority
     }
 
     pub(crate) fn upload_url(&self) -> String {
@@ -176,7 +182,7 @@ impl BlossomEndpoint {
         let mut found = false;
         for address in addresses {
             found = true;
-            if !blossom_policy_accepts_address(self.policy, address) {
+            if !blossom_authority_accepts_address(self.authority, address) {
                 return Err(BlossomError::configuration(
                     BlossomErrorKind::ResolvedAddressDenied,
                 ));
@@ -195,94 +201,80 @@ impl BlossomEndpoint {
 #[cfg(feature = "blossom")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlossomProfile {
-    kind: BlossomProfileKind,
-    endpoints: Vec<BlossomEndpoint>,
+    host_kind: BlossomHostKind,
+    authority: BlossomEndpointAuthority,
+    primary: BlossomEndpoint,
+    fallbacks: Vec<BlossomEndpoint>,
 }
 
 #[cfg(feature = "blossom")]
 impl BlossomProfile {
-    /// Configures explicit public TLS Blossom origins.
-    pub fn public<I, S>(origins: I) -> Result<Self, BlossomError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        Self::parse(
-            BlossomProfileKind::Public,
-            origins,
-            BlossomEndpointPolicy::Public,
-        )
-    }
-
-    /// Configures exact simulator-loopback Blossom origins.
-    pub fn simulator<I, S>(origins: I) -> Result<Self, BlossomError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        Self::parse(
-            BlossomProfileKind::Simulator,
-            origins,
-            BlossomEndpointPolicy::Simulator,
-        )
-    }
-
-    /// Configures explicit TLS origins reachable from a physical device.
-    pub fn device<I, S>(origins: I) -> Result<Self, BlossomError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        Self::parse(
-            BlossomProfileKind::Device,
-            origins,
-            BlossomEndpointPolicy::Device,
-        )
-    }
-
-    fn parse<I, S>(
-        kind: BlossomProfileKind,
-        origins: I,
-        policy: BlossomEndpointPolicy,
+    /// Configures one primary origin and an ordered, explicitly bounded fallback set.
+    pub fn new<I, S>(
+        host_kind: BlossomHostKind,
+        authority: BlossomEndpointAuthority,
+        primary_origin: impl AsRef<str>,
+        fallback_origins: I,
     ) -> Result<Self, BlossomError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let endpoints = origins
+        validate_host_authority(host_kind, authority)?;
+        let primary = BlossomEndpoint::parse(primary_origin, authority)?;
+        // The public constructor accepts any iterator, so bound collection
+        // before parsing to prevent an oversized caller from allocating an
+        // unbounded temporary vector only to be rejected afterward.
+        let fallbacks = fallback_origins
             .into_iter()
-            .map(|origin| BlossomEndpoint::parse(origin, policy))
+            .take(MAX_BLOSSOM_ENDPOINTS)
+            .map(|origin| BlossomEndpoint::parse(origin, authority))
             .collect::<Result<Vec<_>, _>>()?;
-        if endpoints.is_empty() || endpoints.len() > MAX_BLOSSOM_ENDPOINTS {
+        if fallbacks.len().saturating_add(1) > MAX_BLOSSOM_ENDPOINTS {
             return Err(BlossomError::configuration(
                 BlossomErrorKind::InvalidEndpointCount,
             ));
         }
-        let unique = endpoints
-            .iter()
+        let unique = std::iter::once(&primary)
+            .chain(fallbacks.iter())
             .map(BlossomEndpoint::origin)
             .collect::<BTreeSet<_>>();
-        if unique.len() != endpoints.len() {
+        if unique.len() != fallbacks.len().saturating_add(1) {
             return Err(BlossomError::configuration(
                 BlossomErrorKind::DuplicateEndpoint,
             ));
         }
-        Ok(Self { kind, endpoints })
+        Ok(Self {
+            host_kind,
+            authority,
+            primary,
+            fallbacks,
+        })
     }
 
     #[must_use]
-    pub const fn kind(&self) -> BlossomProfileKind {
-        self.kind
+    pub const fn host_kind(&self) -> BlossomHostKind {
+        self.host_kind
     }
 
     #[must_use]
-    pub fn endpoints(&self) -> &[BlossomEndpoint] {
-        self.endpoints.as_slice()
+    pub const fn authority(&self) -> BlossomEndpointAuthority {
+        self.authority
+    }
+
+    #[must_use]
+    pub const fn primary(&self) -> &BlossomEndpoint {
+        &self.primary
+    }
+
+    #[must_use]
+    pub fn fallbacks(&self) -> &[BlossomEndpoint] {
+        self.fallbacks.as_slice()
     }
 
     pub(crate) fn endpoint_for_blob(&self, url: &BlobUrl) -> Option<&BlossomEndpoint> {
-        self.endpoints
-            .iter()
+        std::iter::once(&self.primary)
+            .chain(self.fallbacks.iter())
             .find(|endpoint| endpoint.accepts_blob_url(url))
     }
 }
@@ -367,6 +359,36 @@ impl BlossomConfig {
         &self.profile
     }
 
+    /// Returns the stable identity of every setting that can affect an operation.
+    #[must_use]
+    pub fn fingerprint(&self) -> BlossomConfigFingerprint {
+        let mut material = Vec::new();
+        material.extend_from_slice(b"radroots-blossom-config-v1\0");
+        material.push(match self.profile.host_kind {
+            BlossomHostKind::Native => 0,
+            BlossomHostKind::Simulator => 1,
+            BlossomHostKind::PhysicalDevice => 2,
+        });
+        material.push(match self.profile.authority {
+            BlossomEndpointAuthority::PublicWebPki => 0,
+            BlossomEndpointAuthority::LoopbackDevelopment => 1,
+            BlossomEndpointAuthority::PrivateNetworkDevelopment => 2,
+        });
+        append_fingerprint_field(&mut material, self.profile.primary.origin.as_bytes());
+        material.extend_from_slice(&(self.profile.fallbacks.len() as u64).to_be_bytes());
+        for endpoint in &self.profile.fallbacks {
+            append_fingerprint_field(&mut material, endpoint.origin.as_bytes());
+        }
+        material.extend_from_slice(&self.max_blob_bytes.to_be_bytes());
+        material.extend_from_slice(&(self.max_descriptor_bytes as u64).to_be_bytes());
+        material.push(self.max_redirects);
+        material.push(self.max_attempts);
+        material.extend_from_slice(&(self.connect_timeout.as_millis() as u64).to_be_bytes());
+        material.extend_from_slice(&(self.request_timeout.as_millis() as u64).to_be_bytes());
+        material.extend_from_slice(&(self.initial_retry_delay.as_millis() as u64).to_be_bytes());
+        BlossomConfigFingerprint(Sha256::digest(material.as_slice()))
+    }
+
     pub(crate) const fn max_blob_bytes(&self) -> u64 {
         self.max_blob_bytes
     }
@@ -394,6 +416,32 @@ impl BlossomConfig {
     pub(crate) const fn initial_retry_delay(&self) -> Duration {
         self.initial_retry_delay
     }
+}
+
+/// Stable, non-secret identity of a completely validated Blossom configuration.
+#[cfg(feature = "blossom")]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct BlossomConfigFingerprint(Sha256);
+
+#[cfg(feature = "blossom")]
+impl BlossomConfigFingerprint {
+    #[must_use]
+    pub fn to_hex(self) -> String {
+        self.0.to_hex()
+    }
+}
+
+#[cfg(feature = "blossom")]
+impl std::fmt::Display for BlossomConfigFingerprint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, formatter)
+    }
+}
+
+#[cfg(feature = "blossom")]
+fn append_fingerprint_field(material: &mut Vec<u8>, value: &[u8]) {
+    material.extend_from_slice(&(value.len() as u64).to_be_bytes());
+    material.extend_from_slice(value);
 }
 
 /// Nonzero dimensions verified from the final image bytes.
@@ -426,11 +474,11 @@ impl BlossomImageDimensions {
     }
 }
 
-/// Exact final image bytes and expected BUD-02 descriptor identity.
+/// Exact final image bytes from which Rust derives the BUD-02 destination.
 #[cfg(feature = "blossom")]
 #[derive(Clone)]
 pub struct BlossomUploadRequest {
-    expected_url: BlobUrl,
+    sha256: Sha256,
     bytes: Arc<[u8]>,
     media_type: MediaType,
     dimensions: BlossomImageDimensions,
@@ -440,34 +488,24 @@ pub struct BlossomUploadRequest {
 #[cfg(feature = "blossom")]
 impl BlossomUploadRequest {
     pub fn new(
-        expected_url: BlobUrl,
         bytes: Arc<[u8]>,
         media_type: MediaType,
         dimensions: BlossomImageDimensions,
         verified_at_unix_ms: u64,
     ) -> Result<Self, BlossomError> {
-        if bytes.is_empty()
-            || expected_url.hash_path().extension().is_none()
-            || expected_url.hash_path().hash() != Sha256::digest(bytes.as_ref())
-            || verified_at_unix_ms == 0
-        {
+        if bytes.is_empty() || verified_at_unix_ms == 0 {
             return Err(BlossomError::configuration(
                 BlossomErrorKind::InvalidRequest,
             ));
         }
         crate::adapters::blossom::verify_image(bytes.as_ref(), &media_type, dimensions)?;
         Ok(Self {
-            expected_url,
+            sha256: Sha256::digest(bytes.as_ref()),
             bytes,
             media_type,
             dimensions,
             verified_at_unix_ms,
         })
-    }
-
-    #[must_use]
-    pub const fn expected_url(&self) -> &BlobUrl {
-        &self.expected_url
     }
 
     #[must_use]
@@ -481,8 +519,8 @@ impl BlossomUploadRequest {
     }
 
     #[must_use]
-    pub fn sha256(&self) -> Sha256 {
-        self.expected_url.hash_path().hash()
+    pub const fn sha256(&self) -> Sha256 {
+        self.sha256
     }
 
     #[must_use]
@@ -496,6 +534,60 @@ impl BlossomUploadRequest {
 
     pub(crate) const fn verified_at_unix_ms(&self) -> u64 {
         self.verified_at_unix_ms
+    }
+}
+
+/// Immutable upload plan binding exact bytes to one complete configuration.
+#[cfg(feature = "blossom")]
+#[derive(Clone)]
+pub struct BlossomUploadTransaction {
+    config: BlossomConfig,
+    config_fingerprint: BlossomConfigFingerprint,
+    endpoint: BlossomEndpoint,
+    expected_url: BlobUrl,
+    request: BlossomUploadRequest,
+}
+
+#[cfg(feature = "blossom")]
+impl BlossomUploadTransaction {
+    #[must_use]
+    pub const fn config_fingerprint(&self) -> BlossomConfigFingerprint {
+        self.config_fingerprint
+    }
+
+    #[must_use]
+    pub const fn expected_url(&self) -> &BlobUrl {
+        &self.expected_url
+    }
+
+    #[must_use]
+    pub const fn request(&self) -> &BlossomUploadRequest {
+        &self.request
+    }
+
+    pub(crate) const fn config(&self) -> &BlossomConfig {
+        &self.config
+    }
+
+    pub(crate) const fn endpoint(&self) -> &BlossomEndpoint {
+        &self.endpoint
+    }
+
+    pub(crate) fn into_request(self) -> BlossomUploadRequest {
+        self.request
+    }
+}
+
+#[cfg(feature = "blossom")]
+impl std::fmt::Debug for BlossomUploadTransaction {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BlossomUploadTransaction")
+            .field("config_fingerprint", &self.config_fingerprint)
+            .field("endpoint", &self.endpoint)
+            .field("expected_url", &self.expected_url)
+            .field("request", &self.request)
+            .finish()
     }
 }
 
@@ -573,6 +665,7 @@ pub enum BlossomErrorKind {
     InvalidEndpointCount,
     DuplicateEndpoint,
     EndpointNotConfigured,
+    ConfigurationChanged,
     ResolutionFailed,
     ResolvedAddressDenied,
     InvalidLimits,
@@ -661,6 +754,7 @@ impl BlossomError {
             BlossomErrorKind::InvalidEndpointCount => "blossom_invalid_endpoint_count",
             BlossomErrorKind::DuplicateEndpoint => "blossom_duplicate_endpoint",
             BlossomErrorKind::EndpointNotConfigured => "blossom_endpoint_not_configured",
+            BlossomErrorKind::ConfigurationChanged => "blossom_configuration_changed",
             BlossomErrorKind::ResolutionFailed => "blossom_resolution_failed",
             BlossomErrorKind::ResolvedAddressDenied => "blossom_resolved_address_denied",
             BlossomErrorKind::InvalidLimits => "blossom_invalid_limits",
@@ -798,29 +892,72 @@ impl BlossomSlot {
     }
 
     #[must_use]
-    pub fn profile_kind(&self) -> Option<BlossomProfileKind> {
-        self.snapshot().map(|config| config.profile.kind())
+    pub fn host_kind(&self) -> Option<BlossomHostKind> {
+        self.snapshot().map(|config| config.profile.host_kind())
+    }
+
+    #[must_use]
+    pub fn endpoint_authority(&self) -> Option<BlossomEndpointAuthority> {
+        self.snapshot().map(|config| config.profile.authority())
+    }
+
+    #[must_use]
+    pub fn config_fingerprint(&self) -> Option<BlossomConfigFingerprint> {
+        self.snapshot().map(|config| config.fingerprint())
+    }
+
+    /// Returns the configured inert profile without performing network I/O.
+    #[must_use]
+    pub fn profile(&self) -> Option<BlossomProfile> {
+        self.snapshot().map(|config| config.profile)
+    }
+
+    /// Atomically returns the inert profile and its exact configuration identity.
+    #[must_use]
+    pub fn configuration(&self) -> Option<(BlossomProfile, BlossomConfigFingerprint)> {
+        self.snapshot().map(|config| {
+            let fingerprint = config.fingerprint();
+            (config.profile, fingerprint)
+        })
+    }
+
+    /// Binds verified bytes to the configured primary origin without network I/O.
+    pub fn prepare_upload(
+        &self,
+        request: BlossomUploadRequest,
+    ) -> Result<BlossomUploadTransaction, BlossomError> {
+        let config = self
+            .snapshot()
+            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        let config_fingerprint = config.fingerprint();
+        let endpoint = config.profile.primary.clone();
+        let extension = canonical_image_extension(request.media_type())?;
+        let expected_url = BlobUrl::parse(
+            format!("{}/{}.{}", endpoint.origin(), request.sha256(), extension).as_str(),
+        )
+        .map_err(|_| BlossomError::configuration(BlossomErrorKind::InvalidEndpoint))?;
+        Ok(BlossomUploadTransaction {
+            config,
+            config_fingerprint,
+            endpoint,
+            expected_url,
+            request,
+        })
     }
 
     /// Builds the exact BUD-11 claim for this configured upload destination.
     pub fn authored_upload_claim(
         &self,
-        request: &BlossomUploadRequest,
+        transaction: &BlossomUploadTransaction,
         content: AuthorizationContent,
         created_at_unix_s: u64,
         lifetime_seconds: u64,
     ) -> Result<AuthoredUploadClaim, BlossomError> {
-        let config = self
-            .snapshot()
-            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
-        let endpoint = config
-            .profile
-            .endpoint_for_blob(request.expected_url())
-            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        self.validate_transaction(transaction)?;
         AuthoredUploadClaim::new(
             content,
-            endpoint.server_domain()?,
-            request.sha256(),
+            transaction.endpoint.server_domain()?,
+            transaction.request.sha256(),
             created_at_unix_s,
             lifetime_seconds,
         )
@@ -838,14 +975,27 @@ impl BlossomSlot {
     /// Uploads exact bytes and verifies the returned descriptor and a full GET.
     pub async fn upload(
         &self,
-        request: BlossomUploadRequest,
+        transaction: BlossomUploadTransaction,
         authorization: crate::signing::AuthorizationHeader,
         cancellation: BlossomCancellation,
     ) -> Result<BlossomUploadReceipt, BlossomError> {
-        let config = self
-            .snapshot()
+        self.validate_transaction(&transaction)?;
+        crate::adapters::blossom::upload(transaction, authorization, cancellation).await
+    }
+
+    fn validate_transaction(
+        &self,
+        transaction: &BlossomUploadTransaction,
+    ) -> Result<(), BlossomError> {
+        let fingerprint = self
+            .config_fingerprint()
             .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
-        crate::adapters::blossom::upload(config, request, authorization, cancellation).await
+        if fingerprint != transaction.config_fingerprint {
+            return Err(BlossomError::configuration(
+                BlossomErrorKind::ConfigurationChanged,
+            ));
+        }
+        Ok(())
     }
 
     fn snapshot(&self) -> Option<BlossomConfig> {
@@ -858,26 +1008,53 @@ impl std::fmt::Debug for BlossomSlot {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("BlossomSlot")
-            .field("configured", &self.profile_kind().is_some())
+            .field("configured", &self.host_kind().is_some())
             .finish()
     }
 }
 
 #[cfg(feature = "blossom")]
-fn endpoint_scheme_is_allowed(scheme: &str, policy: BlossomEndpointPolicy) -> bool {
-    scheme == "https" || scheme == "http" && policy == BlossomEndpointPolicy::Simulator
+fn endpoint_scheme_is_allowed(scheme: &str, authority: BlossomEndpointAuthority) -> bool {
+    scheme == "https"
+        || scheme == "http" && authority == BlossomEndpointAuthority::LoopbackDevelopment
 }
 
 #[cfg(feature = "blossom")]
-fn validate_blossom_host(host: &str, policy: BlossomEndpointPolicy) -> Result<(), BlossomError> {
+fn validate_host_authority(
+    host_kind: BlossomHostKind,
+    authority: BlossomEndpointAuthority,
+) -> Result<(), BlossomError> {
+    let accepted = match authority {
+        BlossomEndpointAuthority::PublicWebPki => true,
+        BlossomEndpointAuthority::LoopbackDevelopment => host_kind == BlossomHostKind::Simulator,
+        BlossomEndpointAuthority::PrivateNetworkDevelopment => {
+            host_kind == BlossomHostKind::PhysicalDevice
+        }
+    };
+    if accepted {
+        Ok(())
+    } else {
+        Err(BlossomError::configuration(
+            BlossomErrorKind::InvalidEndpoint,
+        ))
+    }
+}
+
+#[cfg(feature = "blossom")]
+fn validate_blossom_host(
+    host: &str,
+    authority: BlossomEndpointAuthority,
+) -> Result<(), BlossomError> {
     let address = host.parse::<IpAddr>().ok();
-    let accepted = match (policy, address) {
-        (BlossomEndpointPolicy::Public, Some(address)) => public_blossom_address(address),
-        (BlossomEndpointPolicy::Public, None) => public_blossom_hostname(host),
-        (BlossomEndpointPolicy::Simulator, Some(address)) => address.is_loopback(),
-        (BlossomEndpointPolicy::Simulator, None) => host == "localhost",
-        (BlossomEndpointPolicy::Device, Some(address)) => trusted_blossom_address(address),
-        (BlossomEndpointPolicy::Device, None) => host != "localhost",
+    let accepted = match (authority, address) {
+        (BlossomEndpointAuthority::PublicWebPki, Some(address)) => public_blossom_address(address),
+        (BlossomEndpointAuthority::PublicWebPki, None) => public_blossom_hostname(host),
+        (BlossomEndpointAuthority::LoopbackDevelopment, Some(address)) => address.is_loopback(),
+        (BlossomEndpointAuthority::LoopbackDevelopment, None) => host == "localhost",
+        (BlossomEndpointAuthority::PrivateNetworkDevelopment, Some(address)) => {
+            trusted_blossom_address(address)
+        }
+        (BlossomEndpointAuthority::PrivateNetworkDevelopment, None) => host != "localhost",
     };
     if accepted {
         Ok(())
@@ -897,11 +1074,28 @@ fn public_blossom_hostname(host: &str) -> bool {
 }
 
 #[cfg(feature = "blossom")]
-fn blossom_policy_accepts_address(policy: BlossomEndpointPolicy, address: IpAddr) -> bool {
-    match policy {
-        BlossomEndpointPolicy::Public => public_blossom_address(address),
-        BlossomEndpointPolicy::Simulator => address.is_loopback(),
-        BlossomEndpointPolicy::Device => trusted_blossom_address(address),
+fn blossom_authority_accepts_address(authority: BlossomEndpointAuthority, address: IpAddr) -> bool {
+    match authority {
+        BlossomEndpointAuthority::PublicWebPki => public_blossom_address(address),
+        BlossomEndpointAuthority::LoopbackDevelopment => address.is_loopback(),
+        BlossomEndpointAuthority::PrivateNetworkDevelopment => trusted_blossom_address(address),
+    }
+}
+
+#[cfg(feature = "blossom")]
+fn canonical_image_extension(media_type: &MediaType) -> Result<&'static str, BlossomError> {
+    match media_type.as_str() {
+        "image/png" => Ok("png"),
+        "image/jpeg" => Ok("jpg"),
+        "image/gif" => Ok("gif"),
+        "image/webp" => Ok("webp"),
+        _ => Err(BlossomError::new(
+            BlossomErrorKind::UnsupportedMediaType,
+            BlossomPhase::Verification,
+            false,
+            false,
+            0,
+        )),
     }
 }
 
@@ -1580,22 +1774,22 @@ mod tests {
     #[cfg(feature = "blossom")]
     #[test]
     fn blossom_profiles_enforce_environment_and_ssrf_boundaries() {
-        assert!(BlossomProfile::public(["https://media.example"]).is_ok());
-        assert!(BlossomProfile::public(["http://media.example"]).is_err());
-        assert!(BlossomProfile::public(["https://127.0.0.1"]).is_err());
-        assert!(BlossomProfile::public(["https://10.0.0.1"]).is_err());
-        assert!(BlossomProfile::simulator(["http://127.0.0.1:3000"]).is_ok());
-        assert!(BlossomProfile::simulator(["http://localhost:3000"]).is_ok());
-        assert!(BlossomProfile::simulator(["http://media.example"]).is_err());
-        assert!(BlossomProfile::device(["https://10.0.0.10:8443"]).is_ok());
-        assert!(BlossomProfile::device(["http://10.0.0.10:8443"]).is_err());
-        assert!(BlossomProfile::device(["https://127.0.0.1:8443"]).is_err());
+        assert!(public_blossom_profile("https://media.example").is_ok());
+        assert!(public_blossom_profile("http://media.example").is_err());
+        assert!(public_blossom_profile("https://127.0.0.1").is_err());
+        assert!(public_blossom_profile("https://10.0.0.1").is_err());
+        assert!(simulator_blossom_profile("http://127.0.0.1:3000").is_ok());
+        assert!(simulator_blossom_profile("http://localhost:3000").is_ok());
+        assert!(simulator_blossom_profile("http://media.example").is_err());
+        assert!(device_blossom_profile("https://10.0.0.10:8443").is_ok());
+        assert!(device_blossom_profile("http://10.0.0.10:8443").is_err());
+        assert!(device_blossom_profile("https://127.0.0.1:8443").is_err());
     }
 
     #[cfg(feature = "blossom")]
     #[test]
     fn blossom_configuration_is_bounded_and_debug_is_secret_safe() {
-        let profile = BlossomProfile::simulator(["http://127.0.0.1:3000"]).unwrap();
+        let profile = simulator_blossom_profile("http://127.0.0.1:3000").unwrap();
         assert!(
             BlossomConfig::from_profile(profile.clone())
                 .with_limits(0, 1, 0)
@@ -1614,7 +1808,11 @@ mod tests {
         let slot = BlossomSlot::new();
         slot.configure(BlossomConfig::from_profile(profile))
             .unwrap();
-        assert_eq!(slot.profile_kind(), Some(BlossomProfileKind::Simulator));
+        assert_eq!(slot.host_kind(), Some(BlossomHostKind::Simulator));
+        assert_eq!(
+            slot.endpoint_authority(),
+            Some(BlossomEndpointAuthority::LoopbackDevelopment)
+        );
         assert_eq!(format!("{slot:?}"), "BlossomSlot { configured: true }");
     }
 
@@ -1627,11 +1825,9 @@ mod tests {
     }
 
     #[cfg(feature = "blossom")]
-    fn blossom_request(origin: &str) -> BlossomUploadRequest {
+    fn blossom_request(_origin: &str) -> BlossomUploadRequest {
         let bytes = blossom_png(2, 3);
-        let hash = Sha256::digest(bytes.as_slice());
         BlossomUploadRequest::new(
-            BlobUrl::parse(format!("{origin}/{hash}.png").as_str()).expect("blob URL"),
             Arc::from(bytes),
             MediaType::parse("image/png").expect("media type"),
             BlossomImageDimensions::new(2, 3).expect("dimensions"),
@@ -1641,56 +1837,130 @@ mod tests {
     }
 
     #[cfg(feature = "blossom")]
+    fn public_blossom_profile(origin: &str) -> Result<BlossomProfile, BlossomError> {
+        BlossomProfile::new(
+            BlossomHostKind::Native,
+            BlossomEndpointAuthority::PublicWebPki,
+            origin,
+            std::iter::empty::<&str>(),
+        )
+    }
+
+    #[cfg(feature = "blossom")]
+    fn simulator_blossom_profile(origin: &str) -> Result<BlossomProfile, BlossomError> {
+        BlossomProfile::new(
+            BlossomHostKind::Simulator,
+            BlossomEndpointAuthority::LoopbackDevelopment,
+            origin,
+            std::iter::empty::<&str>(),
+        )
+    }
+
+    #[cfg(feature = "blossom")]
+    fn device_blossom_profile(origin: &str) -> Result<BlossomProfile, BlossomError> {
+        BlossomProfile::new(
+            BlossomHostKind::PhysicalDevice,
+            BlossomEndpointAuthority::PrivateNetworkDevelopment,
+            origin,
+            std::iter::empty::<&str>(),
+        )
+    }
+
+    #[cfg(feature = "blossom")]
     #[test]
     fn blossom_profiles_expose_exact_identity_and_reject_malformed_sets() {
-        let public = BlossomProfile::public(["https://media.example:8443"]).expect("public");
-        assert_eq!(public.kind(), BlossomProfileKind::Public);
-        assert_eq!(public.endpoints().len(), 1);
-        let endpoint = &public.endpoints()[0];
+        let public = BlossomProfile::new(
+            BlossomHostKind::PhysicalDevice,
+            BlossomEndpointAuthority::PublicWebPki,
+            "https://media.example:8443",
+            ["https://fallback.example"],
+        )
+        .expect("public");
+        assert_eq!(public.host_kind(), BlossomHostKind::PhysicalDevice);
+        assert_eq!(public.authority(), BlossomEndpointAuthority::PublicWebPki);
+        assert_eq!(public.fallbacks().len(), 1);
+        let endpoint = public.primary();
         assert_eq!(endpoint.origin(), "https://media.example:8443");
         assert_eq!(endpoint.host(), "media.example");
         assert_eq!(endpoint.port(), 8443);
-        assert_eq!(endpoint.policy(), BlossomEndpointPolicy::Public);
+        assert_eq!(endpoint.authority(), BlossomEndpointAuthority::PublicWebPki);
 
         let request = blossom_request("https://media.example:8443");
-        assert!(endpoint.accepts_blob_url(request.expected_url()));
+        let slot = BlossomSlot::new();
+        slot.configure(BlossomConfig::from_profile(public.clone()))
+            .unwrap();
+        let transaction = slot.prepare_upload(request).unwrap();
+        assert!(endpoint.accepts_blob_url(transaction.expected_url()));
+        assert_eq!(
+            transaction
+                .expected_url()
+                .hash_path()
+                .extension()
+                .unwrap()
+                .as_str(),
+            "png"
+        );
+        assert_eq!(
+            transaction.expected_url().hash_path().hash(),
+            transaction.request().sha256()
+        );
         assert_eq!(endpoint.upload_url(), "https://media.example:8443/upload");
         assert_eq!(endpoint.server_domain().unwrap().as_str(), "media.example");
         assert_eq!(
             public
-                .endpoint_for_blob(request.expected_url())
+                .endpoint_for_blob(transaction.expected_url())
                 .expect("configured endpoint"),
             endpoint
         );
 
         assert_eq!(
-            BlossomProfile::device(["https://device.example"])
-                .unwrap()
-                .kind(),
-            BlossomProfileKind::Device
+            BlossomProfile::new(
+                BlossomHostKind::PhysicalDevice,
+                BlossomEndpointAuthority::PrivateNetworkDevelopment,
+                "https://device.example",
+                std::iter::empty::<&str>(),
+            )
+            .unwrap()
+            .host_kind(),
+            BlossomHostKind::PhysicalDevice
         );
         assert_eq!(
-            BlossomProfile::simulator(["http://localhost:3000"])
+            simulator_blossom_profile("http://localhost:3000")
                 .unwrap()
-                .kind(),
-            BlossomProfileKind::Simulator
+                .host_kind(),
+            BlossomHostKind::Simulator
         );
         assert_eq!(
-            BlossomProfile::public(std::iter::empty::<&str>())
-                .expect_err("empty profile")
-                .kind(),
+            BlossomProfile::new(
+                BlossomHostKind::Native,
+                BlossomEndpointAuthority::PublicWebPki,
+                "",
+                std::iter::empty::<&str>(),
+            )
+            .expect_err("empty profile")
+            .kind(),
+            BlossomErrorKind::InvalidEndpoint
+        );
+        assert_eq!(
+            BlossomProfile::new(
+                BlossomHostKind::Native,
+                BlossomEndpointAuthority::PublicWebPki,
+                "https://primary.example",
+                std::iter::repeat_n("https://media.example", 16),
+            )
+            .expect_err("bounded profile")
+            .kind(),
             BlossomErrorKind::InvalidEndpointCount
         );
         assert_eq!(
-            BlossomProfile::public(std::iter::repeat_n("https://media.example", 17))
-                .expect_err("bounded profile")
-                .kind(),
-            BlossomErrorKind::InvalidEndpointCount
-        );
-        assert_eq!(
-            BlossomProfile::public(["https://media.example", "https://media.example"])
-                .expect_err("duplicate profile")
-                .kind(),
+            BlossomProfile::new(
+                BlossomHostKind::Native,
+                BlossomEndpointAuthority::PublicWebPki,
+                "https://media.example",
+                ["https://media.example"],
+            )
+            .expect_err("duplicate profile")
+            .kind(),
             BlossomErrorKind::DuplicateEndpoint
         );
 
@@ -1706,14 +1976,85 @@ mod tests {
             "ftp://media.example",
             "https://media.example:0",
         ] {
-            assert!(BlossomProfile::public([malformed]).is_err(), "{malformed}");
+            assert!(public_blossom_profile(malformed).is_err(), "{malformed}");
         }
     }
 
     #[cfg(feature = "blossom")]
     #[test]
+    fn blossom_upload_transactions_bind_primary_authority_and_complete_config() {
+        let profile = BlossomProfile::new(
+            BlossomHostKind::PhysicalDevice,
+            BlossomEndpointAuthority::PublicWebPki,
+            "https://media.example:443",
+            ["https://fallback.example"],
+        )
+        .unwrap();
+        assert_eq!(profile.primary().origin(), "https://media.example");
+        assert!(
+            profile
+                .primary()
+                .validate_resolved_addresses([IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))])
+                .is_err()
+        );
+
+        let slot = BlossomSlot::new();
+        let original = BlossomConfig::from_profile(profile);
+        let original_fingerprint = original.fingerprint();
+        slot.configure(original).unwrap();
+        let transaction = slot
+            .prepare_upload(blossom_request("caller-origin-is-ignored"))
+            .unwrap();
+        assert_eq!(transaction.config_fingerprint(), original_fingerprint);
+        assert!(
+            transaction
+                .expected_url()
+                .as_str()
+                .starts_with("https://media.example/")
+        );
+        let claim = slot
+            .authored_upload_claim(
+                &transaction,
+                AuthorizationContent::parse("Upload farm image").unwrap(),
+                100,
+                60,
+            )
+            .unwrap();
+        assert_eq!(claim.server_domain().as_str(), "media.example");
+
+        let changed = BlossomConfig::from_profile(
+            BlossomProfile::new(
+                BlossomHostKind::PhysicalDevice,
+                BlossomEndpointAuthority::PublicWebPki,
+                "https://other.example",
+                ["https://fallback.example"],
+            )
+            .unwrap(),
+        );
+        assert_ne!(changed.fingerprint(), original_fingerprint);
+        slot.configure(changed).unwrap();
+        assert_eq!(
+            slot.authored_upload_claim(
+                &transaction,
+                AuthorizationContent::parse("Upload farm image").unwrap(),
+                100,
+                60,
+            )
+            .expect_err("changed configuration"),
+            BlossomError::configuration(BlossomErrorKind::ConfigurationChanged)
+        );
+        assert_eq!(
+            slot.validate_transaction(&transaction)
+                .expect_err("changed upload destination")
+                .kind(),
+            BlossomErrorKind::ConfigurationChanged
+        );
+    }
+
+    #[cfg(feature = "blossom")]
+    #[test]
     fn blossom_limits_requests_and_errors_cover_the_complete_public_contract() {
-        let profile = BlossomProfile::simulator(["http://127.0.0.1:3000"]).unwrap();
+        let profile = simulator_blossom_profile("http://127.0.0.1:3000").unwrap();
         let valid = BlossomConfig::from_profile(profile.clone())
             .with_limits(1, 1, 5)
             .unwrap()
@@ -1813,51 +2154,25 @@ mod tests {
         assert_eq!(request.media_type().as_str(), "image/png");
         assert_eq!(request.dimensions(), dimensions);
         assert_eq!(request.byte_size(), request.bytes().len() as u64);
-        assert_eq!(request.sha256(), request.expected_url().hash_path().hash());
+        assert_eq!(request.sha256(), Sha256::digest(request.bytes()));
         assert_eq!(request.verified_at_unix_ms(), 1_900_000_000_000);
         assert!(format!("{request:?}").contains("bytes: \"<redacted>\""));
 
         let media_type = MediaType::parse("image/png").unwrap();
-        let empty_hash = Sha256::digest(b"");
-        let empty_url =
-            BlobUrl::parse(format!("http://127.0.0.1:3000/{empty_hash}.png").as_str()).unwrap();
         assert!(
-            BlossomUploadRequest::new(empty_url, Arc::from([]), media_type.clone(), dimensions, 1,)
-                .is_err()
+            BlossomUploadRequest::new(Arc::from([]), media_type.clone(), dimensions, 1,).is_err()
         );
         let bytes = blossom_png(2, 3);
-        let hash = Sha256::digest(bytes.as_slice());
-        let no_extension =
-            BlobUrl::parse(format!("http://127.0.0.1:3000/{hash}").as_str()).unwrap();
         assert!(
             BlossomUploadRequest::new(
-                no_extension,
                 Arc::from(bytes.clone()),
-                media_type.clone(),
+                MediaType::parse("image/jpeg").unwrap(),
                 dimensions,
                 1,
             )
             .is_err()
         );
-        let wrong_hash = Sha256::digest(b"wrong");
-        let wrong_url =
-            BlobUrl::parse(format!("http://127.0.0.1:3000/{wrong_hash}.png").as_str()).unwrap();
-        assert!(
-            BlossomUploadRequest::new(
-                wrong_url,
-                Arc::from(bytes.clone()),
-                media_type.clone(),
-                dimensions,
-                1,
-            )
-            .is_err()
-        );
-        let valid_url =
-            BlobUrl::parse(format!("http://127.0.0.1:3000/{hash}.png").as_str()).unwrap();
-        assert!(
-            BlossomUploadRequest::new(valid_url, Arc::from(bytes), media_type, dimensions, 0)
-                .is_err()
-        );
+        assert!(BlossomUploadRequest::new(Arc::from(bytes), media_type, dimensions, 0).is_err());
 
         let all_kinds = [
             (
@@ -1879,6 +2194,10 @@ mod tests {
             (
                 BlossomErrorKind::EndpointNotConfigured,
                 "blossom_endpoint_not_configured",
+            ),
+            (
+                BlossomErrorKind::ConfigurationChanged,
+                "blossom_configuration_changed",
             ),
             (
                 BlossomErrorKind::ResolutionFailed,
@@ -2010,8 +2329,8 @@ mod tests {
             assert_eq!(public_blossom_hostname(host), accepted, "{host}");
         }
 
-        let simulator = BlossomProfile::simulator(["http://127.0.0.1:3000"]).unwrap();
-        let simulator_endpoint = &simulator.endpoints()[0];
+        let simulator = simulator_blossom_profile("http://127.0.0.1:3000").unwrap();
+        let simulator_endpoint = simulator.primary();
         assert!(
             simulator_endpoint
                 .validate_resolved_addresses([IpAddr::V4(Ipv4Addr::LOCALHOST)])
@@ -2024,15 +2343,17 @@ mod tests {
                 .is_err()
         );
 
-        let public = BlossomProfile::public(["https://media.example"]).unwrap();
+        let public = public_blossom_profile("https://media.example").unwrap();
         assert!(
-            public.endpoints()[0]
+            public
+                .primary()
                 .validate_resolved_addresses([IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))])
                 .is_ok()
         );
-        let device = BlossomProfile::device(["https://device.example"]).unwrap();
+        let device = device_blossom_profile("https://device.example").unwrap();
         assert!(
-            device.endpoints()[0]
+            device
+                .primary()
                 .validate_resolved_addresses([IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))])
                 .is_ok()
         );
@@ -2054,16 +2375,16 @@ mod tests {
         assert!(trusted_blossom_address(IpAddr::V6(
             "fd00::1".parse().unwrap()
         )));
-        assert!(blossom_policy_accepts_address(
-            BlossomEndpointPolicy::Public,
+        assert!(blossom_authority_accepts_address(
+            BlossomEndpointAuthority::PublicWebPki,
             IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))
         ));
-        assert!(blossom_policy_accepts_address(
-            BlossomEndpointPolicy::Simulator,
+        assert!(blossom_authority_accepts_address(
+            BlossomEndpointAuthority::LoopbackDevelopment,
             IpAddr::V4(Ipv4Addr::LOCALHOST)
         ));
-        assert!(blossom_policy_accepts_address(
-            BlossomEndpointPolicy::Device,
+        assert!(blossom_authority_accepts_address(
+            BlossomEndpointAuthority::PrivateNetworkDevelopment,
             IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))
         ));
     }
@@ -2083,33 +2404,31 @@ mod tests {
 
         let request = blossom_request("http://127.0.0.1:3000");
         let slot = BlossomSlot::new();
-        assert!(slot.profile_kind().is_none());
+        assert!(slot.host_kind().is_none());
         let content = AuthorizationContent::parse("Upload farm image").unwrap();
-        assert!(
-            slot.authored_upload_claim(&request, content.clone(), 100, 60)
-                .is_err()
-        );
+        assert!(slot.prepare_upload(request.clone()).is_err());
         slot.configure(BlossomConfig::from_profile(
-            BlossomProfile::simulator(["http://127.0.0.1:3000"]).unwrap(),
+            simulator_blossom_profile("http://127.0.0.1:3000").unwrap(),
         ))
         .unwrap();
+        let transaction = slot.prepare_upload(request.clone()).unwrap();
         let claim = slot
-            .authored_upload_claim(&request, content.clone(), 100, 60)
+            .authored_upload_claim(&transaction, content.clone(), 100, 60)
             .unwrap();
         assert_eq!(claim.server_domain().as_str(), "127.0.0.1");
         assert_eq!(claim.sha256(), request.sha256());
         assert_eq!(claim.lifetime_seconds(), 60);
         assert_eq!(
-            slot.authored_upload_claim(&request, content, 100, 0)
+            slot.authored_upload_claim(&transaction, content, 100, 0)
                 .expect_err("invalid lifetime")
                 .kind(),
             BlossomErrorKind::Authorization
         );
         slot.clear();
-        assert!(slot.profile_kind().is_none());
+        assert!(slot.host_kind().is_none());
 
         let descriptor = radroots_blossom::BlobDescriptor::new(
-            request.expected_url().clone(),
+            transaction.expected_url().clone(),
             request.sha256(),
             request.byte_size(),
             request.media_type().clone(),
@@ -2137,11 +2456,11 @@ mod tests {
         assert!(
             poisoned
                 .configure(BlossomConfig::from_profile(
-                    BlossomProfile::simulator(["http://127.0.0.1:3000"]).unwrap(),
+                    simulator_blossom_profile("http://127.0.0.1:3000").unwrap(),
                 ))
                 .is_err()
         );
-        assert!(poisoned.profile_kind().is_none());
+        assert!(poisoned.host_kind().is_none());
     }
 
     #[cfg(feature = "radrootsd")]

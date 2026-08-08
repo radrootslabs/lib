@@ -9,26 +9,29 @@ use reqwest::{
 use crate::transport::{
     BlossomCancellation, BlossomConfig, BlossomEndpoint, BlossomError, BlossomErrorKind,
     BlossomImageDimensions, BlossomPhase, BlossomUploadReceipt, BlossomUploadRequest,
+    BlossomUploadTransaction,
 };
 
 const MAX_RESOLVED_ADDRESSES: usize = 32;
 const X_SHA_256: &str = "x-sha-256";
 
 pub(crate) async fn upload(
-    config: BlossomConfig,
-    request: BlossomUploadRequest,
+    transaction: BlossomUploadTransaction,
     authorization: crate::signing::AuthorizationHeader,
     cancellation: BlossomCancellation,
 ) -> Result<BlossomUploadReceipt, BlossomError> {
-    upload_with_authorization(config, request, authorization.as_str(), cancellation).await
+    upload_bound_with_authorization(transaction, authorization.as_str(), cancellation).await
 }
 
-async fn upload_with_authorization(
-    config: BlossomConfig,
-    request: BlossomUploadRequest,
+async fn upload_bound_with_authorization(
+    transaction: BlossomUploadTransaction,
     authorization: &str,
     cancellation: BlossomCancellation,
 ) -> Result<BlossomUploadReceipt, BlossomError> {
+    let config = transaction.config().clone();
+    let endpoint = transaction.endpoint().clone();
+    let expected_url = transaction.expected_url().clone();
+    let request = transaction.into_request();
     if request.byte_size() > config.max_blob_bytes() {
         return Err(failure(
             BlossomErrorKind::ResponseTooLarge,
@@ -38,20 +41,6 @@ async fn upload_with_authorization(
             0,
         ));
     }
-    let endpoint = config
-        .profile()
-        .endpoint_for_blob(request.expected_url())
-        .cloned()
-        .ok_or_else(|| {
-            failure(
-                BlossomErrorKind::EndpointNotConfigured,
-                BlossomPhase::Configuration,
-                false,
-                false,
-                0,
-            )
-        })?;
-
     let mut upload_attempts = 0_u8;
     let descriptor = loop {
         ensure_not_cancelled(&cancellation, BlossomPhase::Upload, upload_attempts, false)?;
@@ -74,7 +63,7 @@ async fn upload_with_authorization(
         }
     };
 
-    let verified_upload = verify_descriptor(&request, descriptor, upload_attempts)?;
+    let verified_upload = verify_descriptor(&request, &expected_url, descriptor, upload_attempts)?;
     let mut retrieval_attempts = 0_u8;
     let retrieved = loop {
         ensure_not_cancelled(
@@ -136,6 +125,19 @@ async fn upload_with_authorization(
         upload_attempts.saturating_add(retrieval_attempts),
         request.verified_at_unix_ms(),
     ))
+}
+
+#[cfg(test)]
+async fn upload_with_authorization(
+    config: BlossomConfig,
+    request: BlossomUploadRequest,
+    authorization: &str,
+    cancellation: BlossomCancellation,
+) -> Result<BlossomUploadReceipt, BlossomError> {
+    let slot = crate::transport::BlossomSlot::new();
+    slot.configure(config)?;
+    let transaction = slot.prepare_upload(request)?;
+    upload_bound_with_authorization(transaction, authorization, cancellation).await
 }
 
 // Direct DNS/socket/HTTP behavior is verified by the local real-I/O suite;
@@ -249,12 +251,13 @@ async fn upload_once(
 
 fn verify_descriptor(
     request: &BlossomUploadRequest,
+    expected_url: &BlobUrl,
     descriptor: BlobDescriptor,
     attempts: u8,
 ) -> Result<radroots_blossom::ByteVerifiedDescriptor, BlossomError> {
     // `BlobDescriptor` construction already binds `sha256` to the URL hash,
     // so equality of the typed URL proves equality of that hash as well.
-    if descriptor.url() != request.expected_url()
+    if descriptor.url() != expected_url
         || descriptor.size() != request.byte_size()
         || descriptor.media_type() != request.media_type()
     {
@@ -1126,8 +1129,7 @@ mod tests {
             BlossomErrorKind::Cancelled
         );
 
-        let profile =
-            crate::transport::BlossomProfile::simulator(["http://127.0.0.1:9"]).expect("profile");
+        let profile = simulator_profile("http://127.0.0.1:9");
         let config = BlossomConfig::from_profile(profile)
             .with_network_policy(
                 Duration::from_millis(10),
@@ -1159,11 +1161,9 @@ mod tests {
 
         let bytes = png(2, 3);
         let request = upload_request("http://127.0.0.1:9", bytes.clone());
-        let too_small = BlossomConfig::from_profile(
-            crate::transport::BlossomProfile::simulator(["http://127.0.0.1:9"]).unwrap(),
-        )
-        .with_limits(1, 100, 0)
-        .unwrap();
+        let too_small = BlossomConfig::from_profile(simulator_profile("http://127.0.0.1:9"))
+            .with_limits(1, 100, 0)
+            .unwrap();
         assert_eq!(
             upload_with_authorization(
                 too_small,
@@ -1176,25 +1176,15 @@ mod tests {
             .kind(),
             BlossomErrorKind::ResponseTooLarge
         );
-        let unconfigured_request = upload_request("http://127.0.0.1:10", bytes);
-        assert_eq!(
-            upload_with_authorization(
-                config,
-                unconfigured_request,
-                "Nostr redacted",
-                BlossomCancellation::default(),
-            )
-            .await
-            .expect_err("unconfigured origin")
-            .kind(),
-            BlossomErrorKind::EndpointNotConfigured
-        );
     }
 
     #[test]
     fn descriptor_verification_checks_each_identity_field() {
         let bytes = png(2, 3);
         let request = upload_request("http://127.0.0.1:3000", bytes);
+        let expected_url =
+            BlobUrl::parse(format!("http://127.0.0.1:3000/{}.png", request.sha256()).as_str())
+                .unwrap();
         let descriptor = |url: BlobUrl, size: u64, media_type: &str| {
             BlobDescriptor::new(
                 url,
@@ -1208,6 +1198,7 @@ mod tests {
         assert!(
             verify_descriptor(
                 &request,
+                &expected_url,
                 descriptor(
                     BlobUrl::parse(
                         format!("http://localhost:3000/{}.png", request.sha256()).as_str()
@@ -1223,11 +1214,8 @@ mod tests {
         assert!(
             verify_descriptor(
                 &request,
-                descriptor(
-                    request.expected_url().clone(),
-                    request.byte_size() + 1,
-                    "image/png"
-                ),
+                &expected_url,
+                descriptor(expected_url.clone(), request.byte_size() + 1, "image/png"),
                 1,
             )
             .is_err()
@@ -1235,11 +1223,8 @@ mod tests {
         assert!(
             verify_descriptor(
                 &request,
-                descriptor(
-                    request.expected_url().clone(),
-                    request.byte_size(),
-                    "image/jpeg",
-                ),
+                &expected_url,
+                descriptor(expected_url.clone(), request.byte_size(), "image/jpeg",),
                 1,
             )
             .is_err()
@@ -1458,10 +1443,8 @@ mod tests {
         (origin, task)
     }
 
-    fn upload_request(origin: &str, bytes: Vec<u8>) -> BlossomUploadRequest {
-        let hash = Sha256::digest(bytes.as_slice());
+    fn upload_request(_origin: &str, bytes: Vec<u8>) -> BlossomUploadRequest {
         BlossomUploadRequest::new(
-            BlobUrl::parse(format!("{origin}/{hash}.png").as_str()).expect("blob URL"),
             Arc::from(bytes),
             MediaType::parse("image/png").expect("media type"),
             BlossomImageDimensions::new(2, 3).expect("dimensions"),
@@ -1471,16 +1454,24 @@ mod tests {
     }
 
     fn config(origin: &str) -> BlossomConfig {
-        BlossomConfig::from_profile(
-            crate::transport::BlossomProfile::simulator([origin]).expect("profile"),
+        BlossomConfig::from_profile(simulator_profile(origin))
+            .with_network_policy(
+                Duration::from_millis(100),
+                Duration::from_millis(100),
+                1,
+                Duration::from_millis(1),
+            )
+            .expect("network policy")
+    }
+
+    fn simulator_profile(origin: &str) -> crate::transport::BlossomProfile {
+        crate::transport::BlossomProfile::new(
+            crate::transport::BlossomHostKind::Simulator,
+            crate::transport::BlossomEndpointAuthority::LoopbackDevelopment,
+            origin,
+            std::iter::empty::<&str>(),
         )
-        .with_network_policy(
-            Duration::from_millis(100),
-            Duration::from_millis(100),
-            1,
-            Duration::from_millis(1),
-        )
-        .expect("network policy")
+        .expect("profile")
     }
 
     #[tokio::test]
@@ -1516,16 +1507,14 @@ mod tests {
     async fn retryable_upload_and_retrieval_failures_recover_with_bounded_attempts() {
         let bytes = png(2, 3);
         let (origin, server) = spawn_retry_server(bytes.clone()).await;
-        let config = BlossomConfig::from_profile(
-            crate::transport::BlossomProfile::simulator([origin.as_str()]).expect("profile"),
-        )
-        .with_network_policy(
-            Duration::from_millis(100),
-            Duration::from_millis(100),
-            2,
-            Duration::from_millis(1),
-        )
-        .expect("network policy");
+        let config = BlossomConfig::from_profile(simulator_profile(origin.as_str()))
+            .with_network_policy(
+                Duration::from_millis(100),
+                Duration::from_millis(100),
+                2,
+                Duration::from_millis(1),
+            )
+            .expect("network policy");
         let receipt = upload_with_authorization(
             config,
             upload_request(origin.as_str(), bytes),
@@ -1588,9 +1577,7 @@ mod tests {
         let cancellation = BlossomCancellation::default();
         cancellation.cancel();
         let bytes = png(2, 3);
-        let hash = Sha256::digest(bytes.as_slice());
         let request = BlossomUploadRequest::new(
-            BlobUrl::parse(format!("http://127.0.0.1:9/{hash}.png").as_str()).unwrap(),
             Arc::from(bytes),
             MediaType::parse("image/png").unwrap(),
             BlossomImageDimensions::new(2, 3).unwrap(),

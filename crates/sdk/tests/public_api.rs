@@ -76,17 +76,19 @@ fn public_native_type_snapshot_uses_contextual_names() {
             type_name::<radroots_sdk::signing::BlossomSigningError>(),
             type_name::<radroots_sdk::transport::BlossomCancellation>(),
             type_name::<radroots_sdk::transport::BlossomConfig>(),
+            type_name::<radroots_sdk::transport::BlossomConfigFingerprint>(),
             type_name::<radroots_sdk::transport::BlossomEndpoint>(),
-            type_name::<radroots_sdk::transport::BlossomEndpointPolicy>(),
+            type_name::<radroots_sdk::transport::BlossomEndpointAuthority>(),
             type_name::<radroots_sdk::transport::BlossomError>(),
             type_name::<radroots_sdk::transport::BlossomErrorKind>(),
+            type_name::<radroots_sdk::transport::BlossomHostKind>(),
             type_name::<radroots_sdk::transport::BlossomImageDimensions>(),
             type_name::<radroots_sdk::transport::BlossomPhase>(),
             type_name::<radroots_sdk::transport::BlossomProfile>(),
-            type_name::<radroots_sdk::transport::BlossomProfileKind>(),
             type_name::<radroots_sdk::transport::BlossomSlot>(),
             type_name::<radroots_sdk::transport::BlossomUploadReceipt>(),
             type_name::<radroots_sdk::transport::BlossomUploadRequest>(),
+            type_name::<radroots_sdk::transport::BlossomUploadTransaction>(),
         ])
         .collect::<BTreeSet<_>>();
     #[cfg(feature = "radrootsd")]
@@ -166,7 +168,7 @@ const fn expected_public_type_count() -> usize {
     #[cfg(feature = "nostr")]
     let count = count + 1;
     #[cfg(feature = "blossom")]
-    let count = count + 15;
+    let count = count + 17;
     #[cfg(feature = "radrootsd")]
     let count = count + 5;
     count
