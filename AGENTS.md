@@ -101,13 +101,38 @@ Before editing code:
   package-realistic release gates pass and publication is explicitly
   authorized. Follow `docs/implementation/PUBLICATION_FREEZE.md`.
 
-## 8. Irreversible actions
+## 8. Service hardening boundaries
+
+- Service hardening is clean-slate: do not add or preserve prototype
+  configuration readers, environment-file configuration, prototype state
+  importers, JSON/JSONL mutable state, fallback path searches, compatibility
+  aliases, deprecated modules/APIs/re-exports, dual wire encodings, or old/new
+  feature switches. Update affected consumers directly.
+- `radroots_service_host` owns reusable host mechanics only, and
+  `radroots_service_sqlite` owns reusable SQLite mechanics only. Neither crate
+  may contain Myc or RHI domain configuration, tables, policy, or business
+  rules, and neither may become a broad lifecycle framework.
+- Each service instance has one live SQLite database. Keep its pool private to
+  the owning store, keep live mutable state daemon-owned, and route live-state
+  mutations from local tools through the typed, permissioned Unix-socket
+  local-admin boundary.
+- Library code must not initialize a tracing subscriber, parse a process CLI,
+  read service configuration from environment variables, install signal
+  handlers, create a Tokio runtime, call `process::exit`, or spawn arbitrary
+  signer executables.
+- Inject time, entropy, transport, providers, and failpoints. Bound queues,
+  pools, retries, requests, responses, and collections; redact sensitive data
+  from logs, status, metrics, fixtures, errors, and ordinary `Debug` output.
+- Preserve public Nostr interoperability while removing Radroots-owned
+  prototype behavior; clean-slate rules never authorize protocol drift.
+
+## 9. Irreversible actions
 
 Do not publish crates, create release tags, change crates.io ownership, merge
 or rename repositories, merge pull requests, rotate credentials, or mutate
 trusted-publisher configuration without explicit authorization.
 
-## 9. Commit and deviation directives
+## 10. Commit and deviation directives
 
 - Format commits as `<scope>: <imperative summary>`.
 - Use lowercase scopes that match the crate or subsystem being changed.
@@ -120,7 +145,7 @@ trusted-publisher configuration without explicit authorization.
   `docs/implementation/DEVIATIONS.md`. A normative architecture change also
   requires an approved decision record. Never silently skip or reorder work.
 
-## 10. Definition of done
+## 11. Definition of done
 
 - The requested change is implemented.
 - Affected code, tests, docs, and contract surfaces are updated together.
