@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 
 const SOURCE_LOCK_NAME: &str = "radroots.lib.source-lock.v1.toml";
 const CONSUMER_MARKER: &str = ".radroots-consumer-root";
-const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v1.toml";
+const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v2.toml";
 const REPOSITORY: &str = "https://github.com/radrootslabs/lib";
 const ARCHITECTURE: &str = "radroots.crates.release.v2";
 const VERSION: &str = "0.1.0-alpha";
@@ -1084,7 +1084,7 @@ mod tests {
             fs::create_dir_all(source.join("contracts/crates")).expect("contracts");
             fs::write(
                 source.join(CATALOG_RELATIVE),
-                "schema = \"radroots.workspace.catalog.v1\"\n",
+                "schema = \"radroots.workspace.catalog.v2\"\n",
             )
             .expect("catalog");
             fs::create_dir_all(source.join("src")).expect("source crate");

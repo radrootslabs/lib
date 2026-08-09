@@ -50,7 +50,7 @@ fn rustflags_with_warnings_denied() -> OsString {
 }
 
 fn feature_matrix(workspace_root: &Path) -> Result<Vec<CargoInvocation>, String> {
-    let path = workspace_root.join("contracts/crates/catalog.v1.toml");
+    let path = workspace_root.join("contracts/crates/catalog.v2.toml");
     let raw = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     let catalog = toml::from_str::<Catalog>(&raw)

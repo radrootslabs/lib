@@ -73,7 +73,7 @@ fn load(workspace_root: &Path) -> Result<(TargetMatrix, Vec<String>), String> {
         .map_err(|error| format!("failed to parse {}: {error}", matrix_path.display()))?;
     validate(&matrix)?;
 
-    let catalog_path = workspace_root.join("contracts/crates/catalog.v1.toml");
+    let catalog_path = workspace_root.join("contracts/crates/catalog.v2.toml");
     let catalog = toml::from_str::<Catalog>(&read(&catalog_path)?)
         .map_err(|error| format!("failed to parse {}: {error}", catalog_path.display()))?;
     let mut packages = catalog

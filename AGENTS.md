@@ -86,6 +86,18 @@ Before editing code:
 ## 7. Architecture, contract, and release discipline
 
 - `contracts/` and `tools/xtask` are authoritative for core-library contracts, conformance, coverage, hygiene, and release-candidate governance.
+- `contracts/crates/catalog.v2.toml` is the package-catalog authority. Preserve
+  imported packages as `provenance_kind = "imported"` with their immutable
+  repository, revision, path, and tree digest. New repository-native packages
+  must be active, unpublished `provenance_kind = "native"` entries and must
+  store only `introduction_tree_sha256`; never embed a self-referential
+  introducing commit OID.
+- Before validating a new native catalog entry, stage the complete package path
+  and run `cargo xtask catalog check` or `cargo xtask catalog write`. The
+  pre-commit digest is derived from stage-zero index records, not the mutable
+  worktree. After the introducing commit, the same command derives the first
+  adding commit from repository history and verifies its immutable tree. Do
+  not rewrite that digest for later source changes.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 - This repository owns packages 1-17 in `radroots.crates.release.v1`, from

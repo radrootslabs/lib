@@ -1,5 +1,5 @@
-schema_version = 1
-schema = "radroots.workspace.catalog.v1"
+schema_version = 2
+schema = "radroots.workspace.catalog.v2"
 architecture = "radroots.crates.release.v2"
 consolidation = "radroots.rust.consolidation.v1"
 version = "0.1.0-alpha"
@@ -10,7 +10,8 @@ public_package_count = 19
 package_count = 61
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
-source_provenance_policy = "immutable_after_source_retirement"
+native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
+source_provenance_policy = "imported_revision_tree_or_native_introduction_tree"
 provenance_correction_contract = "approved_correction_record_required"
 retired_packages = [
   "radroots_app_core",
@@ -39,6 +40,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["core"]
 permitted_dependency_tiers = ["foundation"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/core"
@@ -59,6 +61,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["identity"]
 permitted_dependency_tiers = ["foundation"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/identity"
@@ -79,6 +82,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["protocol"]
 permitted_dependency_tiers = ["foundation"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/blossom"
@@ -99,6 +103,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["protocol"]
 permitted_dependency_tiers = ["foundation"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/protocol"
@@ -119,6 +124,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["event"]
 permitted_dependency_tiers = ["foundation", "domain"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/event"
@@ -139,6 +145,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["event"]
 permitted_dependency_tiers = ["foundation", "domain"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/event_codec"
@@ -159,6 +166,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["trade"]
 permitted_dependency_tiers = ["foundation", "domain"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/trade"
@@ -179,6 +187,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["signing"]
 permitted_dependency_tiers = ["foundation", "domain", "spi"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/signing"
@@ -199,6 +208,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["transport"]
 permitted_dependency_tiers = ["foundation", "domain", "spi"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/transport"
@@ -219,6 +229,7 @@ platforms = ["native"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["security"]
 permitted_dependency_tiers = ["foundation", "domain", "spi"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/secrets"
@@ -239,6 +250,7 @@ platforms = ["native"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["storage"]
 permitted_dependency_tiers = ["foundation", "domain", "spi"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/storage"
@@ -259,6 +271,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["nostr"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/nostr"
@@ -279,6 +292,7 @@ platforms = ["any"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["nostr"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/nostr_connect"
@@ -299,6 +313,7 @@ platforms = ["native"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["storage"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/storage_sqlite"
@@ -319,6 +334,7 @@ platforms = ["native"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["transport"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/transport_nostr"
@@ -339,6 +355,7 @@ platforms = ["native"]
 groups = ["coverage_required", "portable", "public_native"]
 owners = ["geonames"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/geonames"
@@ -365,6 +382,7 @@ permitted_dependency_tiers = [
   "adapter",
   "orchestration",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/sync"
@@ -392,6 +410,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/nostrdb"
@@ -419,6 +438,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/transport_reticulum"
@@ -446,6 +466,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_app_store"
@@ -473,6 +494,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_agent_proto"
@@ -500,6 +522,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_chat_proto"
@@ -527,6 +550,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_smp_crypto"
@@ -554,6 +578,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_smp_proto"
@@ -581,6 +606,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/simplex_smp_transport"
@@ -608,6 +634,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/replica_schema"
@@ -635,6 +662,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/replica_store"
@@ -663,6 +691,7 @@ permitted_dependency_tiers = [
   "preview",
   "fixture",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/replica_sync"
@@ -690,6 +719,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/mesh"
@@ -717,6 +747,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/mesh_agent_client"
@@ -744,6 +775,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "preview",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/mesh_agent_proto"
@@ -772,6 +804,7 @@ permitted_dependency_tiers = [
   "preview",
   "runtime",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/runtime_paths"
@@ -800,6 +833,7 @@ permitted_dependency_tiers = [
   "preview",
   "runtime",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/runtime_distribution"
@@ -828,6 +862,7 @@ permitted_dependency_tiers = [
   "preview",
   "runtime",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/runtime_manager"
@@ -848,6 +883,7 @@ platforms = ["native", "wasm32"]
 groups = ["coverage_required", "preview", "wasm"]
 owners = ["storage"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/sql_core"
@@ -877,6 +913,7 @@ permitted_dependency_tiers = [
   "runtime",
   "fixture",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/test_fixtures"
@@ -908,6 +945,7 @@ permitted_dependency_tiers = [
   "codegen",
   "tool",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "tools/xtask"
@@ -935,6 +973,7 @@ permitted_dependency_tiers = [
   "orchestration",
   "sdk",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/sdk"
@@ -963,6 +1002,7 @@ permitted_dependency_tiers = [
   "sdk",
   "facade",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/radroots"
@@ -992,6 +1032,7 @@ permitted_dependency_tiers = [
   "facade",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/core_bindings"
@@ -1021,6 +1062,7 @@ permitted_dependency_tiers = [
   "facade",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/event_bindings"
@@ -1050,6 +1092,7 @@ permitted_dependency_tiers = [
   "facade",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/identity_bindings"
@@ -1079,6 +1122,7 @@ permitted_dependency_tiers = [
   "facade",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/trade_bindings"
@@ -1109,6 +1153,7 @@ permitted_dependency_tiers = [
   "facade",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_schema_bindings"
@@ -1138,6 +1183,7 @@ permitted_dependency_tiers = [
   "facade",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/event_codec_wasm"
@@ -1168,6 +1214,7 @@ permitted_dependency_tiers = [
   "facade",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_store_wasm"
@@ -1198,6 +1245,7 @@ permitted_dependency_tiers = [
   "facade",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_sync_wasm"
@@ -1227,6 +1275,7 @@ permitted_dependency_tiers = [
   "facade",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/ffi"
@@ -1247,6 +1296,7 @@ platforms = ["wasm32"]
 groups = ["coverage_required", "sdk", "wasm"]
 owners = ["sdk"]
 permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/sdk"
 source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/sql_wasm_runtime"
@@ -1276,6 +1326,7 @@ permitted_dependency_tiers = [
   "facade",
   "runtime",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/core"
@@ -1306,6 +1357,7 @@ permitted_dependency_tiers = [
   "runtime",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/ffi"
@@ -1336,6 +1388,7 @@ permitted_dependency_tiers = [
   "runtime",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/wasm"
@@ -1367,6 +1420,7 @@ permitted_dependency_tiers = [
   "boundary",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/app_rt"
 source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
 source_path = "crates/bindgen"
@@ -1396,6 +1450,7 @@ permitted_dependency_tiers = [
   "facade",
   "application_domain",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/domain"
@@ -1425,6 +1480,7 @@ permitted_dependency_tiers = [
   "facade",
   "application_domain",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/_radroots"
 source_revision = "6074a4745be361f21bb47d4778c74a14b2d57954"
 source_path = "studio_app/studio_app_core/crates/core"
@@ -1455,6 +1511,7 @@ permitted_dependency_tiers = [
   "application_domain",
   "application",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/application"
@@ -1486,6 +1543,7 @@ permitted_dependency_tiers = [
   "application",
   "application_adapter",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/nostr"
@@ -1517,6 +1575,7 @@ permitted_dependency_tiers = [
   "application",
   "application_adapter",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/storage"
@@ -1549,6 +1608,7 @@ permitted_dependency_tiers = [
   "application_adapter",
   "runtime_composition",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/storage"
@@ -1582,6 +1642,7 @@ permitted_dependency_tiers = [
   "runtime_composition",
   "boundary",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/crates/ffi"
@@ -1616,6 +1677,7 @@ permitted_dependency_tiers = [
   "boundary",
   "codegen",
 ]
+provenance_kind = "imported"
 source_repository = "https://github.com/radrootslabs/studio_app"
 source_revision = "2b5fe5d8321fd0e248a9d304651b1ba54ee6a180"
 source_path = "core/tools/uniffi-bindgen"

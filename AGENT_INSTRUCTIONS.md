@@ -137,6 +137,18 @@ Do not duplicate contract knowledge between crates when `contracts/`, `contracts
 
 `contracts/`, `contracts/conformance/`, and `tools/xtask` are first-class parts of the product surface, not secondary metadata.
 
+The package authority is `contracts/crates/catalog.v2.toml`. Imported entries
+retain their exact immutable source repository, full revision, source path, and
+source-tree digest. A newly created repository-native package instead uses
+`provenance_kind = "native"` and records only its
+`introduction_tree_sha256`; native entries are active and unpublished. Stage
+the complete new package path before running `cargo xtask catalog check` or
+`cargo xtask catalog write`. Before the first commit, xtask verifies the digest
+against canonical stage-zero index tree records. After that commit, xtask
+derives the earliest adding commit from history and verifies the same digest
+against that commit's package tree. Later source changes do not change the
+introduction digest, and the catalog never stores the introducing commit OID.
+
 When a change affects exported models, transforms, identifiers, or public runtime expectations:
 
 - update the relevant contract metadata
