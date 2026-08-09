@@ -644,9 +644,9 @@ mod tests {
         let config =
             Config::from_profile(RelayProfile::public(["wss://write.example"]).expect("profile"))
                 .with_reconnect_backoff(ReconnectBackoff::new(10, 40).expect("backoff"));
-        let read_only = config.relays()[0].clone();
+        let canonical = config.relays()[0].clone();
         let writable = config.relays()[1].clone();
-        (StatusTracker::new(&config), read_only, writable)
+        (StatusTracker::new(&config), canonical, writable)
     }
 
     #[test]
@@ -672,20 +672,20 @@ mod tests {
 
     #[test]
     fn status_requires_directional_evidence_and_backoff_is_monotonic() {
-        let (tracker, read_only, writable) = tracker();
+        let (tracker, canonical, writable) = tracker();
         let initial = tracker.report();
         assert_eq!(initial.read_availability(), Availability::Unavailable);
         assert_eq!(initial.write_availability(), Availability::Unavailable);
         assert_eq!(initial.state(), RelayAggregateState::Configured);
         assert_eq!(
             initial.relays()[0].write().state(),
-            RelayEvidenceState::Unsupported
+            RelayEvidenceState::Unobserved
         );
-        assert!(!tracker.may_write(&read_only, 100));
+        assert!(tracker.may_write(&canonical, 100));
 
-        tracker.begin_read(&read_only, 100);
+        tracker.begin_read(&canonical, 100);
         assert_eq!(tracker.report().state(), RelayAggregateState::Connecting);
-        tracker.record_read(&read_only, true, false, 100);
+        tracker.record_read(&canonical, true, false, 100);
         tracker.record_read(&writable, false, true, 100);
         tracker.record_write(&writable, false, true, 100);
         let partial = tracker.report();
@@ -706,14 +706,29 @@ mod tests {
             RelayEvidenceState::Unavailable
         );
         tracker.record_write(&writable, true, false, 130);
-        let available = tracker.report();
-        assert_eq!(available.write_availability(), Availability::Available);
-        assert_eq!(available.relays()[1].write().consecutive_failures(), 0);
+        let partially_available = tracker.report();
         assert_eq!(
-            available.relays()[1].write().last_success_unix_ms(),
+            partially_available.write_availability(),
+            Availability::Degraded
+        );
+        assert_eq!(
+            partially_available.relays()[1]
+                .write()
+                .consecutive_failures(),
+            0
+        );
+        assert_eq!(
+            partially_available.relays()[1]
+                .write()
+                .last_success_unix_ms(),
             Some(130)
         );
         assert!(tracker.may_write(&writable, 130));
+        tracker.record_write(&canonical, true, false, 130);
+        assert_eq!(
+            tracker.report().write_availability(),
+            Availability::Available
+        );
         assert_eq!(
             source_status(&tracker).availability(),
             Availability::Degraded
@@ -724,7 +739,9 @@ mod tests {
         );
 
         tracker.record_write(&writable, false, false, 140);
+        tracker.record_write(&canonical, false, false, 140);
         assert!(!tracker.may_write(&writable, u64::MAX));
+        assert!(!tracker.may_write(&canonical, u64::MAX));
         assert_eq!(
             tracker.report().relays()[1]
                 .write()
@@ -762,25 +779,26 @@ mod tests {
     }
 
     #[test]
-    fn all_success_is_available_and_no_writable_relay_is_honestly_unavailable() {
+    fn canonical_relay_read_and_write_success_is_available() {
         let config =
             Config::from_profile(RelayProfile::public(Vec::<String>::new()).expect("profile"));
         let tracker = StatusTracker::new(&config);
         let relay = config.relays()[0].clone();
         tracker.record_read(&relay, true, false, 1);
+        tracker.record_write(&relay, true, false, 1);
         assert_eq!(
             source_status(&tracker).availability(),
             Availability::Available
         );
         let sink = sink_status(&tracker);
-        assert!(!sink.is_configured());
-        assert_eq!(sink.availability(), Availability::Unavailable);
-        assert_eq!(tracker.report().state(), RelayAggregateState::ReadOnly);
+        assert!(sink.is_configured());
+        assert_eq!(sink.availability(), Availability::Available);
+        assert_eq!(tracker.report().state(), RelayAggregateState::Writable);
     }
 
     #[test]
     fn aggregate_states_and_unconfigured_targets_cover_fail_closed_edges() {
-        let (live, read_only, writable) = tracker();
+        let (live, canonical, writable) = tracker();
         let unknown =
             RelayUrl::parse("wss://unknown.example", crate::RelayUrlPolicy::Public).expect("relay");
 
@@ -788,16 +806,16 @@ mod tests {
         live.begin_write(&unknown, 1);
         live.record_read(&unknown, true, false, 1);
         live.record_write(&unknown, true, false, 1);
-        live.begin_write(&read_only, 1);
-        live.record_write(&read_only, true, false, 1);
+        live.begin_write(&canonical, 1);
+        live.record_write(&canonical, true, false, 1);
         assert_eq!(
             live.report().relays()[0].write().state(),
-            RelayEvidenceState::Unsupported
+            RelayEvidenceState::Available
         );
 
-        live.begin_read(&read_only, 2);
-        live.begin_read(&read_only, 1);
-        live.record_read(&read_only, true, false, 2);
+        live.begin_read(&canonical, 2);
+        live.begin_read(&canonical, 1);
+        live.record_read(&canonical, true, false, 2);
         live.record_read(&writable, true, false, 2);
         live.record_write(&writable, true, false, 2);
         let writable_report = live.report();
@@ -808,15 +826,17 @@ mod tests {
             Availability::Available
         );
 
-        let (offline, read_only, writable) = tracker();
-        offline.record_read(&read_only, false, true, 10);
+        let (offline, canonical, writable) = tracker();
+        offline.record_read(&canonical, false, true, 10);
         offline.record_read(&writable, false, true, 10);
+        offline.record_write(&canonical, false, true, 10);
         offline.record_write(&writable, false, true, 10);
         assert_eq!(offline.report().state(), RelayAggregateState::Offline);
 
-        let (failed, read_only, writable) = tracker();
-        failed.record_read(&read_only, false, false, 10);
+        let (failed, canonical, writable) = tracker();
+        failed.record_read(&canonical, false, false, 10);
         failed.record_read(&writable, false, false, 10);
+        failed.record_write(&canonical, false, false, 10);
         failed.record_write(&writable, false, false, 10);
         assert_eq!(failed.report().state(), RelayAggregateState::Failed);
 

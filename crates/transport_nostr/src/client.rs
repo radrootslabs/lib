@@ -325,7 +325,7 @@ mod tests {
         .expect("connections");
         assert_eq!(config.relays().len(), 3);
         assert_eq!(config.read_relays().count(), 3);
-        assert_eq!(config.write_relays().count(), 2);
+        assert_eq!(config.write_relays().count(), 3);
         assert_eq!(config.profile_kind(), RelayProfileKind::Public);
         assert_eq!(config.connect_timeout_ms(), 1);
         assert_eq!(config.request_timeout_ms(), 2);

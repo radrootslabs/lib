@@ -3,7 +3,7 @@
 use crate::{Error, RelayUrl, RelayUrlPolicy};
 use std::collections::BTreeSet;
 
-/// Bundled public relay used for read discovery only.
+/// Bundled canonical Radroots relay used for reads and publication.
 pub const DEFAULT_PUBLIC_RELAY: &str = "wss://radroots.org";
 
 /// Directional access authorized for one configured relay.
@@ -34,7 +34,7 @@ impl RelayAccess {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum RelayProfileKind {
-    /// Public-Internet profile with the bundled read-only relay.
+    /// Public-Internet profile with the bundled canonical relay.
     Public,
     /// Development-only profile restricted to exact loopback destinations.
     Simulator,
@@ -92,10 +92,9 @@ pub struct RelayProfile {
 impl RelayProfile {
     /// Builds the ordinary public profile.
     ///
-    /// `wss://radroots.org/` is always present as read-only. Every supplied
+    /// `wss://radroots.org/` is always present as read-write. Every additional
     /// writable relay must be a TLS public-Internet destination. Supplying the
-    /// bundled relay as writable is rejected rather than silently broadening
-    /// its authority.
+    /// bundled relay again is rejected as a duplicate.
     pub fn public<I, S>(writable_relays: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
@@ -104,7 +103,7 @@ impl RelayProfile {
         let mut endpoints = vec![RelayEndpoint::new(
             DEFAULT_PUBLIC_RELAY,
             RelayUrlPolicy::Public,
-            RelayAccess::ReadOnly,
+            RelayAccess::ReadWrite,
         )?];
         endpoints.extend(parse_endpoints(
             writable_relays,
@@ -133,7 +132,7 @@ impl RelayProfile {
 
     /// Builds a physical-device profile from explicit writable TLS endpoints.
     ///
-    /// The bundled public relay remains read-only. Writable endpoints may
+    /// The bundled canonical relay remains read-write. Additional endpoints may
     /// resolve to public or private addresses, but loopback, unspecified, and
     /// multicast destinations remain forbidden before and after resolution.
     pub fn device<I, S>(writable_relays: I) -> Result<Self, Error>
@@ -144,7 +143,7 @@ impl RelayProfile {
         let mut endpoints = vec![RelayEndpoint::new(
             DEFAULT_PUBLIC_RELAY,
             RelayUrlPolicy::Public,
-            RelayAccess::ReadOnly,
+            RelayAccess::ReadWrite,
         )?];
         endpoints.extend(parse_endpoints(
             writable_relays,
@@ -208,12 +207,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn public_profile_never_promotes_the_bundled_relay_to_writable() {
+    fn public_profile_authorizes_the_canonical_relay_for_publication() {
         let profile = RelayProfile::public(["wss://write.example"]).expect("public profile");
         assert_eq!(profile.kind(), RelayProfileKind::Public);
         assert_eq!(profile.endpoints().len(), 2);
         assert_eq!(profile.endpoints()[0].url().as_str(), DEFAULT_PUBLIC_RELAY);
-        assert_eq!(profile.endpoints()[0].access(), RelayAccess::ReadOnly);
+        assert_eq!(profile.endpoints()[0].access(), RelayAccess::ReadWrite);
         assert_eq!(profile.endpoints()[1].access(), RelayAccess::ReadWrite);
         assert!(RelayProfile::public([DEFAULT_PUBLIC_RELAY]).is_err());
         assert!(RelayProfile::public(["ws://public.example"]).is_err());
@@ -232,6 +231,7 @@ mod tests {
     fn device_profile_requires_tls_and_rejects_duplicate_authority() {
         let profile = RelayProfile::device(["wss://10.0.0.5:7447"]).expect("device profile");
         assert_eq!(profile.kind(), RelayProfileKind::Device);
+        assert_eq!(profile.endpoints()[0].access(), RelayAccess::ReadWrite);
         assert_eq!(
             profile.endpoints()[1].policy(),
             RelayUrlPolicy::PrivateNetwork
