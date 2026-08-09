@@ -8,7 +8,8 @@ use radroots_nostr_connect::{
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
 const EXAMPLE: &str = include_str!("../examples/prepare_request.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_nostr_connect.txt");
+const PUBLIC_API: &str =
+    include_str!("../../../contracts/api_baselines/radroots_nostr_connect.txt");
 const CLIENT: &str = include_str!("../src/client.rs");
 const METHOD: &str = include_str!("../src/method.rs");
 const PERMISSION: &str = include_str!("../src/permission.rs");

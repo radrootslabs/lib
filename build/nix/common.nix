@@ -42,10 +42,6 @@ let
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates
-        ../../docs/api
-        ../../docs/decisions
-        ../../docs/implementation
-        ../../docs/specs
         ../../fuzz
         ../../tools
       ]

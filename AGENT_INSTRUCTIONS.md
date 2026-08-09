@@ -66,16 +66,31 @@ Use this mental model:
   - keep domain logic inside the correct crate rather than spreading it across the workspace
 - `contracts/`
   - core-library contract metadata, release-candidate policy, coverage governance, and public conformance assets
+- `contracts/api_baselines/`
+  - reviewed generated public Rust API surfaces
+- `contracts/architecture/`
+  - machine-readable deviations, decisions, and compatibility-retirement authority
+- `contracts/crates/release_v1/`
+  - historical machine catalog, inventory, graph, and checksums retained by release V2
 - `contracts/conformance/`
   - cross-language and cross-surface vector expectations
-- `docs/`
-  - durable workflow and environment documentation
 - `build/nix/`, `flake.nix`, `treefmt.nix`
   - canonical environment and CI contract
 - `tools/xtask/`
   - typed repo-owned automation used by canonical lanes
 
 Do not duplicate contract knowledge between crates when `contracts/`, `contracts/conformance/`, or `tools/xtask` already owns it.
+
+Do not add or retain tracked `docs/**`, `.github/**`, or `.act/**`. Root
+`README.md`, `AGENTS.md`, `AGENT_INSTRUCTIONS.md`, conventional public project
+files, package READMEs, and Rustdoc carry concise standalone guidance. Extended
+human authority is parent-owned and is never a standalone command input.
+
+Deviation `spec_anchors` target the Release V1 TOML and must use one of the
+machine selectors enforced by `cargo xtask architecture`:
+`repositories.<name>`, `repository_policy`, `release_policy`,
+`quality_policy.coverage`, or `package.<name>`. Markdown heading fragments and
+unresolved free-form fragments are invalid.
 
 ## 5. Rust engineering standards
 
@@ -157,6 +172,23 @@ When a change affects exported models, transforms, identifiers, or public runtim
 - keep release and export rules aligned with the new behavior
 
 Do not change public behavior in Rust and leave contract or conformance assets stale.
+
+Public API baselines are generated with `cargo-public-api` `0.52.0` and
+rustdoc JSON from `nightly-2026-07-16`; the workspace's pinned stable toolchain
+still governs package verification. From the canonical development shell,
+regenerate one package with:
+
+```sh
+RUSTC="$(rustup which --toolchain nightly-2026-07-16 rustc)" \
+RUSTDOC="$(rustup which --toolchain nightly-2026-07-16 rustdoc)" \
+cargo public-api --manifest-path crates/<crate>/Cargo.toml \
+  --all-features -sss \
+  > contracts/api_baselines/<package>.txt
+```
+
+Review each baseline change with the package's machine charter and intended
+SemVer impact. Generated listings are evidence of the Rust surface, not
+authority to expand it.
 
 ## 7. Canonical validation strategy
 

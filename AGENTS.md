@@ -14,24 +14,32 @@ This file exists for compatibility with tools that look for AGENTS.md.
 
 ## 2. Source of intent
 
-- Read `docs/specs/README.md` and
-  `docs/specs/radroots_crates_release_v1.md` before changing a public package,
-  package identity, dependency, feature, or release control.
-- The Markdown specification is normative. Its TOML catalog is the executable
-  package and dependency representation; the CSV and DOT files are review
-  aids.
+- Read `contracts/crates/release.v2.toml`,
+  `contracts/crates/release_v1/radroots_crates_release_v1.toml`, and
+  `contracts/crates/catalog.v2.toml` before changing a public package, package
+  identity, dependency, feature, or release control.
+- Machine contracts under `contracts/**` are the standalone authority. Human
+  specifications, decisions, runbooks, and qualification evidence belong
+  under the parent monorepo's `docs/oss/lib/**` authority and must never become
+  a standalone build, test, package, or release input.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
-  `docs/implementation/deviations.toml`, following
-  `docs/implementation/DEVIATIONS.md`, before proceeding. Validate it with
-  `cargo xtask architecture`.
+  `contracts/architecture/deviations.toml` before proceeding. Validate it with
+  `cargo xtask architecture`; a normative architecture exception also requires
+  the applicable machine decision under `contracts/architecture/decisions/**`.
+  Deviation anchors must resolve the Release V1 TOML through a validated
+  selector: `repositories.<name>`, `repository_policy`, `release_policy`,
+  `quality_policy.coverage`, or `package.<name>`.
 
 ## 3. Repository operating model
 
 - This is a public open-source library workspace; optimize for durable library design, portability, determinism, and explicit contracts.
 - Keep release and validation automation forge-agnostic; repo-owned xtask commands, Nix apps, tags, and contract metadata are canonical, while committed provider-specific workflow automation is not.
-- `.github/**` and capsule-local CI workflows are forbidden. Any required monorepo orchestration belongs exclusively to the parent repository's root `.act/**` authority and must not be copied into this standalone capsule.
+- Do not add or retain tracked `docs/**`, `.github/**`, or `.act/**` content.
+  Keep validation forge-agnostic. Any required monorepo orchestration belongs
+  exclusively to the parent repository's root `.act/**` authority and must not
+  be copied into this standalone capsule.
 - Prefer clean target-state changes over compatibility scaffolding unless compatibility is explicitly required.
 - Stay within the requested scope and the smallest coherent file set.
 - Do not fold unrelated cleanup, speculative refactors, or roadmap work into the same change.
@@ -59,6 +67,9 @@ Before editing code:
 - `nix run .#release-preflight`
 - `cargo xtask architecture` for controlled deviation records and local spec
   anchors
+- Public API baselines live in `contracts/api_baselines/**`. Regenerate one
+  with `cargo-public-api` `0.52.0` and rustdoc JSON from
+  `nightly-2026-07-16`, writing the reviewed output back to that directory.
 - targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
 - `cargo xtask dto-roots --write` after changing configured DTO exports and
   `cargo xtask dto-roots --check` for exact generated-root freshness
@@ -114,7 +125,8 @@ Before editing code:
   feature closures.
 - During the migration, every package remains non-publishable until its
   package-realistic release gates pass and publication is explicitly
-  authorized. Follow `docs/implementation/PUBLICATION_FREEZE.md`.
+  authorized. `contracts/releases/publish_policy.toml` is the machine
+  authority; validation metadata does not authorize upload.
 
 ## 8. Service hardening boundaries
 
@@ -156,9 +168,9 @@ trusted-publisher configuration without explicit authorization.
 - Split unrelated changes into separate commits.
 - If repository evidence proves a planned step obsolete or unsafe, record the
   evidence, affected specification anchor, disposition, and validation in
-  `docs/implementation/deviations.toml`, following
-  `docs/implementation/DEVIATIONS.md`. A normative architecture change also
-  requires an approved decision record. Never silently skip or reorder work.
+  `contracts/architecture/deviations.toml`. A normative architecture change
+  also requires an approved machine decision under
+  `contracts/architecture/decisions/**`. Never silently skip or reorder work.
 
 ## 11. Definition of done
 

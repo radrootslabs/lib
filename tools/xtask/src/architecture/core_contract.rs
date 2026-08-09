@@ -6,7 +6,7 @@ use std::{
 
 use syn::{Item, UseTree, Visibility};
 
-const ARCHITECTURE_RELATIVE: &str = "docs/specs/radroots_crates_release_v1.toml";
+const ARCHITECTURE_RELATIVE: &str = "contracts/crates/release_v1/radroots_crates_release_v1.toml";
 const CORE_MANIFEST_RELATIVE: &str = "crates/core/Cargo.toml";
 const CORE_LIB_RELATIVE: &str = "crates/core/src/lib.rs";
 
@@ -485,11 +485,12 @@ serde_json = { workspace = true }
 
     fn fixture() -> tempfile::TempDir {
         let root = tempdir().expect("temporary workspace");
-        fs::create_dir_all(root.path().join("docs/specs")).expect("spec directory");
+        fs::create_dir_all(root.path().join("contracts/crates/release_v1"))
+            .expect("spec directory");
         fs::create_dir_all(root.path().join("crates/core/src")).expect("core directory");
         fs::write(
             root.path()
-                .join("docs/specs/radroots_crates_release_v1.toml"),
+                .join("contracts/crates/release_v1/radroots_crates_release_v1.toml"),
             SPEC,
         )
         .expect("architecture spec");

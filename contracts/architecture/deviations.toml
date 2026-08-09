@@ -1,0 +1,327 @@
+schema_version = 1
+architecture_id = "radroots.crates.release.v1"
+
+[[deviation]]
+id = "RCRV1-DEV-001"
+date = "2026-07-27"
+status = "active"
+approval = "Explicit user correction dated 2026-07-27."
+affected_steps = [
+  "015",
+  "016",
+  "017",
+  "018",
+  "019",
+  "020",
+  "021",
+  "022",
+  "023",
+  "026",
+]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.lib",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy",
+]
+source_evidence = [
+  "The final v1 specification allocates 17 public packages to radrootslabs/lib and 2 to radrootslabs/sdk.",
+  "Both existing repositories have independent histories, workspaces, lockfiles, remotes, and standalone release boundaries.",
+]
+replacement_action = "Retain the two existing standalone repositories; replace import and monorepo-unification work with independent workspace, lockfile, metadata, dependency, and release qualification."
+verification = [
+  "Both repository-local architecture validators resolve every spec anchor.",
+  "The synchronized architecture catalog enforces the exact 17/2 ownership partition.",
+  "Each standalone repository owns a required architecture CI adapter over its repository-local command surface.",
+]
+unresolved_risk = "Parent gitlinks cannot advance until the new standalone commits are public-remote reachable under separate authorization."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-010"
+date = "2026-08-03"
+status = "closed"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["201", "215", "269", "294", "301", "313"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport",
+]
+source_evidence = [
+  "The Step 294 downstream matrix proved the former app_rt radroots_net_core consumer had migrated and no current first-party manifest retained an edge to radroots_net.",
+  "Step 301 full workspace qualification proved that the assigned radroots_nostr_runtime Step 215 deletion and radroots_net Step 313 deletion had not been applied even though both removal gates were satisfied.",
+  "Both obsolete packages failed against the final transport boundary when the complete all-feature workspace closure was checked.",
+]
+replacement_action = "Delete radroots_nostr_runtime, its NostrDB runtime adapter, and radroots_net during Step 301 qualification; forbid their package, dependency, alias, feature, and source identities from being reintroduced."
+verification = [
+  "Transport-owned tests reject reintroduction of radroots_nostr_runtime, radroots_net, or the NostrDB runtime-adapter feature.",
+  "Workspace-wide source tests reject every removed transport-client identifier without a compatibility exception.",
+  "The full all-target and all-feature workspace qualification compiles without either predecessor package.",
+]
+unresolved_risk = "None for the two removed packages; historical names remain only in governed specifications, migration evidence, and fail-closed regression assertions."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "crates/transport_nostr/tests/workspace_consumers.rs proves both package directories and workspace dependency identities are absent.",
+  "crates/transport_nostr/tests/legacy_quarantine.rs proves release policy and the compatibility ledger no longer classify either package as a retained shim.",
+]
+
+[[deviation]]
+id = "RCRV1-DEV-008"
+date = "2026-08-01"
+status = "closed"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["153", "155", "171", "179", "226", "288", "293", "313"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_secrets",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite",
+]
+source_evidence = [
+  "The final radroots_storage_sqlite scaffold can consume radroots_secrets immediately and has no predecessor secret dependency.",
+  "Step 179, not Step 153, owns transfer of the current SDK private database and its encrypted records into canonical SQLite storage.",
+  "Mixed publish-frozen runtime, Nostr-account, SimpleX preview, SDK private-store, Myc, and other external hosts still require predecessor vault/store behavior until their ordered migration steps.",
+]
+replacement_action = "Activate the final radroots_storage_sqlite and SDK dependency edges in Step 153; confine predecessor vault/store imports to exact publish-frozen quarantine packages and the SDK private-store module; Step 179 transfers canonical private storage, Steps 226/288/293 migrate the remaining SDK and downstream consumers, and Step 313 removes every remaining compatibility package and legacy name."
+verification = [
+  "Consumer-migration tests enumerate every lib package manifest that still names radroots_secret_vault or radroots_protected_store and reject any unapproved or publishable consumer.",
+  "Storage SQLite package-boundary tests require radroots_secrets and reject all predecessor secret package names.",
+  "SDK source-boundary tests confine predecessor imports to private_store.rs and require the final optional radroots_secrets dependency edge.",
+  "Step 155 release-policy validation keeps every quarantine package non-publishable until its exact removal gate.",
+]
+unresolved_risk = "None; the predecessor packages and all active manifest consumers are absent."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "crates/secrets/tests/consumer_migration.rs rejects every predecessor package directory, workspace dependency, and active manifest reference.",
+  "Step 313 source census confirmed the SDK, Myc, CLI, and library runtime paths use only radroots_secrets and final storage owners.",
+]
+
+[[deviation]]
+id = "RCRV1-DEV-007"
+date = "2026-07-30"
+status = "closed"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["122", "170", "215", "235", "305"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport",
+]
+source_evidence = [
+  "Step 120 migrated canonical adapters and registries to independent EventSource and EventSink contracts.",
+  "Mixed runtime delivery workers still consume predecessor request and receipt models until their ordered RCLD 40 migration.",
+  "The runtime delivery worker also accepts opaque byte payloads, while the final EventSink contract accepts only verified SignedEvent values; deleting the bridge at Step 170 would silently remove a supported private runtime path before sync orchestration owns that decision.",
+  "The standalone publish-frozen SDK still maps user-facing target and satisfaction models into predecessor outbox orchestration until Step 235.",
+  "oss/cli/src/runtime/{config,sync,transport}.rs and oss/radrootsd/src/core/transport_publish.rs still import the predecessor identity aliases and Reticulum target helpers; those standalone repositories are outside the approved crate-surface mutation scope.",
+]
+replacement_action = "Remove the monolithic trait from radroots_transport in Step 122; retain one explicitly named runtime-owned unpublished shim until Step 215 at the sync-orchestration retirement gate, the SDK-local unpublished target/satisfaction mapping until Step 235, and documentation-hidden external-consumer aliases/helpers until the fail-closed package-realistic Step 305 gate."
+verification = [
+  "Transport source-boundary tests reject every removed public predecessor name and require the singular runtime-owned shim.",
+  "Release policy keeps runtime and SDK publication disabled while either downstream shim exists.",
+  "Steps 215 and 235 are the exact fail-closed final-removal gates for the remaining runtime and SDK mappings.",
+  "Step 305 rejects publication until oss/cli and oss/radrootsd no longer require the documentation-hidden external-consumer aliases and Reticulum helpers.",
+]
+unresolved_risk = "None; final consumers use TransportId, Target, TargetScope, TargetLabel, and TargetFingerprint directly."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "crates/transport/tests/package_boundary.rs rejects the hidden Reticulum constructors, legacy constant spellings, and prefixed target aliases.",
+  "Step 313 source census confirmed every external-consumer alias and helper is absent after the daemon cutover to final transport identities.",
+]
+
+[[deviation]]
+id = "RCRV1-DEV-009"
+date = "2026-08-02"
+status = "closed"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = [
+  "170",
+  "179",
+  "189",
+  "196",
+  "201",
+  "213",
+  "226",
+  "235",
+  "263",
+  "269",
+  "288",
+  "292",
+  "313",
+]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk",
+]
+source_evidence = [
+  "The Step 170 first-party census found radroots_event_index consumers in the standalone CLI, SDK, SDK bindings, and indexer repositories.",
+  "The census found radroots_event_store and radroots_outbox consumers in the standalone CLI and SDK, plus active library transport_nostr orchestration scheduled to move in Step 196.",
+  "The census found radroots_runtime_store consumed by the standalone CLI, whose crate cutover is scheduled after the canonical library storage and sync implementations are complete.",
+  "Deleting these packages before their ordered migrations would make the independently buildable first-party repositories unresolvable and would remove the source data needed by the approved one-shot importer.",
+]
+replacement_action = "Keep radroots_event_index, radroots_event_store, radroots_outbox, and radroots_runtime_store as documentation-hidden publish-frozen compatibility packages with no new consumers; port durable behavior into radroots_storage_sqlite through Step 189, remove local transport coupling in Step 196, migrate library/SDK/binding/CLI/indexer consumers in their ordered steps, and delete every remaining package at Step 313."
+verification = [
+  "Package manifests carry machine-readable publish-frozen metadata naming the final replacement, deviation, Step 313 removal gate, and prohibition on new consumers.",
+  "A storage-owned quarantine test requires the four packages to remain private and absent from the approved publication inventory.",
+  "Workspace checks and tests prove current migration consumers remain buildable while publication stays frozen.",
+  "Step 313 performs the all-first-party forbidden-name search and final package deletion.",
+]
+unresolved_risk = "None; all four predecessor packages and their active dependency edges are absent."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "crates/storage_sqlite/tests/package_boundary.rs and crates/storage/tests/workspace_consumers.rs reject the four predecessor package identities.",
+  "Step 313 removed the final library packages, SDK runtime/event-index surfaces, and CLI source dependency branch after all standalone consumers migrated.",
+]
+
+[[deviation]]
+id = "RCRV1-DEV-005"
+date = "2026-07-28"
+status = "active"
+approval = "Explicit user Rust version-policy update dated 2026-07-28 17:47 UTC."
+affected_steps = [
+  "013",
+  "019",
+  "020",
+  "021",
+  "022",
+  "023",
+  "024",
+  "025",
+  "026",
+  "305",
+]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.lib",
+]
+source_evidence = [
+  "The prior 1.0.0 and mixed 0.1.0 prerelease crate cohorts were explicitly declared incorrect.",
+  "The user requires every Rust crate in radrootslabs/lib to remain exactly 0.1.0-alpha until further explicit notice.",
+]
+replacement_action = "Pin every workspace package, lockfile entry, and internal Radroots dependency requirement in radrootslabs/lib to 0.1.0-alpha; preserve independent protocol and sibling-repository versions; reject library cohort drift until new explicit authority is recorded."
+verification = [
+  "Repository architecture validation rejects any workspace package version other than 0.1.0-alpha.",
+  "Internal Radroots dependency requirements resolve exactly to =0.1.0-alpha.",
+  "Synchronized release specifications record the library cohort independently from the SDK repository version.",
+]
+unresolved_risk = "The prerelease cohort intentionally prevents independent library package version advancement until a future explicit policy change."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-002"
+date = "2026-07-27"
+status = "active"
+approval = "Explicit user correction dated 2026-07-27."
+affected_steps = ["249"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.sdk",
+]
+source_evidence = [
+  "The final v1 specification assigns the radroots facade to the existing sdk repository.",
+  "The approved sequence requires radroots to be the first crate-surface mutation after architecture controls are green.",
+]
+replacement_action = "Scaffold radroots in the sdk repository immediately after Step 014, then execute Steps 250-260 in their original order without repeating the scaffold portion of Step 249."
+verification = [
+  "The sdk release policy reserves radroots as an approved local package while publication remains frozen.",
+  "The facade scaffold checkpoint must add radroots only to the sdk workspace and architecture policy.",
+]
+unresolved_risk = "The facade remains non-publishable until the package-realistic Step 305 enablement gate."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-004"
+date = "2026-07-28"
+status = "active"
+approval = "Explicit user coverage-policy update dated 2026-07-28 17:15 UTC."
+affected_steps = [
+  "098",
+  "155",
+  "225",
+  "260",
+  "268",
+  "294",
+  "298",
+  "299",
+  "301",
+  "302",
+  "303",
+  "304",
+  "314",
+]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#quality_policy.coverage",
+]
+source_evidence = [
+  "The oss/lib codebase is under heavy development during the multi-RCLD refactor.",
+  "The user explicitly replaced the active 100% coverage requirement with a uniform 90% module requirement.",
+]
+replacement_action = "Enforce 90% executable-line, function, region, and branch coverage for every required oss/lib crate; retain only no-branch-record exceptions; defer restoration of 100% until an explicit future contract update after refactor stabilization."
+verification = [
+  "Contract validation rejects any base coverage dimension other than 90% or disabled required branches.",
+  "Coverage policy-gate tests prove values below 90% fail and values at or above 90% pass.",
+  "The required-crate inventory remains complete and crate-specific numeric thresholds below 90% remain forbidden.",
+]
+unresolved_risk = "A 90% development gate admits untested paths that a later 100% gate would reject; the final restoration remains intentionally unscheduled pending explicit authority."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-011"
+date = "2026-08-03"
+status = "closed"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["225", "226", "248"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_geonames",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk",
+]
+source_evidence = [
+  "The standalone SDK manifest and GeoNames module still resolve radroots_geocoder and its test-fixture feature while the final provider package is implemented in this independently versioned repository.",
+  "The legacy package has no in-repository consumer, is publish disabled, and is already excluded from the exact release-v1 public package inventory.",
+  "Deleting the package at Step 225 would make the independently buildable SDK repository unresolvable before its ordered manifest and API cutover begins at Step 226.",
+]
+replacement_action = "Keep radroots_geocoder as a documentation-marked, machine-classified publish-frozen bridge with no new consumers, features, contracts, or behavior; migrate the standalone SDK to radroots_geonames beginning at Step 226 and delete the bridge at the SDK retirement gate in Step 248."
+verification = [
+  "The predecessor manifest names radroots_geonames as its replacement, RCRV1-DEV-011 as authority, and Step 248 as the exact removal gate.",
+  "GeoNames package quarantine tests require the predecessor to remain private and absent from the approved publication inventory while the SDK source census remains non-empty.",
+  "Step 248 must reject every remaining package, dependency, feature, import, and error-adapter reference to radroots_geocoder before deletion.",
+]
+unresolved_risk = "None; the SDK consumes radroots_geonames and the predecessor package is absent."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "crates/geonames/tests/package_boundary.rs rejects the superseded package directory and release-policy identity.",
+  "The SDK Step 248 checkpoint removed every radroots_geocoder dependency, feature, import, and error-adapter reference.",
+]
+
+[[deviation]]
+id = "RCRV1-DEV-012"
+date = "2026-08-03"
+status = "closed"
+approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
+affected_steps = ["279", "282", "283"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk",
+]
+source_evidence = [
+  "The first-party mobile compile gate proved that its real relay-backed identity, profile, and post operations had no equivalent after the initial shared-engine bridge cutover.",
+  "The generic source request could bound pages and targets but could not express event kind, author, or event-time constraints required for correct profile and feed queries.",
+  "Restoring the retired parallel runtime or accepting client-side filtering after page truncation would violate the final SDK and transport ownership model.",
+]
+replacement_action = "Before qualifying the mobile artifact, add bounded transport-neutral fetch selectors, translate them in the concrete Nostr adapter, complete SDK-owned explicit local-signing and Nostr composition, and map the mobile presentation contract over those SDK operations without restoring direct lower-package dependencies."
+verification = [
+  "Transport selector construction rejects oversized, duplicate, and reversed-range inputs and binds selectors into page validation.",
+  "The Nostr adapter applies kind, author, and time constraints remotely and defensively filters returned events before page bounds.",
+  "The shared-engine SDK and mobile integration gates must pass before Steps 282 and 283 are marked complete.",
+]
+unresolved_risk = "None; the shared-engine and mobile qualification checkpoints completed with the final selector and SDK ownership model."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "crates/transport/tests/source_contract.rs verifies bounded canonical selector construction and request binding.",
+  "crates/transport_nostr/src/source.rs tests remote selector translation and defensive result filtering before page bounds.",
+  "Steps 282 and 283 qualified the SDK-owned signing, Nostr composition, and mobile presentation bridge without lower-package ownership leakage.",
+]

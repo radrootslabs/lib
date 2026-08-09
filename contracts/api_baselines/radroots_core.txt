@@ -1,0 +1,521 @@
+pub mod radroots_core
+pub mod radroots_core::currency
+#[non_exhaustive] pub enum radroots_core::currency::ParseError
+pub radroots_core::currency::ParseError::InvalidFormat
+impl core::convert::From<radroots_core::currency::ParseError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::currency::ParseError) -> Self
+impl core::error::Error for radroots_core::currency::ParseError
+impl core::fmt::Display for radroots_core::currency::ParseError
+pub fn radroots_core::currency::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_core::currency::Currency(_)
+impl radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::AUD: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::CAD: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::EUR: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::GBP: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::JPY: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::USD: radroots_core::currency::Currency
+pub const fn radroots_core::currency::Currency::as_bytes(&self) -> &[u8; 3]
+pub fn radroots_core::currency::Currency::as_str(&self) -> &str
+pub const fn radroots_core::currency::Currency::from_const([u8; 3]) -> core::result::Result<Self, radroots_core::currency::ParseError>
+pub fn radroots_core::currency::Currency::from_str_upper(&str) -> core::result::Result<Self, radroots_core::currency::ParseError>
+pub const fn radroots_core::currency::Currency::minor_unit_exponent(&self) -> u32
+impl core::convert::TryFrom<&str> for radroots_core::currency::Currency
+pub type radroots_core::currency::Currency::Error = radroots_core::currency::ParseError
+pub fn radroots_core::currency::Currency::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::currency::Currency
+pub type radroots_core::currency::Currency::Err = radroots_core::currency::ParseError
+pub fn radroots_core::currency::Currency::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub mod radroots_core::decimal
+#[non_exhaustive] pub enum radroots_core::decimal::Error
+pub radroots_core::decimal::Error::ArithmeticOverflow
+pub radroots_core::decimal::Error::DivisionByZero
+pub radroots_core::decimal::Error::InvalidFormat
+pub radroots_core::decimal::Error::OutOfRange
+pub radroots_core::decimal::Error::PrecisionLoss
+pub radroots_core::decimal::Error::ScaleOutOfRange
+impl core::convert::From<radroots_core::decimal::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::decimal::Error) -> Self
+impl core::convert::From<radroots_core::decimal::Error> for radroots_core::money::Error
+pub fn radroots_core::money::Error::from(radroots_core::decimal::Error) -> Self
+impl core::convert::From<radroots_core::decimal::Error> for radroots_core::quantity::Error
+pub fn radroots_core::quantity::Error::from(radroots_core::decimal::Error) -> Self
+impl core::error::Error for radroots_core::decimal::Error
+impl core::fmt::Display for radroots_core::decimal::Error
+pub fn radroots_core::decimal::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_core::decimal::Decimal(_)
+impl radroots_core::decimal::Decimal
+pub const radroots_core::decimal::Decimal::MAX: Self
+pub const radroots_core::decimal::Decimal::MAX_SCALE: u32
+pub const radroots_core::decimal::Decimal::MIN: Self
+pub const radroots_core::decimal::Decimal::ONE: Self
+pub const radroots_core::decimal::Decimal::ZERO: Self
+pub fn radroots_core::decimal::Decimal::checked_add(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::checked_div(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::checked_mul(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::checked_sub(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::from_f64_display(f64) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::from_str_exact(&str) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::is_sign_negative(&self) -> bool
+pub fn radroots_core::decimal::Decimal::is_zero(&self) -> bool
+pub fn radroots_core::decimal::Decimal::normalize(&self) -> Self
+pub fn radroots_core::decimal::Decimal::rescale(&mut self, u32)
+pub fn radroots_core::decimal::Decimal::scale(&self) -> u32
+pub fn radroots_core::decimal::Decimal::to_f64_lossy(&self) -> core::option::Option<f64>
+pub fn radroots_core::decimal::Decimal::to_u64_exact(&self) -> core::option::Option<u64>
+pub fn radroots_core::decimal::Decimal::try_rescale_exact(&mut self, u32) -> core::result::Result<(), radroots_core::decimal::Error>
+impl core::convert::From<i32> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(i32) -> Self
+impl core::convert::From<i64> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(i64) -> Self
+impl core::convert::From<u32> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(u32) -> Self
+impl core::convert::From<u64> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(u64) -> Self
+impl core::fmt::Display for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::decimal::Decimal
+pub type radroots_core::decimal::Decimal::Err = radroots_core::decimal::Error
+pub fn radroots_core::decimal::Decimal::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub mod radroots_core::money
+#[non_exhaustive] pub enum radroots_core::money::Error
+pub radroots_core::money::Error::AmountOverflow
+pub radroots_core::money::Error::ArithmeticOverflow
+pub radroots_core::money::Error::CurrencyMismatch
+pub radroots_core::money::Error::DivisionByZero
+pub radroots_core::money::Error::NegativeAmount
+pub radroots_core::money::Error::NotWholeMinorUnits
+pub radroots_core::money::Error::PrecisionLoss
+pub radroots_core::money::Error::ScaleOutOfRange
+impl core::convert::From<radroots_core::decimal::Error> for radroots_core::money::Error
+pub fn radroots_core::money::Error::from(radroots_core::decimal::Error) -> Self
+impl core::convert::From<radroots_core::money::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::money::Error) -> Self
+impl core::error::Error for radroots_core::money::Error
+impl core::fmt::Display for radroots_core::money::Error
+pub fn radroots_core::money::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_core::money::Money
+impl radroots_core::money::Money
+pub const fn radroots_core::money::Money::amount(&self) -> radroots_core::decimal::Decimal
+pub fn radroots_core::money::Money::checked_add(&self, &Self) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::checked_div_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::checked_mul_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::checked_sub(&self, &Self) -> core::result::Result<Self, radroots_core::money::Error>
+pub const fn radroots_core::money::Money::currency(&self) -> radroots_core::currency::Currency
+pub fn radroots_core::money::Money::from_minor_units_u32(u32, radroots_core::currency::Currency) -> Self
+pub fn radroots_core::money::Money::from_minor_units_u64(u64, radroots_core::currency::Currency) -> Self
+pub fn radroots_core::money::Money::is_zero(&self) -> bool
+pub fn radroots_core::money::Money::quantize_to_currency(self) -> Self
+pub fn radroots_core::money::Money::to_minor_units_u32_exact(&self) -> core::result::Result<u32, radroots_core::money::Error>
+pub fn radroots_core::money::Money::to_minor_units_u32_rounded(&self) -> core::result::Result<u32, radroots_core::money::Error>
+pub fn radroots_core::money::Money::to_minor_units_u64_exact(&self) -> core::result::Result<u64, radroots_core::money::Error>
+pub fn radroots_core::money::Money::to_minor_units_u64_rounded(&self) -> core::result::Result<u64, radroots_core::money::Error>
+pub fn radroots_core::money::Money::try_new(radroots_core::decimal::Decimal, radroots_core::currency::Currency) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::try_with_scale_exact(self, u32) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::zero(radroots_core::currency::Currency) -> Self
+impl core::fmt::Display for radroots_core::money::Money
+pub fn radroots_core::money::Money::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::money::Money
+pub fn radroots_core::money::Money::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub mod radroots_core::percent
+#[non_exhaustive] pub enum radroots_core::percent::ParseError
+pub radroots_core::percent::ParseError::InvalidNumber
+impl core::convert::From<radroots_core::percent::ParseError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::percent::ParseError) -> Self
+impl core::error::Error for radroots_core::percent::ParseError
+impl core::fmt::Display for radroots_core::percent::ParseError
+pub fn radroots_core::percent::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_core::percent::Percent
+impl radroots_core::percent::Percent
+pub fn radroots_core::percent::Percent::new(radroots_core::decimal::Decimal) -> Self
+pub fn radroots_core::percent::Percent::try_from_ratio(radroots_core::decimal::Decimal) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::percent::Percent::try_of_money(&self, &radroots_core::money::Money) -> core::result::Result<radroots_core::money::Money, radroots_core::money::Error>
+pub fn radroots_core::percent::Percent::try_of_money_quantized(&self, &radroots_core::money::Money) -> core::result::Result<radroots_core::money::Money, radroots_core::money::Error>
+pub fn radroots_core::percent::Percent::try_to_ratio(&self) -> core::result::Result<radroots_core::decimal::Decimal, radroots_core::decimal::Error>
+pub const fn radroots_core::percent::Percent::value(&self) -> radroots_core::decimal::Decimal
+impl core::fmt::Display for radroots_core::percent::Percent
+pub fn radroots_core::percent::Percent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::percent::Percent
+pub type radroots_core::percent::Percent::Err = radroots_core::percent::ParseError
+pub fn radroots_core::percent::Percent::from_str(&str) -> core::result::Result<Self, Self::Err>
+pub mod radroots_core::pricing
+#[non_exhaustive] pub enum radroots_core::pricing::DiscountError
+pub radroots_core::pricing::DiscountError::NegativeThreshold
+pub radroots_core::pricing::DiscountError::NegativeValue
+impl core::convert::From<radroots_core::pricing::DiscountError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::pricing::DiscountError) -> Self
+impl core::error::Error for radroots_core::pricing::DiscountError
+impl core::fmt::Display for radroots_core::pricing::DiscountError
+pub fn radroots_core::pricing::DiscountError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_core::pricing::DiscountScope
+pub radroots_core::pricing::DiscountScope::Bin
+pub radroots_core::pricing::DiscountScope::OrderTotal
+pub enum radroots_core::pricing::DiscountThreshold
+pub radroots_core::pricing::DiscountThreshold::BinCount
+pub radroots_core::pricing::DiscountThreshold::BinCount::bin_id: alloc::string::String
+pub radroots_core::pricing::DiscountThreshold::BinCount::min: u32
+pub radroots_core::pricing::DiscountThreshold::OrderQuantity
+pub radroots_core::pricing::DiscountThreshold::OrderQuantity::min: radroots_core::quantity::Quantity
+pub enum radroots_core::pricing::DiscountValue
+pub radroots_core::pricing::DiscountValue::MoneyPerBin(radroots_core::money::Money)
+pub radroots_core::pricing::DiscountValue::Percent(radroots_core::percent::Percent)
+pub enum radroots_core::pricing::Error
+pub radroots_core::pricing::Error::ArithmeticOverflow
+pub radroots_core::pricing::Error::NegativePrice
+pub radroots_core::pricing::Error::NegativeRequestedQuantity
+pub radroots_core::pricing::Error::NonConvertibleUnits
+pub radroots_core::pricing::Error::NonConvertibleUnits::from: radroots_core::unit::Unit
+pub radroots_core::pricing::Error::NonConvertibleUnits::to: radroots_core::unit::Unit
+pub radroots_core::pricing::Error::PerQuantityNegative
+pub radroots_core::pricing::Error::PerQuantityZero
+pub radroots_core::pricing::Error::UnitMismatch
+pub radroots_core::pricing::Error::UnitMismatch::have: radroots_core::unit::Unit
+pub radroots_core::pricing::Error::UnitMismatch::want: radroots_core::unit::Unit
+impl core::convert::From<radroots_core::pricing::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::pricing::Error) -> Self
+impl core::error::Error for radroots_core::pricing::Error
+impl core::fmt::Display for radroots_core::pricing::Error
+pub fn radroots_core::pricing::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_core::pricing::Discount
+impl radroots_core::pricing::Discount
+pub fn radroots_core::pricing::Discount::is_non_negative(&self) -> bool
+pub fn radroots_core::pricing::Discount::scope(&self) -> &radroots_core::pricing::DiscountScope
+pub fn radroots_core::pricing::Discount::threshold(&self) -> &radroots_core::pricing::DiscountThreshold
+pub fn radroots_core::pricing::Discount::try_new(radroots_core::pricing::DiscountScope, radroots_core::pricing::DiscountThreshold, radroots_core::pricing::DiscountValue) -> core::result::Result<Self, radroots_core::pricing::DiscountError>
+pub fn radroots_core::pricing::Discount::validate(&self) -> core::result::Result<(), radroots_core::pricing::DiscountError>
+pub fn radroots_core::pricing::Discount::value(&self) -> &radroots_core::pricing::DiscountValue
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::pricing::Discount
+pub fn radroots_core::pricing::Discount::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_core::pricing::QuantityPrice
+impl radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::amount(&self) -> &radroots_core::money::Money
+pub fn radroots_core::QuantityPrice::is_price_per_canonical_unit(&self) -> bool
+pub fn radroots_core::QuantityPrice::quantity(&self) -> &radroots_core::quantity::Quantity
+pub fn radroots_core::QuantityPrice::try_cost_for_amount_in(&self, radroots_core::decimal::Decimal, radroots_core::unit::Unit) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_cost_for_quantity_in(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_new(radroots_core::money::Money, radroots_core::quantity::Quantity) -> core::result::Result<Self, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_to_canonical_unit_price(&self) -> core::result::Result<radroots_core::QuantityPrice, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_to_unit_price(&self, radroots_core::unit::Unit) -> core::result::Result<radroots_core::QuantityPrice, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::validate(&self) -> core::result::Result<(), radroots_core::pricing::Error>
+impl radroots_core::pricing::QuantityPriceOps for radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::try_cost_for(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_cost_for_rounded(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub trait radroots_core::pricing::QuantityPriceOps: radroots_core::quantity_price::sealed::Sealed
+pub fn radroots_core::pricing::QuantityPriceOps::try_cost_for(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::pricing::QuantityPriceOps::try_cost_for_rounded(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+impl radroots_core::pricing::QuantityPriceOps for radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::try_cost_for(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_cost_for_rounded(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub mod radroots_core::quantity
+#[non_exhaustive] pub enum radroots_core::quantity::Error
+pub radroots_core::quantity::Error::ArithmeticOverflow
+pub radroots_core::quantity::Error::DivisionByZero
+pub radroots_core::quantity::Error::NegativeAmount
+pub radroots_core::quantity::Error::UnitMismatch
+impl core::convert::From<radroots_core::decimal::Error> for radroots_core::quantity::Error
+pub fn radroots_core::quantity::Error::from(radroots_core::decimal::Error) -> Self
+impl core::convert::From<radroots_core::quantity::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::quantity::Error) -> Self
+impl core::error::Error for radroots_core::quantity::Error
+impl core::fmt::Display for radroots_core::quantity::Error
+pub fn radroots_core::quantity::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_core::quantity::Quantity
+impl radroots_core::quantity::Quantity
+pub const fn radroots_core::quantity::Quantity::amount(&self) -> radroots_core::decimal::Decimal
+pub fn radroots_core::quantity::Quantity::canonical_unit(&self) -> radroots_core::unit::Unit
+pub fn radroots_core::quantity::Quantity::checked_add(&self, &radroots_core::quantity::Quantity) -> core::option::Option<radroots_core::quantity::Quantity>
+pub fn radroots_core::quantity::Quantity::checked_div_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::checked_mul_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::checked_sub(&self, &radroots_core::quantity::Quantity) -> core::option::Option<radroots_core::quantity::Quantity>
+pub fn radroots_core::quantity::Quantity::clear_label(self) -> Self
+pub fn radroots_core::quantity::Quantity::is_canonical(&self) -> bool
+pub fn radroots_core::quantity::Quantity::is_zero(&self) -> bool
+pub fn radroots_core::quantity::Quantity::label(&self) -> core::option::Option<&str>
+pub fn radroots_core::quantity::Quantity::to_canonical(&self) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::unit::ConvertError>
+pub fn radroots_core::quantity::Quantity::try_add(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::try_convert_to(&self, radroots_core::unit::Unit) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::unit::ConvertError>
+pub fn radroots_core::quantity::Quantity::try_new(radroots_core::decimal::Decimal, radroots_core::unit::Unit) -> core::result::Result<Self, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::try_sub(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub const fn radroots_core::quantity::Quantity::unit(&self) -> radroots_core::unit::Unit
+pub fn radroots_core::quantity::Quantity::with_label<S: core::convert::Into<alloc::string::String>>(self, S) -> Self
+pub fn radroots_core::quantity::Quantity::with_optional_label<S: core::convert::Into<alloc::string::String>>(self, core::option::Option<S>) -> Self
+pub fn radroots_core::quantity::Quantity::zero(radroots_core::unit::Unit) -> Self
+impl core::fmt::Display for radroots_core::quantity::Quantity
+pub fn radroots_core::quantity::Quantity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::quantity::Quantity
+pub fn radroots_core::quantity::Quantity::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub mod radroots_core::unit
+pub enum radroots_core::unit::ConvertError
+pub radroots_core::unit::ConvertError::ArithmeticOverflow
+pub radroots_core::unit::ConvertError::ArithmeticOverflow::from: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::ArithmeticOverflow::to: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::NotConvertibleUnits
+pub radroots_core::unit::ConvertError::NotConvertibleUnits::from: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::NotConvertibleUnits::to: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::NotMassUnit
+pub radroots_core::unit::ConvertError::NotMassUnit::from: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::NotMassUnit::to: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::NotVolumeUnit
+pub radroots_core::unit::ConvertError::NotVolumeUnit::from: radroots_core::unit::Unit
+pub radroots_core::unit::ConvertError::NotVolumeUnit::to: radroots_core::unit::Unit
+impl core::convert::From<radroots_core::unit::ConvertError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::unit::ConvertError) -> Self
+impl core::error::Error for radroots_core::unit::ConvertError
+impl core::fmt::Display for radroots_core::unit::ConvertError
+pub fn radroots_core::unit::ConvertError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_core::unit::ParseError
+pub radroots_core::unit::ParseError::NotAMassUnit
+pub radroots_core::unit::ParseError::NotAVolumeUnit
+pub radroots_core::unit::ParseError::UnknownUnit
+impl core::convert::From<radroots_core::unit::ParseError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::unit::ParseError) -> Self
+impl core::error::Error for radroots_core::unit::ParseError
+impl core::fmt::Display for radroots_core::unit::ParseError
+pub fn radroots_core::unit::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_core::unit::Unit
+pub radroots_core::unit::Unit::Each
+pub radroots_core::unit::Unit::MassG
+pub radroots_core::unit::Unit::MassKg
+pub radroots_core::unit::Unit::MassLb
+pub radroots_core::unit::Unit::MassOz
+pub radroots_core::unit::Unit::VolumeL
+pub radroots_core::unit::Unit::VolumeMl
+impl radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::canonical_unit(&self) -> Self
+pub fn radroots_core::unit::Unit::code(&self) -> &'static str
+pub fn radroots_core::unit::Unit::dimension(&self) -> radroots_core::unit::UnitDimension
+pub fn radroots_core::unit::Unit::is_count(&self) -> bool
+pub fn radroots_core::unit::Unit::is_mass(&self) -> bool
+pub fn radroots_core::unit::Unit::is_volume(&self) -> bool
+pub fn radroots_core::unit::Unit::same_dimension(Self, Self) -> bool
+impl core::fmt::Display for radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::unit::Unit
+pub type radroots_core::unit::Unit::Err = radroots_core::unit::ParseError
+pub fn radroots_core::unit::Unit::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub enum radroots_core::unit::UnitDimension
+pub radroots_core::unit::UnitDimension::Count
+pub radroots_core::unit::UnitDimension::Mass
+pub radroots_core::unit::UnitDimension::Volume
+pub fn radroots_core::unit::convert_mass_decimal(radroots_core::decimal::Decimal, radroots_core::unit::Unit, radroots_core::unit::Unit) -> core::result::Result<radroots_core::decimal::Decimal, radroots_core::unit::ConvertError>
+pub fn radroots_core::unit::convert_unit_decimal(radroots_core::decimal::Decimal, radroots_core::unit::Unit, radroots_core::unit::Unit) -> core::result::Result<radroots_core::decimal::Decimal, radroots_core::unit::ConvertError>
+pub fn radroots_core::unit::convert_volume_decimal(radroots_core::decimal::Decimal, radroots_core::unit::Unit, radroots_core::unit::Unit) -> core::result::Result<radroots_core::decimal::Decimal, radroots_core::unit::ConvertError>
+pub fn radroots_core::unit::parse_mass_unit(&str) -> core::result::Result<radroots_core::unit::Unit, radroots_core::unit::ParseError>
+pub fn radroots_core::unit::parse_volume_unit(&str) -> core::result::Result<radroots_core::unit::Unit, radroots_core::unit::ParseError>
+#[non_exhaustive] pub enum radroots_core::Error
+pub radroots_core::Error::Currency(radroots_core::currency::ParseError)
+pub radroots_core::Error::Decimal(radroots_core::decimal::Error)
+pub radroots_core::Error::Discount(radroots_core::pricing::DiscountError)
+pub radroots_core::Error::Money(radroots_core::money::Error)
+pub radroots_core::Error::Percent(radroots_core::percent::ParseError)
+pub radroots_core::Error::Pricing(radroots_core::pricing::Error)
+pub radroots_core::Error::Quantity(radroots_core::quantity::Error)
+pub radroots_core::Error::UnitConversion(radroots_core::unit::ConvertError)
+pub radroots_core::Error::UnitParse(radroots_core::unit::ParseError)
+impl core::convert::From<radroots_core::currency::ParseError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::currency::ParseError) -> Self
+impl core::convert::From<radroots_core::decimal::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::decimal::Error) -> Self
+impl core::convert::From<radroots_core::money::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::money::Error) -> Self
+impl core::convert::From<radroots_core::percent::ParseError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::percent::ParseError) -> Self
+impl core::convert::From<radroots_core::pricing::DiscountError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::pricing::DiscountError) -> Self
+impl core::convert::From<radroots_core::pricing::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::pricing::Error) -> Self
+impl core::convert::From<radroots_core::quantity::Error> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::quantity::Error) -> Self
+impl core::convert::From<radroots_core::unit::ConvertError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::unit::ConvertError) -> Self
+impl core::convert::From<radroots_core::unit::ParseError> for radroots_core::Error
+pub fn radroots_core::Error::from(radroots_core::unit::ParseError) -> Self
+impl core::error::Error for radroots_core::Error
+pub fn radroots_core::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_core::Error
+pub fn radroots_core::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_core::Unit
+pub radroots_core::Unit::Each
+pub radroots_core::Unit::MassG
+pub radroots_core::Unit::MassKg
+pub radroots_core::Unit::MassLb
+pub radroots_core::Unit::MassOz
+pub radroots_core::Unit::VolumeL
+pub radroots_core::Unit::VolumeMl
+impl radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::canonical_unit(&self) -> Self
+pub fn radroots_core::unit::Unit::code(&self) -> &'static str
+pub fn radroots_core::unit::Unit::dimension(&self) -> radroots_core::unit::UnitDimension
+pub fn radroots_core::unit::Unit::is_count(&self) -> bool
+pub fn radroots_core::unit::Unit::is_mass(&self) -> bool
+pub fn radroots_core::unit::Unit::is_volume(&self) -> bool
+pub fn radroots_core::unit::Unit::same_dimension(Self, Self) -> bool
+impl core::fmt::Display for radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::unit::Unit
+pub type radroots_core::unit::Unit::Err = radroots_core::unit::ParseError
+pub fn radroots_core::unit::Unit::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::unit::Unit
+pub fn radroots_core::unit::Unit::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_core::Currency(_)
+impl radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::AUD: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::CAD: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::EUR: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::GBP: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::JPY: radroots_core::currency::Currency
+pub const radroots_core::currency::Currency::USD: radroots_core::currency::Currency
+pub const fn radroots_core::currency::Currency::as_bytes(&self) -> &[u8; 3]
+pub fn radroots_core::currency::Currency::as_str(&self) -> &str
+pub const fn radroots_core::currency::Currency::from_const([u8; 3]) -> core::result::Result<Self, radroots_core::currency::ParseError>
+pub fn radroots_core::currency::Currency::from_str_upper(&str) -> core::result::Result<Self, radroots_core::currency::ParseError>
+pub const fn radroots_core::currency::Currency::minor_unit_exponent(&self) -> u32
+impl core::convert::TryFrom<&str> for radroots_core::currency::Currency
+pub type radroots_core::currency::Currency::Error = radroots_core::currency::ParseError
+pub fn radroots_core::currency::Currency::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::currency::Currency
+pub type radroots_core::currency::Currency::Err = radroots_core::currency::ParseError
+pub fn radroots_core::currency::Currency::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::currency::Currency
+pub fn radroots_core::currency::Currency::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_core::Decimal(_)
+impl radroots_core::decimal::Decimal
+pub const radroots_core::decimal::Decimal::MAX: Self
+pub const radroots_core::decimal::Decimal::MAX_SCALE: u32
+pub const radroots_core::decimal::Decimal::MIN: Self
+pub const radroots_core::decimal::Decimal::ONE: Self
+pub const radroots_core::decimal::Decimal::ZERO: Self
+pub fn radroots_core::decimal::Decimal::checked_add(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::checked_div(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::checked_mul(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::checked_sub(self, Self) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::from_f64_display(f64) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::from_str_exact(&str) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::decimal::Decimal::is_sign_negative(&self) -> bool
+pub fn radroots_core::decimal::Decimal::is_zero(&self) -> bool
+pub fn radroots_core::decimal::Decimal::normalize(&self) -> Self
+pub fn radroots_core::decimal::Decimal::rescale(&mut self, u32)
+pub fn radroots_core::decimal::Decimal::scale(&self) -> u32
+pub fn radroots_core::decimal::Decimal::to_f64_lossy(&self) -> core::option::Option<f64>
+pub fn radroots_core::decimal::Decimal::to_u64_exact(&self) -> core::option::Option<u64>
+pub fn radroots_core::decimal::Decimal::try_rescale_exact(&mut self, u32) -> core::result::Result<(), radroots_core::decimal::Error>
+impl core::convert::From<i32> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(i32) -> Self
+impl core::convert::From<i64> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(i64) -> Self
+impl core::convert::From<u32> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(u32) -> Self
+impl core::convert::From<u64> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::from(u64) -> Self
+impl core::fmt::Display for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::decimal::Decimal
+pub type radroots_core::decimal::Decimal::Err = radroots_core::decimal::Error
+pub fn radroots_core::decimal::Decimal::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::decimal::Decimal
+pub fn radroots_core::decimal::Decimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_core::Money
+impl radroots_core::money::Money
+pub const fn radroots_core::money::Money::amount(&self) -> radroots_core::decimal::Decimal
+pub fn radroots_core::money::Money::checked_add(&self, &Self) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::checked_div_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::checked_mul_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::checked_sub(&self, &Self) -> core::result::Result<Self, radroots_core::money::Error>
+pub const fn radroots_core::money::Money::currency(&self) -> radroots_core::currency::Currency
+pub fn radroots_core::money::Money::from_minor_units_u32(u32, radroots_core::currency::Currency) -> Self
+pub fn radroots_core::money::Money::from_minor_units_u64(u64, radroots_core::currency::Currency) -> Self
+pub fn radroots_core::money::Money::is_zero(&self) -> bool
+pub fn radroots_core::money::Money::quantize_to_currency(self) -> Self
+pub fn radroots_core::money::Money::to_minor_units_u32_exact(&self) -> core::result::Result<u32, radroots_core::money::Error>
+pub fn radroots_core::money::Money::to_minor_units_u32_rounded(&self) -> core::result::Result<u32, radroots_core::money::Error>
+pub fn radroots_core::money::Money::to_minor_units_u64_exact(&self) -> core::result::Result<u64, radroots_core::money::Error>
+pub fn radroots_core::money::Money::to_minor_units_u64_rounded(&self) -> core::result::Result<u64, radroots_core::money::Error>
+pub fn radroots_core::money::Money::try_new(radroots_core::decimal::Decimal, radroots_core::currency::Currency) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::try_with_scale_exact(self, u32) -> core::result::Result<Self, radroots_core::money::Error>
+pub fn radroots_core::money::Money::zero(radroots_core::currency::Currency) -> Self
+impl core::fmt::Display for radroots_core::money::Money
+pub fn radroots_core::money::Money::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::money::Money
+pub fn radroots_core::money::Money::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_core::Percent
+impl radroots_core::percent::Percent
+pub fn radroots_core::percent::Percent::new(radroots_core::decimal::Decimal) -> Self
+pub fn radroots_core::percent::Percent::try_from_ratio(radroots_core::decimal::Decimal) -> core::result::Result<Self, radroots_core::decimal::Error>
+pub fn radroots_core::percent::Percent::try_of_money(&self, &radroots_core::money::Money) -> core::result::Result<radroots_core::money::Money, radroots_core::money::Error>
+pub fn radroots_core::percent::Percent::try_of_money_quantized(&self, &radroots_core::money::Money) -> core::result::Result<radroots_core::money::Money, radroots_core::money::Error>
+pub fn radroots_core::percent::Percent::try_to_ratio(&self) -> core::result::Result<radroots_core::decimal::Decimal, radroots_core::decimal::Error>
+pub const fn radroots_core::percent::Percent::value(&self) -> radroots_core::decimal::Decimal
+impl core::fmt::Display for radroots_core::percent::Percent
+pub fn radroots_core::percent::Percent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_core::percent::Percent
+pub type radroots_core::percent::Percent::Err = radroots_core::percent::ParseError
+pub fn radroots_core::percent::Percent::from_str(&str) -> core::result::Result<Self, Self::Err>
+pub struct radroots_core::Quantity
+impl radroots_core::quantity::Quantity
+pub const fn radroots_core::quantity::Quantity::amount(&self) -> radroots_core::decimal::Decimal
+pub fn radroots_core::quantity::Quantity::canonical_unit(&self) -> radroots_core::unit::Unit
+pub fn radroots_core::quantity::Quantity::checked_add(&self, &radroots_core::quantity::Quantity) -> core::option::Option<radroots_core::quantity::Quantity>
+pub fn radroots_core::quantity::Quantity::checked_div_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::checked_mul_decimal(&self, radroots_core::decimal::Decimal) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::checked_sub(&self, &radroots_core::quantity::Quantity) -> core::option::Option<radroots_core::quantity::Quantity>
+pub fn radroots_core::quantity::Quantity::clear_label(self) -> Self
+pub fn radroots_core::quantity::Quantity::is_canonical(&self) -> bool
+pub fn radroots_core::quantity::Quantity::is_zero(&self) -> bool
+pub fn radroots_core::quantity::Quantity::label(&self) -> core::option::Option<&str>
+pub fn radroots_core::quantity::Quantity::to_canonical(&self) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::unit::ConvertError>
+pub fn radroots_core::quantity::Quantity::try_add(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::try_convert_to(&self, radroots_core::unit::Unit) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::unit::ConvertError>
+pub fn radroots_core::quantity::Quantity::try_new(radroots_core::decimal::Decimal, radroots_core::unit::Unit) -> core::result::Result<Self, radroots_core::quantity::Error>
+pub fn radroots_core::quantity::Quantity::try_sub(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::quantity::Quantity, radroots_core::quantity::Error>
+pub const fn radroots_core::quantity::Quantity::unit(&self) -> radroots_core::unit::Unit
+pub fn radroots_core::quantity::Quantity::with_label<S: core::convert::Into<alloc::string::String>>(self, S) -> Self
+pub fn radroots_core::quantity::Quantity::with_optional_label<S: core::convert::Into<alloc::string::String>>(self, core::option::Option<S>) -> Self
+pub fn radroots_core::quantity::Quantity::zero(radroots_core::unit::Unit) -> Self
+impl core::fmt::Display for radroots_core::quantity::Quantity
+pub fn radroots_core::quantity::Quantity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::quantity::Quantity
+pub fn radroots_core::quantity::Quantity::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_core::QuantityPrice
+impl radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::amount(&self) -> &radroots_core::money::Money
+pub fn radroots_core::QuantityPrice::is_price_per_canonical_unit(&self) -> bool
+pub fn radroots_core::QuantityPrice::quantity(&self) -> &radroots_core::quantity::Quantity
+pub fn radroots_core::QuantityPrice::try_cost_for_amount_in(&self, radroots_core::decimal::Decimal, radroots_core::unit::Unit) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_cost_for_quantity_in(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_new(radroots_core::money::Money, radroots_core::quantity::Quantity) -> core::result::Result<Self, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_to_canonical_unit_price(&self) -> core::result::Result<radroots_core::QuantityPrice, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_to_unit_price(&self, radroots_core::unit::Unit) -> core::result::Result<radroots_core::QuantityPrice, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::validate(&self) -> core::result::Result<(), radroots_core::pricing::Error>
+impl radroots_core::pricing::QuantityPriceOps for radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::try_cost_for(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+pub fn radroots_core::QuantityPrice::try_cost_for_rounded(&self, &radroots_core::quantity::Quantity) -> core::result::Result<radroots_core::money::Money, radroots_core::pricing::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_core::QuantityPrice
+pub fn radroots_core::QuantityPrice::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>

@@ -10,14 +10,14 @@ use radroots_transport::{
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const EXAMPLE: &str = include_str!("../examples/host_transport.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_transport.txt");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_transport.txt");
 const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const SOURCE: &str = include_str!("../src/source.rs");
 const SINK: &str = include_str!("../src/sink.rs");
 const ID: &str = include_str!("../src/id.rs");
 const TARGET: &str = include_str!("../src/target.rs");
-const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
+const DEVIATIONS: &str = include_str!("../../../contracts/architecture/deviations.toml");
 
 #[test]
 fn manifest_has_final_identity_features_and_required_radroots_dependencies() {
@@ -81,7 +81,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "## Security and side effects",
         "## Features",
         "## Intended consumers",
-        "radroots_crates_release_v1.md#9-radroots_transport",
+        "radroots_crates_release_v1.toml",
         "examples/host_transport.rs",
     ] {
         assert!(README.contains(required), "README is missing {required}");

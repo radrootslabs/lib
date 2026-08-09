@@ -1,0 +1,39 @@
+schema_version = 1
+decision_id = "radroots.public_api_leakage_migration_baseline.v1"
+status = "accepted_historical"
+accepted_date = "2026-07-27"
+completed_step = 313
+publication_authorized = false
+exception_ids = [
+  "RCRV1-API-001",
+  "RCRV1-API-002",
+  "RCRV1-API-003",
+  "RCRV1-API-004",
+  "RCRV1-API-005",
+  "RCRV1-API-006",
+  "RCRV1-API-007",
+  "RCRV1-API-008",
+]
+active_exception_ids = []
+forbidden_expansion = [
+  "broader_aliases",
+  "keyring",
+  "new_items",
+  "new_upstream_paths",
+  "platform_specific_types",
+  "reqwest",
+  "sqlx",
+  "tokio",
+]
+
+[[removal_milestone]]
+package = "radroots_identity"
+step = 42
+
+[[removal_milestone]]
+package = "radroots_nostr"
+step = 124
+
+[[removal_milestone]]
+package = "radroots_nostr_connect"
+step = 140

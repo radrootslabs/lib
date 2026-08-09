@@ -11,7 +11,7 @@ state. Live Nostr transport belongs in `radroots_transport_nostr`; application
 composition belongs in `radroots_sdk` or an advanced host.
 
 The authoritative package charter is the
-[`radroots_nostr` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#10-radroots_nostr).
+[`radroots_nostr` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 
 ## Quick start
 

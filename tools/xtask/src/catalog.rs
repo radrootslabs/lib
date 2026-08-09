@@ -85,12 +85,20 @@ struct ReleaseV2 {
     publication_authorized: bool,
     public_packages: Vec<String>,
     v1_artifact: Vec<V1Artifact>,
+    v1_retired_human_artifact: Vec<RetiredV1HumanArtifact>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct V1Artifact {
     path: String,
+    sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetiredV1HumanArtifact {
+    former_path: String,
     sha256: String,
 }
 
@@ -567,7 +575,7 @@ fn validate_release(
     catalog: &Catalog,
     workspace_root: &Path,
 ) -> Result<(), String> {
-    if release.schema_version != 1
+    if release.schema_version != 2
         || release.spec_id != RELEASE_ID
         || release.status != "approved_not_published"
         || release.supersedes_without_mutation != "radroots.crates.release.v1"
@@ -602,14 +610,24 @@ fn validate_release(
         }
     }
     let expected = BTreeSet::from([
-        "docs/specs/radroots_crates_release_v1.dot",
-        "docs/specs/radroots_crates_release_v1.md",
-        "docs/specs/radroots_crates_release_v1.sha256",
-        "docs/specs/radroots_crates_release_v1.toml",
-        "docs/specs/radroots_crates_release_v1_inventory.csv",
+        "contracts/crates/release_v1/radroots_crates_release_v1.dot",
+        "contracts/crates/release_v1/radroots_crates_release_v1.sha256",
+        "contracts/crates/release_v1/radroots_crates_release_v1.toml",
+        "contracts/crates/release_v1/radroots_crates_release_v1_inventory.csv",
     ]);
     if paths != expected {
-        return Err("release v2 must pin every historical v1 authority artifact".to_owned());
+        return Err("release v2 must pin every historical v1 machine artifact".to_owned());
+    }
+    if release.v1_retired_human_artifact.len() != 1 {
+        return Err("release v2 must record the retired v1 human artifact".to_owned());
+    }
+    let retired = &release.v1_retired_human_artifact[0];
+    validate_relative_path(&retired.former_path)?;
+    validate_sha256(&retired.sha256, "retired v1 human artifact digest")?;
+    if retired.former_path != "docs/specs/radroots_crates_release_v1.md"
+        || retired.sha256 != "ea2c1f0f5c53fae56a247ae7519b065c9a0d62dafb998b75a48075f4a875b5eb"
+    {
+        return Err("release v2 retired v1 human artifact drifted".to_owned());
     }
     Ok(())
 }

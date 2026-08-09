@@ -51,11 +51,11 @@ Focused values remain in these modules:
 - `username` — canonical username parsing, bounds, and normalization.
 
 The normative responsibility and dependency boundary are defined by the
-[`radroots_identity` package charter](../../docs/specs/radroots_crates_release_v1.md).
-The reviewed pre-release surface is recorded in
-[`docs/api`](../../docs/api/README.md). Signing, Nostr-key, secret-provider,
-and storage ownership is documented in the
-[`identity` migration boundary](../../docs/migration/identity.md).
+[`radroots_identity` package charter](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
+The reviewed pre-release surface is recorded in the
+[`radroots_identity` API baseline](../../contracts/api_baselines/radroots_identity.txt).
+Signing, Nostr-key, secret-provider, and storage ownership remains outside
+this public-only identity package as described by the package boundary above.
 
 ## Features
 

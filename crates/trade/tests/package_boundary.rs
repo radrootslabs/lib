@@ -18,7 +18,7 @@ const WORKFLOW: &str = include_str!("../src/workflow.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
 const README: &str = include_str!("../README.md");
 const EXAMPLE: &str = include_str!("../examples/reduce_trade.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_trade.txt");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_trade.txt");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {

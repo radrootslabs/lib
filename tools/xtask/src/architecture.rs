@@ -9,9 +9,10 @@ use serde::Deserialize;
 mod api_leakage;
 mod core_contract;
 mod dependency_boundary;
+mod retired_compatibility;
 
-const DEVIATIONS_RELATIVE: &str = "docs/implementation/deviations.toml";
-const ARCHITECTURE_RELATIVE: &str = "docs/specs/radroots_crates_release_v1.toml";
+const DEVIATIONS_RELATIVE: &str = "contracts/architecture/deviations.toml";
+const ARCHITECTURE_RELATIVE: &str = "contracts/crates/release_v1/radroots_crates_release_v1.toml";
 const ARCHITECTURE_ID: &str = "radroots.crates.release.v1";
 const PUBLIC_HOMEPAGE: &str = "https://radroots.org";
 const PUBLIC_README: &str = "README.md";
@@ -168,6 +169,7 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     core_contract::validate(workspace_root)?;
     api_leakage::validate_policy_catalog(workspace_root, &architecture_packages)?;
     dependency_boundary::validate_policy_catalog(workspace_root, &architecture_packages)?;
+    retired_compatibility::validate(workspace_root)?;
     validate_workspace_toolchain(workspace_root, &architecture)?;
     validate_public_package_metadata(workspace_root, &architecture)?;
     validate_no_production_sibling_paths(workspace_root)?;
@@ -1105,7 +1107,7 @@ fn validate_spec_anchor(
     let (relative, fragment) = anchor
         .split_once('#')
         .map_or((anchor, None), |(path, fragment)| (path, Some(fragment)));
-    if relative.trim().is_empty() || fragment.is_some_and(|value| value.trim().is_empty()) {
+    if relative.trim().is_empty() || fragment.is_none_or(|value| value.trim().is_empty()) {
         return Err(format!(
             "deviation {deviation_id} has invalid spec anchor {anchor}"
         ));
@@ -1121,12 +1123,62 @@ fn validate_spec_anchor(
             "deviation {deviation_id} spec anchor must be repository-relative: {anchor}"
         ));
     }
-    if !relative.starts_with("docs/specs/") || !workspace_root.join(path).is_file() {
+    if relative != ARCHITECTURE_RELATIVE {
         return Err(format!(
-            "deviation {deviation_id} spec anchor does not resolve to a local spec: {anchor}"
+            "deviation {deviation_id} spec anchor must target {ARCHITECTURE_RELATIVE}: {anchor}"
+        ));
+    }
+    let machine_path = workspace_root.join(path);
+    let raw = fs::read_to_string(&machine_path)
+        .map_err(|error| format!("read {}: {error}", machine_path.display()))?;
+    let machine = toml::from_str::<toml::Value>(&raw)
+        .map_err(|error| format!("parse {}: {error}", machine_path.display()))?;
+    let selector = fragment.expect("fragment is required above");
+    if !machine_selector_exists(&machine, selector) {
+        return Err(format!(
+            "deviation {deviation_id} spec anchor has unknown machine selector {selector}"
         ));
     }
     Ok(())
+}
+
+fn machine_selector_exists(machine: &toml::Value, selector: &str) -> bool {
+    let segments = selector.split('.').collect::<Vec<_>>();
+    if segments.iter().any(|segment| segment.is_empty()) {
+        return false;
+    }
+    let root = match machine.as_table() {
+        Some(root) => root,
+        None => return false,
+    };
+    match segments.as_slice() {
+        ["repositories", repository] => root
+            .get("repositories")
+            .and_then(toml::Value::as_table)
+            .and_then(|repositories| repositories.get(*repository))
+            .is_some_and(toml::Value::is_table),
+        ["repository_policy"] | ["release_policy"] => {
+            root.get(segments[0]).is_some_and(toml::Value::is_table)
+        }
+        ["quality_policy", "coverage"] => root
+            .get("quality_policy")
+            .and_then(toml::Value::as_table)
+            .and_then(|quality| quality.get("coverage"))
+            .is_some_and(toml::Value::is_table),
+        ["package", package] => root
+            .get("package")
+            .and_then(toml::Value::as_array)
+            .is_some_and(|packages| {
+                packages.iter().any(|candidate| {
+                    candidate
+                        .as_table()
+                        .and_then(|table| table.get("name"))
+                        .and_then(toml::Value::as_str)
+                        == Some(*package)
+                })
+            }),
+        _ => false,
+    }
 }
 
 fn require_text(deviation_id: &str, field: &str, value: &str) -> Result<(), String> {
@@ -1184,10 +1236,10 @@ mod tests {
             .expect("clock")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("radroots_architecture_{label}_{nonce}"));
-        fs::create_dir_all(root.join("docs/specs")).expect("create spec root");
+        fs::create_dir_all(root.join("contracts/crates/release_v1")).expect("create spec root");
         fs::write(
-            root.join("docs/specs/radroots_crates_release_v1.md"),
-            "# Architecture\n",
+            root.join("contracts/crates/release_v1/radroots_crates_release_v1.toml"),
+            "spec_id = \"radroots.crates.release.v1\"\n\n[repositories.sdk]\nurl = \"https://github.com/radrootslabs/sdk\"\n",
         )
         .expect("write spec");
         root
@@ -1203,7 +1255,7 @@ date = "2026-07-27"
 status = "active"
 approval = "Explicit user correction dated 2026-07-27."
 affected_steps = ["015", "016"]
-spec_anchors = ["docs/specs/radroots_crates_release_v1.md#repository-topology"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.sdk"]
 source_evidence = ["The approved architecture assigns packages to the existing lib and sdk repositories."]
 replacement_action = "Keep both standalone repositories and verify them independently."
 verification = ["Repository-local architecture validation passes."]
@@ -1253,12 +1305,28 @@ adr_required = false
     fn rejects_incomplete_active_deviation() {
         let root = test_root("incomplete");
         let incomplete = complete_ledger().replace(
-            "spec_anchors = [\"docs/specs/radroots_crates_release_v1.md#repository-topology\"]",
+            "spec_anchors = [\"contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.sdk\"]",
             "spec_anchors = []",
         );
         let error = validate_ledger(&root, "radroots.crates.release.v1", &incomplete)
             .expect_err("missing anchor must fail");
         assert!(error.contains("field spec_anchors must contain non-empty values"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn deviation_anchors_require_resolving_machine_selectors() {
+        let root = test_root("machine_selector");
+        let invalid = complete_ledger().replace("#repositories.sdk", "#garbage");
+        let error = validate_ledger(&root, "radroots.crates.release.v1", &invalid)
+            .expect_err("arbitrary fragment must fail");
+        assert!(error.contains("unknown machine selector garbage"));
+
+        let markdown_slug =
+            complete_ledger().replace("#repositories.sdk", "#20-current-to-target-migration-map");
+        let error = validate_ledger(&root, "radroots.crates.release.v1", &markdown_slug)
+            .expect_err("Markdown heading slug must fail");
+        assert!(error.contains("unknown machine selector"));
         let _ = fs::remove_dir_all(root);
     }
 

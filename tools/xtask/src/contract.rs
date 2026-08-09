@@ -155,7 +155,7 @@ const KNOWLEDGE_BETA_CONTRACT_IDS: [&str; 3] = [
     "radroots.knowledge.change_proposal.v1",
     "radroots.knowledge.contribution_attestation.v1",
 ];
-const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
+const EVENT_BOUNDARY_MATRIX_RELATIVE: &str = "contracts/event_boundary_matrix.md";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 90.0;
 const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "90/90/90/90";
 const COVERAGE_REPORT_EPSILON: f64 = 0.000_001;
@@ -1271,11 +1271,6 @@ const FOOD_AVAILABILITY_VECTOR_EXPECTATIONS: [(&str, &str); 40] = [
         "food_availability.validate_revision.valid",
     ),
 ];
-const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 2] = [
-    "contracts/event_boundary_matrix.md",
-    "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
-];
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractManifest {
@@ -3212,37 +3207,16 @@ fn parse_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
     }
 }
 
-fn resolve_event_boundary_matrix_path_with_override(
-    workspace_root: &Path,
-    event_boundary_override: Option<PathBuf>,
-) -> Result<PathBuf, String> {
-    if let Some(path) = event_boundary_override {
-        if !path.is_file() {
-            return Err(format!(
-                "{EVENT_BOUNDARY_MATRIX_ENV} points to a missing canonical event matrix file: {}",
-                path.display()
-            ));
-        }
-        return Ok(path);
+fn resolve_event_boundary_matrix_path(workspace_root: &Path) -> Result<PathBuf, String> {
+    let candidate = workspace_root.join(EVENT_BOUNDARY_MATRIX_RELATIVE);
+    if candidate.is_file() {
+        return Ok(candidate);
     }
-
-    for ancestor in workspace_root.ancestors() {
-        for relative in EVENT_BOUNDARY_MATRIX_RELATIVES {
-            let candidate = ancestor.join(relative);
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
-    }
-
     resolve_missing_event_boundary_matrix_path(workspace_root)
 }
 
 fn missing_event_boundary_matrix_error() -> String {
-    format!(
-        "canonical event matrix not found; set {EVENT_BOUNDARY_MATRIX_ENV} or provide one of: {}",
-        EVENT_BOUNDARY_MATRIX_RELATIVES.join(", ")
-    )
+    format!("canonical event matrix not found at {EVENT_BOUNDARY_MATRIX_RELATIVE}")
 }
 
 #[cfg(not(test))]
@@ -3389,13 +3363,11 @@ fn validate_event_boundary_source_witness(
     Ok(())
 }
 
-fn validate_canonical_event_boundary_with_override(
+fn validate_canonical_event_boundary_at_path(
     workspace_root: &Path,
-    event_boundary_override: Option<PathBuf>,
+    matrix_path: &Path,
 ) -> Result<(), String> {
-    let matrix_path =
-        resolve_event_boundary_matrix_path_with_override(workspace_root, event_boundary_override)?;
-    let rows = parse_event_boundary_matrix(&matrix_path)?;
+    let rows = parse_event_boundary_matrix(matrix_path)?;
     let expected_domains = CANONICAL_EVENT_BOUNDARY_EXPECTATIONS
         .iter()
         .map(|row| row.domain.to_string())
@@ -3460,7 +3432,8 @@ fn validate_canonical_event_boundary_with_override(
 }
 
 pub fn validate_canonical_event_boundary(workspace_root: &Path) -> Result<(), String> {
-    validate_canonical_event_boundary_with_override(workspace_root, None)
+    let matrix_path = resolve_event_boundary_matrix_path(workspace_root)?;
+    validate_canonical_event_boundary_at_path(workspace_root, &matrix_path)
 }
 
 fn contract_root(workspace_root: &Path) -> PathBuf {
@@ -3812,7 +3785,8 @@ fn validate_workspace_version_lockstep(
 ) -> Result<(), String> {
     let workspace_manifest =
         parse_toml::<WorkspaceVersionCargoManifest>(&workspace_root.join("Cargo.toml"))?;
-    let architecture_path = workspace_root.join("docs/specs/radroots_crates_release_v1.toml");
+    let architecture_path =
+        workspace_root.join("contracts/crates/release_v1/radroots_crates_release_v1.toml");
     let governed_version = if architecture_path.is_file() {
         parse_toml::<CratesReleaseArchitecture>(&architecture_path)?
             .repositories
@@ -8533,7 +8507,8 @@ fn validate_v1_release_policy(
         return Ok(None);
     }
 
-    let architecture_path = workspace_root.join("docs/specs/radroots_crates_release_v1.toml");
+    let architecture_path =
+        workspace_root.join("contracts/crates/release_v1/radroots_crates_release_v1.toml");
     let architecture = parse_toml::<CratesReleaseArchitecture>(&architecture_path)?;
     let expected_approved = collect_unique_set(
         &architecture
@@ -9583,7 +9558,7 @@ mod tests {
     fn create_synthetic_workspace(prefix: &str) -> PathBuf {
         let root = temp_root(prefix);
         write_file(
-            &root.join("docs/specs/radroots_crates_release_v1.toml"),
+            &root.join("contracts/crates/release_v1/radroots_crates_release_v1.toml"),
             r#"spec_id = "radroots.crates.release.v1"
 package_count = 2
 
@@ -11023,7 +10998,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         assert!(lock_error.contains("Cargo.lock package radroots_a version"));
 
         write_file(
-            &root.join("docs/specs/radroots_crates_release_v1.toml"),
+            &root.join("contracts/crates/release_v1/radroots_crates_release_v1.toml"),
             r#"spec_id = "radroots.crates.release.v1"
 package_count = 0
 package = []
@@ -11532,8 +11507,7 @@ packages = []
     #[test]
     fn canonical_event_boundary_reports_row_drift() {
         let root = workspace_root();
-        let matrix_path =
-            resolve_event_boundary_matrix_path_with_override(&root, None).expect("matrix path");
+        let matrix_path = resolve_event_boundary_matrix_path(&root).expect("matrix path");
         let raw = fs::read_to_string(&matrix_path).expect("read matrix");
         let drifted = raw.replacen(
             "| message | 14 | Message |",
@@ -11544,7 +11518,7 @@ packages = []
         let override_path = temp.join("spec-coverage.md");
         write_file(&override_path, &drifted);
 
-        let err = validate_canonical_event_boundary_with_override(&root, Some(override_path))
+        let err = validate_canonical_event_boundary_at_path(&root, &override_path)
             .expect_err("message kind drift should fail");
         assert!(err.contains("message kind drift"));
 
@@ -11554,8 +11528,7 @@ packages = []
     #[test]
     fn canonical_event_boundary_rejects_deletion_operation_drift() {
         let root = workspace_root();
-        let matrix_path =
-            resolve_event_boundary_matrix_path_with_override(&root, None).expect("matrix path");
+        let matrix_path = resolve_event_boundary_matrix_path(&root).expect("matrix path");
         let raw = fs::read_to_string(&matrix_path).expect("read matrix");
         let (preamble, table) = raw
             .split_once("## Coverage matrix")
@@ -11572,11 +11545,27 @@ packages = []
         let override_path = temp.join("spec-coverage.md");
         write_file(&override_path, &drifted);
 
-        let error = validate_canonical_event_boundary_with_override(&root, Some(override_path))
+        let error = validate_canonical_event_boundary_at_path(&root, &override_path)
             .expect_err("deletion operation drift must fail");
         assert!(error.contains("deletion_request rpc drift"), "{error}");
 
         let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn event_boundary_never_falls_back_to_parent_human_documentation() {
+        let parent = temp_root("event_boundary_parent_docs");
+        let capsule = parent.join("oss/lib");
+        fs::create_dir_all(&capsule).expect("capsule root");
+        let parent_doc = parent.join(
+            "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
+        );
+        write_file(&parent_doc, &synthetic_event_boundary_matrix());
+
+        let error = resolve_event_boundary_matrix_path(&capsule)
+            .expect_err("parent human documentation must not become contract input");
+        assert!(error.contains(EVENT_BOUNDARY_MATRIX_RELATIVE));
+        let _ = fs::remove_dir_all(parent);
     }
 
     #[test]
@@ -12884,7 +12873,7 @@ crates = ["radroots_a"]
             architecture.push_str(&format!("\n[[package]]\nname = \"{name}\"\n"));
         }
         write_file(
-            &root.join("docs/specs/radroots_crates_release_v1.toml"),
+            &root.join("contracts/crates/release_v1/radroots_crates_release_v1.toml"),
             &architecture,
         );
 

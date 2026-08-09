@@ -1,0 +1,354 @@
+pub mod radroots_trade
+pub mod radroots_trade::evidence
+pub enum radroots_trade::evidence::RadrootsTradeAttestationResultV1
+pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Invalid
+pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Valid
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceStateV1
+pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Complete
+pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Missing
+pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::QueryPartial
+pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::UnsupportedVersion
+pub struct radroots_trade::evidence::RadrootsTradeAttestationRecordV1
+impl radroots_trade::evidence::RadrootsTradeAttestationRecordV1
+pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
+pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::event_id(&self) -> &radroots_event::id::EventId
+pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::new(radroots_event::id::EventId, radroots_event::id::MutationId, radroots_trade::evidence::RadrootsTradeAttestationResultV1) -> Self
+pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::result(&self) -> radroots_trade::evidence::RadrootsTradeAttestationResultV1
+pub struct radroots_trade::evidence::RadrootsTradeMutationRecordV1
+impl radroots_trade::evidence::RadrootsTradeMutationRecordV1
+pub const fn radroots_trade::evidence::RadrootsTradeMutationRecordV1::mutation(&self) -> &radroots_event::trade::TradeMutationEnvelopeV1
+pub const fn radroots_trade::evidence::RadrootsTradeMutationRecordV1::new(core::option::Option<radroots_event::id::EventId>, radroots_event::trade::TradeMutationEnvelopeV1) -> Self
+pub const fn radroots_trade::evidence::RadrootsTradeMutationRecordV1::transport_event_id(&self) -> core::option::Option<&radroots_event::id::EventId>
+pub struct radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1
+impl radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1
+pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::candidate_id(&self) -> &radroots_event::id::CandidateId
+pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::new(radroots_event::id::CandidateId, radroots_trade::model::RadrootsTradePrivateTermsStateV1) -> Self
+pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::state(&self) -> radroots_trade::model::RadrootsTradePrivateTermsStateV1
+pub mod radroots_trade::model
+pub enum radroots_trade::model::OrderIdError
+pub radroots_trade::model::OrderIdError::Empty
+pub radroots_trade::model::OrderIdError::InvalidCharacter
+pub radroots_trade::model::OrderIdError::TooLong
+pub radroots_trade::model::OrderIdError::TooLong::actual: usize
+pub radroots_trade::model::OrderIdError::TooLong::max: usize
+impl core::error::Error for radroots_trade::model::OrderIdError
+impl core::fmt::Display for radroots_trade::model::OrderIdError
+pub fn radroots_trade::model::OrderIdError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_trade::model::RadrootsTradeAgreementStateV1
+pub radroots_trade::model::RadrootsTradeAgreementStateV1::Agreed
+pub radroots_trade::model::RadrootsTradeAgreementStateV1::Cancelled
+pub radroots_trade::model::RadrootsTradeAgreementStateV1::Contested
+pub radroots_trade::model::RadrootsTradeAgreementStateV1::None
+pub enum radroots_trade::model::RadrootsTradeAttestationStateV1
+pub radroots_trade::model::RadrootsTradeAttestationStateV1::Conflicting
+pub radroots_trade::model::RadrootsTradeAttestationStateV1::None
+pub radroots_trade::model::RadrootsTradeAttestationStateV1::PresentInvalid
+pub radroots_trade::model::RadrootsTradeAttestationStateV1::PresentValid
+pub enum radroots_trade::model::RadrootsTradeConflictStateV1
+pub radroots_trade::model::RadrootsTradeConflictStateV1::CancellationConflict
+pub radroots_trade::model::RadrootsTradeConflictStateV1::ConcurrentCandidates
+pub radroots_trade::model::RadrootsTradeConflictStateV1::DecisionConflict
+pub radroots_trade::model::RadrootsTradeConflictStateV1::DoubleAcceptance
+pub radroots_trade::model::RadrootsTradeConflictStateV1::InvalidCausalChain
+pub radroots_trade::model::RadrootsTradeConflictStateV1::InventoryAuthorityConflict
+pub radroots_trade::model::RadrootsTradeConflictStateV1::None
+pub enum radroots_trade::model::RadrootsTradeFulfillmentStateV1
+pub radroots_trade::model::RadrootsTradeFulfillmentStateV1::NotStarted
+pub enum radroots_trade::model::RadrootsTradeNegotiationStateV1
+pub radroots_trade::model::RadrootsTradeNegotiationStateV1::ClosedDeclined
+pub radroots_trade::model::RadrootsTradeNegotiationStateV1::ClosedExpired
+pub radroots_trade::model::RadrootsTradeNegotiationStateV1::None
+pub radroots_trade::model::RadrootsTradeNegotiationStateV1::Open
+pub enum radroots_trade::model::RadrootsTradePaymentStateV1
+pub radroots_trade::model::RadrootsTradePaymentStateV1::NotTracked
+pub enum radroots_trade::model::RadrootsTradePrivateTermsStateV1
+pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::AvailableVerified
+pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::CommitmentMismatch
+pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::Missing
+pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::NotRequired
+pub radroots_trade::model::RadrootsTradePrivateTermsStateV1::Undecryptable
+pub struct radroots_trade::model::OrderId(_)
+impl radroots_trade::model::OrderId
+pub fn radroots_trade::model::OrderId::as_str(&self) -> &str
+pub fn radroots_trade::model::OrderId::into_string(self) -> alloc::string::String
+pub fn radroots_trade::model::OrderId::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_trade::model::OrderIdError>
+impl core::convert::AsRef<str> for radroots_trade::model::OrderId
+pub fn radroots_trade::model::OrderId::as_ref(&self) -> &str
+impl core::convert::From<radroots_trade::model::OrderId> for alloc::string::String
+pub fn alloc::string::String::from(radroots_trade::model::OrderId) -> Self
+impl core::convert::TryFrom<&str> for radroots_trade::model::OrderId
+pub type radroots_trade::model::OrderId::Error = radroots_trade::model::OrderIdError
+pub fn radroots_trade::model::OrderId::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_trade::model::OrderId
+pub type radroots_trade::model::OrderId::Error = radroots_trade::model::OrderIdError
+pub fn radroots_trade::model::OrderId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for radroots_trade::model::OrderId
+pub fn radroots_trade::model::OrderId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_trade::model::OrderId
+pub type radroots_trade::model::OrderId::Err = radroots_trade::model::OrderIdError
+pub fn radroots_trade::model::OrderId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_trade::model::OrderId
+pub fn radroots_trade::model::OrderId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_trade::model::OrderId
+pub fn radroots_trade::model::OrderId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_trade::model::RadrootsTradeAgreementClaimV1
+impl radroots_trade::model::RadrootsTradeAgreementClaimV1
+pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::accepted_by_pubkey(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::candidate_author_pubkey(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::candidate_id(&self) -> &radroots_event::id::CandidateId
+pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
+pub const fn radroots_trade::model::RadrootsTradeAgreementClaimV1::proposal_mutation_id(&self) -> &radroots_event::id::MutationId
+pub fn radroots_trade::model::RadrootsTradeAgreementClaimV1::reservation_commitment(&self) -> &str
+pub struct radroots_trade::model::RadrootsTradeProjectionV1
+impl radroots_trade::Projection
+pub fn radroots_trade::Projection::active_agreement_claim_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::agreement_claims(&self) -> &[radroots_trade::model::RadrootsTradeAgreementClaimV1]
+pub const fn radroots_trade::Projection::agreement_state(&self) -> radroots_trade::model::RadrootsTradeAgreementStateV1
+pub const fn radroots_trade::Projection::attestation_state(&self) -> radroots_trade::model::RadrootsTradeAttestationStateV1
+pub fn radroots_trade::Projection::attestations(&self) -> &[radroots_trade::evidence::RadrootsTradeAttestationRecordV1]
+pub const fn radroots_trade::Projection::buyer_pubkey(&self) -> core::option::Option<&radroots_identity::key::PublicKey>
+pub fn radroots_trade::Projection::cancelled_claim_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::candidate_heads(&self) -> &[radroots_event::id::MutationId]
+pub const fn radroots_trade::Projection::conflict_state(&self) -> radroots_trade::model::RadrootsTradeConflictStateV1
+pub fn radroots_trade::Projection::contested_claim_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::declined_candidate_ids(&self) -> &[radroots_event::id::CandidateId]
+pub const fn radroots_trade::Projection::evidence_state(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceStateV1
+pub const fn radroots_trade::Projection::farm_id(&self) -> core::option::Option<&radroots_event::id::DTag>
+pub const fn radroots_trade::Projection::fulfillment_state(&self) -> radroots_trade::model::RadrootsTradeFulfillmentStateV1
+pub fn radroots_trade::Projection::issues(&self) -> &[radroots_trade::ReducerIssue]
+pub fn radroots_trade::Projection::missing_parent_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::missing_proposal_ids(&self) -> &[radroots_event::id::MutationId]
+pub const fn radroots_trade::Projection::negotiation_state(&self) -> radroots_trade::model::RadrootsTradeNegotiationStateV1
+pub const fn radroots_trade::Projection::payment_state(&self) -> radroots_trade::model::RadrootsTradePaymentStateV1
+pub const fn radroots_trade::Projection::private_terms_state(&self) -> radroots_trade::model::RadrootsTradePrivateTermsStateV1
+pub fn radroots_trade::Projection::projection_digest(&self) -> &str
+pub fn radroots_trade::Projection::reducer_contract_id(&self) -> &str
+pub const fn radroots_trade::Projection::reducer_version(&self) -> u16
+pub const fn radroots_trade::Projection::root_mutation_id(&self) -> core::option::Option<&radroots_event::id::MutationId>
+pub const fn radroots_trade::Projection::seller_pubkey(&self) -> core::option::Option<&radroots_identity::key::PublicKey>
+pub const fn radroots_trade::Projection::trade_id(&self) -> &radroots_event::id::TradeId
+pub fn radroots_trade::Projection::unsupported_mutation_ids(&self) -> &[radroots_event::id::MutationId]
+pub const radroots_trade::model::ORDER_ID_MAX_LEN: usize
+pub mod radroots_trade::reducer
+pub enum radroots_trade::reducer::RadrootsTradeReducerIssueV1
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::CancellationConflict
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::CancellationConflict::cancellation_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::CandidateIdMismatch
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::CandidateIdMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::CandidateIdMismatch::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionAuthorMismatch
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionAuthorMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionConflict
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionConflict::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionParentMissing
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionParentMissing::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DecisionParentMissing::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DoubleAcceptance
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::DoubleAcceptance::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::InvalidCausalChain
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::InvalidCausalChain::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::InvalidMutation
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::InvalidMutation::mutation_id: core::option::Option<radroots_event::id::MutationId>
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::InvalidMutation::reason: alloc::string::String
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingMutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingParent
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingParent::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingParent::parent_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingProposal
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingProposal::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingProposal::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingRootProposal
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingSellerReservation
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MissingSellerReservation::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::MultipleRootProposals
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::PrivateTermsUnavailable
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::PrivateTermsUnavailable::candidate_id: radroots_event::id::CandidateId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ProjectionDigestUnavailable
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ProjectionDigestUnavailable::reason: alloc::string::String
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ReservationAuthorityMismatch
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ReservationAuthorityMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ReservationCandidateMismatch
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ReservationCandidateMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ReservationLineMismatch
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::ReservationLineMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::TradeIdentityMismatch
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::TradeIdentityMismatch::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::UnsupportedSchema
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::UnsupportedSchema::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::reducer::RadrootsTradeReducerIssueV1::UnsupportedSchema::schema_version: u16
+pub struct radroots_trade::reducer::RadrootsTradeReductionInputV1
+impl radroots_trade::ReductionInput
+pub fn radroots_trade::ReductionInput::attestations(&self) -> &[radroots_trade::evidence::RadrootsTradeAttestationRecordV1]
+pub const fn radroots_trade::ReductionInput::evidence_state(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceStateV1
+pub fn radroots_trade::ReductionInput::mutations(&self) -> &[radroots_trade::evidence::RadrootsTradeMutationRecordV1]
+pub fn radroots_trade::ReductionInput::new(radroots_event::id::TradeId) -> Self
+pub const fn radroots_trade::ReductionInput::observed_at_unix_s(&self) -> core::option::Option<u64>
+pub fn radroots_trade::ReductionInput::private_terms(&self) -> &[radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1]
+pub const fn radroots_trade::ReductionInput::trade_id(&self) -> &radroots_event::id::TradeId
+pub fn radroots_trade::ReductionInput::with_attestations(self, alloc::vec::Vec<radroots_trade::evidence::RadrootsTradeAttestationRecordV1>) -> Self
+pub fn radroots_trade::ReductionInput::with_evidence_state(self, radroots_trade::evidence::RadrootsTradeEvidenceStateV1) -> Self
+pub fn radroots_trade::ReductionInput::with_mutations(self, alloc::vec::Vec<radroots_trade::evidence::RadrootsTradeMutationRecordV1>) -> Self
+pub fn radroots_trade::ReductionInput::with_observed_at_unix_s(self, core::option::Option<u64>) -> Self
+pub fn radroots_trade::ReductionInput::with_private_terms(self, alloc::vec::Vec<radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1>) -> Self
+pub const radroots_trade::reducer::RADROOTS_TRADE_REDUCER_CONTRACT_ID: &str
+pub const radroots_trade::reducer::RADROOTS_TRADE_REDUCER_VERSION: u16
+pub fn radroots_trade::reducer::reduce_trade_records(radroots_trade::ReductionInput) -> radroots_trade::Projection
+pub mod radroots_trade::validation
+pub struct radroots_trade::validation::ValidationError
+impl radroots_trade::workflow::Error
+pub const fn radroots_trade::workflow::Error::kind(&self) -> radroots_trade::workflow::ErrorKind
+pub const fn radroots_trade::workflow::Error::protocol_error(&self) -> core::option::Option<&radroots_event::trade::TradeProtocolError>
+impl core::error::Error for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_trade::workflow
+#[non_exhaustive] pub enum radroots_trade::workflow::ErrorKind
+pub radroots_trade::workflow::ErrorKind::InvalidMutation
+pub radroots_trade::workflow::ErrorKind::InvalidPrivateTerms
+pub radroots_trade::workflow::ErrorKind::MissingMutationId
+pub radroots_trade::workflow::ErrorKind::UnsupportedSchema
+#[non_exhaustive] pub enum radroots_trade::workflow::WorkflowAction
+pub radroots_trade::workflow::WorkflowAction::Deliver
+pub radroots_trade::workflow::WorkflowAction::Persist
+pub radroots_trade::workflow::WorkflowAction::Sign
+pub radroots_trade::workflow::WorkflowAction::VerifyPrivateTerms
+pub struct radroots_trade::workflow::Error
+impl radroots_trade::workflow::Error
+pub const fn radroots_trade::workflow::Error::kind(&self) -> radroots_trade::workflow::ErrorKind
+pub const fn radroots_trade::workflow::Error::protocol_error(&self) -> core::option::Option<&radroots_event::trade::TradeProtocolError>
+impl core::error::Error for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::workflow::PrivateTermsPlan
+impl radroots_trade::workflow::PrivateTermsPlan
+pub fn radroots_trade::workflow::PrivateTermsPlan::artifact_id(&self) -> &str
+pub const fn radroots_trade::workflow::PrivateTermsPlan::candidate_id(&self) -> &radroots_event::id::CandidateId
+pub fn radroots_trade::workflow::PrivateTermsPlan::ciphertext_commitment(&self) -> &str
+pub fn radroots_trade::workflow::PrivateTermsPlan::schema_id(&self) -> &str
+pub struct radroots_trade::workflow::WorkflowPlan
+impl radroots_trade::workflow::WorkflowPlan
+pub fn radroots_trade::workflow::WorkflowPlan::into_mutation(self) -> radroots_event::trade::TradeMutationEnvelopeV1
+pub const fn radroots_trade::workflow::WorkflowPlan::kind(&self) -> radroots_event::trade::TradeMutationKindV1
+pub const fn radroots_trade::workflow::WorkflowPlan::mutation(&self) -> &radroots_event::trade::TradeMutationEnvelopeV1
+pub const fn radroots_trade::workflow::WorkflowPlan::mutation_id(&self) -> &radroots_event::id::MutationId
+pub fn radroots_trade::workflow::WorkflowPlan::prepare(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_trade::workflow::Error>
+pub const fn radroots_trade::workflow::WorkflowPlan::private_terms(&self) -> core::option::Option<&radroots_trade::workflow::PrivateTermsPlan>
+pub fn radroots_trade::workflow::WorkflowPlan::required_actions(&self) -> &[radroots_trade::workflow::WorkflowAction]
+pub const fn radroots_trade::workflow::WorkflowPlan::trade_id(&self) -> &radroots_event::id::TradeId
+pub enum radroots_trade::ReducerIssue
+pub radroots_trade::ReducerIssue::CancellationConflict
+pub radroots_trade::ReducerIssue::CancellationConflict::cancellation_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::CandidateIdMismatch
+pub radroots_trade::ReducerIssue::CandidateIdMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::CandidateIdMismatch::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::DecisionAuthorMismatch
+pub radroots_trade::ReducerIssue::DecisionAuthorMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::DecisionConflict
+pub radroots_trade::ReducerIssue::DecisionConflict::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::DecisionParentMissing
+pub radroots_trade::ReducerIssue::DecisionParentMissing::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::DecisionParentMissing::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::DoubleAcceptance
+pub radroots_trade::ReducerIssue::DoubleAcceptance::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::InvalidCausalChain
+pub radroots_trade::ReducerIssue::InvalidCausalChain::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::InvalidMutation
+pub radroots_trade::ReducerIssue::InvalidMutation::mutation_id: core::option::Option<radroots_event::id::MutationId>
+pub radroots_trade::ReducerIssue::InvalidMutation::reason: alloc::string::String
+pub radroots_trade::ReducerIssue::MissingMutationId
+pub radroots_trade::ReducerIssue::MissingParent
+pub radroots_trade::ReducerIssue::MissingParent::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::MissingParent::parent_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::MissingProposal
+pub radroots_trade::ReducerIssue::MissingProposal::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::MissingProposal::proposal_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::MissingRootProposal
+pub radroots_trade::ReducerIssue::MissingSellerReservation
+pub radroots_trade::ReducerIssue::MissingSellerReservation::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::MultipleRootProposals
+pub radroots_trade::ReducerIssue::PrivateTermsUnavailable
+pub radroots_trade::ReducerIssue::PrivateTermsUnavailable::candidate_id: radroots_event::id::CandidateId
+pub radroots_trade::ReducerIssue::ProjectionDigestUnavailable
+pub radroots_trade::ReducerIssue::ProjectionDigestUnavailable::reason: alloc::string::String
+pub radroots_trade::ReducerIssue::ReservationAuthorityMismatch
+pub radroots_trade::ReducerIssue::ReservationAuthorityMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::ReservationCandidateMismatch
+pub radroots_trade::ReducerIssue::ReservationCandidateMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::ReservationLineMismatch
+pub radroots_trade::ReducerIssue::ReservationLineMismatch::decision_mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::TradeIdentityMismatch
+pub radroots_trade::ReducerIssue::TradeIdentityMismatch::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::UnsupportedSchema
+pub radroots_trade::ReducerIssue::UnsupportedSchema::mutation_id: radroots_event::id::MutationId
+pub radroots_trade::ReducerIssue::UnsupportedSchema::schema_version: u16
+pub struct radroots_trade::Error
+impl radroots_trade::workflow::Error
+pub const fn radroots_trade::workflow::Error::kind(&self) -> radroots_trade::workflow::ErrorKind
+pub const fn radroots_trade::workflow::Error::protocol_error(&self) -> core::option::Option<&radroots_event::trade::TradeProtocolError>
+impl core::error::Error for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::Projection
+impl radroots_trade::Projection
+pub fn radroots_trade::Projection::active_agreement_claim_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::agreement_claims(&self) -> &[radroots_trade::model::RadrootsTradeAgreementClaimV1]
+pub const fn radroots_trade::Projection::agreement_state(&self) -> radroots_trade::model::RadrootsTradeAgreementStateV1
+pub const fn radroots_trade::Projection::attestation_state(&self) -> radroots_trade::model::RadrootsTradeAttestationStateV1
+pub fn radroots_trade::Projection::attestations(&self) -> &[radroots_trade::evidence::RadrootsTradeAttestationRecordV1]
+pub const fn radroots_trade::Projection::buyer_pubkey(&self) -> core::option::Option<&radroots_identity::key::PublicKey>
+pub fn radroots_trade::Projection::cancelled_claim_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::candidate_heads(&self) -> &[radroots_event::id::MutationId]
+pub const fn radroots_trade::Projection::conflict_state(&self) -> radroots_trade::model::RadrootsTradeConflictStateV1
+pub fn radroots_trade::Projection::contested_claim_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::declined_candidate_ids(&self) -> &[radroots_event::id::CandidateId]
+pub const fn radroots_trade::Projection::evidence_state(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceStateV1
+pub const fn radroots_trade::Projection::farm_id(&self) -> core::option::Option<&radroots_event::id::DTag>
+pub const fn radroots_trade::Projection::fulfillment_state(&self) -> radroots_trade::model::RadrootsTradeFulfillmentStateV1
+pub fn radroots_trade::Projection::issues(&self) -> &[radroots_trade::ReducerIssue]
+pub fn radroots_trade::Projection::missing_parent_ids(&self) -> &[radroots_event::id::MutationId]
+pub fn radroots_trade::Projection::missing_proposal_ids(&self) -> &[radroots_event::id::MutationId]
+pub const fn radroots_trade::Projection::negotiation_state(&self) -> radroots_trade::model::RadrootsTradeNegotiationStateV1
+pub const fn radroots_trade::Projection::payment_state(&self) -> radroots_trade::model::RadrootsTradePaymentStateV1
+pub const fn radroots_trade::Projection::private_terms_state(&self) -> radroots_trade::model::RadrootsTradePrivateTermsStateV1
+pub fn radroots_trade::Projection::projection_digest(&self) -> &str
+pub fn radroots_trade::Projection::reducer_contract_id(&self) -> &str
+pub const fn radroots_trade::Projection::reducer_version(&self) -> u16
+pub const fn radroots_trade::Projection::root_mutation_id(&self) -> core::option::Option<&radroots_event::id::MutationId>
+pub const fn radroots_trade::Projection::seller_pubkey(&self) -> core::option::Option<&radroots_identity::key::PublicKey>
+pub const fn radroots_trade::Projection::trade_id(&self) -> &radroots_event::id::TradeId
+pub fn radroots_trade::Projection::unsupported_mutation_ids(&self) -> &[radroots_event::id::MutationId]
+pub struct radroots_trade::ReductionInput
+impl radroots_trade::ReductionInput
+pub fn radroots_trade::ReductionInput::attestations(&self) -> &[radroots_trade::evidence::RadrootsTradeAttestationRecordV1]
+pub const fn radroots_trade::ReductionInput::evidence_state(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceStateV1
+pub fn radroots_trade::ReductionInput::mutations(&self) -> &[radroots_trade::evidence::RadrootsTradeMutationRecordV1]
+pub fn radroots_trade::ReductionInput::new(radroots_event::id::TradeId) -> Self
+pub const fn radroots_trade::ReductionInput::observed_at_unix_s(&self) -> core::option::Option<u64>
+pub fn radroots_trade::ReductionInput::private_terms(&self) -> &[radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1]
+pub const fn radroots_trade::ReductionInput::trade_id(&self) -> &radroots_event::id::TradeId
+pub fn radroots_trade::ReductionInput::with_attestations(self, alloc::vec::Vec<radroots_trade::evidence::RadrootsTradeAttestationRecordV1>) -> Self
+pub fn radroots_trade::ReductionInput::with_evidence_state(self, radroots_trade::evidence::RadrootsTradeEvidenceStateV1) -> Self
+pub fn radroots_trade::ReductionInput::with_mutations(self, alloc::vec::Vec<radroots_trade::evidence::RadrootsTradeMutationRecordV1>) -> Self
+pub fn radroots_trade::ReductionInput::with_observed_at_unix_s(self, core::option::Option<u64>) -> Self
+pub fn radroots_trade::ReductionInput::with_private_terms(self, alloc::vec::Vec<radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1>) -> Self
+pub struct radroots_trade::ValidationError
+impl radroots_trade::workflow::Error
+pub const fn radroots_trade::workflow::Error::kind(&self) -> radroots_trade::workflow::ErrorKind
+pub const fn radroots_trade::workflow::Error::protocol_error(&self) -> core::option::Option<&radroots_event::trade::TradeProtocolError>
+impl core::error::Error for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_trade::workflow::Error
+pub fn radroots_trade::workflow::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::WorkflowPlan
+impl radroots_trade::workflow::WorkflowPlan
+pub fn radroots_trade::workflow::WorkflowPlan::into_mutation(self) -> radroots_event::trade::TradeMutationEnvelopeV1
+pub const fn radroots_trade::workflow::WorkflowPlan::kind(&self) -> radroots_event::trade::TradeMutationKindV1
+pub const fn radroots_trade::workflow::WorkflowPlan::mutation(&self) -> &radroots_event::trade::TradeMutationEnvelopeV1
+pub const fn radroots_trade::workflow::WorkflowPlan::mutation_id(&self) -> &radroots_event::id::MutationId
+pub fn radroots_trade::workflow::WorkflowPlan::prepare(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_trade::workflow::Error>
+pub const fn radroots_trade::workflow::WorkflowPlan::private_terms(&self) -> core::option::Option<&radroots_trade::workflow::PrivateTermsPlan>
+pub fn radroots_trade::workflow::WorkflowPlan::required_actions(&self) -> &[radroots_trade::workflow::WorkflowAction]
+pub const fn radroots_trade::workflow::WorkflowPlan::trade_id(&self) -> &radroots_event::id::TradeId

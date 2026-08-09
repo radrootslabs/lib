@@ -13,9 +13,9 @@ policies belong to `radroots_sync` and host applications. It does own bounded
 relay profiles, per-relay reconnect suppression, and evidence-based status.
 
 The authoritative package charter is the
-[`radroots_transport_nostr` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#15-radroots_transport_nostr).
+[`radroots_transport_nostr` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 The reviewed Rust surface is recorded in the
-[public API baseline](../../docs/api/radroots_transport_nostr.txt).
+[public API baseline](../../contracts/api_baselines/radroots_transport_nostr.txt).
 
 ## Configure without connecting
 

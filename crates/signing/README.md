@@ -12,7 +12,7 @@ belongs in `radroots_nostr_connect`; applications compose those adapters in
 `radroots_sdk` or their own host layer.
 
 The authoritative package charter is the
-[`radroots_signing` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#8-radroots_signing).
+[`radroots_signing` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 
 ## Typical flow
 

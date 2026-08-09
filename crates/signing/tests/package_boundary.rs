@@ -9,7 +9,7 @@ use radroots_signing::{
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const EXAMPLE: &str = include_str!("../examples/host_signer.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_signing.txt");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_signing.txt");
 const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 
@@ -150,7 +150,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "## Security and side effects",
         "## Features",
         "## Intended consumers",
-        "radroots_crates_release_v1.md#8-radroots_signing",
+        "radroots_crates_release_v1.toml",
         "examples/host_signer.rs",
     ] {
         assert!(README.contains(required), "README is missing {required}");

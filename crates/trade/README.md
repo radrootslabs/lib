@@ -29,7 +29,7 @@ human or business-workflow identifier and has no conversion to or from
 
 Operational-listing host planning and binding-generation machinery are outside
 this algorithm package. The reviewed Rust surface is recorded in the
-[public API baseline](../../docs/api/radroots_trade.txt).
+[public API baseline](../../contracts/api_baselines/radroots_trade.txt).
 
 ## Deterministic reduction
 
@@ -140,9 +140,9 @@ storage, orchestration, and front-door packages.
 
 The authoritative Release V1 responsibility, dependency, feature, module,
 root-export, and forbidden-scope contract is the
-[Radroots crates Release V1 specification](../../docs/specs/radroots_crates_release_v1.md).
-The baseline generation procedure and toolchain are documented in
-[`docs/api/README.md`](../../docs/api/README.md).
+[Radroots crates Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
+The reviewed surface is the
+[`radroots_trade` API baseline](../../contracts/api_baselines/radroots_trade.txt).
 
 ## Copyright
 

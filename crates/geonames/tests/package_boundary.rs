@@ -5,8 +5,7 @@ use std::path::Path;
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
 const EXAMPLE: &str = include_str!("../examples/prepare_query.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_geonames.txt");
-const API_INDEX: &str = include_str!("../../../docs/api/README.md");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_geonames.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
 const PUBLISH_POLICY: &str = include_str!("../../../contracts/releases/publish_policy.toml");
 
@@ -49,9 +48,9 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "## Database and query behavior",
         "## Errors, serialization, and side effects",
         "## Intended consumers",
-        "radroots_crates_release_v1.md#17-radroots_geonames",
+        "radroots_crates_release_v1.toml",
         "examples/prepare_query.rs",
-        "docs/api/radroots_geonames.txt",
+        "contracts/api_baselines/radroots_geonames.txt",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -97,10 +96,6 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
             "public API exposes `{forbidden}`"
         );
     }
-    assert!(
-        API_INDEX
-            .contains("| `radroots_geonames` | [`radroots_geonames.txt`](radroots_geonames.txt) |")
-    );
 }
 
 #[test]

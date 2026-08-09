@@ -116,7 +116,7 @@ fn public_api_has_no_redundant_radroots_type_prefixes() {
         .parent()
         .and_then(Path::parent)
         .expect("lib repo root");
-    let baseline = fs::read_to_string(repo_root.join("docs/api/radroots_event.txt"))
+    let baseline = fs::read_to_string(repo_root.join("contracts/api_baselines/radroots_event.txt"))
         .expect("read radroots_event public API baseline");
     let mut prefixed = baseline
         .split(|character: char| !is_identifier_character(character))

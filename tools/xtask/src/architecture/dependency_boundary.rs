@@ -570,7 +570,7 @@ mod tests {
 
     const POLICY: &str = include_str!("../../../../contracts/releases/package_tiers.toml");
     const ARCHITECTURE: &str =
-        include_str!("../../../../docs/specs/radroots_crates_release_v1.toml");
+        include_str!("../../../../contracts/crates/release_v1/radroots_crates_release_v1.toml");
     const DOMAIN_TO_STORAGE: &str =
         include_str!("../../tests/fixtures/dependency-boundaries/domain-to-storage.json");
     const SPI_TO_ADAPTER: &str =

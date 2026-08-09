@@ -11,7 +11,7 @@ and `Result`. Advanced operations live in the `farm`, `listing`, `trade`,
 modules.
 
 The package charter is the normative [`radroots_sdk` crate
-specification](../../docs/specs/radroots_crates_release_v1.md#18-radroots_sdk).
+specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 This advanced front door is intended for CLI, Studio, FFI/mobile, and native
 applications that need to compose storage, signing, transport, or sync
 capabilities directly. Ordinary Rust applications should use the curated
@@ -171,4 +171,4 @@ publication remains blocked pending the approval packet and a separately
 authorized operator step. The crate is licensed under `MIT OR Apache-2.0`.
 
 The reviewed all-features public API baseline is recorded at
-[`docs/api/radroots_sdk.txt`](../../docs/api/radroots_sdk.txt).
+[`contracts/api_baselines/radroots_sdk.txt`](../../contracts/api_baselines/radroots_sdk.txt).

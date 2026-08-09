@@ -26,7 +26,7 @@ The curated root exports are `Client`, `Server`, `Method`, `Permission`,
 `Request`, `Response`, `BunkerUri`, `ClientUri`, and `Error`. Supporting types
 remain in their owning modules so callers make protocol boundaries explicit.
 The reviewed Rust surface is recorded in the
-[public API baseline](../../docs/api/radroots_nostr_connect.txt).
+[public API baseline](../../contracts/api_baselines/radroots_nostr_connect.txt).
 
 ## Preparing a client request
 
@@ -130,9 +130,9 @@ applications, and host runtimes.
 
 The authoritative responsibility, dependency, feature, module, root-export,
 and forbidden-scope contract is the
-[Radroots crates Release V1 specification](../../docs/specs/radroots_crates_release_v1.md).
-The baseline generation procedure and pinned toolchain are documented in
-[`docs/api/README.md`](../../docs/api/README.md).
+[Radroots crates Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
+The reviewed surface is the
+[`radroots_nostr_connect` API baseline](../../contracts/api_baselines/radroots_nostr_connect.txt).
 
 ## Copyright
 

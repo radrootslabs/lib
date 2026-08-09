@@ -1,0 +1,791 @@
+pub mod radroots_protocol
+pub mod radroots_protocol::capability
+pub mod radroots_protocol::capability::v1
+pub enum radroots_protocol::capability::v1::Availability
+pub radroots_protocol::capability::v1::Availability::Available
+pub radroots_protocol::capability::v1::Availability::Degraded
+pub radroots_protocol::capability::v1::Availability::Unavailable
+#[non_exhaustive] pub enum radroots_protocol::capability::v1::Error
+pub radroots_protocol::capability::v1::Error::DuplicateTransportKind
+pub radroots_protocol::capability::v1::Error::DuplicateTransportKind::kind: radroots_protocol::capability::v1::TransportKind
+pub radroots_protocol::capability::v1::Error::EmptyTransportKind
+pub radroots_protocol::capability::v1::Error::InvalidMeshScopeId
+pub radroots_protocol::capability::v1::Error::InvalidReticulumDestination
+pub radroots_protocol::capability::v1::Error::InvalidTransportKind
+pub radroots_protocol::capability::v1::Error::InvalidTransportKind::value: alloc::string::String
+pub radroots_protocol::capability::v1::Error::MissingRequiredTransport
+pub radroots_protocol::capability::v1::Error::MissingRequiredTransport::kind: radroots_protocol::capability::v1::TransportKind
+impl core::error::Error for radroots_protocol::capability::v1::Error
+impl core::fmt::Display for radroots_protocol::capability::v1::Error
+pub fn radroots_protocol::capability::v1::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::capability::v1::Maturity
+pub radroots_protocol::capability::v1::Maturity::Experimental
+pub radroots_protocol::capability::v1::Maturity::Preview
+pub radroots_protocol::capability::v1::Maturity::Stable
+pub struct radroots_protocol::capability::v1::MeshScopeId
+impl radroots_protocol::capability::v1::MeshScopeId
+pub fn radroots_protocol::capability::v1::MeshScopeId::as_str(&self) -> &str
+pub fn radroots_protocol::capability::v1::MeshScopeId::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::capability::v1::Error>
+pub struct radroots_protocol::capability::v1::ReticulumDestination
+impl radroots_protocol::capability::v1::ReticulumDestination
+pub fn radroots_protocol::capability::v1::ReticulumDestination::as_str(&self) -> &str
+pub fn radroots_protocol::capability::v1::ReticulumDestination::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::capability::v1::Error>
+pub struct radroots_protocol::capability::v1::ReticulumTarget
+pub radroots_protocol::capability::v1::ReticulumTarget::destination: radroots_protocol::capability::v1::ReticulumDestination
+pub radroots_protocol::capability::v1::ReticulumTarget::mesh_scope: core::option::Option<radroots_protocol::capability::v1::MeshScopeId>
+pub struct radroots_protocol::capability::v1::TransportDescriptor
+pub radroots_protocol::capability::v1::TransportDescriptor::availability: radroots_protocol::capability::v1::Availability
+pub radroots_protocol::capability::v1::TransportDescriptor::can_deliver: bool
+pub radroots_protocol::capability::v1::TransportDescriptor::can_discover: bool
+pub radroots_protocol::capability::v1::TransportDescriptor::can_fetch: bool
+pub radroots_protocol::capability::v1::TransportDescriptor::can_gateway_forward: bool
+pub radroots_protocol::capability::v1::TransportDescriptor::can_observe_receipts: bool
+pub radroots_protocol::capability::v1::TransportDescriptor::kind: radroots_protocol::capability::v1::TransportKind
+pub radroots_protocol::capability::v1::TransportDescriptor::maturity: radroots_protocol::capability::v1::Maturity
+pub radroots_protocol::capability::v1::TransportDescriptor::required_for_v1: bool
+pub struct radroots_protocol::capability::v1::TransportKind
+impl radroots_protocol::capability::v1::TransportKind
+pub const radroots_protocol::capability::v1::TransportKind::LOCAL: Self
+pub const radroots_protocol::capability::v1::TransportKind::NOSTR: Self
+pub const radroots_protocol::capability::v1::TransportKind::RADROOTSD: Self
+pub const radroots_protocol::capability::v1::TransportKind::RETICULUM: Self
+pub fn radroots_protocol::capability::v1::TransportKind::as_str(&self) -> &str
+pub fn radroots_protocol::capability::v1::TransportKind::parse(&str) -> core::result::Result<Self, radroots_protocol::capability::v1::Error>
+impl core::fmt::Display for radroots_protocol::capability::v1::TransportKind
+pub fn radroots_protocol::capability::v1::TransportKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_protocol::capability::v1::TransportKind
+pub fn radroots_protocol::capability::v1::TransportKind::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::capability::v1::TransportKind
+pub fn radroots_protocol::capability::v1::TransportKind::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_protocol::capability::v1::CATALOG: &[radroots_protocol::capability::v1::TransportDescriptor]
+pub const radroots_protocol::capability::v1::MAX_TRANSPORT_KIND_BYTES: usize
+pub const radroots_protocol::capability::v1::SCHEMAS: &[radroots_protocol::schema::Metadata]
+pub fn radroots_protocol::capability::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
+pub fn radroots_protocol::capability::v1::validate_catalog(&[radroots_protocol::capability::v1::TransportDescriptor]) -> core::result::Result<(), radroots_protocol::capability::v1::Error>
+pub mod radroots_protocol::error
+pub mod radroots_protocol::error::v1
+pub enum radroots_protocol::error::v1::Class
+pub radroots_protocol::error::v1::Class::Authorization
+pub radroots_protocol::error::v1::Class::Capability
+pub radroots_protocol::error::v1::Class::Conflict
+pub radroots_protocol::error::v1::Class::Contract
+pub radroots_protocol::error::v1::Class::Internal
+pub radroots_protocol::error::v1::Class::Maintenance
+pub radroots_protocol::error::v1::Class::Network
+pub radroots_protocol::error::v1::Class::Operation
+pub radroots_protocol::error::v1::Class::Privacy
+pub radroots_protocol::error::v1::Class::Projection
+pub radroots_protocol::error::v1::Class::Query
+pub radroots_protocol::error::v1::Class::Resource
+pub radroots_protocol::error::v1::Class::Runtime
+pub radroots_protocol::error::v1::Class::Security
+pub radroots_protocol::error::v1::Class::Signer
+pub radroots_protocol::error::v1::Class::Storage
+pub radroots_protocol::error::v1::Class::Sync
+pub radroots_protocol::error::v1::Class::Unknown
+pub radroots_protocol::error::v1::Class::Validation
+pub enum radroots_protocol::error::v1::DetailValue
+pub radroots_protocol::error::v1::DetailValue::Bool(bool)
+pub radroots_protocol::error::v1::DetailValue::Signed(i64)
+pub radroots_protocol::error::v1::DetailValue::Text(alloc::string::String)
+pub radroots_protocol::error::v1::DetailValue::Unsigned(u64)
+#[non_exhaustive] pub enum radroots_protocol::error::v1::Error
+pub radroots_protocol::error::v1::Error::DescriptorMismatch
+pub radroots_protocol::error::v1::Error::DescriptorMismatch::code: radroots_protocol::error::v1::KnownCode
+pub radroots_protocol::error::v1::Error::DuplicateDetailKey
+pub radroots_protocol::error::v1::Error::ExpectedUnknownCode
+pub radroots_protocol::error::v1::Error::InvalidCapabilityId
+pub radroots_protocol::error::v1::Error::InvalidCode
+pub radroots_protocol::error::v1::Error::InvalidDetailKey
+pub radroots_protocol::error::v1::Error::InvalidDetailText
+pub radroots_protocol::error::v1::Error::InvalidSafeMessage
+pub radroots_protocol::error::v1::Error::InvalidUnknownCodePolicy
+pub radroots_protocol::error::v1::Error::SensitiveDetailKey
+pub radroots_protocol::error::v1::Error::SensitiveMessage
+pub radroots_protocol::error::v1::Error::TooManyDetails
+pub radroots_protocol::error::v1::Error::UnsupportedSchemaVersion
+pub radroots_protocol::error::v1::Error::UnsupportedSchemaVersion::version: u16
+impl core::error::Error for radroots_protocol::error::v1::Error
+impl core::fmt::Display for radroots_protocol::error::v1::Error
+pub fn radroots_protocol::error::v1::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::error::v1::KnownCode
+pub radroots_protocol::error::v1::KnownCode::AmbiguousTrade
+pub radroots_protocol::error::v1::KnownCode::ApprovalExpired
+pub radroots_protocol::error::v1::KnownCode::ApprovalInvalid
+pub radroots_protocol::error::v1::KnownCode::ApprovalReplayed
+pub radroots_protocol::error::v1::KnownCode::ApprovalRequired
+pub radroots_protocol::error::v1::KnownCode::AuthorizationDenied
+pub radroots_protocol::error::v1::KnownCode::Backpressure
+pub radroots_protocol::error::v1::KnownCode::BackupAuthenticationFailed
+pub radroots_protocol::error::v1::KnownCode::BackupInvalid
+pub radroots_protocol::error::v1::KnownCode::CancelledNoCommit
+pub radroots_protocol::error::v1::KnownCode::DatabaseBusy
+pub radroots_protocol::error::v1::KnownCode::DeadlineExceeded
+pub radroots_protocol::error::v1::KnownCode::DmRelayUnconfigured
+pub radroots_protocol::error::v1::KnownCode::IdempotencyConflict
+pub radroots_protocol::error::v1::KnownCode::InternalError
+pub radroots_protocol::error::v1::KnownCode::InvalidArgument
+pub radroots_protocol::error::v1::KnownCode::InvalidCursor
+pub radroots_protocol::error::v1::KnownCode::InventoryUnavailable
+pub radroots_protocol::error::v1::KnownCode::LocalCommittedDeliveryPending
+pub radroots_protocol::error::v1::KnownCode::MaintenanceInProgress
+pub radroots_protocol::error::v1::KnownCode::MediaPolicyDenied
+pub radroots_protocol::error::v1::KnownCode::NotFound
+pub radroots_protocol::error::v1::KnownCode::OperationInProgress
+pub radroots_protocol::error::v1::KnownCode::PreconditionChanged
+pub radroots_protocol::error::v1::KnownCode::PrivateDataUnavailable
+pub radroots_protocol::error::v1::KnownCode::ProfileWriterInUse
+pub radroots_protocol::error::v1::KnownCode::ProjectionFailed
+pub radroots_protocol::error::v1::KnownCode::ProjectionGenerationChanged
+pub radroots_protocol::error::v1::KnownCode::ProjectionStale
+pub radroots_protocol::error::v1::KnownCode::RelayAuthRejected
+pub radroots_protocol::error::v1::KnownCode::RelayAuthRequired
+pub radroots_protocol::error::v1::KnownCode::RelayPaymentRequired
+pub radroots_protocol::error::v1::KnownCode::RelayPolicyRestricted
+pub radroots_protocol::error::v1::KnownCode::RelayPowRequired
+pub radroots_protocol::error::v1::KnownCode::RelayRateLimited
+pub radroots_protocol::error::v1::KnownCode::RestoreFailed
+pub radroots_protocol::error::v1::KnownCode::RevisionRequired
+pub radroots_protocol::error::v1::KnownCode::SchemaTooNew
+pub radroots_protocol::error::v1::KnownCode::SignerCancelled
+pub radroots_protocol::error::v1::KnownCode::SignerCapabilityMissing
+pub radroots_protocol::error::v1::KnownCode::SignerOutputInvalid
+pub radroots_protocol::error::v1::KnownCode::SignerRejected
+pub radroots_protocol::error::v1::KnownCode::SignerTimeout
+pub radroots_protocol::error::v1::KnownCode::SignerUnavailable
+pub radroots_protocol::error::v1::KnownCode::StaleListingRevision
+pub radroots_protocol::error::v1::KnownCode::StorageIntegrityFailed
+pub radroots_protocol::error::v1::KnownCode::StorageSpaceInsufficient
+pub radroots_protocol::error::v1::KnownCode::SyncPartial
+pub radroots_protocol::error::v1::KnownCode::SyncSaturated
+pub radroots_protocol::error::v1::KnownCode::TransportOperationUnavailable
+pub radroots_protocol::error::v1::KnownCode::TransportPartial
+pub radroots_protocol::error::v1::KnownCode::UnsupportedCapability
+pub radroots_protocol::error::v1::KnownCode::UnsupportedContractVersion
+pub radroots_protocol::error::v1::KnownCode::UnsupportedProfileSchema
+pub radroots_protocol::error::v1::KnownCode::ValidationExpired
+pub radroots_protocol::error::v1::KnownCode::ValidationPending
+pub radroots_protocol::error::v1::KnownCode::ValidatorSetInvalid
+impl radroots_protocol::error::v1::KnownCode
+pub const radroots_protocol::error::v1::KnownCode::ALL: &'static [Self]
+pub const fn radroots_protocol::error::v1::KnownCode::as_str(self) -> &'static str
+pub const fn radroots_protocol::error::v1::KnownCode::descriptor(self) -> radroots_protocol::error::v1::Descriptor
+pub fn radroots_protocol::error::v1::KnownCode::parse(&str) -> core::option::Option<Self>
+pub enum radroots_protocol::error::v1::RecoveryAction
+pub radroots_protocol::error::v1::RecoveryAction::CompleteSignerAuthentication
+pub radroots_protocol::error::v1::RecoveryAction::ConfigureGeoNamesCache
+pub radroots_protocol::error::v1::RecoveryAction::ConfigureSigner
+pub radroots_protocol::error::v1::RecoveryAction::ConfigureTransportTargets
+pub radroots_protocol::error::v1::RecoveryAction::EnableRequiredFeature
+pub radroots_protocol::error::v1::RecoveryAction::FixRequest
+pub radroots_protocol::error::v1::RecoveryAction::InspectGeoNamesAsset
+pub radroots_protocol::error::v1::RecoveryAction::InspectLocalStores
+pub radroots_protocol::error::v1::RecoveryAction::RetryAfterTransportFailure
+pub radroots_protocol::error::v1::RecoveryAction::RetryGeoNamesDownload
+pub radroots_protocol::error::v1::RecoveryAction::RetryOperationWithSameIdempotencyKey
+pub radroots_protocol::error::v1::RecoveryAction::SelectAuthorizedActor
+pub struct radroots_protocol::error::v1::CapabilityId(_)
+impl radroots_protocol::error::v1::CapabilityId
+pub fn radroots_protocol::error::v1::CapabilityId::as_str(&self) -> &str
+pub fn radroots_protocol::error::v1::CapabilityId::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::error::v1::Error>
+impl serde_core::ser::Serialize for radroots_protocol::error::v1::CapabilityId
+pub fn radroots_protocol::error::v1::CapabilityId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::error::v1::CapabilityId
+pub fn radroots_protocol::error::v1::CapabilityId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_protocol::error::v1::Code(_)
+impl radroots_protocol::error::v1::Code
+pub fn radroots_protocol::error::v1::Code::as_str(&self) -> &str
+pub fn radroots_protocol::error::v1::Code::known(radroots_protocol::error::v1::KnownCode) -> Self
+pub fn radroots_protocol::error::v1::Code::known_code(&self) -> core::option::Option<radroots_protocol::error::v1::KnownCode>
+pub fn radroots_protocol::error::v1::Code::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::error::v1::Error>
+impl serde_core::ser::Serialize for radroots_protocol::error::v1::Code
+pub fn radroots_protocol::error::v1::Code::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::error::v1::Code
+pub fn radroots_protocol::error::v1::Code::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_protocol::error::v1::Descriptor
+pub radroots_protocol::error::v1::Descriptor::class: radroots_protocol::error::v1::Class
+pub radroots_protocol::error::v1::Descriptor::code: radroots_protocol::error::v1::KnownCode
+pub radroots_protocol::error::v1::Descriptor::recovery_actions: &'static [radroots_protocol::error::v1::RecoveryAction]
+pub radroots_protocol::error::v1::Descriptor::retryable: bool
+pub struct radroots_protocol::error::v1::Detail
+pub radroots_protocol::error::v1::Detail::key: alloc::string::String
+pub radroots_protocol::error::v1::Detail::value: radroots_protocol::error::v1::DetailValue
+impl radroots_protocol::error::v1::Detail
+pub fn radroots_protocol::error::v1::Detail::new(impl core::convert::Into<alloc::string::String>, radroots_protocol::error::v1::DetailValue) -> Self
+pub struct radroots_protocol::error::v1::ErrorReport
+impl radroots_protocol::error::v1::ErrorReport
+pub fn radroots_protocol::error::v1::ErrorReport::capability_id(&self) -> core::option::Option<&radroots_protocol::error::v1::CapabilityId>
+pub const fn radroots_protocol::error::v1::ErrorReport::class(&self) -> radroots_protocol::error::v1::Class
+pub fn radroots_protocol::error::v1::ErrorReport::code(&self) -> &radroots_protocol::error::v1::Code
+pub fn radroots_protocol::error::v1::ErrorReport::details(&self) -> &radroots_protocol::error::v1::SafeDetails
+pub fn radroots_protocol::error::v1::ErrorReport::known(radroots_protocol::error::v1::KnownCode, core::option::Option<radroots_protocol::runtime::v1::OperationId>, core::option::Option<radroots_protocol::error::v1::CapabilityId>, radroots_protocol::error::v1::SafeMessage, radroots_protocol::error::v1::SafeDetails) -> Self
+pub fn radroots_protocol::error::v1::ErrorReport::message(&self) -> &radroots_protocol::error::v1::SafeMessage
+pub const fn radroots_protocol::error::v1::ErrorReport::operation_id(&self) -> core::option::Option<radroots_protocol::runtime::v1::OperationId>
+pub fn radroots_protocol::error::v1::ErrorReport::recovery_actions(&self) -> &[radroots_protocol::error::v1::RecoveryAction]
+pub fn radroots_protocol::error::v1::ErrorReport::redacted_from_source(radroots_protocol::error::v1::KnownCode, core::option::Option<radroots_protocol::runtime::v1::OperationId>, core::option::Option<radroots_protocol::error::v1::CapabilityId>) -> Self
+pub const fn radroots_protocol::error::v1::ErrorReport::retryable(&self) -> bool
+pub const fn radroots_protocol::error::v1::ErrorReport::schema_version(&self) -> u16
+pub fn radroots_protocol::error::v1::ErrorReport::unknown(radroots_protocol::error::v1::Code) -> core::result::Result<Self, radroots_protocol::error::v1::Error>
+pub fn radroots_protocol::error::v1::ErrorReport::validate(&self) -> core::result::Result<(), radroots_protocol::error::v1::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::error::v1::ErrorReport
+pub fn radroots_protocol::error::v1::ErrorReport::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_protocol::error::v1::SafeDetails
+impl radroots_protocol::error::v1::SafeDetails
+pub fn radroots_protocol::error::v1::SafeDetails::entries(&self) -> &[radroots_protocol::error::v1::Detail]
+pub fn radroots_protocol::error::v1::SafeDetails::is_empty(&self) -> bool
+pub fn radroots_protocol::error::v1::SafeDetails::try_new(impl core::iter::traits::collect::IntoIterator<Item = radroots_protocol::error::v1::Detail>) -> core::result::Result<Self, radroots_protocol::error::v1::Error>
+impl core::convert::From<radroots_protocol::error::v1::SafeDetails> for alloc::vec::Vec<radroots_protocol::error::v1::Detail>
+pub fn alloc::vec::Vec<radroots_protocol::error::v1::Detail>::from(radroots_protocol::error::v1::SafeDetails) -> Self
+impl core::convert::TryFrom<alloc::vec::Vec<radroots_protocol::error::v1::Detail>> for radroots_protocol::error::v1::SafeDetails
+pub type radroots_protocol::error::v1::SafeDetails::Error = radroots_protocol::error::v1::Error
+pub fn radroots_protocol::error::v1::SafeDetails::try_from(alloc::vec::Vec<radroots_protocol::error::v1::Detail>) -> core::result::Result<Self, Self::Error>
+pub struct radroots_protocol::error::v1::SafeMessage(_)
+impl radroots_protocol::error::v1::SafeMessage
+pub fn radroots_protocol::error::v1::SafeMessage::as_str(&self) -> &str
+pub fn radroots_protocol::error::v1::SafeMessage::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::error::v1::Error>
+pub fn radroots_protocol::error::v1::SafeMessage::redacted() -> Self
+impl serde_core::ser::Serialize for radroots_protocol::error::v1::SafeMessage
+pub fn radroots_protocol::error::v1::SafeMessage::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::error::v1::SafeMessage
+pub fn radroots_protocol::error::v1::SafeMessage::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_protocol::error::v1::CATALOG: &[radroots_protocol::error::v1::Descriptor]
+pub const radroots_protocol::error::v1::REDACTED_MESSAGE: &str
+pub const radroots_protocol::error::v1::SCHEMAS: &[radroots_protocol::schema::Metadata]
+pub const radroots_protocol::error::v1::SCHEMA_ID: &str
+pub const radroots_protocol::error::v1::SCHEMA_VERSION: u16
+pub fn radroots_protocol::error::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
+pub mod radroots_protocol::event
+pub mod radroots_protocol::event::v1
+#[non_exhaustive] pub enum radroots_protocol::event::v1::Error
+pub radroots_protocol::event::v1::Error::DuplicateEventKind
+pub radroots_protocol::event::v1::Error::DuplicateEventKind::kind: u32
+pub radroots_protocol::event::v1::Error::DuplicateEventName
+pub radroots_protocol::event::v1::Error::DuplicateEventName::name: alloc::string::String
+pub radroots_protocol::event::v1::Error::DuplicateTradeState
+pub radroots_protocol::event::v1::Error::DuplicateTradeState::state: radroots_protocol::event::v1::TradeState
+pub radroots_protocol::event::v1::Error::RetiredEventKind
+pub radroots_protocol::event::v1::Error::RetiredEventKind::kind: u32
+pub radroots_protocol::event::v1::Error::RetiredEventName
+pub radroots_protocol::event::v1::Error::RetiredEventName::name: alloc::string::String
+pub radroots_protocol::event::v1::Error::RetiredTradeState
+pub radroots_protocol::event::v1::Error::RetiredTradeState::state: alloc::string::String
+pub radroots_protocol::event::v1::Error::UnknownTradeState
+pub radroots_protocol::event::v1::Error::UnknownTradeState::value: alloc::string::String
+impl core::error::Error for radroots_protocol::event::v1::Error
+impl core::fmt::Display for radroots_protocol::event::v1::Error
+pub fn radroots_protocol::event::v1::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::event::v1::EventClass
+pub radroots_protocol::event::v1::EventClass::Addressable
+pub radroots_protocol::event::v1::EventClass::Regular
+pub radroots_protocol::event::v1::EventClass::Replaceable
+pub radroots_protocol::event::v1::EventClass::UnsignedRumor
+pub enum radroots_protocol::event::v1::TradeState
+pub radroots_protocol::event::v1::TradeState::AgreedPendingValidation
+pub radroots_protocol::event::v1::TradeState::Cancelled
+pub radroots_protocol::event::v1::TradeState::Committed
+pub radroots_protocol::event::v1::TradeState::Declined
+pub radroots_protocol::event::v1::TradeState::Invalid
+pub radroots_protocol::event::v1::TradeState::Missing
+pub radroots_protocol::event::v1::TradeState::Requested
+pub radroots_protocol::event::v1::TradeState::ValidationExpired
+impl radroots_protocol::event::v1::TradeState
+pub const fn radroots_protocol::event::v1::TradeState::as_str(self) -> &'static str
+pub fn radroots_protocol::event::v1::TradeState::parse(&str) -> core::result::Result<Self, radroots_protocol::event::v1::Error>
+pub struct radroots_protocol::event::v1::EventDescriptor
+pub radroots_protocol::event::v1::EventDescriptor::event_class: radroots_protocol::event::v1::EventClass
+pub radroots_protocol::event::v1::EventDescriptor::kind: u32
+pub radroots_protocol::event::v1::EventDescriptor::name: &'static str
+pub radroots_protocol::event::v1::EventDescriptor::purpose: &'static str
+pub const radroots_protocol::event::v1::CATALOG: &[radroots_protocol::event::v1::EventDescriptor]
+pub const radroots_protocol::event::v1::RETIRED_KINDS: &[u32]
+pub const radroots_protocol::event::v1::SCHEMAS: &[radroots_protocol::schema::Metadata]
+pub const radroots_protocol::event::v1::TRADE_STATE_VOCABULARY: &[radroots_protocol::event::v1::TradeState]
+pub fn radroots_protocol::event::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
+pub fn radroots_protocol::event::v1::validate_catalog(&[radroots_protocol::event::v1::EventDescriptor]) -> core::result::Result<(), radroots_protocol::event::v1::Error>
+pub fn radroots_protocol::event::v1::validate_trade_state_vocabulary(&[radroots_protocol::event::v1::TradeState]) -> core::result::Result<(), radroots_protocol::event::v1::Error>
+pub mod radroots_protocol::radrootsd
+pub mod radroots_protocol::radrootsd::transport_publish
+pub mod radroots_protocol::radrootsd::transport_publish::v5
+pub enum radroots_protocol::radrootsd::transport_publish::v5::CapabilityAvailability
+pub radroots_protocol::radrootsd::transport_publish::v5::CapabilityAvailability::Available
+pub radroots_protocol::radrootsd::transport_publish::v5::CapabilityAvailability::Degraded
+pub radroots_protocol::radrootsd::transport_publish::v5::CapabilityAvailability::Unavailable
+pub enum radroots_protocol::radrootsd::transport_publish::v5::CapabilityMaturity
+pub radroots_protocol::radrootsd::transport_publish::v5::CapabilityMaturity::Preview
+pub radroots_protocol::radrootsd::transport_publish::v5::CapabilityMaturity::Stable
+pub enum radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::All
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::Any
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::Quorum
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::Quorum::quorum: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::RequiredTargets
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::RequiredTargets::targets: alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint>
+impl radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy
+pub fn radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::required_target_count(&self, usize) -> usize
+pub fn radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::required_targets(alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint>) -> core::result::Result<Self, radroots_protocol::radrootsd::transport_publish::v5::Error>
+pub fn radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy::validate(&self) -> core::result::Result<(), radroots_protocol::radrootsd::transport_publish::v5::Error>
+pub enum radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName::All
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName::Any
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName::Quorum
+pub radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName::RequiredTargets
+pub enum radroots_protocol::radrootsd::transport_publish::v5::Error
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::DuplicateRequiredTargetFingerprint
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::DuplicateRequiredTargetFingerprint::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::DuplicateTarget
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::DuplicateTarget::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyEndpointUri
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyEndpointUri::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyIdempotencyKey
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyJobId
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyPrincipalId
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyRawEventJson
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyRequiredTargetSet
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTag
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTag::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTargetLabel
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTargetLabel::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTargetScope
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTargetScope::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTargetSet
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTransportKind
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::EmptyTransportKind::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidEndpointUri
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidEndpointUri::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidExplicitTargetOutcome
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidExplicitTargetOutcome::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidHexField
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidHexField::expected_len: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidHexField::field: &'static str
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobAcknowledgedCount
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobAcknowledgedCount::actual: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobAcknowledgedCount::expected: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobCompletedAt
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobDeliverySatisfiedState
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobRetryableCount
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobRetryableCount::actual: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobRetryableCount::expected: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobStatusState
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTargetCount
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTargetCount::actual: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTargetCount::expected: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTerminalCount
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTerminalCount::actual: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTerminalCount::expected: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidJobTerminalState
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidQuorum
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidReticulumBehavior
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidReticulumBehavior::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidReticulumEndpoint
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidReticulumEndpoint::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidReticulumOutcome
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidReticulumOutcome::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetLabel
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetLabel::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetOutcomeKind
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetOutcomeKind::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetScope
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetScope::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetSource
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTargetSource::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTimeoutMs
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTransportKind
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::InvalidTransportKind::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::RequiredTargetNotInTargetSet
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::RequiredTargetNotInTargetSet::index: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::TargetLimitExceeded
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::TargetLimitExceeded::actual: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Error::TargetLimitExceeded::max: usize
+impl core::error::Error for radroots_protocol::radrootsd::transport_publish::v5::Error
+impl core::fmt::Display for radroots_protocol::radrootsd::transport_publish::v5::Error
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::radrootsd::transport_publish::v5::Implementation
+pub radroots_protocol::radrootsd::transport_publish::v5::Implementation::Mock
+pub radroots_protocol::radrootsd::transport_publish::v5::Implementation::Real
+pub enum radroots_protocol::radrootsd::transport_publish::v5::JobStatus
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::Accepted
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::DeliveryDeferred
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::DeliveryDeferredUntilImplemented
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::DeliverySatisfied
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::DeliveryUnsatisfiedRetryable
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::DeliveryUnsatisfiedTerminal
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::Publishing
+pub radroots_protocol::radrootsd::transport_publish::v5::JobStatus::Rejected
+pub enum radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy::AuthorWriteThenDaemonDefault
+pub radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy::DaemonDefaultOnly
+pub radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy::ExplicitOnly
+pub radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault
+pub enum radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Accepted
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::AuthRequired
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Blocked
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::ConnectionFailed
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::DeferredUntilImplemented
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::DuplicateAccepted
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Error
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Invalid
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Muted
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::PaymentRequired
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::PowRequired
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::RateLimited
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Restricted
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::SkippedAlreadyAccepted
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::TargetRejected
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Timeout
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Unknown
+pub radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::Unsupported
+impl radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind
+pub fn radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::counts_toward_accepted_delivery(self) -> bool
+pub fn radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::is_deferred_until_implemented(self) -> bool
+pub fn radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::is_retryable(self) -> bool
+pub fn radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind::is_terminal_failure(self) -> bool
+pub enum radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior
+pub radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior::DeferDeliveryPlans
+pub radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior::RejectDeliveryAttempts
+pub enum radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::ExplicitTargets
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::ExplicitTargets::targets: alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::Target>
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::Nostr
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::Nostr::relay_urls: alloc::vec::Vec<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::Nostr::source_policy: radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy
+impl radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::explicit_targets(alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::Target>) -> Self
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::nostr(radroots_protocol::radrootsd::transport_publish::v5::NostrTargetSourcePolicy, alloc::vec::Vec<alloc::string::String>) -> Self
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy::request_target_count(&self) -> usize
+pub enum radroots_protocol::radrootsd::transport_publish::v5::TargetPolicyName
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicyName::ExplicitTargets
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetPolicyName::Nostr
+pub enum radroots_protocol::radrootsd::transport_publish::v5::TargetSource
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetSource::DaemonDefault
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetSource::NostrAuthorWrite
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetSource::Request
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetSource::Reticulum
+pub struct radroots_protocol::radrootsd::transport_publish::v5::AuthCapabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::AuthCapabilities::mode: alloc::string::String
+pub struct radroots_protocol::radrootsd::transport_publish::v5::Capabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::Capabilities::api_version: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::Capabilities::auth: radroots_protocol::radrootsd::transport_publish::v5::AuthCapabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::Capabilities::daemon: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::Capabilities::methods: alloc::vec::Vec<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::Capabilities::publish: radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::Capabilities::transports: alloc::vec::Vec<alloc::string::String>
+impl radroots_protocol::radrootsd::transport_publish::v5::Capabilities
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Capabilities::v5(usize, usize) -> Self
+pub struct radroots_protocol::radrootsd::transport_publish::v5::EventRequest
+pub radroots_protocol::radrootsd::transport_publish::v5::EventRequest::delivery_policy: radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::EventRequest::idempotency_key: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::EventRequest::raw_event_json: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::EventRequest::target_policy: radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::EventRequest::timeout_ms: core::option::Option<u64>
+impl radroots_protocol::radrootsd::transport_publish::v5::EventRequest
+pub fn radroots_protocol::radrootsd::transport_publish::v5::EventRequest::validate(&self, usize) -> core::result::Result<(), radroots_protocol::radrootsd::transport_publish::v5::Error>
+pub struct radroots_protocol::radrootsd::transport_publish::v5::EventResponse
+pub radroots_protocol::radrootsd::transport_publish::v5::EventResponse::deduplicated: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::EventResponse::job: radroots_protocol::radrootsd::transport_publish::v5::Job
+pub struct radroots_protocol::radrootsd::transport_publish::v5::Job
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::acknowledged_count: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::completed_at_ms: core::option::Option<i64>
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::delivery_policy: radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::delivery_satisfied: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::event_id: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::event_kind: u32
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::job_id: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::last_error: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::pubkey: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::requested_at_ms: i64
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::retryable_count: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::status: radroots_protocol::radrootsd::transport_publish::v5::JobStatus
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::target_count: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::target_policy: radroots_protocol::radrootsd::transport_publish::v5::TargetPolicy
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::targets: alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome>
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::terminal: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::Job::terminal_count: usize
+impl radroots_protocol::radrootsd::transport_publish::v5::Job
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Job::validate(&self) -> core::result::Result<(), radroots_protocol::radrootsd::transport_publish::v5::Error>
+pub struct radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities::deliver: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities::discovery: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities::fetch: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities::gateway_forwarding: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities::receipt_observation: bool
+pub struct radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::delivery_policies: alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::DeliveryPolicyName>
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::max_event_bytes: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::max_targets_per_request: usize
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::raw_event_json_ingress: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::server_side_user_signing: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::target_policy_modes: alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::TargetPolicyName>
+pub radroots_protocol::radrootsd::transport_publish::v5::SurfaceCapabilities::transports: alloc::vec::Vec<radroots_protocol::radrootsd::transport_publish::v5::TransportCapability>
+pub struct radroots_protocol::radrootsd::transport_publish::v5::Target
+pub radroots_protocol::radrootsd::transport_publish::v5::Target::endpoint_uri: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::Target::reticulum_behavior: core::option::Option<radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior>
+pub radroots_protocol::radrootsd::transport_publish::v5::Target::target_label: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::Target::target_scope: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::Target::transport_kind: alloc::string::String
+impl radroots_protocol::radrootsd::transport_publish::v5::Target
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Target::nostr(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Target::reticulum(radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior) -> Self
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Target::with_label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn radroots_protocol::radrootsd::transport_publish::v5::Target::with_scope(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub struct radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint(_)
+impl radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint::as_str(&self) -> &str
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::radrootsd::transport_publish::v5::Error>
+impl serde_core::ser::Serialize for radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint
+pub fn radroots_protocol::radrootsd::transport_publish::v5::TargetFingerprint::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::attempted: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::endpoint_uri: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::latency_ms: core::option::Option<u64>
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::message: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::outcome_kind: radroots_protocol::radrootsd::transport_publish::v5::OutcomeKind
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::source: radroots_protocol::radrootsd::transport_publish::v5::TargetSource
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::target_label: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::target_scope: core::option::Option<alloc::string::String>
+pub radroots_protocol::radrootsd::transport_publish::v5::TargetOutcome::transport_kind: alloc::string::String
+pub struct radroots_protocol::radrootsd::transport_publish::v5::TransportCapability
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::availability: radroots_protocol::radrootsd::transport_publish::v5::CapabilityAvailability
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::capabilities: radroots_protocol::radrootsd::transport_publish::v5::OperationCapabilities
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::configured: bool
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::implementation: radroots_protocol::radrootsd::transport_publish::v5::Implementation
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::maturity: radroots_protocol::radrootsd::transport_publish::v5::CapabilityMaturity
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::message: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::reticulum_behavior: core::option::Option<radroots_protocol::radrootsd::transport_publish::v5::ReticulumBehavior>
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::transport: alloc::string::String
+pub radroots_protocol::radrootsd::transport_publish::v5::TransportCapability::usable_for_delivery: bool
+pub const radroots_protocol::radrootsd::transport_publish::v5::API_VERSION: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::DAEMON_NAME: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::METHOD_CAPABILITIES: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::METHOD_EVENT: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::METHOD_JOB_GET: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::METHOD_JOB_LIST: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::RETICULUM_ENDPOINT_URI: &str
+pub const radroots_protocol::radrootsd::transport_publish::v5::RETICULUM_UNAVAILABLE_MESSAGE: &str
+pub fn radroots_protocol::radrootsd::transport_publish::v5::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
+pub mod radroots_protocol::runtime
+pub mod radroots_protocol::runtime::v1
+pub enum radroots_protocol::runtime::v1::ApprovalRequirement
+pub radroots_protocol::runtime::v1::ApprovalRequirement::ConditionalOrRequiredByMode
+pub radroots_protocol::runtime::v1::ApprovalRequirement::None
+pub radroots_protocol::runtime::v1::ApprovalRequirement::Required
+pub enum radroots_protocol::runtime::v1::DeadlinePolicy
+pub radroots_protocol::runtime::v1::DeadlinePolicy::DefaultBounded
+pub radroots_protocol::runtime::v1::DeadlinePolicy::OperationDeclared
+pub enum radroots_protocol::runtime::v1::DryRunSupport
+pub radroots_protocol::runtime::v1::DryRunSupport::NotApplicable
+pub radroots_protocol::runtime::v1::DryRunSupport::PureLocalPlan
+#[non_exhaustive] pub enum radroots_protocol::runtime::v1::Error
+pub radroots_protocol::runtime::v1::Error::CatalogInvalid
+pub radroots_protocol::runtime::v1::Error::CatalogInvalid::message: alloc::string::String
+pub radroots_protocol::runtime::v1::Error::DuplicateOperationId
+pub radroots_protocol::runtime::v1::Error::DuplicateOperationId::operation_id: radroots_protocol::runtime::v1::OperationId
+pub radroots_protocol::runtime::v1::Error::MissingRequiredOperation
+pub radroots_protocol::runtime::v1::Error::MissingRequiredOperation::operation_id: radroots_protocol::runtime::v1::OperationId
+pub radroots_protocol::runtime::v1::Error::UnknownOperationId
+pub radroots_protocol::runtime::v1::Error::UnknownOperationId::operation_id: alloc::string::String
+pub radroots_protocol::runtime::v1::Error::UnsupportedOperationSchemaVersion
+pub radroots_protocol::runtime::v1::Error::UnsupportedOperationSchemaVersion::operation_id: radroots_protocol::runtime::v1::OperationId
+pub radroots_protocol::runtime::v1::Error::UnsupportedOperationSchemaVersion::version: u16
+impl core::error::Error for radroots_protocol::runtime::v1::Error
+impl core::fmt::Display for radroots_protocol::runtime::v1::Error
+pub fn radroots_protocol::runtime::v1::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::runtime::v1::IdempotencyPolicy
+pub radroots_protocol::runtime::v1::IdempotencyPolicy::Forbidden
+pub radroots_protocol::runtime::v1::IdempotencyPolicy::RequiredUuidV7
+pub enum radroots_protocol::runtime::v1::Mutability
+pub radroots_protocol::runtime::v1::Mutability::Mutation
+pub radroots_protocol::runtime::v1::Mutability::Read
+pub enum radroots_protocol::runtime::v1::OperationId
+pub radroots_protocol::runtime::v1::OperationId::AccountCreate
+pub radroots_protocol::runtime::v1::OperationId::AccountImport
+pub radroots_protocol::runtime::v1::OperationId::AccountList
+pub radroots_protocol::runtime::v1::OperationId::AccountRemove
+pub radroots_protocol::runtime::v1::OperationId::AccountSelect
+pub radroots_protocol::runtime::v1::OperationId::BasketCreate
+pub radroots_protocol::runtime::v1::OperationId::BasketGet
+pub radroots_protocol::runtime::v1::OperationId::BasketItemAdd
+pub radroots_protocol::runtime::v1::OperationId::BasketItemRemove
+pub radroots_protocol::runtime::v1::OperationId::BasketItemUpdate
+pub radroots_protocol::runtime::v1::OperationId::BasketList
+pub radroots_protocol::runtime::v1::OperationId::BasketQuote
+pub radroots_protocol::runtime::v1::OperationId::DiagnosticsInspect
+pub radroots_protocol::runtime::v1::OperationId::FarmCreate
+pub radroots_protocol::runtime::v1::OperationId::FarmGet
+pub radroots_protocol::runtime::v1::OperationId::FarmList
+pub radroots_protocol::runtime::v1::OperationId::FarmPublish
+pub radroots_protocol::runtime::v1::OperationId::FarmUpdate
+pub radroots_protocol::runtime::v1::OperationId::HealthInspect
+pub radroots_protocol::runtime::v1::OperationId::ListingCreate
+pub radroots_protocol::runtime::v1::OperationId::ListingGet
+pub radroots_protocol::runtime::v1::OperationId::ListingList
+pub radroots_protocol::runtime::v1::OperationId::ListingPause
+pub radroots_protocol::runtime::v1::OperationId::ListingPublish
+pub radroots_protocol::runtime::v1::OperationId::ListingUpdate
+pub radroots_protocol::runtime::v1::OperationId::ListingWithdraw
+pub radroots_protocol::runtime::v1::OperationId::MarketGet
+pub radroots_protocol::runtime::v1::OperationId::MarketPull
+pub radroots_protocol::runtime::v1::OperationId::MarketSearch
+pub radroots_protocol::runtime::v1::OperationId::ProfileInspect
+pub radroots_protocol::runtime::v1::OperationId::ProfileReset
+pub radroots_protocol::runtime::v1::OperationId::SignerStatus
+pub radroots_protocol::runtime::v1::OperationId::StoreBackup
+pub radroots_protocol::runtime::v1::OperationId::StoreInspect
+pub radroots_protocol::runtime::v1::OperationId::StoreRestore
+pub radroots_protocol::runtime::v1::OperationId::SyncPull
+pub radroots_protocol::runtime::v1::OperationId::SyncPush
+pub radroots_protocol::runtime::v1::OperationId::SyncStatus
+pub radroots_protocol::runtime::v1::OperationId::TradeCancellationSubmit
+pub radroots_protocol::runtime::v1::OperationId::TradeCandidateDecide
+pub radroots_protocol::runtime::v1::OperationId::TradeEvidenceInspect
+pub radroots_protocol::runtime::v1::OperationId::TradeEvidenceRefresh
+pub radroots_protocol::runtime::v1::OperationId::TradeGet
+pub radroots_protocol::runtime::v1::OperationId::TradeList
+pub radroots_protocol::runtime::v1::OperationId::TradeOperationResume
+pub radroots_protocol::runtime::v1::OperationId::TradePrivateArtifactDelete
+pub radroots_protocol::runtime::v1::OperationId::TradePrivateArtifactOpen
+pub radroots_protocol::runtime::v1::OperationId::TradePrivateArtifactSeal
+pub radroots_protocol::runtime::v1::OperationId::TradeProposalSubmit
+pub radroots_protocol::runtime::v1::OperationId::TradeRevisionPropose
+pub radroots_protocol::runtime::v1::OperationId::TransportCapabilityList
+pub radroots_protocol::runtime::v1::OperationId::TransportConfigInspect
+pub radroots_protocol::runtime::v1::OperationId::TransportConfigUpdate
+pub radroots_protocol::runtime::v1::OperationId::TransportDeliveryInspect
+pub radroots_protocol::runtime::v1::OperationId::TransportDeliveryRetry
+pub radroots_protocol::runtime::v1::OperationId::TransportStatusInspect
+pub radroots_protocol::runtime::v1::OperationId::ValidationStatus
+impl radroots_protocol::runtime::v1::OperationId
+pub fn radroots_protocol::runtime::v1::OperationId::as_str(self) -> &'static str
+pub fn radroots_protocol::runtime::v1::OperationId::parse(&str) -> core::result::Result<Self, radroots_protocol::runtime::v1::Error>
+pub fn radroots_protocol::runtime::v1::OperationId::receipt_schema_id(self) -> &'static str
+pub fn radroots_protocol::runtime::v1::OperationId::request_schema_id(self) -> &'static str
+impl serde_core::ser::Serialize for radroots_protocol::runtime::v1::OperationId
+pub fn radroots_protocol::runtime::v1::OperationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::runtime::v1::OperationId
+pub fn radroots_protocol::runtime::v1::OperationId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub enum radroots_protocol::runtime::v1::PrivacyEffect
+pub radroots_protocol::runtime::v1::PrivacyEffect::BackupRestore
+pub radroots_protocol::runtime::v1::PrivacyEffect::None
+pub radroots_protocol::runtime::v1::PrivacyEffect::PrivateCoordination
+pub radroots_protocol::runtime::v1::PrivacyEffect::PrivateStore
+pub radroots_protocol::runtime::v1::PrivacyEffect::PublicEvent
+pub enum radroots_protocol::runtime::v1::ProjectionEffect
+pub radroots_protocol::runtime::v1::ProjectionEffect::MayUpdateProjection
+pub radroots_protocol::runtime::v1::ProjectionEffect::None
+pub radroots_protocol::runtime::v1::ProjectionEffect::ReadsProjection
+pub radroots_protocol::runtime::v1::ProjectionEffect::WritesProjection
+pub enum radroots_protocol::runtime::v1::Risk
+pub radroots_protocol::runtime::v1::Risk::Critical
+pub radroots_protocol::runtime::v1::Risk::High
+pub radroots_protocol::runtime::v1::Risk::Low
+pub radroots_protocol::runtime::v1::Risk::Medium
+pub enum radroots_protocol::runtime::v1::SignerRequirement
+pub radroots_protocol::runtime::v1::SignerRequirement::ConditionalRelayAuth
+pub radroots_protocol::runtime::v1::SignerRequirement::None
+pub radroots_protocol::runtime::v1::SignerRequirement::Required
+pub struct radroots_protocol::runtime::v1::OperationDescriptor
+pub radroots_protocol::runtime::v1::OperationDescriptor::approval: radroots_protocol::runtime::v1::ApprovalRequirement
+pub radroots_protocol::runtime::v1::OperationDescriptor::deadline: radroots_protocol::runtime::v1::DeadlinePolicy
+pub radroots_protocol::runtime::v1::OperationDescriptor::dry_run: radroots_protocol::runtime::v1::DryRunSupport
+pub radroots_protocol::runtime::v1::OperationDescriptor::idempotency: radroots_protocol::runtime::v1::IdempotencyPolicy
+pub radroots_protocol::runtime::v1::OperationDescriptor::maturity: radroots_protocol::capability::v1::Maturity
+pub radroots_protocol::runtime::v1::OperationDescriptor::mutability: radroots_protocol::runtime::v1::Mutability
+pub radroots_protocol::runtime::v1::OperationDescriptor::operation_id: radroots_protocol::runtime::v1::OperationId
+pub radroots_protocol::runtime::v1::OperationDescriptor::privacy: radroots_protocol::runtime::v1::PrivacyEffect
+pub radroots_protocol::runtime::v1::OperationDescriptor::projection: radroots_protocol::runtime::v1::ProjectionEffect
+pub radroots_protocol::runtime::v1::OperationDescriptor::risk: radroots_protocol::runtime::v1::Risk
+pub radroots_protocol::runtime::v1::OperationDescriptor::schema_version: u16
+pub radroots_protocol::runtime::v1::OperationDescriptor::signer: radroots_protocol::runtime::v1::SignerRequirement
+pub radroots_protocol::runtime::v1::OperationDescriptor::transport_capability: radroots_protocol::runtime::v1::TransportRoute
+impl radroots_protocol::runtime::v1::OperationDescriptor
+pub fn radroots_protocol::runtime::v1::OperationDescriptor::receipt_schema_id(self) -> &'static str
+pub fn radroots_protocol::runtime::v1::OperationDescriptor::request_schema_id(self) -> &'static str
+pub struct radroots_protocol::runtime::v1::TransportRoute
+pub radroots_protocol::runtime::v1::TransportRoute::deliver: bool
+pub radroots_protocol::runtime::v1::TransportRoute::diagnostics: bool
+pub radroots_protocol::runtime::v1::TransportRoute::fetch: bool
+pub radroots_protocol::runtime::v1::TransportRoute::local: bool
+pub radroots_protocol::runtime::v1::TransportRoute::nostr: bool
+pub radroots_protocol::runtime::v1::TransportRoute::reticulum: bool
+pub radroots_protocol::runtime::v1::TransportRoute::synchronize: bool
+impl radroots_protocol::runtime::v1::TransportRoute
+pub const fn radroots_protocol::runtime::v1::TransportRoute::delivery() -> Self
+pub const fn radroots_protocol::runtime::v1::TransportRoute::diagnostics() -> Self
+pub const fn radroots_protocol::runtime::v1::TransportRoute::fetch() -> Self
+pub fn radroots_protocol::runtime::v1::TransportRoute::includes_transport(self, radroots_protocol::capability::v1::TransportKind) -> bool
+pub const fn radroots_protocol::runtime::v1::TransportRoute::local() -> Self
+pub const fn radroots_protocol::runtime::v1::TransportRoute::none() -> Self
+pub const radroots_protocol::runtime::v1::CATALOG: &[radroots_protocol::runtime::v1::OperationDescriptor]
+pub const radroots_protocol::runtime::v1::OPERATION_SCHEMA_VERSION: u16
+pub fn radroots_protocol::runtime::v1::operation_descriptor(radroots_protocol::runtime::v1::OperationId) -> core::result::Result<radroots_protocol::runtime::v1::OperationDescriptor, radroots_protocol::runtime::v1::Error>
+pub fn radroots_protocol::runtime::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
+pub fn radroots_protocol::runtime::v1::validate_catalog(&[radroots_protocol::runtime::v1::OperationDescriptor]) -> core::result::Result<(), radroots_protocol::runtime::v1::Error>
+pub mod radroots_protocol::schema
+#[non_exhaustive] pub enum radroots_protocol::schema::Error
+pub radroots_protocol::schema::Error::DuplicateSchemaId
+pub radroots_protocol::schema::Error::DuplicateSchemaId::schema_id: alloc::string::String
+pub radroots_protocol::schema::Error::EmptySchemaId
+pub radroots_protocol::schema::Error::InvalidSchemaNamespaceSegment
+pub radroots_protocol::schema::Error::InvalidSchemaNamespaceSegment::index: usize
+pub radroots_protocol::schema::Error::InvalidSchemaVersion
+pub radroots_protocol::schema::Error::MissingSchemaNamespace
+pub radroots_protocol::schema::Error::SchemaIdTooLong
+pub radroots_protocol::schema::Error::SchemaIdTooLong::actual: usize
+pub radroots_protocol::schema::Error::SchemaIdTooLong::max: usize
+pub radroots_protocol::schema::Error::SchemaVersionMismatch
+pub radroots_protocol::schema::Error::SchemaVersionMismatch::declared: u16
+pub radroots_protocol::schema::Error::SchemaVersionMismatch::encoded: u16
+pub radroots_protocol::schema::Error::SchemaVersionMismatch::schema_id: alloc::string::String
+impl core::error::Error for radroots_protocol::schema::Error
+impl core::fmt::Display for radroots_protocol::schema::Error
+pub fn radroots_protocol::schema::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_protocol::schema::ModuleVersion
+pub radroots_protocol::schema::ModuleVersion::CapabilityV1
+pub radroots_protocol::schema::ModuleVersion::ErrorV1
+pub radroots_protocol::schema::ModuleVersion::EventV1
+pub radroots_protocol::schema::ModuleVersion::RadrootsdTransportPublishV5
+pub radroots_protocol::schema::ModuleVersion::RuntimeV1
+impl radroots_protocol::schema::ModuleVersion
+pub const radroots_protocol::schema::ModuleVersion::ALL: [Self; 5]
+pub const fn radroots_protocol::schema::ModuleVersion::generation(self) -> u16
+pub const fn radroots_protocol::schema::ModuleVersion::path(self) -> &'static str
+pub struct radroots_protocol::schema::Descriptor
+impl radroots_protocol::schema::Descriptor
+pub const fn radroots_protocol::schema::Descriptor::id(&self) -> &radroots_protocol::schema::SchemaId
+pub const fn radroots_protocol::schema::Descriptor::module(&self) -> radroots_protocol::schema::ModuleVersion
+pub fn radroots_protocol::schema::Descriptor::try_new(impl core::convert::Into<alloc::string::String>, radroots_protocol::schema::ModuleVersion) -> core::result::Result<Self, radroots_protocol::schema::Error>
+pub struct radroots_protocol::schema::Metadata
+pub radroots_protocol::schema::Metadata::schema_id: &'static str
+pub radroots_protocol::schema::Metadata::schema_version: u16
+pub radroots_protocol::schema::Metadata::type_name: &'static str
+pub struct radroots_protocol::schema::Registry
+impl radroots_protocol::schema::Registry
+pub fn radroots_protocol::schema::Registry::descriptor(&self, &radroots_protocol::schema::SchemaId) -> core::option::Option<&radroots_protocol::schema::Descriptor>
+pub fn radroots_protocol::schema::Registry::descriptors(&self) -> &[radroots_protocol::schema::Descriptor]
+pub fn radroots_protocol::schema::Registry::is_empty(&self) -> bool
+pub fn radroots_protocol::schema::Registry::len(&self) -> usize
+pub fn radroots_protocol::schema::Registry::module_for(&self, &radroots_protocol::schema::SchemaId) -> core::option::Option<radroots_protocol::schema::ModuleVersion>
+pub fn radroots_protocol::schema::Registry::try_from_metadata(impl core::iter::traits::collect::IntoIterator<Item = (radroots_protocol::schema::Metadata, radroots_protocol::schema::ModuleVersion)>) -> core::result::Result<Self, radroots_protocol::schema::Error>
+pub fn radroots_protocol::schema::Registry::try_new(impl core::iter::traits::collect::IntoIterator<Item = radroots_protocol::schema::Descriptor>) -> core::result::Result<Self, radroots_protocol::schema::Error>
+pub struct radroots_protocol::schema::SchemaId
+impl radroots_protocol::schema::SchemaId
+pub fn radroots_protocol::schema::SchemaId::as_str(&self) -> &str
+pub fn radroots_protocol::schema::SchemaId::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_protocol::schema::Error>
+pub const fn radroots_protocol::schema::SchemaId::version(&self) -> u16
+impl core::convert::AsRef<str> for radroots_protocol::schema::SchemaId
+pub fn radroots_protocol::schema::SchemaId::as_ref(&self) -> &str
+impl core::convert::TryFrom<&str> for radroots_protocol::schema::SchemaId
+pub type radroots_protocol::schema::SchemaId::Error = radroots_protocol::schema::Error
+pub fn radroots_protocol::schema::SchemaId::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_protocol::schema::SchemaId
+pub type radroots_protocol::schema::SchemaId::Error = radroots_protocol::schema::Error
+pub fn radroots_protocol::schema::SchemaId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for radroots_protocol::schema::SchemaId
+pub fn radroots_protocol::schema::SchemaId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_protocol::schema::SchemaId
+pub type radroots_protocol::schema::SchemaId::Err = radroots_protocol::schema::Error
+pub fn radroots_protocol::schema::SchemaId::from_str(&str) -> core::result::Result<Self, Self::Err>
+pub const radroots_protocol::schema::MAX_SCHEMA_ID_BYTES: usize
+pub fn radroots_protocol::schema::protocol_v1_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
