@@ -3607,6 +3607,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "async-trait",
  "hex",
+ "libc",
  "nostr 0.44.1",
  "nostr-relay-builder",
  "nostr-sdk 0.44.0",
