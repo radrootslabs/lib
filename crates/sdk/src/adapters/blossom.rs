@@ -13,6 +13,8 @@ use crate::transport::{
 };
 
 const MAX_RESOLVED_ADDRESSES: usize = 32;
+const MAX_ERROR_RESPONSE_BYTES: usize = 4_096;
+const MAX_SERVER_ERROR_CODE_BYTES: usize = 64;
 const X_SHA_256: &str = "x-sha-256";
 const BLOSSOM_PROBE_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -380,12 +382,14 @@ async fn upload_once(
         ));
     }
     if !matches!(response.status(), StatusCode::OK | StatusCode::CREATED) {
-        return Err(http_status_error(
-            response.status(),
+        return Err(http_status_response_error(
+            response,
             BlossomPhase::Upload,
             true,
             attempt,
-        ));
+            cancellation,
+        )
+        .await);
     }
     {
         let content_type = response
@@ -580,12 +584,14 @@ async fn retrieve_once(
             continue;
         }
         if response.status() != StatusCode::OK {
-            return Err(http_status_error(
-                response.status(),
+            return Err(http_status_response_error(
+                response,
                 BlossomPhase::Retrieval,
                 true,
                 attempt,
-            ));
+                cancellation,
+            )
+            .await);
         }
         let actual_media_type = response
             .headers()
@@ -908,6 +914,72 @@ fn http_status_error(
         attempts,
     )
     .with_http_status(status.as_u16())
+}
+
+async fn http_status_response_error(
+    response: reqwest::Response,
+    phase: BlossomPhase,
+    possible_orphan: bool,
+    attempts: u8,
+    cancellation: &BlossomCancellation,
+) -> BlossomError {
+    let status = response.status();
+    let mut error = http_status_error(status, phase, possible_orphan, attempts);
+    if let Some(code) = read_server_error_code(response, cancellation).await {
+        error = error.with_server_error_code(code);
+    }
+    error
+}
+
+async fn read_server_error_code(
+    mut response: reqwest::Response,
+    cancellation: &BlossomCancellation,
+) -> Option<String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_ERROR_RESPONSE_BYTES as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(
+        response
+            .content_length()
+            .and_then(|length| usize::try_from(length).ok())
+            .unwrap_or(0)
+            .min(MAX_ERROR_RESPONSE_BYTES),
+    );
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => return None,
+            chunk = response.chunk() => chunk.ok()?,
+        };
+        let Some(chunk) = chunk else {
+            break;
+        };
+        if bytes.len().saturating_add(chunk.len()) > MAX_ERROR_RESPONSE_BYTES {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    parse_server_error_code(bytes.as_slice())
+}
+
+fn parse_server_error_code(bytes: &[u8]) -> Option<String> {
+    if bytes.len() > MAX_ERROR_RESPONSE_BYTES {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let code = value.get("error")?.as_str()?;
+    if code.is_empty()
+        || code.len() > MAX_SERVER_ERROR_CODE_BYTES
+        || !code
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        return None;
+    }
+    Some(code.to_owned())
 }
 
 fn with_operation(error: BlossomError, possible_orphan: bool, attempts: u8) -> BlossomError {
@@ -1390,6 +1462,69 @@ mod tests {
             .kind(),
             BlossomErrorKind::ResponseTooLarge
         );
+    }
+
+    #[test]
+    fn server_error_codes_are_bounded_validated_and_detail_free() {
+        assert_eq!(
+            parse_server_error_code(
+                br#"{"error":"entitlement_missing","detail":"must never be retained"}"#
+            )
+            .as_deref(),
+            Some("entitlement_missing")
+        );
+        assert_eq!(
+            parse_server_error_code(br#"{"error":"unsafe-value"}"#),
+            None
+        );
+        assert_eq!(parse_server_error_code(br#"{"error":"UPPERCASE"}"#), None);
+        assert_eq!(
+            parse_server_error_code(format!(r#"{{"error":"{}"}}"#, "a".repeat(65)).as_bytes()),
+            None
+        );
+        assert_eq!(
+            parse_server_error_code(vec![b' '; MAX_ERROR_RESPONSE_BYTES + 1].as_slice()),
+            None
+        );
+        assert_eq!(parse_server_error_code(b"not-json"), None);
+    }
+
+    #[tokio::test]
+    async fn http_failure_retains_only_the_public_server_error_code() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept");
+            let request = read_request(&mut stream).await;
+            assert!(String::from_utf8_lossy(&request).starts_with("PUT /upload HTTP/1.1"));
+            let body =
+                br#"{"error":"entitlement_missing","detail":"sensitive operational context"}"#;
+            let response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.expect("head");
+            stream.write_all(body).await.expect("body");
+            stream.shutdown().await.expect("close");
+        });
+        let origin = format!("http://{address}");
+        let config = config(origin.as_str());
+        let endpoint = config.profile().primary().clone();
+        let error = upload_once(
+            &config,
+            &endpoint,
+            &upload_request(origin.as_str(), png(2, 3)),
+            "Nostr redacted",
+            &BlossomCancellation::default(),
+            1,
+        )
+        .await
+        .expect_err("forbidden upload");
+        assert_eq!(error.http_status(), Some(403));
+        assert_eq!(error.server_error_code(), Some("entitlement_missing"));
+        assert!(!format!("{error:?}").contains("sensitive operational context"));
+        assert!(!format!("{error:?}").contains("Nostr redacted"));
+        server.await.expect("server");
     }
 
     #[test]

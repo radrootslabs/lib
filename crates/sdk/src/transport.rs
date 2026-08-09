@@ -597,6 +597,7 @@ pub struct BlossomEndpointEvidence {
     observed_at_unix_ms: Option<u64>,
     http_status: Option<u16>,
     error_code: Option<&'static str>,
+    server_error_code: Option<String>,
     error_phase: Option<BlossomPhase>,
     retryable: bool,
     possible_orphan: bool,
@@ -605,7 +606,7 @@ pub struct BlossomEndpointEvidence {
 
 #[cfg(feature = "blossom")]
 impl BlossomEndpointEvidence {
-    const SCHEMA_VERSION: u16 = 1;
+    const SCHEMA_VERSION: u16 = 2;
 
     fn configured(config: &BlossomConfig) -> Self {
         let primary = config.profile().primary();
@@ -627,6 +628,7 @@ impl BlossomEndpointEvidence {
             observed_at_unix_ms: None,
             http_status: None,
             error_code: None,
+            server_error_code: None,
             error_phase: None,
             retryable: false,
             possible_orphan: false,
@@ -679,6 +681,12 @@ impl BlossomEndpointEvidence {
         self.error_code
     }
 
+    /// Bounded, validated public error identifier returned by the server.
+    #[must_use]
+    pub fn server_error_code(&self) -> Option<&str> {
+        self.server_error_code.as_deref()
+    }
+
     #[must_use]
     pub const fn error_phase(&self) -> Option<BlossomPhase> {
         self.error_phase
@@ -705,6 +713,7 @@ impl BlossomEndpointEvidence {
         self.observed_at_unix_ms = Some(blossom_now_unix_ms());
         self.http_status = http_status;
         self.error_code = None;
+        self.server_error_code = None;
         self.error_phase = None;
         self.retryable = false;
         self.possible_orphan = false;
@@ -720,6 +729,7 @@ impl BlossomEndpointEvidence {
         self.observed_at_unix_ms = Some(blossom_now_unix_ms());
         self.http_status = error.http_status();
         self.error_code = Some(error.code());
+        self.server_error_code = error.server_error_code().map(str::to_owned);
         self.error_phase = Some(error.phase());
         self.retryable = error.retryable();
         self.possible_orphan = error.possible_orphan();
@@ -878,6 +888,7 @@ pub struct BlossomError {
     possible_orphan: bool,
     attempts: u8,
     http_status: Option<u16>,
+    server_error_code: Option<String>,
 }
 
 #[cfg(feature = "blossom")]
@@ -896,6 +907,7 @@ impl BlossomError {
             possible_orphan,
             attempts,
             http_status: None,
+            server_error_code: None,
         }
     }
 
@@ -931,6 +943,12 @@ impl BlossomError {
     #[must_use]
     pub const fn http_status(&self) -> Option<u16> {
         self.http_status
+    }
+
+    /// Bounded, validated public error identifier returned by the server.
+    #[must_use]
+    pub fn server_error_code(&self) -> Option<&str> {
+        self.server_error_code.as_deref()
     }
 
     #[must_use]
@@ -975,6 +993,11 @@ impl BlossomError {
         self.http_status = Some(status);
         self
     }
+
+    pub(crate) fn with_server_error_code(mut self, code: String) -> Self {
+        self.server_error_code = Some(code);
+        self
+    }
 }
 
 #[cfg(feature = "blossom")]
@@ -995,6 +1018,7 @@ impl std::fmt::Debug for BlossomError {
             .field("possible_orphan", &self.possible_orphan)
             .field("attempts", &self.attempts)
             .field("http_status", &self.http_status)
+            .field("server_error_code", &self.server_error_code)
             .finish()
     }
 }
@@ -2137,7 +2161,7 @@ mod tests {
         let public_fingerprint = public_config.fingerprint();
         slot.configure(public_config).expect("public config");
         let initial = slot.evidence().expect("initial evidence");
-        assert_eq!(initial.schema_version(), 1);
+        assert_eq!(initial.schema_version(), 2);
         assert_eq!(initial.origin(), "https://media.example");
         assert_eq!(initial.config_fingerprint(), public_fingerprint);
         assert_eq!(initial.state(), BlossomEvidenceState::ConfiguredUnobserved);
@@ -2199,6 +2223,7 @@ mod tests {
         );
         assert_eq!(evidence.http_status(), Some(403));
         assert_eq!(evidence.error_code(), Some("blossom_http_status"));
+        assert_eq!(evidence.server_error_code(), None);
         assert_eq!(evidence.error_phase(), Some(BlossomPhase::Retrieval));
         assert!(!evidence.retryable());
         assert!(evidence.possible_orphan());
