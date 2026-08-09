@@ -17,7 +17,6 @@ roots = [
   "build",
   "crates",
   "deny.toml",
-  "docs",
   "dto_bindgen.toml",
   "flake.lock",
   "flake.nix",
