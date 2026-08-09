@@ -1,0 +1,227 @@
+schema = "radroots.prototype-contract-source-guard.v1"
+mode = "report_only"
+
+[scan]
+roots = [
+  ".cargo",
+  ".envrc",
+  ".gitignore",
+  "AGENTS.md",
+  "AGENT_INSTRUCTIONS.md",
+  "BUILD.md",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "Cargo.lock",
+  "Cargo.toml",
+  "README.md",
+  "build",
+  "crates",
+  "deny.toml",
+  "docs",
+  "dto_bindgen.toml",
+  "flake.lock",
+  "flake.nix",
+  "fuzz",
+  "rust-toolchain-coverage.toml",
+  "rust-toolchain.toml",
+  "tools",
+  "treefmt.nix",
+]
+path_roots = ["."]
+path_excludes = [".direnv", ".git", ".treefmt-cache", "result", "target"]
+extensions = [
+  "capnp",
+  "csv",
+  "dot",
+  "json",
+  "lock",
+  "md",
+  "nix",
+  "rs",
+  "sha256",
+  "sh",
+  "sql",
+  "toml",
+  "ts",
+  "txt",
+]
+extensionless_names = [
+  ".envrc",
+  ".gitignore",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+  "README",
+]
+
+[limits]
+max_scan_entries = 20000
+max_inventory_bytes = 33554432
+max_file_bytes = 8388608
+max_matches = 4096
+max_reported_findings = 200
+max_reported_allowlisted = 200
+
+[[pattern]]
+id = "config-env"
+needle = "config.env"
+match_kind = "substring"
+description = "prototype environment-file configuration selector"
+
+[[pattern]]
+id = "env-example"
+needle = ".env.example"
+match_kind = "substring"
+description = "prototype service environment example"
+match_path = true
+
+[[pattern]]
+id = "env-file-flag"
+needle = "--env-file"
+match_kind = "substring"
+description = "prototype environment-file CLI flag"
+
+[[pattern]]
+id = "myc-paths-environment"
+needle = "MYC_PATHS_"
+match_kind = "substring"
+description = "prototype Myc path environment contract"
+
+[[pattern]]
+id = "rhi-paths-environment"
+needle = "RHI_PATHS_"
+match_kind = "substring"
+description = "prototype RHI path environment contract"
+
+[[pattern]]
+id = "trade-validation-receipt"
+needle = "trade_validation_receipt"
+match_kind = "substring"
+description = "prototype trade validation receipt surface"
+
+[[pattern]]
+id = "json-file-state"
+needle = "JsonFile"
+match_kind = "substring"
+description = "prototype JSON mutable-state backend"
+
+[[pattern]]
+id = "jsonl-file-state"
+needle = "JsonlFile"
+match_kind = "substring"
+description = "prototype JSONL mutable-state backend"
+
+[[pattern]]
+id = "identity-auto-generation"
+needle = "allow_generate_identity"
+match_kind = "substring"
+description = "prototype ordinary-run identity generation"
+
+[[pattern]]
+id = "identity-json-example"
+needle = "identity.example.json"
+match_kind = "substring"
+description = "prototype plaintext identity example"
+match_path = true
+
+[[pattern]]
+id = "rhi-worker-path"
+needle = "workers/rhi"
+match_kind = "substring"
+description = "prototype RHI worker path"
+match_path = true
+
+[[pattern]]
+id = "external-command-provider"
+needle = "external_command"
+match_kind = "substring"
+description = "prototype executable signer-provider selector"
+
+[[pattern]]
+id = "logging-output-directory"
+needle = "logging.output_dir"
+match_kind = "substring"
+description = "prototype daemon-owned log-directory selector"
+
+[[pattern]]
+id = "never-rolling-appender"
+needle = "rolling::never"
+match_kind = "substring"
+description = "prototype service-owned non-rolling file logger"
+
+[[pattern]]
+id = "daily-rolling-appender"
+needle = "rolling::daily"
+match_kind = "substring"
+description = "prototype service-owned daily file logger"
+
+[[pattern]]
+id = "import-json-flag"
+needle = "import-json"
+match_kind = "substring"
+description = "prototype mutable-state import CLI surface"
+
+[[pattern]]
+id = "import-json-identifier"
+needle = "import_json"
+match_kind = "substring"
+description = "prototype mutable-state import implementation surface"
+
+[[pattern]]
+id = "legacy-concept"
+needle = "legacy"
+match_kind = "word_prefix"
+description = "legacy product or compatibility concept requiring review"
+path_prefixes = [
+  "crates/runtime_paths",
+  "crates/secrets",
+  "crates/service_host",
+  "crates/service_sqlite",
+]
+
+[[pattern]]
+id = "compatibility-concept"
+needle = "compat"
+match_kind = "word_prefix"
+description = "compatibility product concept requiring review"
+path_prefixes = [
+  "crates/runtime_paths",
+  "crates/secrets",
+  "crates/service_host",
+  "crates/service_sqlite",
+]
+
+[[pattern]]
+id = "deprecated-concept"
+needle = "deprecated"
+match_kind = "word_prefix"
+description = "deprecated product concept requiring review"
+path_prefixes = [
+  "crates/runtime_paths",
+  "crates/secrets",
+  "crates/service_host",
+  "crates/service_sqlite",
+]
+
+[[allow]]
+pattern_id = "import-json-identifier"
+path = "crates/replica_store_wasm/src/wasm_impl.rs"
+line_contains = "#[wasm_bindgen(js_name = replica_store_import_json)]"
+reason = "The replica-store interchange API is not a Myc or RHI mutable service-state importer."
+
+[[allow]]
+pattern_id = "import-json-identifier"
+path = "crates/replica_store_wasm/src/wasm_impl.rs"
+line_contains = "pub fn replica_store_import_json"
+reason = "The replica-store interchange API is not a Myc or RHI mutable service-state importer."
+
+[[allow]]
+pattern_id = "import-json-identifier"
+path = "tools/xtask/src/sdk_generation/wasm_declarations.rs"
+line_contains = "replica_store_import_json"
+reason = "The generated replica-store interchange declaration is not a Myc or RHI mutable service-state importer."
+
+[[allow]]
+pattern_id = "compatibility-concept"
+path = "crates/secrets/src/wrapping.rs"
+line_contains = "dyn-compatible data-key wrapping"
+reason = "This describes Rust trait object safety rather than a Radroots-owned compatibility path."

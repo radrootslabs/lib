@@ -90,6 +90,7 @@ in
     runtimeInputs = common.runtimeInputs.stable;
     command = ''
       cargo run -q -p xtask -- hygiene forbidden-identifiers
+      cargo run -q -p xtask -- hygiene prototype-contracts
     '';
   };
 

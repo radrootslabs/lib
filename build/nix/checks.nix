@@ -216,6 +216,7 @@ in
     initGit = true;
     command = ''
       xtask hygiene forbidden-identifiers
+      xtask hygiene prototype-contracts
     '';
   };
 }

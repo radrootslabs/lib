@@ -53,7 +53,12 @@ tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = [
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "time",
+] }
 
 [lints]
 workspace = true

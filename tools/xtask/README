@@ -9,6 +9,9 @@ tasks for the `radroots` core libraries.
    release workflows;
  * `contract`, `coverage`, `dto-roots`, `release`, and `hygiene` command
    families for core-library governance;
+ * configurable deterministic prototype-contract reporting through
+   `hygiene prototype-contracts`, with explicit narrow allowlists and a future
+   strict enforcement mode;
  * deterministic `dto-roots --write|--check` generation for every
    source-manifest package in the workspace DTO authority;
  * command-dispatch code used for contract, coverage, hygiene, and release

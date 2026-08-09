@@ -165,6 +165,9 @@ Targeted iteration inside the Nix shell:
 - `cargo xtask dto-roots --write` after changing configured DTO exports
 - `cargo xtask release preflight`
 - `cargo xtask hygiene forbidden-identifiers`
+- `cargo xtask hygiene prototype-contracts` for the deterministic report-only
+  service-prototype census; strict mode is enabled only after the owning
+  cleanup sequence clears its findings
 
 Validation rules:
 

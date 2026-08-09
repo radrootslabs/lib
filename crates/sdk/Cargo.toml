@@ -118,7 +118,11 @@ nostr = { workspace = true, features = ["std"] }
 radroots_blossom = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = [
+  "io-util",
+  "macros",
+  "rt-multi-thread",
+] }
 
 [[test]]
 name = "package_boundary"

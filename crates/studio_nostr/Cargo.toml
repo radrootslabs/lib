@@ -23,7 +23,12 @@ tokio = { version = "=1.47.1", features = ["sync", "time"] }
 
 [dev-dependencies]
 nostr-relay-builder = { git = "https://github.com/rust-nostr/nostr.git", rev = "5bba5163eb77107f82c4a8262cf29d7f33a73219", package = "nostr-relay-builder" }
-tokio = { version = "=1.47.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "=1.47.1", features = [
+  "macros",
+  "rt-multi-thread",
+  "sync",
+  "time",
+] }
 
 [lints]
 workspace = true

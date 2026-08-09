@@ -63,6 +63,9 @@ Before editing code:
 - `cargo xtask dto-roots --write` after changing configured DTO exports and
   `cargo xtask dto-roots --check` for exact generated-root freshness
 - targeted `cargo xtask contract ...`, `cargo xtask coverage ...`, `cargo xtask release ...`, or `cargo xtask hygiene ...` only when narrowing a repo-owned workflow
+- `cargo xtask hygiene prototype-contracts` for the governed report-only
+  service-prototype census; use `--strict` only when the cleanup sequence has
+  made every non-allowlisted finding release-blocking
 - if Beads is active, read `.beads/PRIME.md`
 
 ## 6. Rust engineering rules
