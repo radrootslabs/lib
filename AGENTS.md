@@ -27,6 +27,12 @@ This file exists for compatibility with tools that look for AGENTS.md.
   Service-event source, registry, generated, and consumer work must implement
   that exact kind, tag, cardinality, query, and supersession contract; it may
   not reinterpret the reservation from current prototype wire behavior.
+- The pre-implementation local-admin, process-exit, doctor, readiness,
+  peer-credential, systemd, and bare-Rust host decisions are reserved by
+  `contracts/architecture/decisions/services_hardening_host.v1.json`.
+  Service-host and service-owned operator contracts must implement or narrow
+  that boundary without adding a second transport, exit map, or readiness
+  authority.
 - Source-lock consumer identities include `sdk`, `mobile`, `studio`, `myc`,
   and `rhi`. Only the first three are generated-artifact product identities;
   accepting a service consumer marker must not expose an artifact route.
