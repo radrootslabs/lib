@@ -710,7 +710,7 @@ mod tests {
             .expect("delivery capability");
         assert!(fetch.is_configured());
         assert_eq!(fetch.availability(), Availability::Unavailable);
-        assert!(!delivery.is_configured());
+        assert!(delivery.is_configured());
         assert_eq!(delivery.availability(), Availability::Unavailable);
 
         client
