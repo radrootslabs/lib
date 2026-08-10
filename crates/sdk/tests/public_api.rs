@@ -85,6 +85,8 @@ fn public_native_type_snapshot_uses_contextual_names() {
             type_name::<radroots_sdk::transport::BlossomEvidenceState>(),
             type_name::<radroots_sdk::transport::BlossomHostKind>(),
             type_name::<radroots_sdk::transport::BlossomImageDimensions>(),
+            type_name::<radroots_sdk::transport::BlossomInboundReceipt>(),
+            type_name::<radroots_sdk::transport::BlossomInboundRequest>(),
             type_name::<radroots_sdk::transport::BlossomPhase>(),
             type_name::<radroots_sdk::transport::BlossomProfile>(),
             type_name::<radroots_sdk::transport::BlossomSlot>(),
@@ -171,7 +173,7 @@ const fn expected_public_type_count() -> usize {
     #[cfg(feature = "nostr")]
     let count = count + 1;
     #[cfg(feature = "blossom")]
-    let count = count + 20;
+    let count = count + 22;
     #[cfg(feature = "radrootsd")]
     let count = count + 5;
     count

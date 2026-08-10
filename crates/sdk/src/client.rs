@@ -693,7 +693,14 @@ mod tests {
     fn nostr_capabilities_require_directional_profile_authority_and_evidence() {
         let slot = crate::transport::NostrSlot::new();
         slot.configure(
-            crate::transport::RelayProfile::public(Vec::<String>::new()).expect("public profile"),
+            crate::transport::RelayProfile::explicit(
+                crate::transport::RelayProfileKind::Public,
+                [(
+                    radroots_transport_nostr::DEFAULT_PUBLIC_RELAY,
+                    crate::transport::RelayAccess::ReadOnly,
+                )],
+            )
+            .expect("read-only public profile"),
         )
         .expect("configure slot");
         let client = ClientBuilder::memory(generation())

@@ -49,6 +49,10 @@ const MAX_BLOSSOM_ATTEMPTS: u8 = 5;
 const MAX_BLOSSOM_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(feature = "blossom")]
 const MAX_BLOSSOM_RETRY_DELAY: Duration = Duration::from_secs(30);
+#[cfg(feature = "blossom")]
+const MAX_BLOSSOM_IMAGE_EDGE: u32 = 16_384;
+#[cfg(feature = "blossom")]
+const MAX_BLOSSOM_IMAGE_PIXELS: u64 = 100_000_000;
 
 /// Host environment executing Blossom operations.
 #[cfg(feature = "blossom")]
@@ -426,6 +430,11 @@ pub struct BlossomConfigFingerprint(Sha256);
 #[cfg(feature = "blossom")]
 impl BlossomConfigFingerprint {
     #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        self.0.as_bytes()
+    }
+
+    #[must_use]
     pub fn to_hex(self) -> String {
         self.0.to_hex()
     }
@@ -445,7 +454,7 @@ fn append_fingerprint_field(material: &mut Vec<u8>, value: &[u8]) {
 }
 
 #[cfg(feature = "blossom")]
-fn blossom_now_unix_ms() -> u64 {
+pub(crate) fn blossom_now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
@@ -465,7 +474,12 @@ pub struct BlossomImageDimensions {
 #[cfg(feature = "blossom")]
 impl BlossomImageDimensions {
     pub const fn new(width: u32, height: u32) -> Result<Self, BlossomError> {
-        if width == 0 || height == 0 {
+        if width == 0
+            || height == 0
+            || width > MAX_BLOSSOM_IMAGE_EDGE
+            || height > MAX_BLOSSOM_IMAGE_EDGE
+            || width as u64 * height as u64 > MAX_BLOSSOM_IMAGE_PIXELS
+        {
             return Err(BlossomError::configuration(
                 BlossomErrorKind::InvalidDimensions,
             ));
@@ -544,6 +558,73 @@ impl BlossomUploadRequest {
 
     pub(crate) const fn verified_at_unix_ms(&self) -> u64 {
         self.verified_at_unix_ms
+    }
+}
+
+/// Expected signed metadata for one bounded BUD-01 image retrieval.
+#[cfg(feature = "blossom")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BlossomInboundRequest {
+    url: BlobUrl,
+    expected_media_type: Option<MediaType>,
+    expected_byte_size: Option<u64>,
+    expected_dimensions: Option<BlossomImageDimensions>,
+}
+
+#[cfg(feature = "blossom")]
+impl BlossomInboundRequest {
+    pub fn new(
+        url: BlobUrl,
+        expected_media_type: Option<MediaType>,
+        expected_byte_size: Option<u64>,
+        expected_dimensions: Option<BlossomImageDimensions>,
+    ) -> Result<Self, BlossomError> {
+        url.clone()
+            .approve()
+            .map_err(|_| BlossomError::configuration(BlossomErrorKind::InvalidRequest))?;
+        if expected_byte_size == Some(0) {
+            return Err(BlossomError::configuration(
+                BlossomErrorKind::InvalidRequest,
+            ));
+        }
+        if let Some(media_type) = &expected_media_type {
+            let extension = canonical_image_extension(media_type)?;
+            if url
+                .hash_path()
+                .extension()
+                .is_none_or(|value| value.as_str() != extension)
+            {
+                return Err(BlossomError::configuration(
+                    BlossomErrorKind::MediaTypeMismatch,
+                ));
+            }
+        }
+        Ok(Self {
+            url,
+            expected_media_type,
+            expected_byte_size,
+            expected_dimensions,
+        })
+    }
+
+    #[must_use]
+    pub const fn url(&self) -> &BlobUrl {
+        &self.url
+    }
+
+    #[must_use]
+    pub const fn expected_media_type(&self) -> Option<&MediaType> {
+        self.expected_media_type.as_ref()
+    }
+
+    #[must_use]
+    pub const fn expected_byte_size(&self) -> Option<u64> {
+        self.expected_byte_size
+    }
+
+    #[must_use]
+    pub const fn expected_dimensions(&self) -> Option<BlossomImageDimensions> {
+        self.expected_dimensions
     }
 }
 
@@ -872,7 +953,10 @@ pub enum BlossomErrorKind {
     HttpStatus,
     UnsafeRedirect,
     RedirectLimit,
+    ContentEncodingDenied,
     ResponseTooLarge,
+    ResponseSizeMismatch,
+    ResponseHashMismatch,
     InvalidDescriptor,
     DescriptorMismatch,
     RetrievedBytesMismatch,
@@ -976,7 +1060,10 @@ impl BlossomError {
             BlossomErrorKind::HttpStatus => "blossom_http_status",
             BlossomErrorKind::UnsafeRedirect => "blossom_unsafe_redirect",
             BlossomErrorKind::RedirectLimit => "blossom_redirect_limit",
+            BlossomErrorKind::ContentEncodingDenied => "blossom_content_encoding_denied",
             BlossomErrorKind::ResponseTooLarge => "blossom_response_too_large",
+            BlossomErrorKind::ResponseSizeMismatch => "blossom_response_size_mismatch",
+            BlossomErrorKind::ResponseHashMismatch => "blossom_response_hash_mismatch",
             BlossomErrorKind::InvalidDescriptor => "blossom_invalid_descriptor",
             BlossomErrorKind::DescriptorMismatch => "blossom_descriptor_mismatch",
             BlossomErrorKind::RetrievedBytesMismatch => "blossom_retrieved_bytes_mismatch",
@@ -1034,6 +1121,93 @@ pub struct BlossomUploadReceipt {
     dimensions: BlossomImageDimensions,
     attempts: u8,
     verified_at_unix_ms: u64,
+}
+
+/// Exact verified image bytes returned by a bounded BUD-01 retrieval.
+#[cfg(feature = "blossom")]
+#[derive(Clone)]
+pub struct BlossomInboundReceipt {
+    final_url: BlobUrl,
+    commitment: radroots_blossom::descriptor::ByteCommitment,
+    dimensions: BlossomImageDimensions,
+    bytes: Arc<[u8]>,
+    config_fingerprint: BlossomConfigFingerprint,
+    attempts: u8,
+    verified_at_unix_ms: u64,
+}
+
+#[cfg(feature = "blossom")]
+impl std::fmt::Debug for BlossomInboundReceipt {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BlossomInboundReceipt")
+            .field("final_url", &self.final_url)
+            .field("commitment", &self.commitment)
+            .field("dimensions", &self.dimensions)
+            .field("bytes", &"<redacted>")
+            .field("config_fingerprint", &self.config_fingerprint)
+            .field("attempts", &self.attempts)
+            .field("verified_at_unix_ms", &self.verified_at_unix_ms)
+            .finish()
+    }
+}
+
+#[cfg(feature = "blossom")]
+impl BlossomInboundReceipt {
+    pub(crate) fn new(
+        final_url: BlobUrl,
+        commitment: radroots_blossom::descriptor::ByteCommitment,
+        dimensions: BlossomImageDimensions,
+        bytes: Arc<[u8]>,
+        config_fingerprint: BlossomConfigFingerprint,
+        attempts: u8,
+        verified_at_unix_ms: u64,
+    ) -> Self {
+        Self {
+            final_url,
+            commitment,
+            dimensions,
+            bytes,
+            config_fingerprint,
+            attempts,
+            verified_at_unix_ms,
+        }
+    }
+
+    #[must_use]
+    pub const fn final_url(&self) -> &BlobUrl {
+        &self.final_url
+    }
+
+    #[must_use]
+    pub const fn commitment(&self) -> &radroots_blossom::descriptor::ByteCommitment {
+        &self.commitment
+    }
+
+    #[must_use]
+    pub const fn dimensions(&self) -> BlossomImageDimensions {
+        self.dimensions
+    }
+
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
+
+    #[must_use]
+    pub const fn config_fingerprint(&self) -> BlossomConfigFingerprint {
+        self.config_fingerprint
+    }
+
+    #[must_use]
+    pub const fn attempts(&self) -> u8 {
+        self.attempts
+    }
+
+    #[must_use]
+    pub const fn verified_at_unix_ms(&self) -> u64 {
+        self.verified_at_unix_ms
+    }
 }
 
 #[cfg(feature = "blossom")]
@@ -1279,6 +1453,39 @@ impl BlossomSlot {
         }
     }
 
+    /// Retrieves and verifies one immutable BUD-01 image under the exact
+    /// configured DNS, TLS, redirect, retry, and byte limits.
+    pub async fn retrieve(
+        &self,
+        request: BlossomInboundRequest,
+        cancellation: BlossomCancellation,
+    ) -> Result<BlossomInboundReceipt, BlossomError> {
+        let config = self
+            .snapshot()
+            .ok_or_else(|| BlossomError::configuration(BlossomErrorKind::EndpointNotConfigured))?;
+        let fingerprint = config.fingerprint();
+        if config.profile().endpoint_for_blob(request.url()).is_none() {
+            return Err(BlossomError::configuration(
+                BlossomErrorKind::EndpointNotConfigured,
+            ));
+        }
+        let result = crate::adapters::blossom::retrieve(config, request, cancellation).await;
+        match result {
+            Ok(receipt) => {
+                self.record_evidence(fingerprint, BlossomPhase::Verification, false, |evidence| {
+                    evidence.record_success(BlossomEvidenceState::RetrievalVerified, None);
+                })?;
+                Ok(receipt)
+            }
+            Err(error) => {
+                self.record_evidence(fingerprint, BlossomPhase::Verification, false, |evidence| {
+                    evidence.record_failure(&error);
+                })?;
+                Err(error)
+            }
+        }
+    }
+
     fn validate_transaction(
         &self,
         transaction: &BlossomUploadTransaction,
@@ -1414,7 +1621,9 @@ fn blossom_authority_accepts_address(authority: BlossomEndpointAuthority, addres
 }
 
 #[cfg(feature = "blossom")]
-fn canonical_image_extension(media_type: &MediaType) -> Result<&'static str, BlossomError> {
+pub(crate) fn canonical_image_extension(
+    media_type: &MediaType,
+) -> Result<&'static str, BlossomError> {
     match media_type.as_str() {
         "image/png" => Ok("png"),
         "image/jpeg" => Ok("jpg"),
@@ -2571,6 +2780,8 @@ mod tests {
 
         assert!(BlossomImageDimensions::new(0, 1).is_err());
         assert!(BlossomImageDimensions::new(1, 0).is_err());
+        assert!(BlossomImageDimensions::new(16_385, 1).is_err());
+        assert!(BlossomImageDimensions::new(10_001, 10_000).is_err());
         let dimensions = BlossomImageDimensions::new(2, 3).unwrap();
         assert_eq!(dimensions.width(), 2);
         assert_eq!(dimensions.height(), 3);
@@ -2665,8 +2876,20 @@ mod tests {
             (BlossomErrorKind::UnsafeRedirect, "blossom_unsafe_redirect"),
             (BlossomErrorKind::RedirectLimit, "blossom_redirect_limit"),
             (
+                BlossomErrorKind::ContentEncodingDenied,
+                "blossom_content_encoding_denied",
+            ),
+            (
                 BlossomErrorKind::ResponseTooLarge,
                 "blossom_response_too_large",
+            ),
+            (
+                BlossomErrorKind::ResponseSizeMismatch,
+                "blossom_response_size_mismatch",
+            ),
+            (
+                BlossomErrorKind::ResponseHashMismatch,
+                "blossom_response_hash_mismatch",
             ),
             (
                 BlossomErrorKind::InvalidDescriptor,
