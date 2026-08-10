@@ -27,6 +27,9 @@ This file exists for compatibility with tools that look for AGENTS.md.
   Service-event source, registry, generated, and consumer work must implement
   that exact kind, tag, cardinality, query, and supersession contract; it may
   not reinterpret the reservation from current prototype wire behavior.
+- Source-lock consumer identities include `sdk`, `mobile`, `studio`, `myc`,
+  and `rhi`. Only the first three are generated-artifact product identities;
+  accepting a service consumer marker must not expose an artifact route.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in

@@ -93,8 +93,11 @@ impl ConsumerRoot {
             .map_err(|error| format!("consumer marker is not UTF-8: {error}"))?
             .trim()
             .to_owned();
-        if !matches!(product.as_str(), "sdk" | "mobile" | "studio") {
-            return Err("consumer marker must contain sdk, mobile, or studio".to_owned());
+        if !matches!(
+            product.as_str(),
+            "sdk" | "mobile" | "studio" | "myc" | "rhi"
+        ) {
+            return Err("consumer marker must contain sdk, mobile, studio, myc, or rhi".to_owned());
         }
         let source_lock_path = canonical.join(SOURCE_LOCK_NAME);
         let source_lock = parse_source_lock(&source_lock_path)?;
@@ -1160,6 +1163,16 @@ mod tests {
         )
         .expect("floating manifest");
         assert!(ConsumerRoot::open(&fixture.consumer).is_err());
+    }
+
+    #[test]
+    fn source_lock_accepts_services_without_creating_artifact_routes() {
+        for product in ["myc", "rhi"] {
+            let fixture = Fixture::new(product);
+            let consumer = ConsumerRoot::open(&fixture.consumer).expect("valid service consumer");
+            assert_eq!(consumer.product, product);
+            assert!(validate_artifact_route(product, "linux", "rust").is_err());
+        }
     }
 
     #[test]
