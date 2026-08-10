@@ -336,6 +336,85 @@ async fn upload_bound_with_authorization(
     ))
 }
 
+pub(crate) async fn complete_native_upload(
+    transaction: BlossomUploadTransaction,
+    status_code: u16,
+    response_media_type: Option<&str>,
+    response_content_encoding: Option<&str>,
+    response_body: &[u8],
+    cancellation: BlossomCancellation,
+) -> Result<BlossomUploadReceipt, BlossomError> {
+    let config = transaction.config().clone();
+    let expected_url = transaction.expected_url().clone();
+    let request = transaction.into_request();
+    if !matches!(status_code, 200 | 201) {
+        let status = StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        return Err(http_status_error(status, BlossomPhase::Upload, true, 1));
+    }
+    if response_media_type != Some("application/json")
+        || response_content_encoding.is_some_and(|value| value != "identity")
+        || response_body.is_empty()
+        || response_body.len() > config.max_descriptor_bytes()
+    {
+        return Err(failure(
+            BlossomErrorKind::InvalidDescriptor,
+            BlossomPhase::Upload,
+            false,
+            true,
+            1,
+        ));
+    }
+    let descriptor = serde_json::from_slice::<BlobDescriptor>(response_body).map_err(|_| {
+        failure(
+            BlossomErrorKind::InvalidDescriptor,
+            BlossomPhase::Upload,
+            false,
+            true,
+            1,
+        )
+    })?;
+    let verified_upload = verify_descriptor(&request, &expected_url, descriptor, 1)?;
+    let retrieved = retrieve(
+        config,
+        BlossomInboundRequest::new(
+            verified_upload.url().as_blob_url().clone(),
+            Some(request.media_type().clone()),
+            Some(request.byte_size()),
+            Some(request.dimensions()),
+        )?,
+        cancellation,
+    )
+    .await?;
+    if retrieved.bytes() != request.bytes() {
+        return Err(failure(
+            BlossomErrorKind::RetrievedBytesMismatch,
+            BlossomPhase::Verification,
+            false,
+            true,
+            1_u8.saturating_add(retrieved.attempts()),
+        ));
+    }
+    let descriptor = verified_upload
+        .into_descriptor()
+        .approve_reference()
+        .and_then(|approved| approved.verify_bytes(retrieved.bytes(), request.media_type()))
+        .map_err(|_| {
+            failure(
+                BlossomErrorKind::RetrievedBytesMismatch,
+                BlossomPhase::Verification,
+                false,
+                true,
+                1_u8.saturating_add(retrieved.attempts()),
+            )
+        })?;
+    Ok(BlossomUploadReceipt::new(
+        descriptor,
+        request.dimensions(),
+        1_u8.saturating_add(retrieved.attempts()),
+        request.verified_at_unix_ms(),
+    ))
+}
+
 pub(crate) async fn retrieve(
     config: BlossomConfig,
     request: BlossomInboundRequest,
@@ -2027,6 +2106,56 @@ mod tests {
             std::iter::empty::<&str>(),
         )
         .expect("profile")
+    }
+
+    #[tokio::test]
+    async fn native_upload_completion_verifies_descriptor_and_retrieved_bytes() {
+        let bytes = png(2, 3);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let request = upload_request(origin.as_str(), bytes.clone());
+        let expected_url =
+            BlobUrl::parse(format!("{origin}/{}.png", request.sha256()).as_str()).unwrap();
+        let descriptor = BlobDescriptor::new(
+            expected_url,
+            request.sha256(),
+            request.byte_size(),
+            MediaType::parse("image/png").unwrap(),
+            1_900_000_000,
+        )
+        .unwrap();
+        let descriptor_body = serde_json::to_vec(&descriptor).unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_request(&mut stream).await;
+            assert!(String::from_utf8_lossy(&request).starts_with("GET /"));
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                bytes.len()
+            );
+            stream.write_all(head.as_bytes()).await.unwrap();
+            stream.write_all(&bytes).await.unwrap();
+            stream.shutdown().await.unwrap();
+        });
+        let slot = crate::transport::BlossomSlot::new();
+        slot.configure(config(origin.as_str())).unwrap();
+        let transaction = slot
+            .prepare_upload(upload_request(origin.as_str(), png(2, 3)))
+            .unwrap();
+        let receipt = slot
+            .complete_native_upload(
+                transaction,
+                200,
+                Some("application/json"),
+                None,
+                descriptor_body.as_slice(),
+                BlossomCancellation::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(receipt.descriptor().sha256(), descriptor.sha256());
+        assert_eq!(receipt.attempts(), 2);
+        server.await.unwrap();
     }
 
     async fn spawn_inbound_server(

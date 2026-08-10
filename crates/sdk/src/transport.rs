@@ -1453,6 +1453,47 @@ impl BlossomSlot {
         }
     }
 
+    /// Verifies a host-executed BUD-02 response, then performs the canonical
+    /// BUD-01 exact-byte retrieval before returning an upload receipt.
+    pub async fn complete_native_upload(
+        &self,
+        transaction: BlossomUploadTransaction,
+        status_code: u16,
+        response_media_type: Option<&str>,
+        response_content_encoding: Option<&str>,
+        response_body: &[u8],
+        cancellation: BlossomCancellation,
+    ) -> Result<BlossomUploadReceipt, BlossomError> {
+        self.validate_transaction(&transaction)?;
+        let fingerprint = transaction.config_fingerprint();
+        let result = crate::adapters::blossom::complete_native_upload(
+            transaction,
+            status_code,
+            response_media_type,
+            response_content_encoding,
+            response_body,
+            cancellation,
+        )
+        .await;
+        match result {
+            Ok(receipt) => {
+                self.record_evidence(fingerprint, BlossomPhase::Verification, true, |evidence| {
+                    evidence.record_success(BlossomEvidenceState::RetrievalVerified, None);
+                })?;
+                Ok(receipt)
+            }
+            Err(error) => {
+                self.record_evidence(fingerprint, BlossomPhase::Verification, true, |evidence| {
+                    if error.possible_orphan() {
+                        evidence.last_successful_state = BlossomEvidenceState::UploadVerified;
+                    }
+                    evidence.record_failure(&error);
+                })?;
+                Err(error)
+            }
+        }
+    }
+
     /// Retrieves and verifies one immutable BUD-01 image under the exact
     /// configured DNS, TLS, redirect, retry, and byte limits.
     pub async fn retrieve(
