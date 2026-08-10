@@ -90,6 +90,27 @@ pub struct RelayProfile {
 }
 
 impl RelayProfile {
+    /// Builds an explicit profile with directional access per endpoint.
+    ///
+    /// This constructor does not inject a bundled endpoint. Callers provide the
+    /// complete validated set they intend to use.
+    pub fn explicit<I, S>(kind: RelayProfileKind, endpoints: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = (S, RelayAccess)>,
+        S: AsRef<str>,
+    {
+        let policy = match kind {
+            RelayProfileKind::Public => RelayUrlPolicy::Public,
+            RelayProfileKind::Simulator => RelayUrlPolicy::Local,
+            RelayProfileKind::Device => RelayUrlPolicy::PrivateNetwork,
+        };
+        let endpoints = endpoints
+            .into_iter()
+            .map(|(url, access)| RelayEndpoint::new(url, policy, access))
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::validated(kind, endpoints)
+    }
+
     /// Builds the ordinary public profile.
     ///
     /// `wss://radroots.org/` is always present as read-write. Every additional
@@ -216,6 +237,24 @@ mod tests {
         assert_eq!(profile.endpoints()[1].access(), RelayAccess::ReadWrite);
         assert!(RelayProfile::public([DEFAULT_PUBLIC_RELAY]).is_err());
         assert!(RelayProfile::public(["ws://public.example"]).is_err());
+    }
+
+    #[test]
+    fn explicit_profile_preserves_directional_access_without_injecting_endpoints() {
+        let profile = RelayProfile::explicit(
+            RelayProfileKind::Public,
+            [
+                ("wss://read.example", RelayAccess::ReadOnly),
+                ("wss://write.example", RelayAccess::ReadWrite),
+            ],
+        )
+        .expect("explicit profile");
+
+        assert_eq!(profile.endpoints().len(), 2);
+        assert_eq!(profile.endpoints()[0].access(), RelayAccess::ReadOnly);
+        assert_eq!(profile.endpoints()[1].access(), RelayAccess::ReadWrite);
+        assert!(!profile.endpoints()[0].access().can_write());
+        assert!(profile.endpoints()[1].access().can_write());
     }
 
     #[test]
