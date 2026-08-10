@@ -22,6 +22,11 @@ This file exists for compatibility with tools that look for AGENTS.md.
   specifications, decisions, runbooks, and qualification evidence belong
   under the parent monorepo's `docs/oss/lib/**` authority and must never become
   a standalone build, test, package, or release input.
+- The pre-implementation service-event reservation is
+  `contracts/architecture/decisions/services_hardening_events.v1.json`.
+  Service-event source, registry, generated, and consumer work must implement
+  that exact kind, tag, cardinality, query, and supersession contract; it may
+  not reinterpret the reservation from current prototype wire behavior.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
