@@ -12,6 +12,7 @@ const LIFECYCLE_SOURCE: &str = concat!(
     include_str!("../src/lifecycle/mod.rs"),
     include_str!("../src/lifecycle/cancel.rs"),
     include_str!("../src/lifecycle/shutdown.rs"),
+    include_str!("../src/lifecycle/signal.rs"),
     include_str!("../src/lifecycle/supervisor.rs"),
     include_str!("../src/lifecycle/task.rs"),
 );
