@@ -240,18 +240,10 @@ impl fmt::Display for AdminRouteRegistrationError {
 
 impl Error for AdminRouteRegistrationError {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminRequestDecodeError {
     Empty,
-    Malformed(serde_json::Error),
-}
-
-impl fmt::Debug for AdminRequestDecodeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Empty => "AdminRequestDecodeError::Empty",
-            Self::Malformed(_) => "AdminRequestDecodeError::Malformed(<redacted>)",
-        })
-    }
+    Malformed,
 }
 
 impl fmt::Display for AdminRequestDecodeError {
@@ -260,14 +252,7 @@ impl fmt::Display for AdminRequestDecodeError {
     }
 }
 
-impl Error for AdminRequestDecodeError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Empty => None,
-            Self::Malformed(error) => Some(error),
-        }
-    }
-}
+impl Error for AdminRequestDecodeError {}
 
 /// Validated request metadata and a bounded raw JSON body.
 pub struct AdminRequest {
@@ -318,7 +303,7 @@ impl AdminRequest {
         if self.body.is_empty() {
             return Err(AdminRequestDecodeError::Empty);
         }
-        serde_json::from_slice(&self.body).map_err(AdminRequestDecodeError::Malformed)
+        serde_json::from_slice(&self.body).map_err(|_| AdminRequestDecodeError::Malformed)
     }
 
     pub fn success<T>(&self, result: &T) -> Result<AdminRouteOutcome, AdminRouteOutcomeError>
@@ -328,13 +313,14 @@ impl AdminRequest {
         let encoded =
             encode_bounded(result, self.response_body_limit).map_err(|error| match error {
                 BoundedEncodingError::Limit => AdminRouteOutcomeError::ResponseLimit,
-                BoundedEncodingError::Encoding(error) => AdminRouteOutcomeError::Encoding(error),
+                BoundedEncodingError::Encoding => AdminRouteOutcomeError::Encoding,
             })?;
         let _: StrictJsonValue =
-            serde_json::from_slice(&encoded).map_err(AdminRouteOutcomeError::InvalidPayload)?;
+            serde_json::from_slice(&encoded).map_err(|_| AdminRouteOutcomeError::InvalidPayload)?;
         let encoded =
             String::from_utf8(encoded).expect("serde_json output must always be valid UTF-8");
-        let result = RawValue::from_string(encoded).map_err(AdminRouteOutcomeError::Encoding)?;
+        let result =
+            RawValue::from_string(encoded).map_err(|_| AdminRouteOutcomeError::Encoding)?;
         Ok(AdminRouteOutcome(AdminRouteOutcomeKind::Success(result)))
     }
 }
@@ -356,40 +342,24 @@ impl fmt::Debug for AdminRequest {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminRouteOutcomeError {
-    Encoding(serde_json::Error),
-    InvalidPayload(serde_json::Error),
+    Encoding,
+    InvalidPayload,
     ResponseLimit,
-}
-
-impl fmt::Debug for AdminRouteOutcomeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Encoding(_) => "AdminRouteOutcomeError::Encoding(<redacted>)",
-            Self::InvalidPayload(_) => "AdminRouteOutcomeError::InvalidPayload(<redacted>)",
-            Self::ResponseLimit => "AdminRouteOutcomeError::ResponseLimit",
-        })
-    }
 }
 
 impl fmt::Display for AdminRouteOutcomeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::Encoding(_) => "admin route result could not be encoded",
-            Self::InvalidPayload(_) => "admin route result violates the JSON payload contract",
+            Self::Encoding => "admin route result could not be encoded",
+            Self::InvalidPayload => "admin route result violates the JSON payload contract",
             Self::ResponseLimit => "admin route result exceeds the response limit",
         })
     }
 }
 
-impl Error for AdminRouteOutcomeError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Encoding(error) | Self::InvalidPayload(error) => Some(error),
-            Self::ResponseLimit => None,
-        }
-    }
-}
+impl Error for AdminRouteOutcomeError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminRouteFailureStatus {
@@ -1205,7 +1175,7 @@ where
 
 enum BoundedEncodingError {
     Limit,
-    Encoding(serde_json::Error),
+    Encoding,
 }
 
 struct CappedWriter {
@@ -1247,7 +1217,7 @@ where
     match serde_json::to_writer(&mut writer, value) {
         Ok(()) => Ok(writer.bytes),
         Err(_) if writer.exceeded => Err(BoundedEncodingError::Limit),
-        Err(error) => Err(BoundedEncodingError::Encoding(error)),
+        Err(_) => Err(BoundedEncodingError::Encoding),
     }
 }
 
@@ -1985,8 +1955,34 @@ mod tests {
         };
         assert!(matches!(
             request.success(&Option::<bool>::None),
-            Err(AdminRouteOutcomeError::InvalidPayload(_))
+            Err(AdminRouteOutcomeError::InvalidPayload)
         ));
+
+        let malformed = AdminRequest {
+            body: Bytes::from_static(b"secret malformed JSON"),
+            ..request
+        }
+        .decode_json::<bool>()
+        .expect_err("malformed request must fail");
+        assert_eq!(malformed, AdminRequestDecodeError::Malformed);
+        assert!(std::error::Error::source(&malformed).is_none());
+        assert!(!format!("{malformed:?}").contains("secret"));
+
+        let request = AdminRequest {
+            method: AdminHttpMethod::Get,
+            path: AdminRoutePath::new("/v1/test").expect("path"),
+            query: None,
+            correlation_id: AdminCorrelationId::new("safe-id").expect("correlation"),
+            parameters: BTreeMap::new(),
+            body: Bytes::new(),
+            response_body_limit: ADMIN_MIN_RESPONSE_BODY_UTF8_BYTES as usize,
+        };
+        let unsupported_json_map_key = BTreeMap::from([((1_u8, 2_u8), true)]);
+        let encoding = request
+            .success(&unsupported_json_map_key)
+            .expect_err("tuple map key must not encode as JSON");
+        assert_eq!(encoding, AdminRouteOutcomeError::Encoding);
+        assert!(std::error::Error::source(&encoding).is_none());
     }
 
     #[test]

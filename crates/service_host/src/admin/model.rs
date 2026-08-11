@@ -183,37 +183,22 @@ impl fmt::Display for AdminErrorMessageError {
 
 impl Error for AdminErrorMessageError {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminPayloadError {
     NullForbidden,
-    Encoding(serde_json::Error),
-}
-
-impl fmt::Debug for AdminPayloadError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::NullForbidden => "AdminPayloadError::NullForbidden",
-            Self::Encoding(_) => "AdminPayloadError::Encoding(<redacted>)",
-        })
-    }
+    Encoding,
 }
 
 impl fmt::Display for AdminPayloadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::NullForbidden => "admin payloads may not contain JSON null",
-            Self::Encoding(_) => "admin payload could not be represented as JSON",
+            Self::Encoding => "admin payload could not be represented as JSON",
         })
     }
 }
 
-impl Error for AdminPayloadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::NullForbidden => None,
-            Self::Encoding(error) => Some(error),
-        }
-    }
-}
+impl Error for AdminPayloadError {}
 
 #[derive(Clone, PartialEq, Eq)]
 struct NonNullPayload<T>(T);
@@ -835,7 +820,7 @@ where
 }
 
 fn checked_json_value(value: &impl Serialize) -> Result<serde_json::Value, AdminPayloadError> {
-    let value = serde_json::to_value(value).map_err(AdminPayloadError::Encoding)?;
+    let value = serde_json::to_value(value).map_err(|_| AdminPayloadError::Encoding)?;
     if contains_null(&value) {
         Err(AdminPayloadError::NullForbidden)
     } else {
@@ -1494,6 +1479,17 @@ mod tests {
         assert!(response_debug.contains("<redacted>"));
         assert!(!request_debug.contains("secret request"));
         assert!(!response_debug.contains("secret response"));
+    }
+
+    #[test]
+    fn payload_encoding_failure_has_only_a_stable_crate_owned_error() {
+        let unsupported_json_map_key = std::collections::BTreeMap::from([((1_u8, 2_u8), true)]);
+        let error = AdminMutationRequest::new(operation_id(), None, unsupported_json_map_key)
+            .expect_err("tuple map key must not encode as JSON");
+
+        assert_eq!(error, AdminPayloadError::Encoding);
+        assert_eq!(format!("{error:?}"), "Encoding");
+        assert!(error.source().is_none());
     }
 
     #[derive(Debug)]

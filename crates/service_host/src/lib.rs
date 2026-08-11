@@ -1,16 +1,15 @@
 #![forbid(unsafe_code)]
+#![doc = include_str!("../README.md")]
 
-//! Reusable, service-neutral host mechanics for Radroots services.
-
-pub mod admin;
-pub mod build_info;
-pub mod config;
-pub mod entropy;
-pub mod error;
-pub mod lifecycle;
-pub mod operations;
-pub mod status;
-pub mod time;
+mod admin;
+mod build_info;
+mod config;
+mod entropy;
+mod error;
+mod lifecycle;
+mod operations;
+mod status;
+mod time;
 
 pub use admin::{
     ADMIN_CONTRACT_VERSION, ADMIN_CORRELATION_ID_MAX_UTF8_BYTES, ADMIN_ERROR_CODE_MAX_UTF8_BYTES,
@@ -70,6 +69,7 @@ pub use operations::{
     OperationsTransportLimitValues, OperationsTransportLimits, OperationsTransportLimitsError,
     READYZ_PATH, StableRelayId, livez, readyz,
 };
+pub use radroots_runtime_paths::{InstanceId, ServiceId};
 pub use status::{
     CONFIGURATION_SCHEMA_VERSION, CachedServiceState, CachedServiceStatePublisher,
     CachedServiceStateReader, CommonReasonCode, ConfigurationIdentity, ConfigurationSource,

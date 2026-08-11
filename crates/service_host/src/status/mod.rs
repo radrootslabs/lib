@@ -10,7 +10,7 @@ pub use cache::{
     StatusPublisherDropped, cached_service_state,
 };
 pub use phase::{Readiness, ServiceOperationalState, ServicePhase, StatusContractError};
-pub use reason::{CommonReasonCode, REASON_CODES_MAX_ITEMS, ReasonCode, ReasonCodes};
+pub use reason::{CommonReasonCode, ReasonCode, ReasonCodes};
 pub use service::{
     CONFIGURATION_SCHEMA_VERSION, ConfigurationIdentity, ConfigurationSource, IntegrityState,
     PersistenceHealth, PersistenceSummary, ProviderHealth, SERVICE_STATUS_CONTRACT_VERSION,

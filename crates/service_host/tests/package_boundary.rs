@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const README: &str = include_str!("../README.md");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_service_host.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
 const CONFIG_DOCUMENT_SOURCE: &str = include_str!("../src/config/document.rs");
 const CONFIG_VALUE_SOURCE: &str = include_str!("../src/config/value.rs");
@@ -71,8 +73,9 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
             "toml",
         ])
     );
+    assert!(public_modules(ROOT).is_empty());
     assert_eq!(
-        public_modules(ROOT),
+        private_modules(ROOT),
         BTreeSet::from([
             "admin",
             "build_info",
@@ -85,6 +88,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
             "time",
         ])
     );
+    assert!(ROOT.contains("pub use radroots_runtime_paths::{InstanceId, ServiceId};"));
     assert!(!STATUS_SOURCE.contains("serde(untagged)"));
     assert!(!ADMIN_SOURCE.contains("serde(untagged)"));
     for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
@@ -112,9 +116,71 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     }
 }
 
+#[test]
+fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
+    for required in [
+        "## Strict configuration values",
+        "## Cached state and explicit cancellation",
+        "## Local administration and operations",
+        "## Process and runtime ownership",
+        "## Supported targets and publication",
+        "services_hardening_host.v1.json",
+        "contracts/api_baselines/radroots_service_host.txt",
+        "BoundedCount::<64>::new(8)",
+        "cached_service_state(CachedServiceState::new",
+        "parent.child_token()",
+    ] {
+        assert!(README.contains(required), "README is missing `{required}`");
+    }
+
+    for required in [
+        "pub struct radroots_service_host::BuildInfo",
+        "pub struct radroots_service_host::ConfigDocumentExpectation",
+        "pub struct radroots_service_host::PositiveDuration",
+        "pub struct radroots_service_host::CancellationToken",
+        "pub struct radroots_service_host::TaskSupervisor",
+        "pub struct radroots_service_host::AdminRouter",
+        "pub struct radroots_service_host::OperationsServer",
+        "pub struct radroots_service_host::BoundedMetricsSnapshot",
+        "pub struct radroots_service_host::ServiceStatus",
+        "pub trait radroots_service_host::MonotonicClock",
+        "pub trait radroots_service_host::EntropySource",
+    ] {
+        assert!(
+            PUBLIC_API.contains(required),
+            "reviewed API baseline is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "pub mod radroots_service_host::admin",
+        "pub mod radroots_service_host::config",
+        "pub mod radroots_service_host::lifecycle",
+        "pub mod radroots_service_host::operations",
+        "pub mod radroots_service_host::status",
+        "hyper::",
+        "rustix::",
+        "serde_json::",
+        "tokio::",
+        "tokio_util::",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "reviewed API baseline exposes `{forbidden}`"
+        );
+    }
+}
+
 fn public_modules(root: &str) -> BTreeSet<&str> {
     root.lines()
         .filter_map(|line| line.strip_prefix("pub mod "))
+        .filter_map(|module| module.strip_suffix(';'))
+        .collect()
+}
+
+fn private_modules(root: &str) -> BTreeSet<&str> {
+    root.lines()
+        .filter_map(|line| line.strip_prefix("mod "))
         .filter_map(|module| module.strip_suffix(';'))
         .collect()
 }
