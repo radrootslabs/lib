@@ -4,7 +4,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 
 #[test]
-fn service_host_is_unpublished_lint_governed_and_dependency_free() {
+fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     for required in [
         "name = \"radroots_service_host\"",
         "publish = false",
@@ -17,8 +17,11 @@ fn service_host_is_unpublished_lint_governed_and_dependency_free() {
         );
     }
 
-    assert_eq!(dependency_keys(MANIFEST), BTreeSet::new());
-    assert_eq!(public_modules(ROOT), BTreeSet::from(["error"]));
+    assert_eq!(dependency_keys(MANIFEST), BTreeSet::from(["getrandom"]));
+    assert_eq!(
+        public_modules(ROOT),
+        BTreeSet::from(["entropy", "error", "time"])
+    );
 }
 
 fn public_modules(root: &str) -> BTreeSet<&str> {

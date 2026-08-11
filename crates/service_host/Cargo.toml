@@ -12,6 +12,7 @@ homepage.workspace = true
 readme = "README.md"
 
 [dependencies]
+getrandom = { workspace = true }
 
 [lints]
 workspace = true
