@@ -5,6 +5,7 @@
 pub mod build_info;
 pub mod entropy;
 pub mod error;
+pub mod status;
 pub mod time;
 
 pub use build_info::{
@@ -13,6 +14,10 @@ pub use build_info::{
 };
 pub use entropy::{EntropyError, EntropySource, SystemEntropy};
 pub use error::{HostError, HostErrorCode, HostErrorKind, SafeHostError};
+pub use status::{
+    CommonReasonCode, Readiness, ReasonCode, ReasonCodes, ServiceOperationalState, ServicePhase,
+    StatusContractError,
+};
 pub use time::{
     MonotonicClock, MonotonicClockError, MonotonicDeadline, MonotonicTime, SystemMonotonicClock,
     SystemWallClock, UnixTimeSeconds, WallClock, WallClockError,
