@@ -14,7 +14,11 @@ pub use conventions::{
     DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE, DEFAULT_SHARED_IDENTITY_FILE_NAME,
     DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME, DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE,
     DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_KIND, DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_VALUE,
-    RadrootsBootstrapPaths, default_namespaced_bootstrap_paths, default_service_instance_paths,
+    RadrootsBootstrapPaths, RadrootsServiceInstanceArtifacts, SERVICE_ADMIN_SOCKET_FILE_NAME,
+    SERVICE_CREDENTIAL_ARTIFACT_NAME_MAX_BYTES, SERVICE_STATE_DATABASE_FILE_NAME,
+    SERVICE_STATE_LOCK_FILE_NAME, ServiceCredentialArtifactName,
+    ServiceCredentialArtifactNameError, default_namespaced_bootstrap_paths,
+    default_service_instance_artifacts, default_service_instance_paths,
     default_shared_geonames_database_file_name,
     default_shared_geonames_database_path_from_cache_root,
     default_shared_geonames_root_from_cache_root, default_shared_identity_path,
@@ -22,6 +26,7 @@ pub use conventions::{
     default_shared_runtime_store_database_path_from_shared_accounts_data_root,
     default_shared_runtime_store_root_from_data_root,
     default_shared_runtime_store_root_from_shared_accounts_data_root,
+    service_credential_artifact_path,
 };
 pub use error::RadrootsRuntimePathsError;
 pub use identifier::{
