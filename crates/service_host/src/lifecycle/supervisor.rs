@@ -7,7 +7,7 @@ use tokio::task::{Id, JoinError, JoinSet};
 
 use crate::HostError;
 
-use super::{CancellationToken, TaskClassification, TaskMetadata};
+use super::{CancellationToken, TaskClassification, TaskMetadata, UnfinishedWork};
 
 /// Owns every spawned service task until its join result is observed.
 #[must_use = "a task supervisor must be run or drained so authoritative tasks are joined"]
@@ -154,6 +154,26 @@ impl TaskSupervisor {
                 }
             }
         }
+    }
+
+    pub(crate) fn unfinished_work(&self) -> UnfinishedWork {
+        if self.metadata.is_empty() {
+            UnfinishedWork::None
+        } else if self
+            .metadata
+            .values()
+            .any(|metadata| metadata.classification().failure_is_fatal())
+        {
+            UnfinishedWork::FatalAuthoritative
+        } else {
+            UnfinishedWork::RecoverableOptional
+        }
+    }
+
+    pub(crate) async fn abort_and_drain(&mut self) {
+        self.cancellation.cancel();
+        self.tasks.abort_all();
+        while self.join_next().await.is_some() {}
     }
 }
 
