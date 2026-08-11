@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn service_host_unix_uses_canonical_service_roots() {
+    fn service_host_linux_uses_canonical_service_roots() {
         let resolver =
             RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
 
@@ -161,45 +161,28 @@ mod tests {
     }
 
     #[test]
-    fn service_host_windows_uses_programdata_roots() {
-        let resolver = RadrootsPathResolver::new(
+    fn service_host_is_unsupported_outside_linux() {
+        for platform in [
+            RadrootsPlatform::Macos,
             RadrootsPlatform::Windows,
-            RadrootsHostEnvironment {
-                programdata_dir: Some(PathBuf::from(r"C:\ProgramData")),
-                ..RadrootsHostEnvironment::default()
-            },
-        );
-
-        let roots = resolver
-            .resolve(
-                RadrootsPathProfile::ServiceHost,
-                &RadrootsPathOverrides::default(),
-            )
-            .expect("resolve service_host roots");
-
-        assert_eq!(
-            roots,
-            RadrootsPaths {
-                config: PathBuf::from(r"C:\ProgramData")
-                    .join("Radroots")
-                    .join("config"),
-                data: PathBuf::from(r"C:\ProgramData")
-                    .join("Radroots")
-                    .join("data"),
-                cache: PathBuf::from(r"C:\ProgramData")
-                    .join("Radroots")
-                    .join("cache"),
-                logs: PathBuf::from(r"C:\ProgramData")
-                    .join("Radroots")
-                    .join("logs"),
-                run: PathBuf::from(r"C:\ProgramData")
-                    .join("Radroots")
-                    .join("run"),
-                secrets: PathBuf::from(r"C:\ProgramData")
-                    .join("Radroots")
-                    .join("secrets"),
-            }
-        );
+            RadrootsPlatform::Android,
+            RadrootsPlatform::Ios,
+            RadrootsPlatform::Other,
+        ] {
+            let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
+            assert_eq!(
+                resolver
+                    .resolve(
+                        RadrootsPathProfile::ServiceHost,
+                        &RadrootsPathOverrides::default(),
+                    )
+                    .expect_err("service_host must be unsupported outside linux"),
+                RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                    profile: RadrootsPathProfile::ServiceHost,
+                    platform,
+                }
+            );
+        }
     }
 
     #[test]

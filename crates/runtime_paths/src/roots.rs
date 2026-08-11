@@ -113,10 +113,15 @@ impl RadrootsPathResolver {
                     .mobile_roots
                     .clone()
                     .ok_or(RadrootsRuntimePathsError::MissingMobileRoots),
-                _ => Err(RadrootsRuntimePathsError::UnsupportedProfilePlatform {
-                    profile,
-                    platform: self.platform,
-                }),
+                RadrootsPlatform::Linux
+                | RadrootsPlatform::Macos
+                | RadrootsPlatform::Windows
+                | RadrootsPlatform::Other => {
+                    Err(RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                        profile,
+                        platform: self.platform,
+                    })
+                }
             },
         }
     }
@@ -153,7 +158,7 @@ impl RadrootsPathResolver {
                     secrets: config_root.join("secrets"),
                 })
             }
-            RadrootsPlatform::Android | RadrootsPlatform::Ios => {
+            RadrootsPlatform::Android | RadrootsPlatform::Ios | RadrootsPlatform::Other => {
                 Err(RadrootsRuntimePathsError::UnsupportedProfilePlatform {
                     profile: RadrootsPathProfile::InteractiveUser,
                     platform: self.platform,
@@ -164,23 +169,7 @@ impl RadrootsPathResolver {
 
     fn resolve_service_host(&self) -> Result<RadrootsPaths, RadrootsRuntimePathsError> {
         match self.platform {
-            RadrootsPlatform::Windows => {
-                let programdata = self
-                    .host_environment
-                    .programdata_dir
-                    .as_ref()
-                    .ok_or(RadrootsRuntimePathsError::MissingWindowsProgramDataDir)?;
-                let base = programdata.join("Radroots");
-                Ok(RadrootsPaths {
-                    config: base.join("config"),
-                    data: base.join("data"),
-                    cache: base.join("cache"),
-                    logs: base.join("logs"),
-                    run: base.join("run"),
-                    secrets: base.join("secrets"),
-                })
-            }
-            RadrootsPlatform::Linux | RadrootsPlatform::Macos => Ok(RadrootsPaths {
+            RadrootsPlatform::Linux => Ok(RadrootsPaths {
                 config: PathBuf::from("/etc/radroots"),
                 data: PathBuf::from("/var/lib/radroots"),
                 cache: PathBuf::from("/var/cache/radroots"),
@@ -188,7 +177,11 @@ impl RadrootsPathResolver {
                 run: PathBuf::from("/run/radroots"),
                 secrets: PathBuf::from("/etc/radroots/secrets"),
             }),
-            RadrootsPlatform::Android | RadrootsPlatform::Ios => {
+            RadrootsPlatform::Macos
+            | RadrootsPlatform::Windows
+            | RadrootsPlatform::Android
+            | RadrootsPlatform::Ios
+            | RadrootsPlatform::Other => {
                 Err(RadrootsRuntimePathsError::UnsupportedProfilePlatform {
                     profile: RadrootsPathProfile::ServiceHost,
                     platform: self.platform,
@@ -277,32 +270,21 @@ mod tests {
     }
 
     #[test]
-    fn service_host_windows_requires_programdata() {
-        let resolver = RadrootsPathResolver::new(
+    fn service_host_is_rejected_outside_linux() {
+        for platform in [
+            RadrootsPlatform::Macos,
             RadrootsPlatform::Windows,
-            RadrootsHostEnvironment::default(),
-        );
-
-        let err = resolver
-            .resolve(
-                RadrootsPathProfile::ServiceHost,
-                &RadrootsPathOverrides::default(),
-            )
-            .expect_err("service_host on windows should require programdata");
-
-        assert_eq!(err, RadrootsRuntimePathsError::MissingWindowsProgramDataDir);
-    }
-
-    #[test]
-    fn service_host_is_rejected_on_mobile_platforms() {
-        for platform in [RadrootsPlatform::Android, RadrootsPlatform::Ios] {
+            RadrootsPlatform::Android,
+            RadrootsPlatform::Ios,
+            RadrootsPlatform::Other,
+        ] {
             let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
             let err = resolver
                 .resolve(
                     RadrootsPathProfile::ServiceHost,
                     &RadrootsPathOverrides::default(),
                 )
-                .expect_err("service_host should be unsupported on mobile");
+                .expect_err("service_host should be unsupported outside linux");
             assert_eq!(
                 err,
                 RadrootsRuntimePathsError::UnsupportedProfilePlatform {
