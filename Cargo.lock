@@ -3909,6 +3909,7 @@ dependencies = [
 name = "radroots_service_sqlite"
 version = "0.1.0-alpha"
 dependencies = [
+ "radroots_runtime_paths",
  "serde",
  "serde_json",
 ]

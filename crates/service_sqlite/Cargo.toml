@@ -12,6 +12,7 @@ homepage.workspace = true
 readme = "README.md"
 
 [dependencies]
+radroots_runtime_paths = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 
 [dev-dependencies]
