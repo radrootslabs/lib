@@ -40,9 +40,11 @@ pub use build_info::{
     StatusBuildInfo,
 };
 pub use config::{
-    CONFIG_DOCUMENT_MAX_UTF8_BYTES, CONFIG_SCHEMA_ID_MAX_UTF8_BYTES, ConfigDocumentError,
-    ConfigDocumentErrorKind, ConfigDocumentExpectation, ConfigDocumentExpectationError,
-    ConfigDocumentLocation, load_config_document,
+    BoundedCount, BoundedCountError, ByteLimit, ByteLimitError, CONFIG_DOCUMENT_MAX_UTF8_BYTES,
+    CONFIG_SCHEMA_ID_MAX_UTF8_BYTES, ConfigDocumentError, ConfigDocumentErrorKind,
+    ConfigDocumentExpectation, ConfigDocumentExpectationError, ConfigDocumentLocation,
+    LoggingFormat, LoggingFormatError, OptionalOperationsBind, OptionalOperationsBindError,
+    PositiveDuration, PositiveDurationError, load_config_document,
 };
 pub use entropy::{EntropyError, EntropySource, SystemEntropy};
 pub use error::{HostError, HostErrorCode, HostErrorKind, SafeHostError};
