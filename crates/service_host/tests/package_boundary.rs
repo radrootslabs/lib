@@ -4,6 +4,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const ADMIN_SOURCE: &str = concat!(
     include_str!("../src/admin/mod.rs"),
+    include_str!("../src/admin/client.rs"),
     include_str!("../src/admin/limits.rs"),
     include_str!("../src/admin/model.rs"),
     include_str!("../src/admin/server.rs"),

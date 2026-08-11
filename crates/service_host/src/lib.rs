@@ -22,13 +22,14 @@ pub use admin::{
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use admin::{
     ADMIN_MIN_RESPONSE_BODY_UTF8_BYTES, ADMIN_ROUTE_PARAMETER_NAME_MAX_UTF8_BYTES,
-    ADMIN_ROUTE_PARAMETER_VALUE_MAX_UTF8_BYTES, ADMIN_ROUTE_PATH_MAX_UTF8_BYTES, AdminHttpMethod,
-    AdminRequest, AdminRequestDecodeError, AdminRouteFailure, AdminRouteFailureStatus,
-    AdminRouteOutcome, AdminRouteOutcomeError, AdminRoutePath, AdminRoutePathError,
-    AdminRouteRegistrationError, AdminRouter, AdminServer, AdminServerConfigError,
-    AdminServerError, UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT, UNIX_ADMIN_OWNER_DIRECTORY_MODE,
-    UNIX_ADMIN_OWNER_SOCKET_MODE, UnixAdminSocketBinding, UnixAdminSocketError,
-    UnixAdminSocketWriterAuthority,
+    ADMIN_ROUTE_PARAMETER_VALUE_MAX_UTF8_BYTES, ADMIN_ROUTE_PATH_MAX_UTF8_BYTES, AdminClient,
+    AdminClientError, AdminClientErrorKind, AdminClientTarget, AdminClientTargetError,
+    AdminHttpMethod, AdminRequest, AdminRequestDecodeError, AdminRouteFailure,
+    AdminRouteFailureStatus, AdminRouteOutcome, AdminRouteOutcomeError, AdminRoutePath,
+    AdminRoutePathError, AdminRouteRegistrationError, AdminRouter, AdminServer,
+    AdminServerConfigError, AdminServerError, UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT,
+    UNIX_ADMIN_OWNER_DIRECTORY_MODE, UNIX_ADMIN_OWNER_SOCKET_MODE, UnixAdminSocketBinding,
+    UnixAdminSocketError, UnixAdminSocketWriterAuthority,
 };
 pub use build_info::{
     BuildInfo, BuildInfoEnvironment, BuildInfoError, BuildInfoField, BuildMode, ContractVersions,

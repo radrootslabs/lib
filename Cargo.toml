@@ -210,7 +210,7 @@ hkdf = { version = "0.12", default-features = false }
 hmac = { version = "0.12", default-features = false }
 http = { version = "1" }
 http-body-util = { version = "0.1" }
-hyper = { version = "1", features = ["http1", "server"] }
+hyper = { version = "1", features = ["client", "http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 hex = { version = "0.4" }
 jiff-tzdb = { version = "=0.1.8", default-features = false }

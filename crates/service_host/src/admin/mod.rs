@@ -1,5 +1,7 @@
 //! Versioned, bounded local-administration protocol models.
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod client;
 mod limits;
 mod model;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -7,6 +9,10 @@ mod server;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use client::{
+    AdminClient, AdminClientError, AdminClientErrorKind, AdminClientTarget, AdminClientTargetError,
+};
 pub use limits::{
     AdminTransportLimitField, AdminTransportLimitValues, AdminTransportLimits,
     AdminTransportLimitsError,
