@@ -16,7 +16,8 @@ pub use admin::{
     AdminContractVersionError, AdminCorrelationId, AdminError, AdminErrorCode, AdminErrorCodeError,
     AdminErrorMessage, AdminErrorMessageError, AdminFailureResponse, AdminIdentifierError,
     AdminIdentifierField, AdminMutationRequest, AdminOperationId, AdminPayloadError,
-    AdminSuccessResponse,
+    AdminSuccessResponse, AdminTransportLimitField, AdminTransportLimitValues,
+    AdminTransportLimits, AdminTransportLimitsError,
 };
 pub use build_info::{
     BuildInfo, BuildInfoEnvironment, BuildInfoError, BuildInfoField, BuildMode, ContractVersions,

@@ -1,7 +1,12 @@
 //! Versioned, bounded local-administration protocol models.
 
+mod limits;
 mod model;
 
+pub use limits::{
+    AdminTransportLimitField, AdminTransportLimitValues, AdminTransportLimits,
+    AdminTransportLimitsError,
+};
 pub use model::{
     ADMIN_CONTRACT_VERSION, ADMIN_CORRELATION_ID_MAX_UTF8_BYTES, ADMIN_ERROR_CODE_MAX_UTF8_BYTES,
     ADMIN_ERROR_MESSAGE_MAX_UTF8_BYTES, ADMIN_OPERATION_ID_MAX_UTF8_BYTES,
