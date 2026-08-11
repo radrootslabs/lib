@@ -3,6 +3,7 @@
 mod config;
 mod health;
 mod metrics;
+mod server;
 
 pub use config::{
     OperationsBindPolicy, OperationsConfigError, OperationsConfigField, OperationsListenAddress,
@@ -19,4 +20,8 @@ pub use metrics::{
     MetricComponentId, MetricDescriptor, MetricHealthState, MetricKind, MetricLabel,
     MetricLabelKey, MetricName, MetricSample, MetricTaskOutcome, MetricValue, MetricsContractError,
     MetricsRenderError, StableRelayId,
+};
+pub use server::{
+    BoundOperationsServer, METRICS_PATH, OPERATIONS_HTTP_MIN_HEADER_BYTES, OperationsServer,
+    OperationsServerError,
 };

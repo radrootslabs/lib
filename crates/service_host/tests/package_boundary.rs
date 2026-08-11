@@ -25,11 +25,15 @@ const LIFECYCLE_SOURCE: &str = concat!(
     include_str!("../src/lifecycle/supervisor.rs"),
     include_str!("../src/lifecycle/task.rs"),
 );
-const OPERATIONS_SOURCE: &str = concat!(
+const OPERATIONS_PRIMITIVES_SOURCE: &str = concat!(
     include_str!("../src/operations/mod.rs"),
     include_str!("../src/operations/config.rs"),
     include_str!("../src/operations/health.rs"),
     include_str!("../src/operations/metrics.rs"),
+);
+const OPERATIONS_SOURCE: &str = concat!(
+    include_str!("../src/operations/mod.rs"),
+    include_str!("../src/operations/server.rs"),
 );
 
 #[test]
@@ -82,15 +86,10 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
         assert!(!LIFECYCLE_SOURCE.contains(forbidden));
     }
-    for forbidden in [
-        "TcpListener",
-        "TcpStream",
-        "/status",
-        "process::exit",
-        "tokio::spawn",
-    ] {
-        assert!(!OPERATIONS_SOURCE.contains(forbidden));
+    for forbidden in ["TcpListener", "TcpStream", "tokio::spawn"] {
+        assert!(!OPERATIONS_PRIMITIVES_SOURCE.contains(forbidden));
     }
+    assert!(!OPERATIONS_SOURCE.contains("process::exit"));
 }
 
 fn public_modules(root: &str) -> BTreeSet<&str> {

@@ -50,15 +50,17 @@ pub use lifecycle::{
     TaskRegistrationError, TaskSupervisor, UnfinishedWork,
 };
 pub use operations::{
-    BoundedMetricsSnapshot, CommonMetricGroup, LIVEZ_PATH, METRICS_CONTENT_TYPE,
-    METRICS_MAX_DESCRIPTORS, METRICS_MAX_LABELS_PER_SAMPLE, METRICS_MAX_RENDER_UTF8_BYTES,
-    METRICS_MAX_SAMPLES, MetricComponentId, MetricDescriptor, MetricHealthState, MetricKind,
-    MetricLabel, MetricLabelKey, MetricName, MetricSample, MetricTaskOutcome, MetricValue,
-    MetricsContractError, MetricsRenderError, OPERATIONS_HEALTH_CONTENT_TYPE, OperationsBindPolicy,
+    BoundOperationsServer, BoundedMetricsSnapshot, CommonMetricGroup, LIVEZ_PATH,
+    METRICS_CONTENT_TYPE, METRICS_MAX_DESCRIPTORS, METRICS_MAX_LABELS_PER_SAMPLE,
+    METRICS_MAX_RENDER_UTF8_BYTES, METRICS_MAX_SAMPLES, METRICS_PATH, MetricComponentId,
+    MetricDescriptor, MetricHealthState, MetricKind, MetricLabel, MetricLabelKey, MetricName,
+    MetricSample, MetricTaskOutcome, MetricValue, MetricsContractError, MetricsRenderError,
+    OPERATIONS_HEALTH_CONTENT_TYPE, OPERATIONS_HTTP_MIN_HEADER_BYTES, OperationsBindPolicy,
     OperationsConfigError, OperationsConfigField, OperationsHealthResponse,
     OperationsListenAddress, OperationsListenAddressError, OperationsListenerConfig,
-    OperationsTransportLimitField, OperationsTransportLimitValues, OperationsTransportLimits,
-    OperationsTransportLimitsError, READYZ_PATH, StableRelayId, livez, readyz,
+    OperationsServer, OperationsServerError, OperationsTransportLimitField,
+    OperationsTransportLimitValues, OperationsTransportLimits, OperationsTransportLimitsError,
+    READYZ_PATH, StableRelayId, livez, readyz,
 };
 pub use status::{
     CONFIGURATION_SCHEMA_VERSION, CachedServiceState, CachedServiceStatePublisher,
