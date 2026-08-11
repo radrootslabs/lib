@@ -794,6 +794,7 @@ health_surface = "jsonrpc_status"
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(home_dir),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                 ..RadrootsHostEnvironment::default()
             },
         )

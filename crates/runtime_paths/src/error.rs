@@ -12,6 +12,12 @@ pub enum RadrootsRuntimePathsError {
     #[error("interactive_user on windows requires APPDATA and LOCALAPPDATA roots")]
     MissingWindowsUserDirs,
 
+    #[error("interactive_user on linux requires XDG_RUNTIME_DIR")]
+    MissingXdgRuntimeDir,
+
+    #[error("interactive_user on {platform} requires HOME to be an absolute path")]
+    InvalidHomeDir { platform: RadrootsPlatform },
+
     #[error("repo_local requires an explicit repo-local base root")]
     MissingRepoLocalRoot,
 

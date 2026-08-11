@@ -5,6 +5,30 @@ use crate::{
     RadrootsRuntimePathsError,
 };
 
+const APPLICATION_DIRECTORY: &str = "radroots";
+const MACOS_APPLICATION_DIRECTORY: &str = "Radroots";
+
+#[derive(Clone, Copy)]
+enum XdgDirectory {
+    Config,
+    Data,
+    State,
+    Cache,
+    Runtime,
+}
+
+impl XdgDirectory {
+    const fn home_default(self) -> Option<&'static str> {
+        match self {
+            Self::Config => Some(".config"),
+            Self::Data => Some(".local/share"),
+            Self::State => Some(".local/state"),
+            Self::Cache => Some(".cache"),
+            Self::Runtime => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsPaths {
     pub config: PathBuf,
@@ -128,14 +152,8 @@ impl RadrootsPathResolver {
 
     fn resolve_interactive_user(&self) -> Result<RadrootsPaths, RadrootsRuntimePathsError> {
         match self.platform {
-            RadrootsPlatform::Linux | RadrootsPlatform::Macos => self
-                .host_environment
-                .home_dir
-                .as_ref()
-                .map(|home| RadrootsPaths::from_base_root(home.join(".radroots")))
-                .ok_or(RadrootsRuntimePathsError::MissingHomeDir {
-                    platform: self.platform,
-                }),
+            RadrootsPlatform::Linux => self.resolve_linux_interactive_user(),
+            RadrootsPlatform::Macos => self.resolve_macos_interactive_user(),
             RadrootsPlatform::Windows => {
                 let appdata = self
                     .host_environment
@@ -164,6 +182,75 @@ impl RadrootsPathResolver {
                     platform: self.platform,
                 })
             }
+        }
+    }
+
+    fn resolve_linux_interactive_user(&self) -> Result<RadrootsPaths, RadrootsRuntimePathsError> {
+        let config = self.resolve_xdg_directory(XdgDirectory::Config)?;
+        let data = self.resolve_xdg_directory(XdgDirectory::Data)?;
+        let state = self.resolve_xdg_directory(XdgDirectory::State)?;
+        let cache = self.resolve_xdg_directory(XdgDirectory::Cache)?;
+        let run = self.resolve_xdg_directory(XdgDirectory::Runtime)?;
+        Ok(RadrootsPaths {
+            config: config.join(APPLICATION_DIRECTORY),
+            data: data.join(APPLICATION_DIRECTORY),
+            cache: cache.join(APPLICATION_DIRECTORY),
+            logs: state.join(APPLICATION_DIRECTORY).join("logs"),
+            run: run.join(APPLICATION_DIRECTORY),
+            secrets: config.join(APPLICATION_DIRECTORY).join("secrets"),
+        })
+    }
+
+    fn resolve_xdg_directory(
+        &self,
+        directory: XdgDirectory,
+    ) -> Result<PathBuf, RadrootsRuntimePathsError> {
+        let configured = match directory {
+            XdgDirectory::Config => &self.host_environment.xdg_config_home,
+            XdgDirectory::Data => &self.host_environment.xdg_data_home,
+            XdgDirectory::State => &self.host_environment.xdg_state_home,
+            XdgDirectory::Cache => &self.host_environment.xdg_cache_home,
+            XdgDirectory::Runtime => &self.host_environment.xdg_runtime_dir,
+        };
+        if let Some(path) = configured.as_ref().filter(|path| path.is_absolute()) {
+            return Ok(path.clone());
+        }
+        let Some(default) = directory.home_default() else {
+            return Err(RadrootsRuntimePathsError::MissingXdgRuntimeDir);
+        };
+        Ok(self.valid_home_dir(RadrootsPlatform::Linux)?.join(default))
+    }
+
+    fn resolve_macos_interactive_user(&self) -> Result<RadrootsPaths, RadrootsRuntimePathsError> {
+        let home = self.valid_home_dir(RadrootsPlatform::Macos)?;
+        let application_support = home
+            .join("Library/Application Support")
+            .join(MACOS_APPLICATION_DIRECTORY);
+        Ok(RadrootsPaths {
+            config: application_support.join("config"),
+            data: application_support.join("data"),
+            cache: home
+                .join("Library/Caches")
+                .join(MACOS_APPLICATION_DIRECTORY),
+            logs: home.join("Library/Logs").join(MACOS_APPLICATION_DIRECTORY),
+            run: application_support.join("run"),
+            secrets: application_support.join("secrets"),
+        })
+    }
+
+    fn valid_home_dir(
+        &self,
+        platform: RadrootsPlatform,
+    ) -> Result<&Path, RadrootsRuntimePathsError> {
+        let home = self
+            .host_environment
+            .home_dir
+            .as_deref()
+            .ok_or(RadrootsRuntimePathsError::MissingHomeDir { platform })?;
+        if home.is_absolute() {
+            Ok(home)
+        } else {
+            Err(RadrootsRuntimePathsError::InvalidHomeDir { platform })
         }
     }
 
@@ -225,6 +312,265 @@ mod tests {
                 RadrootsPlatform::current(),
                 RadrootsHostEnvironment::from_current_process()
             )
+        );
+    }
+
+    #[test]
+    fn linux_interactive_uses_exact_config_data_state_cache_and_runtime_roots() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                xdg_config_home: Some(PathBuf::from("/xdg/config")),
+                xdg_data_home: Some(PathBuf::from("/xdg/data")),
+                xdg_state_home: Some(PathBuf::from("/xdg/state")),
+                xdg_cache_home: Some(PathBuf::from("/xdg/cache")),
+                xdg_runtime_dir: Some(PathBuf::from("/xdg/run")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+
+        assert_eq!(
+            resolver
+                .resolve(
+                    RadrootsPathProfile::InteractiveUser,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect("configured XDG roots"),
+            RadrootsPaths {
+                config: PathBuf::from("/xdg/config/radroots"),
+                data: PathBuf::from("/xdg/data/radroots"),
+                cache: PathBuf::from("/xdg/cache/radroots"),
+                logs: PathBuf::from("/xdg/state/radroots/logs"),
+                run: PathBuf::from("/xdg/run/radroots"),
+                secrets: PathBuf::from("/xdg/config/radroots/secrets"),
+            }
+        );
+    }
+
+    #[test]
+    fn linux_interactive_uses_xdg_home_defaults_but_never_invents_runtime() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+
+        assert_eq!(
+            resolver
+                .resolve(
+                    RadrootsPathProfile::InteractiveUser,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect("defaulted XDG roots"),
+            RadrootsPaths {
+                config: PathBuf::from("/home/treesap/.config/radroots"),
+                data: PathBuf::from("/home/treesap/.local/share/radroots"),
+                cache: PathBuf::from("/home/treesap/.cache/radroots"),
+                logs: PathBuf::from("/home/treesap/.local/state/radroots/logs"),
+                run: PathBuf::from("/run/user/1000/radroots"),
+                secrets: PathBuf::from("/home/treesap/.config/radroots/secrets"),
+            }
+        );
+
+        let missing_runtime = RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+        assert_eq!(
+            missing_runtime
+                .resolve(
+                    RadrootsPathProfile::InteractiveUser,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect_err("XDG runtime has no home fallback"),
+            RadrootsRuntimePathsError::MissingXdgRuntimeDir
+        );
+    }
+
+    #[test]
+    fn linux_interactive_ignores_empty_and_relative_xdg_directories() {
+        let valid = RadrootsHostEnvironment {
+            home_dir: Some(PathBuf::from("/home/treesap")),
+            xdg_config_home: Some(PathBuf::from("/xdg/config")),
+            xdg_data_home: Some(PathBuf::from("/xdg/data")),
+            xdg_state_home: Some(PathBuf::from("/xdg/state")),
+            xdg_cache_home: Some(PathBuf::from("/xdg/cache")),
+            xdg_runtime_dir: Some(PathBuf::from("/xdg/run")),
+            ..RadrootsHostEnvironment::default()
+        };
+        for (environment, expected) in [
+            (
+                RadrootsHostEnvironment {
+                    xdg_config_home: Some(PathBuf::new()),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.config/radroots"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_config_home: Some(PathBuf::from("relative/config")),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.config/radroots"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_data_home: Some(PathBuf::new()),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.local/share/radroots"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_data_home: Some(PathBuf::from("relative/data")),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.local/share/radroots"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_state_home: Some(PathBuf::new()),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.local/state/radroots/logs"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_state_home: Some(PathBuf::from("relative/state")),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.local/state/radroots/logs"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_cache_home: Some(PathBuf::new()),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.cache/radroots"),
+            ),
+            (
+                RadrootsHostEnvironment {
+                    xdg_cache_home: Some(PathBuf::from("relative/cache")),
+                    ..valid.clone()
+                },
+                PathBuf::from("/home/treesap/.cache/radroots"),
+            ),
+        ] {
+            let resolver = RadrootsPathResolver::new(RadrootsPlatform::Linux, environment);
+            let roots = resolver
+                .resolve(
+                    RadrootsPathProfile::InteractiveUser,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect("invalid optional XDG directory is ignored");
+            assert!(
+                [roots.config, roots.data, roots.logs, roots.cache].contains(&expected),
+                "expected fallback root {expected:?}"
+            );
+        }
+
+        for xdg_runtime_dir in [Some(PathBuf::new()), Some(PathBuf::from("relative/run"))] {
+            let resolver = RadrootsPathResolver::new(
+                RadrootsPlatform::Linux,
+                RadrootsHostEnvironment {
+                    xdg_runtime_dir,
+                    ..valid.clone()
+                },
+            );
+            assert_eq!(
+                resolver
+                    .resolve(
+                        RadrootsPathProfile::InteractiveUser,
+                        &RadrootsPathOverrides::default(),
+                    )
+                    .expect_err("invalid XDG runtime is treated as missing"),
+                RadrootsRuntimePathsError::MissingXdgRuntimeDir
+            );
+        }
+    }
+
+    #[test]
+    fn interactive_home_derived_roots_require_an_absolute_nonempty_home() {
+        for home_dir in [Some(PathBuf::new()), Some(PathBuf::from("relative/home"))] {
+            let linux = RadrootsPathResolver::new(
+                RadrootsPlatform::Linux,
+                RadrootsHostEnvironment {
+                    home_dir: home_dir.clone(),
+                    xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+                    ..RadrootsHostEnvironment::default()
+                },
+            );
+            assert_eq!(
+                linux
+                    .resolve(
+                        RadrootsPathProfile::InteractiveUser,
+                        &RadrootsPathOverrides::default(),
+                    )
+                    .expect_err("Linux HOME defaults require an absolute HOME"),
+                RadrootsRuntimePathsError::InvalidHomeDir {
+                    platform: RadrootsPlatform::Linux,
+                }
+            );
+
+            let macos = RadrootsPathResolver::new(
+                RadrootsPlatform::Macos,
+                RadrootsHostEnvironment {
+                    home_dir,
+                    ..RadrootsHostEnvironment::default()
+                },
+            );
+            assert_eq!(
+                macos
+                    .resolve(
+                        RadrootsPathProfile::InteractiveUser,
+                        &RadrootsPathOverrides::default(),
+                    )
+                    .expect_err("macOS native roots require an absolute HOME"),
+                RadrootsRuntimePathsError::InvalidHomeDir {
+                    platform: RadrootsPlatform::Macos,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn macos_interactive_uses_native_library_roots_and_ignores_xdg() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Macos,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/Users/treesap")),
+                xdg_config_home: Some(PathBuf::from("relative/config")),
+                xdg_data_home: Some(PathBuf::from("relative/data")),
+                xdg_state_home: Some(PathBuf::from("relative/state")),
+                xdg_cache_home: Some(PathBuf::from("relative/cache")),
+                xdg_runtime_dir: Some(PathBuf::from("relative/run")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+
+        assert_eq!(
+            resolver
+                .resolve(
+                    RadrootsPathProfile::InteractiveUser,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect("macOS native roots"),
+            RadrootsPaths {
+                config: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/config",),
+                data: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/data",),
+                cache: PathBuf::from("/Users/treesap/Library/Caches/Radroots"),
+                logs: PathBuf::from("/Users/treesap/Library/Logs/Radroots"),
+                run: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/run",),
+                secrets: PathBuf::from(
+                    "/Users/treesap/Library/Application Support/Radroots/secrets",
+                ),
+            }
         );
     }
 

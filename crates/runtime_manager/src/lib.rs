@@ -201,6 +201,7 @@ preferred_cli_binding = true
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                 ..RadrootsHostEnvironment::default()
             },
         );
@@ -216,31 +217,31 @@ preferred_cli_binding = true
 
         assert_eq!(
             paths.instance_registry_path,
-            PathBuf::from("/home/treesap/.radroots/config/shared/runtime-manager/instances.toml")
+            PathBuf::from("/home/treesap/.config/radroots/shared/runtime-manager/instances.toml")
         );
         assert_eq!(
             paths.install_root,
-            PathBuf::from("/home/treesap/.radroots/data/shared/runtime-manager/installs")
+            PathBuf::from("/home/treesap/.local/share/radroots/shared/runtime-manager/installs")
         );
         assert_eq!(
             paths.artifact_cache_dir,
-            PathBuf::from("/home/treesap/.radroots/cache/shared/runtime-manager/artifacts")
+            PathBuf::from("/home/treesap/.cache/radroots/shared/runtime-manager/artifacts")
         );
         assert_eq!(
             paths.state_root,
-            PathBuf::from("/home/treesap/.radroots/data/shared/runtime-manager/state")
+            PathBuf::from("/home/treesap/.local/share/radroots/shared/runtime-manager/state")
         );
         assert_eq!(
             paths.logs_root,
-            PathBuf::from("/home/treesap/.radroots/logs/shared/runtime-manager")
+            PathBuf::from("/home/treesap/.local/state/radroots/logs/shared/runtime-manager")
         );
         assert_eq!(
             paths.run_root,
-            PathBuf::from("/home/treesap/.radroots/run/shared/runtime-manager")
+            PathBuf::from("/run/user/1000/radroots/shared/runtime-manager")
         );
         assert_eq!(
             paths.secrets_root,
-            PathBuf::from("/home/treesap/.radroots/secrets/shared/runtime-manager")
+            PathBuf::from("/home/treesap/.config/radroots/secrets/shared/runtime-manager")
         );
     }
 
@@ -288,19 +289,19 @@ preferred_cli_binding = true
         assert_eq!(
             instance_paths.install_dir,
             PathBuf::from(
-                "/Users/treesap/.radroots/data/shared/runtime-manager/installs/radrootsd/local"
+                "/Users/treesap/Library/Application Support/Radroots/data/shared/runtime-manager/installs/radrootsd/local"
             )
         );
         assert_eq!(
             instance_paths.pid_file_path,
             PathBuf::from(
-                "/Users/treesap/.radroots/run/shared/runtime-manager/radrootsd/local/runtime.pid"
+                "/Users/treesap/Library/Application Support/Radroots/run/shared/runtime-manager/radrootsd/local/runtime.pid"
             )
         );
         assert_eq!(
             instance_paths.metadata_path,
             PathBuf::from(
-                "/Users/treesap/.radroots/data/shared/runtime-manager/state/radrootsd/local/instance.toml"
+                "/Users/treesap/Library/Application Support/Radroots/data/shared/runtime-manager/state/radrootsd/local/instance.toml"
             )
         );
     }

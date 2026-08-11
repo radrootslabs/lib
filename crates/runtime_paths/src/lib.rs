@@ -47,11 +47,12 @@ mod tests {
     };
 
     #[test]
-    fn interactive_user_linux_uses_home_dotradroots_root() {
+    fn interactive_user_linux_uses_xdg_defaults_and_explicit_runtime() {
         let resolver = RadrootsPathResolver::new(
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                 ..RadrootsHostEnvironment::default()
             },
         );
@@ -64,13 +65,26 @@ mod tests {
             .expect("resolve linux interactive roots");
 
         assert_eq!(
-            roots,
-            RadrootsPaths::from_base_root("/home/treesap/.radroots")
+            roots.config,
+            PathBuf::from("/home/treesap/.config/radroots")
+        );
+        assert_eq!(
+            roots.data,
+            PathBuf::from("/home/treesap/.local/share/radroots")
+        );
+        assert_eq!(
+            roots.logs,
+            PathBuf::from("/home/treesap/.local/state/radroots/logs")
+        );
+        assert_eq!(roots.run, PathBuf::from("/run/user/1000/radroots"));
+        assert_eq!(
+            roots.secrets,
+            PathBuf::from("/home/treesap/.config/radroots/secrets")
         );
     }
 
     #[test]
-    fn interactive_user_macos_uses_home_dotradroots_root() {
+    fn interactive_user_macos_uses_native_library_roots() {
         let resolver = RadrootsPathResolver::new(
             RadrootsPlatform::Macos,
             RadrootsHostEnvironment {
@@ -88,7 +102,16 @@ mod tests {
 
         assert_eq!(
             roots,
-            RadrootsPaths::from_base_root("/Users/treesap/.radroots")
+            RadrootsPaths {
+                config: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/config",),
+                data: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/data",),
+                cache: PathBuf::from("/Users/treesap/Library/Caches/Radroots"),
+                logs: PathBuf::from("/Users/treesap/Library/Logs/Radroots"),
+                run: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/run",),
+                secrets: PathBuf::from(
+                    "/Users/treesap/Library/Application Support/Radroots/secrets",
+                ),
+            }
         );
     }
 
@@ -261,20 +284,20 @@ mod tests {
     #[test]
     fn namespace_derivation_keeps_runtime_segments_explicit() {
         let namespace = RadrootsRuntimeNamespace::service("myc").expect("namespace");
-        let roots = RadrootsPaths::from_base_root("/home/treesap/.radroots");
+        let roots = RadrootsPaths::from_base_root("/logical-root");
         let namespaced = roots.namespaced(&namespace);
 
         assert_eq!(
             namespaced.config,
-            PathBuf::from("/home/treesap/.radroots/config/services/myc")
+            PathBuf::from("/logical-root/config/services/myc")
         );
         assert_eq!(
             namespaced.data,
-            PathBuf::from("/home/treesap/.radroots/data/services/myc")
+            PathBuf::from("/logical-root/data/services/myc")
         );
         assert_eq!(
             namespaced.secrets,
-            PathBuf::from("/home/treesap/.radroots/secrets/services/myc")
+            PathBuf::from("/logical-root/secrets/services/myc")
         );
     }
 
@@ -290,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_user_unix_requires_home_dir() {
+    fn interactive_user_linux_requires_home_for_xdg_defaults() {
         let resolver =
             RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
 

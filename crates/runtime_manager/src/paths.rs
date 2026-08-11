@@ -268,6 +268,7 @@ preferred_cli_binding = true
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                 ..RadrootsHostEnvironment::default()
             },
         )

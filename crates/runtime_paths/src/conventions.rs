@@ -143,6 +143,7 @@ mod tests {
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                 ..RadrootsHostEnvironment::default()
             },
         );
@@ -160,16 +161,16 @@ mod tests {
 
         assert_eq!(
             paths.config_path,
-            PathBuf::from("/home/treesap/.radroots/config/services/radrootsd/config.toml")
+            PathBuf::from("/home/treesap/.config/radroots/services/radrootsd/config.toml")
         );
         assert_eq!(
             paths.logs_dir,
-            PathBuf::from("/home/treesap/.radroots/logs/services/radrootsd")
+            PathBuf::from("/home/treesap/.local/state/radroots/logs/services/radrootsd")
         );
         assert_eq!(
             paths.identity_path,
             PathBuf::from(
-                "/home/treesap/.radroots/secrets/services/radrootsd/identity.secret.json"
+                "/home/treesap/.config/radroots/secrets/services/radrootsd/identity.secret.json"
             )
         );
     }
@@ -192,8 +193,10 @@ mod tests {
         .expect("shared identity path should resolve");
         assert_eq!(
             identity_path,
-            PathBuf::from("/Users/treesap/.radroots/secrets/shared/identities")
-                .join(DEFAULT_SHARED_IDENTITY_FILE_NAME)
+            PathBuf::from(
+                "/Users/treesap/Library/Application Support/Radroots/secrets/shared/identities"
+            )
+            .join(DEFAULT_SHARED_IDENTITY_FILE_NAME)
         );
 
         let logs_dir = default_shared_runtime_logs_dir(
@@ -204,7 +207,7 @@ mod tests {
         .expect("shared runtime logs dir should resolve");
         assert_eq!(
             logs_dir,
-            PathBuf::from("/Users/treesap/.radroots/logs/shared/runtime")
+            PathBuf::from("/Users/treesap/Library/Logs/Radroots/shared/runtime")
         );
     }
 
