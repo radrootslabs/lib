@@ -4,6 +4,7 @@ use core::fmt;
 use std::{
     error::Error,
     future::Future,
+    path::Path,
     pin::Pin,
     sync::{
         Arc,
@@ -46,6 +47,8 @@ pub struct ServiceSqliteHost {
     closing: AtomicBool,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     close_state: tokio::sync::Mutex<ServiceSqliteHostCloseState>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    backup_active: Arc<AtomicBool>,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -197,6 +200,43 @@ impl ServiceSqliteHost {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
+            Err(unsupported_host())
+        }
+    }
+
+    /// Captures one point-in-time SQLite backup into a new staging directory.
+    ///
+    /// The caller supplies the exact new absolute staging-directory path and an
+    /// injected creation time. Capture is available only on writable hosts and
+    /// admits at most one active capture per host. The canonical manifest and a
+    /// successful result are returned only after the visible staging directory's
+    /// sole `state.sqlite` member has passed metadata, integrity, digest, and
+    /// durability checks. The manifest remains in memory and is not written into
+    /// the staging directory.
+    ///
+    /// Dropping this future requests cancellation. The admitted worker retains
+    /// host authority until it has closed SQLite handles and either completed or
+    /// cleaned the exact staging artifacts, so `close` drains that work before
+    /// releasing writer authority.
+    pub async fn capture_online_backup(
+        &self,
+        staging_directory: &Path,
+        created_at_unix_ms: crate::BackupCreatedAtUnixMs,
+    ) -> Result<crate::ServiceBackupManifest, ServiceSqliteError> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            crate::backup::capture_online_backup(
+                &self.pool,
+                &self.closing,
+                &self.backup_active,
+                staging_directory,
+                created_at_unix_ms,
+            )
+            .await
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (staging_directory, created_at_unix_ms);
             Err(unsupported_host())
         }
     }
@@ -436,6 +476,7 @@ impl ServiceSqliteHost {
             pool,
             closing: AtomicBool::new(false),
             close_state: tokio::sync::Mutex::new(ServiceSqliteHostCloseState::Pending),
+            backup_active: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -836,6 +877,9 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use tokio::sync::Notify;
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    static CAPTURE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     use super::*;
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -995,6 +1039,546 @@ mod tests {
         })
         .await
         .expect("count rows")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn online_backup_captures_exact_member_manifest_and_preserves_source() {
+        use sha2::Digest;
+
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+        crate::backup::test_capture_reset();
+        let (root, paths, identity, migrations, schema, host) = initialized_host().await;
+        host.transaction(|transaction| {
+            Box::pin(async move {
+                sqlx::query("INSERT INTO host_probe (value) VALUES (41), (42)")
+                    .execute(&mut *transaction)
+                    .await
+                    .map(|_| ())
+            })
+        })
+        .await
+        .expect("seed live WAL state");
+
+        let output = root.path().join("backup-output");
+        fs::create_dir(&output).expect("backup parent");
+        fs::set_permissions(&output, fs::Permissions::from_mode(0o700))
+            .expect("backup parent mode");
+        let collision = output.join("collision");
+        fs::create_dir(&collision).expect("preexisting collision");
+        fs::write(collision.join("foreign"), b"preserve").expect("foreign collision member");
+        let collision_error = host
+            .capture_online_backup(
+                &collision,
+                crate::BackupCreatedAtUnixMs::new(1_700_000_000_100).expect("backup creation time"),
+            )
+            .await
+            .expect_err("existing destination is rejected");
+        assert_eq!(collision_error.kind(), ServiceSqliteErrorKind::Backup);
+        assert_eq!(
+            fs::read(collision.join("foreign")).expect("preserved collision"),
+            b"preserve"
+        );
+
+        let source_database_before = fs::read(paths.state_database()).expect("source bytes");
+        let source_inventory_before =
+            fs::read_dir(paths.state_database().parent().expect("source directory"))
+                .expect("source inventory")
+                .map(|entry| entry.expect("source entry").file_name())
+                .collect::<std::collections::BTreeSet<_>>();
+        let stage = output.join("successful");
+        let created_at =
+            crate::BackupCreatedAtUnixMs::new(1_700_000_000_101).expect("backup creation time");
+        let manifest = host
+            .capture_online_backup(&stage, created_at)
+            .await
+            .expect("online backup");
+
+        assert_eq!(manifest.service(), paths.service());
+        assert_eq!(manifest.instance(), paths.instance());
+        assert_eq!(manifest.source_generation(), identity.source_generation());
+        assert_eq!(
+            manifest.state_schema_version(),
+            identity.supported_state_schema_version()
+        );
+        assert_eq!(manifest.created_at_unix_ms(), created_at);
+        assert_eq!(manifest.members().len(), 1);
+        assert!(!manifest.protected_material_included());
+        assert_eq!(manifest.integrity().sqlite(), "ok");
+        assert_eq!(manifest.integrity().foreign_keys(), "ok");
+
+        let state = stage.join("state.sqlite");
+        let bytes = fs::read(&state).expect("captured state bytes");
+        let digest: [u8; 32] = sha2::Sha256::digest(&bytes).into();
+        assert_eq!(manifest.members()[0].byte_length(), bytes.len() as u64);
+        assert_eq!(manifest.members()[0].sha256().as_bytes(), &digest);
+        assert_eq!(
+            fs::metadata(&stage)
+                .expect("stage metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(&state)
+                .expect("state metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::read_dir(&stage)
+                .expect("stage inventory")
+                .map(|entry| entry.expect("stage entry").file_name())
+                .collect::<Vec<_>>(),
+            vec![std::ffi::OsString::from("state.sqlite")]
+        );
+
+        let backup = rusqlite::Connection::open_with_flags(
+            &state,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NOFOLLOW,
+        )
+        .expect("open captured database");
+        assert_eq!(
+            backup
+                .query_row("SELECT COUNT(*) FROM host_probe", [], |row| row
+                    .get::<_, i64>(0))
+                .expect("captured row count"),
+            2
+        );
+        backup.close().expect("close captured database");
+
+        assert_eq!(
+            fs::read(paths.state_database()).expect("source bytes after capture"),
+            source_database_before
+        );
+        assert_eq!(
+            fs::read_dir(paths.state_database().parent().expect("source directory"))
+                .expect("source inventory after")
+                .map(|entry| entry.expect("source entry").file_name())
+                .collect::<std::collections::BTreeSet<_>>(),
+            source_inventory_before
+        );
+
+        host.close().await.expect("close writable host");
+        let inspection = ServiceSqliteHost::open_read_only_inspection(
+            &paths,
+            &identity,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+        )
+        .await
+        .expect("open inspection");
+        let forbidden = output.join("read-only-forbidden");
+        let error = inspection
+            .capture_online_backup(&forbidden, created_at)
+            .await
+            .expect_err("read-only capture is unavailable");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Open);
+        assert!(!forbidden.exists());
+        inspection.close().await.expect("close inspection");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn cancelled_capture_cleans_up_close_drains_and_next_capture_recovers() {
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+        crate::backup::test_capture_reset();
+        let (root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+        let output = root.path().join("cancel-output");
+        fs::create_dir(&output).expect("backup parent");
+        fs::set_permissions(&output, fs::Permissions::from_mode(0o700))
+            .expect("backup parent mode");
+        let cancelled_stage = output.join("cancelled");
+        crate::backup::test_capture_block_phase(crate::backup::TEST_CAPTURE_PHASE_STAGING_CREATED);
+        let capture = tokio::spawn({
+            let host = Arc::clone(&host);
+            let stage = cancelled_stage.clone();
+            async move {
+                host.capture_online_backup(
+                    &stage,
+                    crate::BackupCreatedAtUnixMs::new(1_700_000_000_200)
+                        .expect("backup creation time"),
+                )
+                .await
+            }
+        });
+        while crate::backup::test_capture_phase()
+            != crate::backup::TEST_CAPTURE_PHASE_STAGING_CREATED
+        {
+            tokio::task::yield_now().await;
+        }
+
+        let concurrent_stage = output.join("concurrent");
+        let concurrent = host
+            .capture_online_backup(
+                &concurrent_stage,
+                crate::BackupCreatedAtUnixMs::new(1_700_000_000_201).expect("backup creation time"),
+            )
+            .await
+            .expect_err("second capture is rejected");
+        assert_eq!(concurrent.kind(), ServiceSqliteErrorKind::Backup);
+        assert!(!concurrent_stage.exists());
+
+        capture.abort();
+        assert!(
+            capture
+                .await
+                .expect_err("capture task is cancelled")
+                .is_cancelled()
+        );
+        while host.backup_active.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+        crate::backup::test_capture_reset();
+        assert!(!cancelled_stage.exists());
+
+        let recovered_stage = output.join("recovered");
+        host.capture_online_backup(
+            &recovered_stage,
+            crate::BackupCreatedAtUnixMs::new(1_700_000_000_202).expect("backup creation time"),
+        )
+        .await
+        .expect("capture recovers after cancellation");
+        assert!(recovered_stage.join("state.sqlite").exists());
+
+        crate::backup::test_capture_reset();
+        crate::backup::test_capture_block_phase(crate::backup::TEST_CAPTURE_PHASE_STAGING_CREATED);
+        let close_drained_stage = output.join("close-drained");
+        let capture = tokio::spawn({
+            let host = Arc::clone(&host);
+            let stage = close_drained_stage.clone();
+            async move {
+                host.capture_online_backup(
+                    &stage,
+                    crate::BackupCreatedAtUnixMs::new(1_700_000_000_203)
+                        .expect("backup creation time"),
+                )
+                .await
+            }
+        });
+        while crate::backup::test_capture_phase()
+            != crate::backup::TEST_CAPTURE_PHASE_STAGING_CREATED
+        {
+            tokio::task::yield_now().await;
+        }
+        capture.abort();
+        assert!(
+            capture
+                .await
+                .expect_err("capture task is cancelled")
+                .is_cancelled()
+        );
+        host.close()
+            .await
+            .expect("close drains every admitted capture");
+        crate::backup::test_capture_reset();
+        assert!(!close_drained_stage.exists());
+        assert!(!host.backup_active.load(Ordering::Acquire));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn capture_cancellation_is_cleanup_safe_at_every_governed_phase() {
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+
+        for (index, phase) in [
+            crate::backup::TEST_CAPTURE_PHASE_BEFORE_CREATE,
+            crate::backup::TEST_CAPTURE_PHASE_BACKUP_STEPPED,
+            crate::backup::TEST_CAPTURE_PHASE_POST_COPY,
+            crate::backup::TEST_CAPTURE_PHASE_PRE_FINAL_SYNC,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            crate::backup::test_capture_reset();
+            let (root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+            let host = Arc::new(host);
+            if phase == crate::backup::TEST_CAPTURE_PHASE_BACKUP_STEPPED {
+                host.transaction(|transaction| {
+                    Box::pin(async move {
+                        sqlx::raw_sql(
+                            "WITH RECURSIVE sequence(value) AS (
+                                 VALUES(1)
+                                 UNION ALL
+                                 SELECT value + 1 FROM sequence WHERE value < 100000
+                             )
+                             INSERT INTO host_probe(value) SELECT 0 FROM sequence",
+                        )
+                        .execute(&mut *transaction)
+                        .await
+                        .map(|_| ())
+                    })
+                })
+                .await
+                .expect("seed multi-batch cancellation fixture");
+            }
+
+            let output = root.path().join(format!("phase-cancel-output-{index}"));
+            fs::create_dir(&output).expect("backup parent");
+            fs::set_permissions(&output, fs::Permissions::from_mode(0o700))
+                .expect("backup parent mode");
+            let stage = output.join("cancelled");
+            crate::backup::test_capture_block_phase(phase);
+            let capture = tokio::spawn({
+                let host = Arc::clone(&host);
+                let stage = stage.clone();
+                async move {
+                    host.capture_online_backup(
+                        &stage,
+                        crate::BackupCreatedAtUnixMs::new(1_700_000_000_220 + index as u64)
+                            .expect("backup creation time"),
+                    )
+                    .await
+                }
+            });
+            while crate::backup::test_capture_phase() != phase {
+                tokio::task::yield_now().await;
+            }
+
+            capture.abort();
+            assert!(
+                capture
+                    .await
+                    .expect_err("capture task is cancelled")
+                    .is_cancelled()
+            );
+            host.close()
+                .await
+                .expect("close drains phase-cancelled capture cleanup");
+            crate::backup::test_capture_reset();
+
+            assert!(!stage.exists(), "phase {phase} must leave no staging tree");
+            assert!(!host.backup_active.load(Ordering::Acquire));
+            let mut authority = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+                .expect("writer authority can be reacquired")
+                .expect("writable mode returns authority");
+            authority.release().expect("release reacquired authority");
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn online_backup_remains_consistent_with_a_concurrent_wal_writer() {
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+        crate::backup::test_capture_reset();
+        let (root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+        host.transaction(|transaction| {
+            Box::pin(async move {
+                sqlx::raw_sql(
+                    "WITH RECURSIVE sequence(value) AS (
+                         VALUES(1) UNION ALL SELECT value + 1 FROM sequence WHERE value < 100000
+                     )
+                     INSERT INTO host_probe(value) SELECT 0 FROM sequence",
+                )
+                .execute(&mut *transaction)
+                .await
+                .map(|_| ())
+            })
+        })
+        .await
+        .expect("seed a multi-batch database");
+
+        let output = root.path().join("concurrent-output");
+        fs::create_dir(&output).expect("backup parent");
+        fs::set_permissions(&output, fs::Permissions::from_mode(0o700))
+            .expect("backup parent mode");
+        let stage = output.join("consistent");
+        crate::backup::test_capture_block_phase(crate::backup::TEST_CAPTURE_PHASE_BACKUP_STEPPED);
+        let capture = tokio::spawn({
+            let host = Arc::clone(&host);
+            let stage = stage.clone();
+            async move {
+                host.capture_online_backup(
+                    &stage,
+                    crate::BackupCreatedAtUnixMs::new(1_700_000_000_300)
+                        .expect("backup creation time"),
+                )
+                .await
+            }
+        });
+        while crate::backup::test_capture_phase()
+            != crate::backup::TEST_CAPTURE_PHASE_BACKUP_STEPPED
+        {
+            tokio::task::yield_now().await;
+        }
+        host.transaction(|transaction| {
+            Box::pin(async move {
+                sqlx::query("UPDATE host_probe SET value = 1 WHERE rowid IN (1, 2)")
+                    .execute(&mut *transaction)
+                    .await
+                    .map(|_| ())
+            })
+        })
+        .await
+        .expect("commit concurrent WAL transaction");
+        crate::backup::test_capture_block_phase(0);
+        capture
+            .await
+            .expect("capture joins")
+            .expect("capture remains consistent");
+        crate::backup::test_capture_reset();
+
+        let backup = rusqlite::Connection::open_with_flags(
+            stage.join("state.sqlite"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NOFOLLOW,
+        )
+        .expect("open backup");
+        let updated: i64 = backup
+            .query_row(
+                "SELECT COUNT(*) FROM host_probe WHERE value = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count transaction projection");
+        assert!(
+            updated == 0 || updated == 2,
+            "backup must not tear a transaction"
+        );
+        assert_eq!(
+            backup
+                .query_row("PRAGMA integrity_check(1)", [], |row| row
+                    .get::<_, String>(0))
+                .expect("backup integrity"),
+            "ok"
+        );
+        backup.close().expect("close backup");
+        host.close().await.expect("close writer host");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn backup_sync_failures_cleanup_and_leave_host_recoverable() {
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+        crate::backup::test_capture_reset();
+        let (root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let output = root.path().join("sync-failure-output");
+        fs::create_dir(&output).expect("backup parent");
+        fs::set_permissions(&output, fs::Permissions::from_mode(0o700))
+            .expect("backup parent mode");
+
+        for (index, failure) in [
+            crate::backup::TestCaptureSyncFailure::State,
+            crate::backup::TestCaptureSyncFailure::Staging,
+            crate::backup::TestCaptureSyncFailure::FinalParent,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let stage = output.join(format!("failure-{index}"));
+            let error = crate::backup::test_capture_online_backup_with_sync_failure(
+                &host.pool,
+                &host.closing,
+                &host.backup_active,
+                &stage,
+                crate::BackupCreatedAtUnixMs::new(1_700_000_000_400 + index as u64)
+                    .expect("backup creation time"),
+                failure,
+            )
+            .await
+            .expect_err("injected synchronization failure must reject capture");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Backup);
+            assert!(!stage.exists());
+            assert!(!host.backup_active.load(Ordering::Acquire));
+            assert_eq!(row_count(&host).await, 0);
+        }
+
+        let recovered = output.join("recovered");
+        host.capture_online_backup(
+            &recovered,
+            crate::BackupCreatedAtUnixMs::new(1_700_000_000_410).expect("backup creation time"),
+        )
+        .await
+        .expect("host remains usable after sync failures");
+        assert!(recovered.join("state.sqlite").exists());
+        host.close().await.expect("close host");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn backup_await_boundaries_preserve_authority_precedence() {
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+        crate::backup::test_capture_reset();
+        let (root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+        let output = root.path().join("precedence-output");
+        fs::create_dir(&output).expect("backup parent");
+        fs::set_permissions(&output, fs::Permissions::from_mode(0o700))
+            .expect("backup parent mode");
+
+        crate::backup::test_capture_inject_metadata_failure(true);
+        crate::backup::test_capture_block_phase(crate::backup::TEST_CAPTURE_PHASE_METADATA_AWAITED);
+        let metadata_stage = output.join("metadata");
+        let capture = tokio::spawn({
+            let host = Arc::clone(&host);
+            let stage = metadata_stage.clone();
+            async move {
+                host.capture_online_backup(
+                    &stage,
+                    crate::BackupCreatedAtUnixMs::new(1_700_000_000_420)
+                        .expect("backup creation time"),
+                )
+                .await
+            }
+        });
+        while crate::backup::test_capture_phase()
+            != crate::backup::TEST_CAPTURE_PHASE_METADATA_AWAITED
+        {
+            tokio::task::yield_now().await;
+        }
+        let retired_lock = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("retired-backup-precedence.lock");
+        fs::rename(paths.state_lock(), &retired_lock).expect("retire writer lock");
+        crate::backup::test_capture_block_phase(0);
+        let metadata_error = capture
+            .await
+            .expect("metadata capture joins")
+            .expect_err("authority overrides metadata failure");
+        assert_eq!(metadata_error.kind(), ServiceSqliteErrorKind::Authority);
+        fs::rename(&retired_lock, paths.state_lock()).expect("restore writer lock");
+        crate::backup::test_capture_reset();
+        assert!(!metadata_stage.exists());
+        assert_eq!(row_count(&host).await, 0);
+
+        crate::backup::test_capture_panic_worker(true);
+        crate::backup::test_capture_block_phase(crate::backup::TEST_CAPTURE_PHASE_JOIN_AWAITED);
+        let join_stage = output.join("join");
+        let capture = tokio::spawn({
+            let host = Arc::clone(&host);
+            let stage = join_stage.clone();
+            async move {
+                host.capture_online_backup(
+                    &stage,
+                    crate::BackupCreatedAtUnixMs::new(1_700_000_000_421)
+                        .expect("backup creation time"),
+                )
+                .await
+            }
+        });
+        while crate::backup::test_capture_phase() != crate::backup::TEST_CAPTURE_PHASE_JOIN_AWAITED
+        {
+            tokio::task::yield_now().await;
+        }
+        fs::rename(paths.state_lock(), &retired_lock).expect("retire writer lock again");
+        crate::backup::test_capture_block_phase(0);
+        let join_error = capture
+            .await
+            .expect("join-failure capture joins")
+            .expect_err("authority overrides worker join failure");
+        assert_eq!(join_error.kind(), ServiceSqliteErrorKind::Authority);
+        fs::rename(&retired_lock, paths.state_lock()).expect("restore writer lock again");
+        crate::backup::test_capture_reset();
+        assert!(!join_stage.exists());
+        assert_eq!(row_count(&host).await, 0);
+        host.close().await.expect("close host");
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1777,7 +2361,7 @@ mod tests {
 
     #[test]
     fn host_and_transaction_errors_are_redacted_and_source_free() {
-        let error = ServiceSqliteTransactionError::rollback_failed(
+        let error = ServiceSqliteTransactionError::not_committed_with_operation(
             Some("operation-secret"),
             ServiceSqliteError::new(ServiceSqliteErrorKind::Open),
         );

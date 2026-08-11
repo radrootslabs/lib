@@ -48,8 +48,31 @@ integrity are exactly `ok`, and protected material is always excluded.
 Parsing proves only the strict structural and canonical contract. It rejects
 unknown, duplicate, null, reordered, whitespace-altered, or version-drifted
 input; member bytes, digest, SQLite identity, and actual integrity remain the
-separate backup-verification boundary. This crate does no backup filesystem or
-SQLite capture work while constructing or parsing the manifest model.
+separate backup-verification boundary. Constructing or parsing the manifest
+model performs no filesystem or SQLite work.
+
+Writable hosts provide `ServiceSqliteHost::capture_online_backup` for one
+incremental, point-in-time SQLite capture at a time. The caller supplies an
+injected creation time and the exact new absolute staging-directory path under
+an existing owner-controlled parent; capture creates that directory with mode
+`0700` and its sole `state.sqlite` member with mode `0600`. It uses SQLite's
+online-backup API without checkpointing or copying the live source file, then
+requires exact service metadata, bounded `integrity_check`, an empty
+`foreign_key_check`, a singleton member inventory, SHA-256, and file, staging,
+and parent synchronization before returning the canonical manifest in memory.
+No manifest file, bundle identifier, credential, or protected material is
+written to the staging directory.
+
+Capture rejects read-only, closing, unsupported, colliding, or concurrent
+admission before publishing a result. Dropping the capture future requests
+cancellation; the blocking worker retains its checked-out pool admission,
+writer authority, and exact staging identities until SQLite handles are closed
+and cleanup completes. Host close therefore drains capture and cancellation
+cleanup before it checkpoints or releases authority. Capture has no hidden
+timeout: callers own any deadline by cancelling the future. A completed capture
+is still untrusted backup input until the separate verifier binds its manifest,
+member bytes, expected intent, application metadata, and integrity; capture
+does not provide restore or replacement behavior.
 
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness

@@ -16,12 +16,13 @@ fs2 = { workspace = true }
 futures = { workspace = true }
 radroots_runtime_paths = { workspace = true }
 radroots_storage = { workspace = true }
+rusqlite = { workspace = true, features = ["backup", "bundled"] }
 rustix = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["rt", "sync"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

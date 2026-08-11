@@ -193,7 +193,7 @@ pub(crate) struct PrivateConnectionPool {
     schema_catalog: SchemaCatalog,
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
-    resources: Mutex<PrivateConnectionResources>,
+    resources: Arc<Mutex<PrivateConnectionResources>>,
     close_driver: tokio::sync::Mutex<PrivateCloseDriver>,
     #[cfg(test)]
     close_phase: std::sync::atomic::AtomicU8,
@@ -211,6 +211,41 @@ struct PrivateConnectionResources {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone)]
+pub(crate) struct BackupSourceValidator {
+    binding: DirectoryBinding,
+    paths: ServiceSqlitePaths,
+    resources: Arc<Mutex<PrivateConnectionResources>>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl BackupSourceValidator {
+    pub(crate) fn validate(&self) -> Result<(), ServiceSqliteError> {
+        let resources = self.resources.lock().map_err(|_| {
+            connection_error(
+                ServiceSqliteErrorKind::Authority,
+                ConnectionFailureKind::AuthorityMismatch,
+            )
+        })?;
+        resources
+            .authority
+            .as_ref()
+            .ok_or_else(|| {
+                connection_error(
+                    ServiceSqliteErrorKind::Authority,
+                    ConnectionFailureKind::AuthorityMismatch,
+                )
+            })?
+            .validate_for(&self.paths)?;
+        self.binding.validate(&self.paths)
+    }
+
+    pub(crate) fn database_path(&self) -> &Path {
+        self.paths.state_database()
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 enum PrivateCloseDriver {
     Pending,
     Connecting(BoxFuture<'static, Result<SqliteConnection, ServiceSqliteError>>),
@@ -223,7 +258,7 @@ enum PrivateCloseDriver {
     Complete(Option<ServiceSqliteErrorKind>),
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 pub(crate) const TEST_CLOSE_PHASE_CHECKPOINT: u8 = 4;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -271,6 +306,14 @@ impl PrivateConnectionPool {
 
     pub(crate) fn identity(&self) -> &ServiceDatabaseIdentity {
         &self.identity
+    }
+
+    pub(crate) fn backup_source_validator(&self) -> BackupSourceValidator {
+        BackupSourceValidator {
+            binding: self.binding.clone(),
+            paths: self.paths.clone(),
+            resources: Arc::clone(&self.resources),
+        }
     }
 
     pub(crate) fn catalog(&self) -> &MigrationCatalog {
@@ -351,7 +394,7 @@ impl PrivateConnectionPool {
 
     pub(crate) async fn close(self) -> Option<WriterAuthority> {
         self.pool.close().await;
-        let mut resources = match self.resources.into_inner() {
+        let mut resources = match self.resources.lock() {
             Ok(resources) => resources,
             Err(poisoned) => poisoned.into_inner(),
         };
@@ -891,10 +934,10 @@ async fn open_connection_pool(
         schema_catalog: retained_schema_catalog,
         mode,
         policy,
-        resources: Mutex::new(PrivateConnectionResources {
+        resources: Arc::new(Mutex::new(PrivateConnectionResources {
             authority,
             inspection_guard,
-        }),
+        })),
         close_driver: tokio::sync::Mutex::new(PrivateCloseDriver::Pending),
         #[cfg(test)]
         close_phase: std::sync::atomic::AtomicU8::new(0),

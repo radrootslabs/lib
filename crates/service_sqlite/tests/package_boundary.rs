@@ -5,6 +5,7 @@ const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const BACKUP_SOURCE: &str = include_str!("../src/backup/manifest.rs");
+const BACKUP_CAPTURE_SOURCE: &str = include_str!("../src/backup/capture.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const CONNECTION_SOURCE: &str = include_str!("../src/connection.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
@@ -39,6 +40,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "futures",
             "radroots_runtime_paths",
             "radroots_storage",
+            "rusqlite",
             "rustix",
             "serde",
             "serde_json",
@@ -105,7 +107,22 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "integrity are exactly `ok`, and protected material is always excluded",
         "Parsing proves only the strict structural and canonical contract",
         "unknown, duplicate, null, reordered, whitespace-altered, or version-drifted input",
-        "does no backup filesystem or SQLite capture work",
+        "Constructing or parsing the manifest model performs no filesystem or SQLite work",
+        "Writable hosts provide `ServiceSqliteHost::capture_online_backup`",
+        "one incremental, point-in-time SQLite capture at a time",
+        "exact new absolute staging-directory path",
+        "directory with mode `0700` and its sole `state.sqlite` member with mode `0600`",
+        "online-backup API without checkpointing or copying the live source file",
+        "requires exact service metadata, bounded `integrity_check`, an empty `foreign_key_check`",
+        "SHA-256, and file, staging, and parent synchronization",
+        "returning the canonical manifest in memory",
+        "No manifest file, bundle identifier, credential, or protected material",
+        "Dropping the capture future requests cancellation",
+        "retains its checked-out pool admission, writer authority, and exact staging identities",
+        "Host close therefore drains capture and cancellation cleanup",
+        "Capture has no hidden timeout",
+        "callers own any deadline by cancelling the future",
+        "does not provide restore or replacement behavior",
     ] {
         assert!(
             readme_words.contains(required),
@@ -132,6 +149,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(test)]")
         .map(|(production, _)| production)
         .expect("backup source must keep tests separated");
+    let backup_capture_production = BACKUP_CAPTURE_SOURCE
+        .split_once("#[cfg(test)]\nmod tests")
+        .map(|(production, _)| production)
+        .expect("backup capture source must keep tests separated");
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -282,6 +303,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "cancelling the future yields no result",
         "must reread authoritative state before any idempotent retry",
         "pub async fn close(&self)",
+        "pub async fn capture_online_backup(",
         "closing.store(true, Ordering::Release)",
         "close_state.lock().await",
         "ServiceSqliteHostCloseState::Complete",
@@ -327,6 +349,52 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             !connection_production.contains(forbidden) && !ROOT.contains(forbidden),
             "Step 061 source exposes forbidden raw authority `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "rusqlite::backup::Backup::new",
+        "tokio::task::spawn_blocking",
+        "BACKUP_PAGES_PER_STEP",
+        "HASH_BUFFER_BYTES",
+        "OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC",
+        "Mode::RUSR | Mode::WUSR | Mode::XUSR",
+        "Mode::RUSR | Mode::WUSR",
+        "PRAGMA integrity_check(1)",
+        "ValueRef::Text",
+        "MAX_INTEGRITY_RESULT_UTF8_BYTES",
+        "PRAGMA foreign_key_check",
+        "BackupSourceValidator",
+        "PoolConnection<Sqlite>",
+        "CaptureCancellation",
+        "CapturePermit",
+        "ServiceBackupManifest::from_capture",
+        "sync_state",
+        "sync_directories",
+        "hash_state",
+        "validate_inventory",
+    ] {
+        assert!(
+            backup_capture_production.contains(required),
+            "Step 064 backup capture source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub use rusqlite",
+        "pub fn restore",
+        "pub async fn restore",
+        "pub fn verify_backup",
+        "pub async fn verify_backup",
+        "VACUUM INTO",
+        "SystemTime::now",
+        "tokio::time::timeout",
+        "manifest.json",
+        "create_dir_all",
+        "std::fs::copy",
+    ] {
+        assert!(
+            !backup_capture_production.contains(forbidden) && !ROOT.contains(forbidden),
+            "Step 064 backup capture source contains deferred or public authority `{forbidden}`"
         );
     }
 

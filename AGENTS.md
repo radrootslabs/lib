@@ -177,9 +177,14 @@ Before editing code:
   exact 1,024-byte compact canonical JSON, raw canonical-byte SHA-256, typed
   service/instance/source-generation/schema/time binding, singleton
   `state.sqlite` inventory, exact `ok` integrity projection, and mandatory
-  protected-material exclusion. Parsing is structural only; do not let the
-  model perform filesystem capture, SQLite backup, file/digest verification,
-  restore, ambient clock access, or public dependency-owned error exposure.
+  protected-material exclusion. Parsing is structural only and must not perform
+  filesystem or SQLite work. Online capture belongs only to the writable
+  `ServiceSqliteHost`: admit one capture at a time, use SQLite's incremental
+  online-backup API, create a caller-selected new owner-only staging directory,
+  return the manifest in memory, and retain host authority until success or
+  exact-artifact cancellation cleanup completes. Do not expose raw backup
+  handles, capture credentials, invent a manifest filename, read an ambient
+  clock, or fold untrusted verification or restore behavior into capture.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist
