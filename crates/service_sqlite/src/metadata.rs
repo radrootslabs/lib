@@ -17,35 +17,6 @@ use sqlx::{Connection, Row, SqliteConnection};
 const MAX_APPLICATION_ID: u32 = i32::MAX as u32;
 const MAX_CREATED_AT_UNIX_MS: u64 = i64::MAX as u64;
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-const CREATE_METADATA_SQL: &str = r#"
-CREATE TABLE radroots_service_metadata (
-    singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
-    service_id TEXT NOT NULL,
-    instance_id TEXT NOT NULL,
-    source_generation BLOB NOT NULL CHECK (length(source_generation) = 32),
-    state_schema_version INTEGER NOT NULL
-        CHECK (state_schema_version BETWEEN 1 AND 4294967295),
-    created_at_unix_ms INTEGER NOT NULL CHECK (created_at_unix_ms > 0)
-) STRICT;
-CREATE TRIGGER radroots_service_metadata_guard_update
-BEFORE UPDATE ON radroots_service_metadata
-WHEN NEW.singleton != OLD.singleton
-    OR NEW.service_id != OLD.service_id
-    OR NEW.instance_id != OLD.instance_id
-    OR NEW.source_generation != OLD.source_generation
-    OR NEW.created_at_unix_ms != OLD.created_at_unix_ms
-    OR NEW.state_schema_version <= OLD.state_schema_version
-BEGIN
-    SELECT RAISE(ABORT, 'service metadata identity is immutable');
-END;
-CREATE TRIGGER radroots_service_metadata_no_delete
-BEFORE DELETE ON radroots_service_metadata
-BEGIN
-    SELECT RAISE(ABORT, 'service metadata is immutable');
-END;
-"#;
-
 /// A validated nonzero SQLite application identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ServiceSqliteApplicationId(u32);
@@ -317,6 +288,7 @@ impl Error for MigrationLedgerInitializationFailure {}
 pub(crate) async fn write_database_metadata(
     connection: &mut SqliteConnection,
     expected: &ServiceDatabaseMetadata,
+    schema_catalog: &crate::SchemaCatalog,
 ) -> Result<(), ServiceSqliteError> {
     if expected.state_schema_version().get() != 1 {
         return Err(metadata_error(MetadataFailureKind::Mismatch));
@@ -329,19 +301,23 @@ pub(crate) async fn write_database_metadata(
         .begin()
         .await
         .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
-    sqlx::raw_sql(CREATE_METADATA_SQL)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|_| metadata_error(MetadataFailureKind::AlreadyPresent))?;
-    sqlx::raw_sql(crate::migration::CREATE_MIGRATION_LEDGER_SQL)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|_source| {
-            ServiceSqliteError::with_source(
-                ServiceSqliteErrorKind::Migration,
-                MigrationLedgerInitializationFailure,
-            )
-        })?;
+    for statement in crate::integrity::catalog::METADATA_SCHEMA_SQL {
+        sqlx::query(statement)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| metadata_error(MetadataFailureKind::AlreadyPresent))?;
+    }
+    for statement in crate::integrity::catalog::MIGRATION_LEDGER_SCHEMA_SQL {
+        sqlx::query(statement)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_source| {
+                ServiceSqliteError::with_source(
+                    ServiceSqliteErrorKind::Migration,
+                    MigrationLedgerInitializationFailure,
+                )
+            })?;
+    }
     sqlx::query(
         "INSERT INTO radroots_service_metadata (
             singleton, service_id, instance_id, source_generation,
@@ -368,6 +344,12 @@ pub(crate) async fn write_database_metadata(
         .execute(&mut *transaction)
         .await
         .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
+    crate::integrity::verify_schema_catalog(
+        &mut transaction,
+        schema_catalog,
+        expected.state_schema_version().get(),
+    )
+    .await?;
     transaction
         .commit()
         .await
@@ -533,6 +515,7 @@ mod tests {
         ServiceSqlitePaths::from_runtime_context(&context).expect("SQLite paths")
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn metadata(
         paths: &ServiceSqlitePaths,
         generation_byte: u8,
@@ -555,6 +538,16 @@ mod tests {
         SqliteConnection::connect("sqlite::memory:")
             .await
             .expect("memory SQLite")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn base_schema_catalog() -> crate::SchemaCatalog {
+        let migrations = crate::MigrationCatalog::new([]).expect("empty migration catalog");
+        let digest = crate::SchemaVersionCatalog::computed_digest(1, [])
+            .expect("base schema snapshot digest");
+        let version =
+            crate::SchemaVersionCatalog::new(1, [], digest).expect("base schema version catalog");
+        crate::SchemaCatalog::new(&migrations, [version]).expect("base schema catalog")
     }
 
     #[test]
@@ -613,7 +606,7 @@ mod tests {
         let expected = metadata(&paths, 7, 1, 1_700_000_000_000, 0x5244_5351);
         let mut connection = memory_connection().await;
 
-        write_database_metadata(&mut connection, &expected)
+        write_database_metadata(&mut connection, &expected, &base_schema_catalog())
             .await
             .expect("write metadata");
         verify_database_metadata(&mut connection, &expected.identity())
@@ -671,7 +664,7 @@ mod tests {
             );
         }
         assert_eq!(
-            write_database_metadata(&mut connection, &expected)
+            write_database_metadata(&mut connection, &expected, &base_schema_catalog())
                 .await
                 .expect_err("second write must fail")
                 .kind(),
@@ -687,11 +680,56 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test(flavor = "current_thread")]
+    async fn schema_mismatch_rolls_back_shared_objects_metadata_and_application_id() {
+        let paths = sqlite_paths("myc", "primary");
+        let expected = metadata(&paths, 7, 1, 1_700_000_000_000, 0x5244_5351);
+        let mut connection = memory_connection().await;
+        sqlx::query("CREATE TABLE unlisted_service_object (id INTEGER PRIMARY KEY)")
+            .execute(&mut connection)
+            .await
+            .expect("pre-existing service object");
+
+        let error = write_database_metadata(&mut connection, &expected, &base_schema_catalog())
+            .await
+            .expect_err("schema mismatch must roll back initialization transaction");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+        assert_eq!(read_application_id(&mut connection).await.unwrap(), 0);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM sqlite_schema
+                 WHERE name IN (
+                    'radroots_service_metadata',
+                    'radroots_service_metadata_guard_update',
+                    'radroots_service_metadata_no_delete',
+                    'schema_migrations',
+                    'schema_migrations_no_update',
+                    'schema_migrations_no_delete'
+                 )",
+            )
+            .fetch_one(&mut connection)
+            .await
+            .expect("shared schema rollback evidence"),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM sqlite_schema
+                 WHERE type = 'table' AND name = 'unlisted_service_object'",
+            )
+            .fetch_one(&mut connection)
+            .await
+            .expect("pre-existing object evidence"),
+            1
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
     async fn every_identity_dimension_must_match() {
         let paths = sqlite_paths("myc", "primary");
         let expected = metadata(&paths, 7, 1, 1_700_000_000_000, 0x5244_5351);
         let mut connection = memory_connection().await;
-        write_database_metadata(&mut connection, &expected)
+        write_database_metadata(&mut connection, &expected, &base_schema_catalog())
             .await
             .expect("write metadata");
 
@@ -746,14 +784,14 @@ mod tests {
         let mut newer_state = memory_connection().await;
         let version_two = metadata(&paths, 7, 2, 1_700_000_000_001, 0x5244_5351);
         assert_eq!(
-            write_database_metadata(&mut newer_state, &version_two)
+            write_database_metadata(&mut newer_state, &version_two, &base_schema_catalog())
                 .await
                 .expect_err("fresh metadata must start at v1")
                 .kind(),
             ServiceSqliteErrorKind::Metadata
         );
         let version_one = metadata(&paths, 7, 1, 1_700_000_000_001, 0x5244_5351);
-        write_database_metadata(&mut newer_state, &version_one)
+        write_database_metadata(&mut newer_state, &version_one, &base_schema_catalog())
             .await
             .expect("write v1 metadata");
         sqlx::query(

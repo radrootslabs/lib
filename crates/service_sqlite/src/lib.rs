@@ -6,6 +6,7 @@ mod authority;
 mod config;
 mod error;
 mod initialize;
+mod integrity;
 mod metadata;
 mod migration;
 mod open;
@@ -17,6 +18,10 @@ pub use error::{
     SafeServiceSqliteError, ServiceSqliteError, ServiceSqliteErrorCode, ServiceSqliteErrorKind,
 };
 pub use initialize::initialize_database;
+pub use integrity::{
+    SchemaCatalog, SchemaCatalogContractError, SchemaDigest, SchemaObject, SchemaObjectKind,
+    SchemaVersionCatalog,
+};
 pub use metadata::{
     ServiceDatabaseIdentity, ServiceDatabaseMetadata, ServiceSqliteApplicationId,
     ServiceSqliteMetadataValueError,

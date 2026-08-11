@@ -6,6 +6,8 @@ const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
 const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
+const INTEGRITY_SOURCE: &str = include_str!("../src/integrity/mod.rs");
+const INTEGRITY_CATALOG_SOURCE: &str = include_str!("../src/integrity/catalog.rs");
 const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
@@ -48,6 +50,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "config",
             "error",
             "initialize",
+            "integrity",
             "metadata",
             "migration",
             "open",
@@ -90,6 +93,12 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "MigrationEvidenceError",
         "MigrationKind",
         "MigrationName",
+        "SchemaCatalog",
+        "SchemaCatalogContractError",
+        "SchemaDigest",
+        "SchemaObject",
+        "SchemaObjectKind",
+        "SchemaVersionCatalog",
         "ServiceSqlitePathError",
         "ServiceSqlitePaths",
         "OpenMode",
@@ -113,13 +122,6 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub fn for_sql",
         "pub fn for_callback",
         ".take(MAX_MIGRATION_COUNT + 1)",
-        "schema_migrations",
-        "applied_at_unix_s",
-        "service_commit TEXT",
-        "lib_revision TEXT",
-        "provider_contract_version INTEGER",
-        "schema_migrations_no_update",
-        "schema_migrations_no_delete",
         ".begin_with(\"BEGIN IMMEDIATE\")",
         "pub(crate) async fn verify_migration_history",
         "pub(crate) async fn apply_governed_migrations",
@@ -139,6 +141,51 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             migration_production.contains(required),
             "Step 059 migration source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "radroots.service_sqlite.schema_object.v1\\0",
+        "radroots.service_sqlite.schema_snapshot.v1\\0",
+        "radroots.service_sqlite.schema_catalog.v1\\0",
+        "MAX_SCHEMA_OBJECT_COUNT",
+        "MAX_SCHEMA_SQL_UTF8_BYTES",
+        "MAX_SCHEMA_CATALOG_UTF8_BYTES",
+        ".take(MAX_SCHEMA_OBJECT_COUNT + 1)",
+        ".take(MAX_SCHEMA_VERSION_COUNT + 1)",
+        "CREATE TABLE radroots_service_metadata",
+        "CREATE TABLE schema_migrations",
+        "schema_migrations_no_update",
+        "schema_migrations_no_delete",
+        "pub fn computed_digest",
+        "pub fn new<I>",
+        "pub(crate) async fn verify_schema_catalog",
+        "FROM main.sqlite_schema",
+        "LIMIT 4097",
+        "typeof(sql) = 'text'",
+        "length(CAST(sql AS BLOB)) BETWEEN 1 AND 1048576",
+    ] {
+        assert!(
+            INTEGRITY_SOURCE.contains(required) || INTEGRITY_CATALOG_SOURCE.contains(required),
+            "Step 060 integrity source is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "pub async fn verify_schema_catalog",
+        "pub fn verify_schema_catalog",
+        "pub use sqlx",
+        "SqlitePool",
+        "PoolConnection",
+        "pub fn sql(&self",
+        "Serialize",
+        "Deserialize",
+        "myc_",
+        "rhi_",
+    ] {
+        assert!(
+            !INTEGRITY_SOURCE.contains(forbidden) && !INTEGRITY_CATALOG_SOURCE.contains(forbidden),
+            "Step 060 integrity source contains forbidden surface `{forbidden}`"
         );
     }
 
@@ -179,13 +226,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     }
 
     for required in [
-        "radroots_service_metadata",
         "PRAGMA application_id",
-        "source_generation BLOB",
-        "state_schema_version INTEGER",
-        "created_at_unix_ms INTEGER",
-        "radroots_service_metadata_guard_update",
-        "radroots_service_metadata_no_delete",
         "LIMIT 2",
         "SourceGeneration",
         "NonZeroU32",
@@ -197,6 +238,25 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             METADATA_SOURCE.contains(required),
             "Step 057 metadata source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "radroots_service_metadata",
+        "source_generation BLOB",
+        "state_schema_version INTEGER",
+        "created_at_unix_ms INTEGER",
+        "radroots_service_metadata_guard_update",
+        "radroots_service_metadata_no_delete",
+        "schema_migrations",
+        "applied_at_unix_s",
+        "service_commit TEXT",
+        "lib_revision TEXT",
+        "provider_contract_version INTEGER",
+    ] {
+        assert!(
+            INTEGRITY_CATALOG_SOURCE.contains(required),
+            "shared schema authority is missing `{required}`"
         );
     }
 

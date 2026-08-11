@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{Connection, Row, SqliteConnection};
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use crate::{ServiceSqliteError, ServiceSqliteErrorKind};
+use crate::{SchemaCatalog, ServiceSqliteError, ServiceSqliteErrorKind};
 
 const MIGRATION_CONTENT_DOMAIN: &[u8] = b"radroots.service_sqlite.migration_content.v1\0";
 const MIGRATION_CATALOG_DOMAIN: &[u8] = b"radroots.service_sqlite.migration_catalog.v1\0";
@@ -29,39 +29,6 @@ const MAX_MIGRATION_NAME_UTF8_BYTES: usize = 128;
 const MAX_MIGRATION_CONTENT_BYTES: usize = 1024 * 1024;
 const MAX_MIGRATION_COUNT: usize = 4096;
 const MAX_MIGRATION_BUILD_ID_UTF8_BYTES: usize = 128;
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) const CREATE_MIGRATION_LEDGER_SQL: &str = r#"
-CREATE TABLE schema_migrations (
-    version INTEGER NOT NULL PRIMARY KEY
-        CHECK (version BETWEEN 2 AND 4294967295),
-    name TEXT NOT NULL UNIQUE
-        CHECK (length(CAST(name AS BLOB)) BETWEEN 1 AND 128),
-    checksum BLOB NOT NULL CHECK (length(checksum) = 32),
-    applied_at_unix_s INTEGER NOT NULL CHECK (applied_at_unix_s BETWEEN 0 AND 9223372036854775807),
-    service_version TEXT NOT NULL CHECK (length(CAST(service_version AS BLOB)) BETWEEN 1 AND 128),
-    service_commit TEXT NOT NULL CHECK (length(CAST(service_commit AS BLOB)) = 40),
-    lib_revision TEXT NOT NULL CHECK (length(CAST(lib_revision AS BLOB)) = 40),
-    rust_version TEXT NOT NULL CHECK (length(CAST(rust_version AS BLOB)) BETWEEN 1 AND 128),
-    target TEXT NOT NULL CHECK (length(CAST(target AS BLOB)) BETWEEN 1 AND 128),
-    feature_profile TEXT NOT NULL CHECK (length(CAST(feature_profile AS BLOB)) BETWEEN 1 AND 128),
-    config_contract_version INTEGER NOT NULL CHECK (config_contract_version BETWEEN 1 AND 4294967295),
-    state_contract_version INTEGER NOT NULL CHECK (state_contract_version BETWEEN 1 AND 4294967295),
-    admin_contract_version INTEGER NOT NULL CHECK (admin_contract_version BETWEEN 1 AND 4294967295),
-    status_contract_version INTEGER NOT NULL CHECK (status_contract_version BETWEEN 1 AND 4294967295),
-    provider_contract_version INTEGER NOT NULL CHECK (provider_contract_version BETWEEN 1 AND 4294967295)
-) STRICT;
-CREATE TRIGGER schema_migrations_no_update
-BEFORE UPDATE ON schema_migrations
-BEGIN
-    SELECT RAISE(ABORT, 'migration history is immutable');
-END;
-CREATE TRIGGER schema_migrations_no_delete
-BEFORE DELETE ON schema_migrations
-BEGIN
-    SELECT RAISE(ABORT, 'migration history is immutable');
-END;
-"#;
 
 /// A bounded stable lower-snake migration name.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -926,14 +893,23 @@ struct AppliedMigration {
 pub(crate) async fn verify_migration_history(
     connection: &mut SqliteConnection,
     catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
     require_current: bool,
 ) -> Result<u32, ServiceSqliteError> {
+    if !schema_catalog.matches_migrations(catalog) {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
+    }
     let mut transaction = connection
         .begin()
         .await
         .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?;
-    let result =
-        verify_migration_history_snapshot(&mut transaction, catalog, require_current).await;
+    let result = verify_migration_history_snapshot(
+        &mut transaction,
+        catalog,
+        schema_catalog,
+        require_current,
+    )
+    .await;
     let rollback = transaction.rollback().await;
     match (result, rollback) {
         (Err(error), _) => Err(error),
@@ -949,11 +925,13 @@ pub(crate) async fn verify_migration_history(
 async fn verify_migration_history_snapshot(
     connection: &mut SqliteConnection,
     catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
     require_current: bool,
 ) -> Result<u32, ServiceSqliteError> {
     let version = read_state_schema_version(connection).await?;
     let history = read_migration_history(connection).await?;
     validate_migration_prefix(catalog, version, &history)?;
+    crate::integrity::verify_schema_catalog(connection, schema_catalog, version).await?;
     if require_current && version != catalog.current_version() {
         return Err(migration_error(MigrationFailureKind::CatalogMismatch));
     }
@@ -964,6 +942,7 @@ async fn verify_migration_history_snapshot(
 pub(crate) async fn apply_governed_migrations<V>(
     connection: &mut SqliteConnection,
     catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
     applied_at: MigrationAppliedAtUnixSeconds,
     build: &MigrationBuildIdentity,
     callback_bindings: &[MigrationCallbackBinding],
@@ -976,6 +955,7 @@ where
     apply_governed_migrations_with_observer(
         connection,
         catalog,
+        schema_catalog,
         applied_at,
         build,
         callback_bindings,
@@ -986,9 +966,11 @@ where
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+#[allow(clippy::too_many_arguments)]
 async fn apply_governed_migrations_with_observer<V, O>(
     connection: &mut SqliteConnection,
     catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
     applied_at: MigrationAppliedAtUnixSeconds,
     build: &MigrationBuildIdentity,
     callback_bindings: &[MigrationCallbackBinding],
@@ -999,6 +981,9 @@ where
     V: FnMut() -> Result<(), ServiceSqliteError>,
     O: FnMut() -> Result<(), ServiceSqliteError>,
 {
+    if !schema_catalog.matches_migrations(catalog) {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
+    }
     let callbacks = validate_callback_bindings(catalog, callback_bindings)?;
     let mut initial_version = None;
     let mut applied_count = 0_u32;
@@ -1017,7 +1002,8 @@ where
         let mut transaction = transaction_result
             .map_err(|source| migration_source(MigrationFailureKind::Execution, source))?;
         let transactional_result =
-            verify_migration_history_snapshot(&mut transaction, catalog, false).await;
+            verify_migration_history_snapshot(&mut transaction, catalog, schema_catalog, false)
+                .await;
         validate_authority()?;
         let current = transactional_result?;
         initial_version.get_or_insert(current);
@@ -1047,6 +1033,22 @@ where
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
+        let policy_result = read_connection_policy(&mut transaction).await;
+        validate_authority()?;
+        if policy_result? != initial_policy {
+            return Err(migration_error(MigrationFailureKind::Execution));
+        }
+        let transaction_result = assert_governed_transaction(&mut transaction).await;
+        validate_authority()?;
+        transaction_result?;
+        let schema_result = crate::integrity::verify_schema_catalog(
+            &mut transaction,
+            schema_catalog,
+            descriptor.target_version(),
+        )
+        .await;
+        validate_authority()?;
+        schema_result?;
         let insert_result =
             insert_migration_row(&mut transaction, descriptor, applied_at, build).await;
         validate_authority()?;
@@ -1086,7 +1088,7 @@ where
     }
 
     validate_authority()?;
-    let final_result = verify_migration_history(connection, catalog, true).await;
+    let final_result = verify_migration_history(connection, catalog, schema_catalog, true).await;
     validate_authority()?;
     let final_version = final_result?;
     Ok(MigrationApplicationOutcome {
@@ -1538,6 +1540,72 @@ mod tests {
             .expect("valid SQL descriptor")
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn table_object(name: &'static str, sql: &'static str) -> crate::SchemaObject {
+        crate::SchemaObject::new(
+            crate::SchemaObjectKind::Table,
+            name,
+            name,
+            sql,
+            crate::SchemaObject::computed_digest(crate::SchemaObjectKind::Table, name, name, sql)
+                .expect("schema table digest"),
+        )
+        .expect("schema table")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn schema_catalog(
+        migrations: &MigrationCatalog,
+        versions: Vec<Vec<crate::SchemaObject>>,
+    ) -> crate::SchemaCatalog {
+        let versions = versions
+            .into_iter()
+            .enumerate()
+            .map(|(index, objects)| {
+                let version = u32::try_from(index + 1).expect("schema version");
+                let digest =
+                    crate::SchemaVersionCatalog::computed_digest(version, objects.iter().cloned())
+                        .expect("schema digest");
+                crate::SchemaVersionCatalog::new(version, objects, digest)
+                    .expect("schema version catalog")
+            })
+            .collect::<Vec<_>>();
+        crate::SchemaCatalog::new(migrations, versions).expect("schema catalog")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn unchanged_schema_catalog(migrations: &MigrationCatalog) -> crate::SchemaCatalog {
+        schema_catalog(
+            migrations,
+            (0..migrations.current_version())
+                .map(|_| Vec::new())
+                .collect(),
+        )
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn alpha_schema_catalog(migrations: &MigrationCatalog) -> crate::SchemaCatalog {
+        const ALPHA_SQL: &str = "CREATE TABLE alpha (id INTEGER PRIMARY KEY)";
+        let alpha = table_object("alpha", ALPHA_SQL);
+        let mut versions = vec![Vec::new()];
+        versions.extend((1..migrations.current_version()).map(|_| vec![alpha.clone()]));
+        schema_catalog(migrations, versions)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn alpha_beta_schema_catalog(
+        migrations: &MigrationCatalog,
+        beta_sql: &'static str,
+    ) -> crate::SchemaCatalog {
+        const ALPHA_SQL: &str = "CREATE TABLE alpha (id INTEGER PRIMARY KEY)";
+        let alpha = table_object("alpha", ALPHA_SQL);
+        let beta = table_object("beta", beta_sql);
+        schema_catalog(
+            migrations,
+            vec![Vec::new(), vec![alpha.clone()], vec![alpha, beta]],
+        )
+    }
+
     fn build_identity() -> MigrationBuildIdentity {
         MigrationBuildIdentity::new(
             "0.1.0-alpha",
@@ -1598,7 +1666,9 @@ mod tests {
         let mut connection = SqliteConnection::connect_with(&options)
             .await
             .expect("test SQLite");
-        crate::metadata::write_database_metadata(&mut connection, &metadata)
+        let migrations = MigrationCatalog::new([]).expect("empty migration catalog");
+        let schema_catalog = unchanged_schema_catalog(&migrations);
+        crate::metadata::write_database_metadata(&mut connection, &metadata, &schema_catalog)
             .await
             .expect("initialize metadata and ledger");
         connection
@@ -1878,6 +1948,7 @@ mod tests {
         );
         let catalog =
             MigrationCatalog::new([sql_descriptor, callback_descriptor]).expect("catalog");
+        let schema_catalog = alpha_schema_catalog(&catalog);
         let applied_at = MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap();
         let build = build_identity();
         let mut connection = initialized_memory_database().await;
@@ -1886,6 +1957,7 @@ mod tests {
         let outcome = apply_governed_migrations(
             &mut connection,
             &catalog,
+            &schema_catalog,
             applied_at,
             &build,
             &[callback],
@@ -1981,6 +2053,7 @@ mod tests {
         let reopened = apply_governed_migrations(
             &mut connection,
             &catalog,
+            &schema_catalog,
             MigrationAppliedAtUnixSeconds::new(1_900_000_000).unwrap(),
             &build,
             &[callback],
@@ -2009,6 +2082,7 @@ mod tests {
         let first = sql(2, "create_alpha", SQL_TWO);
         let invalid = sql(3, "create_beta", INVALID_SQL);
         let invalid_catalog = MigrationCatalog::new([first.clone(), invalid]).unwrap();
+        let invalid_schema_catalog = alpha_schema_catalog(&invalid_catalog);
         let applied_at = MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap();
         let build = build_identity();
         let mut connection = initialized_memory_database().await;
@@ -2017,6 +2091,7 @@ mod tests {
         let error = apply_governed_migrations(
             &mut connection,
             &invalid_catalog,
+            &invalid_schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2042,9 +2117,14 @@ mod tests {
 
         let recovered_catalog =
             MigrationCatalog::new([first, sql(3, "create_beta", RECOVERY_SQL)]).unwrap();
+        let recovered_schema_catalog = alpha_beta_schema_catalog(
+            &recovered_catalog,
+            "CREATE TABLE beta (id INTEGER PRIMARY KEY)",
+        );
         let recovered = apply_governed_migrations(
             &mut connection,
             &recovered_catalog,
+            &recovered_schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2055,6 +2135,91 @@ mod tests {
         assert_eq!(recovered.initial_version(), 2);
         assert_eq!(recovered.final_version(), 3);
         assert_eq!(recovered.applied_count(), 1);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn schema_mismatch_before_or_after_execution_never_commits_a_step() {
+        let catalog = MigrationCatalog::new([sql(2, "create_alpha", SQL_TWO)]).unwrap();
+        let wrong_target_catalog = unchanged_schema_catalog(&catalog);
+        let applied_at = MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap();
+        let build = build_identity();
+        let mut validate = || Ok(());
+
+        let mut after_execution = initialized_memory_database().await;
+        let error = apply_governed_migrations(
+            &mut after_execution,
+            &catalog,
+            &wrong_target_catalog,
+            applied_at,
+            &build,
+            &[],
+            &mut validate,
+        )
+        .await
+        .expect_err("target schema mismatch must roll back");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+        assert_eq!(
+            read_state_schema_version(&mut after_execution)
+                .await
+                .unwrap(),
+            1
+        );
+        assert!(
+            read_migration_history(&mut after_execution)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'alpha'",
+            )
+            .fetch_one(&mut after_execution)
+            .await
+            .unwrap(),
+            0
+        );
+
+        let mut before_execution = initialized_memory_database().await;
+        sqlx::query("CREATE TABLE unexpected (value INTEGER)")
+            .execute(&mut before_execution)
+            .await
+            .unwrap();
+        let expected_target = alpha_schema_catalog(&catalog);
+        let error = apply_governed_migrations(
+            &mut before_execution,
+            &catalog,
+            &expected_target,
+            applied_at,
+            &build,
+            &[],
+            &mut validate,
+        )
+        .await
+        .expect_err("current schema mismatch must fail before execution");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+        assert_eq!(
+            read_state_schema_version(&mut before_execution)
+                .await
+                .unwrap(),
+            1
+        );
+        assert!(
+            read_migration_history(&mut before_execution)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'alpha'",
+            )
+            .fetch_one(&mut before_execution)
+            .await
+            .unwrap(),
+            0
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2076,10 +2241,12 @@ mod tests {
         let mut sql_connection = initialized_file_database(&sql_path).await;
         let sql_catalog =
             MigrationCatalog::new([sql(2, "attempt_commit_escape", COMMIT_ESCAPE_SQL)]).unwrap();
+        let sql_schema_catalog = unchanged_schema_catalog(&sql_catalog);
         let mut validate = || Ok(());
         let sql_error = apply_governed_migrations(
             &mut sql_connection,
             &sql_catalog,
+            &sql_schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2099,9 +2266,11 @@ mod tests {
             REPLACEMENT_ESCAPE_SQL,
         )])
         .unwrap();
+        let replacement_schema_catalog = unchanged_schema_catalog(&replacement_catalog);
         let replacement_error = apply_governed_migrations(
             &mut replacement_connection,
             &replacement_catalog,
+            &replacement_schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2133,9 +2302,11 @@ mod tests {
             rollback_escape_callback,
         );
         let callback_catalog = MigrationCatalog::new([callback_descriptor]).unwrap();
+        let callback_schema_catalog = unchanged_schema_catalog(&callback_catalog);
         let callback_error = apply_governed_migrations(
             &mut callback_connection,
             &callback_catalog,
+            &callback_schema_catalog,
             applied_at,
             &build,
             &[callback],
@@ -2154,9 +2325,11 @@ mod tests {
         let mut policy_connection = initialized_file_database(&policy_path).await;
         let policy_catalog =
             MigrationCatalog::new([sql(2, "attempt_policy_escape", POLICY_ESCAPE_SQL)]).unwrap();
+        let policy_schema_catalog = unchanged_schema_catalog(&policy_catalog);
         let policy_error = apply_governed_migrations(
             &mut policy_connection,
             &policy_catalog,
+            &policy_schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2211,6 +2384,7 @@ mod tests {
         )
         .unwrap();
         let catalog = MigrationCatalog::new([sql_descriptor, callback_descriptor.clone()]).unwrap();
+        let schema_catalog = alpha_schema_catalog(&catalog);
         let pending_binding = MigrationCallbackBinding::new(
             3,
             callback_descriptor.name(),
@@ -2232,6 +2406,7 @@ mod tests {
         let mut application = Box::pin(apply_governed_migrations(
             &mut connection,
             &catalog,
+            &schema_catalog,
             applied_at,
             &build,
             &pending_bindings,
@@ -2263,6 +2438,7 @@ mod tests {
         let recovered = apply_governed_migrations(
             &mut connection,
             &catalog,
+            &schema_catalog,
             applied_at,
             &build,
             &[working_binding],
@@ -2288,6 +2464,7 @@ mod tests {
         let first = sql(2, "create_alpha", SQL_TWO);
         let second = sql(3, "create_beta", "CREATE TABLE beta (id INTEGER);");
         let catalog = MigrationCatalog::new([first, second]).unwrap();
+        let schema_catalog = alpha_beta_schema_catalog(&catalog, "CREATE TABLE beta (id INTEGER)");
         let applied_at = MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap();
         let build = build_identity();
         let mut connection = initialized_memory_database().await;
@@ -2297,6 +2474,7 @@ mod tests {
         let error = apply_governed_migrations_with_observer(
             &mut connection,
             &catalog,
+            &schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2315,6 +2493,7 @@ mod tests {
         let resumed = apply_governed_migrations(
             &mut connection,
             &catalog,
+            &schema_catalog,
             applied_at,
             &build,
             &[],
@@ -2347,6 +2526,7 @@ mod tests {
         )
         .unwrap();
         let catalog = MigrationCatalog::new([callback_descriptor.clone()]).unwrap();
+        let schema_catalog = unchanged_schema_catalog(&catalog);
         let correct = MigrationCallbackBinding::new(
             2,
             callback_descriptor.name(),
@@ -2368,6 +2548,7 @@ mod tests {
             let error = apply_governed_migrations(
                 &mut connection,
                 &catalog,
+                &schema_catalog,
                 applied_at,
                 &build,
                 &bindings,
@@ -2409,7 +2590,7 @@ mod tests {
         .execute(&mut connection)
         .await
         .unwrap();
-        let error = verify_migration_history(&mut connection, &catalog, true)
+        let error = verify_migration_history(&mut connection, &catalog, &schema_catalog, true)
             .await
             .expect_err("mismatched history");
         assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
@@ -2421,6 +2602,7 @@ mod tests {
         let first = sql(2, "create_alpha", SQL_TWO);
         let second = sql(3, "create_beta", "CREATE TABLE beta (id INTEGER);");
         let catalog = MigrationCatalog::new([first.clone(), second.clone()]).unwrap();
+        let schema_catalog = unchanged_schema_catalog(&catalog);
 
         let mut missing = initialized_memory_database().await;
         sqlx::query(
@@ -2430,7 +2612,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            verify_migration_history(&mut missing, &catalog, false)
+            verify_migration_history(&mut missing, &catalog, &schema_catalog, false)
                 .await
                 .expect_err("missing row")
                 .kind(),
@@ -2449,7 +2631,7 @@ mod tests {
         )
         .await;
         assert_eq!(
-            verify_migration_history(&mut extra, &catalog, false)
+            verify_migration_history(&mut extra, &catalog, &schema_catalog, false)
                 .await
                 .expect_err("extra row")
                 .kind(),
@@ -2483,7 +2665,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            verify_migration_history(&mut reordered, &catalog, true)
+            verify_migration_history(&mut reordered, &catalog, &schema_catalog, true)
                 .await
                 .expect_err("reordered names and checksums")
                 .kind(),
@@ -2498,7 +2680,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            verify_migration_history(&mut newer, &catalog, false)
+            verify_migration_history(&mut newer, &catalog, &schema_catalog, false)
                 .await
                 .expect_err("newer schema")
                 .kind(),
@@ -2524,7 +2706,7 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(
-                verify_migration_history(&mut corrupt, &catalog, false)
+                verify_migration_history(&mut corrupt, &catalog, &schema_catalog, false)
                     .await
                     .expect_err("corrupt time or build")
                     .kind(),
@@ -2538,6 +2720,7 @@ mod tests {
     async fn oversized_corrupt_history_is_bounded_before_decode() {
         let descriptor = sql(2, "create_alpha", SQL_TWO);
         let catalog = MigrationCatalog::new([descriptor.clone()]).unwrap();
+        let schema_catalog = unchanged_schema_catalog(&catalog);
         let oversized_text = "a".repeat(4 * 1024 * 1024);
         for (column, update) in [
             (
@@ -2592,7 +2775,7 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(
-                verify_migration_history(&mut connection, &catalog, true)
+                verify_migration_history(&mut connection, &catalog, &schema_catalog, true)
                     .await
                     .expect_err("oversized text must fail before decode")
                     .kind(),
@@ -2619,7 +2802,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            verify_migration_history(&mut checksum, &catalog, true)
+            verify_migration_history(&mut checksum, &catalog, &schema_catalog, true)
                 .await
                 .expect_err("oversized checksum must fail before decode")
                 .kind(),

@@ -4,7 +4,7 @@ use core::{fmt, future::Future};
 use std::{error::Error, path::PathBuf};
 
 use crate::{
-    OpenMode, ServiceDatabaseMetadata, ServiceSqliteError, ServiceSqliteErrorKind,
+    OpenMode, SchemaCatalog, ServiceDatabaseMetadata, ServiceSqliteError, ServiceSqliteErrorKind,
     ServiceSqlitePaths, WriterAuthority,
 };
 
@@ -20,6 +20,7 @@ pub async fn initialize_database<F, Fut, E>(
     paths: &ServiceSqlitePaths,
     mode: OpenMode,
     metadata: &ServiceDatabaseMetadata,
+    schema_catalog: &SchemaCatalog,
     initialize_schema: F,
 ) -> Result<WriterAuthority, ServiceSqliteError>
 where
@@ -48,6 +49,7 @@ where
             paths,
             authority,
             metadata,
+            schema_catalog,
             initialize_schema,
             &SystemInitializationOperations,
         )
@@ -56,7 +58,7 @@ where
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        drop((authority, metadata, initialize_schema));
+        drop((authority, metadata, schema_catalog, initialize_schema));
         Err(initialization_error(InitializationCause::new(
             InitializationFailureKind::CreateUnavailable,
         )))
@@ -439,6 +441,7 @@ mod supported {
         paths: &ServiceSqlitePaths,
         authority: WriterAuthority,
         metadata: &ServiceDatabaseMetadata,
+        schema_catalog: &SchemaCatalog,
         initialize_schema: F,
         operations: &O,
     ) -> Result<WriterAuthority, ServiceSqliteError>
@@ -486,7 +489,8 @@ mod supported {
                     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
                 })?;
             let write_result =
-                crate::metadata::write_database_metadata(&mut connection, metadata).await;
+                crate::metadata::write_database_metadata(&mut connection, metadata, schema_catalog)
+                    .await;
             let close_result = connection.close().await.map_err(|source| {
                 ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
             });
@@ -637,6 +641,39 @@ mod supported {
             .expect("database metadata")
         }
 
+        fn schema_catalog(service_objects: Vec<crate::SchemaObject>) -> crate::SchemaCatalog {
+            let migrations = crate::MigrationCatalog::new([]).expect("empty migrations");
+            let digest =
+                crate::SchemaVersionCatalog::computed_digest(1, service_objects.iter().cloned())
+                    .expect("schema digest");
+            let version = crate::SchemaVersionCatalog::new(1, service_objects, digest)
+                .expect("schema version");
+            crate::SchemaCatalog::new(&migrations, [version]).expect("schema catalog")
+        }
+
+        fn base_schema_catalog() -> crate::SchemaCatalog {
+            schema_catalog(Vec::new())
+        }
+
+        fn service_schema_catalog() -> crate::SchemaCatalog {
+            const SQL: &str = "CREATE TABLE service_schema (id INTEGER PRIMARY KEY)";
+            let object = crate::SchemaObject::new(
+                crate::SchemaObjectKind::Table,
+                "service_schema",
+                "service_schema",
+                SQL,
+                crate::SchemaObject::computed_digest(
+                    crate::SchemaObjectKind::Table,
+                    "service_schema",
+                    "service_schema",
+                    SQL,
+                )
+                .expect("service schema digest"),
+            )
+            .expect("service schema object");
+            schema_catalog(vec![object])
+        }
+
         #[tokio::test(flavor = "current_thread")]
         async fn successful_initialization_is_create_new_mode_0600_and_retains_authority() {
             let root = tempfile::tempdir().expect("root");
@@ -644,8 +681,13 @@ mod supported {
             prepare(&paths);
             let expected_path = paths.state_database().to_path_buf();
             let metadata = metadata(&paths);
-            let mut authority =
-                initialize_database(&paths, OpenMode::Initialize, &metadata, |path| async move {
+            let schema_catalog = service_schema_catalog();
+            let mut authority = initialize_database(
+                &paths,
+                OpenMode::Initialize,
+                &metadata,
+                &schema_catalog,
+                |path| async move {
                     assert_eq!(path, expected_path);
                     use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
 
@@ -659,9 +701,10 @@ mod supported {
                         .await?;
                     connection.close().await?;
                     Ok::<(), sqlx::Error>(())
-                })
-                .await
-                .expect("initialize");
+                },
+            )
+            .await
+            .expect("initialize");
 
             let filesystem_metadata = fs::metadata(paths.state_database()).unwrap();
             assert_eq!(filesystem_metadata.permissions().mode() & 0o777, 0o600);
@@ -693,10 +736,17 @@ mod supported {
                 }
                 let called = Cell::new(false);
                 let metadata = metadata(&paths);
-                let error = initialize_database(&paths, OpenMode::Initialize, &metadata, |_| {
-                    called.set(true);
-                    ready(Ok::<(), CallbackFailure>(()))
-                })
+                let schema_catalog = base_schema_catalog();
+                let error = initialize_database(
+                    &paths,
+                    OpenMode::Initialize,
+                    &metadata,
+                    &schema_catalog,
+                    |_| {
+                        called.set(true);
+                        ready(Ok::<(), CallbackFailure>(()))
+                    },
+                )
                 .await
                 .expect_err("existing state must fail");
                 assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
@@ -712,7 +762,8 @@ mod supported {
                 let paths = paths(root.path(), "wrong-mode");
                 let called = Cell::new(false);
                 let metadata = metadata(&paths);
-                let error = initialize_database(&paths, mode, &metadata, |_| {
+                let schema_catalog = base_schema_catalog();
+                let error = initialize_database(&paths, mode, &metadata, &schema_catalog, |_| {
                     called.set(true);
                     ready(Ok::<(), CallbackFailure>(()))
                 })
@@ -732,9 +783,14 @@ mod supported {
             let paths = paths(root.path(), "callback-failure");
             prepare(&paths);
             let metadata = metadata(&paths);
-            let error = initialize_database(&paths, OpenMode::Initialize, &metadata, |_| {
-                ready(Err::<(), _>(CallbackFailure))
-            })
+            let schema_catalog = base_schema_catalog();
+            let error = initialize_database(
+                &paths,
+                OpenMode::Initialize,
+                &metadata,
+                &schema_catalog,
+                |_| ready(Err::<(), _>(CallbackFailure)),
+            )
             .await
             .expect_err("callback failure");
             assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
@@ -756,9 +812,13 @@ mod supported {
                 Some("secret callback path=/private/state.sqlite")
             );
 
-            let retry = initialize_database(&paths, OpenMode::Initialize, &metadata, |_| {
-                ready(Ok::<(), CallbackFailure>(()))
-            })
+            let retry = initialize_database(
+                &paths,
+                OpenMode::Initialize,
+                &metadata,
+                &schema_catalog,
+                |_| ready(Ok::<(), CallbackFailure>(())),
+            )
             .await
             .expect("retry after cleanup");
             assert!(retry.is_held());
@@ -783,10 +843,12 @@ mod supported {
                 let paths = paths(root.path(), instance);
                 prepare(&paths);
                 let metadata = metadata(&paths);
+                let schema_catalog = base_schema_catalog();
                 let error = initialize_database(
                     &paths,
                     OpenMode::Initialize,
                     &metadata,
+                    &schema_catalog,
                     move |path| async move {
                         use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
 
@@ -814,15 +876,55 @@ mod supported {
         }
 
         #[tokio::test(flavor = "current_thread")]
+        async fn schema_catalog_mismatch_cleans_the_exact_reserved_database() {
+            let root = tempfile::tempdir().expect("root");
+            let paths = paths(root.path(), "schema-mismatch");
+            prepare(&paths);
+            let metadata = metadata(&paths);
+            let schema_catalog = base_schema_catalog();
+            let error = initialize_database(
+                &paths,
+                OpenMode::Initialize,
+                &metadata,
+                &schema_catalog,
+                |path| async move {
+                    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
+
+                    let options = SqliteConnectOptions::new()
+                        .filename(path)
+                        .create_if_missing(false)
+                        .disable_statement_logging();
+                    let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
+                    sqlx::query("CREATE TABLE unexpected (value INTEGER)")
+                        .execute(&mut connection)
+                        .await?;
+                    connection.close().await?;
+                    Ok::<(), sqlx::Error>(())
+                },
+            )
+            .await
+            .expect_err("unlisted schema object must fail initialization");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+            assert!(!paths.state_database().exists());
+            assert!(
+                WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+
+        #[tokio::test(flavor = "current_thread")]
         async fn cancellation_rolls_back_and_releases_authority() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "cancelled");
             prepare(&paths);
             let metadata = metadata(&paths);
+            let schema_catalog = base_schema_catalog();
             let (poll, future) = poll_once(initialize_database(
                 &paths,
                 OpenMode::Initialize,
                 &metadata,
+                &schema_catalog,
                 |_| pending::<Result<(), CallbackFailure>>(),
             ));
             assert!(poll.is_pending());
@@ -843,11 +945,13 @@ mod supported {
             let paths = paths(root.path(), "replacement");
             prepare(&paths);
             let metadata = metadata(&paths);
+            let schema_catalog = base_schema_catalog();
             let replacement_path = paths.state_database().to_path_buf();
             let error = initialize_database(
                 &paths,
                 OpenMode::Initialize,
                 &metadata,
+                &schema_catalog,
                 move |path| async move {
                     fs::remove_file(&path)?;
                     fs::write(&replacement_path, b"replacement")?;
@@ -866,6 +970,7 @@ mod supported {
             let paths = paths(root.path(), "parent-replacement");
             prepare(&paths);
             let metadata = metadata(&paths);
+            let schema_catalog = base_schema_catalog();
             let state_directory = paths.state_database().parent().unwrap().to_path_buf();
             let displaced_directory = state_directory.with_file_name("parent-replacement-old");
             let displaced_for_callback = displaced_directory.clone();
@@ -875,6 +980,7 @@ mod supported {
                 &paths,
                 OpenMode::Initialize,
                 &metadata,
+                &schema_catalog,
                 move |_| async move {
                     fs::rename(&state_directory, &displaced_for_callback)?;
                     fs::create_dir(&state_directory)?;
@@ -904,6 +1010,7 @@ mod supported {
                 let paths = paths(root.path(), scenario);
                 prepare(&paths);
                 let metadata = metadata(&paths);
+                let schema_catalog = base_schema_catalog();
                 let authority = WriterAuthority::acquire(&paths, OpenMode::Initialize)
                     .unwrap()
                     .unwrap();
@@ -924,6 +1031,7 @@ mod supported {
                         &paths,
                         authority,
                         &metadata,
+                        &schema_catalog,
                         |_| ready(Err::<(), _>(CallbackFailure)),
                         &operations,
                     )
@@ -933,6 +1041,7 @@ mod supported {
                         &paths,
                         authority,
                         &metadata,
+                        &schema_catalog,
                         |_| ready(Ok::<(), CallbackFailure>(())),
                         &operations,
                     )

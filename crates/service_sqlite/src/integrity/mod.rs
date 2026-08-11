@@ -1,0 +1,415 @@
+//! Exact schema-object catalog verification.
+
+pub(crate) mod catalog;
+
+pub use catalog::{
+    SchemaCatalog, SchemaCatalogContractError, SchemaDigest, SchemaObject, SchemaObjectKind,
+    SchemaVersionCatalog,
+};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use core::fmt;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::error::Error;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use sqlx::{Row, SqliteConnection};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::{ServiceSqliteError, ServiceSqliteErrorKind};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use self::catalog::{
+    MAX_SCHEMA_CATALOG_UTF8_BYTES, MAX_SCHEMA_OBJECT_COUNT, MAX_SCHEMA_SQL_UTF8_BYTES, ObjectRef,
+    object_digest, snapshot_digest,
+};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const READ_SCHEMA_CATALOG_SQL: &str = r#"
+WITH raw_catalog AS (
+    SELECT type, name, tbl_name, sql
+    FROM main.sqlite_schema
+    WHERE NOT (typeof(name) = 'text' AND substr(name, 1, 7) = 'sqlite_')
+), bounded_catalog AS (
+    SELECT
+        type,
+        name,
+        tbl_name,
+        sql,
+        COUNT(*) OVER () AS object_count,
+        COALESCE(SUM(length(CAST(sql AS BLOB))) OVER (), 0) AS total_sql_bytes
+    FROM raw_catalog
+)
+SELECT
+    object_count,
+    total_sql_bytes,
+    CASE
+        WHEN object_count <= 4096
+         AND typeof(type) = 'text'
+         AND length(CAST(type AS BLOB)) BETWEEN 1 AND 16
+        THEN type
+    END AS bounded_type,
+    CASE
+        WHEN object_count <= 4096
+         AND typeof(name) = 'text'
+         AND length(CAST(name AS BLOB)) BETWEEN 1 AND 128
+        THEN name
+    END AS bounded_name,
+    CASE
+        WHEN object_count <= 4096
+         AND typeof(tbl_name) = 'text'
+         AND length(CAST(tbl_name AS BLOB)) BETWEEN 1 AND 128
+        THEN tbl_name
+    END AS bounded_table_name,
+    CASE
+        WHEN object_count <= 4096
+         AND total_sql_bytes <= 16777216
+         AND typeof(sql) = 'text'
+         AND length(CAST(sql AS BLOB)) BETWEEN 1 AND 1048576
+        THEN sql
+    END AS bounded_sql
+FROM bounded_catalog
+LIMIT 4097
+"#;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SchemaVerificationReport {
+    version: u32,
+    expected_count: u32,
+    actual_count: u32,
+    expected_digest: SchemaDigest,
+    actual_digest: SchemaDigest,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SchemaIntegrityFailureKind {
+    CatalogMismatch,
+    CatalogCorrupt,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct SchemaIntegrityFailure {
+    kind: SchemaIntegrityFailureKind,
+    report: Option<SchemaVerificationReport>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Debug for SchemaIntegrityFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SchemaIntegrityFailure")
+            .field("kind", &self.kind)
+            .field("report", &self.report)
+            .finish()
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Display for SchemaIntegrityFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self.kind {
+            SchemaIntegrityFailureKind::CatalogMismatch => {
+                "SQLite schema object catalog does not match"
+            }
+            SchemaIntegrityFailureKind::CatalogCorrupt => "SQLite schema object catalog is invalid",
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Error for SchemaIntegrityFailure {}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn integrity_error(kind: SchemaIntegrityFailureKind) -> ServiceSqliteError {
+    ServiceSqliteError::with_source(
+        ServiceSqliteErrorKind::Integrity,
+        SchemaIntegrityFailure { kind, report: None },
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn mismatch_error(report: SchemaVerificationReport) -> ServiceSqliteError {
+    ServiceSqliteError::with_source(
+        ServiceSqliteErrorKind::Integrity,
+        SchemaIntegrityFailure {
+            kind: SchemaIntegrityFailureKind::CatalogMismatch,
+            report: Some(report),
+        },
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct RuntimeSchemaObject {
+    kind: SchemaObjectKind,
+    name: String,
+    table_name: String,
+    sql: String,
+    digest: SchemaDigest,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn verify_schema_catalog(
+    connection: &mut SqliteConnection,
+    catalog: &SchemaCatalog,
+    version: u32,
+) -> Result<SchemaVerificationReport, ServiceSqliteError> {
+    let expected = catalog
+        .version(version)
+        .ok_or_else(|| integrity_error(SchemaIntegrityFailureKind::CatalogMismatch))?;
+    let rows = sqlx::query(READ_SCHEMA_CATALOG_SQL)
+        .fetch_all(connection)
+        .await
+        .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+    if rows.len() > MAX_SCHEMA_OBJECT_COUNT {
+        return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+    }
+    let mut objects = Vec::with_capacity(rows.len());
+    let mut reported_count = None;
+    let mut reported_total = None;
+    for row in rows {
+        let count = row
+            .try_get::<i64, _>("object_count")
+            .ok()
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        let total = row
+            .try_get::<i64, _>("total_sql_bytes")
+            .ok()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        if count > u32::try_from(MAX_SCHEMA_OBJECT_COUNT).unwrap_or(u32::MAX)
+            || total > MAX_SCHEMA_CATALOG_UTF8_BYTES
+            || reported_count.is_some_and(|observed| observed != count)
+            || reported_total.is_some_and(|observed| observed != total)
+        {
+            return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+        }
+        reported_count = Some(count);
+        reported_total = Some(total);
+        let object_type = row
+            .try_get::<String, _>("bounded_type")
+            .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        let name = row
+            .try_get::<String, _>("bounded_name")
+            .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        let table_name = row
+            .try_get::<String, _>("bounded_table_name")
+            .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        let sql = row
+            .try_get::<String, _>("bounded_sql")
+            .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        if sql.len() > MAX_SCHEMA_SQL_UTF8_BYTES {
+            return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+        }
+        let kind = SchemaObjectKind::from_sqlite(&object_type)
+            .ok_or_else(|| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+        if !runtime_name_is_valid(&name)
+            || !runtime_name_is_valid(&table_name)
+            || (kind == SchemaObjectKind::Table) != (name == table_name)
+        {
+            return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+        }
+        let digest = object_digest(kind, &name, &table_name, &sql);
+        objects.push(RuntimeSchemaObject {
+            kind,
+            name,
+            table_name,
+            sql,
+            digest,
+        });
+    }
+    let actual_count = u32::try_from(objects.len())
+        .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+    if reported_count.unwrap_or(0) != actual_count {
+        return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+    }
+    let mut identities = std::collections::BTreeSet::new();
+    if objects
+        .iter()
+        .any(|object| !identities.insert((object.kind, object.name.as_str())))
+    {
+        return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+    }
+    let refs = objects
+        .iter()
+        .map(|object| ObjectRef {
+            kind: object.kind,
+            name: &object.name,
+            table_name: &object.table_name,
+            sql: &object.sql,
+            digest: object.digest,
+        })
+        .collect::<Vec<_>>();
+    let actual_digest = snapshot_digest(version, &refs);
+    let report = SchemaVerificationReport {
+        version,
+        expected_count: expected.object_count(),
+        actual_count,
+        expected_digest: expected.digest(),
+        actual_digest,
+    };
+    if report.expected_count != report.actual_count
+        || report.expected_digest != report.actual_digest
+    {
+        return Err(mismatch_error(report));
+    }
+    Ok(report)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn runtime_name_is_valid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes[0].is_ascii_lowercase()
+        && bytes[bytes.len() - 1].is_ascii_alphanumeric()
+        && !bytes.windows(2).any(|pair| pair == b"__")
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_')
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod tests {
+    use super::*;
+    use sqlx::{Connection, Executor, sqlite::SqliteConnectOptions};
+
+    const TABLE_SQL: &str =
+        "CREATE TABLE alpha (id INTEGER PRIMARY KEY, value INTEGER NOT NULL) STRICT";
+    const INDEX_SQL: &str = "CREATE INDEX alpha_value_idx ON alpha(value)";
+    const TRIGGER_SQL: &str = "CREATE TRIGGER alpha_guard BEFORE UPDATE ON alpha BEGIN SELECT RAISE(ABORT, 'blocked'); END";
+
+    fn object(
+        kind: SchemaObjectKind,
+        name: &'static str,
+        table_name: &'static str,
+        sql: &'static str,
+    ) -> SchemaObject {
+        SchemaObject::new(
+            kind,
+            name,
+            table_name,
+            sql,
+            SchemaObject::computed_digest(kind, name, table_name, sql).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn expected(objects: Vec<SchemaObject>) -> SchemaCatalog {
+        let migrations = crate::MigrationCatalog::new([]).unwrap();
+        let digest = SchemaVersionCatalog::computed_digest(1, objects.iter().cloned()).unwrap();
+        let version = SchemaVersionCatalog::new(1, objects, digest).unwrap();
+        SchemaCatalog::new(&migrations, [version]).unwrap()
+    }
+
+    fn full_objects() -> Vec<SchemaObject> {
+        vec![
+            object(
+                SchemaObjectKind::Trigger,
+                "alpha_guard",
+                "alpha",
+                TRIGGER_SQL,
+            ),
+            object(
+                SchemaObjectKind::Index,
+                "alpha_value_idx",
+                "alpha",
+                INDEX_SQL,
+            ),
+            object(SchemaObjectKind::Table, "alpha", "alpha", TABLE_SQL),
+        ]
+    }
+
+    async fn shared_database() -> SqliteConnection {
+        let mut connection =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(":memory:"))
+                .await
+                .unwrap();
+        for statement in catalog::METADATA_SCHEMA_SQL
+            .into_iter()
+            .chain(catalog::MIGRATION_LEDGER_SCHEMA_SQL)
+        {
+            connection.execute(statement).await.unwrap();
+        }
+        connection
+    }
+
+    async fn full_database() -> SqliteConnection {
+        let mut connection = shared_database().await;
+        for statement in [TABLE_SQL, INDEX_SQL, TRIGGER_SQL] {
+            connection.execute(statement).await.unwrap();
+        }
+        connection
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn exact_catalog_is_order_independent_and_report_is_bounded() {
+        let mut connection = full_database().await;
+        let catalog = expected(full_objects());
+        let first = verify_schema_catalog(&mut connection, &catalog, 1)
+            .await
+            .unwrap();
+        let second = verify_schema_catalog(&mut connection, &catalog, 1)
+            .await
+            .unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.version, 1);
+        assert_eq!(first.expected_count, 9);
+        assert_eq!(first.actual_count, 9);
+        assert_eq!(first.expected_digest, first.actual_digest);
+        assert!(!format!("{first:?}").contains(TABLE_SQL));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn missing_extra_replaced_index_trigger_column_and_view_fail_closed() {
+        let cases = [
+            "DROP INDEX alpha_value_idx",
+            "CREATE TABLE extra (value INTEGER)",
+            "DROP INDEX alpha_value_idx; CREATE INDEX alpha_value_idx ON alpha(value DESC)",
+            "DROP TRIGGER alpha_guard; CREATE TRIGGER alpha_guard BEFORE UPDATE ON alpha BEGIN SELECT RAISE(ABORT, 'changed'); END",
+            "ALTER TABLE alpha ADD COLUMN changed TEXT",
+            "CREATE VIEW alpha_view AS SELECT value FROM alpha",
+        ];
+        for mutation in cases {
+            let mut connection = full_database().await;
+            sqlx::raw_sql(mutation)
+                .execute(&mut connection)
+                .await
+                .unwrap();
+            let error = verify_schema_catalog(&mut connection, &expected(full_objects()), 1)
+                .await
+                .expect_err("schema drift must fail");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+            assert!(!error.to_string().contains("alpha"));
+            assert!(!format!("{error:?}").contains("alpha"));
+        }
+
+        let mut missing = shared_database().await;
+        assert_eq!(
+            verify_schema_catalog(&mut missing, &expected(full_objects()), 1)
+                .await
+                .expect_err("missing table")
+                .kind(),
+            ServiceSqliteErrorKind::Integrity
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn oversized_persisted_sql_is_rejected_before_rust_decode() {
+        let mut connection = shared_database().await;
+        let oversized = "x".repeat(catalog::MAX_SCHEMA_SQL_UTF8_BYTES + 1);
+        let statement = format!("CREATE TABLE oversized (value TEXT DEFAULT '{oversized}')");
+        sqlx::query(sqlx::AssertSqlSafe(statement))
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        let error = verify_schema_catalog(&mut connection, &expected(Vec::new()), 1)
+            .await
+            .expect_err("oversized SQL must fail");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+        assert!(!error.to_string().contains(&oversized));
+        assert!(!format!("{error:?}").contains(&oversized));
+    }
+}
