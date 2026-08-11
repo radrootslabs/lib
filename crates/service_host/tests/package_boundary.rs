@@ -17,10 +17,13 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
         );
     }
 
-    assert_eq!(dependency_keys(MANIFEST), BTreeSet::from(["getrandom"]));
+    assert_eq!(
+        dependency_keys(MANIFEST),
+        BTreeSet::from(["getrandom", "serde"])
+    );
     assert_eq!(
         public_modules(ROOT),
-        BTreeSet::from(["entropy", "error", "time"])
+        BTreeSet::from(["build_info", "entropy", "error", "time"])
     );
 }
 
