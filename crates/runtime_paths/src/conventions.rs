@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsRuntimeNamespace,
-    RadrootsRuntimePathsError,
+    InstanceId, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
+    RadrootsRuntimeNamespace, RadrootsRuntimePathsError, RadrootsServiceInstanceNamespace,
+    RadrootsServiceInstancePaths, ServiceId,
 };
 
 pub const DEFAULT_CONFIG_FILE_NAME: &str = "config.toml";
@@ -21,6 +22,20 @@ pub struct RadrootsBootstrapPaths {
     pub config_path: PathBuf,
     pub logs_dir: PathBuf,
     pub identity_path: PathBuf,
+}
+
+pub fn default_service_instance_paths(
+    resolver: &RadrootsPathResolver,
+    profile: RadrootsPathProfile,
+    overrides: &RadrootsPathOverrides,
+    service_id: &ServiceId,
+    instance_id: &InstanceId,
+) -> Result<RadrootsServiceInstancePaths, RadrootsRuntimePathsError> {
+    let namespace = RadrootsServiceInstanceNamespace::new(service_id.clone(), instance_id.clone());
+    let roots = resolver.resolve(profile, overrides)?;
+    Ok(RadrootsServiceInstancePaths::from_resolved_roots(
+        &roots, &namespace,
+    ))
 }
 
 pub fn default_namespaced_bootstrap_paths(
@@ -128,7 +143,7 @@ mod tests {
         DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_GEONAMES_NAMESPACE,
         DEFAULT_SHARED_IDENTITY_FILE_NAME, DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME,
         DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE, default_namespaced_bootstrap_paths,
-        default_shared_geonames_database_file_name,
+        default_service_instance_paths, default_shared_geonames_database_file_name,
         default_shared_geonames_database_path_from_cache_root,
         default_shared_geonames_root_from_cache_root, default_shared_identity_path,
         default_shared_runtime_logs_dir, default_shared_runtime_store_database_path_from_data_root,
@@ -136,6 +151,90 @@ mod tests {
         default_shared_runtime_store_root_from_data_root,
         default_shared_runtime_store_root_from_shared_accounts_data_root,
     };
+    use crate::{InstanceId, ServiceId};
+
+    #[test]
+    fn service_instance_paths_are_exact_for_linux_and_xdg_profiles() {
+        let service_id = ServiceId::new("myc").expect("service id");
+        let instance_id = InstanceId::new("primary").expect("instance id");
+        let service_host = crate::RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment::default(),
+        );
+        let service_paths = default_service_instance_paths(
+            &service_host,
+            crate::RadrootsPathProfile::ServiceHost,
+            &crate::RadrootsPathOverrides::default(),
+            &service_id,
+            &instance_id,
+        )
+        .expect("service-host paths");
+        assert_eq!(
+            service_paths.config(),
+            PathBuf::from("/etc/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            service_paths.state(),
+            PathBuf::from("/var/lib/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            service_paths.cache(),
+            PathBuf::from("/var/cache/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            service_paths.logs(),
+            PathBuf::from("/var/log/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            service_paths.run(),
+            PathBuf::from("/run/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            service_paths.secrets(),
+            PathBuf::from("/etc/radroots/secrets/services/myc/primary")
+        );
+
+        let interactive = crate::RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+        let interactive_paths = default_service_instance_paths(
+            &interactive,
+            crate::RadrootsPathProfile::InteractiveUser,
+            &crate::RadrootsPathOverrides::default(),
+            &service_id,
+            &instance_id,
+        )
+        .expect("XDG paths");
+        assert_eq!(
+            interactive_paths.config(),
+            PathBuf::from("/home/treesap/.config/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            interactive_paths.state(),
+            PathBuf::from("/home/treesap/.local/share/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            interactive_paths.cache(),
+            PathBuf::from("/home/treesap/.cache/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            interactive_paths.logs(),
+            PathBuf::from("/home/treesap/.local/state/radroots/logs/services/myc/primary")
+        );
+        assert_eq!(
+            interactive_paths.run(),
+            PathBuf::from("/run/user/1000/radroots/services/myc/primary")
+        );
+        assert_eq!(
+            interactive_paths.secrets(),
+            PathBuf::from("/home/treesap/.config/radroots/secrets/services/myc/primary")
+        );
+    }
 
     #[test]
     fn namespaced_bootstrap_paths_use_canonical_interactive_roots() {

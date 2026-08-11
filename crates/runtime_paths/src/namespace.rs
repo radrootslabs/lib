@@ -1,6 +1,55 @@
 use std::path::PathBuf;
 
-use crate::RadrootsRuntimePathsError;
+use crate::{InstanceId, RadrootsRuntimePathsError, ServiceId, ServiceIdentityError};
+
+/// A validated canonical `services/<service>/<instance>` namespace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsServiceInstanceNamespace {
+    service_id: ServiceId,
+    instance_id: InstanceId,
+}
+
+impl RadrootsServiceInstanceNamespace {
+    /// Constructs a namespace from already validated identities.
+    #[must_use]
+    pub fn new(service_id: ServiceId, instance_id: InstanceId) -> Self {
+        Self {
+            service_id,
+            instance_id,
+        }
+    }
+
+    /// Parses both canonical path components before constructing a namespace.
+    pub fn parse(
+        service_id: impl Into<String>,
+        instance_id: impl Into<String>,
+    ) -> Result<Self, ServiceIdentityError> {
+        Ok(Self::new(
+            ServiceId::new(service_id)?,
+            InstanceId::new(instance_id)?,
+        ))
+    }
+
+    /// Returns the validated service identity.
+    #[must_use]
+    pub fn service_id(&self) -> &ServiceId {
+        &self.service_id
+    }
+
+    /// Returns the validated instance identity.
+    #[must_use]
+    pub fn instance_id(&self) -> &InstanceId {
+        &self.instance_id
+    }
+
+    /// Returns the canonical relative namespace path.
+    #[must_use]
+    pub fn relative_path(&self) -> PathBuf {
+        PathBuf::from(RadrootsRuntimeNamespaceKind::Service.path_segment())
+            .join(self.service_id.as_str())
+            .join(self.instance_id.as_str())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsRuntimeNamespaceKind {
@@ -89,8 +138,12 @@ fn validate_component(value: &str) -> Result<(), RadrootsRuntimePathsError> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
-    use crate::RadrootsRuntimePathsError;
+    use super::{
+        RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind, RadrootsServiceInstanceNamespace,
+    };
+    use crate::{
+        InstanceId, RadrootsRuntimePathsError, ServiceId, ServiceIdentityError, ServiceIdentityKind,
+    };
 
     #[test]
     fn namespace_kind_path_segments_are_canonical() {
@@ -144,5 +197,40 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn service_instance_namespace_requires_both_validated_identities() {
+        let namespace = RadrootsServiceInstanceNamespace::new(
+            ServiceId::new("myc").expect("service id"),
+            InstanceId::new("primary-01").expect("instance id"),
+        );
+        assert_eq!(namespace.service_id().as_str(), "myc");
+        assert_eq!(namespace.instance_id().as_str(), "primary-01");
+        assert_eq!(
+            namespace.relative_path(),
+            PathBuf::from("services/myc/primary-01")
+        );
+
+        for invalid in ["../myc", "/absolute", "myc/other", "Myc"] {
+            let error = RadrootsServiceInstanceNamespace::parse(invalid, "primary")
+                .expect_err("invalid service path component");
+            assert_identity_error_kind(error, ServiceIdentityKind::Service);
+        }
+        for invalid in ["../primary", "/absolute", "primary/other", "Primary"] {
+            let error = RadrootsServiceInstanceNamespace::parse("myc", invalid)
+                .expect_err("invalid instance path component");
+            assert_identity_error_kind(error, ServiceIdentityKind::Instance);
+        }
+    }
+
+    fn assert_identity_error_kind(error: ServiceIdentityError, expected: ServiceIdentityKind) {
+        let actual = match error {
+            ServiceIdentityError::Empty { kind }
+            | ServiceIdentityError::TooLong { kind, .. }
+            | ServiceIdentityError::InvalidBoundary { kind }
+            | ServiceIdentityError::InvalidCharacter { kind } => kind,
+        };
+        assert_eq!(actual, expected);
     }
 }

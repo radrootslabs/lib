@@ -14,7 +14,7 @@ pub use conventions::{
     DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE, DEFAULT_SHARED_IDENTITY_FILE_NAME,
     DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME, DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE,
     DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_KIND, DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_VALUE,
-    RadrootsBootstrapPaths, default_namespaced_bootstrap_paths,
+    RadrootsBootstrapPaths, default_namespaced_bootstrap_paths, default_service_instance_paths,
     default_shared_geonames_database_file_name,
     default_shared_geonames_database_path_from_cache_root,
     default_shared_geonames_root_from_cache_root, default_shared_identity_path,
@@ -28,13 +28,16 @@ pub use identifier::{
     INSTANCE_ID_MAX_BYTES, InstanceId, SERVICE_ID_MAX_BYTES, ServiceId, ServiceIdentityError,
     ServiceIdentityKind,
 };
-pub use namespace::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
+pub use namespace::{
+    RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind, RadrootsServiceInstanceNamespace,
+};
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
 pub use roots::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
 pub use service::{
     RadrootsRuntimePathConfigEntry, RadrootsRuntimePathPolicyContract,
     RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError,
     RadrootsRuntimeSelectionContract, RadrootsRuntimeSelectionOverrideContract,
+    RadrootsServiceInstancePaths,
 };
 
 #[cfg(test)]

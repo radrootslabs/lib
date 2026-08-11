@@ -1,12 +1,91 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsPaths,
-    RadrootsRuntimeNamespace, RadrootsRuntimePathsError,
+    InstanceId, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsPaths,
+    RadrootsRuntimeNamespace, RadrootsRuntimePathsError, RadrootsServiceInstanceNamespace,
+    ServiceId,
 };
+
+/// Canonical directories owned by one validated service instance.
+///
+/// Callers cannot construct this value without the crate's validated identity
+/// and root derivation boundary.
+///
+/// ```compile_fail
+/// use std::path::PathBuf;
+/// use radroots_runtime_paths::RadrootsServiceInstancePaths;
+///
+/// let _forged = RadrootsServiceInstancePaths {
+///     config: PathBuf::from("/tmp/escape"),
+///     state: PathBuf::from("/tmp/escape"),
+///     cache: PathBuf::from("/tmp/escape"),
+///     logs: PathBuf::from("/tmp/escape"),
+///     run: PathBuf::from("/tmp/escape"),
+///     secrets: PathBuf::from("/tmp/escape"),
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsServiceInstancePaths {
+    config: PathBuf,
+    state: PathBuf,
+    cache: PathBuf,
+    logs: PathBuf,
+    run: PathBuf,
+    secrets: PathBuf,
+}
+
+impl RadrootsServiceInstancePaths {
+    pub(crate) fn from_resolved_roots(
+        roots: &RadrootsPaths,
+        namespace: &RadrootsServiceInstanceNamespace,
+    ) -> Self {
+        let relative = namespace.relative_path();
+        Self {
+            config: roots.config.join(&relative),
+            state: roots.data.join(&relative),
+            cache: roots.cache.join(&relative),
+            logs: roots.logs.join(&relative),
+            run: roots.run.join(&relative),
+            secrets: roots.secrets.join(relative),
+        }
+    }
+
+    #[must_use]
+    pub fn config(&self) -> &Path {
+        &self.config
+    }
+
+    #[must_use]
+    pub fn state(&self) -> &Path {
+        &self.state
+    }
+
+    #[must_use]
+    pub fn cache(&self) -> &Path {
+        &self.cache
+    }
+
+    #[must_use]
+    pub fn logs(&self) -> &Path {
+        &self.logs
+    }
+
+    #[must_use]
+    pub fn run(&self) -> &Path {
+        &self.run
+    }
+
+    #[must_use]
+    pub fn secrets(&self) -> &Path {
+        &self.secrets
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsRuntimePathSelection {
@@ -268,6 +347,23 @@ impl RadrootsRuntimePathSelection {
         let roots = resolver.resolve(self.profile, &overrides)?;
         Ok(roots.namespaced(&namespace))
     }
+
+    pub fn resolve_service_instance_paths(
+        &self,
+        resolver: &RadrootsPathResolver,
+        service_id: &ServiceId,
+        instance_id: &InstanceId,
+        profile_env: &'static str,
+        repo_local_root_env: &'static str,
+    ) -> Result<RadrootsServiceInstancePaths, RadrootsRuntimePathSelectionError> {
+        let namespace =
+            RadrootsServiceInstanceNamespace::new(service_id.clone(), instance_id.clone());
+        let overrides = self.overrides(profile_env, repo_local_root_env)?;
+        let roots = resolver.resolve(self.profile, &overrides)?;
+        Ok(RadrootsServiceInstancePaths::from_resolved_roots(
+            &roots, &namespace,
+        ))
+    }
 }
 
 fn parse_profile(
@@ -306,6 +402,7 @@ mod tests {
         RadrootsRuntimePathConfigEntry, RadrootsRuntimePathPolicyContract,
         RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError,
     };
+    use crate::{InstanceId, ServiceId};
 
     #[test]
     fn caller_selection_preserves_profile_and_sources() {
@@ -379,6 +476,53 @@ mod tests {
         assert_eq!(
             roots.secrets,
             PathBuf::from("/repo/.local/radroots/secrets/services/radrootsd")
+        );
+    }
+
+    #[test]
+    fn resolve_service_instance_paths_uses_one_repo_local_base() {
+        let selection = RadrootsRuntimePathSelection::caller(
+            RadrootsPathProfile::RepoLocal,
+            Some(PathBuf::from("/repo/.local/radroots")),
+        );
+        let resolver =
+            RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+        let service_id = ServiceId::new("rhi").expect("service id");
+        let instance_id = InstanceId::new("west-01").expect("instance id");
+
+        let paths = selection
+            .resolve_service_instance_paths(
+                &resolver,
+                &service_id,
+                &instance_id,
+                "PROFILE_ENV",
+                "ROOT_ENV",
+            )
+            .expect("service instance paths");
+
+        assert_eq!(
+            paths.config(),
+            PathBuf::from("/repo/.local/radroots/config/services/rhi/west-01")
+        );
+        assert_eq!(
+            paths.state(),
+            PathBuf::from("/repo/.local/radroots/data/services/rhi/west-01")
+        );
+        assert_eq!(
+            paths.cache(),
+            PathBuf::from("/repo/.local/radroots/cache/services/rhi/west-01")
+        );
+        assert_eq!(
+            paths.logs(),
+            PathBuf::from("/repo/.local/radroots/logs/services/rhi/west-01")
+        );
+        assert_eq!(
+            paths.run(),
+            PathBuf::from("/repo/.local/radroots/run/services/rhi/west-01")
+        );
+        assert_eq!(
+            paths.secrets(),
+            PathBuf::from("/repo/.local/radroots/secrets/services/rhi/west-01")
         );
     }
 
