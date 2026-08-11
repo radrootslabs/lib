@@ -10,13 +10,15 @@ use std::{
 use std::{
     fs::File,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use fs2::FileExt;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use futures::future::BoxFuture;
 use radroots_runtime_paths::{
     InstanceId, RuntimeContext, ServiceId, default_service_instance_artifacts,
 };
@@ -190,14 +192,39 @@ pub(crate) struct PrivateConnectionPool {
     catalog: MigrationCatalog,
     schema_catalog: SchemaCatalog,
     mode: OpenMode,
-    authority: Option<WriterAuthority>,
-    inspection_guard: Option<ReadOnlyInspectionGuard>,
+    policy: ServiceSqliteConnectionOptions,
+    resources: Mutex<PrivateConnectionResources>,
+    close_driver: tokio::sync::Mutex<PrivateCloseDriver>,
+    #[cfg(test)]
+    close_phase: std::sync::atomic::AtomicU8,
     authority_failure: Arc<AtomicBool>,
     metadata_failure: Arc<AtomicBool>,
     migration_failure: Arc<AtomicBool>,
     integrity_failure: Arc<AtomicBool>,
     pragma_failure: Arc<AtomicBool>,
 }
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct PrivateConnectionResources {
+    authority: Option<WriterAuthority>,
+    inspection_guard: Option<ReadOnlyInspectionGuard>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+enum PrivateCloseDriver {
+    Pending,
+    Connecting(BoxFuture<'static, Result<SqliteConnection, ServiceSqliteError>>),
+    Connected(SqliteConnection),
+    Closing {
+        future: BoxFuture<'static, Result<(), ServiceSqliteError>>,
+        authority_error: Option<ServiceSqliteError>,
+        checkpoint_error: Option<ServiceSqliteError>,
+    },
+    Complete(Option<ServiceSqliteErrorKind>),
+}
+
+#[cfg(test)]
+pub(crate) const TEST_CLOSE_PHASE_CHECKPOINT: u8 = 4;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl PrivateConnectionPool {
@@ -212,11 +239,28 @@ impl PrivateConnectionPool {
     }
 
     pub(crate) fn validate(&self) -> Result<(), ServiceSqliteError> {
-        if let Some(authority) = self.authority.as_ref() {
-            authority.validate_for(&self.paths)?;
-        }
-        if let Some(inspection_guard) = self.inspection_guard.as_ref() {
-            inspection_guard.validate_for(&self.paths)?;
+        let resources = self.resources.lock().map_err(|_| {
+            connection_error(
+                ServiceSqliteErrorKind::Authority,
+                ConnectionFailureKind::AuthorityMismatch,
+            )
+        })?;
+        match self.mode {
+            OpenMode::Initialize | OpenMode::ReadWriteExisting => resources
+                .authority
+                .as_ref()
+                .ok_or_else(|| {
+                    connection_error(
+                        ServiceSqliteErrorKind::Authority,
+                        ConnectionFailureKind::AuthorityMismatch,
+                    )
+                })?
+                .validate_for(&self.paths)?,
+            OpenMode::ReadOnlyInspection => resources
+                .inspection_guard
+                .as_ref()
+                .ok_or_else(|| inspection_error(ConnectionFailureKind::InspectionUnavailable))?
+                .validate_for(&self.paths)?,
         }
         self.binding.validate(&self.paths)
     }
@@ -235,6 +279,11 @@ impl PrivateConnectionPool {
 
     pub(crate) fn schema_catalog(&self) -> &SchemaCatalog {
         &self.schema_catalog
+    }
+
+    #[cfg(test)]
+    pub(crate) fn close_phase(&self) -> u8 {
+        self.close_phase.load(Ordering::Acquire)
     }
 
     pub(crate) async fn acquire(&self) -> Result<PoolConnection<Sqlite>, ServiceSqliteError> {
@@ -261,25 +310,16 @@ impl PrivateConnectionPool {
         build: &MigrationBuildIdentity,
         callbacks: &[crate::migration::MigrationCallbackBinding],
     ) -> Result<crate::migration::MigrationApplicationOutcome, ServiceSqliteError> {
-        let authority = self
-            .authority
-            .as_ref()
-            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
-        authority.validate_for(&self.paths)?;
-        self.binding.validate(&self.paths)?;
+        self.validate_writer_authority()?;
         let acquired = self.pool.acquire().await;
-        authority.validate_for(&self.paths)?;
-        self.binding.validate(&self.paths)?;
+        self.validate_writer_authority()?;
         let mut connection =
             acquired.map_err(|source| connection_source(self.connection_failure_kind(), source))?;
         // Migration execution installs connection-local fail-closed guards. Always
         // discard this one-time connection so cancellation cannot return a guarded
         // or callback-altered handle to the pool.
         connection.close_on_drop();
-        let mut validate_authority = || {
-            authority.validate_for(&self.paths)?;
-            self.binding.validate(&self.paths)
-        };
+        let mut validate_authority = || self.validate_writer_authority();
         let result = crate::migration::apply_governed_migrations(
             &mut connection,
             &self.catalog,
@@ -290,20 +330,204 @@ impl PrivateConnectionPool {
             &mut validate_authority,
         )
         .await;
-        authority.validate_for(&self.paths)?;
-        self.binding.validate(&self.paths)?;
+        self.validate_writer_authority()?;
         result
     }
 
-    pub(crate) async fn close(mut self) -> Option<WriterAuthority> {
-        self.pool.close().await;
-        self.inspection_guard.take();
-        self.authority.take()
+    fn validate_writer_authority(&self) -> Result<(), ServiceSqliteError> {
+        let resources = self.resources.lock().map_err(|_| {
+            connection_error(
+                ServiceSqliteErrorKind::Authority,
+                ConnectionFailureKind::AuthorityMismatch,
+            )
+        })?;
+        resources
+            .authority
+            .as_ref()
+            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?
+            .validate_for(&self.paths)?;
+        self.binding.validate(&self.paths)
     }
 
-    #[cfg(test)]
-    pub(crate) async fn close_pool(&self) {
+    pub(crate) async fn close(self) -> Option<WriterAuthority> {
         self.pool.close().await;
+        let mut resources = match self.resources.into_inner() {
+            Ok(resources) => resources,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        resources.inspection_guard.take();
+        resources.authority.take()
+    }
+
+    /// The outer error means authority release was not proven and close must retry.
+    /// The inner result is terminal and may be cached by the host.
+    pub(crate) async fn close_explicit(
+        &self,
+    ) -> Result<Result<(), ServiceSqliteError>, ServiceSqliteError> {
+        self.pool.close().await;
+        let terminal = if self.mode.requires_writer_authority() {
+            self.drive_writable_close().await
+        } else {
+            self.validate()
+        };
+        self.release_resources()?;
+        Ok(terminal)
+    }
+
+    async fn drive_writable_close(&self) -> Result<(), ServiceSqliteError> {
+        let mut driver = self.close_driver.lock().await;
+        loop {
+            match &mut *driver {
+                PrivateCloseDriver::Pending => {
+                    if let Err(error) = self.validate_writer_authority() {
+                        #[cfg(test)]
+                        self.close_phase.store(6, Ordering::Release);
+                        *driver = PrivateCloseDriver::Complete(Some(error.kind()));
+                        return Err(error);
+                    }
+                    let options = sqlite_connect_options(&self.paths, self.mode, self.policy);
+                    let connect: BoxFuture<'static, Result<SqliteConnection, ServiceSqliteError>> =
+                        Box::pin(async move {
+                            SqliteConnection::connect_with(&options)
+                                .await
+                                .map_err(|source| {
+                                    connection_source(ServiceSqliteErrorKind::Open, source)
+                                })
+                        });
+                    #[cfg(test)]
+                    self.close_phase.store(1, Ordering::Release);
+                    *driver = PrivateCloseDriver::Connecting(connect);
+                }
+                PrivateCloseDriver::Connecting(connect) => {
+                    let connected = connect.as_mut().await;
+                    match connected {
+                        Ok(connection) => {
+                            #[cfg(test)]
+                            self.close_phase.store(2, Ordering::Release);
+                            *driver = PrivateCloseDriver::Connected(connection);
+                        }
+                        Err(error) => {
+                            let authority_error = self.validate_writer_authority().err();
+                            let error = authority_error.unwrap_or(error);
+                            #[cfg(test)]
+                            self.close_phase.store(6, Ordering::Release);
+                            *driver = PrivateCloseDriver::Complete(Some(error.kind()));
+                            return Err(error);
+                        }
+                    }
+                }
+                PrivateCloseDriver::Connected(connection) => {
+                    let mut authority_error = self.validate_writer_authority().err();
+                    let mut checkpoint_error = None;
+                    if authority_error.is_none() {
+                        #[cfg(test)]
+                        self.close_phase.store(3, Ordering::Release);
+                        checkpoint_error =
+                            verify_connection_policy(connection, self.mode, self.policy)
+                                .await
+                                .map_err(|source| {
+                                    connection_source(ServiceSqliteErrorKind::Pragma, source)
+                                })
+                                .err();
+                        authority_error =
+                            authority_error.or_else(|| self.validate_writer_authority().err());
+                    }
+                    if checkpoint_error.is_none() && authority_error.is_none() {
+                        #[cfg(test)]
+                        self.close_phase
+                            .store(TEST_CLOSE_PHASE_CHECKPOINT, Ordering::Release);
+                        checkpoint_error =
+                            sqlx::query_as::<_, (i64, i64, i64)>("PRAGMA wal_checkpoint(TRUNCATE)")
+                                .fetch_one(&mut *connection)
+                                .await
+                                .map_err(|source| {
+                                    connection_source(ServiceSqliteErrorKind::Pragma, source)
+                                })
+                                .and_then(|(busy, _log_frames, _checkpointed_frames)| {
+                                    if busy == 0 {
+                                        Ok(())
+                                    } else {
+                                        Err(connection_error(
+                                            ServiceSqliteErrorKind::Pragma,
+                                            ConnectionFailureKind::CheckpointBusy,
+                                        ))
+                                    }
+                                })
+                                .err();
+                        authority_error =
+                            authority_error.or_else(|| self.validate_writer_authority().err());
+                    }
+
+                    let connected = core::mem::replace(&mut *driver, PrivateCloseDriver::Pending);
+                    let PrivateCloseDriver::Connected(connection) = connected else {
+                        unreachable!("close driver retains its connected phase")
+                    };
+                    let close: BoxFuture<'static, Result<(), ServiceSqliteError>> =
+                        Box::pin(async move {
+                            connection.close().await.map_err(|source| {
+                                connection_source(ServiceSqliteErrorKind::Open, source)
+                            })
+                        });
+                    #[cfg(test)]
+                    self.close_phase.store(5, Ordering::Release);
+                    *driver = PrivateCloseDriver::Closing {
+                        future: close,
+                        authority_error,
+                        checkpoint_error,
+                    };
+                }
+                PrivateCloseDriver::Closing {
+                    future,
+                    authority_error,
+                    checkpoint_error,
+                } => {
+                    let close_error = future.as_mut().await.err();
+                    let authority_error = authority_error
+                        .take()
+                        .or_else(|| self.validate_writer_authority().err());
+                    let error = authority_error
+                        .or_else(|| checkpoint_error.take())
+                        .or(close_error);
+                    #[cfg(test)]
+                    self.close_phase.store(6, Ordering::Release);
+                    *driver =
+                        PrivateCloseDriver::Complete(error.as_ref().map(ServiceSqliteError::kind));
+                    return error.map_or(Ok(()), Err);
+                }
+                PrivateCloseDriver::Complete(kind) => {
+                    return kind.map_or(Ok(()), |kind| Err(ServiceSqliteError::new(kind)));
+                }
+            }
+        }
+    }
+
+    fn release_resources(&self) -> Result<(), ServiceSqliteError> {
+        let mut resources = self.resources.lock().map_err(|_| {
+            connection_error(
+                ServiceSqliteErrorKind::Authority,
+                ConnectionFailureKind::AuthorityMismatch,
+            )
+        })?;
+        match self.mode {
+            OpenMode::Initialize | OpenMode::ReadWriteExisting => {
+                let authority = resources.authority.as_mut().ok_or_else(|| {
+                    connection_error(
+                        ServiceSqliteErrorKind::Authority,
+                        ConnectionFailureKind::AuthorityMismatch,
+                    )
+                })?;
+                authority.release()?;
+                resources.authority.take();
+            }
+            OpenMode::ReadOnlyInspection => {
+                let inspection = resources.inspection_guard.as_mut().ok_or_else(|| {
+                    inspection_error(ConnectionFailureKind::InspectionUnavailable)
+                })?;
+                inspection.release()?;
+                resources.inspection_guard.take();
+            }
+        }
+        Ok(())
     }
 }
 
@@ -666,8 +890,14 @@ async fn open_connection_pool(
         catalog: retained_catalog,
         schema_catalog: retained_schema_catalog,
         mode,
-        authority,
-        inspection_guard,
+        policy,
+        resources: Mutex::new(PrivateConnectionResources {
+            authority,
+            inspection_guard,
+        }),
+        close_driver: tokio::sync::Mutex::new(PrivateCloseDriver::Pending),
+        #[cfg(test)]
+        close_phase: std::sync::atomic::AtomicU8::new(0),
         authority_failure,
         metadata_failure,
         migration_failure,
@@ -787,6 +1017,7 @@ enum ConnectionFailureKind {
     AuthorityMismatch,
     InspectionUnavailable,
     InspectionContended,
+    CheckpointBusy,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -797,6 +1028,7 @@ impl fmt::Display for ConnectionFailureKind {
             Self::AuthorityMismatch => "SQLite writer authority is missing or mismatched",
             Self::InspectionUnavailable => "SQLite inspection authority is unavailable",
             Self::InspectionContended => "SQLite inspection requires an offline writer",
+            Self::CheckpointBusy => "SQLite close checkpoint could not drain active readers",
         })
     }
 }
@@ -827,7 +1059,7 @@ fn connection_source(kind: ServiceSqliteErrorKind, cause: sqlx::Error) -> Servic
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 struct ReadOnlyInspectionGuard {
-    lock: File,
+    lock: Option<File>,
     lock_device: u64,
     lock_inode: u64,
     directory: File,
@@ -947,7 +1179,7 @@ impl ReadOnlyInspectionGuard {
             ));
         }
         Ok(Self {
-            lock,
+            lock: Some(lock),
             lock_device: u64::try_from(lock_status.st_dev)
                 .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
             lock_inode: lock_status.st_ino,
@@ -1009,7 +1241,11 @@ impl ReadOnlyInspectionGuard {
         .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let lock_status = fstat(&lock)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        let held_lock_status = fstat(&self.lock)
+        let held_lock = self
+            .lock
+            .as_ref()
+            .ok_or_else(|| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let held_lock_status = fstat(held_lock)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let lock_device = u64::try_from(lock_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
@@ -1044,12 +1280,22 @@ impl ReadOnlyInspectionGuard {
         }
         Ok(())
     }
+
+    fn release(&mut self) -> Result<(), ServiceSqliteError> {
+        let Some(lock) = self.lock.as_ref() else {
+            return Ok(());
+        };
+        FileExt::unlock(lock)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        self.lock.take();
+        Ok(())
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Drop for ReadOnlyInspectionGuard {
     fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.lock);
+        let _ = self.release();
     }
 }
 
@@ -1280,7 +1526,10 @@ mod tests {
         fs,
         num::NonZeroU32,
         os::unix::fs::{PermissionsExt, symlink},
-        sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        },
         time::{Duration, SystemTime},
     };
 
@@ -1293,6 +1542,8 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use crate::{ServiceDatabaseMetadata, ServiceSqliteApplicationId};
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    use tokio::sync::Notify;
 
     use super::*;
 
@@ -2439,7 +2690,72 @@ mod tests {
         )
         .await
         .expect("read-only inspection");
-        assert!(read_only.authority.is_none());
+        assert_eq!(read_only.mode(), OpenMode::ReadOnlyInspection);
         assert!(read_only.close().await.is_none());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn cancellation_during_explicit_connection_close_retains_the_close_driver() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let policy = ServiceSqliteConnectionOptions::reviewed();
+        let (paths, pool) = initialized_pool(directory.path(), policy).await;
+        let connection = SqliteConnection::connect_with(&sqlite_connect_options(
+            &paths,
+            OpenMode::Initialize,
+            policy,
+        ))
+        .await
+        .expect("open private checkpoint connection");
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let close: BoxFuture<'static, Result<(), ServiceSqliteError>> = Box::pin({
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            async move {
+                entered.notify_one();
+                release.notified().await;
+                connection
+                    .close()
+                    .await
+                    .map_err(|source| connection_source(ServiceSqliteErrorKind::Open, source))
+            }
+        });
+        {
+            let mut driver = pool.close_driver.lock().await;
+            *driver = PrivateCloseDriver::Closing {
+                future: close,
+                authority_error: None,
+                checkpoint_error: None,
+            };
+        }
+        let pool = Arc::new(pool);
+        let close_task = tokio::spawn({
+            let pool = Arc::clone(&pool);
+            async move { pool.close_explicit().await }
+        });
+        entered.notified().await;
+        close_task.abort();
+        assert!(
+            close_task
+                .await
+                .expect_err("explicit close task is cancelled")
+                .is_cancelled()
+        );
+        let retained = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting);
+        assert!(matches!(
+            retained,
+            Err(ref error) if error.kind() == ServiceSqliteErrorKind::Authority
+        ));
+
+        release.notify_one();
+        pool.close_explicit()
+            .await
+            .expect("authority release is proven")
+            .expect("retained connection closes explicitly");
+        let mut reacquired = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("authority reacquisition")
+            .expect("writer mode yields authority");
+        reacquired.release().expect("release reacquired authority");
     }
 }

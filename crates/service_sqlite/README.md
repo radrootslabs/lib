@@ -23,6 +23,21 @@ commit begins yields no result and must be treated as an unknown commit outcome.
 Both that case and `CommitOutcomeUnknown` require rereading authoritative state
 before an idempotent retry.
 
+Every host must be closed explicitly with `ServiceSqliteHost::close`. Close
+permanently stops new transaction admission, drains transactions that were
+already admitted, and is safe to call sequentially or concurrently. Writable
+close applies the fixed `PRAGMA wal_checkpoint(TRUNCATE)` policy, requires an
+unblocked checkpoint, closes the private checkpoint connection, and explicitly
+releases writer authority. Read-only inspection close drains its pool and
+releases its shared inspection guard without checkpointing or mutating the
+database or filesystem. Cancelling close before terminal completion leaves the
+host non-admitting and retains authority; the private connect, checkpoint, and
+explicit connection-close driver remains host-owned so a later call resumes
+close without losing the SQLite handle or its close proof. Once authority
+release is proven, the stable outer result is cached for every later call.
+Dropping a host performs no asynchronous close work and is not proof that the
+governed checkpoint and authority-release sequence completed.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

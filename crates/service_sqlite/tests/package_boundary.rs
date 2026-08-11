@@ -18,6 +18,7 @@ const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_contro
 
 #[test]
 fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
+    let readme_words = README.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
         "name = \"radroots_service_sqlite\"",
         "publish = false",
@@ -40,7 +41,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "rustix",
             "serde",
             "sha2",
-            "sqlx"
+            "sqlx",
+            "tokio"
         ])
     );
     assert_eq!(
@@ -80,9 +82,22 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "must be treated as an unknown commit outcome",
         "require rereading authoritative state",
         "before an idempotent retry",
+        "Every host must be closed explicitly with `ServiceSqliteHost::close`",
+        "permanently stops new transaction admission",
+        "drains transactions that were",
+        "safe to call sequentially or concurrently",
+        "fixed `PRAGMA wal_checkpoint(TRUNCATE)` policy",
+        "requires an unblocked checkpoint",
+        "releases its shared inspection guard without checkpointing or mutating",
+        "Cancelling close before terminal completion",
+        "private connect, checkpoint, and explicit connection-close driver remains host-owned",
+        "without losing the SQLite handle or its close proof",
+        "a later call resumes close",
+        "stable outer result is cached",
+        "Dropping a host performs no asynchronous close work",
     ] {
         assert!(
-            README.contains(required),
+            readme_words.contains(required),
             "Step 061 README contract is missing `{required}`"
         );
     }
@@ -91,13 +106,17 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .map(|(production, _)| production)
         .expect("authority source must keep tests separated");
     let open_production = OPEN_SOURCE
-        .split_once("#[cfg(test)]")
+        .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
         .expect("open source must keep tests separated");
     let migration_production = MIGRATION_SOURCE
         .split_once("#[cfg(test)]")
         .map(|(production, _)| production)
         .expect("migration source must keep tests separated");
+    let connection_production = CONNECTION_SOURCE
+        .split_once("#[cfg(test)]\nmod tests")
+        .map(|(production, _)| production)
+        .expect("connection source must keep tests separated");
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -199,6 +218,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "CommitOutcomeUnknown",
         "cancelling the future yields no result",
         "must reread authoritative state before any idempotent retry",
+        "pub async fn close(&self)",
+        "closing.store(true, Ordering::Release)",
+        "close_state.lock().await",
+        "ServiceSqliteHostCloseState::Complete",
     ] {
         assert!(
             CONNECTION_SOURCE.contains(required),
@@ -233,10 +256,47 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub async fn commit(",
         "pub async fn rollback(",
         "pub use sqlx",
+        "impl Drop for ServiceSqliteHost",
+        "pub async fn checkpoint",
+        "pub fn checkpoint",
+        "checkpoint_mode",
     ] {
         assert!(
-            !CONNECTION_SOURCE.contains(forbidden) && !ROOT.contains(forbidden),
+            !connection_production.contains(forbidden) && !ROOT.contains(forbidden),
             "Step 061 source exposes forbidden raw authority `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "self.pool.close().await",
+        "PRAGMA wal_checkpoint(TRUNCATE)",
+        "if busy == 0",
+        ".close()",
+        "authority.release()?",
+        "inspection.release()?",
+        "release_resources",
+        "CheckpointBusy",
+        "close_driver: tokio::sync::Mutex<PrivateCloseDriver>",
+        "PrivateCloseDriver::Connecting",
+        "PrivateCloseDriver::Connected",
+        "PrivateCloseDriver::Closing",
+        "connect.as_mut().await",
+        "future.as_mut().await",
+    ] {
+        assert!(
+            open_production.contains(required),
+            "Step 062 close source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "tokio::spawn",
+        "Runtime::new",
+        "pub enum Checkpoint",
+        "pub struct Checkpoint",
+    ] {
+        assert!(
+            !connection_production.contains(forbidden) && !open_production.contains(forbidden),
+            "Step 062 close source contains forbidden authority `{forbidden}`"
         );
     }
 
@@ -483,7 +543,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     }
 
     for required in [
-        "inspection_guard.validate_for(&self.paths)",
+        ".inspection_guard",
+        ".validate_for(&self.paths)?",
         "fn validate_for(&self, paths: &ServiceSqlitePaths)",
         "held_lock_status",
         "lock_device",

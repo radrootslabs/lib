@@ -42,6 +42,16 @@ pub struct ServiceSqliteHost {
     mode: OpenMode,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pool: crate::open::PrivateConnectionPool,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    closing: AtomicBool,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    close_state: tokio::sync::Mutex<ServiceSqliteHostCloseState>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+enum ServiceSqliteHostCloseState {
+    Pending,
+    Complete(Option<ServiceSqliteErrorKind>),
 }
 
 impl ServiceSqliteHost {
@@ -69,13 +79,7 @@ impl ServiceSqliteHost {
             )
             .await?;
             match pool.apply_migrations(applied_at, build, callbacks).await {
-                Ok(outcome) => Ok((
-                    Self {
-                        mode: OpenMode::ReadWriteExisting,
-                        pool,
-                    },
-                    outcome,
-                )),
+                Ok(outcome) => Ok((Self::from_pool(OpenMode::ReadWriteExisting, pool), outcome)),
                 Err(error) => {
                     drop(pool.close().await);
                     Err(error)
@@ -111,13 +115,7 @@ impl ServiceSqliteHost {
             )
             .await?;
             match pool.apply_migrations(applied_at, build, callbacks).await {
-                Ok(outcome) => Ok((
-                    Self {
-                        mode: OpenMode::Initialize,
-                        pool,
-                    },
-                    outcome,
-                )),
+                Ok(outcome) => Ok((Self::from_pool(OpenMode::Initialize, pool), outcome)),
                 Err(error) => {
                     drop(pool.close().await);
                     Err(error)
@@ -153,10 +151,7 @@ impl ServiceSqliteHost {
                 options,
             )
             .await?;
-            Ok(Self {
-                mode: OpenMode::ReadOnlyInspection,
-                pool,
-            })
+            Ok(Self::from_pool(OpenMode::ReadOnlyInspection, pool))
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
@@ -169,6 +164,41 @@ impl ServiceSqliteHost {
     #[must_use]
     pub const fn mode(&self) -> OpenMode {
         self.mode
+    }
+
+    /// Closes all connections and explicitly releases retained instance authority.
+    ///
+    /// Close rejects new transactions as soon as it starts and waits for already
+    /// admitted transactions to finish. Writable hosts then perform the fixed
+    /// governed `TRUNCATE` WAL checkpoint before releasing writer authority;
+    /// read-only inspection performs no checkpoint or filesystem mutation.
+    ///
+    /// Cancelling this future leaves the host permanently non-admitting and retains
+    /// authority until a later call resumes close. A completed result is cached, so
+    /// sequential or concurrent later calls return the same stable outer outcome.
+    pub async fn close(&self) -> Result<(), ServiceSqliteError> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.closing.store(true, Ordering::Release);
+            let mut state = self.close_state.lock().await;
+            if let ServiceSqliteHostCloseState::Complete(kind) = *state {
+                return kind.map_or(Ok(()), |kind| Err(ServiceSqliteError::new(kind)));
+            }
+            let close = self.pool.close_explicit().await;
+            match close {
+                Err(retryable) => Err(retryable),
+                Ok(terminal) => {
+                    *state = ServiceSqliteHostCloseState::Complete(
+                        terminal.as_ref().err().map(ServiceSqliteError::kind),
+                    );
+                    terminal
+                }
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            Err(unsupported_host())
+        }
     }
 
     /// Executes one runner-owned transaction without exposing its connection or pool.
@@ -218,6 +248,11 @@ impl ServiceSqliteHost {
             ) -> ServiceSqliteTransactionFuture<'a, T, E>
             + Send,
     {
+        if self.closing.load(Ordering::Acquire) {
+            return Err(ServiceSqliteTransactionError::not_committed(
+                ServiceSqliteError::new(ServiceSqliteErrorKind::Open),
+            ));
+        }
         self.pool
             .validate()
             .map_err(ServiceSqliteTransactionError::not_committed)?;
@@ -395,6 +430,31 @@ impl ServiceSqliteHost {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn from_pool(mode: OpenMode, pool: crate::open::PrivateConnectionPool) -> Self {
+        Self {
+            mode,
+            pool,
+            closing: AtomicBool::new(false),
+            close_state: tokio::sync::Mutex::new(ServiceSqliteHostCloseState::Pending),
+        }
+    }
+
+    fn lifecycle_state(&self) -> &'static str {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            if self.closing.load(Ordering::Acquire) {
+                "closing_or_closed"
+            } else {
+                "open"
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            "closing_or_closed"
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     async fn verify_before_commit(
         &self,
         connection: &mut SqliteConnection,
@@ -428,11 +488,6 @@ impl ServiceSqliteHost {
         }
         Ok(())
     }
-
-    #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
-    async fn close_pool(&self) {
-        self.pool.close_pool().await;
-    }
 }
 
 impl fmt::Debug for ServiceSqliteHost {
@@ -441,6 +496,7 @@ impl fmt::Debug for ServiceSqliteHost {
             .debug_struct("ServiceSqliteHost")
             .field("mode", &self.mode)
             .field("pool", &"[redacted]")
+            .field("lifecycle", &self.lifecycle_state())
             .finish()
     }
 }
@@ -755,14 +811,17 @@ fn unsupported_host() -> ServiceSqliteError {
 mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use std::{
+        collections::BTreeMap,
         convert::Infallible,
         fs,
         num::NonZeroU32,
         os::unix::fs::PermissionsExt,
+        path::Path,
         sync::{
             Arc,
             atomic::{AtomicBool, Ordering},
         },
+        time::{Duration, SystemTime},
     };
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -774,6 +833,8 @@ mod tests {
     use radroots_storage::event::SourceGeneration;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use sqlx::{Connection, sqlite::SqliteConnectOptions};
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    use tokio::sync::Notify;
 
     use super::*;
 
@@ -852,6 +913,20 @@ mod tests {
         SchemaCatalog,
         ServiceSqliteHost,
     ) {
+        initialized_host_with_options(ServiceSqliteConnectionOptions::reviewed()).await
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    async fn initialized_host_with_options(
+        options: ServiceSqliteConnectionOptions,
+    ) -> (
+        tempfile::TempDir,
+        ServiceSqlitePaths,
+        ServiceDatabaseIdentity,
+        MigrationCatalog,
+        SchemaCatalog,
+        ServiceSqliteHost,
+    ) {
         let root = tempfile::tempdir().expect("temporary root");
         let paths = ServiceSqlitePaths::from_runtime_context(&runtime_context(root.path()))
             .expect("SQLite paths");
@@ -895,7 +970,7 @@ mod tests {
             &identity,
             &migrations,
             &schema,
-            ServiceSqliteConnectionOptions::reviewed(),
+            options,
             authority,
             MigrationAppliedAtUnixSeconds::new(1_700_000_000).expect("migration time"),
             &build_identity(),
@@ -920,6 +995,436 @@ mod tests {
         })
         .await
         .expect("count rows")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[derive(Debug, PartialEq, Eq)]
+    struct StateFileSnapshot {
+        bytes: Vec<u8>,
+        length: u64,
+        modified: SystemTime,
+        mode: u32,
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn state_directory_snapshot(directory: &Path) -> BTreeMap<String, StateFileSnapshot> {
+        fs::read_dir(directory)
+            .expect("read state directory")
+            .map(|entry| {
+                let entry = entry.expect("state entry");
+                let name = entry.file_name().into_string().expect("UTF-8 state entry");
+                let metadata = entry.metadata().expect("state entry metadata");
+                (
+                    name,
+                    StateFileSnapshot {
+                        bytes: fs::read(entry.path()).expect("state entry bytes"),
+                        length: metadata.len(),
+                        modified: metadata.modified().expect("state entry mtime"),
+                        mode: metadata.permissions().mode() & 0o777,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn close_drains_admitted_work_rejects_new_work_and_is_idempotent() {
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let transaction = tokio::spawn({
+            let host = Arc::clone(&host);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            async move {
+                host.transaction::<i64, Infallible, _>(|transaction| {
+                    Box::pin(async move {
+                        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_probe")
+                            .fetch_one(&mut *transaction)
+                            .await
+                            .expect("read in admitted transaction");
+                        entered.notify_one();
+                        release.notified().await;
+                        Ok(count)
+                    })
+                })
+                .await
+            }
+        });
+        entered.notified().await;
+
+        let first_close = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move { host.close().await }
+        });
+        while !host.closing.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+        let second_close = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move { host.close().await }
+        });
+        let rejected = host
+            .transaction(|_| Box::pin(async { Ok::<_, Infallible>(()) }))
+            .await
+            .expect_err("close admission must reject new work");
+        assert_eq!(
+            rejected.kind(),
+            ServiceSqliteTransactionErrorKind::NotCommitted
+        );
+        assert_eq!(
+            rejected.sqlite_error().map(ServiceSqliteError::kind),
+            Some(ServiceSqliteErrorKind::Open)
+        );
+        let contended = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting);
+        assert!(matches!(
+            contended,
+            Err(ref error) if error.kind() == ServiceSqliteErrorKind::Authority
+        ));
+
+        release.notify_one();
+        assert_eq!(
+            transaction
+                .await
+                .expect("transaction task joins")
+                .expect("admitted transaction"),
+            0
+        );
+        first_close
+            .await
+            .expect("first close task joins")
+            .expect("first close succeeds");
+        second_close
+            .await
+            .expect("second close task joins")
+            .expect("concurrent close is idempotent");
+        host.close().await.expect("sequential close is idempotent");
+
+        let mut next = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("authority can be reacquired")
+            .expect("writer mode yields authority");
+        next.release().expect("release reacquired authority");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn cancelled_close_retains_authority_and_retry_finishes() {
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let transaction = tokio::spawn({
+            let host = Arc::clone(&host);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            async move {
+                host.transaction::<(), Infallible, _>(|transaction| {
+                    Box::pin(async move {
+                        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_probe")
+                            .fetch_one(&mut *transaction)
+                            .await
+                            .expect("admitted read");
+                        entered.notify_one();
+                        release.notified().await;
+                        Ok(())
+                    })
+                })
+                .await
+            }
+        });
+        entered.notified().await;
+        let close_task = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move { host.close().await }
+        });
+        while !host.closing.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+        close_task.abort();
+        assert!(
+            close_task
+                .await
+                .expect_err("close task is cancelled")
+                .is_cancelled()
+        );
+        let retained = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting);
+        assert!(matches!(
+            retained,
+            Err(ref error) if error.kind() == ServiceSqliteErrorKind::Authority
+        ));
+        let rejected = host
+            .transaction(|_| Box::pin(async { Ok::<_, Infallible>(()) }))
+            .await
+            .expect_err("cancelled close remains non-admitting");
+        assert_eq!(
+            rejected.kind(),
+            ServiceSqliteTransactionErrorKind::NotCommitted
+        );
+
+        release.notify_one();
+        transaction
+            .await
+            .expect("transaction task joins")
+            .expect("admitted transaction finishes");
+        host.close().await.expect("close retry succeeds");
+        assert!(
+            WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+                .expect("authority reacquisition after retry")
+                .is_some()
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn writable_close_checkpoints_and_read_only_close_is_side_effect_free() {
+        let (_root, paths, identity, migrations, schema, host) = initialized_host().await;
+        host.transaction(|transaction| {
+            Box::pin(async move {
+                sqlx::query("INSERT INTO host_probe (value) VALUES (41)")
+                    .execute(&mut *transaction)
+                    .await
+                    .map(|_| ())
+            })
+        })
+        .await
+        .expect("write WAL frame");
+        host.close().await.expect("writable close checkpoints");
+        let state_directory = paths.state_database().parent().expect("state directory");
+        assert!(!state_directory.join("state.sqlite-wal").exists());
+        assert!(!state_directory.join("state.sqlite-shm").exists());
+        let before = state_directory_snapshot(state_directory);
+
+        let inspection = ServiceSqliteHost::open_read_only_inspection(
+            &paths,
+            &identity,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+        )
+        .await
+        .expect("open read-only inspection");
+        assert_eq!(row_count(&inspection).await, 1);
+        inspection
+            .close()
+            .await
+            .expect("close read-only inspection");
+        assert_eq!(state_directory_snapshot(state_directory), before);
+
+        let (reopened, outcome) = ServiceSqliteHost::open_read_write_existing(
+            &paths,
+            &identity,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_001).expect("migration time"),
+            &build_identity(),
+            &[],
+        )
+        .await
+        .expect("reopen writer after read-only close");
+        assert_eq!(outcome.applied_count(), 0);
+        assert_eq!(row_count(&reopened).await, 1);
+        reopened.close().await.expect("close reopened writer");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn read_only_close_revalidates_after_drain_before_releasing_stale_authority() {
+        let (_root, paths, identity, migrations, schema, writer) = initialized_host().await;
+        writer.close().await.expect("close writer host");
+        let inspection = Arc::new(
+            ServiceSqliteHost::open_read_only_inspection(
+                &paths,
+                &identity,
+                &migrations,
+                &schema,
+                ServiceSqliteConnectionOptions::reviewed(),
+            )
+            .await
+            .expect("open read-only inspection"),
+        );
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let transaction = tokio::spawn({
+            let inspection = Arc::clone(&inspection);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            async move {
+                inspection
+                    .transaction::<(), Infallible, _>(|transaction| {
+                        Box::pin(async move {
+                            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_probe")
+                                .fetch_one(&mut *transaction)
+                                .await
+                                .expect("read through retained inspection");
+                            entered.notify_one();
+                            release.notified().await;
+                            Ok(())
+                        })
+                    })
+                    .await
+            }
+        });
+        entered.notified().await;
+        let close_task = tokio::spawn({
+            let inspection = Arc::clone(&inspection);
+            async move { inspection.close().await }
+        });
+        while !inspection.closing.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+
+        let retired_lock = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("retired-inspection-close.lock");
+        fs::rename(paths.state_lock(), retired_lock).expect("replace inspection lock");
+        let mut replacement = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("replacement acquisition")
+            .expect("replacement authority");
+        release.notify_one();
+        let transaction_error = transaction
+            .await
+            .expect("inspection transaction task joins")
+            .expect_err("binding drift revokes admitted inspection");
+        assert_eq!(
+            transaction_error.kind(),
+            ServiceSqliteTransactionErrorKind::NotCommitted
+        );
+        let close_error = close_task
+            .await
+            .expect("inspection close task joins")
+            .expect_err("close must report stale inspection authority");
+        assert_eq!(close_error.kind(), ServiceSqliteErrorKind::Authority);
+        assert_eq!(
+            inspection
+                .close()
+                .await
+                .expect_err("terminal authority result is cached")
+                .kind(),
+            ServiceSqliteErrorKind::Authority
+        );
+        replacement
+            .release()
+            .expect("release replacement authority");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn cancelled_checkpoint_resumes_to_terminal_error_and_releases_authority() {
+        let options = ServiceSqliteConnectionOptions::new(Duration::from_secs(1), 1)
+            .expect("short reviewed limits");
+        let (_root, paths, _identity, _migrations, _schema, host) =
+            initialized_host_with_options(options).await;
+        let host = Arc::new(host);
+        host.transaction(|transaction| {
+            Box::pin(async move {
+                sqlx::query("INSERT INTO host_probe (value) VALUES (1)")
+                    .execute(&mut *transaction)
+                    .await
+                    .map(|_| ())
+            })
+        })
+        .await
+        .expect("seed reader snapshot");
+
+        let mut reader = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(paths.state_database())
+                .read_only(true)
+                .create_if_missing(false),
+        )
+        .await
+        .expect("open external reader");
+        let mut reader_transaction = reader.begin().await.expect("begin external read");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_probe")
+                .fetch_one(&mut *reader_transaction)
+                .await
+                .expect("establish reader snapshot"),
+            1
+        );
+        host.transaction(|transaction| {
+            Box::pin(async move {
+                sqlx::query("INSERT INTO host_probe (value) VALUES (2)")
+                    .execute(&mut *transaction)
+                    .await
+                    .map(|_| ())
+            })
+        })
+        .await
+        .expect("append frame after reader snapshot");
+
+        let close_task = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move { host.close().await }
+        });
+        while host.pool.close_phase() != crate::open::TEST_CLOSE_PHASE_CHECKPOINT {
+            tokio::task::yield_now().await;
+        }
+        close_task.abort();
+        assert!(
+            close_task
+                .await
+                .expect_err("checkpoint close task is cancelled")
+                .is_cancelled()
+        );
+        let retained = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting);
+        assert!(matches!(
+            retained,
+            Err(ref error) if error.kind() == ServiceSqliteErrorKind::Authority
+        ));
+
+        let first = host
+            .close()
+            .await
+            .expect_err("active reader prevents TRUNCATE");
+        assert_eq!(first.kind(), ServiceSqliteErrorKind::Pragma);
+        assert!(!first.to_string().contains("state.sqlite"));
+        let repeated = host.close().await.expect_err("terminal result is cached");
+        assert_eq!(repeated.kind(), ServiceSqliteErrorKind::Pragma);
+        let mut replacement = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("close releases authority despite checkpoint failure")
+            .expect("writer mode yields authority");
+        replacement
+            .release()
+            .expect("release replacement authority");
+
+        reader_transaction
+            .rollback()
+            .await
+            .expect("release external snapshot");
+        reader.close().await.expect("close external reader");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn close_authority_drift_is_cached_and_releases_the_stale_lock() {
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let retired_lock = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("retired-close-state.lock");
+        fs::rename(paths.state_lock(), retired_lock).expect("replace canonical lock");
+        let mut replacement = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("replacement acquisition")
+            .expect("replacement authority");
+
+        let first = host
+            .close()
+            .await
+            .expect_err("close detects authority drift");
+        assert_eq!(first.kind(), ServiceSqliteErrorKind::Authority);
+        let repeated = host.close().await.expect_err("authority result is cached");
+        assert_eq!(repeated.kind(), ServiceSqliteErrorKind::Authority);
+        assert!(!format!("{host:?}").contains(paths.state_database().to_string_lossy().as_ref()));
+        replacement
+            .release()
+            .expect("release replacement authority");
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1147,7 +1652,7 @@ mod tests {
     #[tokio::test]
     async fn inspection_lock_replacement_and_new_writer_revoke_live_inspection() {
         let (_root, paths, identity, migrations, schema, host) = initialized_host().await;
-        host.close_pool().await;
+        host.close().await.expect("close writer host");
         drop(host);
         let inspection = ServiceSqliteHost::open_read_only_inspection(
             &paths,
@@ -1230,7 +1735,7 @@ mod tests {
     #[tokio::test]
     async fn read_only_writes_roll_back_and_internal_pool_close_refuses_new_work() {
         let (root, paths, identity, migrations, schema, host) = initialized_host().await;
-        host.close_pool().await;
+        host.close().await.expect("close writer host");
         let closed = host
             .transaction(|_| Box::pin(async { Ok::<_, Infallible>(()) }))
             .await

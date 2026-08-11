@@ -20,6 +20,7 @@ rustix = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
+tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

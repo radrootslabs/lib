@@ -165,7 +165,14 @@ Before editing code:
   accessors. Do not attach or detach secondary SQLite databases through the
   transaction executor. Writable host construction must finish governed
   migrations before returning, while read-only inspection must require current
-  migration and schema state.
+  migration and schema state. Every host owner must explicitly await
+  `ServiceSqliteHost::close`: close permanently stops admission, drains admitted
+  work, applies the fixed unblocked `TRUNCATE` WAL checkpoint for writable
+  hosts only, closes its private checkpoint connection, and explicitly releases
+  writer or inspection authority. A cancelled close retains authority and must
+  be resumed through the host-owned connect/checkpoint/connection-close driver;
+  Drop is not an asynchronous close or completion proof. Do not add public
+  checkpoint knobs, background close tasks, or Drop-based async cleanup.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist
