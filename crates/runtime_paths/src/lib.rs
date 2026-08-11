@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod context;
 pub mod conventions;
 pub mod error;
 pub mod identifier;
@@ -8,6 +9,10 @@ pub mod platform;
 pub mod roots;
 pub mod service;
 
+pub use context::{
+    RuntimeContext, RuntimeContextBootstrap, RuntimeContextError, RuntimeContextSource,
+    RuntimeContextSources,
+};
 pub use conventions::{
     DEFAULT_CONFIG_FILE_NAME, DEFAULT_SERVICE_IDENTITY_FILE_NAME,
     DEFAULT_SHARED_GEONAMES_NAMESPACE, DEFAULT_SHARED_GEONAMES_NAMESPACE_KIND,
