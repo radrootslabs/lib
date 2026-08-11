@@ -1,18 +1,25 @@
 # radroots_runtime_paths
 
-This is the README for `radroots_runtime_paths`, which provides canonical
-runtime path selection and contract helpers for the `radroots` core libraries.
+This is the README for `radroots_runtime_paths`, which provides canonical,
+typed runtime paths for the `radroots` core libraries.
 
 ## Overview
 
- * default file-name and bootstrap-path helpers for local runtime layouts;
- * platform, host-environment, namespace, and path-profile types for path
-   decisions;
- * validated service and instance identifiers for canonical service paths;
- * resolver, override, and runtime-selection helpers that produce structured
-   `RadrootsPaths` outputs;
- * service and app contract helpers for active profile, override, and root
-   selection reporting.
+ * validated service and instance identifiers for the sole canonical
+   `services/<service>/<instance>` namespace;
+ * an injected platform, host-environment, and profile resolver with no ambient
+   process-environment constructor;
+ * a sealed `RuntimeContext` as the only public service-instance path
+   construction boundary;
+ * non-forgeable service path and common-artifact views with immutable
+   accessors; and
+ * pure shared geonames and runtime-store path helpers that do not participate
+   in service-instance path selection.
+
+The former generic app/service/worker/shared namespace, raw root containers,
+path overrides, process-environment selectors, and bootstrap path helpers are
+intentionally removed. Callers must construct typed bootstrap provenance and
+resolve a `RuntimeContext` from an explicitly injected resolver.
 
 ## Copyright
 

@@ -167,6 +167,12 @@ Before editing code:
   names are validated single path components, and ordinary manager errors and
   `Debug` output must not expose filesystem paths, file contents, or raw
   dependency-owned causes.
+- Runtime-path consumers must use the sole typed
+  `services/<service>/<instance>` model through `RuntimeContext`. The generic
+  app/service/worker/shared namespace, public raw root containers, path
+  overrides, ambient process-environment selectors, bootstrap helpers, and
+  duplicate service-instance path constructors are removed breaking surfaces;
+  do not restore them or add compatibility aliases.
 - Runtime-distribution and runtime-management service metadata is the sealed
   exact Myc/RHI v1 inventory. Both services support multiple validated
   instances, one TOML config, explicit initialization with existing-only run,

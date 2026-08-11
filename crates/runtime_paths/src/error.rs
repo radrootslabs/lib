@@ -24,17 +24,11 @@ pub enum RadrootsRuntimePathsError {
     #[error("repo_local base root must be an absolute non-root path without parent traversal")]
     InvalidRepoLocalRoot,
 
-    #[error("mobile_native requires explicit logical roots")]
-    MissingMobileRoots,
-
     #[error("{profile} is not supported on {platform}")]
     UnsupportedProfilePlatform {
         profile: RadrootsPathProfile,
         platform: RadrootsPlatform,
     },
-
-    #[error("runtime namespace `{value}` must be one non-empty path component")]
-    InvalidNamespaceComponent { value: String },
 
     #[error("shared accounts data root `{path:?}` has no parent shared data root")]
     SharedAccountsDataRootMissingParent { path: PathBuf },

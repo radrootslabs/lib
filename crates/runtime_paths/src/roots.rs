@@ -1,8 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use crate::{
-    RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform, RadrootsRuntimeNamespace,
-    RadrootsRuntimePathsError,
+    RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform, RadrootsRuntimePathsError,
 };
 
 const APPLICATION_DIRECTORY: &str = "radroots";
@@ -30,18 +29,18 @@ impl XdgDirectory {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RadrootsPaths {
-    pub config: PathBuf,
-    pub data: PathBuf,
-    pub cache: PathBuf,
-    pub logs: PathBuf,
-    pub run: PathBuf,
-    pub secrets: PathBuf,
+pub(crate) struct RadrootsPaths {
+    pub(crate) config: PathBuf,
+    pub(crate) data: PathBuf,
+    pub(crate) cache: PathBuf,
+    pub(crate) logs: PathBuf,
+    pub(crate) run: PathBuf,
+    pub(crate) secrets: PathBuf,
 }
 
 impl RadrootsPaths {
     #[must_use]
-    pub fn from_base_root(base_root: impl AsRef<Path>) -> Self {
+    pub(crate) fn from_base_root(base_root: impl AsRef<Path>) -> Self {
         let base_root = base_root.as_ref();
         Self {
             config: base_root.join("config"),
@@ -50,43 +49,6 @@ impl RadrootsPaths {
             logs: base_root.join("logs"),
             run: base_root.join("run"),
             secrets: base_root.join("secrets"),
-        }
-    }
-
-    #[must_use]
-    pub fn namespaced(&self, namespace: &RadrootsRuntimeNamespace) -> Self {
-        let relative = namespace.relative_path();
-        Self {
-            config: self.config.join(&relative),
-            data: self.data.join(&relative),
-            cache: self.cache.join(&relative),
-            logs: self.logs.join(&relative),
-            run: self.run.join(&relative),
-            secrets: self.secrets.join(relative),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RadrootsPathOverrides {
-    pub repo_local_root: Option<PathBuf>,
-    pub mobile_roots: Option<RadrootsPaths>,
-}
-
-impl RadrootsPathOverrides {
-    #[must_use]
-    pub fn repo_local(base_root: impl Into<PathBuf>) -> Self {
-        Self {
-            repo_local_root: Some(base_root.into()),
-            mobile_roots: None,
-        }
-    }
-
-    #[must_use]
-    pub fn mobile(roots: RadrootsPaths) -> Self {
-        Self {
-            repo_local_root: None,
-            mobile_roots: Some(roots),
         }
     }
 }
@@ -107,49 +69,30 @@ impl RadrootsPathResolver {
     }
 
     #[must_use]
-    pub fn current() -> Self {
-        Self::new(
-            RadrootsPlatform::current(),
-            RadrootsHostEnvironment::from_current_process(),
-        )
-    }
-
-    #[must_use]
     pub fn platform(&self) -> RadrootsPlatform {
         self.platform
     }
 
-    pub fn resolve(
+    pub(crate) fn resolve(
         &self,
         profile: RadrootsPathProfile,
-        overrides: &RadrootsPathOverrides,
+        repo_local_root: Option<&Path>,
     ) -> Result<RadrootsPaths, RadrootsRuntimePathsError> {
         match profile {
             RadrootsPathProfile::InteractiveUser => self.resolve_interactive_user(),
             RadrootsPathProfile::ServiceHost => self.resolve_service_host(),
             RadrootsPathProfile::RepoLocal => {
-                let root = overrides
-                    .repo_local_root
-                    .as_deref()
-                    .ok_or(RadrootsRuntimePathsError::MissingRepoLocalRoot)?;
+                let root =
+                    repo_local_root.ok_or(RadrootsRuntimePathsError::MissingRepoLocalRoot)?;
                 validate_repo_local_root(root)?;
                 Ok(RadrootsPaths::from_base_root(root))
             }
-            RadrootsPathProfile::MobileNative => match self.platform {
-                RadrootsPlatform::Android | RadrootsPlatform::Ios => overrides
-                    .mobile_roots
-                    .clone()
-                    .ok_or(RadrootsRuntimePathsError::MissingMobileRoots),
-                RadrootsPlatform::Linux
-                | RadrootsPlatform::Macos
-                | RadrootsPlatform::Windows
-                | RadrootsPlatform::Other => {
-                    Err(RadrootsRuntimePathsError::UnsupportedProfilePlatform {
-                        profile,
-                        platform: self.platform,
-                    })
-                }
-            },
+            RadrootsPathProfile::MobileNative => {
+                Err(RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                    profile,
+                    platform: self.platform,
+                })
+            }
         }
     }
 
@@ -295,127 +238,57 @@ pub(crate) fn validate_repo_local_root(root: &Path) -> Result<(), RadrootsRuntim
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
-    use super::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
+    use super::{RadrootsPathResolver, RadrootsPaths};
     use crate::{
         RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform, RadrootsRuntimePathsError,
     };
 
     #[test]
-    fn path_override_helpers_only_populate_their_owned_slot() {
-        let repo_local = RadrootsPathOverrides::repo_local("/repo/.local/radroots");
-        assert_eq!(
-            repo_local.repo_local_root,
-            Some(PathBuf::from("/repo/.local/radroots"))
-        );
-        assert!(repo_local.mobile_roots.is_none());
-
-        let mobile_roots = RadrootsPaths::from_base_root("/sandbox");
-        let mobile = RadrootsPathOverrides::mobile(mobile_roots.clone());
-        assert!(mobile.repo_local_root.is_none());
-        assert_eq!(mobile.mobile_roots, Some(mobile_roots));
-    }
-
-    #[test]
-    fn repo_local_root_rejects_missing_relative_root_and_parent_traversal() {
+    fn repo_local_is_explicit_validated_and_one_base() {
         let resolver =
             RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
-
+        assert_eq!(
+            resolver
+                .resolve(RadrootsPathProfile::RepoLocal, None)
+                .expect_err("missing root"),
+            RadrootsRuntimePathsError::MissingRepoLocalRoot
+        );
+        for invalid in ["", ".", "relative/root", "/", "/repo/../escape"] {
+            assert_eq!(
+                resolver
+                    .resolve(RadrootsPathProfile::RepoLocal, Some(Path::new(invalid)))
+                    .expect_err("invalid root"),
+                RadrootsRuntimePathsError::InvalidRepoLocalRoot
+            );
+        }
         assert_eq!(
             resolver
                 .resolve(
                     RadrootsPathProfile::RepoLocal,
-                    &RadrootsPathOverrides::default(),
+                    Some(Path::new("/repo/.local/radroots")),
                 )
-                .expect_err("missing root"),
-            RadrootsRuntimePathsError::MissingRepoLocalRoot
-        );
-
-        for root in [
-            "",
-            ".",
-            "relative/root",
-            "../escape",
-            "/",
-            "/repo/../escape",
-        ] {
-            assert_eq!(
-                resolver
-                    .resolve(
-                        RadrootsPathProfile::RepoLocal,
-                        &RadrootsPathOverrides::repo_local(root),
-                    )
-                    .expect_err("invalid repo-local root"),
-                RadrootsRuntimePathsError::InvalidRepoLocalRoot,
-                "accepted invalid repo-local root `{root}`"
-            );
-        }
-    }
-
-    #[test]
-    fn resolver_current_uses_process_platform_and_environment() {
-        let resolver = RadrootsPathResolver::current();
-        assert_eq!(resolver.platform(), RadrootsPlatform::current());
-        assert_eq!(
-            resolver,
-            RadrootsPathResolver::new(
-                RadrootsPlatform::current(),
-                RadrootsHostEnvironment::from_current_process()
-            )
+                .expect("repo roots"),
+            RadrootsPaths::from_base_root("/repo/.local/radroots")
         );
     }
 
     #[test]
-    fn linux_interactive_uses_exact_config_data_state_cache_and_runtime_roots() {
-        let resolver = RadrootsPathResolver::new(
-            RadrootsPlatform::Linux,
-            RadrootsHostEnvironment {
-                xdg_config_home: Some(PathBuf::from("/xdg/config")),
-                xdg_data_home: Some(PathBuf::from("/xdg/data")),
-                xdg_state_home: Some(PathBuf::from("/xdg/state")),
-                xdg_cache_home: Some(PathBuf::from("/xdg/cache")),
-                xdg_runtime_dir: Some(PathBuf::from("/xdg/run")),
-                ..RadrootsHostEnvironment::default()
-            },
-        );
-
-        assert_eq!(
-            resolver
-                .resolve(
-                    RadrootsPathProfile::InteractiveUser,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect("configured XDG roots"),
-            RadrootsPaths {
-                config: PathBuf::from("/xdg/config/radroots"),
-                data: PathBuf::from("/xdg/data/radroots"),
-                cache: PathBuf::from("/xdg/cache/radroots"),
-                logs: PathBuf::from("/xdg/state/radroots/logs"),
-                run: PathBuf::from("/xdg/run/radroots"),
-                secrets: PathBuf::from("/xdg/config/radroots/secrets"),
-            }
-        );
-    }
-
-    #[test]
-    fn linux_interactive_uses_xdg_home_defaults_but_never_invents_runtime() {
+    fn linux_interactive_uses_injected_xdg_and_home_defaults() {
         let resolver = RadrootsPathResolver::new(
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(PathBuf::from("/home/treesap")),
+                xdg_config_home: Some(PathBuf::from("relative-ignored")),
                 xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                 ..RadrootsHostEnvironment::default()
             },
         );
-
         assert_eq!(
             resolver
-                .resolve(
-                    RadrootsPathProfile::InteractiveUser,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect("defaulted XDG roots"),
+                .resolve(RadrootsPathProfile::InteractiveUser, None)
+                .expect("linux interactive"),
             RadrootsPaths {
                 config: PathBuf::from("/home/treesap/.config/radroots"),
                 data: PathBuf::from("/home/treesap/.local/share/radroots"),
@@ -425,8 +298,11 @@ mod tests {
                 secrets: PathBuf::from("/home/treesap/.config/radroots/secrets"),
             }
         );
+    }
 
-        let missing_runtime = RadrootsPathResolver::new(
+    #[test]
+    fn linux_interactive_never_invents_runtime_root() {
+        let resolver = RadrootsPathResolver::new(
             RadrootsPlatform::Linux,
             RadrootsHostEnvironment {
                 home_dir: Some(PathBuf::from("/home/treesap")),
@@ -434,240 +310,54 @@ mod tests {
             },
         );
         assert_eq!(
-            missing_runtime
-                .resolve(
-                    RadrootsPathProfile::InteractiveUser,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect_err("XDG runtime has no home fallback"),
+            resolver
+                .resolve(RadrootsPathProfile::InteractiveUser, None)
+                .expect_err("runtime root is required"),
             RadrootsRuntimePathsError::MissingXdgRuntimeDir
         );
     }
 
     #[test]
-    fn linux_interactive_ignores_empty_and_relative_xdg_directories() {
-        let valid = RadrootsHostEnvironment {
-            home_dir: Some(PathBuf::from("/home/treesap")),
-            xdg_config_home: Some(PathBuf::from("/xdg/config")),
-            xdg_data_home: Some(PathBuf::from("/xdg/data")),
-            xdg_state_home: Some(PathBuf::from("/xdg/state")),
-            xdg_cache_home: Some(PathBuf::from("/xdg/cache")),
-            xdg_runtime_dir: Some(PathBuf::from("/xdg/run")),
-            ..RadrootsHostEnvironment::default()
-        };
-        for (environment, expected) in [
-            (
-                RadrootsHostEnvironment {
-                    xdg_config_home: Some(PathBuf::new()),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.config/radroots"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_config_home: Some(PathBuf::from("relative/config")),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.config/radroots"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_data_home: Some(PathBuf::new()),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.local/share/radroots"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_data_home: Some(PathBuf::from("relative/data")),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.local/share/radroots"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_state_home: Some(PathBuf::new()),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.local/state/radroots/logs"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_state_home: Some(PathBuf::from("relative/state")),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.local/state/radroots/logs"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_cache_home: Some(PathBuf::new()),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.cache/radroots"),
-            ),
-            (
-                RadrootsHostEnvironment {
-                    xdg_cache_home: Some(PathBuf::from("relative/cache")),
-                    ..valid.clone()
-                },
-                PathBuf::from("/home/treesap/.cache/radroots"),
-            ),
-        ] {
-            let resolver = RadrootsPathResolver::new(RadrootsPlatform::Linux, environment);
-            let roots = resolver
-                .resolve(
-                    RadrootsPathProfile::InteractiveUser,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect("invalid optional XDG directory is ignored");
-            assert!(
-                [roots.config, roots.data, roots.logs, roots.cache].contains(&expected),
-                "expected fallback root {expected:?}"
-            );
-        }
-
-        for xdg_runtime_dir in [Some(PathBuf::new()), Some(PathBuf::from("relative/run"))] {
+    fn home_derived_roots_require_absolute_home() {
+        for platform in [RadrootsPlatform::Linux, RadrootsPlatform::Macos] {
             let resolver = RadrootsPathResolver::new(
-                RadrootsPlatform::Linux,
+                platform,
                 RadrootsHostEnvironment {
-                    xdg_runtime_dir,
-                    ..valid.clone()
-                },
-            );
-            assert_eq!(
-                resolver
-                    .resolve(
-                        RadrootsPathProfile::InteractiveUser,
-                        &RadrootsPathOverrides::default(),
-                    )
-                    .expect_err("invalid XDG runtime is treated as missing"),
-                RadrootsRuntimePathsError::MissingXdgRuntimeDir
-            );
-        }
-    }
-
-    #[test]
-    fn interactive_home_derived_roots_require_an_absolute_nonempty_home() {
-        for home_dir in [Some(PathBuf::new()), Some(PathBuf::from("relative/home"))] {
-            let linux = RadrootsPathResolver::new(
-                RadrootsPlatform::Linux,
-                RadrootsHostEnvironment {
-                    home_dir: home_dir.clone(),
+                    home_dir: Some(PathBuf::from("relative")),
                     xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
                     ..RadrootsHostEnvironment::default()
                 },
             );
             assert_eq!(
-                linux
-                    .resolve(
-                        RadrootsPathProfile::InteractiveUser,
-                        &RadrootsPathOverrides::default(),
-                    )
-                    .expect_err("Linux HOME defaults require an absolute HOME"),
-                RadrootsRuntimePathsError::InvalidHomeDir {
-                    platform: RadrootsPlatform::Linux,
-                }
-            );
-
-            let macos = RadrootsPathResolver::new(
-                RadrootsPlatform::Macos,
-                RadrootsHostEnvironment {
-                    home_dir,
-                    ..RadrootsHostEnvironment::default()
-                },
-            );
-            assert_eq!(
-                macos
-                    .resolve(
-                        RadrootsPathProfile::InteractiveUser,
-                        &RadrootsPathOverrides::default(),
-                    )
-                    .expect_err("macOS native roots require an absolute HOME"),
-                RadrootsRuntimePathsError::InvalidHomeDir {
-                    platform: RadrootsPlatform::Macos,
-                }
+                resolver
+                    .resolve(RadrootsPathProfile::InteractiveUser, None)
+                    .expect_err("relative home"),
+                RadrootsRuntimePathsError::InvalidHomeDir { platform }
             );
         }
     }
 
     #[test]
-    fn macos_interactive_uses_native_library_roots_and_ignores_xdg() {
-        let resolver = RadrootsPathResolver::new(
-            RadrootsPlatform::Macos,
-            RadrootsHostEnvironment {
-                home_dir: Some(PathBuf::from("/Users/treesap")),
-                xdg_config_home: Some(PathBuf::from("relative/config")),
-                xdg_data_home: Some(PathBuf::from("relative/data")),
-                xdg_state_home: Some(PathBuf::from("relative/state")),
-                xdg_cache_home: Some(PathBuf::from("relative/cache")),
-                xdg_runtime_dir: Some(PathBuf::from("relative/run")),
-                ..RadrootsHostEnvironment::default()
-            },
-        );
-
-        assert_eq!(
-            resolver
-                .resolve(
-                    RadrootsPathProfile::InteractiveUser,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect("macOS native roots"),
-            RadrootsPaths {
-                config: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/config",),
-                data: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/data",),
-                cache: PathBuf::from("/Users/treesap/Library/Caches/Radroots"),
-                logs: PathBuf::from("/Users/treesap/Library/Logs/Radroots"),
-                run: PathBuf::from("/Users/treesap/Library/Application Support/Radroots/run",),
-                secrets: PathBuf::from(
-                    "/Users/treesap/Library/Application Support/Radroots/secrets",
-                ),
-            }
-        );
-    }
-
-    #[test]
-    fn mobile_profile_is_rejected_on_non_mobile_platforms() {
+    fn service_host_linux_uses_canonical_roots() {
         let resolver =
             RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
-
-        let err = resolver
-            .resolve(
-                RadrootsPathProfile::MobileNative,
-                &RadrootsPathOverrides::default(),
-            )
-            .expect_err("mobile profile should be rejected on linux");
-
         assert_eq!(
-            err,
-            RadrootsRuntimePathsError::UnsupportedProfilePlatform {
-                profile: RadrootsPathProfile::MobileNative,
-                platform: RadrootsPlatform::Linux,
+            resolver
+                .resolve(RadrootsPathProfile::ServiceHost, None)
+                .expect("service host"),
+            RadrootsPaths {
+                config: PathBuf::from("/etc/radroots"),
+                data: PathBuf::from("/var/lib/radroots"),
+                cache: PathBuf::from("/var/cache/radroots"),
+                logs: PathBuf::from("/var/log/radroots"),
+                run: PathBuf::from("/run/radroots"),
+                secrets: PathBuf::from("/etc/radroots/secrets"),
             }
         );
     }
 
     #[test]
-    fn interactive_user_is_rejected_on_mobile_platforms() {
-        for platform in [RadrootsPlatform::Android, RadrootsPlatform::Ios] {
-            let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
-            let err = resolver
-                .resolve(
-                    RadrootsPathProfile::InteractiveUser,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect_err("interactive_user should be unsupported on mobile");
-            assert_eq!(
-                err,
-                RadrootsRuntimePathsError::UnsupportedProfilePlatform {
-                    profile: RadrootsPathProfile::InteractiveUser,
-                    platform,
-                }
-            );
-        }
-    }
-
-    #[test]
-    fn service_host_is_rejected_outside_linux() {
+    fn unsupported_profile_platform_pairs_fail_closed() {
         for platform in [
             RadrootsPlatform::Macos,
             RadrootsPlatform::Windows,
@@ -676,16 +366,31 @@ mod tests {
             RadrootsPlatform::Other,
         ] {
             let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
-            let err = resolver
-                .resolve(
-                    RadrootsPathProfile::ServiceHost,
-                    &RadrootsPathOverrides::default(),
-                )
-                .expect_err("service_host should be unsupported outside linux");
             assert_eq!(
-                err,
+                resolver
+                    .resolve(RadrootsPathProfile::ServiceHost, None)
+                    .expect_err("unsupported service host"),
                 RadrootsRuntimePathsError::UnsupportedProfilePlatform {
                     profile: RadrootsPathProfile::ServiceHost,
+                    platform,
+                }
+            );
+        }
+        for platform in [
+            RadrootsPlatform::Linux,
+            RadrootsPlatform::Macos,
+            RadrootsPlatform::Windows,
+            RadrootsPlatform::Android,
+            RadrootsPlatform::Ios,
+            RadrootsPlatform::Other,
+        ] {
+            let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
+            assert_eq!(
+                resolver
+                    .resolve(RadrootsPathProfile::MobileNative, None)
+                    .expect_err("mobile roots require a product-owned adapter"),
+                RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                    profile: RadrootsPathProfile::MobileNative,
                     platform,
                 }
             );

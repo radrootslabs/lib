@@ -104,27 +104,9 @@ pub struct RadrootsHostEnvironment {
     pub localappdata_dir: Option<PathBuf>,
 }
 
-impl RadrootsHostEnvironment {
-    #[must_use]
-    pub fn from_current_process() -> Self {
-        Self {
-            home_dir: std::env::var_os("HOME").map(PathBuf::from),
-            xdg_config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
-            xdg_data_home: std::env::var_os("XDG_DATA_HOME").map(PathBuf::from),
-            xdg_state_home: std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
-            xdg_cache_home: std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from),
-            xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
-            appdata_dir: std::env::var_os("APPDATA").map(PathBuf::from),
-            localappdata_dir: std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use super::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
+    use super::{RadrootsPathProfile, RadrootsPlatform};
 
     #[test]
     fn current_matches_compiled_target_platform() {
@@ -178,40 +160,6 @@ mod tests {
         assert_eq!(
             RadrootsPathProfile::MobileNative.to_string(),
             "mobile_native"
-        );
-    }
-
-    #[test]
-    fn host_environment_reads_current_process_variables() {
-        let env = RadrootsHostEnvironment::from_current_process();
-        assert_eq!(env.home_dir, std::env::var_os("HOME").map(PathBuf::from));
-        assert_eq!(
-            env.xdg_config_home,
-            std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.xdg_data_home,
-            std::env::var_os("XDG_DATA_HOME").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.xdg_state_home,
-            std::env::var_os("XDG_STATE_HOME").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.xdg_cache_home,
-            std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.xdg_runtime_dir,
-            std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.appdata_dir,
-            std::env::var_os("APPDATA").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.localappdata_dir,
-            std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
         );
     }
 }
