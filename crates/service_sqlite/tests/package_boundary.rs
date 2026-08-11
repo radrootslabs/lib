@@ -81,10 +81,13 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ServiceDatabaseMetadata",
         "ServiceSqliteApplicationId",
         "ServiceSqliteMetadataValueError",
+        "MigrationAppliedAtUnixSeconds",
+        "MigrationBuildIdentity",
         "MigrationCatalog",
         "MigrationChecksum",
         "MigrationContractError",
         "MigrationDescriptor",
+        "MigrationEvidenceError",
         "MigrationKind",
         "MigrationName",
         "ServiceSqlitePathError",
@@ -110,30 +113,51 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub fn for_sql",
         "pub fn for_callback",
         ".take(MAX_MIGRATION_COUNT + 1)",
+        "schema_migrations",
+        "applied_at_unix_s",
+        "service_commit TEXT",
+        "lib_revision TEXT",
+        "provider_contract_version INTEGER",
+        "schema_migrations_no_update",
+        "schema_migrations_no_delete",
+        ".begin_with(\"BEGIN IMMEDIATE\")",
+        "pub(crate) async fn verify_migration_history",
+        "pub(crate) async fn apply_governed_migrations",
+        "validate_callback_bindings",
+        "advance_schema_version",
+        "pub(crate) struct MigrationTransactionExecutor",
+        "set_commit_hook",
+        "set_rollback_hook",
+        "permit_outer_commit",
+        "permit_runner_rollback",
+        "reject_observed_rollback",
+        "SAVEPOINT radroots_migration_transaction_probe",
+        "FROM pragma_database_list",
+        "CASE WHEN typeof(name) = 'text'",
+        "CASE WHEN typeof(checksum) = 'blob'",
     ] {
         assert!(
             migration_production.contains(required),
-            "Step 058 migration source is missing `{required}`"
+            "Step 059 migration source is missing `{required}`"
         );
     }
 
     for forbidden in [
-        "sqlx::",
-        "schema_migrations",
-        "applied_at",
-        "build_identity",
-        "CREATE TABLE",
-        "INSERT INTO",
-        "BEGIN TRANSACTION",
         "pub fn content(&self",
         "pub fn callback_definition",
         "pub fn migration_sql",
+        "pub type MigrationCallback",
+        "pub struct MigrationCallbackBinding",
+        "pub struct MigrationTransactionExecutor",
+        "pub fn apply_governed_migrations",
+        "pub async fn apply_governed_migrations",
+        "pub use sqlx",
         "Serialize",
         "Deserialize",
     ] {
         assert!(
             !migration_production.contains(forbidden),
-            "Step 058 migration source contains deferred surface `{forbidden}`"
+            "Step 059 migration source contains deferred surface `{forbidden}`"
         );
     }
 
@@ -167,6 +191,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "NonZeroU32",
         "pub(crate) async fn write_database_metadata",
         "pub(crate) async fn verify_database_metadata",
+        "MigrationLedgerInitializationFailure",
+        "ServiceSqliteErrorKind::Migration",
     ] {
         assert!(
             METADATA_SOURCE.contains(required),
@@ -215,6 +241,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         ".after_connect",
         ".before_acquire",
         "PRAGMA busy_timeout",
+        "connection.close_on_drop()",
     ] {
         assert!(
             OPEN_SOURCE.contains(required),
@@ -230,6 +257,9 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub struct PrivateConnectionPool",
         "pub fn open_connection_pool",
         "pub async fn open_connection_pool",
+        "pub struct MigrationCallbackBinding",
+        "pub type MigrationCallback",
+        "pub struct MigrationApplicationOutcome",
         "tokio::runtime",
         "Runtime::new",
     ] {

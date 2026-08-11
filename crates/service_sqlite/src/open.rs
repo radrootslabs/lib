@@ -30,6 +30,7 @@ use sqlx::{
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::{
+    MigrationAppliedAtUnixSeconds, MigrationBuildIdentity, MigrationCatalog,
     ServiceDatabaseIdentity, ServiceSqliteConnectionOptions, ServiceSqliteError,
     ServiceSqliteErrorKind, WriterAuthority,
 };
@@ -189,10 +190,12 @@ struct PrivateConnectionPool {
     pool: SqlitePool,
     binding: DirectoryBinding,
     paths: ServiceSqlitePaths,
+    catalog: MigrationCatalog,
     authority: Option<WriterAuthority>,
     inspection_guard: Option<ReadOnlyInspectionGuard>,
     authority_failure: Arc<AtomicBool>,
     metadata_failure: Arc<AtomicBool>,
+    migration_failure: Arc<AtomicBool>,
     pragma_failure: Arc<AtomicBool>,
 }
 
@@ -202,22 +205,70 @@ struct PrivateConnectionPool {
     reason = "Step 056 keeps pool lifecycle private until the Step 061 host boundary"
 )]
 impl PrivateConnectionPool {
+    fn connection_failure_kind(&self) -> ServiceSqliteErrorKind {
+        if self.authority_failure.load(Ordering::Acquire) {
+            ServiceSqliteErrorKind::Authority
+        } else if self.metadata_failure.load(Ordering::Acquire) {
+            ServiceSqliteErrorKind::Metadata
+        } else if self.migration_failure.load(Ordering::Acquire) {
+            ServiceSqliteErrorKind::Migration
+        } else if self.pragma_failure.load(Ordering::Acquire) {
+            ServiceSqliteErrorKind::Pragma
+        } else {
+            ServiceSqliteErrorKind::Open
+        }
+    }
+
     async fn acquire(&self) -> Result<PoolConnection<Sqlite>, ServiceSqliteError> {
         self.binding.validate(&self.paths)?;
         let result = self.pool.acquire().await;
         self.binding.validate(&self.paths)?;
-        result.map_err(|source| {
-            let kind = if self.authority_failure.load(Ordering::Acquire) {
-                ServiceSqliteErrorKind::Authority
-            } else if self.metadata_failure.load(Ordering::Acquire) {
-                ServiceSqliteErrorKind::Metadata
-            } else if self.pragma_failure.load(Ordering::Acquire) {
-                ServiceSqliteErrorKind::Pragma
-            } else {
-                ServiceSqliteErrorKind::Open
-            };
-            connection_source(kind, source)
-        })
+        let mut connection =
+            result.map_err(|source| connection_source(self.connection_failure_kind(), source))?;
+        let history =
+            crate::migration::verify_migration_history(&mut connection, &self.catalog, true).await;
+        self.binding.validate(&self.paths)?;
+        history?;
+        Ok(connection)
+    }
+
+    async fn apply_migrations(
+        &self,
+        applied_at: MigrationAppliedAtUnixSeconds,
+        build: &MigrationBuildIdentity,
+        callbacks: &[crate::migration::MigrationCallbackBinding],
+    ) -> Result<crate::migration::MigrationApplicationOutcome, ServiceSqliteError> {
+        let authority = self
+            .authority
+            .as_ref()
+            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
+        authority.validate_for(&self.paths)?;
+        self.binding.validate(&self.paths)?;
+        let acquired = self.pool.acquire().await;
+        authority.validate_for(&self.paths)?;
+        self.binding.validate(&self.paths)?;
+        let mut connection =
+            acquired.map_err(|source| connection_source(self.connection_failure_kind(), source))?;
+        // Migration execution installs connection-local fail-closed guards. Always
+        // discard this one-time connection so cancellation cannot return a guarded
+        // or callback-altered handle to the pool.
+        connection.close_on_drop();
+        let mut validate_authority = || {
+            authority.validate_for(&self.paths)?;
+            self.binding.validate(&self.paths)
+        };
+        let result = crate::migration::apply_governed_migrations(
+            &mut connection,
+            &self.catalog,
+            applied_at,
+            build,
+            callbacks,
+            &mut validate_authority,
+        )
+        .await;
+        authority.validate_for(&self.paths)?;
+        self.binding.validate(&self.paths)?;
+        result
     }
 
     async fn close(mut self) -> Option<WriterAuthority> {
@@ -235,6 +286,7 @@ impl PrivateConnectionPool {
 async fn open_existing_connection_pool(
     paths: &ServiceSqlitePaths,
     identity: &ServiceDatabaseIdentity,
+    catalog: &MigrationCatalog,
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
@@ -249,7 +301,16 @@ async fn open_existing_connection_pool(
         OpenMode::ReadOnlyInspection => (None, Some(ReadOnlyInspectionGuard::acquire(paths)?)),
         OpenMode::Initialize => unreachable!("initialize mode returned above"),
     };
-    open_connection_pool(paths, identity, mode, policy, authority, inspection_guard).await
+    open_connection_pool(
+        paths,
+        identity,
+        catalog,
+        mode,
+        policy,
+        authority,
+        inspection_guard,
+    )
+    .await
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -260,6 +321,7 @@ async fn open_existing_connection_pool(
 async fn open_initialized_connection_pool(
     paths: &ServiceSqlitePaths,
     identity: &ServiceDatabaseIdentity,
+    catalog: &MigrationCatalog,
     policy: ServiceSqliteConnectionOptions,
     authority: WriterAuthority,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
@@ -267,6 +329,7 @@ async fn open_initialized_connection_pool(
     open_connection_pool(
         paths,
         identity,
+        catalog,
         OpenMode::Initialize,
         policy,
         Some(authority),
@@ -283,6 +346,7 @@ async fn open_initialized_connection_pool(
 async fn open_connection_pool(
     paths: &ServiceSqlitePaths,
     identity: &ServiceDatabaseIdentity,
+    catalog: &MigrationCatalog,
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
     authority: Option<WriterAuthority>,
@@ -290,6 +354,9 @@ async fn open_connection_pool(
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
     if !identity.matches_paths(paths) {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
+    }
+    if identity.supported_state_schema_version().get() != catalog.current_version() {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Migration));
     }
     let binding = match (mode, authority.as_ref(), inspection_guard.as_ref()) {
         (OpenMode::Initialize | OpenMode::ReadWriteExisting, Some(authority), None) => {
@@ -320,6 +387,14 @@ async fn open_connection_pool(
         crate::metadata::verify_database_metadata(&mut preflight, identity).await;
     binding.validate(paths)?;
     preflight_metadata?;
+    let preflight_history = crate::migration::verify_migration_history(
+        &mut preflight,
+        catalog,
+        mode == OpenMode::ReadOnlyInspection,
+    )
+    .await;
+    binding.validate(paths)?;
+    preflight_history?;
     let preflight_close = preflight.close().await;
     binding.validate(paths)?;
     preflight_close.map_err(|source| connection_source(ServiceSqliteErrorKind::Open, source))?;
@@ -336,14 +411,20 @@ async fn open_connection_pool(
     let before_paths = paths.clone();
     let after_metadata = identity.clone();
     let before_metadata = identity.clone();
+    let retained_catalog = catalog.clone();
+    let after_catalog = catalog.clone();
+    let before_catalog = catalog.clone();
     let authority_failure = Arc::new(AtomicBool::new(false));
     let metadata_failure = Arc::new(AtomicBool::new(false));
+    let migration_failure = Arc::new(AtomicBool::new(false));
     let pragma_failure = Arc::new(AtomicBool::new(false));
     let after_authority_failure = Arc::clone(&authority_failure);
     let after_metadata_failure = Arc::clone(&metadata_failure);
+    let after_migration_failure = Arc::clone(&migration_failure);
     let after_pragma_failure = Arc::clone(&pragma_failure);
     let before_authority_failure = Arc::clone(&authority_failure);
     let before_metadata_failure = Arc::clone(&metadata_failure);
+    let before_migration_failure = Arc::clone(&migration_failure);
     let before_pragma_failure = Arc::clone(&pragma_failure);
     let pool_result = SqlitePoolOptions::new()
         .min_connections(1)
@@ -356,8 +437,10 @@ async fn open_connection_pool(
             let binding = after_binding.clone();
             let paths = after_paths.clone();
             let metadata = after_metadata.clone();
+            let catalog = after_catalog.clone();
             let authority_failure = Arc::clone(&after_authority_failure);
             let metadata_failure = Arc::clone(&after_metadata_failure);
+            let migration_failure = Arc::clone(&after_migration_failure);
             let pragma_failure = Arc::clone(&after_pragma_failure);
             Box::pin(async move {
                 if binding.validate(&paths).is_err() {
@@ -397,6 +480,24 @@ async fn open_connection_pool(
                         "SQLite connection metadata mismatch".to_owned(),
                     ));
                 }
+                let migration_result = crate::migration::verify_migration_history(
+                    connection,
+                    &catalog,
+                    after_mode == OpenMode::ReadOnlyInspection,
+                )
+                .await;
+                if binding.validate(&paths).is_err() {
+                    authority_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite connection authority mismatch".to_owned(),
+                    ));
+                }
+                if migration_result.is_err() {
+                    migration_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite migration history mismatch".to_owned(),
+                    ));
+                }
                 Ok(())
             })
         })
@@ -404,8 +505,10 @@ async fn open_connection_pool(
             let binding = before_binding.clone();
             let paths = before_paths.clone();
             let metadata = before_metadata.clone();
+            let catalog = before_catalog.clone();
             let authority_failure = Arc::clone(&before_authority_failure);
             let metadata_failure = Arc::clone(&before_metadata_failure);
+            let migration_failure = Arc::clone(&before_migration_failure);
             let pragma_failure = Arc::clone(&before_pragma_failure);
             Box::pin(async move {
                 if binding.validate(&paths).is_err() {
@@ -443,6 +546,24 @@ async fn open_connection_pool(
                         "SQLite connection metadata mismatch".to_owned(),
                     ));
                 }
+                let migration_result = crate::migration::verify_migration_history(
+                    connection,
+                    &catalog,
+                    before_mode == OpenMode::ReadOnlyInspection,
+                )
+                .await;
+                if binding.validate(&paths).is_err() {
+                    authority_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite connection authority mismatch".to_owned(),
+                    ));
+                }
+                if migration_result.is_err() {
+                    migration_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite migration history mismatch".to_owned(),
+                    ));
+                }
                 Ok(true)
             })
         })
@@ -454,6 +575,8 @@ async fn open_connection_pool(
             ServiceSqliteErrorKind::Authority
         } else if metadata_failure.load(Ordering::Acquire) {
             ServiceSqliteErrorKind::Metadata
+        } else if migration_failure.load(Ordering::Acquire) {
+            ServiceSqliteErrorKind::Migration
         } else if pragma_failure.load(Ordering::Acquire) {
             ServiceSqliteErrorKind::Pragma
         } else {
@@ -466,10 +589,12 @@ async fn open_connection_pool(
         pool,
         binding: retained_binding,
         paths: paths.clone(),
+        catalog: retained_catalog,
         authority,
         inspection_guard,
         authority_failure,
         metadata_failure,
+        migration_failure,
         pragma_failure,
     })
 }
@@ -983,6 +1108,7 @@ mod tests {
         convert::Infallible,
         fs,
         os::unix::fs::{PermissionsExt, symlink},
+        sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
         time::{Duration, SystemTime},
     };
 
@@ -1037,6 +1163,106 @@ mod tests {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn base_catalog() -> MigrationCatalog {
+        MigrationCatalog::new([]).expect("empty v1 catalog")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn migration_catalog() -> MigrationCatalog {
+        const CREATE: &str = "CREATE TABLE migration_probe (value INTEGER NOT NULL);";
+        const CALLBACK_DEFINITION: &[u8] = b"callback:migration_probe:v1";
+        MigrationCatalog::new([
+            crate::MigrationDescriptor::sql(
+                2,
+                "create_migration_probe",
+                CREATE,
+                crate::MigrationChecksum::for_sql(CREATE),
+            )
+            .expect("SQL migration"),
+            crate::MigrationDescriptor::callback(
+                3,
+                "populate_migration_probe",
+                CALLBACK_DEFINITION,
+                crate::MigrationChecksum::for_callback(CALLBACK_DEFINITION),
+            )
+            .expect("callback migration"),
+        ])
+        .expect("migration catalog")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn migration_build() -> MigrationBuildIdentity {
+        MigrationBuildIdentity::new(
+            "0.1.0-alpha",
+            "0123456789abcdef0123456789abcdef01234567",
+            "89abcdef0123456789abcdef0123456789abcdef",
+            "1.97.1",
+            "x86_64-unknown-linux-gnu",
+            "service-host",
+            1,
+            2,
+            3,
+            4,
+            5,
+        )
+        .expect("migration build")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn migration_callback_binding() -> crate::migration::MigrationCallbackBinding {
+        let catalog = migration_catalog();
+        let descriptor = &catalog.descriptors()[1];
+        crate::migration::MigrationCallbackBinding::new(
+            descriptor.target_version(),
+            descriptor.name(),
+            descriptor.checksum(),
+            migration_callback,
+        )
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn migration_callback<'a>(
+        executor: &'a mut crate::migration::MigrationTransactionExecutor<'_>,
+    ) -> crate::migration::MigrationCallbackFuture<'a> {
+        Box::pin(async move {
+            executor
+                .execute("INSERT INTO migration_probe (value) VALUES (41)")
+                .await
+        })
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn counted_migration_callback<'a>(
+        executor: &'a mut crate::migration::MigrationTransactionExecutor<'_>,
+    ) -> crate::migration::MigrationCallbackFuture<'a> {
+        Box::pin(async move {
+            CONCURRENT_CALLBACK_COUNT.fetch_add(1, AtomicOrdering::SeqCst);
+            executor
+                .execute("INSERT INTO migration_probe (value) VALUES (41)")
+                .await
+        })
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    static CONCURRENT_CALLBACK_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn yielding_migration_callback<'a>(
+        executor: &'a mut crate::migration::MigrationTransactionExecutor<'_>,
+    ) -> crate::migration::MigrationCallbackFuture<'a> {
+        Box::pin(async move {
+            AUTHORITY_CALLBACK_COUNT.fetch_add(1, AtomicOrdering::SeqCst);
+            tokio::task::yield_now().await;
+            executor
+                .execute("INSERT INTO migration_probe (value) VALUES (41)")
+                .await
+        })
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    static AUTHORITY_CALLBACK_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     async fn initialized_authority(
         root: &Path,
         instance: &str,
@@ -1078,10 +1304,34 @@ mod tests {
         policy: ServiceSqliteConnectionOptions,
     ) -> (ServiceSqlitePaths, PrivateConnectionPool) {
         let (paths, identity, authority) = initialized_authority(root, "primary").await;
-        let pool = open_initialized_connection_pool(&paths, &identity, policy, authority)
-            .await
-            .expect("open initialized pool");
+        let pool =
+            open_initialized_connection_pool(&paths, &identity, &base_catalog(), policy, authority)
+                .await
+                .expect("open initialized pool");
         (paths, pool)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    async fn initialized_migration_pool(
+        root: &Path,
+        policy: ServiceSqliteConnectionOptions,
+        catalog: &MigrationCatalog,
+    ) -> (
+        ServiceSqlitePaths,
+        ServiceDatabaseIdentity,
+        PrivateConnectionPool,
+    ) {
+        let (paths, base_identity, authority) = initialized_authority(root, "migrations").await;
+        let identity = ServiceDatabaseIdentity::new(
+            &paths,
+            base_identity.source_generation(),
+            NonZeroU32::new(catalog.current_version()).expect("catalog version"),
+            base_identity.application_id(),
+        );
+        let pool = open_initialized_connection_pool(&paths, &identity, catalog, policy, authority)
+            .await
+            .expect("open migration pool");
+        (paths, identity, pool)
     }
 
     fn runtime_context(
@@ -1304,13 +1554,213 @@ mod tests {
             NonZeroU32::new(1).expect("schema version"),
             ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
         );
-        let result =
-            open_existing_connection_pool(&paths, &wrong, OpenMode::ReadWriteExisting, policy)
-                .await;
+        let result = open_existing_connection_pool(
+            &paths,
+            &wrong,
+            &base_catalog(),
+            OpenMode::ReadWriteExisting,
+            policy,
+        )
+        .await;
         let Err(error) = result else {
             panic!("wrong generation must fail open");
         };
         assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn migration_entry_preserves_post_open_ledger_drift_classification() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let policy = ServiceSqliteConnectionOptions::new(Duration::from_millis(500), 1).unwrap();
+        let (_paths, pool) = initialized_pool(directory.path(), policy).await;
+        let build = migration_build();
+        let mut connection = pool.acquire().await.expect("pooled connection");
+        sqlx::query(
+            "INSERT INTO schema_migrations (
+                version, name, checksum, applied_at_unix_s,
+                service_version, service_commit, lib_revision, rust_version, target,
+                feature_profile, config_contract_version, state_contract_version,
+                admin_contract_version, status_contract_version, provider_contract_version
+             ) VALUES (2, 'unexpected_row', zeroblob(32), 0, ?, ?, ?, ?, ?, ?, 1, 2, 3, 4, 5)",
+        )
+        .bind(build.service_version())
+        .bind(build.service_commit())
+        .bind(build.lib_revision())
+        .bind(build.rust_version())
+        .bind(build.target())
+        .bind(build.feature_profile())
+        .execute(&mut *connection)
+        .await
+        .expect("inject post-open ledger drift");
+        drop(connection);
+
+        let error = pool
+            .apply_migrations(
+                MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap(),
+                &build,
+                &[],
+            )
+            .await
+            .expect_err("migration entry must reject drift before execution");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+        let authority = pool.close().await.expect("writer authority retained");
+        drop(authority);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_history_is_not_exposed_and_read_only_requires_current_state() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let catalog = migration_catalog();
+        let policy = ServiceSqliteConnectionOptions::new(Duration::from_millis(500), 2).unwrap();
+        let (paths, identity, pending) =
+            initialized_migration_pool(directory.path(), policy, &catalog).await;
+
+        let error = pending
+            .acquire()
+            .await
+            .expect_err("pending schema must not escape the private pool");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+        let authority = pending.close().await.expect("writer authority");
+        drop(authority);
+
+        let read_only = open_existing_connection_pool(
+            &paths,
+            &identity,
+            &catalog,
+            OpenMode::ReadOnlyInspection,
+            policy,
+        )
+        .await;
+        let Err(error) = read_only else {
+            panic!("read-only pending state must fail closed");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+
+        let writable = open_existing_connection_pool(
+            &paths,
+            &identity,
+            &catalog,
+            OpenMode::ReadWriteExisting,
+            policy,
+        )
+        .await
+        .expect("reopen writable prefix");
+        let outcome = writable
+            .apply_migrations(
+                MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap(),
+                &migration_build(),
+                &[migration_callback_binding()],
+            )
+            .await
+            .expect("apply pending migrations");
+        assert_eq!(outcome.initial_version(), 1);
+        assert_eq!(outcome.final_version(), 3);
+        assert_eq!(outcome.applied_count(), 2);
+        let connection = writable.acquire().await.expect("current checkout");
+        drop(connection);
+        let authority = writable.close().await.expect("writer authority");
+        drop(authority);
+
+        let current = open_existing_connection_pool(
+            &paths,
+            &identity,
+            &catalog,
+            OpenMode::ReadOnlyInspection,
+            policy,
+        )
+        .await
+        .expect("current read-only state");
+        assert!(current.close().await.is_none());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn concurrent_migration_attempts_serialize_and_execute_callback_once() {
+        CONCURRENT_CALLBACK_COUNT.store(0, AtomicOrdering::SeqCst);
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let catalog = migration_catalog();
+        let policy = ServiceSqliteConnectionOptions::new(Duration::from_secs(2), 2).unwrap();
+        let (_paths, _identity, pool) =
+            initialized_migration_pool(directory.path(), policy, &catalog).await;
+        let applied_at = MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap();
+        let build = migration_build();
+        let descriptor = &catalog.descriptors()[1];
+        let callbacks = [crate::migration::MigrationCallbackBinding::new(
+            descriptor.target_version(),
+            descriptor.name(),
+            descriptor.checksum(),
+            counted_migration_callback,
+        )];
+
+        let (first, second) = tokio::join!(
+            pool.apply_migrations(applied_at, &build, &callbacks),
+            pool.apply_migrations(applied_at, &build, &callbacks),
+        );
+        let first = first.expect("first migration attempt");
+        let second = second.expect("second migration attempt");
+        assert_eq!(
+            first.applied_count() + second.applied_count(),
+            2,
+            "exact catalog is committed only once"
+        );
+        assert_eq!(CONCURRENT_CALLBACK_COUNT.load(AtomicOrdering::SeqCst), 1);
+        let mut connection = pool.acquire().await.expect("current connection");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM migration_probe")
+                .fetch_one(&mut *connection)
+                .await
+                .unwrap(),
+            1
+        );
+        drop(connection);
+        let _authority = pool.close().await;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn authority_replacement_wins_over_in_flight_migration_failure() {
+        AUTHORITY_CALLBACK_COUNT.store(0, AtomicOrdering::SeqCst);
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let catalog = migration_catalog();
+        let policy = ServiceSqliteConnectionOptions::new(Duration::from_secs(2), 1).unwrap();
+        let (paths, _identity, pool) =
+            initialized_migration_pool(directory.path(), policy, &catalog).await;
+        let descriptor = &catalog.descriptors()[1];
+        let callbacks = [crate::migration::MigrationCallbackBinding::new(
+            descriptor.target_version(),
+            descriptor.name(),
+            descriptor.checksum(),
+            yielding_migration_callback,
+        )];
+        let state_directory = paths.state_database().parent().unwrap().to_path_buf();
+        let displaced = directory.path().join("displaced-migration-state");
+        let build = migration_build();
+
+        let application = pool.apply_migrations(
+            MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap(),
+            &build,
+            &callbacks,
+        );
+        let replace = async {
+            while AUTHORITY_CALLBACK_COUNT.load(AtomicOrdering::SeqCst) == 0 {
+                tokio::task::yield_now().await;
+            }
+            fs::rename(&state_directory, &displaced).expect("displace state directory");
+            fs::create_dir_all(&state_directory).expect("replace state directory");
+            fs::copy(displaced.join("state.sqlite"), paths.state_database())
+                .expect("copy replacement database");
+            fs::set_permissions(paths.state_database(), fs::Permissions::from_mode(0o600))
+                .expect("secure replacement database");
+        };
+        let (result, ()) = tokio::join!(application, replace);
+        assert_eq!(
+            result.expect_err("authority replacement must fail").kind(),
+            ServiceSqliteErrorKind::Authority
+        );
+        let authority = pool.close().await.expect("retained writer authority");
+        assert!(authority.is_held());
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1332,6 +1782,7 @@ mod tests {
             let result = open_existing_connection_pool(
                 &paths,
                 &metadata,
+                &base_catalog(),
                 mode,
                 ServiceSqliteConnectionOptions::reviewed(),
             )
@@ -1345,6 +1796,7 @@ mod tests {
         let result = open_existing_connection_pool(
             &paths,
             &metadata,
+            &base_catalog(),
             OpenMode::Initialize,
             ServiceSqliteConnectionOptions::reviewed(),
         )
@@ -1378,6 +1830,7 @@ mod tests {
         let result = open_initialized_connection_pool(
             &other,
             &metadata,
+            &base_catalog(),
             ServiceSqliteConnectionOptions::reviewed(),
             authority,
         )
@@ -1397,6 +1850,7 @@ mod tests {
         let result = open_initialized_connection_pool(
             &paths,
             &metadata,
+            &base_catalog(),
             ServiceSqliteConnectionOptions::reviewed(),
             authority,
         )
@@ -1452,6 +1906,7 @@ mod tests {
         let symlink_result = open_existing_connection_pool(
             &symlink_paths,
             &symlink_metadata,
+            &base_catalog(),
             OpenMode::ReadWriteExisting,
             policy,
         )
@@ -1473,6 +1928,7 @@ mod tests {
         let hardlink_result = open_existing_connection_pool(
             &hardlink_paths,
             &hardlink_metadata,
+            &base_catalog(),
             OpenMode::ReadWriteExisting,
             policy,
         )
@@ -1529,9 +1985,14 @@ mod tests {
             .expect("insert fixture");
         drop(connection);
 
-        let contended =
-            open_existing_connection_pool(&paths, &metadata, OpenMode::ReadOnlyInspection, policy)
-                .await;
+        let contended = open_existing_connection_pool(
+            &paths,
+            &metadata,
+            &base_catalog(),
+            OpenMode::ReadOnlyInspection,
+            policy,
+        )
+        .await;
         let Err(error) = contended else {
             panic!("inspection must reject an active writer");
         };
@@ -1542,9 +2003,14 @@ mod tests {
         let state_directory = paths.state_database().parent().expect("state directory");
         let stale_wal = state_directory.join(WAL_FILE_NAME);
         fs::write(&stale_wal, b"stale-wal-evidence").expect("write stale WAL evidence");
-        let stale =
-            open_existing_connection_pool(&paths, &metadata, OpenMode::ReadOnlyInspection, policy)
-                .await;
+        let stale = open_existing_connection_pool(
+            &paths,
+            &metadata,
+            &base_catalog(),
+            OpenMode::ReadOnlyInspection,
+            policy,
+        )
+        .await;
         let Err(error) = stale else {
             panic!("inspection must reject stale WAL state");
         };
@@ -1553,10 +2019,15 @@ mod tests {
         fs::remove_file(stale_wal).expect("remove test WAL evidence");
         let before = directory_snapshot(state_directory);
 
-        let read_only =
-            open_existing_connection_pool(&paths, &metadata, OpenMode::ReadOnlyInspection, policy)
-                .await
-                .expect("offline read-only inspection");
+        let read_only = open_existing_connection_pool(
+            &paths,
+            &metadata,
+            &base_catalog(),
+            OpenMode::ReadOnlyInspection,
+            policy,
+        )
+        .await
+        .expect("offline read-only inspection");
         let mut connection = read_only.acquire().await.expect("inspection connection");
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT value FROM inspection_fixture")
@@ -1627,6 +2098,7 @@ mod tests {
         let read_only = open_existing_connection_pool(
             &paths,
             &metadata,
+            &base_catalog(),
             OpenMode::ReadOnlyInspection,
             ServiceSqliteConnectionOptions::reviewed(),
         )

@@ -22,8 +22,9 @@ pub use metadata::{
     ServiceSqliteMetadataValueError,
 };
 pub use migration::{
-    MigrationCatalog, MigrationChecksum, MigrationContractError, MigrationDescriptor,
-    MigrationKind, MigrationName,
+    MigrationAppliedAtUnixSeconds, MigrationBuildIdentity, MigrationCatalog, MigrationChecksum,
+    MigrationContractError, MigrationDescriptor, MigrationEvidenceError, MigrationKind,
+    MigrationName,
 };
 pub use open::{OpenMode, ServiceSqlitePathError, ServiceSqlitePaths};
 pub use status::{StorageHealth, StorageIntegrity, StorageStatus};

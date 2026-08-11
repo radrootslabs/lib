@@ -766,36 +766,51 @@ mod supported {
         }
 
         #[tokio::test(flavor = "current_thread")]
-        async fn metadata_write_failure_cleans_the_exact_reserved_database() {
+        async fn metadata_or_migration_ledger_conflict_cleans_the_exact_reserved_database() {
             let root = tempfile::tempdir().expect("root");
-            let paths = paths(root.path(), "metadata-failure");
-            prepare(&paths);
-            let metadata = metadata(&paths);
-            let error =
-                initialize_database(&paths, OpenMode::Initialize, &metadata, |path| async move {
-                    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
+            for (instance, statement, expected_kind) in [
+                (
+                    "metadata-failure",
+                    "CREATE TABLE radroots_service_metadata (value TEXT)",
+                    ServiceSqliteErrorKind::Metadata,
+                ),
+                (
+                    "migration-ledger-failure",
+                    "CREATE TABLE schema_migrations (value TEXT)",
+                    ServiceSqliteErrorKind::Migration,
+                ),
+            ] {
+                let paths = paths(root.path(), instance);
+                prepare(&paths);
+                let metadata = metadata(&paths);
+                let error = initialize_database(
+                    &paths,
+                    OpenMode::Initialize,
+                    &metadata,
+                    move |path| async move {
+                        use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
 
-                    let options = SqliteConnectOptions::new()
-                        .filename(path)
-                        .create_if_missing(false)
-                        .disable_statement_logging();
-                    let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
-                    sqlx::query("CREATE TABLE radroots_service_metadata (value TEXT)")
-                        .execute(&mut connection)
-                        .await?;
-                    connection.close().await?;
-                    Ok::<(), sqlx::Error>(())
-                })
+                        let options = SqliteConnectOptions::new()
+                            .filename(path)
+                            .create_if_missing(false)
+                            .disable_statement_logging();
+                        let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
+                        sqlx::query(statement).execute(&mut connection).await?;
+                        connection.close().await?;
+                        Ok::<(), sqlx::Error>(())
+                    },
+                )
                 .await
-                .expect_err("conflicting metadata must fail");
+                .expect_err("conflicting governed table must fail");
 
-            assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
-            assert!(!paths.state_database().exists());
-            assert!(
-                WriterAuthority::acquire(&paths, OpenMode::Initialize)
-                    .expect("reacquire")
-                    .is_some()
-            );
+                assert_eq!(error.kind(), expected_kind);
+                assert!(!paths.state_database().exists());
+                assert!(
+                    WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                        .expect("reacquire")
+                        .is_some()
+                );
+            }
         }
 
         #[tokio::test(flavor = "current_thread")]

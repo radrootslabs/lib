@@ -300,10 +300,27 @@ fn metadata_error(kind: MetadataFailureKind) -> ServiceSqliteError {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Debug)]
+struct MigrationLedgerInitializationFailure;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Display for MigrationLedgerInitializationFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("SQLite migration ledger could not be initialized")
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Error for MigrationLedgerInitializationFailure {}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) async fn write_database_metadata(
     connection: &mut SqliteConnection,
     expected: &ServiceDatabaseMetadata,
 ) -> Result<(), ServiceSqliteError> {
+    if expected.state_schema_version().get() != 1 {
+        return Err(metadata_error(MetadataFailureKind::Mismatch));
+    }
     if read_application_id(connection).await? != 0 {
         return Err(metadata_error(MetadataFailureKind::AlreadyPresent));
     }
@@ -316,6 +333,15 @@ pub(crate) async fn write_database_metadata(
         .execute(&mut *transaction)
         .await
         .map_err(|_| metadata_error(MetadataFailureKind::AlreadyPresent))?;
+    sqlx::raw_sql(crate::migration::CREATE_MIGRATION_LEDGER_SQL)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_source| {
+            ServiceSqliteError::with_source(
+                ServiceSqliteErrorKind::Migration,
+                MigrationLedgerInitializationFailure,
+            )
+        })?;
     sqlx::query(
         "INSERT INTO radroots_service_metadata (
             singleton, service_id, instance_id, source_generation,
@@ -607,6 +633,13 @@ mod tests {
             read_application_id(&mut connection).await.unwrap(),
             0x5244_5351
         );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM schema_migrations")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+            0
+        );
 
         sqlx::query(
             "UPDATE radroots_service_metadata SET state_schema_version = 2 WHERE singleton = 1",
@@ -712,9 +745,23 @@ mod tests {
 
         let mut newer_state = memory_connection().await;
         let version_two = metadata(&paths, 7, 2, 1_700_000_000_001, 0x5244_5351);
-        write_database_metadata(&mut newer_state, &version_two)
+        assert_eq!(
+            write_database_metadata(&mut newer_state, &version_two)
+                .await
+                .expect_err("fresh metadata must start at v1")
+                .kind(),
+            ServiceSqliteErrorKind::Metadata
+        );
+        let version_one = metadata(&paths, 7, 1, 1_700_000_000_001, 0x5244_5351);
+        write_database_metadata(&mut newer_state, &version_one)
             .await
-            .expect("write newer metadata");
+            .expect("write v1 metadata");
+        sqlx::query(
+            "UPDATE radroots_service_metadata SET state_schema_version = 2 WHERE singleton = 1",
+        )
+        .execute(&mut newer_state)
+        .await
+        .expect("advance newer state");
         assert_eq!(
             verify_database_metadata(&mut newer_state, &expected.identity())
                 .await
