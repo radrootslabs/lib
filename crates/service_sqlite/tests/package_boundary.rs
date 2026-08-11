@@ -4,6 +4,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
+const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
 
@@ -31,7 +32,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     );
     assert_eq!(
         private_modules(ROOT),
-        BTreeSet::from(["authority", "error", "open", "status"])
+        BTreeSet::from(["authority", "error", "initialize", "open", "status"])
     );
     assert!(public_modules(ROOT).is_empty());
     let authority_production = AUTHORITY_SOURCE
@@ -45,6 +46,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "SafeServiceSqliteError",
         "ServiceSqliteError",
         "WriterAuthority",
+        "initialize_database",
         "ServiceSqlitePathError",
         "ServiceSqlitePaths",
         "OpenMode",
@@ -75,6 +77,44 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
                 && !OPEN_SOURCE.contains(forbidden)
                 && !STATUS_SOURCE.contains(forbidden),
             "service SQLite source contains deferred surface `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "OFlags::EXCL",
+        "OFlags::NOFOLLOW",
+        "OFlags::CLOEXEC",
+        "SERVICE_STATE_DATABASE_FILE_NAME",
+        "sync_database",
+        "sync_directory",
+        "validate_entry",
+        "unlink_database",
+    ] {
+        assert!(
+            INITIALIZE_SOURCE.contains(required),
+            "Step 055 initialization source is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "create_dir",
+        "create_dir_all",
+        "OpenOptions::new",
+        "remove_file",
+        "tokio",
+        "sqlx",
+        "rusqlite",
+        "Command::new",
+        "std::process",
+        "pub fn directory",
+    ] {
+        let production = INITIALIZE_SOURCE
+            .split_once("#[cfg(test)]")
+            .map(|(source, _)| source)
+            .expect("initialization source must keep tests separated");
+        assert!(
+            !production.contains(forbidden),
+            "Step 055 production source contains deferred or bypass surface `{forbidden}`"
         );
     }
 

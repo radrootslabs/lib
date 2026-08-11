@@ -20,6 +20,8 @@ use crate::{OpenMode, ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqliteP
 /// ```
 pub struct WriterAuthority {
     file: Option<File>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    directory: File,
 }
 
 impl WriterAuthority {
@@ -41,6 +43,11 @@ impl WriterAuthority {
     #[must_use]
     pub fn is_held(&self) -> bool {
         self.file.is_some()
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(crate) fn directory(&self) -> &File {
+        &self.directory
     }
 
     /// Explicitly releases writer authority; subsequent calls are no-ops.
@@ -176,8 +183,12 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
         .map_err(|_| WriterAuthorityCause::LockUnavailable)?;
 
     let file = File::from(descriptor);
+    let directory = File::from(directory);
     match FileExt::try_lock_exclusive(&file) {
-        Ok(()) => Ok(WriterAuthority { file: Some(file) }),
+        Ok(()) => Ok(WriterAuthority {
+            file: Some(file),
+            directory,
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
             Err(WriterAuthorityCause::Contended)
         }
