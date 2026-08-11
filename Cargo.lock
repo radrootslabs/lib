@@ -3804,6 +3804,7 @@ name = "radroots_runtime_paths"
 version = "0.1.0-alpha"
 dependencies = [
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

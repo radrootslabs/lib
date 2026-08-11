@@ -2,6 +2,7 @@
 
 pub mod conventions;
 pub mod error;
+pub mod identifier;
 pub mod namespace;
 pub mod platform;
 pub mod roots;
@@ -23,6 +24,10 @@ pub use conventions::{
     default_shared_runtime_store_root_from_shared_accounts_data_root,
 };
 pub use error::RadrootsRuntimePathsError;
+pub use identifier::{
+    INSTANCE_ID_MAX_BYTES, InstanceId, SERVICE_ID_MAX_BYTES, ServiceId, ServiceIdentityError,
+    ServiceIdentityKind,
+};
 pub use namespace::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
 pub use roots::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
