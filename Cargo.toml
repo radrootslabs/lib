@@ -271,6 +271,7 @@ tempfile = { version = "3" }
 tar = { version = "0.4" }
 thiserror = { version = "1" }
 tokio = { version = "1" }
+tokio-util = { version = "0.7", features = ["rt"] }
 tokio-tungstenite = { version = "0.26.2", default-features = false, features = [
   "connect",
   "rustls-tls-webpki-roots",

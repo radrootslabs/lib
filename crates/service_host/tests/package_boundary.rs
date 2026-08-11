@@ -8,6 +8,11 @@ const STATUS_SOURCE: &str = concat!(
     include_str!("../src/status/reason.rs"),
     include_str!("../src/status/service.rs"),
 );
+const LIFECYCLE_SOURCE: &str = concat!(
+    include_str!("../src/lifecycle/mod.rs"),
+    include_str!("../src/lifecycle/cancel.rs"),
+    include_str!("../src/lifecycle/task.rs"),
+);
 
 #[test]
 fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
@@ -31,6 +36,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
             "serde",
             "serde_json",
             "tokio",
+            "tokio-util",
         ])
     );
     assert_eq!(
@@ -45,6 +51,9 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
         ])
     );
     assert!(!STATUS_SOURCE.contains("serde(untagged)"));
+    for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
+        assert!(!LIFECYCLE_SOURCE.contains(forbidden));
+    }
 }
 
 fn public_modules(root: &str) -> BTreeSet<&str> {
