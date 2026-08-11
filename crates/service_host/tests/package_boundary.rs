@@ -25,7 +25,13 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
 
     assert_eq!(
         dependency_keys(MANIFEST),
-        BTreeSet::from(["getrandom", "radroots_runtime_paths", "serde", "serde_json"])
+        BTreeSet::from([
+            "getrandom",
+            "radroots_runtime_paths",
+            "serde",
+            "serde_json",
+            "tokio",
+        ])
     );
     assert_eq!(
         public_modules(ROOT),

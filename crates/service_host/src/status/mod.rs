@@ -1,9 +1,14 @@
 //! Common service lifecycle and status value objects.
 
+mod cache;
 mod phase;
 mod reason;
 mod service;
 
+pub use cache::{
+    CachedServiceState, CachedServiceStatePublisher, CachedServiceStateReader,
+    StatusPublisherDropped, cached_service_state,
+};
 pub use phase::{Readiness, ServiceOperationalState, ServicePhase, StatusContractError};
 pub use reason::{CommonReasonCode, REASON_CODES_MAX_ITEMS, ReasonCode, ReasonCodes};
 pub use service::{
