@@ -87,6 +87,7 @@ fn normalize_registry(
     Ok(registry)
 }
 
+#[cfg(test)]
 pub(crate) fn upsert_instance(
     registry: &mut ManagedRuntimeInstanceRegistry,
     record: ManagedRuntimeInstanceRecord,
@@ -117,6 +118,7 @@ pub fn instance<'a>(
         .find(|record| record.service_id() == service_id && record.instance_id() == instance_id)
 }
 
+#[cfg(test)]
 pub(crate) fn remove_instance(
     registry: &mut ManagedRuntimeInstanceRegistry,
     service_id: &ServiceId,

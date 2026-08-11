@@ -2,8 +2,35 @@ use crate::error::RadrootsRuntimeDistributionError;
 use crate::model::{
     ArtifactAdapter, RadrootsRuntimeDistributionContract, RuntimeDistributionEntry, TargetSpec,
 };
+use crate::service::{HardenedServiceTarget, ServiceTier1Target};
+use radroots_runtime_paths::ServiceId;
 
 pub const RUNTIME_DISTRIBUTION_SCHEMA: &str = "radroots-runtime-distribution";
+pub const RUNTIME_DISTRIBUTION_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServiceTargetRequest<'a> {
+    pub service_id: &'a ServiceId,
+    pub target_id: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedServiceTarget {
+    service_id: ServiceId,
+    target: ServiceTier1Target,
+}
+
+impl ResolvedServiceTarget {
+    #[must_use]
+    pub fn service_id(&self) -> &ServiceId {
+        &self.service_id
+    }
+
+    #[must_use]
+    pub const fn target(&self) -> ServiceTier1Target {
+        self.target
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeArtifactRequest<'a> {
@@ -40,7 +67,7 @@ pub struct RadrootsRuntimeDistributionResolver {
 impl RadrootsRuntimeDistributionResolver {
     pub fn parse_str(raw: &str) -> Result<Self, RadrootsRuntimeDistributionError> {
         let contract = toml::from_str::<RadrootsRuntimeDistributionContract>(raw)
-            .map_err(|err| RadrootsRuntimeDistributionError::Parse(err.to_string()))?;
+            .map_err(|_| RadrootsRuntimeDistributionError::Parse)?;
         Self::new(contract)
     }
 
@@ -48,16 +75,48 @@ impl RadrootsRuntimeDistributionResolver {
         contract: RadrootsRuntimeDistributionContract,
     ) -> Result<Self, RadrootsRuntimeDistributionError> {
         if contract.schema != RUNTIME_DISTRIBUTION_SCHEMA {
-            return Err(RadrootsRuntimeDistributionError::UnexpectedSchema {
-                expected: RUNTIME_DISTRIBUTION_SCHEMA,
-                found: contract.schema.clone(),
-            });
+            return Err(RadrootsRuntimeDistributionError::UnexpectedSchema);
+        }
+        if contract.schema_version != RUNTIME_DISTRIBUTION_SCHEMA_VERSION {
+            return Err(RadrootsRuntimeDistributionError::UnexpectedSchemaVersion);
+        }
+        if contract.runtime.iter().any(|runtime| {
+            contract
+                .service_targets
+                .iter()
+                .any(|(_, service)| runtime.id == service.service_id().as_str())
+        }) {
+            return Err(RadrootsRuntimeDistributionError::HardenedServiceArtifactDeferred);
         }
         Ok(Self { contract })
     }
 
     pub fn contract(&self) -> &RadrootsRuntimeDistributionContract {
         &self.contract
+    }
+
+    pub fn service_target(
+        &self,
+        service_id: &ServiceId,
+    ) -> Result<&HardenedServiceTarget, RadrootsRuntimeDistributionError> {
+        self.contract
+            .service_targets
+            .get(service_id)
+            .ok_or(RadrootsRuntimeDistributionError::UnsupportedService)
+    }
+
+    pub fn resolve_service_target(
+        &self,
+        request: &ServiceTargetRequest<'_>,
+    ) -> Result<ResolvedServiceTarget, RadrootsRuntimeDistributionError> {
+        let service = self.service_target(request.service_id)?;
+        let target = ServiceTier1Target::parse(request.target_id)
+            .filter(|target| service.tier_1_targets().contains(target))
+            .ok_or(RadrootsRuntimeDistributionError::UnsupportedServiceTarget)?;
+        Ok(ResolvedServiceTarget {
+            service_id: request.service_id.clone(),
+            target,
+        })
     }
 
     pub fn resolve_artifact(
@@ -69,33 +128,25 @@ impl RadrootsRuntimeDistributionResolver {
             .runtime
             .iter()
             .find(|runtime| runtime.id == request.runtime_id)
-            .ok_or_else(|| {
-                RadrootsRuntimeDistributionError::UnknownRuntime(request.runtime_id.to_string())
-            })?;
+            .ok_or(RadrootsRuntimeDistributionError::UnknownRuntime)?;
 
         if !runtime.human_installable {
-            return Err(RadrootsRuntimeDistributionError::RuntimeNotInstallable(
-                runtime.id.clone(),
-            ));
+            return Err(RadrootsRuntimeDistributionError::RuntimeNotInstallable);
         }
 
         let channel = request.channel.unwrap_or(runtime.default_channel.as_str());
         self.ensure_channel_is_active(channel)?;
 
-        let target_set_id = runtime.target_set.as_ref().ok_or_else(|| {
-            RadrootsRuntimeDistributionError::MissingTargetSet(runtime.id.clone())
-        })?;
+        let target_set_id = runtime
+            .target_set
+            .as_ref()
+            .ok_or(RadrootsRuntimeDistributionError::MissingTargetSet)?;
 
         let adapter = self
             .contract
             .artifact_adapters
             .get(&runtime.artifact_adapter)
-            .ok_or_else(
-                || RadrootsRuntimeDistributionError::UnknownArtifactAdapter {
-                    runtime_id: runtime.id.clone(),
-                    adapter_id: runtime.artifact_adapter.clone(),
-                },
-            )?;
+            .ok_or(RadrootsRuntimeDistributionError::UnknownArtifactAdapter)?;
 
         let (target_id, target) =
             self.select_target(runtime, target_set_id, request.os, request.arch)?;
@@ -105,10 +156,7 @@ impl RadrootsRuntimeDistributionResolver {
             .contract
             .archive_formats
             .get(&normalized_contract_key(archive_format_id))
-            .ok_or_else(|| RadrootsRuntimeDistributionError::UnknownArchiveFormat {
-                target_id: target_id.to_string(),
-                archive_format_id: archive_format_id.to_string(),
-            })?;
+            .ok_or(RadrootsRuntimeDistributionError::UnknownArchiveFormat)?;
 
         let artifact_stem = format!("{}-{}-{}", runtime.release_unit, request.version, target_id);
         let artifact_file_name = format!("{artifact_stem}{}", archive_format.extension);
@@ -142,9 +190,7 @@ impl RadrootsRuntimeDistributionResolver {
             .iter()
             .any(|entry| entry == channel)
         {
-            return Err(RadrootsRuntimeDistributionError::UnknownChannel(
-                channel.to_string(),
-            ));
+            return Err(RadrootsRuntimeDistributionError::UnknownChannel);
         }
         if !self
             .contract
@@ -153,16 +199,14 @@ impl RadrootsRuntimeDistributionResolver {
             .iter()
             .any(|entry| entry == channel)
         {
-            return Err(RadrootsRuntimeDistributionError::InactiveChannel(
-                channel.to_string(),
-            ));
+            return Err(RadrootsRuntimeDistributionError::InactiveChannel);
         }
         Ok(())
     }
 
     fn select_target<'a>(
         &'a self,
-        runtime: &RuntimeDistributionEntry,
+        _runtime: &RuntimeDistributionEntry,
         target_set_id: &str,
         os: &str,
         arch: &str,
@@ -171,21 +215,15 @@ impl RadrootsRuntimeDistributionResolver {
             .contract
             .target_sets
             .get(target_set_id)
-            .ok_or_else(|| RadrootsRuntimeDistributionError::UnsupportedPlatform {
-                runtime_id: runtime.id.clone(),
-                os: os.to_string(),
-                arch: arch.to_string(),
-            })?;
+            .ok_or(RadrootsRuntimeDistributionError::UnsupportedPlatform)?;
 
         let mut found_match = None;
         for target_id in &target_set.targets {
-            let target = self.contract.targets.get(target_id).ok_or_else(|| {
-                RadrootsRuntimeDistributionError::UnknownTarget {
-                    runtime_id: runtime.id.clone(),
-                    target_set_id: target_set_id.to_string(),
-                    target_id: target_id.clone(),
-                }
-            })?;
+            let target = self
+                .contract
+                .targets
+                .get(target_id)
+                .ok_or(RadrootsRuntimeDistributionError::UnknownTarget)?;
 
             if target.os == os && target.arch == arch {
                 found_match = Some((target_id.as_str(), target));
@@ -193,17 +231,13 @@ impl RadrootsRuntimeDistributionResolver {
             }
         }
 
-        found_match.ok_or_else(|| RadrootsRuntimeDistributionError::UnsupportedPlatform {
-            runtime_id: runtime.id.clone(),
-            os: os.to_string(),
-            arch: arch.to_string(),
-        })
+        found_match.ok_or(RadrootsRuntimeDistributionError::UnsupportedPlatform)
     }
 
     fn resolve_archive_format_id<'a>(
         &self,
-        runtime: &RuntimeDistributionEntry,
-        target_id: &'a str,
+        _runtime: &RuntimeDistributionEntry,
+        _target_id: &'a str,
         target: &'a TargetSpec,
         adapter: &'a ArtifactAdapter,
     ) -> Result<&'a str, RadrootsRuntimeDistributionError> {
@@ -215,10 +249,7 @@ impl RadrootsRuntimeDistributionResolver {
             return Ok(adapter.supported_archive_formats[0].as_str());
         }
 
-        Err(RadrootsRuntimeDistributionError::MissingArchiveFormat {
-            runtime_id: runtime.id.clone(),
-            target_id: target_id.to_string(),
-        })
+        Err(RadrootsRuntimeDistributionError::MissingArchiveFormat)
     }
 }
 

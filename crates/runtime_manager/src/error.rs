@@ -11,10 +11,18 @@ pub enum RadrootsRuntimeManagerError {
     Parse,
     #[error("runtime management schema is unsupported")]
     UnexpectedSchema,
+    #[error("runtime management schema version is unsupported")]
+    UnexpectedSchemaVersion,
+    #[error("runtime management contract violates the hardened service inventory")]
+    InvalidContract,
     #[error("management mode does not support the selected profile")]
     UnsupportedProfile,
     #[error("runtime has no bootstrap entry in runtime management contract")]
     UnknownBootstrapRuntime,
+    #[error("runtime is not a hardened service target")]
+    UnsupportedServiceTarget,
+    #[error("hardened service target is metadata-only until service integration is complete")]
+    MetadataOnlyServiceTarget,
     #[error("runtime context does not share the manager path scope")]
     RuntimeContextMismatch,
     #[error("read runtime instance registry failed: {kind}")]

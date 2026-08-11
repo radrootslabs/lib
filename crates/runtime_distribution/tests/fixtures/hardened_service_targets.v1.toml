@@ -1,0 +1,51 @@
+schema = "radroots-runtime-distribution"
+schema_version = 1
+owner_doc = "service-hardening-v1"
+runtime_registry = "registry.toml"
+
+[family]
+id = "radroots_runtime-family"
+canonical_installer_engine = "single_runtime_selected"
+human_install_facade = "delivery_publication_only"
+tooling_consumption = "shared_distribution_library"
+independent_runtime_versions = true
+version_resolution = "runtime_scoped_channel_latest"
+artifact_verification_required = true
+
+[channels]
+active = []
+defined = []
+
+[service_targets.myc]
+service_id = "myc"
+instance_support = "multiple"
+config_format = "toml"
+state_initialization = "explicit"
+run_state_policy = "existing_only"
+admin_transport = "http11_over_unix_domain_socket"
+admin_base_path = "/v1"
+admin_contract_version = 1
+status_surface = "local_admin_service_status_v1"
+operations_surface = "cached_livez_readyz_metrics"
+support_posture = "target"
+tier_1_targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+]
+
+[service_targets.rhi]
+service_id = "rhi"
+instance_support = "multiple"
+config_format = "toml"
+state_initialization = "explicit"
+run_state_policy = "existing_only"
+admin_transport = "http11_over_unix_domain_socket"
+admin_base_path = "/v1"
+admin_contract_version = 1
+status_surface = "local_admin_service_status_v1"
+operations_surface = "cached_livez_readyz_metrics"
+support_posture = "target"
+tier_1_targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+]

@@ -167,6 +167,14 @@ Before editing code:
   names are validated single path components, and ordinary manager errors and
   `Debug` output must not expose filesystem paths, file contents, or raw
   dependency-owned causes.
+- Runtime-distribution and runtime-management service metadata is the sealed
+  exact Myc/RHI v1 inventory. Both services support multiple validated
+  instances, one TOML config, explicit initialization with existing-only run,
+  detailed HTTP/1.1-over-Unix local administration, cached
+  `/livez`/`readyz`/`metrics`, and only Linux x86_64/aarch64 Tier-1 eligibility
+  in `target` posture. This metadata does not authorize service registration,
+  PID/config/log probing, lifecycle actions, artifact names, channels, archive
+  resolution, or a `qualified` support claim.
 - Library code must not initialize a tracing subscriber, parse a process CLI,
   read service configuration from environment variables, install signal
   handlers, create a Tokio runtime, call `process::exit`, or spawn arbitrary

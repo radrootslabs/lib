@@ -8,16 +8,19 @@ runtime lifecycle and inspection helpers for the `radroots` core libraries.
  * schema-checked management contract parsing and shared management constants;
  * manager-owned shared and per-instance tracking paths kept separate from
    canonical service-instance paths supplied by a sealed `RuntimeContext`;
- * typed, deterministic registry load, save, lookup, and upsert helpers that
+ * typed, deterministic registry load, save, and lookup helpers that
    persist service/instance identities without duplicating service paths or
    secrets;
  * lifecycle helpers for contained archive install, process start and stop,
    and context-bound non-secret configuration writes; the manager has no
    credential read/write authority;
- * context-bound runtime inspection and target-resolution helpers for status,
-   logs, config, and action availability; and
+ * sealed Myc/RHI target metadata and context resolution without service
+   registration, lifecycle admission, or PID/config/log probing; and
  * cleanup behavior limited to manager-owned install and tracking artifacts,
-   preserving canonical service state and secrets.
+preserving canonical service state and secrets.
+
+Myc and RHI remain metadata-only management targets until their public CLI,
+Unix-admin, status, and artifact integrations are separately implemented.
 
 ## Copyright
 

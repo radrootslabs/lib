@@ -31,6 +31,10 @@ pub use paths::{ManagedRuntimeInstancePaths, ManagedRuntimeSharedPaths, bootstra
 pub use registry::{instance, load_registry, save_registry};
 
 pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots-runtime-management";
+pub const RUNTIME_MANAGEMENT_SCHEMA_VERSION: u32 = 1;
+
+pub(crate) const HARDENED_MANAGEMENT_CONTRACT: &str =
+    include_str!("../tests/fixtures/hardened_service_management.v1.toml");
 
 pub fn parse_contract_str(
     raw: &str,
@@ -40,69 +44,32 @@ pub fn parse_contract_str(
     if contract.schema != RUNTIME_MANAGEMENT_SCHEMA {
         return Err(RadrootsRuntimeManagerError::UnexpectedSchema);
     }
+    if contract.schema_version != RUNTIME_MANAGEMENT_SCHEMA_VERSION {
+        return Err(RadrootsRuntimeManagerError::UnexpectedSchemaVersion);
+    }
+    validate_hardened_management_contract(&contract)?;
     Ok(contract)
+}
+
+pub(crate) fn validate_hardened_management_contract(
+    contract: &RadrootsRuntimeManagementContract,
+) -> Result<(), RadrootsRuntimeManagerError> {
+    let expected =
+        toml::from_str::<RadrootsRuntimeManagementContract>(HARDENED_MANAGEMENT_CONTRACT)
+            .map_err(|_| RadrootsRuntimeManagerError::InvalidContract)?;
+    if contract != &expected {
+        return Err(RadrootsRuntimeManagerError::InvalidContract);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use std::error::Error as _;
 
-    use super::{RUNTIME_MANAGEMENT_SCHEMA, parse_contract_str};
+    use super::{HARDENED_MANAGEMENT_CONTRACT, RUNTIME_MANAGEMENT_SCHEMA, parse_contract_str};
 
-    const CONTRACT: &str = r#"
-schema = "radroots-runtime-management"
-schema_version = 1
-owner_doc = "owner"
-runtime_registry = "registry"
-distribution_contract = "distribution"
-capabilities_contract = "capabilities"
-
-[defaults]
-instance_cardinality = "multiple"
-managed_runtime_lookup = "typed_instance_registry"
-explicit_runtime_endpoint_overrides_precede_managed_instance_binding = true
-global_path_mutation_forbidden = true
-
-[management_clients]
-active = ["cli"]
-
-[managed_runtime_targets]
-defined = ["myc", "rhi"]
-
-[lifecycle]
-actions = ["status"]
-health_states = ["running"]
-
-[mode.interactive]
-contract_state = "active"
-platforms = ["linux"]
-supported_profiles = ["repo_local"]
-service_manager_integration = false
-uses_absolute_binary_paths = true
-default_instance_cardinality = "multiple"
-
-[paths.interactive]
-shared_namespace = "obsolete"
-instance_registry_root_class = "config"
-instance_registry_rel = "obsolete"
-artifact_cache_root_class = "cache"
-artifact_cache_rel = "obsolete"
-install_root_class = "data"
-install_root_rel = "obsolete"
-state_root_class = "data"
-state_root_rel = "obsolete"
-logs_root_class = "logs"
-logs_root_rel = "obsolete"
-run_root_class = "run"
-run_root_rel = "obsolete"
-secrets_root_class = "secrets"
-secrets_namespace_rel = "obsolete"
-
-[instance_metadata]
-required_fields = ["service_id", "instance_id"]
-
-[bootstrap]
-"#;
+    const CONTRACT: &str = HARDENED_MANAGEMENT_CONTRACT;
 
     #[test]
     fn contract_parser_accepts_only_the_expected_schema() {

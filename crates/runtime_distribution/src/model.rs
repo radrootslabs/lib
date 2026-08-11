@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::service::HardenedServiceTargets;
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsRuntimeDistributionContract {
     pub schema: String,
     pub schema_version: u32,
@@ -20,9 +23,11 @@ pub struct RadrootsRuntimeDistributionContract {
     pub targets: BTreeMap<String, TargetSpec>,
     #[serde(default)]
     pub runtime: Vec<RuntimeDistributionEntry>,
+    pub service_targets: HardenedServiceTargets,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct DistributionFamily {
     pub id: String,
     pub canonical_installer_engine: String,
@@ -34,6 +39,7 @@ pub struct DistributionFamily {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ChannelSet {
     #[serde(default)]
     pub active: Vec<String>,
@@ -42,6 +48,7 @@ pub struct ChannelSet {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactAdapter {
     pub kind: String,
     #[serde(default)]
@@ -50,6 +57,7 @@ pub struct ArtifactAdapter {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ArchiveFormat {
     pub extension: String,
     #[serde(default)]
@@ -57,12 +65,14 @@ pub struct ArchiveFormat {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct TargetSet {
     #[serde(default)]
     pub targets: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct TargetSpec {
     pub os: String,
     pub arch: String,
@@ -70,6 +80,7 @@ pub struct TargetSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeDistributionEntry {
     pub id: String,
     pub distribution_state: String,

@@ -1,10 +1,10 @@
 use core::fmt;
 use std::path::Path;
 
+use radroots_runtime_distribution::HardenedServiceTarget;
 use radroots_runtime_paths::{RadrootsPathProfile, RuntimeContext, RuntimeContextSource};
 
-use crate::paths::{resolve_instance_paths, resolve_shared_paths};
-use crate::registry::{remove_instance, upsert_instance};
+use crate::paths::resolve_shared_paths;
 use crate::{
     BootstrapRuntimeContract, ManagedRuntimeHealthState, ManagedRuntimeInstallState,
     ManagedRuntimeInstancePaths, ManagedRuntimeInstanceRecord, ManagedRuntimeInstanceRegistry,
@@ -44,14 +44,13 @@ impl ManagedRuntimeContext {
     pub fn register_instance(
         &mut self,
         runtime_context: &RuntimeContext,
-        install_state: ManagedRuntimeInstallState,
+        _install_state: ManagedRuntimeInstallState,
     ) -> Result<(), RadrootsRuntimeManagerError> {
         ensure_context_scope(&self.manager_context, runtime_context)?;
-        upsert_instance(
-            &mut self.registry,
-            ManagedRuntimeInstanceRecord::new(runtime_context, install_state),
-        );
-        Ok(())
+        match self.contract.service_targets.get(runtime_context.service()) {
+            Some(_) => Err(RadrootsRuntimeManagerError::MetadataOnlyServiceTarget),
+            None => Err(RadrootsRuntimeManagerError::UnsupportedServiceTarget),
+        }
     }
 
     pub fn remove_instance(
@@ -59,11 +58,10 @@ impl ManagedRuntimeContext {
         runtime_context: &RuntimeContext,
     ) -> Result<Option<ManagedRuntimeInstanceRecord>, RadrootsRuntimeManagerError> {
         ensure_context_scope(&self.manager_context, runtime_context)?;
-        Ok(remove_instance(
-            &mut self.registry,
-            runtime_context.service(),
-            runtime_context.instance(),
-        ))
+        match self.contract.service_targets.get(runtime_context.service()) {
+            Some(_) => Err(RadrootsRuntimeManagerError::MetadataOnlyServiceTarget),
+            None => Err(RadrootsRuntimeManagerError::UnsupportedServiceTarget),
+        }
     }
 }
 
@@ -129,6 +127,7 @@ pub struct ManagedRuntimeTarget {
     context: RuntimeContext,
     instance_source: RuntimeContextSource,
     runtime_group: ManagedRuntimeGroup,
+    service_target: HardenedServiceTarget,
     management_mode: Option<String>,
     mode_contract: Option<ManagementModeContract>,
     bootstrap: Option<BootstrapRuntimeContract>,
@@ -150,6 +149,11 @@ impl ManagedRuntimeTarget {
     #[must_use]
     pub fn runtime_group(&self) -> ManagedRuntimeGroup {
         self.runtime_group
+    }
+
+    #[must_use]
+    pub fn service_target(&self) -> &HardenedServiceTarget {
+        &self.service_target
     }
 
     #[must_use]
@@ -184,6 +188,7 @@ impl fmt::Debug for ManagedRuntimeTarget {
             .debug_struct("ManagedRuntimeTarget")
             .field("context", &self.context)
             .field("runtime_group", &self.runtime_group)
+            .field("service_target", &self.service_target)
             .field("predicted_paths", &self.predicted_paths)
             .finish_non_exhaustive()
     }
@@ -293,6 +298,7 @@ pub fn load_management_context(
     contract: RadrootsRuntimeManagementContract,
     manager_context: RuntimeContext,
 ) -> Result<ManagedRuntimeContext, RadrootsRuntimeManagerError> {
+    crate::validate_hardened_management_contract(&contract)?;
     active_management_mode_for_profile(&contract, manager_context.profile())?;
     let shared_paths = resolve_shared_paths(&manager_context);
     let registry = load_registry(shared_paths.instance_registry_path())?;
@@ -330,29 +336,28 @@ pub fn resolve_runtime_target(
     ensure_context_scope(&context.manager_context, &runtime_context)?;
     let runtime_id = runtime_context.service().as_str();
     let runtime_group = runtime_group(&context.contract, runtime_id);
+    let service_target = context
+        .contract
+        .service_targets
+        .get(runtime_context.service())
+        .cloned()
+        .ok_or(RadrootsRuntimeManagerError::UnsupportedServiceTarget)?;
     let bootstrap = context.contract.bootstrap.get(runtime_id).cloned();
-    let management_mode = bootstrap
-        .as_ref()
-        .map(|entry| entry.management_mode.clone());
+    let management_mode = Some(
+        active_management_mode_for_profile(&context.contract, runtime_context.profile())?
+            .to_owned(),
+    );
     let mode_contract = management_mode
         .as_ref()
         .and_then(|mode_id| context.contract.mode.get(mode_id).cloned());
-    let instance_record = context
-        .registry
-        .instances
-        .iter()
-        .find(|record| record.matches_context(&runtime_context))
-        .cloned();
-    let predicted_paths = matches!(
-        runtime_group,
-        ManagedRuntimeGroup::ActiveManagedTarget | ManagedRuntimeGroup::DefinedManagedTarget
-    )
-    .then(|| resolve_instance_paths(&context.shared_paths, &runtime_context));
+    let instance_record = None;
+    let predicted_paths = None;
 
     Ok(ManagedRuntimeTarget {
         instance_source: runtime_context.sources().instance(),
         context: runtime_context,
         runtime_group,
+        service_target,
         management_mode,
         mode_contract,
         bootstrap,
@@ -400,11 +405,7 @@ pub fn inspect_runtime_status(
     target: &ManagedRuntimeTarget,
     lifecycle_actions: &[String],
 ) -> ManagedRuntimeInspection<ManagedRuntimeStatusInspection> {
-    let availability = if target.runtime_group == ManagedRuntimeGroup::Unknown {
-        ManagedRuntimeInspectionAvailability::Unconfigured
-    } else {
-        ManagedRuntimeInspectionAvailability::Success
-    };
+    let availability = managed_inspection_availability(target);
     let (health_state, health_source) = infer_health_state(target);
 
     ManagedRuntimeInspection {
@@ -430,7 +431,7 @@ pub fn inspect_runtime_status(
             preferred_cli_binding: target
                 .bootstrap
                 .as_ref()
-                .map(|entry| entry.preferred_cli_binding),
+                .map(BootstrapRuntimeContract::preferred_cli_binding),
             install_state: target
                 .instance_record
                 .as_ref()
@@ -453,14 +454,16 @@ pub fn inspect_runtime_logs(
     target: &ManagedRuntimeTarget,
 ) -> ManagedRuntimeInspection<ManagedRuntimeLogsInspection> {
     let availability = managed_inspection_availability(target);
-    let stdout_log_present = target
-        .predicted_paths
-        .as_ref()
-        .is_some_and(|paths| paths.stdout_log_path().exists());
-    let stderr_log_present = target
-        .predicted_paths
-        .as_ref()
-        .is_some_and(|paths| paths.stderr_log_path().exists());
+    let stdout_log_present = (availability == ManagedRuntimeInspectionAvailability::Success)
+        && target
+            .predicted_paths
+            .as_ref()
+            .is_some_and(|paths| paths.stdout_log_path().exists());
+    let stderr_log_present = (availability == ManagedRuntimeInspectionAvailability::Success)
+        && target
+            .predicted_paths
+            .as_ref()
+            .is_some_and(|paths| paths.stderr_log_path().exists());
 
     ManagedRuntimeInspection {
         availability,
@@ -483,12 +486,15 @@ pub fn inspect_runtime_config(
     target: &ManagedRuntimeTarget,
 ) -> ManagedRuntimeInspection<ManagedRuntimeConfigInspection> {
     let availability = managed_inspection_availability(target);
-    let config_path = target.instance_record.as_ref().and_then(|_| {
-        target
-            .predicted_paths
-            .as_ref()
-            .map(ManagedRuntimeInstancePaths::config_path)
-    });
+    let config_path = (availability == ManagedRuntimeInspectionAvailability::Success)
+        .then_some(())
+        .and(target.instance_record.as_ref())
+        .and_then(|_| {
+            target
+                .predicted_paths
+                .as_ref()
+                .map(ManagedRuntimeInstancePaths::config_path)
+        });
     let config_present = config_path.as_deref().is_some_and(Path::exists);
 
     ManagedRuntimeInspection {
@@ -507,23 +513,11 @@ pub fn inspect_runtime_config(
             },
             source: "runtime context + typed instance registry".to_owned(),
             detail: config_detail(target, config_path.is_some()),
-            config_format: target
-                .bootstrap
-                .as_ref()
-                .map(|entry| entry.config_format.clone()),
+            config_format: Some(target.service_target.config_format().as_str().to_owned()),
             config_present,
-            requires_bootstrap_secret: target
-                .bootstrap
-                .as_ref()
-                .map(|entry| entry.requires_bootstrap_secret),
-            requires_config_bootstrap: target
-                .bootstrap
-                .as_ref()
-                .map(|entry| entry.requires_config_bootstrap),
-            requires_signer_provider: target
-                .bootstrap
-                .as_ref()
-                .map(|entry| entry.requires_signer_provider),
+            requires_bootstrap_secret: None,
+            requires_config_bootstrap: Some(true),
+            requires_signer_provider: None,
         },
     }
 }
@@ -693,6 +687,12 @@ fn unknown_runtime_detail(target: &ManagedRuntimeTarget) -> String {
 }
 
 fn infer_health_state(target: &ManagedRuntimeTarget) -> (&'static str, &'static str) {
+    if target.runtime_group != ManagedRuntimeGroup::ActiveManagedTarget {
+        return (
+            health_state_label(ManagedRuntimeHealthState::NotInstalled),
+            "metadata_only",
+        );
+    }
     let Some(record) = &target.instance_record else {
         return (
             health_state_label(ManagedRuntimeHealthState::NotInstalled),
@@ -795,82 +795,12 @@ mod tests {
         inspect_runtime_logs, inspect_runtime_status, load_management_context,
         resolve_runtime_target, runtime_group,
     };
-    use crate::{ManagedRuntimeInstallState, RadrootsRuntimeManagerError, parse_contract_str};
+    use crate::{
+        HARDENED_MANAGEMENT_CONTRACT, ManagedRuntimeInstallState, RadrootsRuntimeManagerError,
+        parse_contract_str,
+    };
 
-    const CONTRACT: &str = r#"
-schema = "radroots-runtime-management"
-schema_version = 1
-owner_doc = "owner"
-runtime_registry = "registry.toml"
-distribution_contract = "distribution.toml"
-capabilities_contract = "capabilities.toml"
-
-[defaults]
-instance_cardinality = "multiple"
-managed_runtime_lookup = "typed_instance_registry"
-explicit_runtime_endpoint_overrides_precede_managed_instance_binding = true
-global_path_mutation_forbidden = true
-
-[management_clients]
-active = ["cli"]
-
-[managed_runtime_targets]
-active = ["radrootsd"]
-defined = ["myc", "rhi"]
-bootstrap_only = ["hyf"]
-
-[lifecycle]
-actions = ["install", "start"]
-health_states = ["not_installed", "running"]
-
-[mode.interactive_user_managed]
-contract_state = "active"
-platforms = ["linux"]
-supported_profiles = ["repo_local"]
-service_manager_integration = false
-uses_absolute_binary_paths = true
-default_instance_cardinality = "multiple"
-
-[mode.service_host_managed]
-contract_state = "defined"
-platforms = ["linux"]
-supported_profiles = ["service_host"]
-service_manager_integration = true
-uses_absolute_binary_paths = true
-default_instance_cardinality = "multiple"
-
-[paths.interactive_user_managed]
-shared_namespace = "obsolete"
-instance_registry_root_class = "config"
-instance_registry_rel = "obsolete"
-artifact_cache_root_class = "cache"
-artifact_cache_rel = "obsolete"
-install_root_class = "data"
-install_root_rel = "obsolete"
-state_root_class = "data"
-state_root_rel = "obsolete"
-logs_root_class = "logs"
-logs_root_rel = "obsolete"
-run_root_class = "run"
-run_root_rel = "obsolete"
-secrets_root_class = "secrets"
-secrets_namespace_rel = "obsolete"
-
-[instance_metadata]
-required_fields = ["service_id", "instance_id"]
-
-[bootstrap.radrootsd]
-runtime_id = "radrootsd"
-management_mode = "interactive_user_managed"
-default_instance_id = "local"
-install_strategy = "archive_unpack"
-config_format = "toml"
-requires_bootstrap_secret = true
-requires_config_bootstrap = true
-requires_signer_provider = false
-health_surface = "jsonrpc_status"
-preferred_cli_binding = true
-"#;
+    const CONTRACT: &str = HARDENED_MANAGEMENT_CONTRACT;
 
     fn context(service: &str, instance: &str, root: &std::path::Path) -> RuntimeContext {
         RuntimeContext::resolve(
@@ -918,9 +848,10 @@ preferred_cli_binding = true
                 .expect("active mode"),
             "interactive_user_managed"
         );
-        assert!(
+        assert_eq!(
             active_management_mode_for_profile(&contract, RadrootsPathProfile::ServiceHost)
-                .is_err()
+                .expect("service-host mode"),
+            "service_host_managed"
         );
     }
 
@@ -930,26 +861,32 @@ preferred_cli_binding = true
         let mut manager = manager(dir.path());
         let primary = context("myc", "primary", dir.path());
         let secondary = context("myc", "secondary", dir.path());
-        manager
-            .register_instance(&primary, ManagedRuntimeInstallState::Configured)
-            .expect("register primary");
 
         let primary_target = resolve_runtime_target(&manager, primary.clone()).expect("primary");
         let secondary_target =
             resolve_runtime_target(&manager, secondary.clone()).expect("secondary");
-        assert!(primary_target.instance_record.is_some());
+        assert!(primary_target.instance_record.is_none());
         assert!(secondary_target.instance_record.is_none());
         assert_eq!(primary_target.context, primary);
         assert_eq!(secondary_target.context, secondary);
         assert_ne!(
-            primary_target.predicted_paths,
-            secondary_target.predicted_paths
+            primary_target.context.paths(),
+            secondary_target.context.paths()
         );
         assert_eq!(
             primary_target.runtime_group,
             ManagedRuntimeGroup::DefinedManagedTarget
         );
-        assert!(primary_target.predicted_paths.is_some());
+        assert!(primary_target.predicted_paths.is_none());
+        assert_eq!(primary_target.service_target().service_id().as_str(), "myc");
+        assert_eq!(
+            manager.register_instance(&primary, ManagedRuntimeInstallState::Configured),
+            Err(RadrootsRuntimeManagerError::MetadataOnlyServiceTarget)
+        );
+        assert_eq!(
+            manager.remove_instance(&primary),
+            Err(RadrootsRuntimeManagerError::MetadataOnlyServiceTarget)
+        );
     }
 
     #[test]
@@ -977,46 +914,41 @@ preferred_cli_binding = true
         let contract = manager.contract();
         assert_eq!(
             runtime_group(contract, "radrootsd"),
-            ManagedRuntimeGroup::ActiveManagedTarget
+            ManagedRuntimeGroup::Unknown
         );
         assert_eq!(
             runtime_group(contract, "myc"),
             ManagedRuntimeGroup::DefinedManagedTarget
         );
-        assert_eq!(
-            runtime_group(contract, "hyf"),
-            ManagedRuntimeGroup::BootstrapOnly
-        );
+        assert_eq!(runtime_group(contract, "hyf"), ManagedRuntimeGroup::Unknown);
         assert_eq!(
             runtime_group(contract, "unknown"),
             ManagedRuntimeGroup::Unknown
         );
 
-        let unknown = resolve_runtime_target(&manager, context("unknown", "default", dir.path()))
-            .expect("unknown target");
-        assert!(unknown.predicted_paths.is_none());
         assert_eq!(
-            inspect_runtime_status(&unknown, &[]).availability,
-            ManagedRuntimeInspectionAvailability::Unconfigured
+            resolve_runtime_target(&manager, context("unknown", "default", dir.path()))
+                .expect_err("unknown target"),
+            RadrootsRuntimeManagerError::UnsupportedServiceTarget
         );
     }
 
     #[test]
-    fn status_uses_manager_tracking_without_disclosing_paths() {
+    fn status_is_metadata_only_without_probing_manager_tracking() {
         let dir = tempdir().expect("tempdir");
-        let mut manager = manager(dir.path());
-        let service = context("radrootsd", "local", dir.path());
-        manager
-            .register_instance(&service, ManagedRuntimeInstallState::Configured)
-            .expect("register service");
+        let manager = manager(dir.path());
+        let service = context("myc", "primary", dir.path());
         let target = resolve_runtime_target(&manager, service).expect("target");
-        let paths = target.predicted_paths.as_ref().expect("paths");
-        fs::create_dir_all(paths.run_dir()).expect("run dir");
-        fs::write(paths.pid_file_path(), std::process::id().to_string()).expect("pid");
+        assert!(target.predicted_paths().is_none());
 
         let status = inspect_runtime_status(&target, &["start".to_owned()]);
-        assert_eq!(status.view.health_state, "running");
-        assert_eq!(status.view.health_source, "process_probe");
+        assert_eq!(
+            status.availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+        assert_eq!(status.view.health_state, "not_installed");
+        assert_eq!(status.view.health_source, "metadata_only");
+        assert!(status.view.lifecycle_actions.is_empty());
         assert_eq!(
             status.view.instance_source,
             RuntimeContextSource::BootstrapCli
@@ -1027,26 +959,35 @@ preferred_cli_binding = true
     }
 
     #[test]
-    fn log_and_config_inspections_use_manager_and_service_context_paths() {
+    fn log_and_config_inspections_remain_non_io_for_metadata_only_services() {
         let dir = tempdir().expect("tempdir");
-        let mut manager = manager(dir.path());
-        let service = context("radrootsd", "local", dir.path());
-        manager
-            .register_instance(&service, ManagedRuntimeInstallState::Configured)
-            .expect("register service");
+        let manager = manager(dir.path());
+        let service = context("rhi", "default", dir.path());
         let target = resolve_runtime_target(&manager, service).expect("target");
-        let paths = target.predicted_paths.as_ref().expect("paths");
-        fs::create_dir_all(paths.logs_dir()).expect("logs");
-        fs::write(paths.stdout_log_path(), "stdout").expect("stdout");
-        let config_path = paths.config_path();
-        fs::create_dir_all(config_path.parent().expect("config parent")).expect("config parent");
-        fs::write(&config_path, "enabled = true").expect("config");
+        assert!(target.predicted_paths().is_none());
+        fs::create_dir_all(target.context().paths().logs()).expect("service logs");
+        fs::write(target.context().paths().logs().join("stdout.log"), "stdout")
+            .expect("service stdout");
+        fs::create_dir_all(target.context().paths().config()).expect("service config");
+        fs::write(
+            target.context().paths().config().join("config.toml"),
+            "enabled = true",
+        )
+        .expect("service config");
 
         let logs = inspect_runtime_logs(&target);
-        assert!(logs.view.stdout_log_present);
+        assert_eq!(
+            logs.availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+        assert!(!logs.view.stdout_log_present);
         assert!(!logs.view.stderr_log_present);
         let config = inspect_runtime_config(&target);
-        assert!(config.view.config_present);
+        assert_eq!(
+            config.availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+        assert!(!config.view.config_present);
         assert_eq!(config.view.config_format.as_deref(), Some("toml"));
         for rendered in [format!("{logs:?}"), format!("{config:?}")] {
             assert!(!rendered.contains(dir.path().to_string_lossy().as_ref()));
@@ -1057,24 +998,51 @@ preferred_cli_binding = true
     fn actions_do_not_mutate_bindings_for_any_group() {
         let dir = tempdir().expect("tempdir");
         let manager = manager(dir.path());
-        for (service, expected) in [
-            (
-                "radrootsd",
-                ManagedRuntimeInspectionAvailability::Unsupported,
-            ),
-            ("myc", ManagedRuntimeInspectionAvailability::Unsupported),
-            ("hyf", ManagedRuntimeInspectionAvailability::Unsupported),
-            (
-                "unknown",
-                ManagedRuntimeInspectionAvailability::Unconfigured,
-            ),
-        ] {
+        for service in ["myc", "rhi"] {
             let target = resolve_runtime_target(&manager, context(service, "default", dir.path()))
                 .expect("target");
             let action = inspect_runtime_action(&target, ManagedRuntimeLifecycleAction::ConfigSet);
-            assert_eq!(action.availability, expected);
+            assert_eq!(
+                action.availability,
+                ManagedRuntimeInspectionAvailability::Unsupported
+            );
             assert!(!action.view.mutates_bindings);
             assert!(action.view.next_step.is_none());
+        }
+    }
+
+    #[test]
+    fn durable_management_contract_requires_explicit_instances_and_rejects_any_drift() {
+        let contract = parse_contract_str(HARDENED_MANAGEMENT_CONTRACT).expect("contract");
+        assert_eq!(contract.service_targets.len(), 2);
+        assert!(contract.bootstrap.is_empty());
+
+        for raw in [
+            HARDENED_MANAGEMENT_CONTRACT.replace("schema_version = 1", "schema_version = 2"),
+            HARDENED_MANAGEMENT_CONTRACT.replace(
+                "defined = [\"myc\", \"rhi\"]",
+                "active = [\"myc\"]\ndefined = [\"rhi\"]",
+            ),
+            HARDENED_MANAGEMENT_CONTRACT.replace(
+                "managed_runtime_lookup = \"typed_instance_registry\"",
+                "managed_runtime_lookup = \"different\"",
+            ),
+            HARDENED_MANAGEMENT_CONTRACT.replace("active = [\"cli\"]", "active = [\"other\"]"),
+            HARDENED_MANAGEMENT_CONTRACT.replace(
+                "supported_profiles = [\"interactive\", \"repo_local\"]",
+                "supported_profiles = [\"interactive\"]",
+            ),
+            HARDENED_MANAGEMENT_CONTRACT.replace(
+                "required_fields = [\"service_id\", \"instance_id\"]",
+                "required_fields = [\"service_id\"]",
+            ),
+            HARDENED_MANAGEMENT_CONTRACT.replace(
+                "distribution_contract = \"hardened-service-targets.v1.toml\"",
+                "distribution_contract = \"different.toml\"",
+            ),
+            format!("{HARDENED_MANAGEMENT_CONTRACT}\nunknown = true\n"),
+        ] {
+            assert!(parse_contract_str(&raw).is_err());
         }
     }
 }

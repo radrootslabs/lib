@@ -187,6 +187,7 @@ pub(crate) fn resolve_shared_paths(context: &RuntimeContext) -> ManagedRuntimeSh
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn resolve_instance_paths(
     shared: &ManagedRuntimeSharedPaths,
     context: &RuntimeContext,

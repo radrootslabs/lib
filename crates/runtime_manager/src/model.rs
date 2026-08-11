@@ -1,8 +1,10 @@
+use radroots_runtime_distribution::HardenedServiceTargets;
 use radroots_runtime_paths::{InstanceId, RuntimeContext, ServiceId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsRuntimeManagementContract {
     pub schema: String,
     pub schema_version: u32,
@@ -13,6 +15,7 @@ pub struct RadrootsRuntimeManagementContract {
     pub defaults: ManagementDefaults,
     pub management_clients: RuntimeGroups,
     pub managed_runtime_targets: RuntimeGroups,
+    pub service_targets: HardenedServiceTargets,
     pub lifecycle: LifecycleContract,
     pub mode: BTreeMap<String, ManagementModeContract>,
     pub paths: BTreeMap<String, ManagementPathContract>,
@@ -21,6 +24,7 @@ pub struct RadrootsRuntimeManagementContract {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ManagementDefaults {
     pub instance_cardinality: String,
     pub managed_runtime_lookup: String,
@@ -29,6 +33,7 @@ pub struct ManagementDefaults {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeGroups {
     #[serde(default)]
     pub active: Vec<String>,
@@ -39,6 +44,7 @@ pub struct RuntimeGroups {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct LifecycleContract {
     #[serde(default)]
     pub actions: Vec<String>,
@@ -49,6 +55,7 @@ pub struct LifecycleContract {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ManagementModeContract {
     pub contract_state: String,
     #[serde(default)]
@@ -63,6 +70,7 @@ pub struct ManagementModeContract {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ManagementPathContract {
     pub shared_namespace: String,
     pub instance_registry_root_class: String,
@@ -82,6 +90,7 @@ pub struct ManagementPathContract {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct InstanceMetadataContract {
     #[serde(default)]
     pub required_fields: Vec<String>,
@@ -90,18 +99,28 @@ pub struct InstanceMetadataContract {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct BootstrapRuntimeContract {
-    pub runtime_id: String,
-    pub management_mode: String,
-    pub default_instance_id: String,
-    pub install_strategy: String,
-    pub config_format: String,
-    pub requires_bootstrap_secret: bool,
-    pub requires_config_bootstrap: bool,
-    pub requires_signer_provider: bool,
-    pub health_surface: String,
-    pub preferred_cli_binding: bool,
-    pub notes: Option<String>,
+    service_id: ServiceId,
+    default_instance_id: InstanceId,
+    preferred_cli_binding: bool,
+}
+
+impl BootstrapRuntimeContract {
+    #[must_use]
+    pub fn service_id(&self) -> &ServiceId {
+        &self.service_id
+    }
+
+    #[must_use]
+    pub fn default_instance_id(&self) -> &InstanceId {
+        &self.default_instance_id
+    }
+
+    #[must_use]
+    pub const fn preferred_cli_binding(&self) -> bool {
+        self.preferred_cli_binding
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -144,6 +163,7 @@ pub struct ManagedRuntimeInstanceRecord {
 }
 
 impl ManagedRuntimeInstanceRecord {
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn new(context: &RuntimeContext, install_state: ManagedRuntimeInstallState) -> Self {
         Self {
