@@ -16,6 +16,7 @@ pub use admin::{
     AdminContractVersionError, AdminCorrelationId, AdminError, AdminErrorCode, AdminErrorCodeError,
     AdminErrorMessage, AdminErrorMessageError, AdminFailureResponse, AdminIdentifierError,
     AdminIdentifierField, AdminMutationRequest, AdminOperationId, AdminPayloadError,
+    AdminPeerAuthorizationPolicy, AdminPeerAuthorizationPolicyError, AdminPeerAuthorizationSupport,
     AdminSuccessResponse, AdminTransportLimitField, AdminTransportLimitValues,
     AdminTransportLimits, AdminTransportLimitsError,
 };
@@ -28,8 +29,9 @@ pub use admin::{
     AdminRouteFailureStatus, AdminRouteOutcome, AdminRouteOutcomeError, AdminRoutePath,
     AdminRoutePathError, AdminRouteRegistrationError, AdminRouter, AdminServer,
     AdminServerConfigError, AdminServerError, UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT,
-    UNIX_ADMIN_OWNER_DIRECTORY_MODE, UNIX_ADMIN_OWNER_SOCKET_MODE, UnixAdminSocketBinding,
-    UnixAdminSocketError, UnixAdminSocketWriterAuthority,
+    UNIX_ADMIN_GROUP_DIRECTORY_MODE, UNIX_ADMIN_GROUP_SOCKET_MODE, UNIX_ADMIN_OWNER_DIRECTORY_MODE,
+    UNIX_ADMIN_OWNER_SOCKET_MODE, UnixAdminSocketBinding, UnixAdminSocketError,
+    UnixAdminSocketWriterAuthority,
 };
 pub use build_info::{
     BuildInfo, BuildInfoEnvironment, BuildInfoError, BuildInfoField, BuildMode, ContractVersions,

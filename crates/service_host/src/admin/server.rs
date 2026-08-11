@@ -754,6 +754,7 @@ impl AdminServer {
             .map_err(|error| AdminServerError::ListenerRegistration { kind: error.kind() })?;
         let listener = tokio::net::UnixListener::from_std(listener)
             .map_err(|error| AdminServerError::ListenerRegistration { kind: error.kind() })?;
+        let peer_authorizer = binding.peer_authorizer();
         let permits = Arc::new(Semaphore::new(
             self.state.limits.concurrent_connections() as usize
         ));
@@ -777,6 +778,10 @@ impl AdminServer {
                             break Err(AdminServerError::Accept { kind: error.kind() });
                         }
                     };
+                    if peer_authorizer.authorize(&stream).is_err() {
+                        drop(stream);
+                        continue;
+                    }
                     let Ok(permit) = Arc::clone(&permits).try_acquire_owned() else {
                         drop(stream);
                         continue;

@@ -7,6 +7,7 @@ const ADMIN_SOURCE: &str = concat!(
     include_str!("../src/admin/client.rs"),
     include_str!("../src/admin/limits.rs"),
     include_str!("../src/admin/model.rs"),
+    include_str!("../src/admin/peer.rs"),
     include_str!("../src/admin/server.rs"),
     include_str!("../src/admin/unix.rs"),
 );

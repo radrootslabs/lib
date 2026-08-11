@@ -4,6 +4,7 @@
 mod client;
 mod limits;
 mod model;
+mod peer;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod server;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -25,6 +26,9 @@ pub use model::{
     AdminIdentifierField, AdminMutationRequest, AdminOperationId, AdminPayloadError,
     AdminSuccessResponse,
 };
+pub use peer::{
+    AdminPeerAuthorizationPolicy, AdminPeerAuthorizationPolicyError, AdminPeerAuthorizationSupport,
+};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use server::{
     ADMIN_MIN_RESPONSE_BODY_UTF8_BYTES, ADMIN_ROUTE_PARAMETER_NAME_MAX_UTF8_BYTES,
@@ -36,6 +40,7 @@ pub use server::{
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use unix::{
-    UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT, UNIX_ADMIN_OWNER_DIRECTORY_MODE, UNIX_ADMIN_OWNER_SOCKET_MODE,
-    UnixAdminSocketBinding, UnixAdminSocketError, UnixAdminSocketWriterAuthority,
+    UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT, UNIX_ADMIN_GROUP_DIRECTORY_MODE, UNIX_ADMIN_GROUP_SOCKET_MODE,
+    UNIX_ADMIN_OWNER_DIRECTORY_MODE, UNIX_ADMIN_OWNER_SOCKET_MODE, UnixAdminSocketBinding,
+    UnixAdminSocketError, UnixAdminSocketWriterAuthority,
 };

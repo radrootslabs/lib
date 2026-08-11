@@ -11,14 +11,22 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use rustix::fs::{FileType, Mode, OFlags, fchmod, fstat, open, openat};
+use rustix::fs::{
+    AtFlags, FileType, Gid, Mode, OFlags, chownat, fchmod, fchown, fstat, open, openat,
+};
 use rustix::process::geteuid;
+
+use super::peer::{AdminPeerAuthorizationPolicy, PeerAuthorizer};
 
 const WRITER_LOCK_FILE_NAME: &str = ".radroots-admin-writer.lock";
 /// Final owner-only mode for the runtime directory.
 pub const UNIX_ADMIN_OWNER_DIRECTORY_MODE: u32 = 0o700;
 /// Final owner-only mode for the socket path.
 pub const UNIX_ADMIN_OWNER_SOCKET_MODE: u32 = 0o600;
+/// Final Linux mode for a runtime directory shared with an admin group.
+pub const UNIX_ADMIN_GROUP_DIRECTORY_MODE: u32 = 0o750;
+/// Final Linux mode for a socket shared with an admin group.
+pub const UNIX_ADMIN_GROUP_SOCKET_MODE: u32 = 0o660;
 
 /// Maximum time spent proving that an existing Unix socket has a live listener.
 pub const UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
@@ -32,6 +40,7 @@ pub enum UnixAdminSocketError {
     RuntimeDirectoryWrongOwner,
     RuntimeDirectoryChanged,
     RuntimeDirectoryPermissions { kind: io::ErrorKind },
+    RuntimeDirectoryGroup { kind: io::ErrorKind },
     InvalidSocketPath,
     WriterLockUnavailable { kind: io::ErrorKind },
     WriterLockInvalidType,
@@ -45,6 +54,7 @@ pub enum UnixAdminSocketError {
     StaleSocketCleanup { kind: io::ErrorKind },
     SocketBind { kind: io::ErrorKind },
     SocketPermissions { kind: io::ErrorKind },
+    SocketGroup { kind: io::ErrorKind },
     ListenerConfiguration { kind: io::ErrorKind },
 }
 
@@ -59,6 +69,9 @@ impl fmt::Display for UnixAdminSocketError {
             Self::RuntimeDirectoryPermissions { .. } => {
                 "admin runtime directory permissions could not be secured"
             }
+            Self::RuntimeDirectoryGroup { .. } => {
+                "admin runtime directory group could not be secured"
+            }
             Self::InvalidSocketPath => "admin socket path is outside its runtime directory",
             Self::WriterLockUnavailable { .. } => "admin writer lock is unavailable",
             Self::WriterLockInvalidType => "admin writer lock path has an unsafe type",
@@ -72,6 +85,7 @@ impl fmt::Display for UnixAdminSocketError {
             Self::StaleSocketCleanup { .. } => "stale admin socket could not be removed",
             Self::SocketBind { .. } => "admin socket could not be bound",
             Self::SocketPermissions { .. } => "admin socket permissions could not be secured",
+            Self::SocketGroup { .. } => "admin socket group could not be secured",
             Self::ListenerConfiguration { .. } => "admin listener could not be configured",
         })
     }
@@ -103,6 +117,9 @@ pub struct UnixAdminSocketWriterAuthority {
     _directory: File,
     directory_identity: FileIdentity,
     expected_uid: u32,
+    expected_gid: Option<u32>,
+    directory_mode: u32,
+    peer_authorization: AdminPeerAuthorizationPolicy,
     _writer_lock: File,
 }
 
@@ -119,20 +136,23 @@ impl fmt::Debug for UnixAdminSocketWriterAuthority {
 impl UnixAdminSocketWriterAuthority {
     /// Acquires owner-only writer authority for one existing runtime directory.
     pub fn acquire(runtime_directory: impl AsRef<Path>) -> Result<Self, UnixAdminSocketError> {
+        Self::acquire_with_peer_authorization(
+            runtime_directory,
+            AdminPeerAuthorizationPolicy::owner_only(),
+        )
+    }
+
+    /// Acquires writer authority using one policy for permissions and peer admission.
+    pub fn acquire_with_peer_authorization(
+        runtime_directory: impl AsRef<Path>,
+        peer_authorization: AdminPeerAuthorizationPolicy,
+    ) -> Result<Self, UnixAdminSocketError> {
         let runtime_directory = runtime_directory.as_ref().to_path_buf();
         if !runtime_directory.is_absolute() {
             return Err(UnixAdminSocketError::RuntimeDirectoryNotAbsolute);
         }
         let expected_uid = geteuid().as_raw();
         let directory = open_secure_directory(&runtime_directory, expected_uid)?;
-        fchmod(&directory, Mode::RWXU).map_err(|error| {
-            UnixAdminSocketError::RuntimeDirectoryPermissions {
-                kind: errno_kind(error),
-            }
-        })?;
-        let directory_metadata = directory.metadata().map_err(|error| {
-            UnixAdminSocketError::RuntimeDirectoryUnavailable { kind: error.kind() }
-        })?;
         let writer_lock = open_writer_lock(&directory, expected_uid)?;
         FileExt::try_lock_exclusive(&writer_lock).map_err(|error| {
             if error.kind() == io::ErrorKind::WouldBlock {
@@ -141,12 +161,37 @@ impl UnixAdminSocketWriterAuthority {
                 UnixAdminSocketError::WriterLockUnavailable { kind: error.kind() }
             }
         })?;
+        let expected_gid = peer_authorization.admin_gid();
+        if let Some(admin_gid) = expected_gid {
+            fchown(&directory, None, Some(Gid::from_raw(admin_gid))).map_err(|error| {
+                UnixAdminSocketError::RuntimeDirectoryGroup {
+                    kind: errno_kind(error),
+                }
+            })?;
+        }
+        let directory_permissions = if expected_gid.is_some() {
+            Mode::RWXU | Mode::RGRP | Mode::XGRP
+        } else {
+            Mode::RWXU
+        };
+        let directory_mode: u32 = directory_permissions.bits().into();
+        fchmod(&directory, directory_permissions).map_err(|error| {
+            UnixAdminSocketError::RuntimeDirectoryPermissions {
+                kind: errno_kind(error),
+            }
+        })?;
+        let directory_metadata = directory.metadata().map_err(|error| {
+            UnixAdminSocketError::RuntimeDirectoryUnavailable { kind: error.kind() }
+        })?;
 
         let authority = Self {
             runtime_directory,
             _directory: directory,
             directory_identity: FileIdentity::from_metadata(&directory_metadata),
             expected_uid,
+            expected_gid,
+            directory_mode,
+            peer_authorization,
             _writer_lock: writer_lock,
         };
         authority.ensure_directory_identity()?;
@@ -173,6 +218,8 @@ impl UnixAdminSocketWriterAuthority {
             return Err(UnixAdminSocketError::RuntimeDirectoryChanged);
         }
         if metadata.uid() != self.expected_uid
+            || self.expected_gid.is_some_and(|gid| metadata.gid() != gid)
+            || metadata.permissions().mode() & 0o777 != self.directory_mode
             || FileIdentity::from_metadata(&metadata) != self.directory_identity
         {
             return Err(UnixAdminSocketError::RuntimeDirectoryChanged);
@@ -181,7 +228,7 @@ impl UnixAdminSocketWriterAuthority {
     }
 }
 
-/// A bound owner-only Unix admin listener with identity-safe cleanup.
+/// A bound Unix admin listener with policy-aligned modes and identity-safe cleanup.
 pub struct UnixAdminSocketBinding {
     listener: UnixListener,
     socket_path: PathBuf,
@@ -225,13 +272,45 @@ impl UnixAdminSocketBinding {
                 return Err(error);
             }
         };
-        if let Err(error) = fs::set_permissions(
-            &socket_path,
-            fs::Permissions::from_mode(UNIX_ADMIN_OWNER_SOCKET_MODE),
-        ) {
+        if let Some(admin_gid) = authority.expected_gid
+            && let Err(error) = chownat(
+                &authority._directory,
+                socket_path
+                    .file_name()
+                    .expect("resolved socket path always has a file name"),
+                None,
+                Some(Gid::from_raw(admin_gid)),
+                AtFlags::SYMLINK_NOFOLLOW,
+            )
+        {
+            drop(listener);
+            remove_matching_socket(&authority, &socket_path, socket_identity);
+            return Err(UnixAdminSocketError::SocketGroup {
+                kind: errno_kind(error),
+            });
+        }
+        let socket_mode = if authority.expected_gid.is_some() {
+            UNIX_ADMIN_GROUP_SOCKET_MODE
+        } else {
+            UNIX_ADMIN_OWNER_SOCKET_MODE
+        };
+        if let Err(error) =
+            fs::set_permissions(&socket_path, fs::Permissions::from_mode(socket_mode))
+        {
             drop(listener);
             remove_matching_socket(&authority, &socket_path, socket_identity);
             return Err(UnixAdminSocketError::SocketPermissions { kind: error.kind() });
+        }
+        if let Err(error) = verify_bound_socket(
+            &socket_path,
+            socket_identity,
+            authority.expected_uid,
+            authority.expected_gid,
+            socket_mode,
+        ) {
+            drop(listener);
+            remove_matching_socket(&authority, &socket_path, socket_identity);
+            return Err(error);
         }
         if let Err(error) = listener.set_nonblocking(true) {
             drop(listener);
@@ -247,10 +326,21 @@ impl UnixAdminSocketBinding {
         })
     }
 
-    /// Borrows the nonblocking listener without transferring cleanup authority.
-    #[must_use]
-    pub fn listener(&self) -> &UnixListener {
+    pub(crate) fn listener(&self) -> &UnixListener {
         &self.listener
+    }
+
+    /// Returns the policy shared by socket permissions and peer admission.
+    #[must_use]
+    pub const fn peer_authorization(&self) -> AdminPeerAuthorizationPolicy {
+        self.authority.peer_authorization
+    }
+
+    pub(crate) const fn peer_authorizer(&self) -> PeerAuthorizer {
+        PeerAuthorizer::new(
+            self.authority.peer_authorization,
+            self.authority.expected_uid,
+        )
     }
 }
 
@@ -374,6 +464,36 @@ fn inspect_socket(
     }
 }
 
+fn verify_bound_socket(
+    socket_path: &Path,
+    expected_identity: FileIdentity,
+    expected_uid: u32,
+    expected_gid: Option<u32>,
+    expected_mode: u32,
+) -> Result<(), UnixAdminSocketError> {
+    let metadata = fs::symlink_metadata(socket_path)
+        .map_err(|error| UnixAdminSocketError::SocketPathUnavailable { kind: error.kind() })?;
+    if !metadata.file_type().is_socket()
+        || FileIdentity::from_metadata(&metadata) != expected_identity
+    {
+        return Err(UnixAdminSocketError::SocketPathWrongType);
+    }
+    if metadata.uid() != expected_uid {
+        return Err(UnixAdminSocketError::SocketPathWrongOwner);
+    }
+    if expected_gid.is_some_and(|gid| metadata.gid() != gid) {
+        return Err(UnixAdminSocketError::SocketGroup {
+            kind: io::ErrorKind::PermissionDenied,
+        });
+    }
+    if metadata.permissions().mode() & 0o777 != expected_mode {
+        return Err(UnixAdminSocketError::SocketPermissions {
+            kind: io::ErrorKind::PermissionDenied,
+        });
+    }
+    Ok(())
+}
+
 fn remove_matching_socket(
     authority: &UnixAdminSocketWriterAuthority,
     socket_path: &Path,
@@ -442,7 +562,49 @@ mod tests {
     fn owner_only_mode_inventory_is_literal_and_stable() {
         assert_eq!(UNIX_ADMIN_OWNER_DIRECTORY_MODE, 0o700);
         assert_eq!(UNIX_ADMIN_OWNER_SOCKET_MODE, 0o600);
+        assert_eq!(UNIX_ADMIN_GROUP_DIRECTORY_MODE, 0o750);
+        assert_eq!(UNIX_ADMIN_GROUP_SOCKET_MODE, 0o660);
         assert_eq!(u32::from(Mode::RWXU.bits()), 0o700);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn configured_admin_group_sets_group_access_modes_and_identity() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let socket = directory.path().join("admin.sock");
+        let admin_gid = rustix::process::getegid().as_raw();
+        let policy = AdminPeerAuthorizationPolicy::with_admin_gid(admin_gid)
+            .expect("current Linux group is valid");
+        let authority = UnixAdminSocketWriterAuthority::acquire_with_peer_authorization(
+            directory.path(),
+            policy,
+        )
+        .expect("group writer authority");
+        let binding = UnixAdminSocketBinding::bind(authority, &socket)
+            .await
+            .expect("group admin binding");
+
+        assert_eq!(mode(directory.path()), UNIX_ADMIN_GROUP_DIRECTORY_MODE);
+        assert_eq!(mode(&socket), UNIX_ADMIN_GROUP_SOCKET_MODE);
+        assert_eq!(
+            fs::symlink_metadata(directory.path())
+                .expect("directory metadata")
+                .gid(),
+            admin_gid
+        );
+        assert_eq!(
+            fs::symlink_metadata(&socket)
+                .expect("socket metadata")
+                .gid(),
+            admin_gid
+        );
+        assert_eq!(binding.peer_authorization(), policy);
+
+        let error = UnixAdminSocketWriterAuthority::acquire(directory.path())
+            .expect_err("active group-authorized writer excludes owner-only reconfiguration");
+        assert_eq!(error, UnixAdminSocketError::WriterAlreadyActive);
+        assert_eq!(mode(directory.path()), UNIX_ADMIN_GROUP_DIRECTORY_MODE);
+        assert_eq!(mode(&socket), UNIX_ADMIN_GROUP_SOCKET_MODE);
     }
 
     #[tokio::test]
