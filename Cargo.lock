@@ -3879,10 +3879,13 @@ dependencies = [
 name = "radroots_service_host"
 version = "0.1.0-alpha"
 dependencies = [
+ "fs2",
  "getrandom 0.2.17",
  "radroots_runtime_paths",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-util",
 ]

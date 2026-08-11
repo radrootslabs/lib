@@ -6,6 +6,7 @@ const ADMIN_SOURCE: &str = concat!(
     include_str!("../src/admin/mod.rs"),
     include_str!("../src/admin/limits.rs"),
     include_str!("../src/admin/model.rs"),
+    include_str!("../src/admin/unix.rs"),
 );
 const STATUS_SOURCE: &str = concat!(
     include_str!("../src/status/mod.rs"),
@@ -39,8 +40,10 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     assert_eq!(
         dependency_keys(MANIFEST),
         BTreeSet::from([
+            "fs2",
             "getrandom",
             "radroots_runtime_paths",
+            "rustix",
             "serde",
             "serde_json",
             "tokio",

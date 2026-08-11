@@ -19,6 +19,11 @@ pub use admin::{
     AdminSuccessResponse, AdminTransportLimitField, AdminTransportLimitValues,
     AdminTransportLimits, AdminTransportLimitsError,
 };
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use admin::{
+    UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT, UNIX_ADMIN_OWNER_DIRECTORY_MODE, UNIX_ADMIN_OWNER_SOCKET_MODE,
+    UnixAdminSocketBinding, UnixAdminSocketError, UnixAdminSocketWriterAuthority,
+};
 pub use build_info::{
     BuildInfo, BuildInfoEnvironment, BuildInfoError, BuildInfoField, BuildMode, ContractVersions,
     StatusBuildInfo,

@@ -2,6 +2,8 @@
 
 mod limits;
 mod model;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod unix;
 
 pub use limits::{
     AdminTransportLimitField, AdminTransportLimitValues, AdminTransportLimits,
@@ -14,4 +16,9 @@ pub use model::{
     AdminErrorMessage, AdminErrorMessageError, AdminFailureResponse, AdminIdentifierError,
     AdminIdentifierField, AdminMutationRequest, AdminOperationId, AdminPayloadError,
     AdminSuccessResponse,
+};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use unix::{
+    UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT, UNIX_ADMIN_OWNER_DIRECTORY_MODE, UNIX_ADMIN_OWNER_SOCKET_MODE,
+    UnixAdminSocketBinding, UnixAdminSocketError, UnixAdminSocketWriterAuthority,
 };
