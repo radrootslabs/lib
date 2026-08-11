@@ -16,8 +16,9 @@ pub use build_info::{
 pub use entropy::{EntropyError, EntropySource, SystemEntropy};
 pub use error::{HostError, HostErrorCode, HostErrorKind, SafeHostError};
 pub use lifecycle::{
-    CancellationToken, ShutdownPhase, TaskClassification, TaskCompletionExpectation, TaskMetadata,
-    TaskMetadataError, TaskName,
+    CancellationToken, ShutdownPhase, SupervisedTaskExit, SupervisedTaskExitStatus,
+    SupervisionFailure, SupervisionFailureKind, TaskClassification, TaskCompletionExpectation,
+    TaskMetadata, TaskMetadataError, TaskName, TaskRegistrationError, TaskSupervisor,
 };
 pub use status::{
     CONFIGURATION_SCHEMA_VERSION, CachedServiceState, CachedServiceStatePublisher,
