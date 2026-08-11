@@ -263,6 +263,18 @@ impl RestoreRecoveryMarker {
         self.phase
     }
 
+    pub(crate) const fn live(&self) -> RestoreArtifactExpectation {
+        self.live
+    }
+
+    pub(crate) const fn staged(&self) -> RestoreArtifactExpectation {
+        self.staged
+    }
+
+    pub(crate) const fn backup(&self) -> RestoreArtifactExpectation {
+        self.backup
+    }
+
     pub(crate) fn transitioned_to(
         &self,
         next: RestoreRecoveryPhase,
@@ -569,10 +581,52 @@ mod store {
     }
 
     impl RestoreMarkerBinding {
+        #[cfg(test)]
         pub(crate) fn create(
             paths: &ServiceSqlitePaths,
             authority: &WriterAuthority,
             marker: &RestoreRecoveryMarker,
+        ) -> Result<Self, ServiceSqliteError> {
+            Self::create_with_durable_callback(paths, authority, marker, || {})
+        }
+
+        pub(crate) fn create_with_durable_callback(
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            marker: &RestoreRecoveryMarker,
+            on_durable: impl FnOnce(),
+        ) -> Result<Self, ServiceSqliteError> {
+            Self::create_with_operations(
+                paths,
+                authority,
+                marker,
+                &SystemStoreOperations,
+                on_durable,
+            )
+        }
+
+        #[cfg(test)]
+        pub(crate) fn test_create_with_durable_authority_drift(
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            marker: &RestoreRecoveryMarker,
+            on_durable: impl FnOnce(),
+        ) -> Result<Self, ServiceSqliteError> {
+            Self::create_with_operations(
+                paths,
+                authority,
+                marker,
+                &AuthorityDriftAfterSyncStoreOperations,
+                on_durable,
+            )
+        }
+
+        fn create_with_operations(
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            marker: &RestoreRecoveryMarker,
+            operations: &dyn StoreOperations,
+            on_durable: impl FnOnce(),
         ) -> Result<Self, ServiceSqliteError> {
             authority.validate_for(paths)?;
             if !marker.matches_paths(paths) {
@@ -606,13 +660,12 @@ mod store {
                 Ok::<_, StoreFailure>((file, identity))
             })?
             .map_err(restore_store)?;
-            let operations = SystemStoreOperations;
             let write_result = authority_checked(authority, paths, || {
                 write_and_sync(
                     &marker_file,
                     marker.canonical_bytes(),
                     &directory,
-                    &operations,
+                    operations,
                 )
             })?;
             if let Err(cause) = write_result {
@@ -625,12 +678,9 @@ mod store {
                 )?;
                 return Err(restore_store(cause));
             }
-            let parent_sync = authority_checked(authority, paths, || {
-                operations
-                    .sync_directory(&directory)
-                    .map_err(|_| StoreFailure::Sync)
-            })?;
-            if parent_sync.is_err() {
+            authority.validate_for(paths)?;
+            if operations.sync_directory(&directory).is_err() {
+                authority.validate_for(paths)?;
                 cleanup_with_authority(
                     authority,
                     paths,
@@ -640,6 +690,11 @@ mod store {
                 )?;
                 return Err(restore_store(StoreFailure::Sync));
             }
+            // The marker contents and its directory entry are durable from
+            // this point. The caller must transfer ownership of every bound
+            // artifact before any subsequent fallible validation.
+            on_durable();
+            authority.validate_for(paths)?;
             let binding = Self {
                 directory,
                 directory_identity,
@@ -1013,6 +1068,29 @@ mod store {
                 MARKER_FILE_NAME,
             )
             .map_err(std::io::Error::from)
+        }
+    }
+
+    #[cfg(test)]
+    struct AuthorityDriftAfterSyncStoreOperations;
+
+    #[cfg(test)]
+    impl StoreOperations for AuthorityDriftAfterSyncStoreOperations {
+        fn sync_file(&self, file: &File, _directory: &File) -> std::io::Result<()> {
+            file.sync_all()
+        }
+
+        fn sync_directory(&self, directory: &File) -> std::io::Result<()> {
+            directory.sync_all()?;
+            fchmod(
+                directory,
+                Mode::RUSR | Mode::WUSR | Mode::XUSR | Mode::RGRP | Mode::WGRP | Mode::XGRP,
+            )
+            .map_err(std::io::Error::from)
+        }
+
+        fn replace_marker(&self, directory: &File) -> std::io::Result<()> {
+            SystemStoreOperations.replace_marker(directory)
         }
     }
 

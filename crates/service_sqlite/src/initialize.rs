@@ -45,6 +45,14 @@ where
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
+        authority.validate_for(paths)?;
+        let recovery = crate::restore::refuse_unresolved_recovery(authority.directory());
+        authority.validate_for(paths)?;
+        recovery?;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
         initialize_with_ops(
             paths,
             authority,

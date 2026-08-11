@@ -380,10 +380,11 @@ pub(crate) struct NativeStagedServiceRestore {
     directory_identity: FileIdentity,
     staged: File,
     staged_identity: FileIdentity,
+    live_artifact: RestoreArtifactExpectation,
     metadata: ServiceDatabaseMetadata,
     manifest_digest: crate::BackupManifestSha256,
     artifact: RestoreArtifactExpectation,
-    armed: bool,
+    armed: AtomicBool,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -412,7 +413,7 @@ impl NativeStagedServiceRestore {
         let directory_identity = directory_identity_result?;
         let closed_live = validate_closed_live(&authority, &paths, &directory);
         authority.validate_for(&paths)?;
-        closed_live?;
+        let live_artifact = closed_live?;
         let before_create = test_blocking_phase(TEST_PHASE_BEFORE_CREATE, cancellation);
         authority.validate_for(&paths)?;
         before_create?;
@@ -447,10 +448,11 @@ impl NativeStagedServiceRestore {
             directory_identity,
             staged,
             staged_identity,
+            live_artifact,
             metadata,
             manifest_digest,
             artifact,
-            armed: true,
+            armed: AtomicBool::new(true),
         };
         result.validate_created()?;
         let copy = copy_exact(
@@ -541,6 +543,7 @@ impl NativeStagedServiceRestore {
                 self.staged_identity,
                 self.artifact.byte_length(),
             )?;
+            validate_live_binding(&self.directory, self.live_artifact)?;
             require_absent(&self.directory, BACKUP_FILE_NAME)?;
             require_absent(&self.directory, MARKER_FILE_NAME)?;
             require_absent(&self.directory, MARKER_NEXT_FILE_NAME)?;
@@ -551,6 +554,21 @@ impl NativeStagedServiceRestore {
         })();
         authority.validate_for(&self.paths)?;
         result
+    }
+
+    pub(super) fn validate_finalization_authority(&self) -> Result<(), ServiceSqliteError> {
+        let authority = self
+            .authority
+            .as_ref()
+            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
+        authority.validate_for(&self.paths)?;
+        let valid_directory = directory_identity(&self.directory)
+            .is_ok_and(|identity| identity == self.directory_identity);
+        authority.validate_for(&self.paths)?;
+        if !valid_directory {
+            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Authority));
+        }
+        Ok(())
     }
 
     fn validate_created(&self) -> Result<(), ServiceSqliteError> {
@@ -589,6 +607,10 @@ impl NativeStagedServiceRestore {
         self.artifact
     }
 
+    pub(super) const fn live_artifact(&self) -> RestoreArtifactExpectation {
+        self.live_artifact
+    }
+
     #[allow(dead_code)]
     pub(crate) fn authority(&self) -> &WriterAuthority {
         self.authority
@@ -596,9 +618,17 @@ impl NativeStagedServiceRestore {
             .expect("staged restore retains authority until consumed")
     }
 
+    pub(super) fn directory(&self) -> &File {
+        &self.directory
+    }
+
+    pub(super) fn staged_file(&self) -> &File {
+        &self.staged
+    }
+
     #[allow(dead_code)]
-    pub(crate) fn disarm_cleanup(&mut self) {
-        self.armed = false;
+    pub(crate) fn disarm_cleanup(&self) {
+        self.armed.store(false, Ordering::Release);
     }
 }
 
@@ -612,7 +642,7 @@ impl fmt::Debug for NativeStagedServiceRestore {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Drop for NativeStagedServiceRestore {
     fn drop(&mut self) {
-        if self.armed {
+        if self.armed.load(Ordering::Acquire) {
             let _ = cleanup_exact_stage(&self.directory, &self.staged, self.staged_identity);
         }
         if let Some(authority) = self.authority.as_mut() {
@@ -759,7 +789,7 @@ fn validate_closed_live(
     authority: &WriterAuthority,
     paths: &ServiceSqlitePaths,
     directory: &File,
-) -> Result<(), ServiceSqliteError> {
+) -> Result<RestoreArtifactExpectation, ServiceSqliteError> {
     authority.validate_for(paths)?;
     let live = openat(
         directory,
@@ -777,6 +807,20 @@ fn validate_closed_live(
     {
         return Err(restore_error(RestoreFailureKind::LiveState));
     }
+    let length =
+        u64::try_from(status.st_size).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
+    if length == 0 || length > i64::MAX as u64 {
+        return Err(restore_error(RestoreFailureKind::LiveState));
+    }
+    let live = File::from(live);
+    let digest = hash_exact(&live, length)?;
+    let artifact = RestoreArtifactExpectation::new(
+        u64::try_from(status.st_dev).map_err(|_| restore_error(RestoreFailureKind::LiveState))?,
+        status.st_ino,
+        length,
+        digest,
+    )
+    .map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
     for name in [
         "state.sqlite-wal",
         "state.sqlite-shm",
@@ -786,6 +830,36 @@ fn validate_closed_live(
         MARKER_NEXT_FILE_NAME,
     ] {
         require_absent(directory, name)?;
+    }
+    Ok(artifact)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_live_binding(
+    directory: &File,
+    expected: RestoreArtifactExpectation,
+) -> Result<(), ServiceSqliteError> {
+    let current = openat(
+        directory,
+        radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
+    let status =
+        fstat(&current).map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
+    let device =
+        u64::try_from(status.st_dev).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
+    let length =
+        u64::try_from(status.st_size).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
+    if !FileType::from_raw_mode(status.st_mode).is_file()
+        || u64::from(status.st_nlink) != 1
+        || status.st_uid != geteuid().as_raw()
+        || u32::from(status.st_mode) & 0o777 != 0o600
+        || (device, status.st_ino) != (expected.device(), expected.inode())
+        || length != expected.byte_length()
+    {
+        return Err(restore_error(RestoreFailureKind::LiveState));
     }
     Ok(())
 }
@@ -1167,11 +1241,17 @@ mod tests {
     use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
 
     use super::*;
+    use crate::restore::finalize::{
+        TEST_FINALIZE_BLOCK_PHASE, TEST_FINALIZE_PHASE, TEST_PHASE_AFTER_PREPARED,
+        TEST_PHASE_BEFORE_PREPARED, TEST_PHASE_COMMIT_OWNED,
+        reset_test_controls as reset_finalize_controls, test_finalize_with_failure,
+    };
+    use crate::restore::{RestoreMarkerBinding, RestoreRecoveryMarker, RestoreRecoveryPhase};
     use crate::{
         BackupCreatedAtUnixMs, BackupMemberSha256, MigrationChecksum, MigrationDescriptor,
         SchemaObject, SchemaObjectKind, SchemaVersionCatalog, ServiceBackupManifest,
         ServiceDatabaseMetadata, ServiceSqliteApplicationId, ServiceSqliteConnectionOptions,
-        ServiceSqliteHost, verify_backup_bundle,
+        ServiceSqliteHost, finalize_staged_restore, verify_backup_bundle,
     };
 
     static STAGE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -1342,6 +1422,46 @@ mod tests {
             }
         }
         panic!("restore staging cleanup did not release authority");
+    }
+
+    async fn wait_for_finalize_phase(phase: u8) {
+        for _ in 0..100_000 {
+            if TEST_FINALIZE_PHASE.load(Ordering::Acquire) == phase {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("restore finalization did not reach phase {phase}");
+    }
+
+    fn recovery_path(fixture: &Fixture, name: &str) -> PathBuf {
+        fixture.staged_path().with_file_name(name)
+    }
+
+    fn marker_phase(fixture: &Fixture) -> RestoreRecoveryPhase {
+        let bytes = fs::read(recovery_path(fixture, MARKER_FILE_NAME)).expect("marker bytes");
+        RestoreRecoveryMarker::from_canonical_bytes(&bytes)
+            .expect("canonical marker")
+            .phase()
+    }
+
+    async fn wait_for_replacement_install(fixture: &Fixture) {
+        for _ in 0..100_000 {
+            if marker_phase_if_present(fixture) == Some(RestoreRecoveryPhase::ReplacementInstalled)
+                && WriterAuthority::acquire(&fixture.paths, OpenMode::ReadWriteExisting).is_ok()
+            {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("restore finalization worker did not complete");
+    }
+
+    fn marker_phase_if_present(fixture: &Fixture) -> Option<RestoreRecoveryPhase> {
+        let bytes = fs::read(recovery_path(fixture, MARKER_FILE_NAME)).ok()?;
+        RestoreRecoveryMarker::from_canonical_bytes(&bytes)
+            .ok()
+            .map(|marker| marker.phase())
     }
 
     fn spawn_stage(
@@ -1880,6 +2000,351 @@ mod tests {
         .expect_err("ledger drift");
         assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
         assert!(!ledger_drift.staged_path().exists());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn atomic_finalization_retains_old_live_installs_stage_and_requires_recovery_open() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        reset_finalize_controls();
+        let fixture = Fixture::new().await;
+        let old_live = fs::read(fixture.paths.state_database()).expect("old live");
+        let replacement =
+            fs::read(fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME)).expect("replacement");
+        let old_metadata = fs::metadata(fixture.paths.state_database()).expect("old metadata");
+        let staged = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect("stage");
+
+        finalize_staged_restore(staged).await.expect("finalize");
+
+        let backup = recovery_path(&fixture, BACKUP_FILE_NAME);
+        assert_eq!(fs::read(&backup).expect("retained old live"), old_live);
+        assert_eq!(
+            fs::read(fixture.paths.state_database()).expect("installed live"),
+            replacement
+        );
+        let backup_metadata = fs::metadata(&backup).expect("backup metadata");
+        assert_eq!(
+            (old_metadata.dev(), old_metadata.ino()),
+            (backup_metadata.dev(), backup_metadata.ino())
+        );
+        assert!(!fixture.staged_path().exists());
+        assert!(!recovery_path(&fixture, MARKER_NEXT_FILE_NAME).exists());
+
+        let binding = RestoreMarkerBinding::load(&fixture.paths)
+            .expect("load marker")
+            .expect("marker present");
+        assert_eq!(
+            binding.marker().phase(),
+            RestoreRecoveryPhase::ReplacementInstalled
+        );
+        assert_eq!(binding.marker().live(), binding.marker().backup());
+        assert_ne!(
+            (
+                binding.marker().live().device(),
+                binding.marker().live().inode()
+            ),
+            (
+                binding.marker().staged().device(),
+                binding.marker().staged().inode()
+            )
+        );
+
+        for mode in [OpenMode::ReadWriteExisting, OpenMode::ReadOnlyInspection] {
+            let error = crate::open::open_existing_connection_pool(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                mode,
+                ServiceSqliteConnectionOptions::reviewed(),
+            )
+            .await
+            .err()
+            .expect("unresolved recovery must reject open");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Recovery);
+        }
+        let initialize = crate::initialize_database(
+            &fixture.paths,
+            OpenMode::Initialize,
+            &fixture.metadata,
+            &fixture.schema,
+            |_| async { Ok::<(), std::io::Error>(()) },
+        )
+        .await
+        .expect_err("unresolved recovery must reject initialization");
+        assert_eq!(initialize.kind(), ServiceSqliteErrorKind::Recovery);
+        reset_finalize_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn finalization_cancellation_is_clean_before_handoff_and_owned_after_handoff() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+
+        reset_finalize_controls();
+        let before = Fixture::new().await;
+        let old_live = fs::read(before.paths.state_database()).expect("old live");
+        let staged = stage_verified_restore(
+            &before.paths,
+            &before.identity,
+            &before.migrations,
+            &before.schema,
+            before.proof(),
+        )
+        .await
+        .expect("stage");
+        TEST_FINALIZE_BLOCK_PHASE.store(TEST_PHASE_BEFORE_PREPARED, Ordering::Release);
+        let caller = tokio::spawn(finalize_staged_restore(staged));
+        wait_for_finalize_phase(TEST_PHASE_BEFORE_PREPARED).await;
+        caller.abort();
+        let _ = caller.await;
+        wait_for_cleanup(&before.paths, &before.staged_path()).await;
+        assert_eq!(
+            fs::read(before.paths.state_database()).expect("preserved live"),
+            old_live
+        );
+        assert!(!recovery_path(&before, MARKER_FILE_NAME).exists());
+
+        for phase in [TEST_PHASE_COMMIT_OWNED, TEST_PHASE_AFTER_PREPARED] {
+            reset_finalize_controls();
+            let after = Fixture::new().await;
+            let staged = stage_verified_restore(
+                &after.paths,
+                &after.identity,
+                &after.migrations,
+                &after.schema,
+                after.proof(),
+            )
+            .await
+            .expect("stage");
+            TEST_FINALIZE_BLOCK_PHASE.store(phase, Ordering::Release);
+            let caller = tokio::spawn(finalize_staged_restore(staged));
+            wait_for_finalize_phase(phase).await;
+            if phase == TEST_PHASE_AFTER_PREPARED {
+                assert_eq!(marker_phase(&after), RestoreRecoveryPhase::Prepared);
+            } else {
+                assert!(!recovery_path(&after, MARKER_FILE_NAME).exists());
+            }
+            caller.abort();
+            let _ = caller.await;
+            assert!(WriterAuthority::acquire(&after.paths, OpenMode::ReadWriteExisting).is_err());
+            TEST_FINALIZE_BLOCK_PHASE.store(0, Ordering::Release);
+            wait_for_replacement_install(&after).await;
+            assert_eq!(
+                marker_phase(&after),
+                RestoreRecoveryPhase::ReplacementInstalled
+            );
+        }
+        reset_finalize_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn every_rename_sync_and_marker_advance_failure_leaves_exact_recovery_evidence() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        for failure in 1..=8 {
+            reset_finalize_controls();
+            let fixture = Fixture::new().await;
+            let staged = stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .expect("stage");
+            let error = test_finalize_with_failure(staged, failure)
+                .await
+                .expect_err("injected finalization failure");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+            assert!(recovery_path(&fixture, MARKER_FILE_NAME).exists());
+            let live = fixture.paths.state_database().exists();
+            let staged = fixture.staged_path().exists();
+            let backup = recovery_path(&fixture, BACKUP_FILE_NAME).exists();
+            match failure {
+                1 => {
+                    assert_eq!((live, staged, backup), (true, true, false));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::Prepared);
+                }
+                2..=4 => {
+                    assert_eq!((live, staged, backup), (false, true, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::Prepared);
+                }
+                5 => {
+                    assert_eq!((live, staged, backup), (false, true, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::LiveRetained);
+                }
+                6..=8 => {
+                    assert_eq!((live, staged, backup), (true, false, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::LiveRetained);
+                }
+                _ => unreachable!("complete injected failure inventory"),
+            }
+            assert_eq!(
+                recovery_path(&fixture, MARKER_NEXT_FILE_NAME).exists(),
+                matches!(failure, 4 | 8)
+            );
+        }
+        reset_finalize_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn finalization_rejects_live_stage_and_destination_replacement_without_clobbering() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+
+        let live_replaced = Fixture::new().await;
+        let staged = stage_verified_restore(
+            &live_replaced.paths,
+            &live_replaced.identity,
+            &live_replaced.migrations,
+            &live_replaced.schema,
+            live_replaced.proof(),
+        )
+        .await
+        .expect("stage");
+        let foreign = recovery_path(&live_replaced, "foreign-live");
+        fs::write(&foreign, b"foreign-live").expect("foreign live");
+        fs::set_permissions(&foreign, fs::Permissions::from_mode(0o600)).expect("foreign mode");
+        fs::rename(&foreign, live_replaced.paths.state_database()).expect("replace live");
+        let error = finalize_staged_restore(staged)
+            .await
+            .expect_err("live replacement");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        assert_eq!(
+            fs::read(live_replaced.paths.state_database()).expect("preserved foreign live"),
+            b"foreign-live"
+        );
+        assert!(!recovery_path(&live_replaced, MARKER_FILE_NAME).exists());
+
+        let stage_replaced = Fixture::new().await;
+        let staged = stage_verified_restore(
+            &stage_replaced.paths,
+            &stage_replaced.identity,
+            &stage_replaced.migrations,
+            &stage_replaced.schema,
+            stage_replaced.proof(),
+        )
+        .await
+        .expect("stage");
+        let foreign = recovery_path(&stage_replaced, "foreign-stage-finalize");
+        fs::write(&foreign, b"foreign-stage").expect("foreign stage");
+        fs::set_permissions(&foreign, fs::Permissions::from_mode(0o600)).expect("foreign mode");
+        fs::rename(&foreign, stage_replaced.staged_path()).expect("replace stage");
+        let error = finalize_staged_restore(staged)
+            .await
+            .expect_err("stage replacement");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        assert_eq!(
+            fs::read(stage_replaced.staged_path()).expect("preserved foreign stage"),
+            b"foreign-stage"
+        );
+        assert!(!recovery_path(&stage_replaced, MARKER_FILE_NAME).exists());
+
+        let collision = Fixture::new().await;
+        let staged = stage_verified_restore(
+            &collision.paths,
+            &collision.identity,
+            &collision.migrations,
+            &collision.schema,
+            collision.proof(),
+        )
+        .await
+        .expect("stage");
+        let backup = recovery_path(&collision, BACKUP_FILE_NAME);
+        fs::write(&backup, b"foreign-backup").expect("backup collision");
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o600)).expect("backup mode");
+        let error = finalize_staged_restore(staged)
+            .await
+            .expect_err("backup collision");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        assert_eq!(
+            fs::read(backup).expect("preserved backup"),
+            b"foreign-backup"
+        );
+        assert!(!recovery_path(&collision, MARKER_FILE_NAME).exists());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn finalization_preserves_authority_precedence_before_and_after_prepared() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        for phase in [TEST_PHASE_BEFORE_PREPARED, TEST_PHASE_AFTER_PREPARED] {
+            reset_finalize_controls();
+            let fixture = Fixture::new().await;
+            let staged = stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .expect("stage");
+            TEST_FINALIZE_BLOCK_PHASE.store(phase, Ordering::Release);
+            let caller = tokio::spawn(finalize_staged_restore(staged));
+            wait_for_finalize_phase(phase).await;
+            let old_lock = recovery_path(&fixture, "state.lock.finalize-old");
+            fs::rename(fixture.paths.state_lock(), &old_lock).expect("retain old lock");
+            fs::write(fixture.paths.state_lock(), b"").expect("replacement lock");
+            fs::set_permissions(
+                fixture.paths.state_lock(),
+                fs::Permissions::from_mode(0o600),
+            )
+            .expect("lock mode");
+            TEST_FINALIZE_BLOCK_PHASE.store(0, Ordering::Release);
+            let error = caller.await.expect("caller").expect_err("authority drift");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+            assert_eq!(
+                recovery_path(&fixture, MARKER_FILE_NAME).exists(),
+                phase == TEST_PHASE_AFTER_PREPARED
+            );
+            assert_eq!(
+                fixture.staged_path().exists(),
+                phase == TEST_PHASE_AFTER_PREPARED
+            );
+            fs::remove_file(old_lock).expect("remove old lock");
+        }
+        reset_finalize_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn marker_sync_authority_drift_retains_durable_prepared_stage() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        reset_finalize_controls();
+        let fixture = Fixture::new().await;
+        let staged = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect("stage");
+
+        let error = test_finalize_with_failure(staged, 9)
+            .await
+            .expect_err("authority drift after durable marker sync");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::Prepared);
+        assert!(fixture.paths.state_database().exists());
+        assert!(fixture.staged_path().exists());
+        assert!(!recovery_path(&fixture, BACKUP_FILE_NAME).exists());
+        fs::set_permissions(
+            fixture
+                .paths
+                .state_database()
+                .parent()
+                .expect("state directory"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .expect("restore directory mode");
+        reset_finalize_controls();
     }
 
     #[test]

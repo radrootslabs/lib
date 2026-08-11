@@ -674,6 +674,25 @@ async fn open_connection_pool(
     if !schema_catalog.matches_migrations(catalog) {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
     }
+    let recovery_guard = match (mode, authority.as_ref(), inspection_guard.as_ref()) {
+        (OpenMode::Initialize | OpenMode::ReadWriteExisting, Some(authority), None) => {
+            authority.validate_for(paths)?;
+            let result = crate::restore::refuse_unresolved_recovery(authority.directory());
+            authority.validate_for(paths)?;
+            result
+        }
+        (OpenMode::ReadOnlyInspection, None, Some(inspection_guard)) => {
+            inspection_guard.validate_for(paths)?;
+            let result = crate::restore::refuse_unresolved_recovery(&inspection_guard.directory);
+            inspection_guard.validate_for(paths)?;
+            result
+        }
+        _ => Err(connection_error(
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::AuthorityMismatch,
+        )),
+    };
+    recovery_guard?;
     let binding = match (mode, authority.as_ref(), inspection_guard.as_ref()) {
         (OpenMode::Initialize | OpenMode::ReadWriteExisting, Some(authority), None) => {
             authority.validate_for(paths)?;
@@ -1138,6 +1157,7 @@ impl ReadOnlyInspectionGuard {
                 ConnectionFailureKind::InspectionUnavailable,
             ));
         }
+        let directory = File::from(directory);
         let lock = openat(
             &directory,
             radroots_runtime_paths::SERVICE_STATE_LOCK_FILE_NAME,
@@ -1164,6 +1184,7 @@ impl ReadOnlyInspectionGuard {
                 inspection_error(ConnectionFailureKind::InspectionUnavailable)
             }
         })?;
+        crate::restore::refuse_unresolved_recovery(&directory)?;
         for sidecar in [WAL_FILE_NAME, SHARED_MEMORY_FILE_NAME] {
             match statat(&directory, sidecar, AtFlags::SYMLINK_NOFOLLOW) {
                 Err(error) if error == rustix::io::Errno::NOENT => {}
@@ -1226,7 +1247,7 @@ impl ReadOnlyInspectionGuard {
             lock_device: u64::try_from(lock_status.st_dev)
                 .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
             lock_inode: lock_status.st_ino,
-            directory: File::from(directory),
+            directory,
             directory_device: u64::try_from(directory_status.st_dev)
                 .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
             directory_inode: directory_status.st_ino,

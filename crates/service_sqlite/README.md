@@ -149,6 +149,30 @@ The operation has no hidden timeout. It does not create or advance a recovery
 marker, rename or retain live state, install a replacement, or authorize reopen;
 those operations remain the finalization and recovery checkpoints.
 
+`finalize_staged_restore` consumes that sealed stage in an owned blocking
+worker. The stage has already bound the exact live inode, length, and digest
+that will be retained. Finalization revalidates both retained descriptors,
+creates and synchronizes the `prepared` marker, and only then disarms automatic
+stage cleanup. It renames live to `state.restore-backup.sqlite` and staged to
+live with descriptor-relative no-replace operations. Each rename is followed
+by exact inode and hash verification, state-directory synchronization, and the
+corresponding marker advance to `live_retained` or
+`replacement_installed`.
+
+Cancellation observed before the worker's atomic commit-ownership handoff
+leaves live state untouched and attempts exact stage cleanup. Caller-task loss
+after that handoff has an unknown immediate outcome, including the short
+interval before `prepared` becomes durable; the worker retains writer
+authority until it either fails before durability or establishes recovery
+evidence and continues. Once `prepared` is durable, staged-artifact cleanup is
+disarmed and the bound stage remains available after every later error.
+Success returns no database host, retains the old live database and final
+marker, and requires a new open. Until open-time recovery is implemented,
+every initialized, read-write-existing, or read-only-inspection pool open
+refuses a marker or marker-scratch as `Recovery` before opening SQLite.
+Finalization does not delete evidence, roll back, reconcile an interruption,
+or reopen the database; those remain the next recovery checkpoint.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

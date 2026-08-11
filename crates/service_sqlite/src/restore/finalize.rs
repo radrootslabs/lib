@@ -1,0 +1,719 @@
+//! Atomic installation of one completely verified offline restore stage.
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use core::fmt;
+
+use crate::{ServiceSqliteError, ServiceSqliteErrorKind, StagedServiceRestore};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use {
+    super::{
+        RestoreArtifactExpectation, RestoreMarkerBinding, RestoreRecoveryMarker,
+        RestoreRecoveryPhase,
+        marker::{BACKUP_FILE_NAME, LIVE_FILE_NAME, STAGED_FILE_NAME},
+        stage::NativeStagedServiceRestore,
+    },
+    rustix::{
+        fs::{FileType, Mode, OFlags, RenameFlags, fstat, openat, renameat_with},
+        process::geteuid,
+    },
+    sha2::{Digest, Sha256},
+    std::{
+        error::Error,
+        fs::File,
+        os::unix::fs::FileExt,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicU8, Ordering},
+        },
+    },
+};
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+use super::marker::MARKER_NEXT_FILE_NAME;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const HASH_BUFFER_BYTES: usize = 64 * 1_024;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const PHASE_BEFORE_PREPARED: u8 = 1;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const PHASE_COMMIT_OWNED: u8 = 2;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const PHASE_AFTER_PREPARED: u8 = 3;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const CANCELLABLE: u8 = 0;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const CANCELLED: u8 = 1;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const COMMIT_OWNED: u8 = 2;
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) static TEST_FINALIZE_PHASE: AtomicU8 = AtomicU8::new(0);
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) static TEST_FINALIZE_BLOCK_PHASE: AtomicU8 = AtomicU8::new(0);
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+static TEST_FINALIZE_FAILURE: AtomicU8 = AtomicU8::new(0);
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) const TEST_PHASE_BEFORE_PREPARED: u8 = PHASE_BEFORE_PREPARED;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) const TEST_PHASE_COMMIT_OWNED: u8 = PHASE_COMMIT_OWNED;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) const TEST_PHASE_AFTER_PREPARED: u8 = PHASE_AFTER_PREPARED;
+
+/// Atomically installs a completely verified adjacent restore stage.
+///
+/// Cancellation observed before the worker atomically claims commit ownership
+/// leaves the live database untouched and attempts exact stage cleanup. Caller
+/// loss after that in-memory handoff has an unknown immediate outcome, even if
+/// the durable `prepared` marker has not appeared yet: the owned worker retains
+/// writer authority until it either fails before durability or establishes
+/// recovery evidence and continues. Once `prepared` is durable, the staged
+/// artifact is retained unconditionally for recovery. A successful return
+/// provides no open database handle; the next open must reconcile and retire
+/// the retained marker and old live database.
+pub async fn finalize_staged_restore(
+    staged: StagedServiceRestore,
+) -> Result<(), ServiceSqliteError> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        let cancellation = Arc::new(AtomicU8::new(CANCELLABLE));
+        let cancellation_on_drop = CancellationOnDrop::new(Arc::clone(&cancellation));
+        let native = staged.into_native();
+        let result = tokio::task::spawn_blocking(move || {
+            finalize_native(native, &cancellation, &SystemFinalizeOperations)
+        })
+        .await
+        .map_err(|source| finalize_source(FinalizeFailureKind::Join, source))?;
+        cancellation_on_drop.disarm();
+        result
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = staged;
+        Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Restore))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn finalize_native(
+    staged: NativeStagedServiceRestore,
+    cancellation: &AtomicU8,
+    operations: &dyn FinalizeOperations,
+) -> Result<(), ServiceSqliteError> {
+    staged.validate()?;
+    check_cancel(cancellation)?;
+    let live = authority_checked(&staged, || open_live(staged.directory()))??;
+    let live_artifact = staged.live_artifact();
+    authority_checked(&staged, || {
+        verify_named_artifact(
+            staged.directory(),
+            LIVE_FILE_NAME,
+            &live,
+            live_artifact,
+            Some(cancellation),
+        )
+    })??;
+    authority_checked(&staged, || {
+        verify_named_artifact(
+            staged.directory(),
+            STAGED_FILE_NAME,
+            staged.staged_file(),
+            staged.artifact(),
+            Some(cancellation),
+        )
+    })??;
+    authority_checked(&staged, || {
+        live.sync_all()
+            .map_err(|source| finalize_source(FinalizeFailureKind::SyncLive, source))
+    })??;
+    authority_checked(&staged, || {
+        staged
+            .staged_file()
+            .sync_all()
+            .map_err(|source| finalize_source(FinalizeFailureKind::SyncStaged, source))
+    })??;
+    test_phase(PHASE_BEFORE_PREPARED, cancellation, true)?;
+    staged.validate()?;
+    claim_commit_ownership(cancellation)?;
+    test_phase(PHASE_COMMIT_OWNED, cancellation, false)?;
+
+    let marker = RestoreRecoveryMarker::prepared(
+        staged.metadata(),
+        staged.manifest_digest(),
+        live_artifact,
+        staged.artifact(),
+    )
+    .map_err(|source| ServiceSqliteError::with_source(ServiceSqliteErrorKind::Restore, source))?;
+    let on_durable = || {
+        staged.disarm_cleanup();
+        let _ = test_phase(PHASE_AFTER_PREPARED, cancellation, false);
+    };
+    #[cfg(test)]
+    let marker_result = if operations.drift_authority_during_marker_sync() {
+        RestoreMarkerBinding::test_create_with_durable_authority_drift(
+            staged.paths(),
+            staged.authority(),
+            &marker,
+            on_durable,
+        )
+    } else {
+        RestoreMarkerBinding::create_with_durable_callback(
+            staged.paths(),
+            staged.authority(),
+            &marker,
+            on_durable,
+        )
+    };
+    #[cfg(not(test))]
+    let marker_result = RestoreMarkerBinding::create_with_durable_callback(
+        staged.paths(),
+        staged.authority(),
+        &marker,
+        on_durable,
+    );
+    let mut marker = marker_result?;
+
+    rename_and_sync(
+        &staged,
+        operations,
+        RenameStep::RetainLive,
+        LIVE_FILE_NAME,
+        BACKUP_FILE_NAME,
+        &live,
+        live_artifact,
+    )?;
+    authority_checked(&staged, || {
+        operations.after_directory_sync(staged.directory(), RenameStep::RetainLive)
+    })??;
+    marker = marker.advance(
+        staged.paths(),
+        staged.authority(),
+        RestoreRecoveryPhase::LiveRetained,
+    )?;
+
+    rename_and_sync(
+        &staged,
+        operations,
+        RenameStep::InstallStage,
+        STAGED_FILE_NAME,
+        LIVE_FILE_NAME,
+        staged.staged_file(),
+        staged.artifact(),
+    )?;
+    authority_checked(&staged, || {
+        operations.after_directory_sync(staged.directory(), RenameStep::InstallStage)
+    })??;
+    marker = marker.advance(
+        staged.paths(),
+        staged.authority(),
+        RestoreRecoveryPhase::ReplacementInstalled,
+    )?;
+    if marker.marker().phase() != RestoreRecoveryPhase::ReplacementInstalled {
+        return Err(finalize_error(FinalizeFailureKind::Marker));
+    }
+    staged.validate_finalization_authority()?;
+    drop(marker);
+    drop(staged);
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn rename_and_sync(
+    staged: &NativeStagedServiceRestore,
+    operations: &dyn FinalizeOperations,
+    step: RenameStep,
+    source_name: &str,
+    destination_name: &str,
+    held: &File,
+    expected: RestoreArtifactExpectation,
+) -> Result<(), ServiceSqliteError> {
+    authority_checked(staged, || {
+        verify_named_artifact(staged.directory(), source_name, held, expected, None)
+    })??;
+    let rename = authority_checked(staged, || {
+        operations
+            .rename(staged.directory(), source_name, destination_name, step)
+            .map_err(|source| finalize_source(step.rename_failure(), source))
+    })?;
+    rename?;
+    authority_checked(staged, || {
+        verify_named_artifact(staged.directory(), destination_name, held, expected, None)
+    })??;
+    let sync = authority_checked(staged, || {
+        operations
+            .sync_directory(staged.directory(), step)
+            .map_err(|source| finalize_source(step.sync_failure(), source))
+    })?;
+    sync?;
+    authority_checked(staged, || {
+        verify_named_artifact(staged.directory(), destination_name, held, expected, None)
+    })??;
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn authority_checked<T>(
+    staged: &NativeStagedServiceRestore,
+    operation: impl FnOnce() -> T,
+) -> Result<T, ServiceSqliteError> {
+    staged.validate_finalization_authority()?;
+    let result = operation();
+    staged.validate_finalization_authority()?;
+    Ok(result)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn open_live(directory: &File) -> Result<File, ServiceSqliteError> {
+    openat(
+        directory,
+        LIVE_FILE_NAME,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map(File::from)
+    .map_err(|source| finalize_source(FinalizeFailureKind::Live, source))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn verify_named_artifact(
+    directory: &File,
+    name: &str,
+    held: &File,
+    expected: RestoreArtifactExpectation,
+    cancellation: Option<&AtomicU8>,
+) -> Result<(), ServiceSqliteError> {
+    let current = openat(
+        directory,
+        name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map(File::from)
+    .map_err(|source| finalize_source(FinalizeFailureKind::Artifact, source))?;
+    let held_status =
+        fstat(held).map_err(|source| finalize_source(FinalizeFailureKind::Artifact, source))?;
+    let current_status =
+        fstat(&current).map_err(|source| finalize_source(FinalizeFailureKind::Artifact, source))?;
+    validate_status(&held_status, Some(expected.byte_length()))?;
+    validate_status(&current_status, Some(expected.byte_length()))?;
+    let held_identity = (
+        u64::try_from(held_status.st_dev)
+            .map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?,
+        held_status.st_ino,
+    );
+    let current_identity = (
+        u64::try_from(current_status.st_dev)
+            .map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?,
+        current_status.st_ino,
+    );
+    if held_identity != (expected.device(), expected.inode())
+        || current_identity != held_identity
+        || hash_exact(held, expected.byte_length(), cancellation)? != expected.sha256()
+    {
+        return Err(finalize_error(FinalizeFailureKind::Artifact));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_status(
+    status: &rustix::fs::Stat,
+    expected_length: Option<u64>,
+) -> Result<(), ServiceSqliteError> {
+    let length =
+        u64::try_from(status.st_size).map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?;
+    if !FileType::from_raw_mode(status.st_mode).is_file()
+        || u64::from(status.st_nlink) != 1
+        || status.st_uid != geteuid().as_raw()
+        || u32::from(status.st_mode) & 0o777 != 0o600
+        || length == 0
+        || length > i64::MAX as u64
+        || expected_length.is_some_and(|expected| length != expected)
+    {
+        return Err(finalize_error(FinalizeFailureKind::Artifact));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn hash_exact(
+    file: &File,
+    expected_length: u64,
+    cancellation: Option<&AtomicU8>,
+) -> Result<[u8; 32], ServiceSqliteError> {
+    let mut offset = 0_u64;
+    let mut buffer = [0_u8; HASH_BUFFER_BYTES];
+    let mut hasher = Sha256::new();
+    while offset < expected_length {
+        if cancellation.is_some_and(|state| state.load(Ordering::Acquire) == CANCELLED) {
+            return Err(finalize_error(FinalizeFailureKind::Cancelled));
+        }
+        let requested = usize::try_from((expected_length - offset).min(HASH_BUFFER_BYTES as u64))
+            .map_err(|_| finalize_error(FinalizeFailureKind::Hash))?;
+        let read = file
+            .read_at(&mut buffer[..requested], offset)
+            .map_err(|source| finalize_source(FinalizeFailureKind::Hash, source))?;
+        if read == 0 {
+            return Err(finalize_error(FinalizeFailureKind::Hash));
+        }
+        hasher.update(&buffer[..read]);
+        offset = offset
+            .checked_add(
+                u64::try_from(read).map_err(|_| finalize_error(FinalizeFailureKind::Hash))?,
+            )
+            .ok_or_else(|| finalize_error(FinalizeFailureKind::Hash))?;
+    }
+    if cancellation.is_some_and(|state| state.load(Ordering::Acquire) == CANCELLED) {
+        return Err(finalize_error(FinalizeFailureKind::Cancelled));
+    }
+    let mut extra = [0_u8; 1];
+    if file
+        .read_at(&mut extra, expected_length)
+        .map_err(|source| finalize_source(FinalizeFailureKind::Hash, source))?
+        != 0
+    {
+        return Err(finalize_error(FinalizeFailureKind::Hash));
+    }
+    Ok(hasher.finalize().into())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn check_cancel(cancellation: &AtomicU8) -> Result<(), ServiceSqliteError> {
+    if cancellation.load(Ordering::Acquire) == CANCELLED {
+        Err(finalize_error(FinalizeFailureKind::Cancelled))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn claim_commit_ownership(cancellation: &AtomicU8) -> Result<(), ServiceSqliteError> {
+    cancellation
+        .compare_exchange(
+            CANCELLABLE,
+            COMMIT_OWNED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .map(|_| ())
+        .map_err(|_| finalize_error(FinalizeFailureKind::Cancelled))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_phase(
+    phase: u8,
+    cancellation: &AtomicU8,
+    cancellable: bool,
+) -> Result<(), ServiceSqliteError> {
+    #[cfg(test)]
+    {
+        TEST_FINALIZE_PHASE.store(phase, Ordering::Release);
+        while TEST_FINALIZE_BLOCK_PHASE.load(Ordering::Acquire) == phase {
+            if cancellable && cancellation.load(Ordering::Acquire) == CANCELLED {
+                return Err(finalize_error(FinalizeFailureKind::Cancelled));
+            }
+            std::thread::yield_now();
+        }
+    }
+    #[cfg(not(test))]
+    let _ = (phase, cancellation, cancellable);
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RenameStep {
+    RetainLive,
+    InstallStage,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl RenameStep {
+    const fn rename_failure(self) -> FinalizeFailureKind {
+        match self {
+            Self::RetainLive => FinalizeFailureKind::RetainLive,
+            Self::InstallStage => FinalizeFailureKind::InstallStage,
+        }
+    }
+
+    const fn sync_failure(self) -> FinalizeFailureKind {
+        match self {
+            Self::RetainLive => FinalizeFailureKind::SyncRetained,
+            Self::InstallStage => FinalizeFailureKind::SyncInstalled,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+trait FinalizeOperations: Send + Sync {
+    fn rename(
+        &self,
+        directory: &File,
+        source: &str,
+        destination: &str,
+        step: RenameStep,
+    ) -> std::io::Result<()>;
+
+    fn sync_directory(&self, directory: &File, step: RenameStep) -> std::io::Result<()>;
+
+    fn after_directory_sync(
+        &self,
+        _directory: &File,
+        _step: RenameStep,
+    ) -> Result<(), ServiceSqliteError> {
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn drift_authority_during_marker_sync(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct SystemFinalizeOperations;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl FinalizeOperations for SystemFinalizeOperations {
+    fn rename(
+        &self,
+        directory: &File,
+        source: &str,
+        destination: &str,
+        _step: RenameStep,
+    ) -> std::io::Result<()> {
+        renameat_with(
+            directory,
+            source,
+            directory,
+            destination,
+            RenameFlags::NOREPLACE,
+        )
+        .map_err(std::io::Error::from)
+    }
+
+    fn sync_directory(&self, directory: &File, _step: RenameStep) -> std::io::Result<()> {
+        directory.sync_all()
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+struct FailingFinalizeOperations;
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+impl FinalizeOperations for FailingFinalizeOperations {
+    fn drift_authority_during_marker_sync(&self) -> bool {
+        TEST_FINALIZE_FAILURE.load(Ordering::Acquire) == 9
+    }
+
+    fn rename(
+        &self,
+        directory: &File,
+        source: &str,
+        destination: &str,
+        step: RenameStep,
+    ) -> std::io::Result<()> {
+        let failure = TEST_FINALIZE_FAILURE.load(Ordering::Acquire);
+        let (before, after) = match step {
+            RenameStep::RetainLive => (1, 2),
+            RenameStep::InstallStage => (5, 6),
+        };
+        if failure == before {
+            return Err(std::io::Error::other("injected pre-rename failure"));
+        }
+        SystemFinalizeOperations.rename(directory, source, destination, step)?;
+        if failure == after {
+            return Err(std::io::Error::other("injected post-rename failure"));
+        }
+        Ok(())
+    }
+
+    fn sync_directory(&self, directory: &File, step: RenameStep) -> std::io::Result<()> {
+        let failure = TEST_FINALIZE_FAILURE.load(Ordering::Acquire);
+        let target = match step {
+            RenameStep::RetainLive => 3,
+            RenameStep::InstallStage => 7,
+        };
+        if failure == target {
+            return Err(std::io::Error::other("injected directory sync failure"));
+        }
+        SystemFinalizeOperations.sync_directory(directory, step)
+    }
+
+    fn after_directory_sync(
+        &self,
+        directory: &File,
+        step: RenameStep,
+    ) -> Result<(), ServiceSqliteError> {
+        let failure = TEST_FINALIZE_FAILURE.load(Ordering::Acquire);
+        let target = match step {
+            RenameStep::RetainLive => 4,
+            RenameStep::InstallStage => 8,
+        };
+        if failure != target {
+            return Ok(());
+        }
+        openat(
+            directory,
+            MARKER_NEXT_FILE_NAME,
+            OFlags::RDWR
+                | OFlags::CREATE
+                | OFlags::EXCL
+                | OFlags::NOFOLLOW
+                | OFlags::CLOEXEC
+                | OFlags::NONBLOCK,
+            Mode::RUSR | Mode::WUSR,
+        )
+        .map(drop)
+        .map_err(|source| finalize_source(FinalizeFailureKind::Marker, source))
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) async fn test_finalize_with_failure(
+    staged: StagedServiceRestore,
+    failure: u8,
+) -> Result<(), ServiceSqliteError> {
+    TEST_FINALIZE_FAILURE.store(failure, Ordering::Release);
+    let native = staged.into_native();
+    let result = tokio::task::spawn_blocking(move || {
+        finalize_native(
+            native,
+            &AtomicU8::new(CANCELLABLE),
+            &FailingFinalizeOperations,
+        )
+    })
+    .await
+    .map_err(|source| finalize_source(FinalizeFailureKind::Join, source))?;
+    TEST_FINALIZE_FAILURE.store(0, Ordering::Release);
+    result
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) fn reset_test_controls() {
+    TEST_FINALIZE_PHASE.store(0, Ordering::Release);
+    TEST_FINALIZE_BLOCK_PHASE.store(0, Ordering::Release);
+    TEST_FINALIZE_FAILURE.store(0, Ordering::Release);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct CancellationOnDrop {
+    cancellation: Arc<AtomicU8>,
+    armed: AtomicBool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl CancellationOnDrop {
+    fn new(cancellation: Arc<AtomicU8>) -> Self {
+        Self {
+            cancellation,
+            armed: AtomicBool::new(true),
+        }
+    }
+
+    fn disarm(&self) {
+        self.armed.store(false, Ordering::Release);
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Drop for CancellationOnDrop {
+    fn drop(&mut self) {
+        if self.armed.load(Ordering::Acquire) {
+            let _ = self.cancellation.compare_exchange(
+                CANCELLABLE,
+                CANCELLED,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            );
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FinalizeFailureKind {
+    Live,
+    Artifact,
+    Hash,
+    SyncLive,
+    SyncStaged,
+    Marker,
+    RetainLive,
+    SyncRetained,
+    InstallStage,
+    SyncInstalled,
+    Cancelled,
+    Join,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct FinalizeFailure {
+    kind: FinalizeFailureKind,
+    source: Option<Box<dyn Error + Send + Sync + 'static>>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Debug for FinalizeFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FinalizeFailure")
+            .field("kind", &self.kind)
+            .field("source", &self.source.as_ref().map(|_| "[redacted]"))
+            .finish()
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Display for FinalizeFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self.kind {
+            FinalizeFailureKind::Live => "live restore source is invalid",
+            FinalizeFailureKind::Artifact => "restore artifact binding changed",
+            FinalizeFailureKind::Hash => "restore artifact hash failed",
+            FinalizeFailureKind::SyncLive => "live restore source sync failed",
+            FinalizeFailureKind::SyncStaged => "staged restore sync failed",
+            FinalizeFailureKind::Marker => "restore marker transition failed",
+            FinalizeFailureKind::RetainLive => "live restore retention failed",
+            FinalizeFailureKind::SyncRetained => "retained restore sync failed",
+            FinalizeFailureKind::InstallStage => "restore installation failed",
+            FinalizeFailureKind::SyncInstalled => "installed restore sync failed",
+            FinalizeFailureKind::Cancelled => "restore finalization was cancelled",
+            FinalizeFailureKind::Join => "restore finalization worker failed",
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Error for FinalizeFailure {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn Error + 'static))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn finalize_error(kind: FinalizeFailureKind) -> ServiceSqliteError {
+    ServiceSqliteError::with_source(
+        ServiceSqliteErrorKind::Restore,
+        FinalizeFailure { kind, source: None },
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn finalize_source(
+    kind: FinalizeFailureKind,
+    source: impl Error + Send + Sync + 'static,
+) -> ServiceSqliteError {
+    ServiceSqliteError::with_source(
+        ServiceSqliteErrorKind::Restore,
+        FinalizeFailure {
+            kind,
+            source: Some(Box::new(source)),
+        },
+    )
+}

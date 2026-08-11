@@ -17,6 +17,7 @@ const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
+const RESTORE_FINALIZE_SOURCE: &str = include_str!("../src/restore/finalize.rs");
 const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
 const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
@@ -168,6 +169,19 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "cleanup failure leaves staging or recovery evidence",
         "detached work retains authority and exact cleanup ownership",
         "does not create or advance a recovery marker",
+        "`finalize_staged_restore` consumes that sealed stage",
+        "bound the exact live inode, length, and digest",
+        "creates and synchronizes the `prepared` marker",
+        "descriptor-relative no-replace operations",
+        "marker advance to `live_retained` or `replacement_installed`",
+        "Cancellation observed before the worker's atomic commit-ownership handoff",
+        "interval before `prepared` becomes durable",
+        "Once `prepared` is durable, staged-artifact cleanup is disarmed",
+        "unknown immediate outcome",
+        "retains the old live database and final marker",
+        "every initialized, read-write-existing, or read-only-inspection pool open refuses",
+        "marker or marker-scratch as `Recovery` before opening SQLite",
+        "does not delete evidence, roll back, reconcile an interruption, or reopen the database",
     ] {
         assert!(
             readme_words.contains(required),
@@ -618,7 +632,64 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "Step 067 restore staging source contains deferred or raw authority `{forbidden}`"
         );
     }
-    assert!(ROOT.contains("pub use restore::{StagedServiceRestore, stage_verified_restore};"));
+    let restore_finalize_production = RESTORE_FINALIZE_SOURCE
+        .split_once(
+            "#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]\nstruct FailingFinalizeOperations",
+        )
+        .map(|(production, _)| production)
+        .expect("restore finalization source must keep failure injection separated");
+    for required in [
+        "pub async fn finalize_staged_restore(",
+        "tokio::task::spawn_blocking",
+        "RestoreRecoveryMarker::prepared(",
+        "staged.disarm_cleanup()",
+        "renameat_with(",
+        "RenameFlags::NOREPLACE",
+        "directory.sync_all()",
+        "RestoreRecoveryPhase::LiveRetained",
+        "RestoreRecoveryPhase::ReplacementInstalled",
+        "verify_named_artifact(",
+        "CancellationOnDrop",
+    ] {
+        assert!(
+            restore_finalize_production.contains(required),
+            "Step 068 restore finalization source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub struct RestoreRecovery",
+        "pub enum RestoreRecovery",
+        "pub fn marker",
+        "pub fn directory",
+        "pub fn path",
+        "sqlx::",
+        "rusqlite::",
+        "remove_file",
+        "unlinkat",
+        "remove_dir_all",
+        "tokio::time::timeout",
+        "ServiceSqliteHost",
+    ] {
+        assert!(
+            !restore_finalize_production.contains(forbidden),
+            "Step 068 restore finalization source contains deferred or raw authority `{forbidden}`"
+        );
+    }
+    for required in [
+        "refuse_unresolved_recovery",
+        "ServiceSqliteErrorKind::Recovery",
+        "MARKER_FILE_NAME",
+        "MARKER_NEXT_FILE_NAME",
+    ] {
+        assert!(
+            RESTORE_ROOT_SOURCE.contains(required),
+            "Step 068 recovery-open guard is missing `{required}`"
+        );
+    }
+    assert!(OPEN_SOURCE.contains("crate::restore::refuse_unresolved_recovery"));
+    assert!(ROOT.contains(
+        "pub use restore::{StagedServiceRestore, finalize_staged_restore, stage_verified_restore};"
+    ));
 
     for required in [
         "self.pool.close().await",

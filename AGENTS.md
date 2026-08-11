@@ -216,6 +216,22 @@ Before editing code:
   remain evidence that later admission rejects. Staging must not create a
   marker, rename live state, retain an old live database, or install a
   replacement; those are later finalization and recovery boundaries.
+- Atomic restore finalization consumes only a sealed `StagedServiceRestore`.
+  Staging must bind the exact live inode, length, and digest that finalization
+  will retain. The owned blocking worker creates and synchronizes `prepared`
+  before disarming stage cleanup, then uses descriptor-relative no-replace
+  renames and parent synchronization for live-to-backup and staged-to-live,
+  advancing the marker only after each durable rename. Cancellation observed
+  before the worker atomically claims commit ownership may cleanly stop;
+  caller loss after that handoff is an unknown immediate outcome, including
+  the interval before `prepared` is durable. Once `prepared` is durable, stage
+  cleanup must remain disarmed after every later error so the marker never
+  loses a bound artifact.
+  Successful finalization returns no host and leaves the old live database and
+  `replacement_installed` marker for open-time recovery. Until that recovery
+  exists, every pool open must reject marker or marker-scratch evidence as
+  `Recovery`. Finalization must not roll back, delete recovery evidence, reopen
+  SQLite, or expose paths, descriptors, marker controls, or rename controls.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist
