@@ -77,6 +77,28 @@ pub struct ServiceDatabaseIdentity {
 }
 
 impl ServiceDatabaseMetadata {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(crate) fn from_verified_backup(
+        service: ServiceId,
+        instance: InstanceId,
+        source_generation: SourceGeneration,
+        state_schema_version: NonZeroU32,
+        created_at_unix_ms: u64,
+        application_id: ServiceSqliteApplicationId,
+    ) -> Result<Self, ServiceSqliteMetadataValueError> {
+        if created_at_unix_ms == 0 || created_at_unix_ms > MAX_CREATED_AT_UNIX_MS {
+            return Err(ServiceSqliteMetadataValueError::InvalidCreationTime);
+        }
+        Ok(Self {
+            service,
+            instance,
+            source_generation,
+            state_schema_version,
+            created_at_unix_ms,
+            application_id,
+        })
+    }
+
     /// Constructs metadata bound to the service and instance in canonical paths.
     pub fn new(
         paths: &ServiceSqlitePaths,

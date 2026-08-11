@@ -1094,6 +1094,19 @@ mod tests {
             .await
             .expect("online backup");
 
+        let verified = crate::verify_backup_bundle(
+            manifest.canonical_bytes(),
+            manifest.digest(),
+            &stage,
+            &identity,
+            std::num::NonZeroU64::new(manifest.members()[0].byte_length())
+                .expect("positive captured member length"),
+        )
+        .expect("independently verify captured bundle");
+        assert_eq!(verified.manifest(), &manifest);
+        assert_eq!(verified.database_metadata().service(), identity.service());
+        assert_eq!(verified.database_metadata().instance(), identity.instance());
+
         assert_eq!(manifest.service(), paths.service());
         assert_eq!(manifest.instance(), paths.instance());
         assert_eq!(manifest.source_generation(), identity.source_generation());

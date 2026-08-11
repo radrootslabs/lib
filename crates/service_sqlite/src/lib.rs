@@ -20,7 +20,7 @@ pub use backup::{
     BACKUP_MANIFEST_CANONICAL_MAX_BYTES, BACKUP_MANIFEST_SCHEMA, BACKUP_MANIFEST_SCHEMA_VERSION,
     BACKUP_STATE_MEMBER_NAME, BackupCreatedAtUnixMs, BackupManifestContractError,
     BackupManifestIntegrity, BackupManifestSha256, BackupMemberSha256, ServiceBackupManifest,
-    ServiceBackupMember,
+    ServiceBackupMember, VerifiedServiceBackup, verify_backup_bundle,
 };
 pub use config::{ServiceSqliteConnectionOptions, ServiceSqliteConnectionOptionsError};
 pub use connection::{

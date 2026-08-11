@@ -185,6 +185,15 @@ Before editing code:
   exact-artifact cancellation cleanup completes. Do not expose raw backup
   handles, capture credentials, invent a manifest filename, read an ambient
   clock, or fold untrusted verification or restore behavior into capture.
+- Untrusted backup verification is the synchronous, task-free
+  `verify_backup_bundle` boundary. Require an independently protected manifest
+  digest, exact `ServiceDatabaseIdentity`, and caller-supplied positive member
+  limit; retain the verified directory and member descriptors in the sealed
+  non-cloneable proof. Do not expose paths or raw handles, treat pathname-only
+  verification as restore authority, create an internal task/deadline, mutate
+  the bundle, or introduce restore markers, staging, replacement, or recovery
+  into verification. Later restore work must consume the retained member and
+  reverify its staged copy.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

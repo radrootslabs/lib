@@ -70,6 +70,12 @@ impl fmt::Debug for BackupMemberSha256 {
 pub struct BackupManifestSha256([u8; 32]);
 
 impl BackupManifestSha256 {
+    /// Constructs a digest pinned by independently protected provenance.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     /// Returns the exact digest bytes.
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 32] {

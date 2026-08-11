@@ -74,6 +74,24 @@ is still untrusted backup input until the separate verifier binds its manifest,
 member bytes, expected intent, application metadata, and integrity; capture
 does not provide restore or replacement behavior.
 
+`verify_backup_bundle` is the synchronous, task-free boundary for an untrusted
+manifest and bundle. The caller supplies the independently protected manifest
+SHA-256, expected service database identity, and a positive maximum state-file
+size. Verification requires canonical manifest bytes, exact service, instance,
+source-generation, schema, and application intent, a restrictive owner-only
+directory containing only `state.sqlite`, the exact bounded member length and
+digest, immutable read-only/query-only SQLite access, main-only attachment,
+bounded application metadata, `integrity_check(1)`, and an empty foreign-key
+check. It performs no filesystem mutation and does not create a task or hidden
+deadline.
+
+Success returns a non-forgeable `VerifiedServiceBackup` that retains the exact
+verified directory and member descriptors while exposing only the canonical
+manifest and actual database metadata. It is not restore or replacement
+authority, and it exposes no path or raw handle. Later restore work must copy
+from the retained member and reverify the staged copy under its own supervised
+blocking worker and deadline; pathname verification alone is insufficient.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

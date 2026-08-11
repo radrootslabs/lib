@@ -6,6 +6,7 @@ const ROOT: &str = include_str!("../src/lib.rs");
 const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const BACKUP_SOURCE: &str = include_str!("../src/backup/manifest.rs");
 const BACKUP_CAPTURE_SOURCE: &str = include_str!("../src/backup/capture.rs");
+const BACKUP_VERIFY_SOURCE: &str = include_str!("../src/backup/verify.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const CONNECTION_SOURCE: &str = include_str!("../src/connection.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
@@ -123,6 +124,16 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "Capture has no hidden timeout",
         "callers own any deadline by cancelling the future",
         "does not provide restore or replacement behavior",
+        "`verify_backup_bundle` is the synchronous, task-free boundary",
+        "independently protected manifest SHA-256",
+        "positive maximum state-file size",
+        "restrictive owner-only directory containing only `state.sqlite`",
+        "performs no filesystem mutation and does not create a task or hidden deadline",
+        "non-forgeable `VerifiedServiceBackup`",
+        "exposing only the canonical manifest and actual database metadata",
+        "It is not restore or replacement authority",
+        "copy from the retained member and reverify the staged copy",
+        "pathname verification alone is insufficient",
     ] {
         assert!(
             readme_words.contains(required),
@@ -153,6 +164,9 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
         .expect("backup capture source must keep tests separated");
+    let backup_verify_production = BACKUP_VERIFY_SOURCE
+        .split_once("#[cfg(test)]")
+        .map_or(BACKUP_VERIFY_SOURCE, |(production, _)| production);
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -167,6 +181,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "BackupMemberSha256",
         "ServiceBackupManifest",
         "ServiceBackupMember",
+        "VerifiedServiceBackup",
+        "verify_backup_bundle",
         "BACKUP_MANIFEST_CANONICAL_MAX_BYTES",
         "BACKUP_MANIFEST_SCHEMA",
         "BACKUP_MANIFEST_SCHEMA_VERSION",
@@ -395,6 +411,60 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             !backup_capture_production.contains(forbidden) && !ROOT.contains(forbidden),
             "Step 064 backup capture source contains deferred or public authority `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "pub fn verify_backup_bundle(",
+        "NonZeroU64",
+        "pub struct VerifiedServiceBackup",
+        "pub const fn manifest(&self)",
+        "pub const fn database_metadata(&self)",
+        "Sha256::digest(manifest_bytes)",
+        "BACKUP_MANIFEST_CANONICAL_MAX_BYTES",
+        "OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC",
+        "OFlags::RDONLY | OFlags::NONBLOCK | OFlags::NOFOLLOW | OFlags::CLOEXEC",
+        "Dir::read_from(&self.directory)",
+        "matches!(mode, 0o500 | 0o700)",
+        "matches!(mode, 0o400 | 0o600)",
+        "open_sqlite_from_retained_state",
+        "/proc/self/fd/{descriptor}",
+        "/dev/fd/{descriptor}",
+        "?mode=ro&immutable=1",
+        "pragma_update(None, \"query_only\", true)",
+        "pragma_update(None, \"trusted_schema\", false)",
+        "verify_connection_policy",
+        "PRAGMA database_list",
+        "FROM main.sqlite_schema",
+        "ValueRef::Text(b\"table\")",
+        "PRAGMA integrity_check(1)",
+        "PRAGMA foreign_key_check",
+        "state_schema_version() > expected.supported_state_schema_version()",
+        "binding.hash_state(maximum_state_bytes)",
+    ] {
+        assert!(
+            backup_verify_production.contains(required),
+            "Step 065 backup verifier is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "tokio::task::spawn_blocking",
+        "pub fn state_file",
+        "pub fn directory",
+        "pub fn path",
+        "pub fn restore",
+        "pub async fn restore",
+        "ServiceSqliteErrorKind::Restore",
+        "create_dir",
+        "remove_file",
+        "std::fs::copy",
+        "rename",
+        "SystemTime::now",
+        "tokio::time::timeout",
+    ] {
+        assert!(
+            !backup_verify_production.contains(forbidden),
+            "Step 065 backup verifier contains deferred or raw authority `{forbidden}`"
         );
     }
 

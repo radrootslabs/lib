@@ -3,6 +3,7 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod capture;
 mod manifest;
+mod verify;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) use capture::capture_online_backup;
@@ -22,3 +23,4 @@ pub use manifest::{
     BackupManifestIntegrity, BackupManifestSha256, BackupMemberSha256, ServiceBackupManifest,
     ServiceBackupMember,
 };
+pub use verify::{VerifiedServiceBackup, verify_backup_bundle};
