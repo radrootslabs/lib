@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::{
     RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform, RadrootsRuntimeNamespace,
@@ -127,11 +127,14 @@ impl RadrootsPathResolver {
         match profile {
             RadrootsPathProfile::InteractiveUser => self.resolve_interactive_user(),
             RadrootsPathProfile::ServiceHost => self.resolve_service_host(),
-            RadrootsPathProfile::RepoLocal => overrides
-                .repo_local_root
-                .as_ref()
-                .map(RadrootsPaths::from_base_root)
-                .ok_or(RadrootsRuntimePathsError::MissingRepoLocalRoot),
+            RadrootsPathProfile::RepoLocal => {
+                let root = overrides
+                    .repo_local_root
+                    .as_deref()
+                    .ok_or(RadrootsRuntimePathsError::MissingRepoLocalRoot)?;
+                validate_repo_local_root(root)?;
+                Ok(RadrootsPaths::from_base_root(root))
+            }
             RadrootsPathProfile::MobileNative => match self.platform {
                 RadrootsPlatform::Android | RadrootsPlatform::Ios => overrides
                     .mobile_roots
@@ -278,6 +281,18 @@ impl RadrootsPathResolver {
     }
 }
 
+pub(crate) fn validate_repo_local_root(root: &Path) -> Result<(), RadrootsRuntimePathsError> {
+    if !root.is_absolute()
+        || root.parent().is_none()
+        || root
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(RadrootsRuntimePathsError::InvalidRepoLocalRoot);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -300,6 +315,42 @@ mod tests {
         let mobile = RadrootsPathOverrides::mobile(mobile_roots.clone());
         assert!(mobile.repo_local_root.is_none());
         assert_eq!(mobile.mobile_roots, Some(mobile_roots));
+    }
+
+    #[test]
+    fn repo_local_root_rejects_missing_relative_root_and_parent_traversal() {
+        let resolver =
+            RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+
+        assert_eq!(
+            resolver
+                .resolve(
+                    RadrootsPathProfile::RepoLocal,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect_err("missing root"),
+            RadrootsRuntimePathsError::MissingRepoLocalRoot
+        );
+
+        for root in [
+            "",
+            ".",
+            "relative/root",
+            "../escape",
+            "/",
+            "/repo/../escape",
+        ] {
+            assert_eq!(
+                resolver
+                    .resolve(
+                        RadrootsPathProfile::RepoLocal,
+                        &RadrootsPathOverrides::repo_local(root),
+                    )
+                    .expect_err("invalid repo-local root"),
+                RadrootsRuntimePathsError::InvalidRepoLocalRoot,
+                "accepted invalid repo-local root `{root}`"
+            );
+        }
     }
 
     #[test]

@@ -6,6 +6,7 @@ use std::{
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::roots::validate_repo_local_root;
 use crate::{
     InstanceId, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsPaths,
     RadrootsRuntimeNamespace, RadrootsRuntimePathsError, RadrootsServiceInstanceNamespace,
@@ -329,6 +330,7 @@ impl RadrootsRuntimePathSelection {
                         repo_local_root_env: repo_local_root_label.to_owned(),
                     });
                 };
+                validate_repo_local_root(repo_local_root)?;
                 Ok(RadrootsPathOverrides::repo_local(repo_local_root))
             }
             _ => Ok(RadrootsPathOverrides::default()),
@@ -480,50 +482,52 @@ mod tests {
     }
 
     #[test]
-    fn resolve_service_instance_paths_uses_one_repo_local_base() {
+    fn resolve_myc_and_rhi_instance_paths_use_one_repo_local_base() {
         let selection = RadrootsRuntimePathSelection::caller(
             RadrootsPathProfile::RepoLocal,
             Some(PathBuf::from("/repo/.local/radroots")),
         );
         let resolver =
             RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
-        let service_id = ServiceId::new("rhi").expect("service id");
-        let instance_id = InstanceId::new("west-01").expect("instance id");
+        for (service, instance) in [("myc", "primary"), ("rhi", "west-01")] {
+            let service_id = ServiceId::new(service).expect("service id");
+            let instance_id = InstanceId::new(instance).expect("instance id");
+            let paths = selection
+                .resolve_service_instance_paths(
+                    &resolver,
+                    &service_id,
+                    &instance_id,
+                    "PROFILE_ENV",
+                    "ROOT_ENV",
+                )
+                .expect("service instance paths");
+            let suffix = format!("services/{service}/{instance}");
 
-        let paths = selection
-            .resolve_service_instance_paths(
-                &resolver,
-                &service_id,
-                &instance_id,
-                "PROFILE_ENV",
-                "ROOT_ENV",
-            )
-            .expect("service instance paths");
-
-        assert_eq!(
-            paths.config(),
-            PathBuf::from("/repo/.local/radroots/config/services/rhi/west-01")
-        );
-        assert_eq!(
-            paths.state(),
-            PathBuf::from("/repo/.local/radroots/data/services/rhi/west-01")
-        );
-        assert_eq!(
-            paths.cache(),
-            PathBuf::from("/repo/.local/radroots/cache/services/rhi/west-01")
-        );
-        assert_eq!(
-            paths.logs(),
-            PathBuf::from("/repo/.local/radroots/logs/services/rhi/west-01")
-        );
-        assert_eq!(
-            paths.run(),
-            PathBuf::from("/repo/.local/radroots/run/services/rhi/west-01")
-        );
-        assert_eq!(
-            paths.secrets(),
-            PathBuf::from("/repo/.local/radroots/secrets/services/rhi/west-01")
-        );
+            assert_eq!(
+                paths.config(),
+                PathBuf::from("/repo/.local/radroots/config").join(&suffix)
+            );
+            assert_eq!(
+                paths.state(),
+                PathBuf::from("/repo/.local/radroots/data").join(&suffix)
+            );
+            assert_eq!(
+                paths.cache(),
+                PathBuf::from("/repo/.local/radroots/cache").join(&suffix)
+            );
+            assert_eq!(
+                paths.logs(),
+                PathBuf::from("/repo/.local/radroots/logs").join(&suffix)
+            );
+            assert_eq!(
+                paths.run(),
+                PathBuf::from("/repo/.local/radroots/run").join(&suffix)
+            );
+            assert_eq!(
+                paths.secrets(),
+                PathBuf::from("/repo/.local/radroots/secrets").join(&suffix)
+            );
+        }
     }
 
     #[test]
@@ -540,6 +544,32 @@ mod tests {
                 repo_local_root_env: "RADROOTS_TEST_ROOT".to_owned(),
             }
         );
+    }
+
+    #[test]
+    fn repo_local_selection_rejects_relative_empty_and_escaping_roots() {
+        for root in [
+            "",
+            ".",
+            "relative/root",
+            "../escape",
+            "/",
+            "/repo/../escape",
+        ] {
+            let selection = RadrootsRuntimePathSelection::caller(
+                RadrootsPathProfile::RepoLocal,
+                Some(PathBuf::from(root)),
+            );
+            assert_eq!(
+                selection
+                    .caller_overrides()
+                    .expect_err("invalid caller root"),
+                RadrootsRuntimePathSelectionError::Paths(
+                    crate::RadrootsRuntimePathsError::InvalidRepoLocalRoot
+                ),
+                "accepted invalid repo-local selection `{root}`"
+            );
+        }
     }
 
     #[test]
@@ -639,7 +669,7 @@ mod tests {
             )),
             Some(RadrootsRuntimePathConfigEntry::new(
                 "RADROOTS_CLI_PATHS_REPO_LOCAL_ROOT",
-                ".local/radroots",
+                "/repo/.local/radroots",
                 "env_file:RADROOTS_CLI_PATHS_REPO_LOCAL_ROOT",
             )),
             RadrootsPathProfile::InteractiveUser,
@@ -653,7 +683,7 @@ mod tests {
         );
         assert_eq!(
             selection.repo_local_root,
-            Some(PathBuf::from(".local/radroots"))
+            Some(PathBuf::from("/repo/.local/radroots"))
         );
         assert_eq!(
             selection.repo_local_root_source.as_deref(),

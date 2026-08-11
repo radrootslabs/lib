@@ -21,6 +21,9 @@ pub enum RadrootsRuntimePathsError {
     #[error("repo_local requires an explicit repo-local base root")]
     MissingRepoLocalRoot,
 
+    #[error("repo_local base root must be an absolute non-root path without parent traversal")]
+    InvalidRepoLocalRoot,
+
     #[error("mobile_native requires explicit logical roots")]
     MissingMobileRoots,
 
