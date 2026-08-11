@@ -1,0 +1,17 @@
+[package]
+name = "radroots_service_sqlite"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Reusable SQLite mechanics for Radroots service state"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[dependencies]
+
+[lints]
+workspace = true

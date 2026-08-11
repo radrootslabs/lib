@@ -7,7 +7,7 @@ rust_version = "1.97.1"
 edition = "2024"
 resolver = "3"
 public_package_count = 19
-package_count = 61
+package_count = 63
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
@@ -888,6 +888,58 @@ source_repository = "https://github.com/radrootslabs/lib"
 source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/sql_core"
 source_tree_sha256 = "18e107bdeeee8761f731a1c389e475e5caebbd2a958c0646d0c6aa5f8c95b8dc"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_service_host"
+path = "crates/service_host"
+state = "active"
+tier = "runtime"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["coverage_required", "preview"]
+owners = ["runtime"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+]
+provenance_kind = "native"
+introduction_tree_sha256 = "4c12f734bfb33366546f87f6273b687635debc84876c51b1eff10a3dccf2e52d"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_service_sqlite"
+path = "crates/service_sqlite"
+state = "active"
+tier = "runtime"
+visibility = "private_runtime"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["coverage_required", "preview"]
+owners = ["storage"]
+permitted_dependency_tiers = [
+  "foundation",
+  "domain",
+  "spi",
+  "adapter",
+  "orchestration",
+  "preview",
+  "runtime",
+]
+provenance_kind = "native"
+introduction_tree_sha256 = "6418eec43a267381235158312d4799ffe1a1e3f36ab59ae2063e75bb0235f4a4"
 compatibility = ["package_private"]
 replaces = []
 

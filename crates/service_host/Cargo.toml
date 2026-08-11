@@ -1,0 +1,17 @@
+[package]
+name = "radroots_service_host"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Reusable service-host mechanics for Radroots services"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[dependencies]
+
+[lints]
+workspace = true

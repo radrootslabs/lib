@@ -3875,6 +3875,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_service_host"
+version = "0.1.0-alpha"
+
+[[package]]
+name = "radroots_service_sqlite"
+version = "0.1.0-alpha"
+
+[[package]]
 name = "radroots_signing"
 version = "0.1.0-alpha"
 dependencies = [

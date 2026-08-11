@@ -57,6 +57,8 @@ private = [
   "radroots_runtime_manager",
   "radroots_runtime_paths",
   "radroots_sdk_ffi",
+  "radroots_service_host",
+  "radroots_service_sqlite",
   "radroots_sql_core",
   "radroots_studio_application",
   "radroots_studio_domain",

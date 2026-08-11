@@ -108,6 +108,8 @@ crates = [
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
+  "radroots_service_host",
+  "radroots_service_sqlite",
   "radroots_sql_core",
   "radroots_sdk",
   "radroots_sdk_ffi",

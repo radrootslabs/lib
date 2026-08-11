@@ -31,6 +31,8 @@ members = [
   "crates/runtime_paths",
   "crates/runtime_distribution",
   "crates/runtime_manager",
+  "crates/service_host",
+  "crates/service_sqlite",
   "crates/trade",
   "crates/transport",
   "crates/mesh",
@@ -135,6 +137,8 @@ radroots_protocol = { package = "radroots_protocol", path = "crates/protocol", v
 radroots_runtime_paths = { path = "crates/runtime_paths", version = "=0.1.0-alpha", default-features = false }
 radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "=0.1.0-alpha", default-features = false }
 radroots_runtime_manager = { path = "crates/runtime_manager", version = "=0.1.0-alpha", default-features = false }
+radroots_service_host = { path = "crates/service_host", version = "=0.1.0-alpha", default-features = false }
+radroots_service_sqlite = { path = "crates/service_sqlite", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_nostr = { package = "radroots_transport_nostr", path = "crates/transport_nostr", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_reticulum = { path = "crates/transport_reticulum", version = "=0.1.0-alpha", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "=0.1.0-alpha", default-features = false }
