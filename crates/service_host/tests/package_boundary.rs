@@ -2,6 +2,10 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const CONFIG_SOURCE: &str = concat!(
+    include_str!("../src/config/mod.rs"),
+    include_str!("../src/config/document.rs"),
+);
 const ADMIN_SOURCE: &str = concat!(
     include_str!("../src/admin/mod.rs"),
     include_str!("../src/admin/client.rs"),
@@ -66,6 +70,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
             "serde_json",
             "tokio",
             "tokio-util",
+            "toml",
         ])
     );
     assert_eq!(
@@ -73,6 +78,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
         BTreeSet::from([
             "admin",
             "build_info",
+            "config",
             "entropy",
             "error",
             "lifecycle",
@@ -90,6 +96,20 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(!OPERATIONS_PRIMITIVES_SOURCE.contains(forbidden));
     }
     assert!(!OPERATIONS_SOURCE.contains("process::exit"));
+    let config_production = CONFIG_SOURCE.split_once("#[cfg(test)]").unwrap().0;
+    for forbidden in [
+        "create_dir",
+        "read_dir",
+        "std::env",
+        "TcpStream",
+        "UdpSocket",
+        "SystemTime",
+        "MonotonicClock",
+        "tokio::",
+        "process::",
+    ] {
+        assert!(!config_production.contains(forbidden));
+    }
 }
 
 fn public_modules(root: &str) -> BTreeSet<&str> {

@@ -4,6 +4,7 @@
 
 pub mod admin;
 pub mod build_info;
+pub mod config;
 pub mod entropy;
 pub mod error;
 pub mod lifecycle;
@@ -37,6 +38,11 @@ pub use admin::{
 pub use build_info::{
     BuildInfo, BuildInfoEnvironment, BuildInfoError, BuildInfoField, BuildMode, ContractVersions,
     StatusBuildInfo,
+};
+pub use config::{
+    CONFIG_DOCUMENT_MAX_UTF8_BYTES, CONFIG_SCHEMA_ID_MAX_UTF8_BYTES, ConfigDocumentError,
+    ConfigDocumentErrorKind, ConfigDocumentExpectation, ConfigDocumentExpectationError,
+    ConfigDocumentLocation, load_config_document,
 };
 pub use entropy::{EntropyError, EntropySource, SystemEntropy};
 pub use error::{HostError, HostErrorCode, HostErrorKind, SafeHostError};
