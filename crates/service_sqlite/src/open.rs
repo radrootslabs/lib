@@ -675,11 +675,14 @@ async fn open_connection_pool(
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
     }
     let recovery_guard = match (mode, authority.as_ref(), inspection_guard.as_ref()) {
-        (OpenMode::Initialize | OpenMode::ReadWriteExisting, Some(authority), None) => {
+        (OpenMode::Initialize, Some(authority), None) => {
             authority.validate_for(paths)?;
             let result = crate::restore::refuse_unresolved_recovery(authority.directory());
             authority.validate_for(paths)?;
             result
+        }
+        (OpenMode::ReadWriteExisting, Some(authority), None) => {
+            crate::restore::recover_for_open(paths, identity, authority)
         }
         (OpenMode::ReadOnlyInspection, None, Some(inspection_guard)) => {
             inspection_guard.validate_for(paths)?;
@@ -1589,7 +1592,7 @@ mod tests {
         convert::Infallible,
         fs,
         num::NonZeroU32,
-        os::unix::fs::{PermissionsExt, symlink},
+        os::unix::fs::{MetadataExt, PermissionsExt, symlink},
         sync::{
             Arc,
             atomic::{AtomicUsize, Ordering as AtomicOrdering},
@@ -1603,6 +1606,8 @@ mod tests {
     };
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use radroots_storage::event::SourceGeneration;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    use sha2::{Digest, Sha256};
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use crate::{ServiceDatabaseMetadata, ServiceSqliteApplicationId};
@@ -1649,6 +1654,18 @@ mod tests {
             ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
         )
         .expect("database metadata")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn restore_expectation(path: &Path) -> crate::restore::RestoreArtifactExpectation {
+        let metadata = fs::metadata(path).expect("restore artifact metadata");
+        crate::restore::RestoreArtifactExpectation::new(
+            metadata.dev(),
+            metadata.ino(),
+            metadata.len(),
+            Sha256::digest(fs::read(path).expect("restore artifact bytes")).into(),
+        )
+        .expect("restore artifact expectation")
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2133,6 +2150,104 @@ mod tests {
             panic!("wrong generation must fail open");
         };
         assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn writable_open_recovers_while_read_only_and_initialize_paths_do_not_mutate() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let policy = ServiceSqliteConnectionOptions::reviewed();
+        let (paths, identity, mut authority) =
+            initialized_authority(directory.path(), "restore-recovery").await;
+        authority
+            .release()
+            .expect("release initialization authority");
+
+        let staged = paths
+            .state_database()
+            .with_file_name(crate::restore::STAGED_FILE_NAME);
+        fs::copy(paths.state_database(), &staged).expect("copy exact restore stage");
+        fs::set_permissions(&staged, fs::Permissions::from_mode(0o600))
+            .expect("restrict staged database");
+        let authority = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("writer authority")
+            .expect("writable mode retains authority");
+        let marker = crate::restore::RestoreRecoveryMarker::prepared(
+            &database_metadata(&paths),
+            crate::BackupManifestSha256::from_bytes([23; 32]),
+            restore_expectation(paths.state_database()),
+            restore_expectation(&staged),
+        )
+        .expect("prepared restore marker");
+        crate::restore::RestoreMarkerBinding::create(&paths, &authority, &marker)
+            .expect("persist prepared marker");
+        drop(authority);
+
+        let state_directory = paths.state_database().parent().expect("state directory");
+        let before = directory_snapshot(state_directory);
+        let read_only = open_existing_connection_pool(
+            &paths,
+            &identity,
+            &base_catalog(),
+            &base_schema_catalog(),
+            OpenMode::ReadOnlyInspection,
+            policy,
+        )
+        .await;
+        let Err(error) = read_only else {
+            panic!("read-only open must not recover");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Recovery);
+        assert_eq!(directory_snapshot(state_directory), before);
+
+        let initialize = crate::initialize_database(
+            &paths,
+            OpenMode::Initialize,
+            &database_metadata(&paths),
+            &base_schema_catalog(),
+            |_| async { Ok::<_, Infallible>(()) },
+        )
+        .await
+        .expect_err("initialize must not recover existing evidence");
+        assert_eq!(initialize.kind(), ServiceSqliteErrorKind::Recovery);
+        assert_eq!(directory_snapshot(state_directory), before);
+
+        let initialized_authority = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("writer authority")
+            .expect("writable mode retains authority");
+        let initialized = open_initialized_connection_pool(
+            &paths,
+            &identity,
+            &base_catalog(),
+            &base_schema_catalog(),
+            policy,
+            initialized_authority,
+        )
+        .await;
+        let Err(error) = initialized else {
+            panic!("initialized open must not recover");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Recovery);
+        assert_eq!(directory_snapshot(state_directory), before);
+
+        let writable = open_existing_connection_pool(
+            &paths,
+            &identity,
+            &base_catalog(),
+            &base_schema_catalog(),
+            OpenMode::ReadWriteExisting,
+            policy,
+        )
+        .await
+        .expect("writable open recovers before SQLite");
+        assert!(!staged.exists());
+        assert!(
+            !paths
+                .state_database()
+                .with_file_name(crate::restore::MARKER_FILE_NAME)
+                .exists()
+        );
+        drop(writable.close().await);
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

@@ -59,6 +59,12 @@ enum ServiceSqliteHostCloseState {
 
 impl ServiceSqliteHost {
     /// Opens existing writable state and finishes every pending governed migration.
+    ///
+    /// Before opening SQLite, this path holds exclusive writer authority and
+    /// synchronously reconciles any exact interrupted-restore topology. The
+    /// recovery sequence has no await point: cancellation cannot split one
+    /// filesystem step from its authority check. If the surrounding open is
+    /// cancelled later, a retry re-reads the already durable filesystem state.
     #[allow(clippy::too_many_arguments)]
     pub async fn open_read_write_existing(
         paths: &ServiceSqlitePaths,

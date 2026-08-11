@@ -2056,20 +2056,18 @@ mod tests {
             )
         );
 
-        for mode in [OpenMode::ReadWriteExisting, OpenMode::ReadOnlyInspection] {
-            let error = crate::open::open_existing_connection_pool(
-                &fixture.paths,
-                &fixture.identity,
-                &fixture.migrations,
-                &fixture.schema,
-                mode,
-                ServiceSqliteConnectionOptions::reviewed(),
-            )
-            .await
-            .err()
-            .expect("unresolved recovery must reject open");
-            assert_eq!(error.kind(), ServiceSqliteErrorKind::Recovery);
-        }
+        let read_only = crate::open::open_existing_connection_pool(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            OpenMode::ReadOnlyInspection,
+            ServiceSqliteConnectionOptions::reviewed(),
+        )
+        .await
+        .err()
+        .expect("read-only open must not recover");
+        assert_eq!(read_only.kind(), ServiceSqliteErrorKind::Recovery);
         let initialize = crate::initialize_database(
             &fixture.paths,
             OpenMode::Initialize,
@@ -2080,6 +2078,30 @@ mod tests {
         .await
         .expect_err("unresolved recovery must reject initialization");
         assert_eq!(initialize.kind(), ServiceSqliteErrorKind::Recovery);
+
+        let writable = crate::open::open_existing_connection_pool(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            OpenMode::ReadWriteExisting,
+            ServiceSqliteConnectionOptions::reviewed(),
+        )
+        .await
+        .expect("writable open must recover exact finalization evidence");
+        writable.close().await.expect("close recovered pool");
+        assert_eq!(
+            fs::read(fixture.paths.state_database()).expect("recovered live database"),
+            replacement
+        );
+        for name in [
+            BACKUP_FILE_NAME,
+            MARKER_FILE_NAME,
+            MARKER_NEXT_FILE_NAME,
+            STAGED_FILE_NAME,
+        ] {
+            assert!(!recovery_path(&fixture, name).exists(), "unexpected {name}");
+        }
         reset_finalize_controls();
     }
 

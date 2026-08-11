@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    BackupManifestSha256, ServiceDatabaseMetadata, ServiceSqliteApplicationId, ServiceSqlitePaths,
+    BackupManifestSha256, ServiceDatabaseIdentity, ServiceDatabaseMetadata,
+    ServiceSqliteApplicationId, ServiceSqlitePaths,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -24,11 +25,11 @@ const RESTORE_MARKER_SCHEMA: &str = "radroots.service-sqlite.restore-marker";
 const RESTORE_MARKER_SCHEMA_VERSION: u32 = 1;
 const RESTORE_MARKER_MAX_BYTES: usize = 2_048;
 const RESTORE_MARKER_CHECKSUM_DOMAIN: &[u8] = b"radroots.service_sqlite.restore_marker.v1\0";
-pub(super) const LIVE_FILE_NAME: &str = radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME;
-pub(super) const STAGED_FILE_NAME: &str = "state.restore-staged.sqlite";
-pub(super) const BACKUP_FILE_NAME: &str = "state.restore-backup.sqlite";
-pub(super) const MARKER_FILE_NAME: &str = "state.restore-marker.v1";
-pub(super) const MARKER_NEXT_FILE_NAME: &str = "state.restore-marker.v1.next";
+pub(crate) const LIVE_FILE_NAME: &str = radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME;
+pub(crate) const STAGED_FILE_NAME: &str = "state.restore-staged.sqlite";
+pub(crate) const BACKUP_FILE_NAME: &str = "state.restore-backup.sqlite";
+pub(crate) const MARKER_FILE_NAME: &str = "state.restore-marker.v1";
+pub(crate) const MARKER_NEXT_FILE_NAME: &str = "state.restore-marker.v1.next";
 
 /// Exact retained identity and content expected for one restore artifact.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -370,6 +371,14 @@ impl RestoreRecoveryMarker {
 
     fn matches_paths(&self, paths: &ServiceSqlitePaths) -> bool {
         self.service == *paths.service() && self.instance == *paths.instance()
+    }
+
+    pub(crate) fn matches_identity(&self, identity: &ServiceDatabaseIdentity) -> bool {
+        self.service == *identity.service()
+            && self.instance == *identity.instance()
+            && self.source_generation == identity.source_generation()
+            && self.application_id == identity.application_id()
+            && self.state_schema_version <= identity.supported_state_schema_version()
     }
 }
 
@@ -747,13 +756,94 @@ mod store {
             Ok(Some(binding))
         }
 
+        pub(crate) fn load_for_recovery(
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+        ) -> Result<Option<Self>, ServiceSqliteError> {
+            authority.validate_for(paths)?;
+            let layout = RestoreRecoveryLayout::for_paths(paths).map_err(recovery_contract)?;
+            let directory = authority_checked(authority, paths, || {
+                authority
+                    .directory()
+                    .try_clone()
+                    .map_err(|_| StoreFailure::Directory)
+            })?
+            .map_err(recovery_store)?;
+            let directory_identity =
+                authority_checked(authority, paths, || validate_directory(&directory))?
+                    .map_err(authority_store)?;
+            let marker_file = match authority_checked(authority, paths, || {
+                open_marker_file(&directory, MARKER_FILE_NAME)
+            })? {
+                Ok(file) => file,
+                Err(StoreFailure::Missing) => {
+                    authority_checked(authority, paths, || {
+                        require_absent(&directory, MARKER_NEXT_FILE_NAME)
+                    })?
+                    .map_err(recovery_store)?;
+                    return Ok(None);
+                }
+                Err(cause) => return Err(recovery_store(cause)),
+            };
+            let marker_identity =
+                authority_checked(authority, paths, || file_identity(&marker_file))?
+                    .map_err(recovery_store)?;
+            let marker = authority_checked(authority, paths, || read_marker(&marker_file))?
+                .map_err(recovery_store)?;
+            if !marker.matches_paths(paths) {
+                return Err(recovery_contract(
+                    RestoreMarkerContractError::InvalidIdentity,
+                ));
+            }
+            let binding = Self {
+                directory,
+                directory_identity,
+                marker_file,
+                marker_identity,
+                marker,
+            };
+            authority_checked(authority, paths, || {
+                binding.validate_inner(paths, false, ServiceSqliteErrorKind::Recovery)
+            })??;
+            if layout
+                .marker
+                .file_name()
+                .is_none_or(|name| name != MARKER_FILE_NAME)
+            {
+                return Err(recovery_contract(RestoreMarkerContractError::InvalidLayout));
+            }
+            authority.validate_for(paths)?;
+            Ok(Some(binding))
+        }
+
         pub(crate) fn advance(
             self,
             paths: &ServiceSqlitePaths,
             authority: &WriterAuthority,
             next: RestoreRecoveryPhase,
         ) -> Result<Self, ServiceSqliteError> {
-            self.advance_with_operations(paths, authority, next, &SystemStoreOperations)
+            self.advance_with_operations(
+                paths,
+                authority,
+                next,
+                &SystemStoreOperations,
+                ServiceSqliteErrorKind::Restore,
+            )
+        }
+
+        pub(crate) fn advance_for_recovery(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            next: RestoreRecoveryPhase,
+        ) -> Result<Self, ServiceSqliteError> {
+            self.advance_with_operations(
+                paths,
+                authority,
+                next,
+                &SystemStoreOperations,
+                ServiceSqliteErrorKind::Recovery,
+            )
         }
 
         fn advance_with_operations(
@@ -762,30 +852,33 @@ mod store {
             authority: &WriterAuthority,
             next: RestoreRecoveryPhase,
             operations: &dyn StoreOperations,
+            operation_kind: ServiceSqliteErrorKind,
         ) -> Result<Self, ServiceSqliteError> {
-            authority_checked(authority, paths, || self.validate_for_restore(paths))??;
+            authority_checked(authority, paths, || {
+                self.validate_inner(paths, true, operation_kind)
+            })??;
             let current = authority_checked(authority, paths, || read_marker(&self.marker_file))?
-                .map_err(restore_store)?;
+                .map_err(|cause| operation_store(operation_kind, cause))?;
             if current.canonical_bytes() != self.marker.canonical_bytes() {
-                return Err(restore_store(StoreFailure::Conflict));
+                return Err(operation_store(operation_kind, StoreFailure::Conflict));
             }
             let next_marker = self
                 .marker
                 .transitioned_to(next)
-                .map_err(restore_contract)?;
+                .map_err(|cause| operation_contract(operation_kind, cause))?;
             if next_marker.canonical_bytes() == self.marker.canonical_bytes() {
                 return Ok(self);
             }
             authority_checked(authority, paths, || {
                 require_absent(&self.directory, MARKER_NEXT_FILE_NAME)
             })?
-            .map_err(restore_store)?;
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             let (scratch, scratch_identity) = authority_checked(authority, paths, || {
                 let file = create_marker_file(&self.directory, MARKER_NEXT_FILE_NAME)?;
                 let identity = file_identity(&file)?;
                 Ok::<_, StoreFailure>((file, identity))
             })?
-            .map_err(restore_store)?;
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             let scratch_write = authority_checked(authority, paths, || {
                 write_and_sync(
                     &scratch,
@@ -802,10 +895,10 @@ mod store {
                     MARKER_NEXT_FILE_NAME,
                     scratch_identity,
                 )?;
-                return Err(restore_store(cause));
+                return Err(operation_store(operation_kind, cause));
             }
             authority_checked(authority, paths, || {
-                self.validate_inner(paths, false, ServiceSqliteErrorKind::Restore)
+                self.validate_inner(paths, false, operation_kind)
             })??;
             let scratch_matches = authority_checked(authority, paths, || {
                 let current = open_marker_file(&self.directory, MARKER_NEXT_FILE_NAME)?;
@@ -814,7 +907,7 @@ mod store {
                         && file_identity(&current)? == scratch_identity,
                 )
             })?
-            .map_err(restore_store)?;
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             if !scratch_matches {
                 cleanup_with_authority(
                     authority,
@@ -823,7 +916,7 @@ mod store {
                     MARKER_NEXT_FILE_NAME,
                     scratch_identity,
                 )?;
-                return Err(restore_store(StoreFailure::Conflict));
+                return Err(operation_store(operation_kind, StoreFailure::Conflict));
             }
             let replacement = authority_checked(authority, paths, || {
                 operations
@@ -838,7 +931,7 @@ mod store {
                     MARKER_NEXT_FILE_NAME,
                     scratch_identity,
                 )?;
-                return Err(restore_store(StoreFailure::Rename));
+                return Err(operation_store(operation_kind, StoreFailure::Rename));
             }
             let parent_sync = authority_checked(authority, paths, || {
                 operations
@@ -846,7 +939,7 @@ mod store {
                     .map_err(|_| StoreFailure::Sync)
             })?;
             if parent_sync.is_err() {
-                return Err(restore_store(StoreFailure::Sync));
+                return Err(operation_store(operation_kind, StoreFailure::Sync));
             }
             let (marker_file, marker_identity, reread) =
                 authority_checked(authority, paths, || {
@@ -855,9 +948,9 @@ mod store {
                     let marker = read_marker(&file)?;
                     Ok::<_, StoreFailure>((file, identity, marker))
                 })?
-                .map_err(restore_store)?;
+                .map_err(|cause| operation_store(operation_kind, cause))?;
             if reread.canonical_bytes() != next_marker.canonical_bytes() {
-                return Err(restore_store(StoreFailure::Conflict));
+                return Err(operation_store(operation_kind, StoreFailure::Conflict));
             }
             let binding = Self {
                 directory: self.directory,
@@ -866,7 +959,9 @@ mod store {
                 marker_identity,
                 marker: next_marker,
             };
-            authority_checked(authority, paths, || binding.validate_for_restore(paths))??;
+            authority_checked(authority, paths, || {
+                binding.validate_inner(paths, true, operation_kind)
+            })??;
             Ok(binding)
         }
 
@@ -883,11 +978,136 @@ mod store {
                 authority,
                 next,
                 &FailingStoreOperations { failure },
+                ServiceSqliteErrorKind::Restore,
+            )
+        }
+
+        #[cfg(test)]
+        pub(crate) fn test_advance_for_recovery_with_failure(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            next: RestoreRecoveryPhase,
+            failure: TestStoreFailure,
+        ) -> Result<Self, ServiceSqliteError> {
+            self.advance_with_operations(
+                paths,
+                authority,
+                next,
+                &FailingStoreOperations { failure },
+                ServiceSqliteErrorKind::Recovery,
             )
         }
 
         pub(crate) const fn marker(&self) -> &RestoreRecoveryMarker {
             &self.marker
+        }
+
+        pub(crate) fn interrupted_transition(
+            &self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+        ) -> Result<Option<RestoreRecoveryPhase>, ServiceSqliteError> {
+            authority_checked(authority, paths, || {
+                self.validate_inner(paths, false, ServiceSqliteErrorKind::Recovery)
+            })??;
+            let scratch = match authority_checked(authority, paths, || {
+                open_marker_file(&self.directory, MARKER_NEXT_FILE_NAME)
+            })? {
+                Ok(file) => file,
+                Err(StoreFailure::Missing) => return Ok(None),
+                Err(cause) => return Err(recovery_store(cause)),
+            };
+            let scratch_marker = authority_checked(authority, paths, || read_marker(&scratch))?
+                .map_err(recovery_store)?;
+            let next = scratch_marker.phase();
+            let expected = self.marker.transitioned_to(next);
+            if next == self.marker.phase()
+                || match expected {
+                    Ok(expected) => expected.canonical_bytes() != scratch_marker.canonical_bytes(),
+                    Err(_) => true,
+                }
+            {
+                return Err(recovery_store(StoreFailure::Conflict));
+            }
+            Ok(Some(next))
+        }
+
+        pub(crate) fn promote_interrupted_transition(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            expected_phase: RestoreRecoveryPhase,
+        ) -> Result<Self, ServiceSqliteError> {
+            self.promote_interrupted_transition_with_hook(paths, authority, expected_phase, || {})
+        }
+
+        fn promote_interrupted_transition_with_hook(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            expected_phase: RestoreRecoveryPhase,
+            before_exact_removal: impl FnOnce(),
+        ) -> Result<Self, ServiceSqliteError> {
+            authority.validate_for(paths)?;
+            authority_checked(authority, paths, || {
+                self.validate_inner(paths, false, ServiceSqliteErrorKind::Recovery)
+            })??;
+            let scratch = authority_checked(authority, paths, || {
+                open_marker_file(&self.directory, MARKER_NEXT_FILE_NAME)
+            })?
+            .map_err(recovery_store)?;
+            let scratch_identity = authority_checked(authority, paths, || file_identity(&scratch))?
+                .map_err(recovery_store)?;
+            let scratch_marker = authority_checked(authority, paths, || read_marker(&scratch))?
+                .map_err(recovery_store)?;
+            let expected = self
+                .marker
+                .transitioned_to(expected_phase)
+                .map_err(recovery_contract)?;
+            if scratch_marker.canonical_bytes() != expected.canonical_bytes() {
+                return Err(recovery_store(StoreFailure::Conflict));
+            }
+            before_exact_removal();
+            // Preserve the valid current marker even if the scratch pathname
+            // was replaced after an interrupted advance. Remove only the
+            // exact validated scratch, then recreate the governed transition.
+            let removal = authority_checked(authority, paths, || {
+                remove_exact_and_sync(&self.directory, MARKER_NEXT_FILE_NAME, scratch_identity)
+            })?;
+            removal.map_err(recovery_store)?;
+            self.advance_for_recovery(paths, authority, expected_phase)
+        }
+
+        #[cfg(test)]
+        pub(crate) fn test_promote_interrupted_transition_after_hook(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            expected_phase: RestoreRecoveryPhase,
+            before_exact_removal: impl FnOnce(),
+        ) -> Result<Self, ServiceSqliteError> {
+            self.promote_interrupted_transition_with_hook(
+                paths,
+                authority,
+                expected_phase,
+                before_exact_removal,
+            )
+        }
+
+        pub(crate) fn retire(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+        ) -> Result<(), ServiceSqliteError> {
+            authority.validate_for(paths)?;
+            authority_checked(authority, paths, || {
+                self.validate_inner(paths, true, ServiceSqliteErrorKind::Recovery)
+            })??;
+            authority_checked(authority, paths, || {
+                remove_exact_and_sync(&self.directory, MARKER_FILE_NAME, self.marker_identity)
+            })?
+            .map_err(recovery_store)
         }
 
         pub(crate) fn validate(
@@ -1183,6 +1403,20 @@ mod store {
         }
     }
 
+    fn remove_exact_and_sync(
+        directory: &File,
+        name: &str,
+        expected: FileIdentity,
+    ) -> Result<(), StoreFailure> {
+        let current = open_marker_file(directory, name)?;
+        if file_identity(&current)? != expected {
+            return Err(StoreFailure::Conflict);
+        }
+        unlinkat(directory, name, AtFlags::empty()).map_err(|_| StoreFailure::Conflict)?;
+        directory.sync_all().map_err(|_| StoreFailure::Sync)?;
+        require_absent(directory, name)
+    }
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum StoreFailure {
         Directory,
@@ -1253,6 +1487,8 @@ mod store {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) use store::RestoreMarkerBinding;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) use store::TestStoreFailure;
 
 #[cfg(test)]
 mod tests {

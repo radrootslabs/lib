@@ -167,11 +167,37 @@ authority until it either fails before durability or establishes recovery
 evidence and continues. Once `prepared` is durable, staged-artifact cleanup is
 disarmed and the bound stage remains available after every later error.
 Success returns no database host, retains the old live database and final
-marker, and requires a new open. Until open-time recovery is implemented,
-every initialized, read-write-existing, or read-only-inspection pool open
-refuses a marker or marker-scratch as `Recovery` before opening SQLite.
-Finalization does not delete evidence, roll back, reconcile an interruption,
-or reopen the database; those remain the next recovery checkpoint.
+marker, and requires a new open. Read-write-existing open is the sole recovery
+path. Under exclusive writer authority and before opening SQLite, it validates
+the marker's exact service, instance, source generation, application ID, schema
+ceiling, artifact identities, lengths, digests, restrictive modes, and the
+absence of database sidecars. Read-only inspection, initialization, and an
+initialized open never recover; they reject any stage, backup, marker, or marker
+scratch as `Recovery` without mutation.
+
+Recovery uses exact topology as the durable authority. `prepared` with the old
+live database still installed rolls back by removing only the exact stage and
+then the marker. Once the exact old live inode has reached the backup name,
+recovery advances and rolls forward. A lagging `live_retained` phase installs or
+recognizes the exact replacement, advances to `replacement_installed`, then
+removes the exact old backup before retiring the marker. Interrupted rollback
+and final cleanup accept only the corresponding already-absent exact artifact,
+so repeated recovery is idempotent. Every other topology, sidecar, replacement,
+link, mode, owner, length, digest, identity, or directory-authority mismatch
+fails closed and preserves the evidence.
+
+A marker scratch is admitted only when it is the canonical one-edge successor
+of the current marker and the artifact topology already proves that successor.
+Recovery removes only the exact bound scratch inode, synchronizes that removal,
+then reproduces the transition through the governed marker-advance path. This
+preserves the valid current marker if the scratch pathname was replaced.
+Orphaned, malformed, skipped, same-phase, terminal, mismatched, or
+topology-inconsistent scratch is never deleted or reinterpreted. Recovery has no
+await point or hidden task: once a writable open is polled, each synchronous
+filesystem step and its authority checks complete before the open can be
+cancelled. A later cancelled SQLite open is retried by rereading the already
+durable, marker-free state. Finalization itself does not reconcile or reopen the
+database.
 
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness

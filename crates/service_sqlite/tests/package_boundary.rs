@@ -18,6 +18,7 @@ const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
 const RESTORE_FINALIZE_SOURCE: &str = include_str!("../src/restore/finalize.rs");
+const RESTORE_RECOVER_SOURCE: &str = include_str!("../src/restore/recover.rs");
 const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
 const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
@@ -179,9 +180,22 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "Once `prepared` is durable, staged-artifact cleanup is disarmed",
         "unknown immediate outcome",
         "retains the old live database and final marker",
-        "every initialized, read-write-existing, or read-only-inspection pool open refuses",
-        "marker or marker-scratch as `Recovery` before opening SQLite",
-        "does not delete evidence, roll back, reconcile an interruption, or reopen the database",
+        "Read-write-existing open is the sole recovery path",
+        "before opening SQLite",
+        "Read-only inspection, initialization, and an initialized open never recover",
+        "reject any stage, backup, marker, or marker scratch as `Recovery` without mutation",
+        "Recovery uses exact topology as the durable authority",
+        "rolls back by removing only the exact stage and then the marker",
+        "recovery advances and rolls forward",
+        "removes the exact old backup before retiring the marker",
+        "repeated recovery is idempotent",
+        "A marker scratch is admitted only when it is the canonical one-edge successor",
+        "Recovery removes only the exact bound scratch inode",
+        "then reproduces the transition through the governed marker-advance path",
+        "preserves the valid current marker if the scratch pathname was replaced",
+        "Recovery has no await point or hidden task",
+        "each synchronous filesystem step and its authority checks complete",
+        "Finalization itself does not reconcile or reopen the database",
     ] {
         assert!(
             readme_words.contains(required),
@@ -675,18 +689,73 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "Step 068 restore finalization source contains deferred or raw authority `{forbidden}`"
         );
     }
-    for required in [
-        "refuse_unresolved_recovery",
-        "ServiceSqliteErrorKind::Recovery",
-        "MARKER_FILE_NAME",
-        "MARKER_NEXT_FILE_NAME",
-    ] {
+    for required in ["refuse_unresolved_recovery", "recover_for_open"] {
         assert!(
             RESTORE_ROOT_SOURCE.contains(required),
             "Step 068 recovery-open guard is missing `{required}`"
         );
     }
     assert!(OPEN_SOURCE.contains("crate::restore::refuse_unresolved_recovery"));
+    assert!(OPEN_SOURCE.contains("crate::restore::recover_for_open(paths, identity, authority)"));
+
+    let restore_recover_production = RESTORE_RECOVER_SOURCE
+        .split_once("#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]")
+        .map(|(production, _)| production)
+        .expect("restore recovery source must keep tests separated");
+    for required in [
+        "pub(crate) fn recover_for_open(",
+        "WriterAuthority",
+        "RestoreMarkerBinding::load_for_recovery",
+        "matches_identity(identity)",
+        "interrupted_transition(paths, authority)",
+        "promote_interrupted_transition",
+        "advance_for_recovery",
+        "RestoreRecoveryPhase::Prepared",
+        "RestoreRecoveryPhase::LiveRetained",
+        "RestoreRecoveryPhase::ReplacementInstalled",
+        "RenameFlags::NOREPLACE",
+        "verify_named_artifact(",
+        "hash_exact(",
+        "remove_exact_artifact(",
+        "marker.retire(paths, authority)",
+        "state.sqlite-wal",
+        "state.sqlite-shm",
+        "state.sqlite-journal",
+        "ServiceSqliteErrorKind::Recovery",
+    ] {
+        assert!(
+            restore_recover_production.contains(required),
+            "Step 069 restore recovery source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub fn recover",
+        "pub async fn recover",
+        "pub struct PendingRestore",
+        "sqlx::",
+        "rusqlite::",
+        "tokio::",
+        "spawn_blocking",
+        "tokio::time::timeout",
+        "remove_dir_all",
+        "SystemTime::now",
+    ] {
+        assert!(
+            !restore_recover_production.contains(forbidden) && !ROOT.contains(forbidden),
+            "Step 069 recovery exposes or implements forbidden authority `{forbidden}`"
+        );
+    }
+    for required in [
+        "STAGED_FILE_NAME",
+        "BACKUP_FILE_NAME",
+        "MARKER_FILE_NAME",
+        "MARKER_NEXT_FILE_NAME",
+    ] {
+        assert!(
+            RESTORE_RECOVER_SOURCE.contains(required),
+            "Step 069 refusal inventory is missing `{required}`"
+        );
+    }
     assert!(ROOT.contains(
         "pub use restore::{StagedServiceRestore, finalize_staged_restore, stage_verified_restore};"
     ));

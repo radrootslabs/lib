@@ -228,10 +228,29 @@ Before editing code:
   cleanup must remain disarmed after every later error so the marker never
   loses a bound artifact.
   Successful finalization returns no host and leaves the old live database and
-  `replacement_installed` marker for open-time recovery. Until that recovery
-  exists, every pool open must reject marker or marker-scratch evidence as
-  `Recovery`. Finalization must not roll back, delete recovery evidence, reopen
-  SQLite, or expose paths, descriptors, marker controls, or rename controls.
+  `replacement_installed` marker for the next writable open to recover. Other
+  open modes reject that evidence as `Recovery`. Finalization itself must not
+  roll back, delete recovery evidence, reopen SQLite, or expose paths,
+  descriptors, marker controls, or rename controls.
+- Interrupted restore recovery is private and automatic only for
+  read-write-existing open under exclusive `WriterAuthority`, before any
+  SQLite connection or await point. Initialize, initialized-open, and
+  read-only inspection must reject every fixed stage, backup, marker, or
+  marker-scratch artifact without mutation. Recovery must bind the marker to
+  the requested database identity, hash and revalidate exact owner-only
+  single-link artifacts, reject sidecars, and let exact topology decide the
+  sole action: roll back `prepared` while old live is still installed, then
+  roll forward once old live is durably retained. Persist every inferred phase
+  before the next destructive step; retire exact backup before marker; and
+  admit marker scratch only as a canonical topology-consistent one-edge
+  successor whose exact bound inode is removed and durably reproduced through
+  the governed marker-advance path without overwriting the valid marker.
+  Repeated recovery may
+  finish already-absent stage or backup cleanup, but every other missing,
+  replaced, linked, malformed, mismatched, or ambiguous artifact remains
+  `Recovery` evidence. Do not expose recovery controls, add a background task
+  or hidden timeout, repair without writer authority, or fold Step 070
+  integrity/status APIs and the later process failpoint harness into recovery.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

@@ -2,37 +2,23 @@
 
 mod finalize;
 mod marker;
+mod recover;
 mod stage;
 
 pub use finalize::finalize_staged_restore;
 pub use stage::{StagedServiceRestore, stage_verified_restore};
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) fn refuse_unresolved_recovery(
-    directory: &impl std::os::fd::AsFd,
-) -> Result<(), crate::ServiceSqliteError> {
-    use rustix::{
-        fs::{AtFlags, statat},
-        io::Errno,
-    };
+pub(crate) use recover::refuse_unresolved_recovery;
 
-    for name in [marker::MARKER_FILE_NAME, marker::MARKER_NEXT_FILE_NAME] {
-        match statat(directory, name, AtFlags::SYMLINK_NOFOLLOW) {
-            Err(Errno::NOENT) => {}
-            Ok(_) | Err(_) => {
-                return Err(crate::ServiceSqliteError::new(
-                    crate::ServiceSqliteErrorKind::Recovery,
-                ));
-            }
-        }
-    }
-    Ok(())
-}
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use recover::recover_for_open;
 
 #[allow(unused_imports)]
 pub(crate) use marker::{
+    BACKUP_FILE_NAME, LIVE_FILE_NAME, MARKER_FILE_NAME, MARKER_NEXT_FILE_NAME,
     RestoreArtifactExpectation, RestoreMarkerContractError, RestoreRecoveryLayout,
-    RestoreRecoveryMarker, RestoreRecoveryPhase,
+    RestoreRecoveryMarker, RestoreRecoveryPhase, STAGED_FILE_NAME,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
