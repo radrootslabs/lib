@@ -1,7 +1,10 @@
 //! Lifetime authority for the sole writable service database owner.
 
 use core::fmt;
-use std::{error::Error, fs::File, path::PathBuf};
+use std::{error::Error, fs::File};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::path::PathBuf;
 
 use fs2::FileExt;
 
@@ -20,13 +23,18 @@ use crate::{OpenMode, ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqliteP
 /// ```
 pub struct WriterAuthority {
     file: Option<File>,
-    #[allow(
-        dead_code,
-        reason = "Step 056 binds the authority for the private Step 061 pool host"
-    )]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     database_path: PathBuf,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     directory: File,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    directory_device: u64,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    directory_inode: u64,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    lock_device: u64,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    lock_inode: u64,
 }
 
 impl WriterAuthority {
@@ -55,10 +63,7 @@ impl WriterAuthority {
         &self.directory
     }
 
-    #[allow(
-        dead_code,
-        reason = "Step 056 binds the authority for the private Step 061 pool host"
-    )]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn validate_for(
         &self,
         paths: &ServiceSqlitePaths,
@@ -68,7 +73,7 @@ impl WriterAuthority {
         }
 
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        validate_directory_binding(&self.directory, paths).map_err(authority_error)?;
+        validate_authority_binding(self, paths).map_err(authority_error)?;
 
         Ok(())
     }
@@ -123,10 +128,7 @@ enum WriterAuthorityCause {
     LockWrongOwner,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     Contended,
-    #[allow(
-        dead_code,
-        reason = "Step 056 binds the authority for the private Step 061 pool host"
-    )]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     Mismatched,
     UnlockFailed,
 }
@@ -156,6 +158,7 @@ impl fmt::Display for WriterAuthorityCause {
             Self::LockWrongOwner => "SQLite writer lock has the wrong owner",
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             Self::Contended => "another SQLite writer is active",
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             Self::Mismatched => "SQLite writer authority does not match this database",
             Self::UnlockFailed => "SQLite writer authority could not be released",
         })
@@ -211,14 +214,30 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
     fchmod(&descriptor, Mode::RUSR | Mode::WUSR)
         .map_err(|_| WriterAuthorityCause::LockUnavailable)?;
 
+    let lock_status = fstat(&descriptor).map_err(|_| WriterAuthorityCause::LockUnavailable)?;
+    if u32::from(lock_status.st_mode) & 0o777 != 0o600 {
+        return Err(WriterAuthorityCause::LockUnavailable);
+    }
+    let directory_device = u64::try_from(directory_status.st_dev)
+        .map_err(|_| WriterAuthorityCause::StateDirectoryUnavailable)?;
+    let lock_device =
+        u64::try_from(lock_status.st_dev).map_err(|_| WriterAuthorityCause::LockUnavailable)?;
     let file = File::from(descriptor);
     let directory = File::from(directory);
     match FileExt::try_lock_exclusive(&file) {
-        Ok(()) => Ok(WriterAuthority {
-            file: Some(file),
-            database_path: paths.state_database().to_path_buf(),
-            directory,
-        }),
+        Ok(()) => {
+            let authority = WriterAuthority {
+                file: Some(file),
+                database_path: paths.state_database().to_path_buf(),
+                directory,
+                directory_device,
+                directory_inode: directory_status.st_ino,
+                lock_device,
+                lock_inode: lock_status.st_ino,
+            };
+            validate_authority_binding(&authority, paths)?;
+            Ok(authority)
+        }
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
             Err(WriterAuthorityCause::Contended)
         }
@@ -270,28 +289,83 @@ fn validate_lock(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn validate_directory_binding(
-    held_directory: &File,
+fn validate_authority_binding(
+    authority: &WriterAuthority,
     paths: &ServiceSqlitePaths,
 ) -> Result<(), WriterAuthorityCause> {
-    use rustix::fs::{Mode, OFlags, fstat, open};
+    use rustix::{
+        fs::{FileType, Mode, OFlags, fstat, open, openat},
+        process::geteuid,
+    };
 
+    let directory_path = paths
+        .state_database()
+        .parent()
+        .filter(|parent| Some(*parent) == paths.state_lock().parent())
+        .ok_or(WriterAuthorityCause::Mismatched)?;
     let current_directory = open(
-        paths
-            .state_database()
-            .parent()
-            .ok_or(WriterAuthorityCause::Mismatched)?,
+        directory_path,
         OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
         Mode::empty(),
     )
     .map_err(|_| WriterAuthorityCause::Mismatched)?;
-    let held = fstat(held_directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
-    let current = fstat(&current_directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
-    if held.st_dev == current.st_dev && held.st_ino == current.st_ino {
-        Ok(())
-    } else {
-        Err(WriterAuthorityCause::Mismatched)
+    let held_directory =
+        fstat(&authority.directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current_directory_status =
+        fstat(&current_directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let held_directory_device =
+        u64::try_from(held_directory.st_dev).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current_directory_device = u64::try_from(current_directory_status.st_dev)
+        .map_err(|_| WriterAuthorityCause::Mismatched)?;
+    if !FileType::from_raw_mode(held_directory.st_mode).is_dir()
+        || held_directory.st_uid != geteuid().as_raw()
+        || u32::from(held_directory.st_mode) & 0o022 != 0
+        || !FileType::from_raw_mode(current_directory_status.st_mode).is_dir()
+        || current_directory_status.st_uid != geteuid().as_raw()
+        || u32::from(current_directory_status.st_mode) & 0o022 != 0
+        || held_directory_device != authority.directory_device
+        || held_directory.st_ino != authority.directory_inode
+        || current_directory_device != authority.directory_device
+        || current_directory_status.st_ino != authority.directory_inode
+    {
+        return Err(WriterAuthorityCause::Mismatched);
     }
+
+    let current_lock = openat(
+        &current_directory,
+        radroots_runtime_paths::SERVICE_STATE_LOCK_FILE_NAME,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let held_lock = fstat(
+        authority
+            .file
+            .as_ref()
+            .ok_or(WriterAuthorityCause::Mismatched)?,
+    )
+    .map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current_lock_status = fstat(&current_lock).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let held_lock_device =
+        u64::try_from(held_lock.st_dev).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current_lock_device =
+        u64::try_from(current_lock_status.st_dev).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    if !FileType::from_raw_mode(held_lock.st_mode).is_file()
+        || u64::from(held_lock.st_nlink) != 1
+        || held_lock.st_uid != geteuid().as_raw()
+        || u32::from(held_lock.st_mode) & 0o777 != 0o600
+        || !FileType::from_raw_mode(current_lock_status.st_mode).is_file()
+        || u64::from(current_lock_status.st_nlink) != 1
+        || current_lock_status.st_uid != geteuid().as_raw()
+        || u32::from(current_lock_status.st_mode) & 0o777 != 0o600
+        || held_lock_device != authority.lock_device
+        || held_lock.st_ino != authority.lock_inode
+        || current_lock_device != authority.lock_device
+        || current_lock_status.st_ino != authority.lock_inode
+    {
+        return Err(WriterAuthorityCause::Mismatched);
+    }
+    Ok(())
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]

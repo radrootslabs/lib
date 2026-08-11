@@ -1,9 +1,11 @@
 use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
+const CONNECTION_SOURCE: &str = include_str!("../src/connection.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
 const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
 const INTEGRITY_SOURCE: &str = include_str!("../src/integrity/mod.rs");
@@ -12,6 +14,7 @@ const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
+const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
 
 #[test]
 fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
@@ -31,6 +34,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         dependency_keys(MANIFEST, "[dependencies]"),
         BTreeSet::from([
             "fs2",
+            "futures",
             "radroots_runtime_paths",
             "radroots_storage",
             "rustix",
@@ -48,16 +52,40 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         BTreeSet::from([
             "authority",
             "config",
+            "connection",
             "error",
             "initialize",
             "integrity",
             "metadata",
             "migration",
             "open",
-            "status"
+            "status",
+            "transaction_control"
         ])
     );
     assert!(public_modules(ROOT).is_empty());
+    for required in [
+        "`ServiceSqliteHost` is the only public connection host",
+        "borrowed `ServiceSqliteTransaction` executor",
+        "transaction begin, commit, rollback, policy",
+        "attached-database exclusion",
+        "Writable host opening finishes every pending governed migration",
+        "read-only inspection opens only current migration and",
+        "with raw database authority",
+        "before the runner enables outer commit",
+        "leaves no authoritative transaction effect",
+        "only after rollback is confirmed",
+        "unconfirmed rollback is reported as `RollbackFailed`",
+        "Cancelling once outer",
+        "must be treated as an unknown commit outcome",
+        "require rereading authoritative state",
+        "before an idempotent retry",
+    ] {
+        assert!(
+            README.contains(required),
+            "Step 061 README contract is missing `{required}`"
+        );
+    }
     let authority_production = AUTHORITY_SOURCE
         .split_once("#[cfg(all(test")
         .map(|(production, _)| production)
@@ -85,7 +113,11 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ServiceSqliteApplicationId",
         "ServiceSqliteMetadataValueError",
         "MigrationAppliedAtUnixSeconds",
+        "MigrationApplicationOutcome",
         "MigrationBuildIdentity",
+        "MigrationCallback",
+        "MigrationCallbackBinding",
+        "MigrationCallbackFuture",
         "MigrationCatalog",
         "MigrationChecksum",
         "MigrationContractError",
@@ -93,6 +125,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "MigrationEvidenceError",
         "MigrationKind",
         "MigrationName",
+        "MigrationTransactionExecutor",
         "SchemaCatalog",
         "SchemaCatalogContractError",
         "SchemaDigest",
@@ -102,6 +135,11 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ServiceSqlitePathError",
         "ServiceSqlitePaths",
         "OpenMode",
+        "ServiceSqliteHost",
+        "ServiceSqliteTransaction",
+        "ServiceSqliteTransactionError",
+        "ServiceSqliteTransactionErrorKind",
+        "ServiceSqliteTransactionFuture",
         "StorageHealth",
         "StorageIntegrity",
         "StorageStatus",
@@ -127,12 +165,9 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub(crate) async fn apply_governed_migrations",
         "validate_callback_bindings",
         "advance_schema_version",
-        "pub(crate) struct MigrationTransactionExecutor",
-        "set_commit_hook",
-        "set_rollback_hook",
-        "permit_outer_commit",
-        "permit_runner_rollback",
-        "reject_observed_rollback",
+        "pub struct MigrationTransactionExecutor",
+        "contains_database_control",
+        "database_control_rejected",
         "SAVEPOINT radroots_migration_transaction_probe",
         "FROM pragma_database_list",
         "CASE WHEN typeof(name) = 'text'",
@@ -141,6 +176,67 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             migration_production.contains(required),
             "Step 059 migration source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "pub struct ServiceSqliteHost",
+        "pub struct ServiceSqliteTransaction<'connection>",
+        "impl<'executor, 'connection> Executor<'executor>",
+        "pub enum ServiceSqliteTransactionErrorKind",
+        "pub struct ServiceSqliteTransactionError<E>",
+        "pub type ServiceSqliteTransactionFuture",
+        "BEGIN IMMEDIATE",
+        "OpenMode::ReadOnlyInspection => connection.begin().await",
+        "verify_before_commit",
+        "connection.close_on_drop()",
+        "connection.trust()",
+        "RestrictedExecute",
+        "contains_database_control",
+        "RADROOTS_FORBIDDEN_DATABASE_CONTROL",
+        "OperationRolledBack",
+        "RollbackFailed",
+        "CommitOutcomeUnknown",
+        "cancelling the future yields no result",
+        "must reread authoritative state before any idempotent retry",
+    ] {
+        assert!(
+            CONNECTION_SOURCE.contains(required),
+            "Step 061 connection source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "set_commit_hook",
+        "set_rollback_hook",
+        "permit_outer_commit",
+        "permit_runner_rollback",
+        "control_violation_observed",
+        "rejected_commit",
+        "rejected_commit_rolled_back",
+        "remove_commit_hook",
+        "remove_rollback_hook",
+    ] {
+        assert!(
+            TRANSACTION_CONTROL_SOURCE.contains(required),
+            "Step 061 transaction-control source is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "pub fn pool(",
+        "pub fn connection(",
+        "pub fn into_inner(",
+        "Deref for ServiceSqliteTransaction",
+        "AsRef<SqliteConnection>",
+        "pub async fn begin(",
+        "pub async fn commit(",
+        "pub async fn rollback(",
+        "pub use sqlx",
+    ] {
+        assert!(
+            !CONNECTION_SOURCE.contains(forbidden) && !ROOT.contains(forbidden),
+            "Step 061 source exposes forbidden raw authority `{forbidden}`"
         );
     }
 
@@ -193,9 +289,6 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub fn content(&self",
         "pub fn callback_definition",
         "pub fn migration_sql",
-        "pub type MigrationCallback",
-        "pub struct MigrationCallbackBinding",
-        "pub struct MigrationTransactionExecutor",
         "pub fn apply_governed_migrations",
         "pub async fn apply_governed_migrations",
         "pub use sqlx",
@@ -317,9 +410,6 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub struct PrivateConnectionPool",
         "pub fn open_connection_pool",
         "pub async fn open_connection_pool",
-        "pub struct MigrationCallbackBinding",
-        "pub type MigrationCallback",
-        "pub struct MigrationApplicationOutcome",
         "tokio::runtime",
         "Runtime::new",
     ] {
@@ -379,10 +469,32 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub fn release(&mut self)",
         "database_path: paths.state_database().to_path_buf()",
         "pub(crate) fn validate_for",
+        "validate_authority_binding",
+        "directory_device",
+        "directory_inode",
+        "lock_device",
+        "lock_inode",
+        "current_lock_status",
     ] {
         assert!(
             AUTHORITY_SOURCE.contains(required),
             "Step 054 authority source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "inspection_guard.validate_for(&self.paths)",
+        "fn validate_for(&self, paths: &ServiceSqlitePaths)",
+        "held_lock_status",
+        "lock_device",
+        "directory_device",
+        "WAL_FILE_NAME",
+        "SHARED_MEMORY_FILE_NAME",
+        "u32::from(directory_status.st_mode) & 0o022",
+    ] {
+        assert!(
+            OPEN_SOURCE.contains(required),
+            "Step 061 live authority source is missing `{required}`"
         );
     }
 

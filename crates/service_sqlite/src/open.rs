@@ -182,16 +182,14 @@ impl OpenMode {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 056 keeps the pool private until the Step 061 host boundary"
-)]
-struct PrivateConnectionPool {
+pub(crate) struct PrivateConnectionPool {
     pool: SqlitePool,
     binding: DirectoryBinding,
     paths: ServiceSqlitePaths,
+    identity: ServiceDatabaseIdentity,
     catalog: MigrationCatalog,
     schema_catalog: SchemaCatalog,
+    mode: OpenMode,
     authority: Option<WriterAuthority>,
     inspection_guard: Option<ReadOnlyInspectionGuard>,
     authority_failure: Arc<AtomicBool>,
@@ -202,10 +200,6 @@ struct PrivateConnectionPool {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 056 keeps pool lifecycle private until the Step 061 host boundary"
-)]
 impl PrivateConnectionPool {
     fn connection_failure_kind(&self) -> ServiceSqliteErrorKind {
         connection_failure_kind(
@@ -217,10 +211,36 @@ impl PrivateConnectionPool {
         )
     }
 
-    async fn acquire(&self) -> Result<PoolConnection<Sqlite>, ServiceSqliteError> {
-        self.binding.validate(&self.paths)?;
+    pub(crate) fn validate(&self) -> Result<(), ServiceSqliteError> {
+        if let Some(authority) = self.authority.as_ref() {
+            authority.validate_for(&self.paths)?;
+        }
+        if let Some(inspection_guard) = self.inspection_guard.as_ref() {
+            inspection_guard.validate_for(&self.paths)?;
+        }
+        self.binding.validate(&self.paths)
+    }
+
+    pub(crate) const fn mode(&self) -> OpenMode {
+        self.mode
+    }
+
+    pub(crate) fn identity(&self) -> &ServiceDatabaseIdentity {
+        &self.identity
+    }
+
+    pub(crate) fn catalog(&self) -> &MigrationCatalog {
+        &self.catalog
+    }
+
+    pub(crate) fn schema_catalog(&self) -> &SchemaCatalog {
+        &self.schema_catalog
+    }
+
+    pub(crate) async fn acquire(&self) -> Result<PoolConnection<Sqlite>, ServiceSqliteError> {
+        self.validate()?;
         let result = self.pool.acquire().await;
-        self.binding.validate(&self.paths)?;
+        self.validate()?;
         let mut connection =
             result.map_err(|source| connection_source(self.connection_failure_kind(), source))?;
         let history = crate::migration::verify_migration_history(
@@ -230,12 +250,12 @@ impl PrivateConnectionPool {
             true,
         )
         .await;
-        self.binding.validate(&self.paths)?;
+        self.validate()?;
         history?;
         Ok(connection)
     }
 
-    async fn apply_migrations(
+    pub(crate) async fn apply_migrations(
         &self,
         applied_at: MigrationAppliedAtUnixSeconds,
         build: &MigrationBuildIdentity,
@@ -275,10 +295,15 @@ impl PrivateConnectionPool {
         result
     }
 
-    async fn close(mut self) -> Option<WriterAuthority> {
+    pub(crate) async fn close(mut self) -> Option<WriterAuthority> {
         self.pool.close().await;
         self.inspection_guard.take();
         self.authority.take()
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn close_pool(&self) {
+        self.pool.close().await;
     }
 }
 
@@ -306,11 +331,7 @@ const fn connection_failure_kind(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 056 keeps pool opening private until the Step 061 host boundary"
-)]
-async fn open_existing_connection_pool(
+pub(crate) async fn open_existing_connection_pool(
     paths: &ServiceSqlitePaths,
     identity: &ServiceDatabaseIdentity,
     catalog: &MigrationCatalog,
@@ -343,11 +364,7 @@ async fn open_existing_connection_pool(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 056 keeps pool opening private until the Step 061 host boundary"
-)]
-async fn open_initialized_connection_pool(
+pub(crate) async fn open_initialized_connection_pool(
     paths: &ServiceSqlitePaths,
     identity: &ServiceDatabaseIdentity,
     catalog: &MigrationCatalog,
@@ -370,11 +387,7 @@ async fn open_initialized_connection_pool(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    clippy::too_many_arguments,
-    dead_code,
-    reason = "Step 056 keeps pool construction private until the Step 061 host boundary"
-)]
+#[allow(clippy::too_many_arguments)]
 async fn open_connection_pool(
     paths: &ServiceSqlitePaths,
     identity: &ServiceDatabaseIdentity,
@@ -450,6 +463,7 @@ async fn open_connection_pool(
     let before_metadata = identity.clone();
     let retained_catalog = catalog.clone();
     let retained_schema_catalog = schema_catalog.clone();
+    let retained_identity = identity.clone();
     let after_catalog = catalog.clone();
     let after_schema_catalog = schema_catalog.clone();
     let before_catalog = catalog.clone();
@@ -648,8 +662,10 @@ async fn open_connection_pool(
         pool,
         binding: retained_binding,
         paths: paths.clone(),
+        identity: retained_identity,
         catalog: retained_catalog,
         schema_catalog: retained_schema_catalog,
+        mode,
         authority,
         inspection_guard,
         authority_failure,
@@ -810,21 +826,17 @@ fn connection_source(kind: ServiceSqliteErrorKind, cause: sqlx::Error) -> Servic
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 056 keeps inspection authority private until the Step 061 host boundary"
-)]
 struct ReadOnlyInspectionGuard {
     lock: File,
+    lock_device: u64,
+    lock_inode: u64,
     directory: File,
+    directory_device: u64,
+    directory_inode: u64,
     _database: File,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 056 keeps inspection authority private until the Step 061 host boundary"
-)]
 impl ReadOnlyInspectionGuard {
     fn acquire(paths: &ServiceSqlitePaths) -> Result<Self, ServiceSqliteError> {
         use rustix::{
@@ -936,9 +948,101 @@ impl ReadOnlyInspectionGuard {
         }
         Ok(Self {
             lock,
+            lock_device: u64::try_from(lock_status.st_dev)
+                .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
+            lock_inode: lock_status.st_ino,
             directory: File::from(directory),
+            directory_device: u64::try_from(directory_status.st_dev)
+                .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
+            directory_inode: directory_status.st_ino,
             _database: database,
         })
+    }
+
+    fn validate_for(&self, paths: &ServiceSqlitePaths) -> Result<(), ServiceSqliteError> {
+        use rustix::{
+            fs::{AtFlags, FileType, Mode, OFlags, fstat, open, openat, statat},
+            process::geteuid,
+        };
+
+        let directory_path = paths
+            .state_lock()
+            .parent()
+            .filter(|parent| Some(*parent) == paths.state_database().parent())
+            .ok_or_else(|| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let directory = open(
+            directory_path,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let directory_status = fstat(&directory)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let held_directory_status = fstat(&self.directory)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let directory_device = u64::try_from(directory_status.st_dev)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let held_directory_device = u64::try_from(held_directory_status.st_dev)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        if !FileType::from_raw_mode(directory_status.st_mode).is_dir()
+            || directory_status.st_uid != geteuid().as_raw()
+            || u32::from(directory_status.st_mode) & 0o022 != 0
+            || !FileType::from_raw_mode(held_directory_status.st_mode).is_dir()
+            || held_directory_status.st_uid != geteuid().as_raw()
+            || u32::from(held_directory_status.st_mode) & 0o022 != 0
+            || directory_device != self.directory_device
+            || directory_status.st_ino != self.directory_inode
+            || held_directory_device != self.directory_device
+            || held_directory_status.st_ino != self.directory_inode
+        {
+            return Err(inspection_error(
+                ConnectionFailureKind::InspectionUnavailable,
+            ));
+        }
+
+        let lock = openat(
+            &directory,
+            radroots_runtime_paths::SERVICE_STATE_LOCK_FILE_NAME,
+            OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+            Mode::empty(),
+        )
+        .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let lock_status = fstat(&lock)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let held_lock_status = fstat(&self.lock)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let lock_device = u64::try_from(lock_status.st_dev)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        let held_lock_device = u64::try_from(held_lock_status.st_dev)
+            .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
+        if !FileType::from_raw_mode(lock_status.st_mode).is_file()
+            || u64::from(lock_status.st_nlink) != 1
+            || lock_status.st_uid != geteuid().as_raw()
+            || u32::from(lock_status.st_mode) & 0o777 != 0o600
+            || !FileType::from_raw_mode(held_lock_status.st_mode).is_file()
+            || u64::from(held_lock_status.st_nlink) != 1
+            || held_lock_status.st_uid != geteuid().as_raw()
+            || u32::from(held_lock_status.st_mode) & 0o777 != 0o600
+            || lock_device != self.lock_device
+            || lock_status.st_ino != self.lock_inode
+            || held_lock_device != self.lock_device
+            || held_lock_status.st_ino != self.lock_inode
+        {
+            return Err(inspection_error(
+                ConnectionFailureKind::InspectionUnavailable,
+            ));
+        }
+        for sidecar in [WAL_FILE_NAME, SHARED_MEMORY_FILE_NAME] {
+            match statat(&directory, sidecar, AtFlags::SYMLINK_NOFOLLOW) {
+                Err(error) if error == rustix::io::Errno::NOENT => {}
+                Ok(_) | Err(_) => {
+                    return Err(inspection_error(
+                        ConnectionFailureKind::InspectionUnavailable,
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1094,6 +1198,12 @@ impl DirectoryBinding {
             || directory_status.st_ino != self.directory_inode
             || held_directory_device != self.directory_device
             || held_directory_status.st_ino != self.directory_inode
+            || !FileType::from_raw_mode(directory_status.st_mode).is_dir()
+            || directory_status.st_uid != geteuid().as_raw()
+            || u32::from(directory_status.st_mode) & 0o022 != 0
+            || !FileType::from_raw_mode(held_directory_status.st_mode).is_dir()
+            || held_directory_status.st_uid != geteuid().as_raw()
+            || u32::from(held_directory_status.st_mode) & 0o022 != 0
         {
             return Err(connection_error(
                 ServiceSqliteErrorKind::Authority,

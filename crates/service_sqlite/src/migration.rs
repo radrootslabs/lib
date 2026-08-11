@@ -1,26 +1,20 @@
 //! Deterministic migration identity, ledger, and governed execution mechanics.
 
 use core::fmt;
-use std::{collections::BTreeSet, error::Error};
+use std::{collections::BTreeSet, error::Error, future::Future, pin::Pin};
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use std::{
-    collections::BTreeMap,
-    future::Future,
-    pin::Pin,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-};
+use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 
+use sqlx::SqliteConnection;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Connection, Row};
 
+use crate::ServiceSqliteError;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use crate::{SchemaCatalog, ServiceSqliteError, ServiceSqliteErrorKind};
+use crate::{SchemaCatalog, ServiceSqliteErrorKind};
 
 const MIGRATION_CONTENT_DOMAIN: &[u8] = b"radroots.service_sqlite.migration_content.v1\0";
 const MIGRATION_CATALOG_DOMAIN: &[u8] = b"radroots.service_sqlite.migration_catalog.v1\0";
@@ -479,19 +473,13 @@ impl fmt::Display for MigrationEvidenceError {
 
 impl Error for MigrationEvidenceError {}
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct MigrationApplicationOutcome {
+pub struct MigrationApplicationOutcome {
     initial_version: u32,
     final_version: u32,
     applied_count: u32,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 059 keeps application outcomes private until the Step 061 host boundary"
-)]
 impl MigrationApplicationOutcome {
     /// Returns the schema version observed under the migration transaction.
     #[must_use]
@@ -634,128 +622,48 @@ fn catalog_digest(descriptors: &[MigrationDescriptor]) -> MigrationChecksum {
     MigrationChecksum(hasher.finalize().into())
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) type MigrationCallbackFuture<'a> =
+pub type MigrationCallbackFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), ServiceSqliteError>> + Send + 'a>>;
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-type MigrationCallback =
+pub type MigrationCallback =
     for<'a> fn(&'a mut MigrationTransactionExecutor<'_>) -> MigrationCallbackFuture<'a>;
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) struct MigrationTransactionExecutor<'a> {
+pub struct MigrationTransactionExecutor<'a> {
     connection: &'a mut SqliteConnection,
+    database_control_rejected: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl MigrationTransactionExecutor<'_> {
-    pub(crate) async fn execute(&mut self, sql: &'static str) -> Result<(), ServiceSqliteError> {
-        assert_governed_transaction(self.connection).await?;
-        let execution = sqlx::raw_sql(sql).execute(&mut *self.connection).await;
-        let transaction = assert_governed_transaction(self.connection).await;
-        transaction?;
-        execution
-            .map(|_| ())
-            .map_err(|source| migration_source(MigrationFailureKind::Execution, source))
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-struct MigrationCommitGate {
-    allow_commit: Arc<AtomicBool>,
-    allow_runner_rollback: Arc<AtomicBool>,
-    rollback_observed: Arc<AtomicBool>,
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-impl MigrationCommitGate {
-    async fn install(connection: &mut SqliteConnection) -> Result<Self, ServiceSqliteError> {
-        let allow_commit = Arc::new(AtomicBool::new(false));
-        let allow_runner_rollback = Arc::new(AtomicBool::new(false));
-        let rollback_observed = Arc::new(AtomicBool::new(false));
-        let hook_permission = Arc::clone(&allow_commit);
-        let rollback_permission = Arc::clone(&allow_runner_rollback);
-        let rollback_epoch = Arc::clone(&rollback_observed);
-        let mut handle = connection
-            .lock_handle()
-            .await
-            .map_err(|source| migration_source(MigrationFailureKind::Execution, source))?;
-        handle.set_commit_hook(move || hook_permission.load(Ordering::Acquire));
-        handle.set_rollback_hook(move || {
-            if !rollback_permission.load(Ordering::Acquire) {
-                rollback_epoch.store(true, Ordering::Release);
-            }
-        });
-        drop(handle);
-        Ok(Self {
-            allow_commit,
-            allow_runner_rollback,
-            rollback_observed,
-        })
-    }
-
-    fn permit_outer_commit(&self) -> MigrationCommitPermit {
-        self.allow_commit.store(true, Ordering::Release);
-        MigrationCommitPermit {
-            allow_commit: Arc::clone(&self.allow_commit),
+    pub async fn execute(&mut self, sql: &'static str) -> Result<(), ServiceSqliteError> {
+        if crate::connection::contains_database_control(sql) {
+            self.database_control_rejected = true;
+            return Err(ServiceSqliteError::new(
+                crate::ServiceSqliteErrorKind::Migration,
+            ));
         }
-    }
-
-    fn permit_runner_rollback(&self) -> MigrationRollbackPermit {
-        self.allow_runner_rollback.store(true, Ordering::Release);
-        MigrationRollbackPermit {
-            allow_runner_rollback: Arc::clone(&self.allow_runner_rollback),
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            assert_governed_transaction(self.connection).await?;
+            let execution = sqlx::raw_sql(sql).execute(&mut *self.connection).await;
+            let transaction = assert_governed_transaction(self.connection).await;
+            transaction?;
+            execution
+                .map(|_| ())
+                .map_err(|source| migration_source(MigrationFailureKind::Execution, source))
         }
-    }
-
-    fn reject_observed_rollback(&self) -> Result<(), ServiceSqliteError> {
-        if self.rollback_observed.load(Ordering::Acquire) {
-            Err(migration_error(MigrationFailureKind::Execution))
-        } else {
-            Ok(())
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (&mut self.connection, sql);
+            Err(ServiceSqliteError::new(
+                crate::ServiceSqliteErrorKind::Migration,
+            ))
         }
-    }
-
-    async fn remove(self, connection: &mut SqliteConnection) -> Result<(), ServiceSqliteError> {
-        self.allow_commit.store(false, Ordering::Release);
-        self.allow_runner_rollback.store(false, Ordering::Release);
-        let mut handle = connection
-            .lock_handle()
-            .await
-            .map_err(|source| migration_source(MigrationFailureKind::Commit, source))?;
-        handle.remove_commit_hook();
-        handle.remove_rollback_hook();
-        Ok(())
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-struct MigrationCommitPermit {
-    allow_commit: Arc<AtomicBool>,
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-impl Drop for MigrationCommitPermit {
-    fn drop(&mut self) {
-        self.allow_commit.store(false, Ordering::Release);
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-struct MigrationRollbackPermit {
-    allow_runner_rollback: Arc<AtomicBool>,
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-impl Drop for MigrationRollbackPermit {
-    fn drop(&mut self) {
-        self.allow_runner_rollback.store(false, Ordering::Release);
     }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(PartialEq, Eq)]
-struct MigrationConnectionPolicy {
+pub(crate) struct MigrationConnectionPolicy {
     application_id: i64,
     journal_mode: String,
     synchronous: i64,
@@ -765,32 +673,38 @@ struct MigrationConnectionPolicy {
     query_only: i64,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(Clone, Copy)]
-pub(crate) struct MigrationCallbackBinding {
+pub struct MigrationCallbackBinding {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     target_version: u32,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     name: MigrationName,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     checksum: MigrationChecksum,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     callback: MigrationCallback,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-#[allow(
-    dead_code,
-    reason = "Step 059 keeps callback bindings private until the Step 061 host boundary"
-)]
 impl MigrationCallbackBinding {
-    pub(crate) const fn new(
+    pub const fn new(
         target_version: u32,
         name: MigrationName,
         checksum: MigrationChecksum,
         callback: MigrationCallback,
     ) -> Self {
-        Self {
-            target_version,
-            name,
-            checksum,
-            callback,
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            Self {
+                target_version,
+                name,
+                checksum,
+                callback,
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (target_version, name, checksum, callback);
+            Self {}
         }
     }
 }
@@ -922,7 +836,7 @@ pub(crate) async fn verify_migration_history(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-async fn verify_migration_history_snapshot(
+pub(crate) async fn verify_migration_history_snapshot(
     connection: &mut SqliteConnection,
     catalog: &MigrationCatalog,
     schema_catalog: &SchemaCatalog,
@@ -994,7 +908,9 @@ where
 
     loop {
         validate_authority()?;
-        let gate_result = MigrationCommitGate::install(connection).await;
+        let gate_result = crate::transaction_control::TransactionControlGate::install(connection)
+            .await
+            .map_err(|source| migration_source(MigrationFailureKind::Execution, source));
         validate_authority()?;
         let commit_gate = gate_result?;
         let transaction_result = connection.begin_with("BEGIN IMMEDIATE").await;
@@ -1014,7 +930,10 @@ where
             validate_authority()?;
             rollback_result
                 .map_err(|source| migration_source(MigrationFailureKind::Commit, source))?;
-            let remove_result = commit_gate.remove(connection).await;
+            let remove_result = commit_gate
+                .remove(connection)
+                .await
+                .map_err(|source| migration_source(MigrationFailureKind::Commit, source));
             validate_authority()?;
             remove_result?;
             break;
@@ -1029,7 +948,9 @@ where
         let execution_result = execute_descriptor(&mut transaction, descriptor, &callbacks).await;
         validate_authority()?;
         execution_result?;
-        commit_gate.reject_observed_rollback()?;
+        if commit_gate.control_violation_observed() {
+            return Err(migration_error(MigrationFailureKind::Execution));
+        }
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
@@ -1063,7 +984,9 @@ where
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
-        commit_gate.reject_observed_rollback()?;
+        if commit_gate.control_violation_observed() {
+            return Err(migration_error(MigrationFailureKind::Execution));
+        }
         let policy_result = read_connection_policy(&mut transaction).await;
         validate_authority()?;
         if policy_result? != initial_policy {
@@ -1072,13 +995,18 @@ where
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
-        commit_gate.reject_observed_rollback()?;
+        if commit_gate.control_violation_observed() {
+            return Err(migration_error(MigrationFailureKind::Execution));
+        }
         let permit = commit_gate.permit_outer_commit();
         let commit_result = transaction.commit().await;
         drop(permit);
         validate_authority()?;
         commit_result.map_err(|source| migration_source(MigrationFailureKind::Commit, source))?;
-        let remove_result = commit_gate.remove(connection).await;
+        let remove_result = commit_gate
+            .remove(connection)
+            .await
+            .map_err(|source| migration_source(MigrationFailureKind::Commit, source));
         validate_authority()?;
         remove_result?;
         let observed = after_commit();
@@ -1137,7 +1065,10 @@ async fn execute_descriptor(
     descriptor: &MigrationDescriptor,
     callbacks: &BTreeMap<u32, MigrationCallback>,
 ) -> Result<(), ServiceSqliteError> {
-    let mut executor = MigrationTransactionExecutor { connection };
+    let mut executor = MigrationTransactionExecutor {
+        connection,
+        database_control_rejected: false,
+    };
     match descriptor.kind() {
         MigrationKind::Sql => {
             let sql = core::str::from_utf8(descriptor.content)
@@ -1154,11 +1085,14 @@ async fn execute_descriptor(
             assert_governed_transaction(executor.connection).await?;
         }
     }
+    if executor.database_control_rejected {
+        return Err(migration_error(MigrationFailureKind::Execution));
+    }
     Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-async fn assert_governed_transaction(
+pub(crate) async fn assert_governed_transaction(
     connection: &mut SqliteConnection,
 ) -> Result<(), ServiceSqliteError> {
     sqlx::raw_sql(
@@ -1172,7 +1106,7 @@ async fn assert_governed_transaction(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-async fn read_connection_policy(
+pub(crate) async fn read_connection_policy(
     connection: &mut SqliteConnection,
 ) -> Result<MigrationConnectionPolicy, ServiceSqliteError> {
     let text = |source| migration_source(MigrationFailureKind::Execution, source);
@@ -1504,7 +1438,10 @@ mod tests {
     use std::{
         num::NonZeroU32,
         path::{Path, PathBuf},
-        sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        sync::{
+            Mutex,
+            atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        },
     };
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1712,7 +1649,24 @@ mod tests {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn ignored_attachment_callback<'a>(
+        executor: &'a mut MigrationTransactionExecutor<'_>,
+    ) -> MigrationCallbackFuture<'a> {
+        let sql = IGNORED_ATTACHMENT_SQL
+            .lock()
+            .expect("attachment SQL mutex")
+            .expect("attachment SQL is installed");
+        Box::pin(async move {
+            let _ = executor.execute(sql).await;
+            Ok(())
+        })
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     static PENDING_CALLBACK_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    static IGNORED_ATTACHMENT_SQL: Mutex<Option<&'static str>> = Mutex::new(None);
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     async fn replace_with_permissive_ledger(connection: &mut SqliteConnection) {
@@ -2340,6 +2294,100 @@ mod tests {
         assert_eq!(policy_error.kind(), ServiceSqliteErrorKind::Migration);
         drop(policy_connection);
         assert_fresh_connection_has_no_migration_effect(&policy_path, "policy_leaked").await;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn migration_executor_rejects_transient_attachment_before_file_creation() {
+        let directory = tempfile::tempdir().unwrap();
+        let database_path = directory.path().join("main.sqlite");
+        let external_path = directory.path().join("external.sqlite");
+        let migration_sql = Box::leak(
+            format!(
+                "ATTACH DATABASE '{}' AS extra; DETACH DATABASE extra",
+                external_path.display()
+            )
+            .into_boxed_str(),
+        );
+        let mut connection = initialized_file_database(&database_path).await;
+        let catalog =
+            MigrationCatalog::new([sql(2, "reject_transient_attachment", migration_sql)]).unwrap();
+        let schema_catalog = unchanged_schema_catalog(&catalog);
+        let mut validate = || Ok(());
+        let error = apply_governed_migrations(
+            &mut connection,
+            &catalog,
+            &schema_catalog,
+            MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap(),
+            &build_identity(),
+            &[],
+            &mut validate,
+        )
+        .await
+        .expect_err("migration ATTACH/DETACH must fail before SQLite compilation");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+        assert!(!external_path.exists());
+        assert_eq!(read_state_schema_version(&mut connection).await.unwrap(), 1);
+        assert!(
+            read_migration_history(&mut connection)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        const CALLBACK_DEFINITION: &[u8] = b"callback:reject_transient_attachment:v1";
+        let callback_database_path = directory.path().join("callback-main.sqlite");
+        let callback_external_path = directory.path().join("callback-external.sqlite");
+        let callback_sql = Box::leak(
+            format!(
+                "ATTACH DATABASE '{}' AS extra; DETACH DATABASE extra",
+                callback_external_path.display()
+            )
+            .into_boxed_str(),
+        );
+        *IGNORED_ATTACHMENT_SQL.lock().expect("attachment SQL mutex") = Some(callback_sql);
+        let mut callback_connection = initialized_file_database(&callback_database_path).await;
+        let callback_descriptor = MigrationDescriptor::callback(
+            2,
+            "reject_callback_attachment",
+            CALLBACK_DEFINITION,
+            MigrationChecksum::for_callback(CALLBACK_DEFINITION),
+        )
+        .unwrap();
+        let callback = MigrationCallbackBinding::new(
+            callback_descriptor.target_version(),
+            callback_descriptor.name(),
+            callback_descriptor.checksum(),
+            ignored_attachment_callback,
+        );
+        let callback_catalog = MigrationCatalog::new([callback_descriptor]).unwrap();
+        let callback_schema_catalog = unchanged_schema_catalog(&callback_catalog);
+        let callback_error = apply_governed_migrations(
+            &mut callback_connection,
+            &callback_catalog,
+            &callback_schema_catalog,
+            MigrationAppliedAtUnixSeconds::new(1_800_000_001).unwrap(),
+            &build_identity(),
+            &[callback],
+            &mut validate,
+        )
+        .await
+        .expect_err("ignored callback ATTACH/DETACH must still fail the migration");
+        *IGNORED_ATTACHMENT_SQL.lock().expect("attachment SQL mutex") = None;
+        assert_eq!(callback_error.kind(), ServiceSqliteErrorKind::Migration);
+        assert!(!callback_external_path.exists());
+        assert_eq!(
+            read_state_schema_version(&mut callback_connection)
+                .await
+                .unwrap(),
+            1
+        );
+        assert!(
+            read_migration_history(&mut callback_connection)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

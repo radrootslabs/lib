@@ -3910,6 +3910,7 @@ name = "radroots_service_sqlite"
 version = "0.1.0-alpha"
 dependencies = [
  "fs2",
+ "futures",
  "radroots_runtime_paths",
  "radroots_storage",
  "rustix 1.1.4",

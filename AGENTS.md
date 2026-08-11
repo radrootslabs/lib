@@ -157,6 +157,15 @@ Before editing code:
   the owning store, keep live mutable state daemon-owned, and route live-state
   mutations from local tools through the typed, permissioned Unix-socket
   local-admin boundary.
+- `radroots_service_sqlite::ServiceSqliteHost` is the sole public owner of the
+  private SQLx pool. Service code may execute typed SQLx queries only through
+  the sealed `&mut ServiceSqliteTransaction` executor passed to
+  `ServiceSqliteHost::transaction`; do not expose or reconstruct raw pools,
+  pooled connections, SQLx transactions, commit/rollback handles, or inner
+  accessors. Do not attach or detach secondary SQLite databases through the
+  transaction executor. Writable host construction must finish governed
+  migrations before returning, while read-only inspection must require current
+  migration and schema state.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

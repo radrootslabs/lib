@@ -4,6 +4,7 @@
 
 mod authority;
 mod config;
+mod connection;
 mod error;
 mod initialize;
 mod integrity;
@@ -11,9 +12,14 @@ mod metadata;
 mod migration;
 mod open;
 mod status;
+mod transaction_control;
 
 pub use authority::WriterAuthority;
 pub use config::{ServiceSqliteConnectionOptions, ServiceSqliteConnectionOptionsError};
+pub use connection::{
+    ServiceSqliteHost, ServiceSqliteTransaction, ServiceSqliteTransactionError,
+    ServiceSqliteTransactionErrorKind, ServiceSqliteTransactionFuture,
+};
 pub use error::{
     SafeServiceSqliteError, ServiceSqliteError, ServiceSqliteErrorCode, ServiceSqliteErrorKind,
 };
@@ -27,9 +33,10 @@ pub use metadata::{
     ServiceSqliteMetadataValueError,
 };
 pub use migration::{
-    MigrationAppliedAtUnixSeconds, MigrationBuildIdentity, MigrationCatalog, MigrationChecksum,
-    MigrationContractError, MigrationDescriptor, MigrationEvidenceError, MigrationKind,
-    MigrationName,
+    MigrationApplicationOutcome, MigrationAppliedAtUnixSeconds, MigrationBuildIdentity,
+    MigrationCallback, MigrationCallbackBinding, MigrationCallbackFuture, MigrationCatalog,
+    MigrationChecksum, MigrationContractError, MigrationDescriptor, MigrationEvidenceError,
+    MigrationKind, MigrationName, MigrationTransactionExecutor,
 };
 pub use open::{OpenMode, ServiceSqlitePathError, ServiceSqlitePaths};
 pub use status::{StorageHealth, StorageIntegrity, StorageStatus};
