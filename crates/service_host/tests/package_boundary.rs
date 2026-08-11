@@ -29,6 +29,7 @@ const OPERATIONS_SOURCE: &str = concat!(
     include_str!("../src/operations/mod.rs"),
     include_str!("../src/operations/config.rs"),
     include_str!("../src/operations/health.rs"),
+    include_str!("../src/operations/metrics.rs"),
 );
 
 #[test]
