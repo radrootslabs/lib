@@ -12,18 +12,23 @@ homepage.workspace = true
 readme = "README.md"
 
 [dependencies]
+bytes = { workspace = true }
 fs2 = { workspace = true }
 getrandom = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 radroots_runtime_paths = { workspace = true }
 rustix = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
-serde_json = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["raw_value", "std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
 tokio-util = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "rt", "sync", "test-util", "time"] }
 
 [lints]
 workspace = true

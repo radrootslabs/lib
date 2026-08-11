@@ -3,6 +3,8 @@
 mod limits;
 mod model;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod server;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
 pub use limits::{
@@ -16,6 +18,15 @@ pub use model::{
     AdminErrorMessage, AdminErrorMessageError, AdminFailureResponse, AdminIdentifierError,
     AdminIdentifierField, AdminMutationRequest, AdminOperationId, AdminPayloadError,
     AdminSuccessResponse,
+};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use server::{
+    ADMIN_MIN_RESPONSE_BODY_UTF8_BYTES, ADMIN_ROUTE_PARAMETER_NAME_MAX_UTF8_BYTES,
+    ADMIN_ROUTE_PARAMETER_VALUE_MAX_UTF8_BYTES, ADMIN_ROUTE_PATH_MAX_UTF8_BYTES, AdminHttpMethod,
+    AdminRequest, AdminRequestDecodeError, AdminRouteFailure, AdminRouteFailureStatus,
+    AdminRouteOutcome, AdminRouteOutcomeError, AdminRoutePath, AdminRoutePathError,
+    AdminRouteRegistrationError, AdminRouter, AdminServer, AdminServerConfigError,
+    AdminServerError,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use unix::{
