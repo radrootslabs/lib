@@ -7,6 +7,7 @@ const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
 const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
 const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
+const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
 
@@ -32,6 +33,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "radroots_storage",
             "rustix",
             "serde",
+            "sha2",
             "sqlx"
         ])
     );
@@ -47,6 +49,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "error",
             "initialize",
             "metadata",
+            "migration",
             "open",
             "status"
         ])
@@ -60,6 +63,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(test)]")
         .map(|(production, _)| production)
         .expect("open source must keep tests separated");
+    let migration_production = MIGRATION_SOURCE
+        .split_once("#[cfg(test)]")
+        .map(|(production, _)| production)
+        .expect("migration source must keep tests separated");
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -74,6 +81,12 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ServiceDatabaseMetadata",
         "ServiceSqliteApplicationId",
         "ServiceSqliteMetadataValueError",
+        "MigrationCatalog",
+        "MigrationChecksum",
+        "MigrationContractError",
+        "MigrationDescriptor",
+        "MigrationKind",
+        "MigrationName",
         "ServiceSqlitePathError",
         "ServiceSqlitePaths",
         "OpenMode",
@@ -84,6 +97,43 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             ROOT.contains(required),
             "crate root is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "radroots.service_sqlite.migration_content.v1\\0",
+        "radroots.service_sqlite.migration_catalog.v1\\0",
+        "MAX_MIGRATION_NAME_UTF8_BYTES",
+        "MAX_MIGRATION_CONTENT_BYTES",
+        "MAX_MIGRATION_COUNT",
+        "pub const fn from_bytes",
+        "pub fn for_sql",
+        "pub fn for_callback",
+        ".take(MAX_MIGRATION_COUNT + 1)",
+    ] {
+        assert!(
+            migration_production.contains(required),
+            "Step 058 migration source is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "sqlx::",
+        "schema_migrations",
+        "applied_at",
+        "build_identity",
+        "CREATE TABLE",
+        "INSERT INTO",
+        "BEGIN TRANSACTION",
+        "pub fn content(&self",
+        "pub fn callback_definition",
+        "pub fn migration_sql",
+        "Serialize",
+        "Deserialize",
+    ] {
+        assert!(
+            !migration_production.contains(forbidden),
+            "Step 058 migration source contains deferred surface `{forbidden}`"
         );
     }
 

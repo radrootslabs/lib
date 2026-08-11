@@ -7,6 +7,7 @@ mod config;
 mod error;
 mod initialize;
 mod metadata;
+mod migration;
 mod open;
 mod status;
 
@@ -19,6 +20,10 @@ pub use initialize::initialize_database;
 pub use metadata::{
     ServiceDatabaseIdentity, ServiceDatabaseMetadata, ServiceSqliteApplicationId,
     ServiceSqliteMetadataValueError,
+};
+pub use migration::{
+    MigrationCatalog, MigrationChecksum, MigrationContractError, MigrationDescriptor,
+    MigrationKind, MigrationName,
 };
 pub use open::{OpenMode, ServiceSqlitePathError, ServiceSqlitePaths};
 pub use status::{StorageHealth, StorageIntegrity, StorageStatus};
