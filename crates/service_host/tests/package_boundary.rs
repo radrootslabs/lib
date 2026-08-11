@@ -18,7 +18,14 @@ fn service_host_is_unpublished_lint_governed_and_dependency_free() {
     }
 
     assert_eq!(dependency_keys(MANIFEST), BTreeSet::new());
-    assert!(!ROOT.contains("pub mod "));
+    assert_eq!(public_modules(ROOT), BTreeSet::from(["error"]));
+}
+
+fn public_modules(root: &str) -> BTreeSet<&str> {
+    root.lines()
+        .filter_map(|line| line.strip_prefix("pub mod "))
+        .filter_map(|module| module.strip_suffix(';'))
+        .collect()
 }
 
 fn dependency_keys(manifest: &str) -> BTreeSet<&str> {
