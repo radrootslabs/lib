@@ -6,13 +6,18 @@ runtime lifecycle and inspection helpers for the `radroots` core libraries.
 ## Overview
 
  * schema-checked management contract parsing and shared management constants;
- * shared and per-instance path resolution layered on `radroots_runtime_paths`;
- * registry load, save, lookup, and upsert helpers for managed runtime
-   instances;
- * lifecycle helpers for archive install, process start and stop, managed-file
-   writes, and secret-file handling;
- * managed runtime inspection and target-resolution helpers for status, logs,
-   config, and action availability.
+ * manager-owned shared and per-instance tracking paths kept separate from
+   canonical service-instance paths supplied by a sealed `RuntimeContext`;
+ * typed, deterministic registry load, save, lookup, and upsert helpers that
+   persist service/instance identities without duplicating service paths or
+   secrets;
+ * lifecycle helpers for contained archive install, process start and stop,
+   and context-bound non-secret configuration writes; the manager has no
+   credential read/write authority;
+ * context-bound runtime inspection and target-resolution helpers for status,
+   logs, config, and action availability; and
+ * cleanup behavior limited to manager-owned install and tracking artifacts,
+   preserving canonical service state and secrets.
 
 ## Copyright
 

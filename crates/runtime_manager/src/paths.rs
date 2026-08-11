@@ -1,101 +1,208 @@
-use std::path::PathBuf;
+use core::fmt;
+use std::path::{Path, PathBuf};
 
-use radroots_runtime_paths::{
-    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsPaths,
-};
+use radroots_runtime_paths::{RuntimeContext, default_service_instance_artifacts};
 
 use crate::error::RadrootsRuntimeManagerError;
 use crate::model::RadrootsRuntimeManagementContract;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Manager-owned paths derived from the manager's validated service context.
+///
+/// External callers cannot forge another root set:
+///
+/// ```compile_fail
+/// use std::path::PathBuf;
+/// use radroots_runtime_manager::ManagedRuntimeSharedPaths;
+///
+/// let _ = ManagedRuntimeSharedPaths {
+///     instance_registry_path: PathBuf::from("/tmp/escape"),
+///     artifact_cache_dir: PathBuf::from("/tmp/escape"),
+///     install_root: PathBuf::from("/tmp/escape"),
+/// };
+/// ```
+#[derive(Clone, PartialEq, Eq)]
 pub struct ManagedRuntimeSharedPaths {
-    pub instance_registry_path: PathBuf,
-    pub artifact_cache_dir: PathBuf,
-    pub install_root: PathBuf,
-    pub state_root: PathBuf,
-    pub logs_root: PathBuf,
-    pub run_root: PathBuf,
-    pub secrets_root: PathBuf,
+    instance_registry_path: PathBuf,
+    artifact_cache_dir: PathBuf,
+    install_root: PathBuf,
+    logs_root: PathBuf,
+    run_root: PathBuf,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl ManagedRuntimeSharedPaths {
+    #[must_use]
+    pub fn instance_registry_path(&self) -> &Path {
+        &self.instance_registry_path
+    }
+
+    #[must_use]
+    pub fn artifact_cache_dir(&self) -> &Path {
+        &self.artifact_cache_dir
+    }
+
+    #[must_use]
+    pub fn install_root(&self) -> &Path {
+        &self.install_root
+    }
+
+    #[must_use]
+    pub fn logs_root(&self) -> &Path {
+        &self.logs_root
+    }
+
+    #[must_use]
+    pub fn run_root(&self) -> &Path {
+        &self.run_root
+    }
+}
+
+impl fmt::Debug for ManagedRuntimeSharedPaths {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ManagedRuntimeSharedPaths([redacted])")
+    }
+}
+
+/// Operational paths for one validated service instance.
+///
+/// Service-owned directories and fixed artifacts come only from the supplied
+/// [`RuntimeContext`]. The manager-owned install directory comes only from its
+/// own validated context. Process tracking and captured stdout/stderr remain
+/// under manager-owned roots, so lifecycle removal cannot delete canonical
+/// service state or secrets.
+///
+/// ```compile_fail
+/// use std::path::PathBuf;
+/// use radroots_runtime_manager::ManagedRuntimeInstancePaths;
+///
+/// let _ = ManagedRuntimeInstancePaths {
+///     install_dir: PathBuf::from("/tmp/escape"),
+/// };
+/// ```
+#[derive(Clone, PartialEq, Eq)]
 pub struct ManagedRuntimeInstancePaths {
-    pub install_dir: PathBuf,
-    pub state_dir: PathBuf,
-    pub logs_dir: PathBuf,
-    pub run_dir: PathBuf,
-    pub secrets_dir: PathBuf,
-    pub pid_file_path: PathBuf,
-    pub stdout_log_path: PathBuf,
-    pub stderr_log_path: PathBuf,
-    pub metadata_path: PathBuf,
+    context: RuntimeContext,
+    install_dir: PathBuf,
+    logs_dir: PathBuf,
+    run_dir: PathBuf,
+    pid_file_path: PathBuf,
+    stdout_log_path: PathBuf,
+    stderr_log_path: PathBuf,
 }
 
-pub fn resolve_shared_paths(
-    contract: &RadrootsRuntimeManagementContract,
-    resolver: &RadrootsPathResolver,
-    profile: RadrootsPathProfile,
-    overrides: &RadrootsPathOverrides,
-    mode_id: &str,
-) -> Result<ManagedRuntimeSharedPaths, RadrootsRuntimeManagerError> {
-    ensure_profile_supported(contract, mode_id, profile)?;
-    let roots = resolver.resolve(profile, overrides)?;
-    let path_spec = contract
-        .paths
-        .get(mode_id)
-        .ok_or_else(|| RadrootsRuntimeManagerError::MissingPathSpec(mode_id.to_string()))?;
-    let root = |root_class: &str, rel: &str| root_class_path(&roots, root_class, rel);
+impl ManagedRuntimeInstancePaths {
+    #[must_use]
+    pub fn context(&self) -> &RuntimeContext {
+        &self.context
+    }
 
-    let instance_registry_path = root(
-        &path_spec.instance_registry_root_class,
-        &path_spec.instance_registry_rel,
-    )?;
-    let artifact_cache_dir = root(
-        &path_spec.artifact_cache_root_class,
-        &path_spec.artifact_cache_rel,
-    )?;
-    let install_root = root(&path_spec.install_root_class, &path_spec.install_root_rel)?;
-    let state_root = root(&path_spec.state_root_class, &path_spec.state_root_rel)?;
-    let logs_root = root(&path_spec.logs_root_class, &path_spec.logs_root_rel)?;
-    let run_root = root(&path_spec.run_root_class, &path_spec.run_root_rel)?;
-    let secrets_root = root(
-        &path_spec.secrets_root_class,
-        &path_spec.secrets_namespace_rel,
-    )?;
+    #[must_use]
+    pub fn install_dir(&self) -> &Path {
+        &self.install_dir
+    }
 
-    Ok(ManagedRuntimeSharedPaths {
-        instance_registry_path,
-        artifact_cache_dir,
-        install_root,
-        state_root,
-        logs_root,
-        run_root,
-        secrets_root,
-    })
+    #[must_use]
+    pub fn config_dir(&self) -> &Path {
+        self.context.paths().config()
+    }
+
+    #[must_use]
+    pub fn state_dir(&self) -> &Path {
+        self.context.paths().state()
+    }
+
+    #[must_use]
+    pub fn logs_dir(&self) -> &Path {
+        &self.logs_dir
+    }
+
+    #[must_use]
+    pub fn run_dir(&self) -> &Path {
+        &self.run_dir
+    }
+
+    #[must_use]
+    pub fn secrets_dir(&self) -> &Path {
+        self.context.paths().secrets()
+    }
+
+    #[must_use]
+    pub fn config_path(&self) -> PathBuf {
+        default_service_instance_artifacts(self.context.paths())
+            .config()
+            .to_path_buf()
+    }
+
+    #[must_use]
+    pub fn state_database_path(&self) -> PathBuf {
+        default_service_instance_artifacts(self.context.paths())
+            .state_database()
+            .to_path_buf()
+    }
+
+    #[must_use]
+    pub fn state_lock_path(&self) -> PathBuf {
+        default_service_instance_artifacts(self.context.paths())
+            .state_lock()
+            .to_path_buf()
+    }
+
+    #[must_use]
+    pub fn admin_socket_path(&self) -> PathBuf {
+        default_service_instance_artifacts(self.context.paths())
+            .admin_socket()
+            .to_path_buf()
+    }
+
+    #[must_use]
+    pub fn pid_file_path(&self) -> &Path {
+        &self.pid_file_path
+    }
+
+    #[must_use]
+    pub fn stdout_log_path(&self) -> &Path {
+        &self.stdout_log_path
+    }
+
+    #[must_use]
+    pub fn stderr_log_path(&self) -> &Path {
+        &self.stderr_log_path
+    }
 }
 
-pub fn resolve_instance_paths(
+impl fmt::Debug for ManagedRuntimeInstancePaths {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ManagedRuntimeInstancePaths([redacted])")
+    }
+}
+
+#[must_use]
+pub(crate) fn resolve_shared_paths(context: &RuntimeContext) -> ManagedRuntimeSharedPaths {
+    ManagedRuntimeSharedPaths {
+        instance_registry_path: context.paths().config().join("instances.toml"),
+        artifact_cache_dir: context.paths().cache().join("artifacts"),
+        install_root: context.paths().state().join("installs"),
+        logs_root: context.paths().logs().join("instances"),
+        run_root: context.paths().run().join("instances"),
+    }
+}
+
+#[must_use]
+pub(crate) fn resolve_instance_paths(
     shared: &ManagedRuntimeSharedPaths,
-    runtime_id: &str,
-    instance_id: &str,
+    context: &RuntimeContext,
 ) -> ManagedRuntimeInstancePaths {
-    let suffix = PathBuf::from(runtime_id).join(instance_id);
-    let install_dir = shared.install_root.join(&suffix);
-    let state_dir = shared.state_root.join(&suffix);
+    let suffix = PathBuf::from(context.service().as_str()).join(context.instance().as_str());
     let logs_dir = shared.logs_root.join(&suffix);
     let run_dir = shared.run_root.join(&suffix);
-    let secrets_dir = shared.secrets_root.join(&suffix);
 
     ManagedRuntimeInstancePaths {
-        install_dir,
-        state_dir: state_dir.clone(),
+        context: context.clone(),
+        install_dir: shared.install_root.join(suffix),
         logs_dir: logs_dir.clone(),
         run_dir: run_dir.clone(),
-        secrets_dir,
         pid_file_path: run_dir.join("runtime.pid"),
         stdout_log_path: logs_dir.join("stdout.log"),
         stderr_log_path: logs_dir.join("stderr.log"),
-        metadata_path: state_dir.join("instance.toml"),
     }
 }
 
@@ -106,52 +213,7 @@ pub fn bootstrap_runtime<'a>(
     contract
         .bootstrap
         .get(runtime_id)
-        .ok_or_else(|| RadrootsRuntimeManagerError::UnknownBootstrapRuntime(runtime_id.to_string()))
-}
-
-fn ensure_profile_supported(
-    contract: &RadrootsRuntimeManagementContract,
-    mode_id: &str,
-    profile: RadrootsPathProfile,
-) -> Result<(), RadrootsRuntimeManagerError> {
-    let mode = contract
-        .mode
-        .get(mode_id)
-        .ok_or_else(|| RadrootsRuntimeManagerError::UnknownManagementMode(mode_id.to_string()))?;
-    let profile_id = profile.to_string();
-    if mode
-        .supported_profiles
-        .iter()
-        .any(|entry| entry == &profile_id)
-    {
-        Ok(())
-    } else {
-        Err(RadrootsRuntimeManagerError::UnsupportedProfile {
-            mode_id: mode_id.to_string(),
-            profile: profile_id,
-        })
-    }
-}
-
-fn root_class_path(
-    roots: &RadrootsPaths,
-    root_class: &str,
-    rel: &str,
-) -> Result<PathBuf, RadrootsRuntimeManagerError> {
-    let base = match root_class {
-        "config" => &roots.config,
-        "data" => &roots.data,
-        "cache" => &roots.cache,
-        "logs" => &roots.logs,
-        "run" => &roots.run,
-        "secrets" => &roots.secrets,
-        other => {
-            return Err(RadrootsRuntimeManagerError::UnknownRootClass(
-                other.to_string(),
-            ));
-        }
-    };
-    Ok(base.join(rel))
+        .ok_or(RadrootsRuntimeManagerError::UnknownBootstrapRuntime)
 }
 
 #[cfg(test)]
@@ -159,239 +221,152 @@ mod tests {
     use std::path::PathBuf;
 
     use radroots_runtime_paths::{
-        RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
-        RadrootsPaths, RadrootsPlatform,
+        InstanceId, RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPlatform, RuntimeContext, RuntimeContextBootstrap, RuntimeContextSource, ServiceId,
     };
 
-    use super::{bootstrap_runtime, resolve_shared_paths, root_class_path};
-    use crate::{
-        ManagementPathContract, RadrootsRuntimeManagerError,
-        model::RadrootsRuntimeManagementContract, parse_contract_str,
-    };
+    use super::{resolve_instance_paths, resolve_shared_paths};
 
-    const CONTRACT: &str = r#"
-schema = "radroots-runtime-management"
-schema_version = 1
-owner_doc = "docs/execution/rcl/radroots-modular-runtime-management-bootstrap-rcl.md"
-runtime_registry = "registry.toml"
-distribution_contract = "distribution.toml"
-capabilities_contract = "capabilities.toml"
-
-[defaults]
-instance_cardinality = "single_default_instance"
-managed_runtime_lookup = "shared_instance_registry"
-explicit_runtime_endpoint_overrides_precede_managed_instance_binding = true
-global_path_mutation_forbidden = true
-
-[management_clients]
-active = ["cli"]
-defined = ["community-app-desktop"]
-
-[managed_runtime_targets]
-active = ["radrootsd"]
-defined = ["myc", "rhi"]
-bootstrap_only = ["hyf"]
-
-[lifecycle]
-actions = ["install", "uninstall", "start"]
-destructive_actions = ["uninstall"]
-health_states = ["not_installed", "running"]
-
-[mode.interactive_user_managed]
-contract_state = "active"
-platforms = ["linux", "macos", "windows"]
-supported_profiles = ["interactive_user", "repo_local"]
-service_manager_integration = false
-uses_absolute_binary_paths = true
-requires_explicit_pid_tracking = true
-requires_explicit_log_tracking = true
-default_instance_cardinality = "single_default_instance"
-
-[mode.service_host_managed]
-contract_state = "defined"
-platforms = ["linux", "macos", "windows"]
-supported_profiles = ["service_host"]
-service_manager_integration = true
-uses_absolute_binary_paths = true
-default_instance_cardinality = "single_default_instance"
-
-[paths.interactive_user_managed]
-shared_namespace = "shared/runtime-manager"
-instance_registry_root_class = "config"
-instance_registry_rel = "shared/runtime-manager/instances.toml"
-artifact_cache_root_class = "cache"
-artifact_cache_rel = "shared/runtime-manager/artifacts"
-install_root_class = "data"
-install_root_rel = "shared/runtime-manager/installs"
-state_root_class = "data"
-state_root_rel = "shared/runtime-manager/state"
-logs_root_class = "logs"
-logs_root_rel = "shared/runtime-manager"
-run_root_class = "run"
-run_root_rel = "shared/runtime-manager"
-secrets_root_class = "secrets"
-secrets_namespace_rel = "shared/runtime-manager"
-
-[instance_metadata]
-required_fields = ["runtime_id"]
-optional_fields = ["notes"]
-
-[bootstrap.radrootsd]
-runtime_id = "radrootsd"
-management_mode = "interactive_user_managed"
-default_instance_id = "local"
-install_strategy = "archive_unpack"
-config_format = "toml"
-requires_bootstrap_secret = true
-requires_config_bootstrap = true
-requires_signer_provider = false
-health_surface = "jsonrpc_status"
-preferred_cli_binding = true
-"#;
-
-    fn contract() -> RadrootsRuntimeManagementContract {
-        parse_contract_str(CONTRACT).expect("parse contract")
-    }
-
-    fn assert_error_contains(err: &RadrootsRuntimeManagerError, parts: &[&str]) {
-        let rendered = err.to_string();
-        for part in parts {
-            assert!(
-                rendered.contains(part),
-                "expected `{rendered}` to contain `{part}`"
-            );
-        }
-    }
-
-    fn linux_resolver() -> RadrootsPathResolver {
-        RadrootsPathResolver::new(
-            RadrootsPlatform::Linux,
-            RadrootsHostEnvironment {
-                home_dir: Some(PathBuf::from("/home/treesap")),
-                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
-                ..RadrootsHostEnvironment::default()
-            },
-        )
-    }
-
-    #[test]
-    fn bootstrap_lookup_reports_unknown_runtime() {
-        let err = bootstrap_runtime(&contract(), "missing-runtime").expect_err("missing runtime");
-        assert_error_contains(&err, &["missing-runtime", "no bootstrap entry"]);
-    }
-
-    #[test]
-    fn resolve_shared_paths_reports_unknown_management_mode() {
-        let err = resolve_shared_paths(
-            &contract(),
-            &linux_resolver(),
-            RadrootsPathProfile::InteractiveUser,
-            &RadrootsPathOverrides::default(),
-            "missing-mode",
-        )
-        .expect_err("missing mode should fail");
-        assert_error_contains(&err, &["management mode `missing-mode`"]);
-    }
-
-    #[test]
-    fn resolve_shared_paths_reports_unsupported_profile() {
-        let err = resolve_shared_paths(
-            &contract(),
-            &linux_resolver(),
-            RadrootsPathProfile::ServiceHost,
-            &RadrootsPathOverrides::default(),
-            "interactive_user_managed",
-        )
-        .expect_err("service_host should be unsupported for interactive mode");
-        assert_error_contains(&err, &["interactive_user_managed", "service_host"]);
-    }
-
-    #[test]
-    fn resolve_shared_paths_reports_missing_path_spec() {
-        let mut contract = contract();
-        contract.paths.remove("interactive_user_managed");
-
-        let err = resolve_shared_paths(
-            &contract,
-            &linux_resolver(),
-            RadrootsPathProfile::InteractiveUser,
-            &RadrootsPathOverrides::default(),
-            "interactive_user_managed",
-        )
-        .expect_err("missing path spec should fail");
-        assert_error_contains(
-            &err,
-            &["interactive_user_managed", "no shared path specification"],
-        );
-    }
-
-    #[test]
-    fn resolve_shared_paths_reports_unknown_root_class() {
-        let mutators: &[fn(&mut ManagementPathContract)] = &[
-            |paths| paths.instance_registry_root_class = "bogus".to_string(),
-            |paths| paths.artifact_cache_root_class = "bogus".to_string(),
-            |paths| paths.install_root_class = "bogus".to_string(),
-            |paths| paths.state_root_class = "bogus".to_string(),
-            |paths| paths.logs_root_class = "bogus".to_string(),
-            |paths| paths.run_root_class = "bogus".to_string(),
-            |paths| paths.secrets_root_class = "bogus".to_string(),
-        ];
-
-        for mutate in mutators {
-            let mut contract = contract();
-            mutate(
-                contract
-                    .paths
-                    .get_mut("interactive_user_managed")
-                    .expect("path spec"),
-            );
-
-            let err = resolve_shared_paths(
-                &contract,
-                &linux_resolver(),
-                RadrootsPathProfile::InteractiveUser,
-                &RadrootsPathOverrides::default(),
-                "interactive_user_managed",
+    fn repo_context(service: &str, instance: &str, root: &str) -> RuntimeContext {
+        RuntimeContext::resolve(
+            &RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default()),
+            RuntimeContextBootstrap::new(
+                RadrootsPathProfile::RepoLocal,
+                Some(PathBuf::from(root)),
+                RuntimeContextSource::BootstrapCli,
+                RuntimeContextSource::BootstrapCli,
             )
-            .expect_err("unknown root class should fail");
-            assert_error_contains(&err, &["unknown root class `bogus`"]);
-        }
+            .expect("bootstrap"),
+            ServiceId::new(service).expect("service"),
+            InstanceId::new(instance).expect("instance"),
+        )
+        .expect("context")
+    }
+
+    fn service_host_context(service: &str, instance: &str) -> RuntimeContext {
+        RuntimeContext::resolve(
+            &RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default()),
+            RuntimeContextBootstrap::new(
+                RadrootsPathProfile::ServiceHost,
+                None,
+                RuntimeContextSource::SafeDefault,
+                RuntimeContextSource::BootstrapCli,
+            )
+            .expect("bootstrap"),
+            ServiceId::new(service).expect("service"),
+            InstanceId::new(instance).expect("instance"),
+        )
+        .expect("context")
     }
 
     #[test]
-    fn root_class_path_maps_all_known_classes() {
-        let roots = RadrootsPaths {
-            config: PathBuf::from("/roots/config"),
-            data: PathBuf::from("/roots/data"),
-            cache: PathBuf::from("/roots/cache"),
-            logs: PathBuf::from("/roots/logs"),
-            run: PathBuf::from("/roots/run"),
-            secrets: PathBuf::from("/roots/secrets"),
-        };
+    fn shared_paths_derive_only_from_the_manager_context() {
+        let manager = repo_context("runtime-manager", "default", "/repo/.radroots");
+        let paths = resolve_shared_paths(&manager);
 
         assert_eq!(
-            root_class_path(&roots, "config", "a/b").expect("config root"),
-            PathBuf::from("/roots/config/a/b")
+            paths.instance_registry_path(),
+            PathBuf::from("/repo/.radroots/config/services/runtime-manager/default/instances.toml")
         );
         assert_eq!(
-            root_class_path(&roots, "data", "a/b").expect("data root"),
-            PathBuf::from("/roots/data/a/b")
+            paths.artifact_cache_dir(),
+            PathBuf::from("/repo/.radroots/cache/services/runtime-manager/default/artifacts")
         );
         assert_eq!(
-            root_class_path(&roots, "cache", "a/b").expect("cache root"),
-            PathBuf::from("/roots/cache/a/b")
+            paths.install_root(),
+            PathBuf::from("/repo/.radroots/data/services/runtime-manager/default/installs")
         );
         assert_eq!(
-            root_class_path(&roots, "logs", "a/b").expect("logs root"),
-            PathBuf::from("/roots/logs/a/b")
+            format!("{paths:?}"),
+            "ManagedRuntimeSharedPaths([redacted])"
+        );
+    }
+
+    #[test]
+    fn instance_paths_use_the_exact_service_context_and_fixed_artifacts() {
+        let shared = resolve_shared_paths(&repo_context(
+            "runtime-manager",
+            "default",
+            "/repo/.radroots",
+        ));
+        let service = repo_context("myc", "north", "/repo/.radroots");
+        let paths = resolve_instance_paths(&shared, &service);
+
+        assert_eq!(
+            paths.install_dir(),
+            PathBuf::from(
+                "/repo/.radroots/data/services/runtime-manager/default/installs/myc/north"
+            )
         );
         assert_eq!(
-            root_class_path(&roots, "run", "a/b").expect("run root"),
-            PathBuf::from("/roots/run/a/b")
+            paths.config_path(),
+            PathBuf::from("/repo/.radroots/config/services/myc/north/config.toml")
         );
         assert_eq!(
-            root_class_path(&roots, "secrets", "a/b").expect("secrets root"),
-            PathBuf::from("/roots/secrets/a/b")
+            paths.state_database_path(),
+            PathBuf::from("/repo/.radroots/data/services/myc/north/state.sqlite")
+        );
+        assert_eq!(
+            paths.state_lock_path(),
+            PathBuf::from("/repo/.radroots/data/services/myc/north/state.lock")
+        );
+        assert_eq!(
+            paths.admin_socket_path(),
+            PathBuf::from("/repo/.radroots/run/services/myc/north/admin.sock")
+        );
+        assert_eq!(
+            paths.stdout_log_path(),
+            PathBuf::from(
+                "/repo/.radroots/logs/services/runtime-manager/default/instances/myc/north/stdout.log"
+            )
+        );
+        assert_eq!(
+            format!("{paths:?}"),
+            "ManagedRuntimeInstancePaths([redacted])"
+        );
+    }
+
+    #[test]
+    fn multi_instance_paths_cannot_cross_service_contexts() {
+        let shared = resolve_shared_paths(&repo_context(
+            "runtime-manager",
+            "default",
+            "/repo/.radroots",
+        ));
+        let north =
+            resolve_instance_paths(&shared, &repo_context("rhi", "north", "/repo/.radroots"));
+        let south =
+            resolve_instance_paths(&shared, &repo_context("rhi", "south", "/repo/.radroots"));
+
+        assert_ne!(north, south);
+        assert!(north.state_dir().ends_with("services/rhi/north"));
+        assert!(south.state_dir().ends_with("services/rhi/south"));
+        assert!(!north.state_dir().starts_with(south.state_dir()));
+        assert!(!south.state_dir().starts_with(north.state_dir()));
+    }
+
+    #[test]
+    fn linux_service_host_paths_preserve_the_canonical_service_layout() {
+        let manager = service_host_context("runtime-manager", "default");
+        let shared = resolve_shared_paths(&manager);
+        let service = service_host_context("myc", "primary");
+        let paths = resolve_instance_paths(&shared, &service);
+
+        assert_eq!(
+            shared.instance_registry_path(),
+            PathBuf::from("/etc/radroots/services/runtime-manager/default/instances.toml")
+        );
+        assert_eq!(
+            paths.config_path(),
+            PathBuf::from("/etc/radroots/services/myc/primary/config.toml")
+        );
+        assert_eq!(
+            paths.state_database_path(),
+            PathBuf::from("/var/lib/radroots/services/myc/primary/state.sqlite")
+        );
+        assert_eq!(
+            paths.admin_socket_path(),
+            PathBuf::from("/run/radroots/services/myc/primary/admin.sock")
         );
     }
 }

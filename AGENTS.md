@@ -157,6 +157,16 @@ Before editing code:
   the owning store, keep live mutable state daemon-owned, and route live-state
   mutations from local tools through the typed, permissioned Unix-socket
   local-admin boundary.
+- Runtime-management flows consume a sealed `RuntimeContext` for every service
+  instance. They must not reconstruct service paths from raw identifiers,
+  ambient selectors, or manager-owned roots, and registries must not persist
+  duplicate config, state, logs, run, secrets, or binary paths. Manager-owned
+  install and process-tracking artifacts remain separate; uninstall and
+  cleanup must never recursively delete canonical service state or secrets.
+  The manager has no credential read/write authority, executable artifact
+  names are validated single path components, and ordinary manager errors and
+  `Debug` output must not expose filesystem paths, file contents, or raw
+  dependency-owned causes.
 - Library code must not initialize a tracing subscriber, parse a process CLI,
   read service configuration from environment variables, install signal
   handlers, create a Tokio runtime, call `process::exit`, or spawn arbitrary
