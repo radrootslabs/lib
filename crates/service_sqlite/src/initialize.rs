@@ -4,18 +4,22 @@ use core::{fmt, future::Future};
 use std::{error::Error, path::PathBuf};
 
 use crate::{
-    OpenMode, ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqlitePaths, WriterAuthority,
+    OpenMode, ServiceDatabaseMetadata, ServiceSqliteError, ServiceSqliteErrorKind,
+    ServiceSqlitePaths, WriterAuthority,
 };
 
 /// Creates and initializes a missing service database while holding sole writer authority.
 ///
 /// The callback receives the already-reserved canonical database path. It must
 /// open that file without create or replacement flags, initialize its schema,
-/// close every database handle, and only then resolve its future. Cancellation
-/// or failure removes only the exact inode reserved by this call.
+/// close every database handle, and only then resolve its future. The supplied
+/// metadata must derive from the same paths; it is written and verified after
+/// the callback but before the database becomes durable. Cancellation or
+/// failure removes only the exact inode reserved by this call.
 pub async fn initialize_database<F, Fut, E>(
     paths: &ServiceSqlitePaths,
     mode: OpenMode,
+    metadata: &ServiceDatabaseMetadata,
     initialize_schema: F,
 ) -> Result<WriterAuthority, ServiceSqliteError>
 where
@@ -27,6 +31,9 @@ where
         return Err(initialization_error(InitializationCause::new(
             InitializationFailureKind::UnsupportedMode,
         )));
+    }
+    if !metadata.matches_paths(paths) {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
     }
 
     let authority = WriterAuthority::acquire(paths, mode)?.ok_or_else(|| {
@@ -40,6 +47,7 @@ where
         initialize_with_ops(
             paths,
             authority,
+            metadata,
             initialize_schema,
             &SystemInitializationOperations,
         )
@@ -48,7 +56,7 @@ where
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        drop((authority, initialize_schema));
+        drop((authority, metadata, initialize_schema));
         Err(initialization_error(InitializationCause::new(
             InitializationFailureKind::CreateUnavailable,
         )))
@@ -414,9 +422,23 @@ mod supported {
         }
     }
 
+    async fn fail_metadata_with_rollback<O: InitializationOperations>(
+        mut pending: PendingDatabase<'_, O>,
+        primary: ServiceSqliteError,
+    ) -> Result<WriterAuthority, ServiceSqliteError> {
+        match pending.rollback() {
+            Ok(()) => Err(primary),
+            Err(cleanup) => Err(initialization_error(InitializationCause::with_source(
+                cleanup.kind,
+                primary,
+            ))),
+        }
+    }
+
     pub(super) async fn initialize_with_ops<F, Fut, E, O>(
         paths: &ServiceSqlitePaths,
         authority: WriterAuthority,
+        metadata: &ServiceDatabaseMetadata,
         initialize_schema: F,
         operations: &O,
     ) -> Result<WriterAuthority, ServiceSqliteError>
@@ -451,6 +473,41 @@ mod supported {
         if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
             return fail_with_rollback(pending, error).await;
         }
+        let metadata_result = async {
+            use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
+
+            let options = SqliteConnectOptions::new()
+                .filename(paths.state_database())
+                .create_if_missing(false)
+                .disable_statement_logging();
+            let mut connection = sqlx::SqliteConnection::connect_with(&options)
+                .await
+                .map_err(|source| {
+                    ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
+                })?;
+            let write_result =
+                crate::metadata::write_database_metadata(&mut connection, metadata).await;
+            let close_result = connection.close().await.map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
+            });
+            write_result.and(close_result)
+        }
+        .await;
+        if let Err(error) = pending.validate() {
+            return fail_with_rollback(pending, error).await;
+        }
+        if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
+            return fail_with_rollback(pending, error).await;
+        }
+        if let Err(error) = metadata_result {
+            return fail_metadata_with_rollback(pending, error).await;
+        }
+        if let Err(error) = pending.validate() {
+            return fail_with_rollback(pending, error).await;
+        }
+        if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
+            return fail_with_rollback(pending, error).await;
+        }
         if let Err(error) = pending.commit(paths.state_database()) {
             return fail_with_rollback(pending, error).await;
         }
@@ -462,9 +519,10 @@ mod supported {
     mod tests {
         use std::{
             cell::{Cell, RefCell},
-            fs::{self, OpenOptions},
+            fs,
             future::{Future, pending, ready},
-            io::{self, Write},
+            io,
+            num::NonZeroU32,
             os::unix::fs::{MetadataExt, PermissionsExt, symlink},
             path::Path,
             pin::Pin,
@@ -476,6 +534,7 @@ mod supported {
             RadrootsPlatform, RuntimeContext, RuntimeContextBootstrap, RuntimeContextSource,
             ServiceId,
         };
+        use radroots_storage::event::SourceGeneration;
 
         use super::*;
 
@@ -542,14 +601,6 @@ mod supported {
             (result, future)
         }
 
-        fn run_ready<F: Future>(future: F) -> F::Output {
-            let (result, _) = poll_once(future);
-            match result {
-                Poll::Ready(output) => output,
-                Poll::Pending => panic!("test future must be immediately ready"),
-            }
-        }
-
         fn paths(root: &Path, instance: &str) -> ServiceSqlitePaths {
             let context = RuntimeContext::resolve(
                 &RadrootsPathResolver::new(
@@ -575,28 +626,46 @@ mod supported {
                 .expect("create state directory");
         }
 
-        #[test]
-        fn successful_initialization_is_create_new_mode_0600_and_retains_authority() {
+        fn metadata(paths: &ServiceSqlitePaths) -> ServiceDatabaseMetadata {
+            ServiceDatabaseMetadata::new(
+                paths,
+                SourceGeneration::new([7; 32]).expect("source generation"),
+                NonZeroU32::new(1).expect("schema version"),
+                1_700_000_000_000,
+                crate::ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+            )
+            .expect("database metadata")
+        }
+
+        #[tokio::test(flavor = "current_thread")]
+        async fn successful_initialization_is_create_new_mode_0600_and_retains_authority() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "success");
             prepare(&paths);
             let expected_path = paths.state_database().to_path_buf();
-            let mut authority = run_ready(initialize_database(
-                &paths,
-                OpenMode::Initialize,
-                |path| async move {
+            let metadata = metadata(&paths);
+            let mut authority =
+                initialize_database(&paths, OpenMode::Initialize, &metadata, |path| async move {
                     assert_eq!(path, expected_path);
-                    let mut file = OpenOptions::new().write(true).open(path)?;
-                    file.write_all(b"schema-v1")?;
-                    Ok::<(), io::Error>(())
-                },
-            ))
-            .expect("initialize");
+                    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
 
-            assert_eq!(fs::read(paths.state_database()).unwrap(), b"schema-v1");
-            let metadata = fs::metadata(paths.state_database()).unwrap();
-            assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
-            assert_eq!(metadata.nlink(), 1);
+                    let options = SqliteConnectOptions::new()
+                        .filename(path)
+                        .create_if_missing(false)
+                        .disable_statement_logging();
+                    let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
+                    sqlx::query("CREATE TABLE service_schema (id INTEGER PRIMARY KEY)")
+                        .execute(&mut connection)
+                        .await?;
+                    connection.close().await?;
+                    Ok::<(), sqlx::Error>(())
+                })
+                .await
+                .expect("initialize");
+
+            let filesystem_metadata = fs::metadata(paths.state_database()).unwrap();
+            assert_eq!(filesystem_metadata.permissions().mode() & 0o777, 0o600);
+            assert_eq!(filesystem_metadata.nlink(), 1);
             assert!(authority.is_held());
             assert!(WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting).is_err());
             authority.release().expect("release");
@@ -607,8 +676,8 @@ mod supported {
             );
         }
 
-        #[test]
-        fn existing_regular_symlink_directory_and_hardlink_are_never_mutated() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn existing_regular_symlink_directory_and_hardlink_are_never_mutated() {
             for shape in ["regular", "symlink", "directory", "hardlink"] {
                 let root = tempfile::tempdir().expect("root");
                 let paths = paths(root.path(), shape);
@@ -623,10 +692,12 @@ mod supported {
                     _ => unreachable!(),
                 }
                 let called = Cell::new(false);
-                let error = run_ready(initialize_database(&paths, OpenMode::Initialize, |_| {
+                let metadata = metadata(&paths);
+                let error = initialize_database(&paths, OpenMode::Initialize, &metadata, |_| {
                     called.set(true);
                     ready(Ok::<(), CallbackFailure>(()))
-                }))
+                })
+                .await
                 .expect_err("existing state must fail");
                 assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
                 assert!(!called.get());
@@ -634,16 +705,18 @@ mod supported {
             }
         }
 
-        #[test]
-        fn non_initialize_modes_have_zero_callback_and_filesystem_effects() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn non_initialize_modes_have_zero_callback_and_filesystem_effects() {
             for mode in [OpenMode::ReadWriteExisting, OpenMode::ReadOnlyInspection] {
                 let root = tempfile::tempdir().expect("root");
                 let paths = paths(root.path(), "wrong-mode");
                 let called = Cell::new(false);
-                let error = run_ready(initialize_database(&paths, mode, |_| {
+                let metadata = metadata(&paths);
+                let error = initialize_database(&paths, mode, &metadata, |_| {
                     called.set(true);
                     ready(Ok::<(), CallbackFailure>(()))
-                }))
+                })
+                .await
                 .expect_err("mode must reject");
                 assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
                 assert!(!called.get());
@@ -653,14 +726,16 @@ mod supported {
             }
         }
 
-        #[test]
-        fn callback_failure_cleans_up_releases_authority_and_preserves_trusted_cause() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn callback_failure_cleans_up_releases_authority_and_preserves_trusted_cause() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "callback-failure");
             prepare(&paths);
-            let error = run_ready(initialize_database(&paths, OpenMode::Initialize, |_| {
+            let metadata = metadata(&paths);
+            let error = initialize_database(&paths, OpenMode::Initialize, &metadata, |_| {
                 ready(Err::<(), _>(CallbackFailure))
-            }))
+            })
+            .await
             .expect_err("callback failure");
             assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
             assert!(!paths.state_database().exists());
@@ -681,23 +756,60 @@ mod supported {
                 Some("secret callback path=/private/state.sqlite")
             );
 
-            let retry = run_ready(initialize_database(&paths, OpenMode::Initialize, |_| {
+            let retry = initialize_database(&paths, OpenMode::Initialize, &metadata, |_| {
                 ready(Ok::<(), CallbackFailure>(()))
-            }))
+            })
+            .await
             .expect("retry after cleanup");
             assert!(retry.is_held());
             assert!(paths.state_database().exists());
         }
 
-        #[test]
-        fn cancellation_rolls_back_and_releases_authority() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn metadata_write_failure_cleans_the_exact_reserved_database() {
+            let root = tempfile::tempdir().expect("root");
+            let paths = paths(root.path(), "metadata-failure");
+            prepare(&paths);
+            let metadata = metadata(&paths);
+            let error =
+                initialize_database(&paths, OpenMode::Initialize, &metadata, |path| async move {
+                    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
+
+                    let options = SqliteConnectOptions::new()
+                        .filename(path)
+                        .create_if_missing(false)
+                        .disable_statement_logging();
+                    let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
+                    sqlx::query("CREATE TABLE radroots_service_metadata (value TEXT)")
+                        .execute(&mut connection)
+                        .await?;
+                    connection.close().await?;
+                    Ok::<(), sqlx::Error>(())
+                })
+                .await
+                .expect_err("conflicting metadata must fail");
+
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+            assert!(!paths.state_database().exists());
+            assert!(
+                WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                    .expect("reacquire")
+                    .is_some()
+            );
+        }
+
+        #[tokio::test(flavor = "current_thread")]
+        async fn cancellation_rolls_back_and_releases_authority() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "cancelled");
             prepare(&paths);
-            let (poll, future) =
-                poll_once(initialize_database(&paths, OpenMode::Initialize, |_| {
-                    pending::<Result<(), CallbackFailure>>()
-                }));
+            let metadata = metadata(&paths);
+            let (poll, future) = poll_once(initialize_database(
+                &paths,
+                OpenMode::Initialize,
+                &metadata,
+                |_| pending::<Result<(), CallbackFailure>>(),
+            ));
             assert!(poll.is_pending());
             assert!(paths.state_database().exists());
             assert!(WriterAuthority::acquire(&paths, OpenMode::Initialize).is_err());
@@ -710,39 +822,44 @@ mod supported {
             );
         }
 
-        #[test]
-        fn replacement_is_detected_and_never_deleted() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn replacement_is_detected_and_never_deleted() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "replacement");
             prepare(&paths);
+            let metadata = metadata(&paths);
             let replacement_path = paths.state_database().to_path_buf();
-            let error = run_ready(initialize_database(
+            let error = initialize_database(
                 &paths,
                 OpenMode::Initialize,
+                &metadata,
                 move |path| async move {
                     fs::remove_file(&path)?;
                     fs::write(&replacement_path, b"replacement")?;
                     Ok::<(), io::Error>(())
                 },
-            ))
+            )
+            .await
             .expect_err("replacement must fail");
             assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
             assert_eq!(fs::read(paths.state_database()).unwrap(), b"replacement");
         }
 
-        #[test]
-        fn parent_directory_replacement_cannot_rebind_the_callback_path() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn parent_directory_replacement_cannot_rebind_the_callback_path() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "parent-replacement");
             prepare(&paths);
+            let metadata = metadata(&paths);
             let state_directory = paths.state_database().parent().unwrap().to_path_buf();
             let displaced_directory = state_directory.with_file_name("parent-replacement-old");
             let displaced_for_callback = displaced_directory.clone();
             let replacement_path = paths.state_database().to_path_buf();
 
-            let error = run_ready(initialize_database(
+            let error = initialize_database(
                 &paths,
                 OpenMode::Initialize,
+                &metadata,
                 move |_| async move {
                     fs::rename(&state_directory, &displaced_for_callback)?;
                     fs::create_dir(&state_directory)?;
@@ -750,7 +867,8 @@ mod supported {
                     fs::set_permissions(&replacement_path, fs::Permissions::from_mode(0o600))?;
                     Ok::<(), io::Error>(())
                 },
-            ))
+            )
+            .await
             .expect_err("canonical path replacement must fail");
 
             assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
@@ -758,8 +876,8 @@ mod supported {
             assert!(!displaced_directory.join("state.sqlite").exists());
         }
 
-        #[test]
-        fn injected_sync_and_cleanup_failures_preserve_exact_ordering() {
+        #[tokio::test(flavor = "current_thread")]
+        async fn injected_sync_and_cleanup_failures_preserve_exact_ordering() {
             let scenarios = [
                 "reservation-sync",
                 "database-sync",
@@ -770,6 +888,7 @@ mod supported {
                 let root = tempfile::tempdir().expect("root");
                 let paths = paths(root.path(), scenario);
                 prepare(&paths);
+                let metadata = metadata(&paths);
                 let authority = WriterAuthority::acquire(&paths, OpenMode::Initialize)
                     .unwrap()
                     .unwrap();
@@ -786,19 +905,23 @@ mod supported {
                     _ => unreachable!(),
                 }
                 let result = if scenario == "cleanup" {
-                    run_ready(initialize_with_ops(
+                    initialize_with_ops(
                         &paths,
                         authority,
+                        &metadata,
                         |_| ready(Err::<(), _>(CallbackFailure)),
                         &operations,
-                    ))
+                    )
+                    .await
                 } else {
-                    run_ready(initialize_with_ops(
+                    initialize_with_ops(
                         &paths,
                         authority,
+                        &metadata,
                         |_| ready(Ok::<(), CallbackFailure>(())),
                         &operations,
-                    ))
+                    )
+                    .await
                 };
                 assert_eq!(
                     result.expect_err("injected failure").kind(),

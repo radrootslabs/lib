@@ -6,6 +6,7 @@ mod authority;
 mod config;
 mod error;
 mod initialize;
+mod metadata;
 mod open;
 mod status;
 
@@ -15,5 +16,9 @@ pub use error::{
     SafeServiceSqliteError, ServiceSqliteError, ServiceSqliteErrorCode, ServiceSqliteErrorKind,
 };
 pub use initialize::initialize_database;
+pub use metadata::{
+    ServiceDatabaseIdentity, ServiceDatabaseMetadata, ServiceSqliteApplicationId,
+    ServiceSqliteMetadataValueError,
+};
 pub use open::{OpenMode, ServiceSqlitePathError, ServiceSqlitePaths};
 pub use status::{StorageHealth, StorageIntegrity, StorageStatus};

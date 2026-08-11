@@ -30,7 +30,8 @@ use sqlx::{
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::{
-    ServiceSqliteConnectionOptions, ServiceSqliteError, ServiceSqliteErrorKind, WriterAuthority,
+    ServiceDatabaseIdentity, ServiceSqliteConnectionOptions, ServiceSqliteError,
+    ServiceSqliteErrorKind, WriterAuthority,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -191,6 +192,7 @@ struct PrivateConnectionPool {
     authority: Option<WriterAuthority>,
     inspection_guard: Option<ReadOnlyInspectionGuard>,
     authority_failure: Arc<AtomicBool>,
+    metadata_failure: Arc<AtomicBool>,
     pragma_failure: Arc<AtomicBool>,
 }
 
@@ -207,6 +209,8 @@ impl PrivateConnectionPool {
         result.map_err(|source| {
             let kind = if self.authority_failure.load(Ordering::Acquire) {
                 ServiceSqliteErrorKind::Authority
+            } else if self.metadata_failure.load(Ordering::Acquire) {
+                ServiceSqliteErrorKind::Metadata
             } else if self.pragma_failure.load(Ordering::Acquire) {
                 ServiceSqliteErrorKind::Pragma
             } else {
@@ -230,6 +234,7 @@ impl PrivateConnectionPool {
 )]
 async fn open_existing_connection_pool(
     paths: &ServiceSqlitePaths,
+    identity: &ServiceDatabaseIdentity,
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
@@ -244,7 +249,7 @@ async fn open_existing_connection_pool(
         OpenMode::ReadOnlyInspection => (None, Some(ReadOnlyInspectionGuard::acquire(paths)?)),
         OpenMode::Initialize => unreachable!("initialize mode returned above"),
     };
-    open_connection_pool(paths, mode, policy, authority, inspection_guard).await
+    open_connection_pool(paths, identity, mode, policy, authority, inspection_guard).await
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -254,11 +259,20 @@ async fn open_existing_connection_pool(
 )]
 async fn open_initialized_connection_pool(
     paths: &ServiceSqlitePaths,
+    identity: &ServiceDatabaseIdentity,
     policy: ServiceSqliteConnectionOptions,
     authority: WriterAuthority,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
     authority.validate_for(paths)?;
-    open_connection_pool(paths, OpenMode::Initialize, policy, Some(authority), None).await
+    open_connection_pool(
+        paths,
+        identity,
+        OpenMode::Initialize,
+        policy,
+        Some(authority),
+        None,
+    )
+    .await
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -268,11 +282,15 @@ async fn open_initialized_connection_pool(
 )]
 async fn open_connection_pool(
     paths: &ServiceSqlitePaths,
+    identity: &ServiceDatabaseIdentity,
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
     authority: Option<WriterAuthority>,
     inspection_guard: Option<ReadOnlyInspectionGuard>,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
+    if !identity.matches_paths(paths) {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
+    }
     let binding = match (mode, authority.as_ref(), inspection_guard.as_ref()) {
         (OpenMode::Initialize | OpenMode::ReadWriteExisting, Some(authority), None) => {
             authority.validate_for(paths)?;
@@ -298,6 +316,10 @@ async fn open_connection_pool(
     let preflight_policy = verify_connection_policy(&mut preflight, mode, policy).await;
     binding.validate(paths)?;
     preflight_policy.map_err(|source| connection_source(ServiceSqliteErrorKind::Pragma, source))?;
+    let preflight_metadata =
+        crate::metadata::verify_database_metadata(&mut preflight, identity).await;
+    binding.validate(paths)?;
+    preflight_metadata?;
     let preflight_close = preflight.close().await;
     binding.validate(paths)?;
     preflight_close.map_err(|source| connection_source(ServiceSqliteErrorKind::Open, source))?;
@@ -312,11 +334,16 @@ async fn open_connection_pool(
     let pool_binding = binding;
     let after_paths = paths.clone();
     let before_paths = paths.clone();
+    let after_metadata = identity.clone();
+    let before_metadata = identity.clone();
     let authority_failure = Arc::new(AtomicBool::new(false));
+    let metadata_failure = Arc::new(AtomicBool::new(false));
     let pragma_failure = Arc::new(AtomicBool::new(false));
     let after_authority_failure = Arc::clone(&authority_failure);
+    let after_metadata_failure = Arc::clone(&metadata_failure);
     let after_pragma_failure = Arc::clone(&pragma_failure);
     let before_authority_failure = Arc::clone(&authority_failure);
+    let before_metadata_failure = Arc::clone(&metadata_failure);
     let before_pragma_failure = Arc::clone(&pragma_failure);
     let pool_result = SqlitePoolOptions::new()
         .min_connections(1)
@@ -328,7 +355,9 @@ async fn open_connection_pool(
         .after_connect(move |connection, _metadata| {
             let binding = after_binding.clone();
             let paths = after_paths.clone();
+            let metadata = after_metadata.clone();
             let authority_failure = Arc::clone(&after_authority_failure);
+            let metadata_failure = Arc::clone(&after_metadata_failure);
             let pragma_failure = Arc::clone(&after_pragma_failure);
             Box::pin(async move {
                 if binding.validate(&paths).is_err() {
@@ -354,13 +383,29 @@ async fn open_connection_pool(
                         "SQLite connection policy mismatch".to_owned(),
                     ));
                 }
+                let metadata_result =
+                    crate::metadata::verify_database_metadata(connection, &metadata).await;
+                if binding.validate(&paths).is_err() {
+                    authority_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite connection authority mismatch".to_owned(),
+                    ));
+                }
+                if metadata_result.is_err() {
+                    metadata_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite connection metadata mismatch".to_owned(),
+                    ));
+                }
                 Ok(())
             })
         })
         .before_acquire(move |connection, _metadata| {
             let binding = before_binding.clone();
             let paths = before_paths.clone();
+            let metadata = before_metadata.clone();
             let authority_failure = Arc::clone(&before_authority_failure);
+            let metadata_failure = Arc::clone(&before_metadata_failure);
             let pragma_failure = Arc::clone(&before_pragma_failure);
             Box::pin(async move {
                 if binding.validate(&paths).is_err() {
@@ -384,6 +429,20 @@ async fn open_connection_pool(
                     pragma_failure.store(true, Ordering::Release);
                     return Ok(false);
                 }
+                let metadata_result =
+                    crate::metadata::verify_database_metadata(connection, &metadata).await;
+                if binding.validate(&paths).is_err() {
+                    authority_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite connection authority mismatch".to_owned(),
+                    ));
+                }
+                if metadata_result.is_err() {
+                    metadata_failure.store(true, Ordering::Release);
+                    return Err(sqlx::Error::Protocol(
+                        "SQLite connection metadata mismatch".to_owned(),
+                    ));
+                }
                 Ok(true)
             })
         })
@@ -393,6 +452,8 @@ async fn open_connection_pool(
     let pool = pool_result.map_err(|source| {
         let kind = if authority_failure.load(Ordering::Acquire) {
             ServiceSqliteErrorKind::Authority
+        } else if metadata_failure.load(Ordering::Acquire) {
+            ServiceSqliteErrorKind::Metadata
         } else if pragma_failure.load(Ordering::Acquire) {
             ServiceSqliteErrorKind::Pragma
         } else {
@@ -408,6 +469,7 @@ async fn open_connection_pool(
         authority,
         inspection_guard,
         authority_failure,
+        metadata_failure,
         pragma_failure,
     })
 }
@@ -913,7 +975,7 @@ impl DirectoryBinding {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{num::NonZeroU32, path::PathBuf};
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use std::{
@@ -928,6 +990,9 @@ mod tests {
         RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver, RadrootsPlatform,
         RuntimeContextBootstrap, RuntimeContextSource,
     };
+    use radroots_storage::event::SourceGeneration;
+
+    use crate::{ServiceDatabaseMetadata, ServiceSqliteApplicationId};
 
     use super::*;
 
@@ -960,10 +1025,22 @@ mod tests {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn database_metadata(paths: &ServiceSqlitePaths) -> ServiceDatabaseMetadata {
+        ServiceDatabaseMetadata::new(
+            paths,
+            SourceGeneration::new([7; 32]).expect("source generation"),
+            NonZeroU32::new(1).expect("schema version"),
+            1_700_000_000_000,
+            ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+        )
+        .expect("database metadata")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     async fn initialized_authority(
         root: &Path,
         instance: &str,
-    ) -> (ServiceSqlitePaths, WriterAuthority) {
+    ) -> (ServiceSqlitePaths, ServiceDatabaseIdentity, WriterAuthority) {
         let paths = ServiceSqlitePaths::from_runtime_context(&runtime_context(
             RadrootsPathProfile::RepoLocal,
             Some(root.to_path_buf()),
@@ -973,8 +1050,12 @@ mod tests {
         .expect("SQLite paths");
         fs::create_dir_all(paths.state_database().parent().expect("state directory"))
             .expect("create state directory");
-        let authority =
-            crate::initialize_database(&paths, OpenMode::Initialize, |database_path| async move {
+        let metadata = database_metadata(&paths);
+        let authority = crate::initialize_database(
+            &paths,
+            OpenMode::Initialize,
+            &metadata,
+            |database_path| async move {
                 let options = SqliteConnectOptions::new()
                     .filename(database_path)
                     .create_if_missing(false);
@@ -983,10 +1064,12 @@ mod tests {
                     .expect("open reserved database");
                 connection.close().await.expect("close reserved database");
                 Ok::<_, Infallible>(())
-            })
-            .await
-            .expect("initialize database");
-        (paths, authority)
+            },
+        )
+        .await
+        .expect("initialize database");
+        let identity = metadata.identity();
+        (paths, identity, authority)
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -994,8 +1077,8 @@ mod tests {
         root: &Path,
         policy: ServiceSqliteConnectionOptions,
     ) -> (ServiceSqlitePaths, PrivateConnectionPool) {
-        let (paths, authority) = initialized_authority(root, "primary").await;
-        let pool = open_initialized_connection_pool(&paths, policy, authority)
+        let (paths, identity, authority) = initialized_authority(root, "primary").await;
+        let pool = open_initialized_connection_pool(&paths, &identity, policy, authority)
             .await
             .expect("open initialized pool");
         (paths, pool)
@@ -1196,6 +1279,42 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test(flavor = "current_thread")]
+    async fn metadata_mismatch_fails_open_and_checkout_before_use() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let policy = ServiceSqliteConnectionOptions::new(Duration::from_millis(500), 1).unwrap();
+        let (paths, pool) = initialized_pool(directory.path(), policy).await;
+
+        let mut connection = pool.acquire().await.expect("pooled connection");
+        sqlx::query("PRAGMA application_id = 1380209490")
+            .execute(&mut *connection)
+            .await
+            .expect("drift application ID");
+        drop(connection);
+        let error = pool
+            .acquire()
+            .await
+            .expect_err("metadata drift must prevent checkout");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+        let authority = pool.close().await.expect("writer authority retained");
+        drop(authority);
+
+        let wrong = ServiceDatabaseIdentity::new(
+            &paths,
+            SourceGeneration::new([8; 32]).expect("wrong generation"),
+            NonZeroU32::new(1).expect("schema version"),
+            ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+        );
+        let result =
+            open_existing_connection_pool(&paths, &wrong, OpenMode::ReadWriteExisting, policy)
+                .await;
+        let Err(error) = result else {
+            panic!("wrong generation must fail open");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
     async fn existing_modes_never_create_missing_state_and_enforce_authority() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let paths = ServiceSqlitePaths::from_runtime_context(&runtime_context(
@@ -1207,10 +1326,12 @@ mod tests {
         .expect("SQLite paths");
         fs::create_dir_all(paths.state_database().parent().expect("state directory"))
             .expect("create state directory");
+        let metadata = database_metadata(&paths).identity();
 
         for mode in [OpenMode::ReadWriteExisting, OpenMode::ReadOnlyInspection] {
             let result = open_existing_connection_pool(
                 &paths,
+                &metadata,
                 mode,
                 ServiceSqliteConnectionOptions::reviewed(),
             )
@@ -1223,6 +1344,7 @@ mod tests {
         }
         let result = open_existing_connection_pool(
             &paths,
+            &metadata,
             OpenMode::Initialize,
             ServiceSqliteConnectionOptions::reviewed(),
         )
@@ -1237,7 +1359,8 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn initialized_pool_rejects_mismatched_paths_and_rebound_directory() {
         let directory = tempfile::tempdir().expect("temporary directory");
-        let (_paths, authority) = initialized_authority(directory.path(), "primary").await;
+        let (_paths, metadata, authority) =
+            initialized_authority(directory.path(), "primary").await;
         let other = ServiceSqlitePaths::from_runtime_context(&runtime_context(
             RadrootsPathProfile::RepoLocal,
             Some(directory.path().to_path_buf()),
@@ -1254,6 +1377,7 @@ mod tests {
         .expect("create other state directory");
         let result = open_initialized_connection_pool(
             &other,
+            &metadata,
             ServiceSqliteConnectionOptions::reviewed(),
             authority,
         )
@@ -1263,7 +1387,7 @@ mod tests {
         };
         assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
 
-        let (paths, authority) = initialized_authority(directory.path(), "rebound").await;
+        let (paths, metadata, authority) = initialized_authority(directory.path(), "rebound").await;
         let state_directory = paths.state_database().parent().expect("state directory");
         let displaced = directory.path().join("displaced-state");
         fs::rename(state_directory, &displaced).expect("displace state directory");
@@ -1272,6 +1396,7 @@ mod tests {
             .expect("copy replacement database");
         let result = open_initialized_connection_pool(
             &paths,
+            &metadata,
             ServiceSqliteConnectionOptions::reviewed(),
             authority,
         )
@@ -1313,7 +1438,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let policy = ServiceSqliteConnectionOptions::reviewed();
 
-        let (symlink_paths, symlink_authority) =
+        let (symlink_paths, symlink_metadata, symlink_authority) =
             initialized_authority(directory.path(), "symlink-database").await;
         drop(symlink_authority);
         let symlink_backing = symlink_paths
@@ -1324,15 +1449,19 @@ mod tests {
         fs::rename(symlink_paths.state_database(), &symlink_backing)
             .expect("displace symlink database");
         symlink(&symlink_backing, symlink_paths.state_database()).expect("database symlink");
-        let symlink_result =
-            open_existing_connection_pool(&symlink_paths, OpenMode::ReadWriteExisting, policy)
-                .await;
+        let symlink_result = open_existing_connection_pool(
+            &symlink_paths,
+            &symlink_metadata,
+            OpenMode::ReadWriteExisting,
+            policy,
+        )
+        .await;
         let Err(symlink_error) = symlink_result else {
             panic!("database symlink must fail");
         };
         assert_eq!(symlink_error.kind(), ServiceSqliteErrorKind::Authority);
 
-        let (hardlink_paths, hardlink_authority) =
+        let (hardlink_paths, hardlink_metadata, hardlink_authority) =
             initialized_authority(directory.path(), "hardlink-database").await;
         drop(hardlink_authority);
         let hardlink_alias = hardlink_paths
@@ -1341,9 +1470,13 @@ mod tests {
             .expect("state directory")
             .join("alias.sqlite");
         fs::hard_link(hardlink_paths.state_database(), hardlink_alias).expect("database hard link");
-        let hardlink_result =
-            open_existing_connection_pool(&hardlink_paths, OpenMode::ReadWriteExisting, policy)
-                .await;
+        let hardlink_result = open_existing_connection_pool(
+            &hardlink_paths,
+            &hardlink_metadata,
+            OpenMode::ReadWriteExisting,
+            policy,
+        )
+        .await;
         let Err(hardlink_error) = hardlink_result else {
             panic!("database hard link must fail");
         };
@@ -1384,6 +1517,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let policy = ServiceSqliteConnectionOptions::reviewed();
         let (paths, writable) = initialized_pool(directory.path(), policy).await;
+        let metadata = database_metadata(&paths).identity();
         let mut connection = writable.acquire().await.expect("writable connection");
         sqlx::query("CREATE TABLE inspection_fixture (value INTEGER NOT NULL)")
             .execute(&mut *connection)
@@ -1396,7 +1530,8 @@ mod tests {
         drop(connection);
 
         let contended =
-            open_existing_connection_pool(&paths, OpenMode::ReadOnlyInspection, policy).await;
+            open_existing_connection_pool(&paths, &metadata, OpenMode::ReadOnlyInspection, policy)
+                .await;
         let Err(error) = contended else {
             panic!("inspection must reject an active writer");
         };
@@ -1408,7 +1543,8 @@ mod tests {
         let stale_wal = state_directory.join(WAL_FILE_NAME);
         fs::write(&stale_wal, b"stale-wal-evidence").expect("write stale WAL evidence");
         let stale =
-            open_existing_connection_pool(&paths, OpenMode::ReadOnlyInspection, policy).await;
+            open_existing_connection_pool(&paths, &metadata, OpenMode::ReadOnlyInspection, policy)
+                .await;
         let Err(error) = stale else {
             panic!("inspection must reject stale WAL state");
         };
@@ -1417,9 +1553,10 @@ mod tests {
         fs::remove_file(stale_wal).expect("remove test WAL evidence");
         let before = directory_snapshot(state_directory);
 
-        let read_only = open_existing_connection_pool(&paths, OpenMode::ReadOnlyInspection, policy)
-            .await
-            .expect("offline read-only inspection");
+        let read_only =
+            open_existing_connection_pool(&paths, &metadata, OpenMode::ReadOnlyInspection, policy)
+                .await
+                .expect("offline read-only inspection");
         let mut connection = read_only.acquire().await.expect("inspection connection");
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT value FROM inspection_fixture")
@@ -1473,6 +1610,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let policy = ServiceSqliteConnectionOptions::new(Duration::from_millis(500), 1).unwrap();
         let (paths, pool) = initialized_pool(directory.path(), policy).await;
+        let metadata = database_metadata(&paths).identity();
         let observer = pool.pool.clone();
         let held = pool.acquire().await.expect("only connection");
         let saturated = pool.pool.try_acquire();
@@ -1488,6 +1626,7 @@ mod tests {
 
         let read_only = open_existing_connection_pool(
             &paths,
+            &metadata,
             OpenMode::ReadOnlyInspection,
             ServiceSqliteConnectionOptions::reviewed(),
         )

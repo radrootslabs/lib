@@ -14,6 +14,7 @@ readme = "README.md"
 [dependencies]
 fs2 = { workspace = true }
 radroots_runtime_paths = { workspace = true }
+radroots_storage = { workspace = true }
 rustix = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }

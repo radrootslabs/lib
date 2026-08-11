@@ -6,6 +6,7 @@ const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
 const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
+const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
 
@@ -25,7 +26,14 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
 
     assert_eq!(
         dependency_keys(MANIFEST, "[dependencies]"),
-        BTreeSet::from(["fs2", "radroots_runtime_paths", "rustix", "serde", "sqlx"])
+        BTreeSet::from([
+            "fs2",
+            "radroots_runtime_paths",
+            "radroots_storage",
+            "rustix",
+            "serde",
+            "sqlx"
+        ])
     );
     assert_eq!(
         dependency_keys(MANIFEST, "[dev-dependencies]"),
@@ -38,6 +46,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "config",
             "error",
             "initialize",
+            "metadata",
             "open",
             "status"
         ])
@@ -61,6 +70,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ServiceSqliteConnectionOptions",
         "ServiceSqliteConnectionOptionsError",
         "initialize_database",
+        "ServiceDatabaseIdentity",
+        "ServiceDatabaseMetadata",
+        "ServiceSqliteApplicationId",
+        "ServiceSqliteMetadataValueError",
         "ServiceSqlitePathError",
         "ServiceSqlitePaths",
         "OpenMode",
@@ -88,6 +101,44 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
                 && !CONFIG_SOURCE.contains(forbidden)
                 && !STATUS_SOURCE.contains(forbidden),
             "service SQLite source contains deferred surface `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "radroots_service_metadata",
+        "PRAGMA application_id",
+        "source_generation BLOB",
+        "state_schema_version INTEGER",
+        "created_at_unix_ms INTEGER",
+        "radroots_service_metadata_guard_update",
+        "radroots_service_metadata_no_delete",
+        "LIMIT 2",
+        "SourceGeneration",
+        "NonZeroU32",
+        "pub(crate) async fn write_database_metadata",
+        "pub(crate) async fn verify_database_metadata",
+    ] {
+        assert!(
+            METADATA_SOURCE.contains(required),
+            "Step 057 metadata source is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "pub use sqlx",
+        "pub fn write_database_metadata",
+        "pub async fn write_database_metadata",
+        "pub fn verify_database_metadata",
+        "pub async fn verify_database_metadata",
+        "myc_",
+        "rhi_",
+        "SystemTime::now",
+        "getrandom",
+        "tokio::runtime",
+    ] {
+        assert!(
+            !METADATA_SOURCE.contains(forbidden),
+            "Step 057 metadata source contains forbidden surface `{forbidden}`"
         );
     }
 
@@ -162,7 +213,6 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "OpenOptions::new",
         "remove_file",
         "tokio",
-        "sqlx",
         "rusqlite",
         "Command::new",
         "std::process",

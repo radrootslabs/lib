@@ -3,7 +3,8 @@
 `radroots_service_sqlite` is the unpublished, native SQLite-mechanism crate for
 Radroots services. It provides narrow, reusable building blocks for exclusive
 writer authority, instance locking, versioned schema mechanics, bounded
-transactions, integrity checks, backup, restore, and passive storage status.
+transactions, immutable service-instance database identity, integrity checks,
+backup, restore, and passive storage status.
 
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
