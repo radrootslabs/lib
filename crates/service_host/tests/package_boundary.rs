@@ -25,6 +25,10 @@ const LIFECYCLE_SOURCE: &str = concat!(
     include_str!("../src/lifecycle/supervisor.rs"),
     include_str!("../src/lifecycle/task.rs"),
 );
+const OPERATIONS_SOURCE: &str = concat!(
+    include_str!("../src/operations/mod.rs"),
+    include_str!("../src/operations/config.rs"),
+);
 
 #[test]
 fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
@@ -66,6 +70,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
             "entropy",
             "error",
             "lifecycle",
+            "operations",
             "status",
             "time",
         ])
@@ -74,6 +79,9 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     assert!(!ADMIN_SOURCE.contains("serde(untagged)"));
     for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
         assert!(!LIFECYCLE_SOURCE.contains(forbidden));
+    }
+    for forbidden in ["TcpListener", "TcpStream", "/status", "process::exit"] {
+        assert!(!OPERATIONS_SOURCE.contains(forbidden));
     }
 }
 

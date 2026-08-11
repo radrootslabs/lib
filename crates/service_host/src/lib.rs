@@ -7,6 +7,7 @@ pub mod build_info;
 pub mod entropy;
 pub mod error;
 pub mod lifecycle;
+pub mod operations;
 pub mod status;
 pub mod time;
 
@@ -47,6 +48,11 @@ pub use lifecycle::{
     SupervisedTaskExit, SupervisedTaskExitStatus, SupervisionFailure, SupervisionFailureKind,
     TaskClassification, TaskCompletionExpectation, TaskMetadata, TaskMetadataError, TaskName,
     TaskRegistrationError, TaskSupervisor, UnfinishedWork,
+};
+pub use operations::{
+    OperationsBindPolicy, OperationsConfigError, OperationsConfigField, OperationsListenAddress,
+    OperationsListenAddressError, OperationsListenerConfig, OperationsTransportLimitField,
+    OperationsTransportLimitValues, OperationsTransportLimits, OperationsTransportLimitsError,
 };
 pub use status::{
     CONFIGURATION_SCHEMA_VERSION, CachedServiceState, CachedServiceStatePublisher,

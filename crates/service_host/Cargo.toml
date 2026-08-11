@@ -29,6 +29,7 @@ tokio-util = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "rt", "sync", "test-util", "time"] }
+toml = { workspace = true }
 
 [lints]
 workspace = true
