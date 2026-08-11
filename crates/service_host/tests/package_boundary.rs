@@ -2,6 +2,12 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const STATUS_SOURCE: &str = concat!(
+    include_str!("../src/status/mod.rs"),
+    include_str!("../src/status/phase.rs"),
+    include_str!("../src/status/reason.rs"),
+    include_str!("../src/status/service.rs"),
+);
 
 #[test]
 fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
@@ -19,12 +25,13 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
 
     assert_eq!(
         dependency_keys(MANIFEST),
-        BTreeSet::from(["getrandom", "serde"])
+        BTreeSet::from(["getrandom", "radroots_runtime_paths", "serde", "serde_json"])
     );
     assert_eq!(
         public_modules(ROOT),
         BTreeSet::from(["build_info", "entropy", "error", "status", "time"])
     );
+    assert!(!STATUS_SOURCE.contains("serde(untagged)"));
 }
 
 fn public_modules(root: &str) -> BTreeSet<&str> {

@@ -15,8 +15,12 @@ pub use build_info::{
 pub use entropy::{EntropyError, EntropySource, SystemEntropy};
 pub use error::{HostError, HostErrorCode, HostErrorKind, SafeHostError};
 pub use status::{
-    CommonReasonCode, Readiness, ReasonCode, ReasonCodes, ServiceOperationalState, ServicePhase,
-    StatusContractError,
+    CONFIGURATION_SCHEMA_VERSION, CommonReasonCode, ConfigurationIdentity, ConfigurationSource,
+    IntegrityState, PersistenceHealth, PersistenceSummary, ProviderHealth, Readiness, ReasonCode,
+    ReasonCodes, SERVICE_STATUS_CONTRACT_VERSION, SERVICE_STATUS_MAX_UTF8_BYTES,
+    ServiceOperationalState, ServicePhase, ServiceStatus, ServiceStatusDetail, Sha256Digest,
+    StatusContractError, StatusEncodingError, StatusId, StatusModelError, TransportHealth,
+    UptimeMillis,
 };
 pub use time::{
     MonotonicClock, MonotonicClockError, MonotonicDeadline, MonotonicTime, SystemMonotonicClock,
