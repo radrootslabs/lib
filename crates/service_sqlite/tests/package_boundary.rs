@@ -16,6 +16,8 @@ const INTEGRITY_CATALOG_SOURCE: &str = include_str!("../src/integrity/catalog.rs
 const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
+const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
+const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
 const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
 
@@ -67,6 +69,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "metadata",
             "migration",
             "open",
+            "restore",
             "status",
             "transaction_control"
         ])
@@ -134,6 +137,21 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "It is not restore or replacement authority",
         "copy from the retained member and reverify the staged copy",
         "pathname verification alone is insufficient",
+        "Restore crash recovery uses a private sealed v1 marker",
+        "state.restore-staged.sqlite",
+        "state.restore-backup.sqlite",
+        "state.restore-marker.v1.next",
+        "compact canonical JSON is capped at 2,048 bytes",
+        "domain-separated checksum binds the canonical fields and detects corruption",
+        "it is not an authenticity credential",
+        "only legal durable sequence is `prepared` to `live_retained` to `replacement_installed`",
+        "repeating the current phase is byte-idempotent",
+        "descriptor-relative, no-follow, single-link, owner-owned regular files with mode `0600`",
+        "compare-and-reloads the current bytes",
+        "create-new scratch, atomically replaces the marker",
+        "reads do not repair or remove it",
+        "does not stage, copy, open, rename, replace, or delete a database",
+        "No marker type, path, raw descriptor, or store operation is public API",
     ] {
         assert!(
             readme_words.contains(required),
@@ -167,6 +185,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     let backup_verify_production = BACKUP_VERIFY_SOURCE
         .split_once("#[cfg(test)]")
         .map_or(BACKUP_VERIFY_SOURCE, |(production, _)| production);
+    let restore_marker_production = RESTORE_MARKER_SOURCE
+        .split_once("#[cfg(test)]\nmod tests")
+        .map(|(production, _)| production)
+        .expect("restore marker source must keep tests separated");
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -465,6 +487,61 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             !backup_verify_production.contains(forbidden),
             "Step 065 backup verifier contains deferred or raw authority `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "radroots.service-sqlite.restore-marker",
+        "RESTORE_MARKER_SCHEMA_VERSION: u32 = 1",
+        "RESTORE_MARKER_MAX_BYTES: usize = 2_048",
+        "radroots.service_sqlite.restore_marker.v1\\0",
+        "state.restore-staged.sqlite",
+        "state.restore-backup.sqlite",
+        "state.restore-marker.v1",
+        "state.restore-marker.v1.next",
+        "enum RestoreRecoveryPhase",
+        "Prepared",
+        "LiveRetained",
+        "ReplacementInstalled",
+        "fn transitioned_to(",
+        "serde(deny_unknown_fields)",
+        "OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK",
+        "OFlags::RDWR",
+        "OFlags::CREATE",
+        "OFlags::EXCL",
+        "Mode::RUSR | Mode::WUSR",
+        "renameat(",
+        "sync_all()",
+        "cleanup_exact",
+        "ServiceSqliteErrorKind::Restore",
+        "ServiceSqliteErrorKind::Recovery",
+    ] {
+        assert!(
+            restore_marker_production.contains(required),
+            "Step 066 restore marker is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub mod restore",
+        "pub use marker",
+        "pub struct Restore",
+        "pub enum Restore",
+        "pub fn restore",
+        "pub async fn restore",
+        "tokio::",
+        "sqlx::",
+        "rusqlite::",
+        "std::fs::copy",
+        "state_database().rename",
+        "remove_dir_all",
+        "SystemTime",
+        "timeout(",
+    ] {
+        assert!(
+            !restore_marker_production.contains(forbidden)
+                && !RESTORE_ROOT_SOURCE.contains(forbidden)
+                && !ROOT.contains(forbidden),
+            "Step 066 restore marker exposes or implements deferred authority `{forbidden}`"
         );
     }
 

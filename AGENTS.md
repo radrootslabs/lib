@@ -194,6 +194,17 @@ Before editing code:
   the bundle, or introduce restore markers, staging, replacement, or recovery
   into verification. Later restore work must consume the retained member and
   reverify its staged copy.
+- Restore recovery markers are private `radroots_service_sqlite` mechanics.
+  Preserve the fixed sibling names, exact 2,048-byte canonical v1 JSON,
+  domain-separated self-checksum, typed database and backup intent, and the
+  only legal durable sequence `prepared -> live_retained ->
+  replacement_installed`. Marker creation and advancement require retained
+  writer authority, descriptor-relative owner-only files, exact inode
+  revalidation, file and parent synchronization, and create-new scratch plus
+  atomic replacement. Reads never repair or remove evidence. Do not expose
+  marker types or paths, truncate markers in place, accept caller-selected
+  names, or move, copy, open, or delete a database in the marker checkpoint;
+  restore staging, replacement, and open-time recovery remain separate steps.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

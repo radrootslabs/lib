@@ -12,6 +12,7 @@ mod integrity;
 mod metadata;
 mod migration;
 mod open;
+mod restore;
 mod status;
 mod transaction_control;
 

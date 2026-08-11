@@ -92,6 +92,34 @@ authority, and it exposes no path or raw handle. Later restore work must copy
 from the retained member and reverify the staged copy under its own supervised
 blocking worker and deadline; pathname verification alone is insufficient.
 
+Restore crash recovery uses a private sealed v1 marker stored beside canonical
+service state. Its fixed layout names the live `state.sqlite`, staged
+`state.restore-staged.sqlite`, retained `state.restore-backup.sqlite`, durable
+`state.restore-marker.v1`, and create-new update scratch
+`state.restore-marker.v1.next`. The compact canonical JSON is capped at 2,048
+bytes and binds typed database intent, the protected source-manifest digest,
+and exact live, staged, and retained-backup device, inode, length, and SHA-256
+expectations. A domain-separated checksum binds the canonical fields and
+detects corruption; it is not an authenticity credential.
+
+The only legal durable sequence is `prepared` to `live_retained` to
+`replacement_installed`; repeating the current phase is byte-idempotent and
+every skip, reversal, or post-install transition fails closed. Marker files are
+descriptor-relative, no-follow, single-link, owner-owned regular files with
+mode `0600`. Creation synchronizes the file and state directory. Advancement
+compare-and-reloads the current bytes, writes and synchronizes the fixed
+create-new scratch, atomically replaces the marker, synchronizes the directory,
+and reopens the exact new bytes. Stale scratch, tamper, collision, binding
+replacement, insecure directory, or malformed marker remains evidence and
+fails closed; reads do not repair or remove it.
+
+This marker checkpoint does not stage, copy, open, rename, replace, or delete a
+database. Later restore staging must consume a retained verified backup;
+replacement must invoke the marker sequence around its governed renames; and
+open-time recovery must reconcile durable marker and artifact identities before
+removing any recovery evidence. No marker type, path, raw descriptor, or store
+operation is public API.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers
