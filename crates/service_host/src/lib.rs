@@ -5,6 +5,7 @@
 pub mod build_info;
 pub mod entropy;
 pub mod error;
+pub mod lifecycle;
 pub mod status;
 pub mod time;
 
@@ -14,6 +15,10 @@ pub use build_info::{
 };
 pub use entropy::{EntropyError, EntropySource, SystemEntropy};
 pub use error::{HostError, HostErrorCode, HostErrorKind, SafeHostError};
+pub use lifecycle::{
+    ShutdownPhase, TaskClassification, TaskCompletionExpectation, TaskMetadata, TaskMetadataError,
+    TaskName,
+};
 pub use status::{
     CONFIGURATION_SCHEMA_VERSION, CachedServiceState, CachedServiceStatePublisher,
     CachedServiceStateReader, CommonReasonCode, ConfigurationIdentity, ConfigurationSource,

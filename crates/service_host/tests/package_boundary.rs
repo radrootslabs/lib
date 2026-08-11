@@ -35,7 +35,14 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     );
     assert_eq!(
         public_modules(ROOT),
-        BTreeSet::from(["build_info", "entropy", "error", "status", "time"])
+        BTreeSet::from([
+            "build_info",
+            "entropy",
+            "error",
+            "lifecycle",
+            "status",
+            "time",
+        ])
     );
     assert!(!STATUS_SOURCE.contains("serde(untagged)"));
 }
