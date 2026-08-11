@@ -3,12 +3,14 @@
 //! Reusable, service-neutral SQLite mechanics for Radroots services.
 
 mod authority;
+mod config;
 mod error;
 mod initialize;
 mod open;
 mod status;
 
 pub use authority::WriterAuthority;
+pub use config::{ServiceSqliteConnectionOptions, ServiceSqliteConnectionOptionsError};
 pub use error::{
     SafeServiceSqliteError, ServiceSqliteError, ServiceSqliteErrorCode, ServiceSqliteErrorKind,
 };

@@ -1,7 +1,7 @@
 //! Lifetime authority for the sole writable service database owner.
 
 use core::fmt;
-use std::{error::Error, fs::File};
+use std::{error::Error, fs::File, path::PathBuf};
 
 use fs2::FileExt;
 
@@ -20,6 +20,11 @@ use crate::{OpenMode, ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqliteP
 /// ```
 pub struct WriterAuthority {
     file: Option<File>,
+    #[allow(
+        dead_code,
+        reason = "Step 056 binds the authority for the private Step 061 pool host"
+    )]
+    database_path: PathBuf,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     directory: File,
 }
@@ -48,6 +53,24 @@ impl WriterAuthority {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn directory(&self) -> &File {
         &self.directory
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Step 056 binds the authority for the private Step 061 pool host"
+    )]
+    pub(crate) fn validate_for(
+        &self,
+        paths: &ServiceSqlitePaths,
+    ) -> Result<(), ServiceSqliteError> {
+        if !self.is_held() || self.database_path != paths.state_database() {
+            return Err(authority_error(WriterAuthorityCause::Mismatched));
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        validate_directory_binding(&self.directory, paths).map_err(authority_error)?;
+
+        Ok(())
     }
 
     /// Explicitly releases writer authority; subsequent calls are no-ops.
@@ -100,6 +123,11 @@ enum WriterAuthorityCause {
     LockWrongOwner,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     Contended,
+    #[allow(
+        dead_code,
+        reason = "Step 056 binds the authority for the private Step 061 pool host"
+    )]
+    Mismatched,
     UnlockFailed,
 }
 
@@ -128,6 +156,7 @@ impl fmt::Display for WriterAuthorityCause {
             Self::LockWrongOwner => "SQLite writer lock has the wrong owner",
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             Self::Contended => "another SQLite writer is active",
+            Self::Mismatched => "SQLite writer authority does not match this database",
             Self::UnlockFailed => "SQLite writer authority could not be released",
         })
     }
@@ -187,6 +216,7 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
     match FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(WriterAuthority {
             file: Some(file),
+            database_path: paths.state_database().to_path_buf(),
             directory,
         }),
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -237,6 +267,31 @@ fn validate_lock(
         return Err(WriterAuthorityCause::LockWrongOwner);
     }
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_directory_binding(
+    held_directory: &File,
+    paths: &ServiceSqlitePaths,
+) -> Result<(), WriterAuthorityCause> {
+    use rustix::fs::{Mode, OFlags, fstat, open};
+
+    let current_directory = open(
+        paths
+            .state_database()
+            .parent()
+            .ok_or(WriterAuthorityCause::Mismatched)?,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let held = fstat(held_directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current = fstat(&current_directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    if held.st_dev == current.st_dev && held.st_ino == current.st_ino {
+        Ok(())
+    } else {
+        Err(WriterAuthorityCause::Mismatched)
+    }
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
