@@ -3,6 +3,7 @@
 //! Reusable, service-neutral SQLite mechanics for Radroots services.
 
 mod authority;
+mod backup;
 mod config;
 mod connection;
 mod error;
@@ -15,6 +16,12 @@ mod status;
 mod transaction_control;
 
 pub use authority::WriterAuthority;
+pub use backup::{
+    BACKUP_MANIFEST_CANONICAL_MAX_BYTES, BACKUP_MANIFEST_SCHEMA, BACKUP_MANIFEST_SCHEMA_VERSION,
+    BACKUP_STATE_MEMBER_NAME, BackupCreatedAtUnixMs, BackupManifestContractError,
+    BackupManifestIntegrity, BackupManifestSha256, BackupMemberSha256, ServiceBackupManifest,
+    ServiceBackupMember,
+};
 pub use config::{ServiceSqliteConnectionOptions, ServiceSqliteConnectionOptionsError};
 pub use connection::{
     ServiceSqliteHost, ServiceSqliteTransaction, ServiceSqliteTransactionError,

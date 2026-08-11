@@ -4,6 +4,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
+const BACKUP_SOURCE: &str = include_str!("../src/backup/manifest.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const CONNECTION_SOURCE: &str = include_str!("../src/connection.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
@@ -40,6 +41,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "radroots_storage",
             "rustix",
             "serde",
+            "serde_json",
             "sha2",
             "sqlx",
             "tokio"
@@ -47,12 +49,13 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     );
     assert_eq!(
         dependency_keys(MANIFEST, "[dev-dependencies]"),
-        BTreeSet::from(["serde_json", "tempfile", "tokio"])
+        BTreeSet::from(["tempfile", "tokio"])
     );
     assert_eq!(
         private_modules(ROOT),
         BTreeSet::from([
             "authority",
+            "backup",
             "config",
             "connection",
             "error",
@@ -95,6 +98,14 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "a later call resumes close",
         "stable outer result is cached",
         "Dropping a host performs no asynchronous close work",
+        "`ServiceBackupManifest` is the stable model-only v1 backup identity",
+        "compact canonical UTF-8 JSON in the frozen field order, capped at 1,024 bytes",
+        "external manifest SHA-256 over those exact bytes",
+        "exactly one `state.sqlite` member",
+        "integrity are exactly `ok`, and protected material is always excluded",
+        "Parsing proves only the strict structural and canonical contract",
+        "unknown, duplicate, null, reordered, whitespace-altered, or version-drifted input",
+        "does no backup filesystem or SQLite capture work",
     ] {
         assert!(
             readme_words.contains(required),
@@ -117,6 +128,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
         .expect("connection source must keep tests separated");
+    let backup_production = BACKUP_SOURCE
+        .split_once("#[cfg(test)]")
+        .map(|(production, _)| production)
+        .expect("backup source must keep tests separated");
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -124,6 +139,17 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "SafeServiceSqliteError",
         "ServiceSqliteError",
         "WriterAuthority",
+        "BackupCreatedAtUnixMs",
+        "BackupManifestContractError",
+        "BackupManifestIntegrity",
+        "BackupManifestSha256",
+        "BackupMemberSha256",
+        "ServiceBackupManifest",
+        "ServiceBackupMember",
+        "BACKUP_MANIFEST_CANONICAL_MAX_BYTES",
+        "BACKUP_MANIFEST_SCHEMA",
+        "BACKUP_MANIFEST_SCHEMA_VERSION",
+        "BACKUP_STATE_MEMBER_NAME",
         "ServiceSqliteConnectionOptions",
         "ServiceSqliteConnectionOptionsError",
         "initialize_database",
@@ -166,6 +192,43 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             ROOT.contains(required),
             "crate root is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "radroots.service-backup",
+        "BACKUP_MANIFEST_SCHEMA_VERSION: u32 = 1",
+        "BACKUP_MANIFEST_CANONICAL_MAX_BYTES: usize = 1_024",
+        "BACKUP_STATE_MEMBER_NAME: &str = \"state.sqlite\"",
+        "pub fn from_canonical_bytes",
+        "manifest.canonical_bytes.as_ref() != bytes",
+        "serde(deny_unknown_fields)",
+        "Sha256::digest(&canonical_bytes)",
+        "pub(crate) fn from_capture",
+        "ServiceDatabaseMetadata",
+        "InvalidMemberInventory",
+        "ProtectedMaterialIncluded",
+    ] {
+        assert!(
+            backup_production.contains(required),
+            "Step 063 backup source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "impl Serialize for ServiceBackupManifest",
+        "impl<'de> Deserialize<'de> for ServiceBackupManifest",
+        "pub fn from_capture",
+        "std::fs",
+        "sqlx",
+        "tokio",
+        "SystemTime",
+        "WallClock",
+        "PathBuf",
+        "OpenOptions",
+    ] {
+        assert!(
+            !backup_production.contains(forbidden),
+            "Step 063 backup source contains deferred or forgeable surface `{forbidden}`"
         );
     }
 

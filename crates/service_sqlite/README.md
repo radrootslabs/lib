@@ -38,6 +38,19 @@ release is proven, the stable outer result is cached for every later call.
 Dropping a host performs no asynchronous close work and is not proof that the
 governed checkpoint and authority-release sequence completed.
 
+`ServiceBackupManifest` is the stable model-only v1 backup identity. It admits
+only compact canonical UTF-8 JSON in the frozen field order, capped at 1,024
+bytes, and computes the external manifest SHA-256 over those exact bytes. The
+v1 member array contains exactly one `state.sqlite` member with a nonzero byte
+length and lowercase SHA-256; service, instance, nonzero source generation,
+state schema, and injected creation time are explicit. SQLite and foreign-key
+integrity are exactly `ok`, and protected material is always excluded.
+Parsing proves only the strict structural and canonical contract. It rejects
+unknown, duplicate, null, reordered, whitespace-altered, or version-drifted
+input; member bytes, digest, SQLite identity, and actual integrity remain the
+separate backup-verification boundary. This crate does no backup filesystem or
+SQLite capture work while constructing or parsing the manifest model.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

@@ -173,6 +173,13 @@ Before editing code:
   be resumed through the host-owned connect/checkpoint/connection-close driver;
   Drop is not an asynchronous close or completion proof. Do not add public
   checkpoint knobs, background close tasks, or Drop-based async cleanup.
+- `ServiceBackupManifest` is the sole v1 backup-manifest model. Preserve its
+  exact 1,024-byte compact canonical JSON, raw canonical-byte SHA-256, typed
+  service/instance/source-generation/schema/time binding, singleton
+  `state.sqlite` inventory, exact `ok` integrity projection, and mandatory
+  protected-material exclusion. Parsing is structural only; do not let the
+  model perform filesystem capture, SQLite backup, file/digest verification,
+  restore, ambient clock access, or public dependency-owned error exposure.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist
