@@ -2,6 +2,10 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const ADMIN_SOURCE: &str = concat!(
+    include_str!("../src/admin/mod.rs"),
+    include_str!("../src/admin/model.rs"),
+);
 const STATUS_SOURCE: &str = concat!(
     include_str!("../src/status/mod.rs"),
     include_str!("../src/status/phase.rs"),
@@ -45,6 +49,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     assert_eq!(
         public_modules(ROOT),
         BTreeSet::from([
+            "admin",
             "build_info",
             "entropy",
             "error",
@@ -54,6 +59,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
         ])
     );
     assert!(!STATUS_SOURCE.contains("serde(untagged)"));
+    assert!(!ADMIN_SOURCE.contains("serde(untagged)"));
     for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
         assert!(!LIFECYCLE_SOURCE.contains(forbidden));
     }
