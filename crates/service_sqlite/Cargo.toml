@@ -12,6 +12,10 @@ homepage.workspace = true
 readme = "README.md"
 
 [dependencies]
+serde = { workspace = true, features = ["derive", "std"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
 
 [lints]
 workspace = true
