@@ -1,12 +1,13 @@
+#![doc = include_str!("../README")]
 #![forbid(unsafe_code)]
 
-pub mod context;
-pub mod conventions;
-pub mod error;
-pub mod identifier;
-pub mod platform;
-pub mod roots;
-pub mod service;
+mod context;
+mod conventions;
+mod error;
+mod identifier;
+mod platform;
+mod roots;
+mod service;
 
 pub use context::{
     RuntimeContext, RuntimeContextBootstrap, RuntimeContextError, RuntimeContextSource,
