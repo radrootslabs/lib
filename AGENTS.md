@@ -205,6 +205,17 @@ Before editing code:
   marker types or paths, truncate markers in place, accept caller-selected
   names, or move, copy, open, or delete a database in the marker checkpoint;
   restore staging, replacement, and open-time recovery remain separate steps.
+- Offline restore staging consumes a sealed `VerifiedServiceBackup`, acquires
+  exclusive writer authority after every governed host has closed, and creates
+  only the fixed adjacent `state.restore-staged.sqlite` file. It must copy from
+  the retained source descriptor, reverify exact metadata, migration prefix,
+  schema catalog, integrity, foreign keys, length, and digest through retained
+  descriptors, and keep authority plus exact cleanup ownership across caller
+  cancellation. The returned sealed capability owns the staged inode until
+  finalization or an identity-checked drop cleanup attempt; failed cleanup must
+  remain evidence that later admission rejects. Staging must not create a
+  marker, rename live state, retain an old live database, or install a
+  replacement; those are later finalization and recovery boundaries.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

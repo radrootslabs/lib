@@ -18,6 +18,7 @@ const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
 const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
+const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status.rs");
 const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
 
@@ -152,6 +153,21 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "reads do not repair or remove it",
         "does not stage, copy, open, rename, replace, or delete a database",
         "No marker type, path, raw descriptor, or store operation is public API",
+        "`stage_verified_restore` is the offline boundary",
+        "acquires exclusive writer authority",
+        "fixed adjacent `state.restore-staged.sqlite`",
+        "A live writable or read-only host",
+        "opened create-new, no-follow, owner-only, and single-link with mode `0600`",
+        "copies the exact manifest-bound bytes from the verifier's retained member descriptor",
+        "opens SQLite only through the retained staged descriptor",
+        "exact applied migration prefix and schema-object catalog",
+        "bounded `integrity_check(1)`, and empty `foreign_key_check`",
+        "Live database bytes, identity, permissions, and timestamps remain untouched",
+        "sealed non-cloneable `StagedServiceRestore`",
+        "attempts an identity-checked unlink and state-directory synchronization",
+        "cleanup failure leaves staging or recovery evidence",
+        "detached work retains authority and exact cleanup ownership",
+        "does not create or advance a recovery marker",
     ] {
         assert!(
             readme_words.contains(required),
@@ -544,6 +560,65 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "Step 066 restore marker exposes or implements deferred authority `{forbidden}`"
         );
     }
+
+    let restore_stage_production = RESTORE_STAGE_SOURCE
+        .split_once(
+            "#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]\nmod tests",
+        )
+        .map(|(production, _)| production)
+        .expect("restore stage source must keep tests separated");
+    for required in [
+        "pub async fn stage_verified_restore(",
+        "pub struct StagedServiceRestore",
+        "VerifiedServiceBackup",
+        "WriterAuthority::acquire(paths, OpenMode::ReadWriteExisting)",
+        "tokio::spawn(async move",
+        "tokio::task::spawn_blocking",
+        "OFlags::CREATE",
+        "OFlags::EXCL",
+        "OFlags::NOFOLLOW",
+        "OFlags::NONBLOCK",
+        "STAGED_FILE_NAME",
+        "verified.state_file()",
+        ".validate_binding()",
+        "verify_database_metadata",
+        "verify_migration_history",
+        "verify_database_integrity",
+        "/proc/self/fd/{descriptor}",
+        "/dev/fd/{descriptor}",
+        "PRAGMA query_only = ON",
+        "PRAGMA trusted_schema = OFF",
+        "PRAGMA database_list",
+        "cleanup_exact_stage",
+        "authority.release()",
+        "StagedServiceRestore([redacted])",
+    ] {
+        assert!(
+            restore_stage_production.contains(required),
+            "Step 067 restore staging source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub fn state_file",
+        "pub fn directory",
+        "pub fn path",
+        "pub fn authority",
+        "pub fn artifact",
+        "RestoreMarkerBinding::create",
+        "RestoreRecoveryPhase::LiveRetained",
+        "RestoreRecoveryPhase::ReplacementInstalled",
+        "renameat(",
+        "std::fs::rename",
+        "remove_dir_all",
+        "SystemTime::now",
+        "tokio::time::timeout",
+    ] {
+        assert!(
+            !restore_stage_production.contains(forbidden),
+            "Step 067 restore staging source contains deferred or raw authority `{forbidden}`"
+        );
+    }
+    assert!(ROOT.contains("pub use restore::{StagedServiceRestore, stage_verified_restore};"));
 
     for required in [
         "self.pool.close().await",

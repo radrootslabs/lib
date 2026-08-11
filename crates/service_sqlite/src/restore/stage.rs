@@ -1,0 +1,1893 @@
+//! Offline staging of one retained verified backup.
+
+use core::fmt;
+
+use crate::{
+    MigrationCatalog, SchemaCatalog, ServiceDatabaseIdentity, ServiceSqliteError,
+    ServiceSqliteErrorKind, ServiceSqlitePaths, VerifiedServiceBackup,
+};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use {
+    super::{
+        RestoreArtifactExpectation, RestoreRecoveryLayout,
+        marker::{BACKUP_FILE_NAME, MARKER_FILE_NAME, MARKER_NEXT_FILE_NAME, STAGED_FILE_NAME},
+    },
+    crate::{OpenMode, ServiceDatabaseMetadata, WriterAuthority},
+    rustix::{
+        fs::{AtFlags, FileType, Mode, OFlags, fchmod, fstat, openat, statat, unlinkat},
+        io::Errno,
+        process::geteuid,
+    },
+    sha2::{Digest, Sha256},
+    sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions},
+    std::{
+        error::Error,
+        fs::File,
+        io::{Read, Seek, SeekFrom, Write},
+        os::fd::AsRawFd,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+    },
+};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const COPY_BUFFER_BYTES: usize = 64 * 1_024;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_BEFORE_CREATE: u8 = 1;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_MID_COPY: u8 = 2;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_POST_COPY: u8 = 3;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_POLICY: u8 = 4;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_METADATA: u8 = 5;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_HISTORY: u8 = 6;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_INTEGRITY: u8 = 7;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_PRE_FINAL_SYNC: u8 = 8;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const TEST_PHASE_CREATED: u8 = 9;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+use std::sync::atomic::AtomicU8;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+static TEST_STAGE_PHASE: AtomicU8 = AtomicU8::new(0);
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+static TEST_STAGE_BLOCK_PHASE: AtomicU8 = AtomicU8::new(0);
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+static TEST_STAGE_FAIL_SYNC: AtomicU8 = AtomicU8::new(0);
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+static TEST_STAGE_PANIC_WORKER: AtomicBool = AtomicBool::new(false);
+
+/// Sealed capability for one completely reverified adjacent restore stage.
+///
+/// The capability owns exclusive writer authority and exact retained file
+/// identities. Dropping it before finalization attempts exact-inode cleanup
+/// before releasing authority; cleanup failure leaves evidence that later
+/// admission rejects. It exposes no path or raw descriptor.
+///
+/// ```compile_fail
+/// use radroots_service_sqlite::StagedServiceRestore;
+/// let _forged = StagedServiceRestore {};
+/// ```
+///
+/// ```compile_fail
+/// fn require_clone<T: Clone>() {}
+/// require_clone::<radroots_service_sqlite::StagedServiceRestore>();
+/// ```
+#[allow(dead_code)] // Step 068 consumes the retained native capability.
+pub struct StagedServiceRestore {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    inner: Option<NativeStagedServiceRestore>,
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    _private: (),
+}
+
+impl fmt::Debug for StagedServiceRestore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("StagedServiceRestore([redacted])")
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl StagedServiceRestore {
+    #[allow(dead_code)] // Step 068 consumes the retained native capability.
+    pub(crate) fn into_native(mut self) -> NativeStagedServiceRestore {
+        self.inner
+            .take()
+            .expect("staged restore capability is consumed only once")
+    }
+}
+
+/// Copies and completely reverifies a retained backup beside closed live state.
+///
+/// This operation never renames or replaces live state and never creates a
+/// recovery marker. It acquires exclusive writer authority before staging, so
+/// an open writable or inspection host is rejected. Caller cancellation
+/// requests bounded worker cancellation; any detached work continues to own
+/// authority and exact cleanup until it terminates.
+pub async fn stage_verified_restore(
+    paths: &ServiceSqlitePaths,
+    expected: &ServiceDatabaseIdentity,
+    migrations: &MigrationCatalog,
+    schema: &SchemaCatalog,
+    verified: VerifiedServiceBackup,
+) -> Result<StagedServiceRestore, ServiceSqliteError> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        validate_intent(paths, expected, migrations, schema, &verified)?;
+        let authority = WriterAuthority::acquire(paths, OpenMode::ReadWriteExisting)?
+            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
+        authority.validate_for(paths)?;
+
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let cancellation_on_drop = CancellationOnDrop::new(Arc::clone(&cancellation));
+        let task_paths = paths.clone();
+        let task_expected = expected.clone();
+        let task_migrations = migrations.clone();
+        let task_schema = schema.clone();
+        let task = tokio::spawn(async move {
+            run_stage(
+                task_paths,
+                task_expected,
+                task_migrations,
+                task_schema,
+                verified,
+                authority,
+                cancellation,
+            )
+            .await
+        });
+        let result = task
+            .await
+            .map_err(|source| restore_source(RestoreFailureKind::Join, source))?;
+        cancellation_on_drop.disarm();
+        result.map(|inner| StagedServiceRestore { inner: Some(inner) })
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = (paths, expected, migrations, schema, verified);
+        Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Restore))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_intent(
+    paths: &ServiceSqlitePaths,
+    expected: &ServiceDatabaseIdentity,
+    migrations: &MigrationCatalog,
+    schema: &SchemaCatalog,
+    verified: &VerifiedServiceBackup,
+) -> Result<(), ServiceSqliteError> {
+    let metadata = verified.database_metadata();
+    let manifest = verified.manifest();
+    if !expected.matches_paths(paths)
+        || expected.supported_state_schema_version().get() != migrations.current_version()
+        || !schema.matches_migrations(migrations)
+        || metadata.service() != expected.service()
+        || metadata.instance() != expected.instance()
+        || metadata.source_generation() != expected.source_generation()
+        || metadata.application_id() != expected.application_id()
+        || metadata.state_schema_version() > expected.supported_state_schema_version()
+        || manifest.service() != metadata.service()
+        || manifest.instance() != metadata.instance()
+        || manifest.source_generation() != metadata.source_generation()
+        || manifest.state_schema_version() != metadata.state_schema_version()
+    {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn run_stage(
+    paths: ServiceSqlitePaths,
+    expected: ServiceDatabaseIdentity,
+    migrations: MigrationCatalog,
+    schema: SchemaCatalog,
+    verified: VerifiedServiceBackup,
+    authority: WriterAuthority,
+    cancellation: Arc<AtomicBool>,
+) -> Result<NativeStagedServiceRestore, ServiceSqliteError> {
+    let copy_cancellation = Arc::clone(&cancellation);
+    let copied = tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        if TEST_STAGE_PANIC_WORKER.load(Ordering::Acquire) {
+            panic!("injected restore staging worker failure");
+        }
+        NativeStagedServiceRestore::copy_from_verified(
+            paths,
+            verified,
+            authority,
+            &copy_cancellation,
+        )
+    })
+    .await
+    .map_err(|source| restore_source(RestoreFailureKind::Join, source))?;
+    let mut staged = copied?;
+    staged.validate()?;
+    if cancellation.load(Ordering::Acquire) {
+        return Err(restore_error(RestoreFailureKind::Cancelled));
+    }
+
+    let connect_options = staged.connect_options()?;
+    staged.validate()?;
+    let connected = SqliteConnection::connect_with(&connect_options).await;
+    staged.validate()?;
+    let mut connection =
+        connected.map_err(|source| restore_source(RestoreFailureKind::OpenStaged, source))?;
+    if cancellation.load(Ordering::Acquire) {
+        close_after(&mut staged, connection).await?;
+        return Err(restore_error(RestoreFailureKind::Cancelled));
+    }
+
+    let verification = verify_staged_connection(
+        &mut staged,
+        &mut connection,
+        &expected,
+        &migrations,
+        &schema,
+        &cancellation,
+    )
+    .await;
+    let close = connection.close().await;
+    staged.validate()?;
+    verification?;
+    close.map_err(|source| restore_source(RestoreFailureKind::CloseStaged, source))?;
+    if cancellation.load(Ordering::Acquire) {
+        return Err(restore_error(RestoreFailureKind::Cancelled));
+    }
+
+    let final_cancellation = Arc::clone(&cancellation);
+    tokio::task::spawn_blocking(move || staged.finalize(&final_cancellation))
+        .await
+        .map_err(|source| restore_source(RestoreFailureKind::Join, source))?
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn close_after(
+    staged: &mut NativeStagedServiceRestore,
+    connection: SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    let result = connection.close().await;
+    staged.validate()?;
+    result.map_err(|source| restore_source(RestoreFailureKind::CloseStaged, source))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn verify_staged_connection(
+    staged: &mut NativeStagedServiceRestore,
+    connection: &mut SqliteConnection,
+    expected: &ServiceDatabaseIdentity,
+    migrations: &MigrationCatalog,
+    schema: &SchemaCatalog,
+    cancellation: &AtomicBool,
+) -> Result<(), ServiceSqliteError> {
+    let policy = verify_read_only_policy(connection).await;
+    staged.validate()?;
+    policy?;
+    let phase = test_async_phase(TEST_PHASE_POLICY, cancellation).await;
+    staged.validate()?;
+    phase?;
+    check_cancel(cancellation)?;
+
+    let metadata = crate::metadata::verify_database_metadata(connection, expected).await;
+    staged.validate()?;
+    let metadata = metadata?;
+    if metadata != staged.metadata {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
+    }
+    let phase = test_async_phase(TEST_PHASE_METADATA, cancellation).await;
+    staged.validate()?;
+    phase?;
+    check_cancel(cancellation)?;
+
+    let history =
+        crate::migration::verify_migration_history(connection, migrations, schema, false).await;
+    staged.validate()?;
+    let version = history?;
+    if version != staged.metadata.state_schema_version().get() {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Migration));
+    }
+    let phase = test_async_phase(TEST_PHASE_HISTORY, cancellation).await;
+    staged.validate()?;
+    phase?;
+    check_cancel(cancellation)?;
+
+    let integrity = crate::integrity::verify_database_integrity(connection).await;
+    staged.validate()?;
+    integrity?;
+    let phase = test_async_phase(TEST_PHASE_INTEGRITY, cancellation).await;
+    staged.validate()?;
+    phase?;
+    check_cancel(cancellation)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn test_async_phase(phase: u8, cancellation: &AtomicBool) -> Result<(), ServiceSqliteError> {
+    #[cfg(test)]
+    {
+        TEST_STAGE_PHASE.store(phase, Ordering::Release);
+        while TEST_STAGE_BLOCK_PHASE.load(Ordering::Acquire) == phase {
+            if cancellation.load(Ordering::Acquire) {
+                return Err(restore_error(RestoreFailureKind::Cancelled));
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+    #[cfg(not(test))]
+    let _ = (phase, cancellation);
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn verify_read_only_policy(
+    connection: &mut SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    sqlx::query("PRAGMA query_only = ON")
+        .execute(&mut *connection)
+        .await
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    sqlx::query("PRAGMA trusted_schema = OFF")
+        .execute(&mut *connection)
+        .await
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    let query_only = sqlx::query_scalar::<_, i64>("PRAGMA query_only")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    let trusted_schema = sqlx::query_scalar::<_, i64>("PRAGMA trusted_schema")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    let databases = sqlx::query("PRAGMA database_list")
+        .fetch_all(connection)
+        .await
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    if query_only != 1
+        || trusted_schema != 0
+        || databases.len() != 1
+        || databases[0].try_get::<i64, _>(0).ok() != Some(0)
+        || databases[0].try_get::<String, _>(1).ok().as_deref() != Some("main")
+    {
+        return Err(restore_error(RestoreFailureKind::Policy));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn check_cancel(cancellation: &AtomicBool) -> Result<(), ServiceSqliteError> {
+    if cancellation.load(Ordering::Acquire) {
+        Err(restore_error(RestoreFailureKind::Cancelled))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[allow(dead_code)] // Step 068 consumes the retained marker/finalization inputs.
+pub(crate) struct NativeStagedServiceRestore {
+    paths: ServiceSqlitePaths,
+    authority: Option<WriterAuthority>,
+    directory: File,
+    directory_identity: FileIdentity,
+    staged: File,
+    staged_identity: FileIdentity,
+    metadata: ServiceDatabaseMetadata,
+    manifest_digest: crate::BackupManifestSha256,
+    artifact: RestoreArtifactExpectation,
+    armed: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl NativeStagedServiceRestore {
+    fn copy_from_verified(
+        paths: ServiceSqlitePaths,
+        verified: VerifiedServiceBackup,
+        authority: WriterAuthority,
+        cancellation: &AtomicBool,
+    ) -> Result<Self, ServiceSqliteError> {
+        authority.validate_for(&paths)?;
+        check_cancel(cancellation)?;
+        let source_binding = verified.validate_binding();
+        authority.validate_for(&paths)?;
+        source_binding.map_err(|_| restore_error(RestoreFailureKind::SourceChanged))?;
+        let layout = RestoreRecoveryLayout::for_paths(&paths)
+            .map_err(|_| restore_error(RestoreFailureKind::Layout))?;
+        let directory_result = authority
+            .directory()
+            .try_clone()
+            .map_err(|source| restore_source(RestoreFailureKind::Layout, source));
+        authority.validate_for(&paths)?;
+        let directory = directory_result?;
+        let directory_identity_result = directory_identity(&directory);
+        authority.validate_for(&paths)?;
+        let directory_identity = directory_identity_result?;
+        let closed_live = validate_closed_live(&authority, &paths, &directory);
+        authority.validate_for(&paths)?;
+        closed_live?;
+        let before_create = test_blocking_phase(TEST_PHASE_BEFORE_CREATE, cancellation);
+        authority.validate_for(&paths)?;
+        before_create?;
+        let staged_result = create_stage(&directory);
+        authority.validate_for(&paths)?;
+        let pending_stage = staged_result?;
+        let created = test_blocking_phase(TEST_PHASE_CREATED, cancellation);
+        authority.validate_for(&paths)?;
+        created?;
+        let staged_identity = pending_stage.identity();
+        let metadata = verified.database_metadata().clone();
+        let manifest_digest = verified.manifest().digest();
+        let member = verified
+            .manifest()
+            .members()
+            .first()
+            .ok_or_else(|| restore_error(RestoreFailureKind::SourceChanged))?;
+        let expected_length = member.byte_length();
+        let expected_digest = *member.sha256().as_bytes();
+        let artifact = RestoreArtifactExpectation::new(
+            staged_identity.device,
+            staged_identity.inode,
+            expected_length,
+            expected_digest,
+        )
+        .map_err(|_| restore_error(RestoreFailureKind::Copy))?;
+        let staged = pending_stage.into_file();
+        let result = Self {
+            paths,
+            authority: Some(authority),
+            directory,
+            directory_identity,
+            staged,
+            staged_identity,
+            metadata,
+            manifest_digest,
+            artifact,
+            armed: true,
+        };
+        result.validate_created()?;
+        let copy = copy_exact(
+            verified.state_file(),
+            &result.staged,
+            expected_length,
+            expected_digest,
+            cancellation,
+        );
+        result.validate()?;
+        copy?;
+        let sync = sync_staged_file(&result.staged, 1);
+        result.validate()?;
+        sync?;
+        let header = validate_sqlite_header(&result.staged);
+        result.validate()?;
+        header?;
+        let source_binding = verified.validate_binding();
+        result.validate()?;
+        source_binding.map_err(|_| restore_error(RestoreFailureKind::SourceChanged))?;
+        let post_copy = test_blocking_phase(TEST_PHASE_POST_COPY, cancellation);
+        result.validate()?;
+        post_copy?;
+        if layout
+            .staged()
+            .file_name()
+            .is_none_or(|name| name != STAGED_FILE_NAME)
+            || Some(layout.state_directory().as_path()) != result.paths.state_database().parent()
+        {
+            return Err(restore_error(RestoreFailureKind::Layout));
+        }
+        Ok(result)
+    }
+
+    fn connect_options(&self) -> Result<SqliteConnectOptions, ServiceSqliteError> {
+        self.validate()?;
+        let descriptor = self.staged.as_raw_fd();
+        #[cfg(target_os = "linux")]
+        let descriptor_path = format!("/proc/self/fd/{descriptor}");
+        #[cfg(target_os = "macos")]
+        let descriptor_path = format!("/dev/fd/{descriptor}");
+        Ok(SqliteConnectOptions::new()
+            .filename(descriptor_path)
+            .read_only(true)
+            .immutable(true)
+            .create_if_missing(false))
+    }
+
+    fn finalize(self, cancellation: &AtomicBool) -> Result<Self, ServiceSqliteError> {
+        self.validate()?;
+        check_cancel(cancellation)?;
+        let digest = hash_exact(&self.staged, self.artifact.byte_length());
+        self.validate()?;
+        let digest = digest?;
+        if digest != self.artifact.sha256() {
+            return Err(restore_error(RestoreFailureKind::StagedChanged));
+        }
+        let header = validate_sqlite_header(&self.staged);
+        self.validate()?;
+        header?;
+        let sync = sync_staged_file(&self.staged, 2);
+        self.validate()?;
+        sync?;
+        check_cancel(cancellation)?;
+        let pre_final_sync = test_blocking_phase(TEST_PHASE_PRE_FINAL_SYNC, cancellation);
+        self.validate()?;
+        pre_final_sync?;
+        let sync = sync_stage_directory(&self.directory);
+        self.validate()?;
+        sync?;
+        check_cancel(cancellation)?;
+        Ok(self)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), ServiceSqliteError> {
+        let authority = self
+            .authority
+            .as_ref()
+            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
+        authority.validate_for(&self.paths)?;
+        let result = (|| {
+            if directory_identity(&self.directory)? != self.directory_identity {
+                return Err(restore_error(RestoreFailureKind::StagedChanged));
+            }
+            validate_stage_binding(
+                &self.directory,
+                &self.staged,
+                self.staged_identity,
+                self.artifact.byte_length(),
+            )?;
+            require_absent(&self.directory, BACKUP_FILE_NAME)?;
+            require_absent(&self.directory, MARKER_FILE_NAME)?;
+            require_absent(&self.directory, MARKER_NEXT_FILE_NAME)?;
+            require_absent(&self.directory, "state.sqlite-wal")?;
+            require_absent(&self.directory, "state.sqlite-shm")?;
+            require_absent(&self.directory, "state.sqlite-journal")?;
+            Ok(())
+        })();
+        authority.validate_for(&self.paths)?;
+        result
+    }
+
+    fn validate_created(&self) -> Result<(), ServiceSqliteError> {
+        let authority = self
+            .authority
+            .as_ref()
+            .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
+        authority.validate_for(&self.paths)?;
+        let result = (|| {
+            if directory_identity(&self.directory)? != self.directory_identity {
+                return Err(restore_error(RestoreFailureKind::StagedChanged));
+            }
+            validate_stage_binding(&self.directory, &self.staged, self.staged_identity, 0)
+        })();
+        authority.validate_for(&self.paths)?;
+        result
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn paths(&self) -> &ServiceSqlitePaths {
+        &self.paths
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn metadata(&self) -> &ServiceDatabaseMetadata {
+        &self.metadata
+    }
+
+    #[allow(dead_code)]
+    pub(crate) const fn manifest_digest(&self) -> crate::BackupManifestSha256 {
+        self.manifest_digest
+    }
+
+    #[allow(dead_code)]
+    pub(crate) const fn artifact(&self) -> RestoreArtifactExpectation {
+        self.artifact
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn authority(&self) -> &WriterAuthority {
+        self.authority
+            .as_ref()
+            .expect("staged restore retains authority until consumed")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn disarm_cleanup(&mut self) {
+        self.armed = false;
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Debug for NativeStagedServiceRestore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("NativeStagedServiceRestore([redacted])")
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Drop for NativeStagedServiceRestore {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = cleanup_exact_stage(&self.directory, &self.staged, self.staged_identity);
+        }
+        if let Some(authority) = self.authority.as_mut() {
+            let _ = authority.release();
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FileIdentity {
+    device: u64,
+    inode: u64,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn directory_identity(directory: &File) -> Result<FileIdentity, ServiceSqliteError> {
+    let status =
+        fstat(directory).map_err(|source| restore_source(RestoreFailureKind::Layout, source))?;
+    if !FileType::from_raw_mode(status.st_mode).is_dir()
+        || status.st_uid != geteuid().as_raw()
+        || u32::from(status.st_mode) & 0o022 != 0
+    {
+        return Err(restore_error(RestoreFailureKind::Layout));
+    }
+    status_identity(&status)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn stage_identity(staged: &File) -> Result<FileIdentity, ServiceSqliteError> {
+    let status =
+        fstat(staged).map_err(|source| restore_source(RestoreFailureKind::CreateStage, source))?;
+    validate_stage_status(&status, None)?;
+    status_identity(&status)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn status_identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqliteError> {
+    Ok(FileIdentity {
+        device: u64::try_from(status.st_dev)
+            .map_err(|_| restore_error(RestoreFailureKind::StagedChanged))?,
+        inode: status.st_ino,
+    })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn create_stage(directory: &File) -> Result<PendingStage, ServiceSqliteError> {
+    let cleanup_directory = directory
+        .try_clone()
+        .map_err(|source| restore_source(RestoreFailureKind::CreateStage, source))?;
+    let descriptor = openat(
+        directory,
+        STAGED_FILE_NAME,
+        OFlags::RDWR
+            | OFlags::CREATE
+            | OFlags::EXCL
+            | OFlags::NOFOLLOW
+            | OFlags::CLOEXEC
+            | OFlags::NONBLOCK,
+        Mode::RUSR | Mode::WUSR,
+    )
+    .map_err(|source| restore_source(RestoreFailureKind::StageCollision, source))?;
+    let file = File::from(descriptor);
+    let mut pending = PendingStage {
+        directory: cleanup_directory,
+        staged: Some(file),
+        identity: None,
+        armed: true,
+    };
+    let status = fstat(
+        pending
+            .staged
+            .as_ref()
+            .expect("pending stage retains its file"),
+    )
+    .map_err(|source| restore_source(RestoreFailureKind::CreateStage, source))?;
+    let identity = status_identity(&status)?;
+    pending.identity = Some(identity);
+    fchmod(
+        pending
+            .staged
+            .as_ref()
+            .expect("pending stage retains its file"),
+        Mode::RUSR | Mode::WUSR,
+    )
+    .map_err(|source| restore_source(RestoreFailureKind::CreateStage, source))?;
+    let confirmed = stage_identity(
+        pending
+            .staged
+            .as_ref()
+            .expect("pending stage retains its file"),
+    )?;
+    if confirmed != identity {
+        return Err(restore_error(RestoreFailureKind::StagedChanged));
+    }
+    Ok(pending)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct PendingStage {
+    directory: File,
+    staged: Option<File>,
+    identity: Option<FileIdentity>,
+    armed: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl PendingStage {
+    fn identity(&self) -> FileIdentity {
+        self.identity
+            .expect("successful stage creation records an exact identity")
+    }
+
+    fn into_file(mut self) -> File {
+        self.armed = false;
+        self.staged
+            .take()
+            .expect("successful stage creation retains its file")
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Drop for PendingStage {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let Some(staged) = self.staged.as_ref() else {
+            return;
+        };
+        let identity = self.identity.or_else(|| {
+            fstat(staged)
+                .ok()
+                .and_then(|status| status_identity(&status).ok())
+        });
+        if let Some(identity) = identity {
+            let _ = cleanup_exact_stage(&self.directory, staged, identity);
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_closed_live(
+    authority: &WriterAuthority,
+    paths: &ServiceSqlitePaths,
+    directory: &File,
+) -> Result<(), ServiceSqliteError> {
+    authority.validate_for(paths)?;
+    let live = openat(
+        directory,
+        radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
+    let status =
+        fstat(&live).map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
+    if !FileType::from_raw_mode(status.st_mode).is_file()
+        || u64::from(status.st_nlink) != 1
+        || status.st_uid != geteuid().as_raw()
+        || u32::from(status.st_mode) & 0o777 != 0o600
+    {
+        return Err(restore_error(RestoreFailureKind::LiveState));
+    }
+    for name in [
+        "state.sqlite-wal",
+        "state.sqlite-shm",
+        "state.sqlite-journal",
+        BACKUP_FILE_NAME,
+        MARKER_FILE_NAME,
+        MARKER_NEXT_FILE_NAME,
+    ] {
+        require_absent(directory, name)?;
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_stage_binding(
+    directory: &File,
+    held: &File,
+    identity: FileIdentity,
+    expected_length: u64,
+) -> Result<(), ServiceSqliteError> {
+    let current = openat(
+        directory,
+        STAGED_FILE_NAME,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(|source| restore_source(RestoreFailureKind::StagedChanged, source))?;
+    let held_status =
+        fstat(held).map_err(|source| restore_source(RestoreFailureKind::StagedChanged, source))?;
+    let current_status = fstat(&current)
+        .map_err(|source| restore_source(RestoreFailureKind::StagedChanged, source))?;
+    validate_stage_status(&held_status, Some(expected_length))?;
+    validate_stage_status(&current_status, Some(expected_length))?;
+    if status_identity(&held_status)? != identity || status_identity(&current_status)? != identity {
+        return Err(restore_error(RestoreFailureKind::StagedChanged));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_stage_status(
+    status: &rustix::fs::Stat,
+    expected_length: Option<u64>,
+) -> Result<(), ServiceSqliteError> {
+    let length = u64::try_from(status.st_size)
+        .map_err(|_| restore_error(RestoreFailureKind::StagedChanged))?;
+    if !FileType::from_raw_mode(status.st_mode).is_file()
+        || u64::from(status.st_nlink) != 1
+        || status.st_uid != geteuid().as_raw()
+        || u32::from(status.st_mode) & 0o777 != 0o600
+        || expected_length.is_some_and(|expected| length != expected)
+    {
+        return Err(restore_error(RestoreFailureKind::StagedChanged));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_absent(directory: &File, name: &str) -> Result<(), ServiceSqliteError> {
+    match statat(directory, name, AtFlags::SYMLINK_NOFOLLOW) {
+        Err(Errno::NOENT) => Ok(()),
+        Ok(_) => Err(restore_error(RestoreFailureKind::RecoveryEvidence)),
+        Err(source) => Err(restore_source(RestoreFailureKind::RecoveryEvidence, source)),
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn copy_exact(
+    source: &File,
+    destination: &File,
+    expected_length: u64,
+    expected_digest: [u8; 32],
+    cancellation: &AtomicBool,
+) -> Result<(), ServiceSqliteError> {
+    let mut source = source
+        .try_clone()
+        .map_err(|source| restore_source(RestoreFailureKind::Copy, source))?;
+    let mut destination = destination;
+    source
+        .seek(SeekFrom::Start(0))
+        .map_err(|source| restore_source(RestoreFailureKind::Copy, source))?;
+    destination
+        .seek(SeekFrom::Start(0))
+        .map_err(|source| restore_source(RestoreFailureKind::Copy, source))?;
+    let mut remaining = expected_length;
+    let mut buffer = [0_u8; COPY_BUFFER_BYTES];
+    let mut hasher = Sha256::new();
+    while remaining != 0 {
+        check_cancel(cancellation)?;
+        let requested = usize::try_from(remaining.min(COPY_BUFFER_BYTES as u64))
+            .map_err(|_| restore_error(RestoreFailureKind::Copy))?;
+        let read = source
+            .read(&mut buffer[..requested])
+            .map_err(|source| restore_source(RestoreFailureKind::Copy, source))?;
+        if read == 0 {
+            return Err(restore_error(RestoreFailureKind::Copy));
+        }
+        destination
+            .write_all(&buffer[..read])
+            .map_err(|source| restore_source(RestoreFailureKind::Copy, source))?;
+        hasher.update(&buffer[..read]);
+        remaining -= u64::try_from(read).map_err(|_| restore_error(RestoreFailureKind::Copy))?;
+        test_blocking_phase(TEST_PHASE_MID_COPY, cancellation)?;
+    }
+    let mut extra = [0_u8; 1];
+    if source
+        .read(&mut extra)
+        .map_err(|source| restore_source(RestoreFailureKind::Copy, source))?
+        != 0
+        || <[u8; 32]>::from(hasher.finalize()) != expected_digest
+    {
+        return Err(restore_error(RestoreFailureKind::Copy));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_blocking_phase(phase: u8, cancellation: &AtomicBool) -> Result<(), ServiceSqliteError> {
+    #[cfg(test)]
+    {
+        TEST_STAGE_PHASE.store(phase, Ordering::Release);
+        while TEST_STAGE_BLOCK_PHASE.load(Ordering::Acquire) == phase {
+            if cancellation.load(Ordering::Acquire) {
+                return Err(restore_error(RestoreFailureKind::Cancelled));
+            }
+            std::thread::yield_now();
+        }
+    }
+    #[cfg(not(test))]
+    let _ = (phase, cancellation);
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn sync_staged_file(file: &File, occurrence: u8) -> Result<(), ServiceSqliteError> {
+    #[cfg(test)]
+    if TEST_STAGE_FAIL_SYNC
+        .compare_exchange(occurrence, 0, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        return Err(restore_error(RestoreFailureKind::SyncStaged));
+    }
+    #[cfg(not(test))]
+    let _ = occurrence;
+    file.sync_all()
+        .map_err(|source| restore_source(RestoreFailureKind::SyncStaged, source))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn sync_stage_directory(directory: &File) -> Result<(), ServiceSqliteError> {
+    #[cfg(test)]
+    if TEST_STAGE_FAIL_SYNC
+        .compare_exchange(3, 0, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        return Err(restore_error(RestoreFailureKind::SyncDirectory));
+    }
+    directory
+        .sync_all()
+        .map_err(|source| restore_source(RestoreFailureKind::SyncDirectory, source))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn hash_exact(file: &File, expected_length: u64) -> Result<[u8; 32], ServiceSqliteError> {
+    let mut file = file
+        .try_clone()
+        .map_err(|source| restore_source(RestoreFailureKind::HashStaged, source))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|source| restore_source(RestoreFailureKind::HashStaged, source))?;
+    let mut remaining = expected_length;
+    let mut buffer = [0_u8; COPY_BUFFER_BYTES];
+    let mut hasher = Sha256::new();
+    while remaining != 0 {
+        let requested = usize::try_from(remaining.min(COPY_BUFFER_BYTES as u64))
+            .map_err(|_| restore_error(RestoreFailureKind::HashStaged))?;
+        let read = file
+            .read(&mut buffer[..requested])
+            .map_err(|source| restore_source(RestoreFailureKind::HashStaged, source))?;
+        if read == 0 {
+            return Err(restore_error(RestoreFailureKind::HashStaged));
+        }
+        hasher.update(&buffer[..read]);
+        remaining -=
+            u64::try_from(read).map_err(|_| restore_error(RestoreFailureKind::HashStaged))?;
+    }
+    let mut extra = [0_u8; 1];
+    if file
+        .read(&mut extra)
+        .map_err(|source| restore_source(RestoreFailureKind::HashStaged, source))?
+        != 0
+    {
+        return Err(restore_error(RestoreFailureKind::HashStaged));
+    }
+    Ok(hasher.finalize().into())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn validate_sqlite_header(file: &File) -> Result<(), ServiceSqliteError> {
+    let mut file = file
+        .try_clone()
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    let mut header = [0_u8; 20];
+    file.read_exact(&mut header)
+        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    let write_version = header[18];
+    let read_version = header[19];
+    if &header[..16] != b"SQLite format 3\0"
+        || !matches!(write_version, 1 | 2)
+        || read_version != write_version
+    {
+        return Err(restore_error(RestoreFailureKind::Policy));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn cleanup_exact_stage(
+    directory: &File,
+    held: &File,
+    identity: FileIdentity,
+) -> Result<(), ServiceSqliteError> {
+    let current = match openat(
+        directory,
+        STAGED_FILE_NAME,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    ) {
+        Ok(file) => file,
+        Err(Errno::NOENT) => return Ok(()),
+        Err(source) => return Err(restore_source(RestoreFailureKind::Cleanup, source)),
+    };
+    let held_status =
+        fstat(held).map_err(|source| restore_source(RestoreFailureKind::Cleanup, source))?;
+    let current_status =
+        fstat(&current).map_err(|source| restore_source(RestoreFailureKind::Cleanup, source))?;
+    if status_identity(&held_status)? != identity || status_identity(&current_status)? != identity {
+        return Ok(());
+    }
+    unlinkat(directory, STAGED_FILE_NAME, AtFlags::empty())
+        .map_err(|source| restore_source(RestoreFailureKind::Cleanup, source))?;
+    directory
+        .sync_all()
+        .map_err(|source| restore_source(RestoreFailureKind::Cleanup, source))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct CancellationOnDrop {
+    cancellation: Arc<AtomicBool>,
+    armed: AtomicBool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl CancellationOnDrop {
+    fn new(cancellation: Arc<AtomicBool>) -> Self {
+        Self {
+            cancellation,
+            armed: AtomicBool::new(true),
+        }
+    }
+
+    fn disarm(&self) {
+        self.armed.store(false, Ordering::Release);
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Drop for CancellationOnDrop {
+    fn drop(&mut self) {
+        if self.armed.load(Ordering::Acquire) {
+            self.cancellation.store(true, Ordering::Release);
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RestoreFailureKind {
+    Layout,
+    LiveState,
+    RecoveryEvidence,
+    StageCollision,
+    CreateStage,
+    SourceChanged,
+    Copy,
+    HashStaged,
+    StagedChanged,
+    OpenStaged,
+    Policy,
+    SyncStaged,
+    SyncDirectory,
+    CloseStaged,
+    Cleanup,
+    Cancelled,
+    Join,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct RestoreFailure {
+    kind: RestoreFailureKind,
+    source: Option<Box<dyn Error + Send + Sync + 'static>>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Debug for RestoreFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RestoreFailure")
+            .field("kind", &self.kind)
+            .field("source", &self.source.as_ref().map(|_| "[redacted]"))
+            .finish()
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl fmt::Display for RestoreFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self.kind {
+            RestoreFailureKind::Layout => "restore layout is invalid",
+            RestoreFailureKind::LiveState => "live state is not closed and canonical",
+            RestoreFailureKind::RecoveryEvidence => "prior restore evidence is present",
+            RestoreFailureKind::StageCollision => "restore staging destination exists",
+            RestoreFailureKind::CreateStage => "restore staging could not be created",
+            RestoreFailureKind::SourceChanged => "verified backup binding changed",
+            RestoreFailureKind::Copy => "verified backup copy failed",
+            RestoreFailureKind::HashStaged => "restore staging hash failed",
+            RestoreFailureKind::StagedChanged => "restore staging binding changed",
+            RestoreFailureKind::OpenStaged => "restore staging could not be opened",
+            RestoreFailureKind::Policy => "restore verification policy failed",
+            RestoreFailureKind::SyncStaged => "restore staging sync failed",
+            RestoreFailureKind::SyncDirectory => "restore directory sync failed",
+            RestoreFailureKind::CloseStaged => "restore verification close failed",
+            RestoreFailureKind::Cleanup => "restore staging cleanup failed",
+            RestoreFailureKind::Cancelled => "restore staging was cancelled",
+            RestoreFailureKind::Join => "restore staging worker failed",
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Error for RestoreFailure {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn Error + 'static))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn restore_error(kind: RestoreFailureKind) -> ServiceSqliteError {
+    ServiceSqliteError::with_source(
+        ServiceSqliteErrorKind::Restore,
+        RestoreFailure { kind, source: None },
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn restore_source(
+    kind: RestoreFailureKind,
+    source: impl Error + Send + Sync + 'static,
+) -> ServiceSqliteError {
+    ServiceSqliteError::with_source(
+        ServiceSqliteErrorKind::Restore,
+        RestoreFailure {
+            kind,
+            source: Some(Box::new(source)),
+        },
+    )
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod tests {
+    use core::num::{NonZeroU32, NonZeroU64};
+    use std::{
+        fs,
+        os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink},
+        path::{Path, PathBuf},
+        process::Command,
+    };
+
+    use radroots_runtime_paths::{
+        InstanceId, RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPlatform, RuntimeContext, RuntimeContextBootstrap, RuntimeContextSource, ServiceId,
+    };
+    use radroots_storage::event::SourceGeneration;
+    use sha2::{Digest, Sha256};
+    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
+
+    use super::*;
+    use crate::{
+        BackupCreatedAtUnixMs, BackupMemberSha256, MigrationChecksum, MigrationDescriptor,
+        SchemaObject, SchemaObjectKind, SchemaVersionCatalog, ServiceBackupManifest,
+        ServiceDatabaseMetadata, ServiceSqliteApplicationId, ServiceSqliteConnectionOptions,
+        ServiceSqliteHost, verify_backup_bundle,
+    };
+
+    static STAGE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    struct Fixture {
+        _root: tempfile::TempDir,
+        paths: ServiceSqlitePaths,
+        metadata: ServiceDatabaseMetadata,
+        identity: ServiceDatabaseIdentity,
+        migrations: MigrationCatalog,
+        schema: SchemaCatalog,
+        bundle: PathBuf,
+        manifest: ServiceBackupManifest,
+    }
+
+    impl Fixture {
+        async fn new() -> Self {
+            let root = tempfile::tempdir().expect("root");
+            let paths = paths(root.path());
+            let state_directory = paths.state_database().parent().expect("state directory");
+            fs::create_dir_all(state_directory).expect("create state directory");
+            fs::set_permissions(state_directory, fs::Permissions::from_mode(0o700))
+                .expect("state directory mode");
+            let metadata = ServiceDatabaseMetadata::new(
+                &paths,
+                SourceGeneration::new([7; 32]).expect("generation"),
+                NonZeroU32::new(1).expect("schema"),
+                1_700_000_000_000,
+                ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+            )
+            .expect("metadata");
+            let migrations = MigrationCatalog::new([]).expect("migration catalog");
+            let digest = SchemaVersionCatalog::computed_digest(1, []).expect("schema digest");
+            let version = SchemaVersionCatalog::new(1, [], digest).expect("schema version");
+            let schema = SchemaCatalog::new(&migrations, [version]).expect("schema catalog");
+            let mut authority = crate::initialize_database(
+                &paths,
+                OpenMode::Initialize,
+                &metadata,
+                &schema,
+                |path| async move {
+                    let options = SqliteConnectOptions::new()
+                        .filename(path)
+                        .create_if_missing(false)
+                        .disable_statement_logging();
+                    let connection = SqliteConnection::connect_with(&options).await?;
+                    connection.close().await
+                },
+            )
+            .await
+            .expect("initialize");
+            authority
+                .release()
+                .expect("release initialization authority");
+            {
+                let connection = rusqlite::Connection::open(paths.state_database())
+                    .expect("open live database for WAL posture");
+                connection
+                    .pragma_update(None, "journal_mode", "WAL")
+                    .expect("set WAL posture");
+                connection
+                    .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+                    .expect("checkpoint WAL posture");
+            }
+
+            let bundle = root.path().join("verified-bundle");
+            fs::create_dir(&bundle).expect("bundle");
+            fs::set_permissions(&bundle, fs::Permissions::from_mode(0o700)).expect("bundle mode");
+            let member = bundle.join(crate::BACKUP_STATE_MEMBER_NAME);
+            fs::copy(paths.state_database(), &member).expect("copy bundle member");
+            fs::set_permissions(&member, fs::Permissions::from_mode(0o600)).expect("member mode");
+            let bytes = fs::read(&member).expect("member bytes");
+            let manifest = ServiceBackupManifest::from_capture(
+                &metadata,
+                BackupCreatedAtUnixMs::new(1_700_000_000_123).expect("capture time"),
+                u64::try_from(bytes.len()).expect("member length"),
+                BackupMemberSha256::from_bytes(Sha256::digest(&bytes).into()),
+            )
+            .expect("manifest");
+            let identity = metadata.identity();
+            Self {
+                _root: root,
+                paths,
+                metadata,
+                identity,
+                migrations,
+                schema,
+                bundle,
+                manifest,
+            }
+        }
+
+        fn proof(&self) -> VerifiedServiceBackup {
+            verify_backup_bundle(
+                self.manifest.canonical_bytes(),
+                self.manifest.digest(),
+                &self.bundle,
+                &self.identity,
+                NonZeroU64::new(16 * 1024 * 1024).expect("member limit"),
+            )
+            .expect("verified backup")
+        }
+
+        fn staged_path(&self) -> PathBuf {
+            self.paths
+                .state_database()
+                .parent()
+                .expect("state directory")
+                .join(STAGED_FILE_NAME)
+        }
+
+        fn refresh_manifest(&mut self) {
+            let bytes =
+                fs::read(self.bundle.join(crate::BACKUP_STATE_MEMBER_NAME)).expect("member bytes");
+            self.manifest = ServiceBackupManifest::from_capture(
+                &self.metadata,
+                BackupCreatedAtUnixMs::new(1_700_000_000_123).expect("capture time"),
+                u64::try_from(bytes.len()).expect("member length"),
+                BackupMemberSha256::from_bytes(Sha256::digest(&bytes).into()),
+            )
+            .expect("manifest");
+        }
+    }
+
+    fn paths(root: &Path) -> ServiceSqlitePaths {
+        let context = RuntimeContext::resolve(
+            &RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default()),
+            RuntimeContextBootstrap::new(
+                RadrootsPathProfile::RepoLocal,
+                Some(root.to_path_buf()),
+                RuntimeContextSource::BootstrapCli,
+                RuntimeContextSource::BootstrapCli,
+            )
+            .expect("bootstrap"),
+            ServiceId::new("myc").expect("service"),
+            InstanceId::new("primary").expect("instance"),
+        )
+        .expect("runtime context");
+        ServiceSqlitePaths::from_runtime_context(&context).expect("SQLite paths")
+    }
+
+    fn reset_test_controls() {
+        TEST_STAGE_PHASE.store(0, Ordering::Release);
+        TEST_STAGE_BLOCK_PHASE.store(0, Ordering::Release);
+        TEST_STAGE_FAIL_SYNC.store(0, Ordering::Release);
+        TEST_STAGE_PANIC_WORKER.store(false, Ordering::Release);
+    }
+
+    async fn wait_for_phase(phase: u8) {
+        for _ in 0..100_000 {
+            if TEST_STAGE_PHASE.load(Ordering::Acquire) == phase {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("restore staging did not reach phase {phase}");
+    }
+
+    async fn wait_for_cleanup(paths: &ServiceSqlitePaths, staged_path: &Path) {
+        for _ in 0..100_000 {
+            match WriterAuthority::acquire(paths, OpenMode::ReadWriteExisting) {
+                Ok(Some(mut authority)) => {
+                    authority.release().expect("release cleanup probe");
+                    assert!(!staged_path.exists());
+                    return;
+                }
+                Ok(None) | Err(_) => tokio::task::yield_now().await,
+            }
+        }
+        panic!("restore staging cleanup did not release authority");
+    }
+
+    fn spawn_stage(
+        fixture: &Fixture,
+    ) -> tokio::task::JoinHandle<Result<StagedServiceRestore, ServiceSqliteError>> {
+        let paths = fixture.paths.clone();
+        let identity = fixture.identity.clone();
+        let migrations = fixture.migrations.clone();
+        let schema = fixture.schema.clone();
+        let proof = fixture.proof();
+        tokio::spawn(async move {
+            stage_verified_restore(&paths, &identity, &migrations, &schema, proof).await
+        })
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn success_reverifies_exact_stage_preserves_live_and_drop_cleans() {
+        let fixture = Fixture::new().await;
+        let live_before = fs::metadata(fixture.paths.state_database()).expect("live metadata");
+        let live_bytes = fs::read(fixture.paths.state_database()).expect("live bytes");
+        let bundle_bytes =
+            fs::read(fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME)).expect("bundle bytes");
+
+        let staged = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .unwrap_or_else(|error| {
+            use std::error::Error as _;
+            panic!(
+                "stage restore: {:?} / {:?}",
+                error.kind(),
+                error.source().map(ToString::to_string)
+            )
+        });
+        assert_eq!(format!("{staged:?}"), "StagedServiceRestore([redacted])");
+        let native = staged.inner.as_ref().expect("native staged capability");
+        assert_eq!(native.metadata(), &fixture.metadata);
+        assert_eq!(
+            native.artifact().byte_length(),
+            u64::try_from(bundle_bytes.len()).expect("bundle length")
+        );
+        let expected_digest: [u8; 32] = Sha256::digest(&bundle_bytes).into();
+        assert_eq!(native.artifact().sha256(), expected_digest);
+        assert_eq!(
+            fs::read(fixture.staged_path()).expect("stage bytes"),
+            bundle_bytes
+        );
+        assert_eq!(
+            fs::metadata(fixture.staged_path())
+                .expect("stage metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::read(fixture.paths.state_database()).expect("live after"),
+            live_bytes
+        );
+        let live_after = fs::metadata(fixture.paths.state_database()).expect("live metadata after");
+        assert_eq!(
+            (live_before.dev(), live_before.ino()),
+            (live_after.dev(), live_after.ino())
+        );
+        assert_eq!(live_before.mode(), live_after.mode());
+        assert_eq!(
+            (live_before.mtime(), live_before.mtime_nsec()),
+            (live_after.mtime(), live_after.mtime_nsec())
+        );
+        assert_eq!(
+            fs::read(fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME))
+                .expect("source remains readable"),
+            bundle_bytes
+        );
+        assert!(WriterAuthority::acquire(&fixture.paths, OpenMode::ReadWriteExisting).is_err());
+        for name in [BACKUP_FILE_NAME, MARKER_FILE_NAME, MARKER_NEXT_FILE_NAME] {
+            assert!(!fixture.staged_path().with_file_name(name).exists());
+        }
+        drop(staged);
+        assert!(!fixture.staged_path().exists());
+        let mut reacquired = WriterAuthority::acquire(&fixture.paths, OpenMode::ReadWriteExisting)
+            .expect("reacquire")
+            .expect("authority");
+        reacquired.release().expect("release");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn active_writer_and_every_recovery_collision_fail_closed() {
+        let fixture = Fixture::new().await;
+        let authority = WriterAuthority::acquire(&fixture.paths, OpenMode::ReadWriteExisting)
+            .expect("authority")
+            .expect("writer");
+        let error = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect_err("active writer rejection");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        drop(authority);
+
+        let inspection = ServiceSqliteHost::open_read_only_inspection(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            ServiceSqliteConnectionOptions::default(),
+        )
+        .await
+        .expect("inspection host");
+        let error = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect_err("inspection rejection");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        inspection.close().await.expect("close inspection");
+
+        for name in [
+            STAGED_FILE_NAME,
+            BACKUP_FILE_NAME,
+            MARKER_FILE_NAME,
+            MARKER_NEXT_FILE_NAME,
+            "state.sqlite-wal",
+            "state.sqlite-shm",
+            "state.sqlite-journal",
+        ] {
+            let collision = fixture.staged_path().with_file_name(name);
+            fs::write(&collision, b"collision").expect("collision");
+            fs::set_permissions(&collision, fs::Permissions::from_mode(0o600))
+                .expect("collision mode");
+            let error = stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .expect_err("collision rejection");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+            assert_eq!(
+                fs::read(&collision).expect("preserved collision"),
+                b"collision"
+            );
+            fs::remove_file(collision).expect("remove collision");
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn retained_source_tamper_and_wrong_intent_never_publish_a_stage() {
+        let fixture = Fixture::new().await;
+        let wrong = ServiceDatabaseIdentity::new(
+            &fixture.paths,
+            SourceGeneration::new([8; 32]).expect("generation"),
+            NonZeroU32::new(1).expect("schema"),
+            fixture.identity.application_id(),
+        );
+        let error = stage_verified_restore(
+            &fixture.paths,
+            &wrong,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect_err("intent rejection");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+        assert!(!fixture.staged_path().exists());
+
+        let proof = fixture.proof();
+        let member = fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME);
+        let mut bytes = fs::read(&member).expect("member");
+        bytes[100] ^= 0x01;
+        fs::write(&member, bytes).expect("tamper in place");
+        let error = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            proof,
+        )
+        .await
+        .expect_err("tamper rejection");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        assert!(!fixture.staged_path().exists());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stage_collision_types_are_never_followed_or_removed() {
+        let fixture = Fixture::new().await;
+        let staged_path = fixture.staged_path();
+
+        fs::create_dir(&staged_path).expect("directory collision");
+        assert!(
+            stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .is_err()
+        );
+        assert!(staged_path.is_dir());
+        fs::remove_dir(&staged_path).expect("remove directory collision");
+
+        symlink(fixture.paths.state_database(), &staged_path).expect("symlink collision");
+        assert!(
+            stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .is_err()
+        );
+        assert!(
+            fs::symlink_metadata(&staged_path)
+                .expect("symlink")
+                .file_type()
+                .is_symlink()
+        );
+        fs::remove_file(&staged_path).expect("remove symlink collision");
+
+        fs::hard_link(fixture.paths.state_database(), &staged_path).expect("hardlink collision");
+        assert!(
+            stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(fs::metadata(&staged_path).expect("hardlink").nlink(), 2);
+        fs::remove_file(&staged_path).expect("remove hardlink collision");
+
+        assert!(
+            Command::new("mkfifo")
+                .arg(&staged_path)
+                .status()
+                .expect("mkfifo")
+                .success()
+        );
+        assert!(
+            stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .is_err()
+        );
+        assert!(
+            fs::symlink_metadata(&staged_path)
+                .expect("FIFO")
+                .file_type()
+                .is_fifo()
+        );
+        fs::remove_file(&staged_path).expect("remove FIFO collision");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancellation_at_every_owned_phase_cleans_before_releasing_authority() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        for phase in [
+            TEST_PHASE_BEFORE_CREATE,
+            TEST_PHASE_CREATED,
+            TEST_PHASE_MID_COPY,
+            TEST_PHASE_POST_COPY,
+            TEST_PHASE_POLICY,
+            TEST_PHASE_METADATA,
+            TEST_PHASE_HISTORY,
+            TEST_PHASE_INTEGRITY,
+            TEST_PHASE_PRE_FINAL_SYNC,
+        ] {
+            reset_test_controls();
+            let fixture = Fixture::new().await;
+            TEST_STAGE_BLOCK_PHASE.store(phase, Ordering::Release);
+            let caller = spawn_stage(&fixture);
+            wait_for_phase(phase).await;
+            caller.abort();
+            let _ = caller.await;
+            wait_for_cleanup(&fixture.paths, &fixture.staged_path()).await;
+            reset_test_controls();
+            let retry = stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .expect("retry after cancellation");
+            drop(retry);
+        }
+        reset_test_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_and_join_failures_cleanup_and_allow_retry() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        for failure in [1, 2, 3] {
+            reset_test_controls();
+            let fixture = Fixture::new().await;
+            TEST_STAGE_FAIL_SYNC.store(failure, Ordering::Release);
+            let error = stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .expect_err("sync failure");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+            wait_for_cleanup(&fixture.paths, &fixture.staged_path()).await;
+        }
+
+        reset_test_controls();
+        let fixture = Fixture::new().await;
+        TEST_STAGE_PANIC_WORKER.store(true, Ordering::Release);
+        let error = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect_err("join failure");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        reset_test_controls();
+        wait_for_cleanup(&fixture.paths, &fixture.staged_path()).await;
+        let retry = stage_verified_restore(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            fixture.proof(),
+        )
+        .await
+        .expect("retry after worker failure");
+        drop(retry);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn staged_replacement_is_rejected_and_foreign_inode_is_preserved() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        reset_test_controls();
+        let fixture = Fixture::new().await;
+        TEST_STAGE_BLOCK_PHASE.store(TEST_PHASE_POST_COPY, Ordering::Release);
+        let caller = spawn_stage(&fixture);
+        wait_for_phase(TEST_PHASE_POST_COPY).await;
+        let foreign = fixture.staged_path().with_file_name("foreign-stage");
+        fs::write(&foreign, b"foreign").expect("foreign stage");
+        fs::set_permissions(&foreign, fs::Permissions::from_mode(0o600)).expect("foreign mode");
+        fs::rename(&foreign, fixture.staged_path()).expect("replace stage");
+        TEST_STAGE_BLOCK_PHASE.store(0, Ordering::Release);
+        let error = caller
+            .await
+            .expect("caller task")
+            .expect_err("replacement rejection");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        assert_eq!(
+            fs::read(fixture.staged_path()).expect("preserved replacement"),
+            b"foreign"
+        );
+        fs::remove_file(fixture.staged_path()).expect("remove replacement");
+        reset_test_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn writer_lock_replacement_has_authority_precedence_and_cleans_stage() {
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        reset_test_controls();
+        let fixture = Fixture::new().await;
+        TEST_STAGE_BLOCK_PHASE.store(TEST_PHASE_POST_COPY, Ordering::Release);
+        let caller = spawn_stage(&fixture);
+        wait_for_phase(TEST_PHASE_POST_COPY).await;
+        let old_lock = fixture.paths.state_lock().with_file_name("state.lock.old");
+        fs::rename(fixture.paths.state_lock(), &old_lock).expect("retain old lock inode");
+        fs::write(fixture.paths.state_lock(), b"").expect("replacement lock");
+        fs::set_permissions(
+            fixture.paths.state_lock(),
+            fs::Permissions::from_mode(0o600),
+        )
+        .expect("replacement lock mode");
+        TEST_STAGE_BLOCK_PHASE.store(0, Ordering::Release);
+        let error = caller
+            .await
+            .expect("caller task")
+            .expect_err("authority drift");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        assert!(!fixture.staged_path().exists());
+        assert!(fixture.paths.state_lock().exists());
+        fs::remove_file(old_lock).expect("remove old lock");
+        reset_test_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn older_valid_prefix_is_accepted_without_migrating_the_stage() {
+        const ADD_ALPHA: &str = "CREATE TABLE alpha (id INTEGER PRIMARY KEY)";
+        let fixture = Fixture::new().await;
+        let migration = MigrationDescriptor::sql(
+            2,
+            "add_alpha",
+            ADD_ALPHA,
+            MigrationChecksum::for_sql(ADD_ALPHA),
+        )
+        .expect("migration");
+        let migrations = MigrationCatalog::new([migration]).expect("migrations");
+        let v1_digest = SchemaVersionCatalog::computed_digest(1, []).expect("v1 digest");
+        let v1 = SchemaVersionCatalog::new(1, [], v1_digest).expect("v1");
+        let alpha = SchemaObject::new(
+            SchemaObjectKind::Table,
+            "alpha",
+            "alpha",
+            ADD_ALPHA,
+            SchemaObject::computed_digest(SchemaObjectKind::Table, "alpha", "alpha", ADD_ALPHA)
+                .expect("alpha digest"),
+        )
+        .expect("alpha object");
+        let v2_digest =
+            SchemaVersionCatalog::computed_digest(2, [alpha.clone()]).expect("v2 digest");
+        let v2 = SchemaVersionCatalog::new(2, [alpha], v2_digest).expect("v2");
+        let schema = SchemaCatalog::new(&migrations, [v1, v2]).expect("schema");
+        let expected = ServiceDatabaseIdentity::new(
+            &fixture.paths,
+            fixture.identity.source_generation(),
+            NonZeroU32::new(2).expect("supported schema"),
+            fixture.identity.application_id(),
+        );
+        let proof = verify_backup_bundle(
+            fixture.manifest.canonical_bytes(),
+            fixture.manifest.digest(),
+            &fixture.bundle,
+            &expected,
+            NonZeroU64::new(16 * 1024 * 1024).expect("limit"),
+        )
+        .expect("older proof");
+        let staged = stage_verified_restore(&fixture.paths, &expected, &migrations, &schema, proof)
+            .await
+            .expect("older prefix stage");
+        assert_eq!(
+            staged
+                .inner
+                .as_ref()
+                .expect("native")
+                .metadata()
+                .state_schema_version()
+                .get(),
+            1
+        );
+        drop(staged);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn schema_catalog_and_migration_ledger_drift_are_rejected() {
+        let mut schema_drift = Fixture::new().await;
+        {
+            let connection = rusqlite::Connection::open(
+                schema_drift.bundle.join(crate::BACKUP_STATE_MEMBER_NAME),
+            )
+            .expect("open bundle");
+            connection
+                .execute("CREATE TABLE unexpected (id INTEGER PRIMARY KEY)", [])
+                .expect("add unexpected table");
+        }
+        schema_drift.refresh_manifest();
+        let error = stage_verified_restore(
+            &schema_drift.paths,
+            &schema_drift.identity,
+            &schema_drift.migrations,
+            &schema_drift.schema,
+            schema_drift.proof(),
+        )
+        .await
+        .expect_err("schema drift");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+        assert!(!schema_drift.staged_path().exists());
+
+        let mut ledger_drift = Fixture::new().await;
+        {
+            let connection = rusqlite::Connection::open(
+                ledger_drift.bundle.join(crate::BACKUP_STATE_MEMBER_NAME),
+            )
+            .expect("open bundle");
+            connection
+                .execute(
+                    "INSERT INTO schema_migrations (
+                        version, name, checksum, applied_at_unix_s,
+                        service_version, service_commit, lib_revision, rust_version,
+                        target, feature_profile, config_contract_version,
+                        state_contract_version, admin_contract_version,
+                        status_contract_version, provider_contract_version
+                     ) VALUES (
+                        3, 'unexpected', zeroblob(32), 1,
+                        '0.1.0', '0123456789abcdef0123456789abcdef01234567',
+                        '89abcdef0123456789abcdef0123456789abcdef', '1.97.1',
+                        'x86_64-unknown-linux-gnu', 'test', 1, 1, 1, 1, 1
+                     )",
+                    [],
+                )
+                .expect("insert ledger drift");
+        }
+        ledger_drift.refresh_manifest();
+        let error = stage_verified_restore(
+            &ledger_drift.paths,
+            &ledger_drift.identity,
+            &ledger_drift.migrations,
+            &ledger_drift.schema,
+            ledger_drift.proof(),
+        )
+        .await
+        .expect_err("ledger drift");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+        assert!(!ledger_drift.staged_path().exists());
+    }
+
+    #[test]
+    fn public_debug_and_errors_do_not_disclose_paths_or_digests() {
+        let error = restore_error(RestoreFailureKind::StagedChanged);
+        let rendered = format!("{error:?} {error}");
+        assert!(!rendered.contains("state.restore"));
+        assert!(!rendered.contains("/tmp"));
+        assert!(!rendered.contains("sha256"));
+    }
+}

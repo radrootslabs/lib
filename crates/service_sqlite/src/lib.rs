@@ -47,4 +47,5 @@ pub use migration::{
     MigrationKind, MigrationName, MigrationTransactionExecutor,
 };
 pub use open::{OpenMode, ServiceSqlitePathError, ServiceSqlitePaths};
+pub use restore::{StagedServiceRestore, stage_verified_restore};
 pub use status::{StorageHealth, StorageIntegrity, StorageStatus};

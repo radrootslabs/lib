@@ -259,6 +259,29 @@ pub(crate) async fn verify_schema_catalog(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn verify_database_integrity(
+    connection: &mut SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    let rows = sqlx::query("PRAGMA integrity_check(1)")
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+    let value = rows.first().and_then(|row| row.try_get::<&str, _>(0).ok());
+    if rows.len() != 1 || value.is_none_or(|value| value.len() > 64 || value != "ok") {
+        return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+    }
+    let foreign_key_violation =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM pragma_foreign_key_check LIMIT 1")
+            .fetch_optional(connection)
+            .await
+            .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
+    if foreign_key_violation.is_some() {
+        return Err(integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn runtime_name_is_valid(value: &str) -> bool {
     let bytes = value.as_bytes();
     !bytes.is_empty()

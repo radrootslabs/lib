@@ -24,11 +24,11 @@ const RESTORE_MARKER_SCHEMA: &str = "radroots.service-sqlite.restore-marker";
 const RESTORE_MARKER_SCHEMA_VERSION: u32 = 1;
 const RESTORE_MARKER_MAX_BYTES: usize = 2_048;
 const RESTORE_MARKER_CHECKSUM_DOMAIN: &[u8] = b"radroots.service_sqlite.restore_marker.v1\0";
-const LIVE_FILE_NAME: &str = radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME;
-const STAGED_FILE_NAME: &str = "state.restore-staged.sqlite";
-const BACKUP_FILE_NAME: &str = "state.restore-backup.sqlite";
-const MARKER_FILE_NAME: &str = "state.restore-marker.v1";
-const MARKER_NEXT_FILE_NAME: &str = "state.restore-marker.v1.next";
+pub(super) const LIVE_FILE_NAME: &str = radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME;
+pub(super) const STAGED_FILE_NAME: &str = "state.restore-staged.sqlite";
+pub(super) const BACKUP_FILE_NAME: &str = "state.restore-backup.sqlite";
+pub(super) const MARKER_FILE_NAME: &str = "state.restore-marker.v1";
+pub(super) const MARKER_NEXT_FILE_NAME: &str = "state.restore-marker.v1.next";
 
 /// Exact retained identity and content expected for one restore artifact.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -55,6 +55,22 @@ impl RestoreArtifactExpectation {
             byte_length,
             sha256,
         })
+    }
+
+    pub(crate) const fn device(self) -> u64 {
+        self.device
+    }
+
+    pub(crate) const fn inode(self) -> u64 {
+        self.inode
+    }
+
+    pub(crate) const fn byte_length(self) -> u64 {
+        self.byte_length
+    }
+
+    pub(crate) const fn sha256(self) -> [u8; 32] {
+        self.sha256
     }
 }
 
@@ -130,6 +146,14 @@ impl RestoreRecoveryLayout {
             marker: state_directory.join(MARKER_FILE_NAME),
             marker_next: state_directory.join(MARKER_NEXT_FILE_NAME),
         })
+    }
+
+    pub(crate) fn state_directory(&self) -> &PathBuf {
+        &self.state_directory
+    }
+
+    pub(crate) fn staged(&self) -> &PathBuf {
+        &self.staged
     }
 
     #[cfg(test)]

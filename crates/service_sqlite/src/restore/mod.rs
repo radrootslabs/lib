@@ -1,6 +1,9 @@
 //! Private crash-recovery marker mechanics for governed restore.
 
 mod marker;
+mod stage;
+
+pub use stage::{StagedServiceRestore, stage_verified_restore};
 
 #[allow(unused_imports)]
 pub(crate) use marker::{

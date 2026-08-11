@@ -120,6 +120,35 @@ open-time recovery must reconcile durable marker and artifact identities before
 removing any recovery evidence. No marker type, path, raw descriptor, or store
 operation is public API.
 
+`stage_verified_restore` is the offline boundary between retained backup proof
+and live-state replacement. It first validates the expected identity plus exact
+migration and schema catalogs, then acquires exclusive writer authority. A live
+writable or read-only host, a live WAL/shared-memory/journal sidecar, an existing
+stage, or any marker/retained-backup evidence fails closed. The only created
+artifact is the fixed adjacent `state.restore-staged.sqlite`, opened create-new,
+no-follow, owner-only, and single-link with mode `0600`.
+
+Staging copies the exact manifest-bound bytes from the verifier's retained
+member descriptor with a fixed-size buffer and digest, synchronizes the staged
+file, and opens SQLite only through the retained staged descriptor. It then
+rechecks immutable application metadata, the exact applied migration prefix and
+schema-object catalog at the backup's actual supported version, main-only
+read-only/query-only connection policy, bounded `integrity_check(1)`, and empty
+`foreign_key_check`. A final retained-descriptor hash and file plus state-
+directory synchronization precede success. Live database bytes, identity,
+permissions, and timestamps remain untouched.
+
+Success returns a sealed non-cloneable `StagedServiceRestore` that retains
+writer authority and the exact staging identities. Dropping it attempts an
+identity-checked unlink and state-directory synchronization before releasing
+authority; cleanup failure leaves staging or recovery evidence that later
+admission rejects. Cancelling the async operation requests bounded copy
+cancellation; any detached work retains authority and exact cleanup ownership
+until it ends.
+The operation has no hidden timeout. It does not create or advance a recovery
+marker, rename or retain live state, install a replacement, or authorize reopen;
+those operations remain the finalization and recovery checkpoints.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers
