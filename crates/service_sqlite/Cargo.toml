@@ -12,11 +12,14 @@ homepage.workspace = true
 readme = "README.md"
 
 [dependencies]
+fs2 = { workspace = true }
 radroots_runtime_paths = { workspace = true }
+rustix = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
