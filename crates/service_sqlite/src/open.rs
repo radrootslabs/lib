@@ -58,7 +58,7 @@ const SHARED_MEMORY_FILE_NAME: &str = "state.sqlite-shm";
 /// use radroots_service_sqlite::ServiceSqlitePaths;
 ///
 /// let _ = ServiceSqlitePaths {
-///     service: ServiceId::new("myc").unwrap(),
+///     service: ServiceId::new("example").unwrap(),
 ///     instance: InstanceId::new("primary").unwrap(),
 ///     state_database: PathBuf::from("/tmp/alternate.sqlite"),
 ///     state_lock: PathBuf::from("/tmp/alternate.lock"),

@@ -284,3 +284,22 @@ with raw database authority.
 
 Publication is disabled. The package is not part of the public Radroots crate
 release closure.
+
+## Public API and package boundary
+
+This unpublished `private_runtime`, `package_private` crate owns only
+service-neutral SQLite mechanics. Its built-in persistent objects are the
+shared `radroots_service_metadata` and `schema_migrations` tables plus their
+governed immutability triggers. Every service-owned table, index, trigger,
+migration statement, and schema policy is supplied through the caller-owned
+migration and schema catalogs; no product identifier or product table belongs
+in this package.
+
+The crate-root exports are frozen in the reviewed
+[service-SQLite API baseline](../../contracts/api_baselines/radroots_service_sqlite.txt).
+Raw pools, pooled or direct connections, transaction-control handles, and
+dependency re-exports are forbidden. The deliberate narrow exception is the
+`sqlx::Executor` implementation for a borrowed
+`&mut ServiceSqliteTransaction<'_>`: it permits compile-time typed queries
+while the crate retains connection ownership and sole begin, commit, rollback,
+policy, and cancellation authority.

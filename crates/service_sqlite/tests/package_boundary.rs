@@ -2,6 +2,11 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
+const PUBLIC_API: &str =
+    include_str!("../../../contracts/api_baselines/radroots_service_sqlite.txt");
+const API_SEMVER: &str = include_str!("../../../contracts/releases/api_semver.toml");
+const PACKAGE_CATALOG: &str = include_str!("../../../contracts/crates/catalog.v2.toml");
+const PUBLISH_POLICY: &str = include_str!("../../../contracts/releases/publish_policy.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const AUTHORITY_SOURCE: &str = include_str!("../src/authority.rs");
 const BACKUP_SOURCE: &str = include_str!("../src/backup/manifest.rs");
@@ -64,6 +69,46 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         dependency_keys(MANIFEST, "[dev-dependencies]"),
         BTreeSet::from(["tempfile", "tokio"])
     );
+    let catalog_entry = package_catalog_entry(PACKAGE_CATALOG, "radroots_service_sqlite");
+    for required in [
+        "path = \"crates/service_sqlite\"",
+        "state = \"active\"",
+        "tier = \"runtime\"",
+        "visibility = \"private_runtime\"",
+        "publish = false",
+        "compatibility = [\"package_private\"]",
+    ] {
+        assert!(
+            catalog_entry.contains(required),
+            "package catalog entry is missing `{required}`"
+        );
+    }
+    let publication = toml_section(
+        PUBLISH_POLICY,
+        "[publication]",
+        "[workspace_classification]",
+    );
+    let workspace_classification = toml_section(
+        PUBLISH_POLICY,
+        "[workspace_classification]",
+        "[publish_order]",
+    );
+    let private_packages = toml_array(workspace_classification, "private");
+    let publish_order = PUBLISH_POLICY
+        .split_once("[publish_order]")
+        .map(|(_, section)| section)
+        .expect("publish policy must contain publish_order");
+    assert!(!publication.contains("\"radroots_service_sqlite\""));
+    assert!(private_packages.contains("\"radroots_service_sqlite\""));
+    assert_eq!(
+        PUBLISH_POLICY
+            .matches("\"radroots_service_sqlite\"")
+            .count(),
+        1,
+        "service SQLite must appear only in the private workspace classification"
+    );
+    assert!(!publish_order.contains("\"radroots_service_sqlite\""));
+    assert!(!API_SEMVER.contains("\"radroots_service_sqlite\""));
     assert_eq!(
         private_modules(ROOT),
         BTreeSet::from([
@@ -295,6 +340,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]")
         .map(|(production, _)| production)
         .expect("integrity inspection source must keep test seams separated");
+    let integrity_catalog_production = INTEGRITY_CATALOG_SOURCE
+        .split_once("#[cfg(test)]")
+        .map(|(production, _)| production)
+        .expect("integrity catalog source must keep tests separated");
     let disk_production = DISK_SOURCE
         .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
@@ -303,6 +352,94 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
         .expect("restore marker source must keep tests separated");
+
+    for required in [
+        "pub struct radroots_service_sqlite::ServiceSqliteHost",
+        "pub struct radroots_service_sqlite::ServiceSqliteTransaction",
+        "pub struct radroots_service_sqlite::ServiceSqlitePaths",
+        "pub struct radroots_service_sqlite::MigrationCatalog",
+        "pub struct radroots_service_sqlite::SchemaCatalog",
+        "pub struct radroots_service_sqlite::VerifiedServiceBackup",
+        "pub struct radroots_service_sqlite::StagedServiceRestore",
+        "pub async fn radroots_service_sqlite::initialize_database",
+        "pub fn radroots_service_sqlite::verify_backup_bundle",
+        "pub async fn radroots_service_sqlite::finalize_staged_restore",
+        "pub async fn radroots_service_sqlite::stage_verified_restore",
+        "impl<'executor, 'connection> sqlx_core::executor::Executor<'executor> for &'executor mut radroots_service_sqlite::ServiceSqliteTransaction<'connection>",
+    ] {
+        assert!(
+            PUBLIC_API.contains(required),
+            "reviewed API baseline is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub mod radroots_service_sqlite::",
+        "SqlitePool",
+        "PoolConnection",
+        "sqlx_sqlite::connection::SqliteConnection",
+        "sqlx_core::pool::Pool",
+        "sqlx_core::transaction::Transaction",
+        "rusqlite::",
+        "rustix::",
+        "tokio::",
+        "fs2::",
+        "serde_json::",
+        "sha2::",
+        "pub use sqlx",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "reviewed API baseline exposes forbidden authority `{forbidden}`"
+        );
+    }
+    for surface in [README, ROOT, PUBLIC_API, open_production] {
+        let lowercase = surface.to_ascii_lowercase();
+        for forbidden in ["myc", "rhi"] {
+            assert!(
+                !lowercase.contains(forbidden),
+                "public or production boundary contains product identifier `{forbidden}`"
+            );
+        }
+    }
+    for required in [
+        "## Public API and package boundary",
+        "unpublished `private_runtime`, `package_private` crate",
+        "shared `radroots_service_metadata` and `schema_migrations` tables",
+        "Every service-owned table, index, trigger,",
+        "[service-SQLite API baseline](../../contracts/api_baselines/radroots_service_sqlite.txt)",
+        "Raw pools, pooled or direct connections, transaction-control handles, and",
+        "`sqlx::Executor` implementation for a borrowed",
+        "while the crate retains connection ownership and sole begin, commit, rollback,",
+    ] {
+        assert!(README.contains(required), "README is missing `{required}`");
+    }
+    assert_eq!(
+        integrity_catalog_production
+            .matches("CREATE TABLE ")
+            .count(),
+        2,
+        "built-in persistent table inventory drifted"
+    );
+    for required in [
+        "CREATE TABLE radroots_service_metadata",
+        "CREATE TABLE schema_migrations",
+        "CREATE TRIGGER radroots_service_metadata_guard_update",
+        "CREATE TRIGGER radroots_service_metadata_no_delete",
+        "CREATE TRIGGER schema_migrations_no_update",
+        "CREATE TRIGGER schema_migrations_no_delete",
+    ] {
+        assert!(
+            integrity_catalog_production.contains(required),
+            "shared persistent-object inventory is missing `{required}`"
+        );
+    }
+    assert_eq!(
+        integrity_catalog_production
+            .matches("CREATE TRIGGER ")
+            .count(),
+        4,
+        "built-in trigger inventory drifted"
+    );
 
     for required in [
         "ServiceSqliteErrorCode",
@@ -1410,6 +1547,89 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     }
 }
 
+#[test]
+fn production_corpus_is_service_neutral_and_owns_only_shared_persistent_objects() {
+    let production = [
+        ROOT,
+        AUTHORITY_SOURCE,
+        BACKUP_SOURCE,
+        BACKUP_CAPTURE_SOURCE,
+        BACKUP_VERIFY_SOURCE,
+        CONFIG_SOURCE,
+        CONNECTION_SOURCE,
+        ERROR_SOURCE,
+        FAILPOINT_SOURCE,
+        INITIALIZE_SOURCE,
+        INTEGRITY_SOURCE,
+        INTEGRITY_CATALOG_SOURCE,
+        INTEGRITY_INSPECTION_SOURCE,
+        METADATA_SOURCE,
+        MIGRATION_SOURCE,
+        OPEN_SOURCE,
+        RESTORE_MARKER_SOURCE,
+        RESTORE_FINALIZE_SOURCE,
+        RESTORE_RECOVER_SOURCE,
+        RESTORE_ROOT_SOURCE,
+        RESTORE_STAGE_SOURCE,
+        STATUS_SOURCE,
+        DISK_SOURCE,
+        TRANSACTION_CONTROL_SOURCE,
+    ]
+    .map(production_before_tests)
+    .join("\n");
+
+    for surface in [README, PUBLIC_API, production.as_str()] {
+        let lowercase = surface.to_ascii_lowercase();
+        for forbidden in ["myc", "rhi"] {
+            assert!(
+                !lowercase.contains(forbidden),
+                "public or production boundary contains product identifier `{forbidden}`"
+            );
+        }
+    }
+
+    assert_eq!(
+        production.matches("CREATE TABLE ").count(),
+        2,
+        "built-in persistent table inventory drifted"
+    );
+    assert_eq!(
+        production.matches("CREATE TRIGGER ").count(),
+        4,
+        "built-in persistent trigger inventory drifted"
+    );
+    for required in [
+        "CREATE TABLE radroots_service_metadata",
+        "CREATE TABLE schema_migrations",
+        "CREATE TRIGGER radroots_service_metadata_guard_update",
+        "CREATE TRIGGER radroots_service_metadata_no_delete",
+        "CREATE TRIGGER schema_migrations_no_update",
+        "CREATE TRIGGER schema_migrations_no_delete",
+    ] {
+        assert!(
+            production.contains(required),
+            "shared persistent-object inventory is missing `{required}`"
+        );
+    }
+    for forbidden in ["CREATE INDEX ", "CREATE VIEW "] {
+        assert!(
+            !production.contains(forbidden),
+            "built-in persistent-object inventory contains forbidden `{forbidden}`"
+        );
+    }
+}
+
+fn production_before_tests(source: &str) -> &str {
+    let Some(module_position) = source.rfind("mod tests {") else {
+        return source;
+    };
+    let prefix = &source[..module_position];
+    let attribute_position = prefix
+        .rfind("#[cfg")
+        .expect("test module must retain an explicit cfg attribute");
+    &source[..attribute_position]
+}
+
 fn public_modules(root: &str) -> BTreeSet<&str> {
     root.lines()
         .filter_map(|line| line.strip_prefix("pub mod "))
@@ -1434,4 +1654,38 @@ fn dependency_keys<'a>(manifest: &'a str, section: &str) -> BTreeSet<&'a str> {
         .filter_map(|line| line.split_once('=').map(|(key, _)| key.trim()))
         .filter(|key| !key.is_empty())
         .collect()
+}
+
+fn package_catalog_entry<'a>(catalog: &'a str, package: &str) -> &'a str {
+    let marker = format!("[[package]]\nname = \"{package}\"\n");
+    let entry = catalog
+        .split_once(&marker)
+        .map(|(_, entry)| entry)
+        .expect("package catalog must contain service SQLite");
+    entry
+        .split_once("\n[[package]]")
+        .map_or(entry, |(entry, _)| entry)
+}
+
+fn toml_section<'a>(document: &'a str, start: &str, end: &str) -> &'a str {
+    let section = document
+        .split_once(start)
+        .map(|(_, section)| section)
+        .expect("TOML section must exist");
+    section
+        .split_once(end)
+        .map(|(section, _)| section)
+        .expect("TOML section terminator must exist")
+}
+
+fn toml_array<'a>(section: &'a str, key: &str) -> &'a str {
+    let marker = format!("{key} = [");
+    let values = section
+        .split_once(&marker)
+        .map(|(_, values)| values)
+        .expect("TOML array must exist");
+    values
+        .split_once(']')
+        .map(|(values, _)| values)
+        .expect("TOML array must terminate")
 }
