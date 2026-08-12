@@ -1,8 +1,5 @@
 [workspace]
-members = [
-    "crates/core",
-    "tools/uniffi-bindgen",
-]
+members = ["crates/core", "tools/uniffi-bindgen"]
 resolver = "2"
 
 [workspace.package]

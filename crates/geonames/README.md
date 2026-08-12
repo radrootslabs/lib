@@ -11,9 +11,9 @@ client types, or define a generic geocoder SPI. Publication remains disabled
 during the `0.1.0-alpha` refactor.
 
 The authoritative package charter is the
-[`radroots_geonames` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#17-radroots_geonames).
+[`radroots_geonames` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 The reviewed Rust surface is recorded in the
-[public API baseline](../../docs/api/radroots_geonames.txt).
+[public API baseline](../../contracts/api_baselines/radroots_geonames.txt).
 
 ## Prepare a query without I/O
 

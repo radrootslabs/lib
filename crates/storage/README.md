@@ -12,7 +12,7 @@ is the native durable backend and the opt-in [`memory`] module is the bounded
 deterministic reference implementation.
 
 The authoritative package charter is the
-[`radroots_storage` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#13-radroots_storage).
+[`radroots_storage` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 
 ## Typical flow
 

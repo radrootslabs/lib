@@ -46,9 +46,9 @@ Focused errors and operations remain in these modules:
 - `unit` — unit parsing, dimensions, and deterministic conversions.
 
 The normative responsibility and dependency boundary are defined by the
-[`radroots_core` package charter](../../docs/specs/radroots_crates_release_v1.md).
-The reviewed pre-release surface is recorded in
-[`docs/api`](../../docs/api/README.md).
+[`radroots_core` package charter](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
+The reviewed pre-release surface is recorded in the
+[`radroots_core` API baseline](../../contracts/api_baselines/radroots_core.txt).
 
 ## Features
 

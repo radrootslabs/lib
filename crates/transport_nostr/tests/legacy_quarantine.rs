@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-const DEVIATIONS: &str = include_str!("../../../docs/implementation/deviations.toml");
-const SHIMS: &str = include_str!("../../../docs/implementation/COMPATIBILITY_SHIMS.md");
+const DEVIATIONS: &str = include_str!("../../../contracts/architecture/deviations.toml");
+const RETIRED_COMPATIBILITY: &str =
+    include_str!("../../../contracts/architecture/retired_compatibility.v1.toml");
 const PUBLISH_POLICY: &str = include_str!("../../../contracts/releases/publish_policy.toml");
 
 #[test]
@@ -29,7 +30,7 @@ fn superseded_transport_packages_are_removed_from_release_authority() {
         assert!(!workspace_manifest.contains(package));
         assert!(!approved.contains(package));
         assert!(!private.contains(&format!("\"{package}\"")));
-        assert!(!SHIMS.contains(&format!("| `{package}` |")));
+        assert!(RETIRED_COMPATIBILITY.contains(&format!("id = \"{package}\"")));
     }
 }
 

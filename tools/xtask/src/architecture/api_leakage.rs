@@ -12,9 +12,38 @@ use syn::{
 };
 
 const API_BOUNDARIES_RELATIVE: &str = "contracts/releases/api_boundaries.toml";
+const API_DECISION_RELATIVE: &str =
+    "contracts/architecture/decisions/public_api_leakage_migration_baseline.v1.toml";
+const API_DECISION_ID: &str = "radroots.public_api_leakage_migration_baseline.v1";
 const SPEC_ID: &str = "radroots.crates.release.v1";
 const POLICY_SCHEMA_VERSION: u16 = 1;
-const CURRENT_STEP: u16 = 25;
+const DECISION_SCHEMA_VERSION: u16 = 1;
+const CURRENT_STEP: u16 = 313;
+const HISTORICAL_EXCEPTION_IDS: [&str; 8] = [
+    "RCRV1-API-001",
+    "RCRV1-API-002",
+    "RCRV1-API-003",
+    "RCRV1-API-004",
+    "RCRV1-API-005",
+    "RCRV1-API-006",
+    "RCRV1-API-007",
+    "RCRV1-API-008",
+];
+const FORBIDDEN_EXPANSION: [&str; 8] = [
+    "broader_aliases",
+    "keyring",
+    "new_items",
+    "new_upstream_paths",
+    "platform_specific_types",
+    "reqwest",
+    "sqlx",
+    "tokio",
+];
+const REMOVAL_MILESTONES: [(&str, u16); 3] = [
+    ("radroots_identity", 42),
+    ("radroots_nostr", 124),
+    ("radroots_nostr_connect", 140),
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -43,9 +72,31 @@ struct ApiException {
     forbidden_path: String,
     items: Vec<String>,
     observed_paths: Vec<String>,
-    adr: String,
+    decision: String,
     removal_step: u16,
     rationale: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApiLeakageDecision {
+    schema_version: u16,
+    decision_id: String,
+    status: String,
+    accepted_date: String,
+    completed_step: u16,
+    publication_authorized: bool,
+    exception_ids: Vec<String>,
+    active_exception_ids: Vec<String>,
+    forbidden_expansion: Vec<String>,
+    removal_milestone: Vec<ApiRemovalMilestone>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApiRemovalMilestone {
+    package: String,
+    step: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,6 +202,7 @@ fn validate_policy(
             "{API_BOUNDARIES_RELATIVE} spec_id must be {SPEC_ID}"
         ));
     }
+    let decision = load_and_validate_decision(workspace_root)?;
 
     let forbidden = sorted_unique(
         "forbidden_public_paths",
@@ -293,7 +345,7 @@ fn validate_policy(
                 exception.id
             ));
         }
-        validate_adr(workspace_root, exception)?;
+        validate_decision_reference(exception, &decision)?;
         for item in &exception.items {
             let key = (
                 exception.package.as_str(),
@@ -308,6 +360,16 @@ fn validate_policy(
                 ));
             }
         }
+    }
+    let active_exception_ids = decision
+        .active_exception_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    if exception_ids != active_exception_ids {
+        return Err(format!(
+            "{API_BOUNDARIES_RELATIVE} active exception ids must exactly match {API_DECISION_RELATIVE}"
+        ));
     }
     Ok(())
 }
@@ -352,32 +414,87 @@ fn validate_relative_source(id: &str, source: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_adr(workspace_root: &Path, exception: &ApiException) -> Result<(), String> {
-    let path = Path::new(&exception.adr);
-    if path.is_absolute()
-        || !exception.adr.starts_with("docs/decisions/")
+fn load_and_validate_decision(workspace_root: &Path) -> Result<ApiLeakageDecision, String> {
+    let path = workspace_root.join(API_DECISION_RELATIVE);
+    let raw =
+        fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))?;
+    let decision = toml::from_str::<ApiLeakageDecision>(&raw)
+        .map_err(|error| format!("parse {}: {error}", path.display()))?;
+
+    if decision.schema_version != DECISION_SCHEMA_VERSION
+        || decision.decision_id != API_DECISION_ID
+        || decision.status != "accepted_historical"
+        || decision.accepted_date != "2026-07-27"
+        || decision.completed_step != CURRENT_STEP
+        || decision.publication_authorized
+    {
+        return Err(format!(
+            "{API_DECISION_RELATIVE} identity, lifecycle, or publication policy drifted"
+        ));
+    }
+    if decision
+        .exception_ids
+        .iter()
+        .map(String::as_str)
+        .ne(HISTORICAL_EXCEPTION_IDS)
+    {
+        return Err(format!(
+            "{API_DECISION_RELATIVE} must preserve the exact historical exception ids"
+        ));
+    }
+    if !decision.active_exception_ids.is_empty() {
+        return Err(format!(
+            "{API_DECISION_RELATIVE} must not authorize active exceptions after Step {CURRENT_STEP}"
+        ));
+    }
+    if decision
+        .forbidden_expansion
+        .iter()
+        .map(String::as_str)
+        .ne(FORBIDDEN_EXPANSION)
+    {
+        return Err(format!(
+            "{API_DECISION_RELATIVE} forbidden expansion set drifted"
+        ));
+    }
+    if decision
+        .removal_milestone
+        .iter()
+        .map(|milestone| (milestone.package.as_str(), milestone.step))
+        .ne(REMOVAL_MILESTONES)
+    {
+        return Err(format!(
+            "{API_DECISION_RELATIVE} removal milestones drifted"
+        ));
+    }
+    Ok(decision)
+}
+
+fn validate_decision_reference(
+    exception: &ApiException,
+    decision: &ApiLeakageDecision,
+) -> Result<(), String> {
+    let path = Path::new(&exception.decision);
+    if exception.decision != API_DECISION_RELATIVE
+        || path.is_absolute()
         || path
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
-        || path.extension().and_then(|extension| extension.to_str()) != Some("md")
+        || path.extension().and_then(|extension| extension.to_str()) != Some("toml")
     {
         return Err(format!(
-            "{API_BOUNDARIES_RELATIVE} exception {} ADR must be a normalized docs/decisions/*.md path",
+            "{API_BOUNDARIES_RELATIVE} exception {} decision must be {API_DECISION_RELATIVE}",
             exception.id
         ));
     }
-    let full = workspace_root.join(path);
-    let raw = fs::read_to_string(&full).map_err(|error| {
-        format!(
-            "{API_BOUNDARIES_RELATIVE} exception {} ADR {} is not readable: {error}",
-            exception.id,
-            full.display()
-        )
-    })?;
-    if !raw.contains(&exception.id) {
+    if !decision
+        .active_exception_ids
+        .iter()
+        .any(|id| id == &exception.id)
+    {
         return Err(format!(
-            "{API_BOUNDARIES_RELATIVE} exception {} ADR {} must cite the exception id",
-            exception.id, exception.adr
+            "{API_BOUNDARIES_RELATIVE} exception {} is not active in {API_DECISION_RELATIVE}",
+            exception.id
         ));
     }
     Ok(())
@@ -1264,15 +1381,18 @@ fn module_label(module: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ApiBoundaryPolicy, ApiException, CargoMetadata, exception_matches, scan_workspace,
+        API_DECISION_RELATIVE, ApiBoundaryPolicy, ApiException, CargoMetadata, scan_workspace,
         validate_policy,
     };
     use serde::Deserialize;
     use std::{collections::BTreeSet, fs};
 
     const POLICY: &str = include_str!("../../../../contracts/releases/api_boundaries.toml");
+    const DECISION: &str = include_str!(
+        "../../../../contracts/architecture/decisions/public_api_leakage_migration_baseline.v1.toml"
+    );
     const ARCHITECTURE: &str =
-        include_str!("../../../../docs/specs/radroots_crates_release_v1.toml");
+        include_str!("../../../../contracts/crates/release_v1/radroots_crates_release_v1.toml");
     const GENERIC_SQLX: &str = include_str!("../../tests/fixtures/api-leakage/generic-sqlx.rs");
     const GENERIC_RENAMED_TOKIO: &str =
         include_str!("../../tests/fixtures/api-leakage/generic-renamed-tokio.rs");
@@ -1280,8 +1400,6 @@ mod tests {
         include_str!("../../tests/fixtures/api-leakage/allowed-concrete-adapter.rs");
     const PRIVATE_IMPLEMENTATION: &str =
         include_str!("../../tests/fixtures/api-leakage/private-implementation.rs");
-    const ADR_EXCEPTION: &str = include_str!("../../tests/fixtures/api-leakage/adr-exception.rs");
-
     #[derive(Deserialize)]
     struct ArchitectureCatalog {
         package: Vec<ArchitecturePackage>,
@@ -1345,19 +1463,22 @@ mod tests {
         .expect("scan fixture")
     }
 
-    fn write_baseline_adr(root: &std::path::Path) {
-        fs::create_dir_all(root.join("docs/decisions")).expect("baseline ADR directory");
+    fn write_baseline_decision(root: &std::path::Path) {
+        fs::create_dir_all(root.join("contracts/architecture/decisions"))
+            .expect("baseline decision directory");
         fs::write(
-            root.join("docs/decisions/0001-public-api-leakage-migration-baseline.md"),
-            "RCRV1-API-001 RCRV1-API-002 RCRV1-API-003 RCRV1-API-004 RCRV1-API-005 RCRV1-API-006 RCRV1-API-007 RCRV1-API-008\n",
+            root.join(
+                "contracts/architecture/decisions/public_api_leakage_migration_baseline.v1.toml",
+            ),
+            DECISION,
         )
-        .expect("baseline ADR");
+        .expect("baseline decision");
     }
 
     #[test]
     fn policy_covers_exact_architecture_catalog() {
         let root = tempfile::TempDir::new().expect("policy root");
-        write_baseline_adr(root.path());
+        write_baseline_decision(root.path());
         validate_policy(root.path(), &policy(), &expected_packages())
             .expect("policy without exceptions");
     }
@@ -1393,15 +1514,9 @@ mod tests {
     }
 
     #[test]
-    fn exact_item_exception_requires_resolving_adr() {
+    fn invented_exception_is_rejected_by_the_completed_decision() {
         let root = tempfile::TempDir::new().expect("exception root");
-        write_baseline_adr(root.path());
-        fs::create_dir_all(root.path().join("docs/decisions")).expect("ADR directory");
-        fs::write(
-            root.path().join("docs/decisions/0001-test.md"),
-            "# Test\n\nRCRV1-API-999\n",
-        )
-        .expect("ADR");
+        write_baseline_decision(root.path());
         let mut policy = policy();
         policy.exception.push(ApiException {
             id: "RCRV1-API-999".to_owned(),
@@ -1410,24 +1525,56 @@ mod tests {
             forbidden_path: "reqwest".to_owned(),
             items: vec!["temporary_client".to_owned()],
             observed_paths: vec!["reqwest::Client".to_owned()],
-            adr: "docs/decisions/0001-test.md".to_owned(),
-            removal_step: 226,
+            decision: API_DECISION_RELATIVE.to_owned(),
+            removal_step: 400,
             rationale: "test-only exception".to_owned(),
         });
-        validate_policy(root.path(), &policy, &expected_packages()).expect("resolving ADR");
-        let finding = scan_workspace(
-            root.path(),
-            &policy,
-            &fixture_metadata(root.path(), "radroots_sdk", ADR_EXCEPTION),
-        )
-        .expect("scan exception fixture")
-        .pop()
-        .expect("finding");
-        assert!(exception_matches(&policy.exception, &finding));
-
-        fs::remove_file(root.path().join("docs/decisions/0001-test.md")).expect("remove ADR");
         let error = validate_policy(root.path(), &policy, &expected_packages())
-            .expect_err("missing ADR must fail");
-        assert!(error.contains("is not readable"));
+            .expect_err("invented exception must fail");
+        assert!(error.contains("is not active"));
+    }
+
+    #[test]
+    fn expired_historical_exception_cannot_return() {
+        let root = tempfile::TempDir::new().expect("expired exception root");
+        write_baseline_decision(root.path());
+        let mut policy = policy();
+        policy.exception.push(ApiException {
+            id: "RCRV1-API-006".to_owned(),
+            package: "radroots_nostr_connect".to_owned(),
+            source: "src/client.rs".to_owned(),
+            forbidden_path: "nostr".to_owned(),
+            items: vec!["client::RadrootsNostrConnectClientTarget".to_owned()],
+            observed_paths: vec!["nostr::PublicKey".to_owned()],
+            decision: API_DECISION_RELATIVE.to_owned(),
+            removal_step: 313,
+            rationale: "retired historical exception".to_owned(),
+        });
+        let error = validate_policy(root.path(), &policy, &expected_packages())
+            .expect_err("expired historical exception must fail");
+        assert!(error.contains("expired at Step 313"));
+    }
+
+    #[test]
+    fn malformed_or_publication_authorizing_decision_fails_closed() {
+        let root = tempfile::TempDir::new().expect("decision validation root");
+        write_baseline_decision(root.path());
+        let decision_path = root.path().join(API_DECISION_RELATIVE);
+        fs::write(&decision_path, "not valid toml = [\n").expect("malformed decision");
+        let malformed = validate_policy(root.path(), &policy(), &expected_packages())
+            .expect_err("malformed decision must fail");
+        assert!(malformed.contains("parse"));
+
+        fs::write(
+            &decision_path,
+            DECISION.replace(
+                "publication_authorized = false",
+                "publication_authorized = true",
+            ),
+        )
+        .expect("publication-authorizing decision");
+        let authorized = validate_policy(root.path(), &policy(), &expected_packages())
+            .expect_err("publication authorization must fail");
+        assert!(authorized.contains("publication policy drifted"));
     }
 }

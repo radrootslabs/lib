@@ -1,4 +1,4 @@
-schema_version = 1
+schema_version = 2
 spec_id = "radroots.crates.release.v2"
 status = "approved_not_published"
 supersedes_without_mutation = "radroots.crates.release.v1"
@@ -28,22 +28,22 @@ public_packages = [
   "radroots",
 ]
 
-[[v1_artifact]]
-path = "docs/specs/radroots_crates_release_v1.md"
+[[v1_retired_human_artifact]]
+former_path = "docs/specs/radroots_crates_release_v1.md"
 sha256 = "ea2c1f0f5c53fae56a247ae7519b065c9a0d62dafb998b75a48075f4a875b5eb"
 
 [[v1_artifact]]
-path = "docs/specs/radroots_crates_release_v1.toml"
+path = "contracts/crates/release_v1/radroots_crates_release_v1.toml"
 sha256 = "1dc18437200dcd65b52090493306f452dade89b5116401d71be4ba4127239b19"
 
 [[v1_artifact]]
-path = "docs/specs/radroots_crates_release_v1_inventory.csv"
+path = "contracts/crates/release_v1/radroots_crates_release_v1_inventory.csv"
 sha256 = "5020875c2cda4b2c9568c8b3f0fad5cd96756c3c779a72481a9652e558f77891"
 
 [[v1_artifact]]
-path = "docs/specs/radroots_crates_release_v1.dot"
+path = "contracts/crates/release_v1/radroots_crates_release_v1.dot"
 sha256 = "d47de10be596a4d33fee102a4f0617f66700b49515a75a1f42d62c9710043059"
 
 [[v1_artifact]]
-path = "docs/specs/radroots_crates_release_v1.sha256"
+path = "contracts/crates/release_v1/radroots_crates_release_v1.sha256"
 sha256 = "5759ceaae30a9435346320c2791cfda9eb1559b779ea79fd2e94810e14efa281"

@@ -33,7 +33,7 @@ fn superseded_transport_packages_and_nostrdb_adapter_are_removed() {
         fs::read_to_string(workspace.join("Cargo.toml")).expect("workspace manifest");
     let nostrdb_manifest =
         fs::read_to_string(workspace.join("crates/nostrdb/Cargo.toml")).expect("nostrdb manifest");
-    let deviations = fs::read_to_string(workspace.join("docs/implementation/deviations.toml"))
+    let deviations = fs::read_to_string(workspace.join("contracts/architecture/deviations.toml"))
         .expect("deviation authority");
 
     assert!(!workspace_manifest.contains("radroots_nostr_runtime"));

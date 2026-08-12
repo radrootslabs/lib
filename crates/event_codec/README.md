@@ -29,7 +29,7 @@ The Release V1 canonical root consists of `Codec`, `DecodeError`,
 canonical modules so each import states whether it encodes, decodes, verifies,
 or admits data. Legacy top-level domain routes are not exposed. The canonical
 surface is recorded in the
-[public API baseline](../../docs/api/radroots_event_codec.txt).
+[public API baseline](../../contracts/api_baselines/radroots_event_codec.txt).
 
 ## Verification pipeline
 
@@ -146,9 +146,9 @@ responsibilities belong to adapter and runtime crates.
 
 The authoritative Release V1 responsibility, dependency, feature, module, and
 forbidden-scope contract is the
-[Radroots crates Release V1 specification](../../docs/specs/radroots_crates_release_v1.md).
-The baseline generation procedure and toolchain are documented in
-[`docs/api/README.md`](../../docs/api/README.md).
+[Radroots crates Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
+The reviewed surface is the
+[`radroots_event_codec` API baseline](../../contracts/api_baselines/radroots_event_codec.txt).
 
 ## Copyright
 

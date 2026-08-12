@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 
 const SOURCE_LOCK_NAME: &str = "radroots.lib.source-lock.v1.toml";
 const CONSUMER_MARKER: &str = ".radroots-consumer-root";
-const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v1.toml";
+const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v2.toml";
 const REPOSITORY: &str = "https://github.com/radrootslabs/lib";
 const ARCHITECTURE: &str = "radroots.crates.release.v2";
 const VERSION: &str = "0.1.0-alpha";
@@ -93,8 +93,11 @@ impl ConsumerRoot {
             .map_err(|error| format!("consumer marker is not UTF-8: {error}"))?
             .trim()
             .to_owned();
-        if !matches!(product.as_str(), "sdk" | "mobile" | "studio") {
-            return Err("consumer marker must contain sdk, mobile, or studio".to_owned());
+        if !matches!(
+            product.as_str(),
+            "sdk" | "mobile" | "studio" | "myc" | "rhi"
+        ) {
+            return Err("consumer marker must contain sdk, mobile, studio, myc, or rhi".to_owned());
         }
         let source_lock_path = canonical.join(SOURCE_LOCK_NAME);
         let source_lock = parse_source_lock(&source_lock_path)?;
@@ -1084,7 +1087,7 @@ mod tests {
             fs::create_dir_all(source.join("contracts/crates")).expect("contracts");
             fs::write(
                 source.join(CATALOG_RELATIVE),
-                "schema = \"radroots.workspace.catalog.v1\"\n",
+                "schema = \"radroots.workspace.catalog.v2\"\n",
             )
             .expect("catalog");
             fs::create_dir_all(source.join("src")).expect("source crate");
@@ -1160,6 +1163,16 @@ mod tests {
         )
         .expect("floating manifest");
         assert!(ConsumerRoot::open(&fixture.consumer).is_err());
+    }
+
+    #[test]
+    fn source_lock_accepts_services_without_creating_artifact_routes() {
+        for product in ["myc", "rhi"] {
+            let fixture = Fixture::new(product);
+            let consumer = ConsumerRoot::open(&fixture.consumer).expect("valid service consumer");
+            assert_eq!(consumer.product, product);
+            assert!(validate_artifact_route(product, "linux", "rust").is_err());
+        }
     }
 
     #[test]

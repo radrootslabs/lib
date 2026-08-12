@@ -4,9 +4,10 @@ Radroots core-library changes are contract-driven and independently
 reviewable. Before editing, read these files in order:
 
 1. `AGENTS.md`
-2. `docs/specs/README.md`
-3. `docs/specs/radroots_crates_release_v1.md` for crate-surface work
-4. `AGENT_INSTRUCTIONS.md`
+2. `AGENT_INSTRUCTIONS.md`
+3. `contracts/crates/release.v2.toml`
+4. `contracts/crates/release_v1/radroots_crates_release_v1.toml` for
+   crate-surface work
 5. the affected manifests, implementation, contracts, and tests
 
 The release-v1 architecture identifier is `radroots.crates.release.v1`. This
@@ -42,10 +43,11 @@ Keep commits focused and keep public commit language independent of any
 private checkout. Do not publish, tag, merge, or change registry ownership
 without explicit authorization.
 
-When current evidence proves a planned step obsolete or unsafe, follow
-`docs/implementation/DEVIATIONS.md` and validate the machine-readable ledger
-with `cargo xtask architecture`. Complete
-`docs/implementation/STEP_REPORT_TEMPLATE.md`, and keep
-`docs/implementation/TRACEABILITY.md` aligned with durable requirements.
-Record the evidence and affected spec anchor before changing the plan; do not
-silently redefine the architecture.
+When current evidence proves a planned step obsolete or unsafe, update
+`contracts/architecture/deviations.toml` and validate it with
+`cargo xtask architecture`. Record the evidence and affected machine-contract
+anchor before changing the plan. Anchors must use a validated Release V1 TOML
+selector (`repositories.<name>`, `repository_policy`, `release_policy`,
+`quality_policy.coverage`, or `package.<name>`); Markdown heading fragments are
+not machine anchors. A normative change also requires the applicable machine
+decision. Do not silently redefine the architecture.

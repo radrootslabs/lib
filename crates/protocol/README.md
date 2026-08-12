@@ -82,6 +82,6 @@ tools. Applications should normally enter through `radroots` or
 a versioned boundary.
 
 The package charter is the
-[Release V1 specification](../../docs/specs/radroots_crates_release_v1.md).
+[Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 The reviewed Rust surface is recorded in the
-[public API baseline](../../docs/api/radroots_protocol.txt).
+[public API baseline](../../contracts/api_baselines/radroots_protocol.txt).

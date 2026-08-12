@@ -19,8 +19,8 @@ affected_steps = [
   "026",
 ]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#repository-ownership",
-  "docs/specs/radroots_crates_release_v1.toml#repository_policy",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.lib",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy",
 ]
 source_evidence = [
   "The final v1 specification allocates 17 public packages to radrootslabs/lib and 2 to radrootslabs/sdk.",
@@ -43,8 +43,8 @@ status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["201", "215", "269", "294", "301", "313"]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#15-radroots_transport_nostr",
-  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport",
 ]
 source_evidence = [
   "The Step 294 downstream matrix proved the former app_rt radroots_net_core consumer had migrated and no current first-party manifest retained an edge to radroots_net.",
@@ -72,8 +72,8 @@ status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["153", "155", "171", "179", "226", "288", "293", "313"]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#12-radroots_secrets",
-  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_secrets",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite",
 ]
 source_evidence = [
   "The final radroots_storage_sqlite scaffold can consume radroots_secrets immediately and has no predecessor secret dependency.",
@@ -102,8 +102,7 @@ status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["122", "170", "215", "235", "305"]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#9-radroots_transport",
-  "docs/specs/radroots_crates_release_v1.md#111-separate-source-and-sink-contracts",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport",
 ]
 source_evidence = [
   "Step 120 migrated canonical adapters and registries to independent EventSource and EventSink contracts.",
@@ -148,9 +147,9 @@ affected_steps = [
   "313",
 ]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#13-radroots_storage",
-  "docs/specs/radroots_crates_release_v1.md#14-radroots_storage_sqlite",
-  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk",
 ]
 source_evidence = [
   "The Step 170 first-party census found radroots_event_index consumers in the standalone CLI, SDK, SDK bindings, and indexer repositories.",
@@ -191,8 +190,7 @@ affected_steps = [
   "305",
 ]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#221-initial-versions",
-  "docs/specs/radroots_crates_release_v1.toml#repositories.lib",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.lib",
 ]
 source_evidence = [
   "The prior 1.0.0 and mixed 0.1.0 prerelease crate cohorts were explicitly declared incorrect.",
@@ -215,8 +213,8 @@ status = "active"
 approval = "Explicit user correction dated 2026-07-27."
 affected_steps = ["249"]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#radroots",
-  "docs/specs/radroots_crates_release_v1.toml#repositories.sdk",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#repositories.sdk",
 ]
 source_evidence = [
   "The final v1 specification assigns the radroots facade to the existing sdk repository.",
@@ -252,8 +250,7 @@ affected_steps = [
   "314",
 ]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#245-coverage-policy",
-  "docs/specs/radroots_crates_release_v1.toml#quality_policy.coverage",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#quality_policy.coverage",
 ]
 source_evidence = [
   "The oss/lib codebase is under heavy development during the multi-RCLD refactor.",
@@ -276,8 +273,8 @@ status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["225", "226", "248"]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#17-radroots_geonames",
-  "docs/specs/radroots_crates_release_v1.md#20-current-to-target-migration-map",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_geonames",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk",
 ]
 source_evidence = [
   "The standalone SDK manifest and GeoNames module still resolve radroots_geocoder and its test-fixture feature while the final provider package is implemented in this independently versioned repository.",
@@ -305,9 +302,9 @@ status = "closed"
 approval = "All code-review recommendations and the full multi-RCLD implementation sequence were explicitly approved by the user."
 affected_steps = ["279", "282", "283"]
 spec_anchors = [
-  "docs/specs/radroots_crates_release_v1.md#9-radroots_transport",
-  "docs/specs/radroots_crates_release_v1.md#15-radroots_transport_nostr",
-  "docs/specs/radroots_crates_release_v1.md#18-radroots_sdk",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk",
 ]
 source_evidence = [
   "The first-party mobile compile gate proved that its real relay-backed identity, profile, and post operations had no equivalent after the initial shared-engine bridge cutover.",

@@ -11,7 +11,7 @@ adapters such as `radroots_transport_nostr` implement the SPI; applications
 compose those adapters in `radroots_sdk` or their own host layer.
 
 The authoritative package charter is the
-[`radroots_transport` section of the Release V1 specification](https://github.com/radrootslabs/lib/blob/master/docs/specs/radroots_crates_release_v1.md#9-radroots_transport).
+[`radroots_transport` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 
 ## Typical flow
 

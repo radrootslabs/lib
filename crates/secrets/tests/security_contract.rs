@@ -9,7 +9,7 @@ use radroots_secrets::{Error, SecretId, SecretRef};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_secrets.txt");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_secrets.txt");
 
 #[test]
 fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {

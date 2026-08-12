@@ -12,14 +12,14 @@ use crate::contract::artifact_bundle::{
     GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
 };
 
-const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v1.toml";
+const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v2.toml";
 const RELEASE_RELATIVE: &str = "contracts/crates/release.v2.toml";
 const CONSOLIDATION_RELATIVE: &str = "contracts/consolidation/architecture.v1.toml";
 const GROUPS_RELATIVE: &str = "contracts/crates/generated/package_groups.v1.toml";
 const PLATFORMS_RELATIVE: &str = "contracts/crates/generated/platform_inventory.v1.toml";
 const RELEASE_INVENTORY_RELATIVE: &str = "contracts/crates/generated/release_inventory.v2.toml";
 const COVERAGE_RELATIVE: &str = "contracts/coverage.toml";
-const CATALOG_SCHEMA: &str = "radroots.workspace.catalog.v1";
+const CATALOG_SCHEMA: &str = "radroots.workspace.catalog.v2";
 const RELEASE_ID: &str = "radroots.crates.release.v2";
 const CONSOLIDATION_ID: &str = "radroots.rust.consolidation.v1";
 const VERSION: &str = "0.1.0-alpha";
@@ -39,6 +39,7 @@ struct Catalog {
     package_count: usize,
     digest_algorithm: String,
     source_tree_digest_algorithm: String,
+    native_introduction_tree_digest_algorithm: String,
     source_provenance_policy: String,
     provenance_correction_contract: String,
     retired_packages: Vec<String>,
@@ -60,10 +61,12 @@ struct CatalogPackage {
     groups: Vec<String>,
     owners: Vec<String>,
     permitted_dependency_tiers: Vec<String>,
-    source_repository: String,
-    source_revision: String,
-    source_path: String,
-    source_tree_sha256: String,
+    provenance_kind: String,
+    source_repository: Option<String>,
+    source_revision: Option<String>,
+    source_path: Option<String>,
+    source_tree_sha256: Option<String>,
+    introduction_tree_sha256: Option<String>,
     compatibility: Vec<String>,
     removal_gate: Option<String>,
     replaces: Vec<String>,
@@ -82,12 +85,20 @@ struct ReleaseV2 {
     publication_authorized: bool,
     public_packages: Vec<String>,
     v1_artifact: Vec<V1Artifact>,
+    v1_retired_human_artifact: Vec<RetiredV1HumanArtifact>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct V1Artifact {
     path: String,
+    sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetiredV1HumanArtifact {
+    former_path: String,
     sha256: String,
 }
 
@@ -251,7 +262,7 @@ fn parse_toml<T: for<'de> Deserialize<'de>>(relative: &str, bytes: &[u8]) -> Res
 }
 
 fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
-    if catalog.schema_version != 1
+    if catalog.schema_version != 2
         || catalog.schema != CATALOG_SCHEMA
         || catalog.architecture != RELEASE_ID
         || catalog.consolidation != CONSOLIDATION_ID
@@ -263,7 +274,8 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         || catalog.package_count != catalog.package.len()
         || catalog.digest_algorithm != "sha256-raw-bytes-v1"
         || catalog.source_tree_digest_algorithm != "sha256-git-ls-tree-r-v1"
-        || catalog.source_provenance_policy != "immutable_after_source_retirement"
+        || catalog.native_introduction_tree_digest_algorithm != "sha256-git-tree-records-z-v1"
+        || catalog.source_provenance_policy != "imported_revision_tree_or_native_introduction_tree"
         || catalog.provenance_correction_contract != "approved_correction_record_required"
     {
         return Err("catalog identity, toolchain, or cardinality drifted".to_owned());
@@ -361,20 +373,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         {
             return Err(format!("GPL package {} has an invalid class", package.name));
         }
-        if package.source_repository
-            != format!(
-                "https://github.com/radrootslabs/{}",
-                source_repository_name(&package.source_repository)?
-            )
-        {
-            return Err(format!(
-                "package {} source repository is noncanonical",
-                package.name
-            ));
-        }
-        validate_oid(&package.source_revision, "source revision")?;
-        validate_relative_path(&package.source_path)?;
-        validate_sha256(&package.source_tree_sha256, "source tree digest")?;
+        validate_package_provenance(package)?;
         for replaced in &package.replaces {
             validate_package_identity(replaced, "replaced package")?;
         }
@@ -466,6 +465,80 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_package_provenance(package: &CatalogPackage) -> Result<(), String> {
+    match package.provenance_kind.as_str() {
+        "imported" => {
+            let source_repository = package.source_repository.as_deref().ok_or_else(|| {
+                format!("imported package {} lacks source repository", package.name)
+            })?;
+            let source_revision = package.source_revision.as_deref().ok_or_else(|| {
+                format!("imported package {} lacks source revision", package.name)
+            })?;
+            let source_path = package
+                .source_path
+                .as_deref()
+                .ok_or_else(|| format!("imported package {} lacks source path", package.name))?;
+            let source_tree_sha256 = package.source_tree_sha256.as_deref().ok_or_else(|| {
+                format!("imported package {} lacks source tree digest", package.name)
+            })?;
+            if package.introduction_tree_sha256.is_some() {
+                return Err(format!(
+                    "imported package {} declares native introduction provenance",
+                    package.name
+                ));
+            }
+            if source_repository
+                != format!(
+                    "https://github.com/radrootslabs/{}",
+                    source_repository_name(source_repository)?
+                )
+            {
+                return Err(format!(
+                    "package {} source repository is noncanonical",
+                    package.name
+                ));
+            }
+            validate_oid(source_revision, "source revision")?;
+            validate_relative_path(source_path)?;
+            validate_sha256(source_tree_sha256, "source tree digest")
+        }
+        "native" => {
+            if package.source_repository.is_some()
+                || package.source_revision.is_some()
+                || package.source_path.is_some()
+                || package.source_tree_sha256.is_some()
+            {
+                return Err(format!(
+                    "native package {} must not declare imported provenance",
+                    package.name
+                ));
+            }
+            let introduction_tree_sha256 =
+                package.introduction_tree_sha256.as_deref().ok_or_else(|| {
+                    format!(
+                        "native package {} lacks introduction tree digest",
+                        package.name
+                    )
+                })?;
+            validate_sha256(introduction_tree_sha256, "introduction tree digest")?;
+            if package.state != "active"
+                || package.publish
+                || package.visibility == "public_release"
+            {
+                return Err(format!(
+                    "native package {} must be active and unpublished",
+                    package.name
+                ));
+            }
+            Ok(())
+        }
+        _ => Err(format!(
+            "package {} has unknown provenance kind {}",
+            package.name, package.provenance_kind
+        )),
+    }
+}
+
 fn validate_coverage_authority(catalog: &Catalog, coverage: &CoveragePolicy) -> Result<(), String> {
     let catalog_required = catalog
         .package
@@ -502,7 +575,7 @@ fn validate_release(
     catalog: &Catalog,
     workspace_root: &Path,
 ) -> Result<(), String> {
-    if release.schema_version != 1
+    if release.schema_version != 2
         || release.spec_id != RELEASE_ID
         || release.status != "approved_not_published"
         || release.supersedes_without_mutation != "radroots.crates.release.v1"
@@ -537,14 +610,24 @@ fn validate_release(
         }
     }
     let expected = BTreeSet::from([
-        "docs/specs/radroots_crates_release_v1.dot",
-        "docs/specs/radroots_crates_release_v1.md",
-        "docs/specs/radroots_crates_release_v1.sha256",
-        "docs/specs/radroots_crates_release_v1.toml",
-        "docs/specs/radroots_crates_release_v1_inventory.csv",
+        "contracts/crates/release_v1/radroots_crates_release_v1.dot",
+        "contracts/crates/release_v1/radroots_crates_release_v1.sha256",
+        "contracts/crates/release_v1/radroots_crates_release_v1.toml",
+        "contracts/crates/release_v1/radroots_crates_release_v1_inventory.csv",
     ]);
     if paths != expected {
-        return Err("release v2 must pin every historical v1 authority artifact".to_owned());
+        return Err("release v2 must pin every historical v1 machine artifact".to_owned());
+    }
+    if release.v1_retired_human_artifact.len() != 1 {
+        return Err("release v2 must record the retired v1 human artifact".to_owned());
+    }
+    let retired = &release.v1_retired_human_artifact[0];
+    validate_relative_path(&retired.former_path)?;
+    validate_sha256(&retired.sha256, "retired v1 human artifact digest")?;
+    if retired.former_path != "docs/specs/radroots_crates_release_v1.md"
+        || retired.sha256 != "ea2c1f0f5c53fae56a247ae7519b065c9a0d62dafb998b75a48075f4a875b5eb"
+    {
+        return Err("release v2 retired v1 human artifact drifted".to_owned());
     }
     Ok(())
 }
@@ -806,36 +889,202 @@ fn validate_active_source_provenance(
     catalog: &Catalog,
     workspace_root: &Path,
 ) -> Result<(), String> {
-    for package in catalog.package.iter().filter(|package| {
-        package.state == "active"
-            && package.source_repository == "https://github.com/radrootslabs/lib"
-    }) {
-        let output = Command::new("git")
-            .args([
-                "ls-tree",
-                "-r",
-                &package.source_revision,
-                "--",
-                &package.source_path,
-            ])
-            .current_dir(workspace_root)
-            .output()
-            .map_err(|error| format!("run git ls-tree for {}: {error}", package.name))?;
-        if !output.status.success() {
-            return Err(format!(
-                "source revision for {} is unavailable: {}",
-                package.name,
-                String::from_utf8_lossy(&output.stderr).trim()
-            ));
-        }
-        if sha256(&output.stdout) != package.source_tree_sha256 {
-            return Err(format!(
-                "source tree provenance drifted for {}",
-                package.name
-            ));
+    for package in catalog
+        .package
+        .iter()
+        .filter(|package| package.state == "active")
+    {
+        match package.provenance_kind.as_str() {
+            "imported"
+                if package.source_repository.as_deref()
+                    == Some("https://github.com/radrootslabs/lib") =>
+            {
+                validate_imported_source_provenance(package, workspace_root)?;
+            }
+            "native" => validate_native_source_provenance(package, workspace_root)?,
+            _ => {}
         }
     }
     Ok(())
+}
+
+fn validate_imported_source_provenance(
+    package: &CatalogPackage,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let source_revision = package
+        .source_revision
+        .as_deref()
+        .ok_or_else(|| format!("imported package {} lacks source revision", package.name))?;
+    let source_path = package
+        .source_path
+        .as_deref()
+        .ok_or_else(|| format!("imported package {} lacks source path", package.name))?;
+    let expected = package
+        .source_tree_sha256
+        .as_deref()
+        .ok_or_else(|| format!("imported package {} lacks source tree digest", package.name))?;
+    let output = Command::new("git")
+        .args(["ls-tree", "-r", source_revision, "--", source_path])
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|error| format!("run git ls-tree for {}: {error}", package.name))?;
+    if !output.status.success() {
+        return Err(format!(
+            "source revision for {} is unavailable: {}",
+            package.name,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    if sha256(&output.stdout) != expected {
+        return Err(format!(
+            "source tree provenance drifted for {}",
+            package.name
+        ));
+    }
+    Ok(())
+}
+
+fn validate_native_source_provenance(
+    package: &CatalogPackage,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let expected = package
+        .introduction_tree_sha256
+        .as_deref()
+        .ok_or_else(|| format!("native package {} lacks introduction digest", package.name))?;
+    let introducing_commit = native_introducing_commit(workspace_root, &package.path)?;
+    let actual = if let Some(commit) = introducing_commit {
+        committed_tree_digest(workspace_root, &commit, &package.path)?
+    } else {
+        staged_tree_digest(workspace_root, &package.path)?
+    };
+    if actual != expected {
+        return Err(format!(
+            "native introduction tree provenance drifted for {}",
+            package.name
+        ));
+    }
+    Ok(())
+}
+
+fn native_introducing_commit(
+    workspace_root: &Path,
+    package_path: &str,
+) -> Result<Option<String>, String> {
+    let output = Command::new("git")
+        .args([
+            "log",
+            "--format=%H",
+            "--diff-filter=A",
+            "--reverse",
+            "--no-renames",
+            "HEAD",
+            "--",
+            package_path,
+        ])
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|error| format!("derive native introduction commit: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "derive native introduction commit for {package_path}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let stdout = std::str::from_utf8(&output.stdout)
+        .map_err(|error| format!("native introduction history is not UTF-8: {error}"))?;
+    let Some(commit) = stdout.lines().next() else {
+        return Ok(None);
+    };
+    validate_oid(commit, "native introducing commit")?;
+    Ok(Some(commit.to_owned()))
+}
+
+fn committed_tree_digest(
+    workspace_root: &Path,
+    commit: &str,
+    package_path: &str,
+) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(["ls-tree", "-r", "-z", commit, "--", package_path])
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|error| format!("read native introduction tree: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "read native introduction tree for {package_path}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    if output.stdout.is_empty() {
+        return Err(format!(
+            "native introducing commit {commit} has no tree at {package_path}"
+        ));
+    }
+    Ok(sha256(&output.stdout))
+}
+
+fn staged_tree_digest(workspace_root: &Path, package_path: &str) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(["ls-files", "--stage", "-z", "--", package_path])
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|error| format!("read staged native tree: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "read staged native tree for {package_path}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let records = canonical_staged_tree_records(&output.stdout)?;
+    if records.is_empty() {
+        return Err(format!(
+            "native package {package_path} has no committed introduction or staged tree"
+        ));
+    }
+    Ok(sha256(&records))
+}
+
+fn canonical_staged_tree_records(input: &[u8]) -> Result<Vec<u8>, String> {
+    let mut output = Vec::new();
+    for record in input
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+    {
+        let tab = record
+            .iter()
+            .position(|byte| *byte == b'\t')
+            .ok_or_else(|| "staged tree record lacks a path separator".to_owned())?;
+        let header = std::str::from_utf8(&record[..tab])
+            .map_err(|error| format!("staged tree record header is not UTF-8: {error}"))?;
+        let fields = header.split(' ').collect::<Vec<_>>();
+        if fields.len() != 3 || fields[2] != "0" {
+            return Err("staged native tree must contain only stage-zero records".to_owned());
+        }
+        let mode = fields[0];
+        let oid = fields[1];
+        if mode.len() != 6 || !mode.bytes().all(|byte| matches!(byte, b'0'..=b'7')) {
+            return Err("staged native tree contains an invalid mode".to_owned());
+        }
+        validate_oid(oid, "staged native object")?;
+        if oid.bytes().all(|byte| byte == b'0') {
+            return Err("staged native tree contains an intent-to-add object".to_owned());
+        }
+        if record[tab + 1..].is_empty() {
+            return Err("staged native tree contains an empty path".to_owned());
+        }
+        let object_type = if mode == "160000" { "commit" } else { "blob" };
+        output.extend_from_slice(mode.as_bytes());
+        output.push(b' ');
+        output.extend_from_slice(object_type.as_bytes());
+        output.push(b' ');
+        output.extend_from_slice(oid.as_bytes());
+        output.push(b'\t');
+        output.extend_from_slice(&record[tab + 1..]);
+        output.push(0);
+    }
+    Ok(output)
 }
 
 fn render_projections(catalog: &Catalog, digest: &str) -> Vec<GeneratedArtifact> {
@@ -1095,9 +1344,58 @@ fn sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     fn checked_in_catalog() -> Catalog {
         parse_file(&crate::workspace_root(), CATALOG_RELATIVE).expect("checked-in catalog")
+    }
+
+    fn git(root: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("run git fixture command");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn git_fixture() -> TempDir {
+        let root = tempfile::tempdir().expect("temporary git fixture");
+        git(root.path(), &["init", "--quiet"]);
+        git(root.path(), &["config", "user.name", "Catalog Test"]);
+        git(
+            root.path(),
+            &["config", "user.email", "catalog-test@example.invalid"],
+        );
+        fs::write(root.path().join("README.md"), "# Fixture\n").expect("baseline file");
+        git(root.path(), &["add", "README.md"]);
+        git(root.path(), &["commit", "--quiet", "-m", "baseline"]);
+        root
+    }
+
+    fn native_package<'a>(
+        catalog: &'a mut Catalog,
+        path: &str,
+        digest: &str,
+    ) -> &'a mut CatalogPackage {
+        let package = catalog
+            .package
+            .iter_mut()
+            .find(|package| package.name == "radroots_nostrdb")
+            .expect("private package fixture");
+        package.path = path.to_owned();
+        package.provenance_kind = "native".to_owned();
+        package.source_repository = None;
+        package.source_revision = None;
+        package.source_path = None;
+        package.source_tree_sha256 = None;
+        package.introduction_tree_sha256 = Some(digest.to_owned());
+        package
     }
 
     #[test]
@@ -1114,6 +1412,114 @@ mod tests {
         assert!(validate_relative_path("crates/./sdk").is_err());
         assert!(validate_sha256(&"a".repeat(64), "digest").is_ok());
         assert!(validate_sha256(&"A".repeat(64), "digest").is_err());
+    }
+
+    #[test]
+    fn provenance_kinds_are_disjoint_and_native_is_unpublished() {
+        let mut catalog = checked_in_catalog();
+        let imported = catalog
+            .package
+            .iter_mut()
+            .find(|package| package.name == "radroots_core")
+            .expect("imported fixture");
+        imported.source_revision = None;
+        assert!(validate_package_provenance(imported).is_err());
+
+        let mut catalog = checked_in_catalog();
+        let native = native_package(&mut catalog, "crates/nostrdb", &"a".repeat(64));
+        assert!(validate_package_provenance(native).is_ok());
+        native.source_revision = Some("a".repeat(40));
+        assert!(validate_package_provenance(native).is_err());
+
+        let mut catalog = checked_in_catalog();
+        let public = catalog
+            .package
+            .iter_mut()
+            .find(|package| package.name == "radroots_core")
+            .expect("public fixture");
+        public.provenance_kind = "native".to_owned();
+        public.source_repository = None;
+        public.source_revision = None;
+        public.source_path = None;
+        public.source_tree_sha256 = None;
+        public.introduction_tree_sha256 = Some("a".repeat(64));
+        assert!(validate_package_provenance(public).is_err());
+    }
+
+    #[test]
+    fn native_provenance_matches_staged_then_derived_introduction_tree() {
+        let root = git_fixture();
+        let package_root = root.path().join("crates/native_fixture");
+        fs::create_dir_all(&package_root).expect("native package root");
+        fs::write(
+            package_root.join("Cargo.toml"),
+            "[package]\nname='fixture'\n",
+        )
+        .expect("native manifest");
+        fs::write(package_root.join("lib.rs"), "pub fn initial() {}\n").expect("native source");
+        git(root.path(), &["add", "crates/native_fixture"]);
+
+        let staged =
+            staged_tree_digest(root.path(), "crates/native_fixture").expect("staged tree digest");
+        assert_eq!(
+            native_introducing_commit(root.path(), "crates/native_fixture")
+                .expect("precommit history"),
+            None
+        );
+        let mut catalog = checked_in_catalog();
+        let package = native_package(&mut catalog, "crates/native_fixture", &staged);
+        validate_native_source_provenance(package, root.path()).expect("staged provenance");
+
+        fs::write(package_root.join("lib.rs"), "unstaged change\n").expect("unstaged change");
+        validate_native_source_provenance(package, root.path())
+            .expect("only the staged introduction is authoritative before commit");
+        git(
+            root.path(),
+            &["commit", "--quiet", "-m", "add native package"],
+        );
+
+        let introducing = native_introducing_commit(root.path(), "crates/native_fixture")
+            .expect("committed history")
+            .expect("introducing commit");
+        assert_eq!(
+            committed_tree_digest(root.path(), &introducing, "crates/native_fixture")
+                .expect("committed introduction digest"),
+            staged
+        );
+        validate_native_source_provenance(package, root.path())
+            .expect("derived committed provenance");
+
+        git(root.path(), &["add", "crates/native_fixture/lib.rs"]);
+        git(
+            root.path(),
+            &["commit", "--quiet", "-m", "change native package"],
+        );
+        validate_native_source_provenance(package, root.path())
+            .expect("later changes do not rewrite introduction provenance");
+        package.introduction_tree_sha256 = Some("b".repeat(64));
+        assert!(validate_native_source_provenance(package, root.path()).is_err());
+    }
+
+    #[test]
+    fn native_precommit_provenance_requires_stage_zero_index_records() {
+        let root = git_fixture();
+        fs::create_dir_all(root.path().join("crates/native_fixture")).expect("native package root");
+        fs::write(
+            root.path().join("crates/native_fixture/lib.rs"),
+            "pub fn unstaged() {}\n",
+        )
+        .expect("unstaged native source");
+        assert!(staged_tree_digest(root.path(), "crates/native_fixture").is_err());
+
+        let oid = "a".repeat(40);
+        let conflicted = format!("100644 {oid} 1\tcrates/native_fixture/lib.rs\0");
+        assert!(canonical_staged_tree_records(conflicted.as_bytes()).is_err());
+
+        let intent_to_add = format!(
+            "100644 {} 0\tcrates/native_fixture/lib.rs\0",
+            "0".repeat(40)
+        );
+        assert!(canonical_staged_tree_records(intent_to_add.as_bytes()).is_err());
     }
 
     #[test]

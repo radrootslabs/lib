@@ -299,6 +299,9 @@ fn usage() {
         "  cargo xtask coverage refresh-summary [--reports-root <dir>] [--out <file>] [--status-out <file>]"
     );
     eprintln!("  cargo xtask hygiene forbidden-identifiers");
+    eprintln!(
+        "  cargo xtask hygiene prototype-contracts [--config <repo-relative-path>] [--strict|--report-only]"
+    );
     eprintln!("  cargo xtask source-lock --consumer-root <absolute-directory>");
     eprintln!(
         "  cargo xtask source materialize --consumer-root <absolute-directory> --cache-root <absolute-directory> --mode <prefetch|offline>"
@@ -782,6 +785,8 @@ mod tests {
         run(&["coverage".to_string(), "help".to_string()]).expect("root run coverage");
         run(&["hygiene".to_string(), "forbidden-identifiers".to_string()])
             .expect("hygiene forbidden identifiers");
+        run(&["hygiene".to_string(), "prototype-contracts".to_string()])
+            .expect("report prototype contracts");
 
         let _ = fs::remove_dir_all(out_dir);
     }

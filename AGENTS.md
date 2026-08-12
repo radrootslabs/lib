@@ -14,24 +14,46 @@ This file exists for compatibility with tools that look for AGENTS.md.
 
 ## 2. Source of intent
 
-- Read `docs/specs/README.md` and
-  `docs/specs/radroots_crates_release_v1.md` before changing a public package,
-  package identity, dependency, feature, or release control.
-- The Markdown specification is normative. Its TOML catalog is the executable
-  package and dependency representation; the CSV and DOT files are review
-  aids.
+- Read `contracts/crates/release.v2.toml`,
+  `contracts/crates/release_v1/radroots_crates_release_v1.toml`, and
+  `contracts/crates/catalog.v2.toml` before changing a public package, package
+  identity, dependency, feature, or release control.
+- Machine contracts under `contracts/**` are the standalone authority. Human
+  specifications, decisions, runbooks, and qualification evidence belong
+  under the parent monorepo's `docs/oss/lib/**` authority and must never become
+  a standalone build, test, package, or release input.
+- The pre-implementation service-event reservation is
+  `contracts/architecture/decisions/services_hardening_events.v1.json`.
+  Service-event source, registry, generated, and consumer work must implement
+  that exact kind, tag, cardinality, query, and supersession contract; it may
+  not reinterpret the reservation from current prototype wire behavior.
+- The pre-implementation local-admin, process-exit, doctor, readiness,
+  peer-credential, systemd, and bare-Rust host decisions are reserved by
+  `contracts/architecture/decisions/services_hardening_host.v1.json`.
+  Service-host and service-owned operator contracts must implement or narrow
+  that boundary without adding a second transport, exit map, or readiness
+  authority.
+- Source-lock consumer identities include `sdk`, `mobile`, `studio`, `myc`,
+  and `rhi`. Only the first three are generated-artifact product identities;
+  accepting a service consumer marker must not expose an artifact route.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
-  `docs/implementation/deviations.toml`, following
-  `docs/implementation/DEVIATIONS.md`, before proceeding. Validate it with
-  `cargo xtask architecture`.
+  `contracts/architecture/deviations.toml` before proceeding. Validate it with
+  `cargo xtask architecture`; a normative architecture exception also requires
+  the applicable machine decision under `contracts/architecture/decisions/**`.
+  Deviation anchors must resolve the Release V1 TOML through a validated
+  selector: `repositories.<name>`, `repository_policy`, `release_policy`,
+  `quality_policy.coverage`, or `package.<name>`.
 
 ## 3. Repository operating model
 
 - This is a public open-source library workspace; optimize for durable library design, portability, determinism, and explicit contracts.
 - Keep release and validation automation forge-agnostic; repo-owned xtask commands, Nix apps, tags, and contract metadata are canonical, while committed provider-specific workflow automation is not.
-- `.github/**` and capsule-local CI workflows are forbidden. Any required monorepo orchestration belongs exclusively to the parent repository's root `.act/**` authority and must not be copied into this standalone capsule.
+- Do not add or retain tracked `docs/**`, `.github/**`, or `.act/**` content.
+  Keep validation forge-agnostic. Any required monorepo orchestration belongs
+  exclusively to the parent repository's root `.act/**` authority and must not
+  be copied into this standalone capsule.
 - Prefer clean target-state changes over compatibility scaffolding unless compatibility is explicitly required.
 - Stay within the requested scope and the smallest coherent file set.
 - Do not fold unrelated cleanup, speculative refactors, or roadmap work into the same change.
@@ -59,10 +81,16 @@ Before editing code:
 - `nix run .#release-preflight`
 - `cargo xtask architecture` for controlled deviation records and local spec
   anchors
+- Public API baselines live in `contracts/api_baselines/**`. Regenerate one
+  with `cargo-public-api` `0.52.0` and rustdoc JSON from
+  `nightly-2026-07-16`, writing the reviewed output back to that directory.
 - targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
 - `cargo xtask dto-roots --write` after changing configured DTO exports and
   `cargo xtask dto-roots --check` for exact generated-root freshness
 - targeted `cargo xtask contract ...`, `cargo xtask coverage ...`, `cargo xtask release ...`, or `cargo xtask hygiene ...` only when narrowing a repo-owned workflow
+- `cargo xtask hygiene prototype-contracts` for the governed report-only
+  service-prototype census; use `--strict` only when the cleanup sequence has
+  made every non-allowlisted finding release-blocking
 - if Beads is active, read `.beads/PRIME.md`
 
 ## 6. Rust engineering rules
@@ -83,6 +111,18 @@ Before editing code:
 ## 7. Architecture, contract, and release discipline
 
 - `contracts/` and `tools/xtask` are authoritative for core-library contracts, conformance, coverage, hygiene, and release-candidate governance.
+- `contracts/crates/catalog.v2.toml` is the package-catalog authority. Preserve
+  imported packages as `provenance_kind = "imported"` with their immutable
+  repository, revision, path, and tree digest. New repository-native packages
+  must be active, unpublished `provenance_kind = "native"` entries and must
+  store only `introduction_tree_sha256`; never embed a self-referential
+  introducing commit OID.
+- Before validating a new native catalog entry, stage the complete package path
+  and run `cargo xtask catalog check` or `cargo xtask catalog write`. The
+  pre-commit digest is derived from stage-zero index records, not the mutable
+  worktree. After the introducing commit, the same command derives the first
+  adding commit from repository history and verifies its immutable tree. Do
+  not rewrite that digest for later source changes.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 - This repository owns packages 1-17 in `radroots.crates.release.v1`, from
@@ -99,7 +139,8 @@ Before editing code:
   feature closures.
 - During the migration, every package remains non-publishable until its
   package-realistic release gates pass and publication is explicitly
-  authorized. Follow `docs/implementation/PUBLICATION_FREEZE.md`.
+  authorized. `contracts/releases/publish_policy.toml` is the machine
+  authority; validation metadata does not authorize upload.
 
 ## 8. Service hardening boundaries
 
@@ -141,9 +182,9 @@ trusted-publisher configuration without explicit authorization.
 - Split unrelated changes into separate commits.
 - If repository evidence proves a planned step obsolete or unsafe, record the
   evidence, affected specification anchor, disposition, and validation in
-  `docs/implementation/deviations.toml`, following
-  `docs/implementation/DEVIATIONS.md`. A normative architecture change also
-  requires an approved decision record. Never silently skip or reorder work.
+  `contracts/architecture/deviations.toml`. A normative architecture change
+  also requires an approved machine decision under
+  `contracts/architecture/decisions/**`. Never silently skip or reorder work.
 
 ## 11. Definition of done
 

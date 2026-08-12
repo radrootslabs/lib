@@ -1,0 +1,118 @@
+{
+  "schema": "radroots.services-hardening.event-decisions.v1",
+  "contract_version": 1,
+  "decision_state": "reserved_preimplementation",
+  "trade_mutation": {
+    "contract_family": "radroots.trade.mutation-index.v1",
+    "event_class": "regular_immutable",
+    "event_kinds": [
+      { "mutation_type": "proposal", "kind": 3470, "contract_id": "radroots.trade.proposal.v1" },
+      { "mutation_type": "decision", "kind": 3471, "contract_id": "radroots.trade.decision.v1" },
+      { "mutation_type": "revision_proposal", "kind": 3472, "contract_id": "radroots.trade.revision_proposal.v1" },
+      { "mutation_type": "revision_decision", "kind": 3473, "contract_id": "radroots.trade.revision_decision.v1" },
+      { "mutation_type": "cancellation", "kind": 3474, "contract_id": "radroots.trade.cancellation.v1" }
+    ],
+    "canonical_tag_order": [
+      "contract",
+      "d:trade",
+      "x:mutation",
+      "x:root",
+      "x:parent_sorted",
+      "p:buyer",
+      "p:seller"
+    ],
+    "tags": [
+      { "name": "contract", "marker": "", "cardinality": "exactly_one", "value": "content_contract_id", "relay_filter": "none" },
+      { "name": "d", "marker": "", "cardinality": "exactly_one", "value": "trade_id_lower_hex_32", "relay_filter": "#d" },
+      { "name": "x", "marker": "mutation", "cardinality": "exactly_one", "value": "mutation_id_lower_hex_64", "relay_filter": "#x" },
+      { "name": "x", "marker": "root", "cardinality": "proposal_zero_other_mutations_exactly_one", "value": "root_mutation_id_lower_hex_64", "relay_filter": "#x" },
+      { "name": "x", "marker": "parent", "cardinality": "proposal_zero_other_mutations_one_to_four_sorted_unique", "value": "parent_mutation_id_lower_hex_64", "relay_filter": "#x" },
+      { "name": "p", "marker": "", "cardinality": "first_of_exactly_two", "value": "buyer_pubkey_lower_hex_64", "relay_filter": "#p" },
+      { "name": "p", "marker": "", "cardinality": "second_of_exactly_two", "value": "seller_pubkey_lower_hex_64", "relay_filter": "#p" }
+    ],
+    "filter_contract": {
+      "trade_id": "kind plus #d",
+      "mutation_id": "kind plus #x followed by marker verification",
+      "root_mutation_id": "kind plus #x followed by marker verification",
+      "party_pubkey": "kind plus #p followed by exact ordered buyer-first and seller-second comparison against canonical content"
+    },
+    "validation": {
+      "structural_tags_are_derived": true,
+      "unknown_structural_marker_rejected": true,
+      "duplicate_or_conflicting_structural_tag_rejected": true,
+      "caller_structural_tags_forbidden": true,
+      "legacy_contract_d_p_e_shape_accepted": false
+    }
+  },
+  "rhi_attestation": {
+    "contract_id": "radroots.rhi.evidence_attestation.v1",
+    "kind_constant": "KIND_RHI_EVIDENCE_ATTESTATION",
+    "kind": 3441,
+    "event_class": "regular_immutable",
+    "replaceability": "none",
+    "content_encoding": "RFC8785_JCS_JSON_UTF8",
+    "statement_digest": {
+      "algorithm": "sha256",
+      "domain_separator_utf8_nul": "radroots:rhi-evidence-attestation-statement:v1",
+      "payload_fields": [
+        "contract_id",
+        "contract_version",
+        "issuer_pubkey",
+        "trade_id",
+        "claim_mutation_id",
+        "outcome",
+        "reason_codes",
+        "reducer_contract_id",
+        "reducer_contract_version",
+        "projection_digest",
+        "evidence_manifest_digest",
+        "evidence_policy_digest",
+        "observed_at_unix_s",
+        "attestation_method",
+        "supersedes_report_id",
+        "supersedes_event_id",
+        "trade_generation"
+      ],
+      "excluded_fields": ["report_id", "statement_digest", "event_id", "signature"],
+      "formula": "SHA256(domain_separator_utf8 || 0x00 || RFC8785(payload)_utf8)"
+    },
+    "fixed_values": {
+      "contract_version": 1,
+      "attestation_method": "signed_evidence_snapshot",
+      "outcomes": ["valid", "invalid", "indeterminate"]
+    },
+    "canonical_tag_order": [
+      "contract",
+      "d:trade",
+      "x:claim",
+      "x:statement",
+      "t:outcome",
+      "x:supersedes_report",
+      "e:supersedes_event"
+    ],
+    "tags": [
+      { "name": "contract", "marker": "", "cardinality": "exactly_one", "value": "radroots.rhi.evidence_attestation.v1", "relay_filter": "none" },
+      { "name": "d", "marker": "", "cardinality": "exactly_one", "value": "trade_id_lower_hex_32", "relay_filter": "#d" },
+      { "name": "x", "marker": "claim", "cardinality": "exactly_one", "value": "claim_mutation_id_lower_hex_64", "relay_filter": "#x" },
+      { "name": "x", "marker": "statement", "cardinality": "exactly_one", "value": "statement_digest_lower_hex_64", "relay_filter": "#x" },
+      { "name": "t", "marker": "", "cardinality": "exactly_one", "value": "radroots:rhi-outcome:<valid|invalid|indeterminate>", "relay_filter": "#t" },
+      { "name": "x", "marker": "supersedes_report", "cardinality": "zero_or_one", "value": "superseded_statement_digest_lower_hex_64", "relay_filter": "#x" },
+      { "name": "e", "marker": "", "cardinality": "zero_or_one", "value": "superseded_nostr_event_id_lower_hex_64", "relay_filter": "#e" }
+    ],
+    "supersession": {
+      "requires_both_references_or_neither": true,
+      "report_id_equals_statement_digest": true,
+      "current_selection": "highest_committed_trade_generation_then_observed_at_then_statement_digest",
+      "relay_arrival_order_authoritative": false,
+      "deletion_request_changes_retained_history": false
+    },
+    "validation": {
+      "author_equals_issuer": true,
+      "content_is_exact_canonical_report": true,
+      "structural_tags_are_derived": true,
+      "duplicate_or_conflicting_structural_tag_rejected": true,
+      "caller_structural_tags_forbidden": true,
+      "reason_codes_sorted_unique": true
+    }
+  }
+}

@@ -10,7 +10,7 @@ const VERIFICATION: &str = include_str!("../src/verification/v1.rs");
 const EXAMPLE: &str = include_str!("../examples/verify_profile.rs");
 const FUZZ_LOCK: &str = include_str!("../../../fuzz/event_codec/Cargo.lock");
 const FUZZ_MANIFEST: &str = include_str!("../../../fuzz/event_codec/Cargo.toml");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event_codec.txt");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_event_codec.txt");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {

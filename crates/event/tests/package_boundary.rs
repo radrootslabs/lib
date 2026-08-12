@@ -22,7 +22,7 @@ const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
 const ADMISSION: &str = include_str!("../src/admission.rs");
 const VERIFICATION: &str = include_str!("../src/verification.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event.txt");
+const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_event.txt");
 const CODEC_MANIFEST: &str = include_str!("../../event_codec/Cargo.toml");
 
 #[test]

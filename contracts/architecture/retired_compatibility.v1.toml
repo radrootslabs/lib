@@ -1,0 +1,43 @@
+schema_version = 1
+contract_id = "radroots.retired_compatibility.v1"
+status = "enforced"
+
+[[retired_bridge]]
+id = "radroots_authority"
+final_owners = ["radroots_signing"]
+removal_step = 313
+
+[[retired_bridge]]
+id = "radroots_geocoder"
+final_owners = ["radroots_geonames"]
+removal_step = 313
+
+[[retired_bridge]]
+id = "radroots_net"
+final_owners = ["radroots_transport"]
+removal_step = 301
+
+[[retired_bridge]]
+id = "radroots_nostr_connect_hidden_prelude"
+final_owners = ["radroots_nostr_connect"]
+removal_step = 313
+
+[[retired_bridge]]
+id = "radroots_nostr_connect_prefixed_client_bridge"
+final_owners = ["radroots_nostr_connect"]
+removal_step = 313
+
+[[retired_bridge]]
+id = "radroots_nostr_signer"
+final_owners = ["radroots_nostr_connect", "radroots_signing"]
+removal_step = 313
+
+[[retired_bridge]]
+id = "radroots_nostr_runtime"
+final_owners = ["radroots_transport_nostr"]
+removal_step = 301
+
+[[retired_bridge]]
+id = "nostrdb_runtime_adapter"
+final_owners = ["radroots_storage_sqlite"]
+removal_step = 301

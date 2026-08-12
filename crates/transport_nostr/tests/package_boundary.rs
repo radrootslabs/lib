@@ -5,8 +5,8 @@ use std::path::Path;
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
 const EXAMPLE: &str = include_str!("../examples/configure_transport.rs");
-const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_transport_nostr.txt");
-const API_INDEX: &str = include_str!("../../../docs/api/README.md");
+const PUBLIC_API: &str =
+    include_str!("../../../contracts/api_baselines/radroots_transport_nostr.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
 
 #[test]
@@ -60,9 +60,9 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "## Serialization and diagnostics",
         "## Features and runtime requirements",
         "## Intended consumers",
-        "radroots_crates_release_v1.md#15-radroots_transport_nostr",
+        "radroots_crates_release_v1.toml",
         "examples/configure_transport.rs",
-        "docs/api/radroots_transport_nostr.txt",
+        "contracts/api_baselines/radroots_transport_nostr.txt",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -113,9 +113,6 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
             "reviewed public API baseline exposes `{forbidden}`"
         );
     }
-    assert!(API_INDEX.contains(
-        "| `radroots_transport_nostr` | [`radroots_transport_nostr.txt`](radroots_transport_nostr.txt) |"
-    ));
 }
 
 fn radroots_dependency_keys(manifest: &str) -> BTreeSet<&str> {

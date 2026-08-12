@@ -42,10 +42,6 @@ let
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates
-        ../../docs/api
-        ../../docs/decisions
-        ../../docs/implementation
-        ../../docs/specs
         ../../fuzz
         ../../tools
       ]
@@ -195,6 +191,7 @@ let
   '';
   contractCommand = ''
     cargo run -q -p xtask -- hygiene forbidden-identifiers
+    cargo run -q -p xtask -- hygiene prototype-contracts
     cargo check -q ${coreContractCargoArgs}
     cargo test -q ${coreContractCargoArgs}
     cargo run -q -p xtask -- contract validate

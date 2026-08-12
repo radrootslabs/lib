@@ -90,6 +90,6 @@ use radroots::sdk;
 ```
 
 The normative package charter is the [`radroots` release-v1
-specification](../../docs/specs/radroots_crates_release_v1.md#19-radroots).
+specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 The reviewed pre-release public API is recorded in the
-[`radroots` baseline](../../docs/api/radroots.txt).
+[`radroots` baseline](../../contracts/api_baselines/radroots.txt).

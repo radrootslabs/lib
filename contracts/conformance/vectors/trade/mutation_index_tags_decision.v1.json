@@ -1,0 +1,147 @@
+{
+  "suite": "trade_mutation_index_decision",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "trade_mutation_index_all_fields_001",
+      "kind": "trade.mutation_index_tags.valid",
+      "input": {
+        "contract_id": "radroots.trade.revision_proposal.v1",
+        "trade_id": "11111111111111111111111111111111",
+        "mutation_id": "2222222222222222222222222222222222222222222222222222222222222222",
+        "root_mutation_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "parent_mutation_ids": [
+          "4444444444444444444444444444444444444444444444444444444444444444",
+          "5555555555555555555555555555555555555555555555555555555555555555"
+        ],
+        "buyer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seller_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "expected": {
+        "kind": 3472,
+        "tags": [
+          ["contract", "radroots.trade.revision_proposal.v1"],
+          ["d", "11111111111111111111111111111111"],
+          ["x", "2222222222222222222222222222222222222222222222222222222222222222", "mutation"],
+          ["x", "3333333333333333333333333333333333333333333333333333333333333333", "root"],
+          ["x", "4444444444444444444444444444444444444444444444444444444444444444", "parent"],
+          ["x", "5555555555555555555555555555555555555555555555555555555555555555", "parent"],
+          ["p", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+        ]
+      }
+    },
+    {
+      "id": "trade_mutation_index_proposal_002",
+      "kind": "trade.mutation_index_tags.valid",
+      "input": {
+        "contract_id": "radroots.trade.proposal.v1",
+        "root_mutation_id": null,
+        "parent_mutation_ids": []
+      },
+      "expected": {
+        "kind": 3470,
+        "tag_names_and_semantics": ["contract", "d:trade", "x:mutation", "p:buyer-first", "p:seller-second"]
+      }
+    },
+    {
+      "id": "trade_mutation_index_decision_003",
+      "kind": "trade.mutation_index_tags.valid",
+      "input": {
+        "contract_id": "radroots.trade.decision.v1",
+        "root_mutation_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "parent_mutation_ids": ["4444444444444444444444444444444444444444444444444444444444444444"]
+      },
+      "expected": {
+        "kind": 3471,
+        "tag_names_and_semantics": ["contract", "d:trade", "x:mutation", "x:root", "x:parent", "p:buyer-first", "p:seller-second"]
+      }
+    },
+    {
+      "id": "trade_mutation_index_revision_decision_004",
+      "kind": "trade.mutation_index_tags.valid",
+      "input": {
+        "contract_id": "radroots.trade.revision_decision.v1",
+        "root_mutation_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "parent_mutation_ids": ["4444444444444444444444444444444444444444444444444444444444444444"]
+      },
+      "expected": {
+        "kind": 3473,
+        "tag_names_and_semantics": ["contract", "d:trade", "x:mutation", "x:root", "x:parent", "p:buyer-first", "p:seller-second"]
+      }
+    },
+    {
+      "id": "trade_mutation_index_cancellation_005",
+      "kind": "trade.mutation_index_tags.valid",
+      "input": {
+        "contract_id": "radroots.trade.cancellation.v1",
+        "root_mutation_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "parent_mutation_ids": ["4444444444444444444444444444444444444444444444444444444444444444"]
+      },
+      "expected": {
+        "kind": 3474,
+        "tag_names_and_semantics": ["contract", "d:trade", "x:mutation", "x:root", "x:parent", "p:buyer-first", "p:seller-second"]
+      }
+    },
+    {
+      "id": "trade_mutation_index_missing_mutation_006",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "remove_tag": ["x", "mutation"] },
+      "expected": { "layer": "wire", "error_code": "missing_mutation_tag" }
+    },
+    {
+      "id": "trade_mutation_index_duplicate_trade_007",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "append_tag": ["d", "99999999999999999999999999999999"] },
+      "expected": { "layer": "wire", "error_code": "duplicate_trade_tag" }
+    },
+    {
+      "id": "trade_mutation_index_proposal_with_root_008",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_proposal_002", "append_tag": ["x", "3333333333333333333333333333333333333333333333333333333333333333", "root"] },
+      "expected": { "layer": "wire", "error_code": "unexpected_root_tag" }
+    },
+    {
+      "id": "trade_mutation_index_nonproposal_without_root_009",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "remove_tag": ["x", "root"] },
+      "expected": { "layer": "wire", "error_code": "missing_root_tag" }
+    },
+    {
+      "id": "trade_mutation_index_unsorted_parents_010",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "swap_tag_indexes": [4, 5] },
+      "expected": { "layer": "wire", "error_code": "noncanonical_parent_order" }
+    },
+    {
+      "id": "trade_mutation_index_wrong_party_order_011",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "swap_tag_indexes": [6, 7] },
+      "expected": { "layer": "wire", "error_code": "party_tag_order_mismatch" }
+    },
+    {
+      "id": "trade_mutation_index_legacy_parent_event_tag_012",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "replace_tag": { "index": 4, "tag": ["e", "4444444444444444444444444444444444444444444444444444444444444444"] } },
+      "expected": { "layer": "wire", "error_code": "legacy_parent_event_tag" }
+    },
+    {
+      "id": "trade_mutation_index_caller_structural_tag_013",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "builder_extra_tags": [["d", "11111111111111111111111111111111"]] },
+      "expected": { "layer": "builder", "error_code": "caller_structural_tag_forbidden" }
+    },
+    {
+      "id": "trade_mutation_index_proposal_with_parent_014",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_proposal_002", "append_tag": ["x", "4444444444444444444444444444444444444444444444444444444444444444", "parent"] },
+      "expected": { "layer": "wire", "error_code": "unexpected_parent_tag" }
+    },
+    {
+      "id": "trade_mutation_index_nonproposal_without_parent_015",
+      "kind": "trade.mutation_index_tags.invalid",
+      "input": { "base": "trade_mutation_index_all_fields_001", "remove_tags": [["x", "parent"]] },
+      "expected": { "layer": "wire", "error_code": "missing_parent_tag" }
+    }
+  ]
+}

@@ -59,9 +59,9 @@ Supporting states and constructors remain in these modules:
 - `url` — structural blob URLs and the stricter approved-reference state.
 
 The normative responsibility and dependency boundary are defined by the
-[`radroots_blossom` package charter](../../docs/specs/radroots_crates_release_v1.md).
-The reviewed pre-release surface is recorded in
-[`docs/api`](../../docs/api/README.md).
+[`radroots_blossom` package charter](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
+The reviewed pre-release surface is recorded in the
+[`radroots_blossom` API baseline](../../contracts/api_baselines/radroots_blossom.txt).
 
 ## Features
 
