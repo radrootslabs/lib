@@ -91,7 +91,23 @@ impl RadrootsNostrdbFilterSpec {
     }
 
     pub(crate) fn to_nostrdb_filter(&self) -> Result<nostrdb::Filter, RadrootsNostrdbError> {
+        let is_empty = self.event_ids_hex.is_empty()
+            && self.authors_hex.is_empty()
+            && self.kinds.is_empty()
+            && self.since_unix.is_none()
+            && self.until_unix.is_none()
+            && self.limit.is_none()
+            && self.search.is_none();
+
         let mut builder = nostrdb::Filter::new();
+
+        // nostrdb 0.9 finalizes an empty native filter through realloc(ptr, 0),
+        // which can free the allocation before its Rust Drop frees it again.
+        // A lower bound of zero preserves the match-all meaning for u64 times
+        // while ensuring the native filter owns a nonempty finalized buffer.
+        if is_empty {
+            builder = builder.since(0);
+        }
 
         if !self.event_ids_hex.is_empty() {
             let event_ids = self
@@ -193,7 +209,14 @@ mod tests {
         assert_eq!(spec.search(), Some("coffee"));
 
         let empty = RadrootsNostrdbFilterSpec::new();
-        let _ = empty.to_nostrdb_filter().expect("empty nostrdb filter");
+        let empty_filter = empty.to_nostrdb_filter().expect("empty nostrdb filter");
+        assert_eq!(empty_filter.num_elements(), 1);
+        assert_eq!(empty_filter.since(), Some(0));
+
+        for _ in 0..512 {
+            let filter = empty.to_nostrdb_filter().expect("repeated empty filter");
+            assert_eq!(filter.since(), Some(0));
+        }
     }
 
     #[test]
