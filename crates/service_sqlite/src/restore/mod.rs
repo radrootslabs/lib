@@ -5,6 +5,9 @@ mod marker;
 mod recover;
 mod stage;
 
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod process_tests;
+
 pub use finalize::finalize_staged_restore;
 pub use stage::{StagedServiceRestore, stage_verified_restore};
 

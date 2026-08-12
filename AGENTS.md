@@ -284,7 +284,16 @@ Before editing code:
   ordinary controllers have zero behavior. Never export failpoint types, use
   process-global failpoint state, select a point from environment or service
   configuration, or add a Cargo feature that alters production behavior.
-  Process-level crash and signal qualification remains a separate layer.
+  Process-level crash and signal qualification must remain in private Cargo
+  test binaries. Pass only one bounded temporary root over stdin, require a
+  fixed stdout token from an occurrence-aware failpoint barrier before
+  `SIGKILL`, and retain a parent kill-on-drop watchdog. Cover writer-lock death
+  and the exact pre-marker, prepared, marker-scratch, installed-replacement,
+  and terminal-marker restore topologies under a permissive child umask.
+  Require Linux execution for OS-level qualification; macOS is developer
+  evidence only. Do not ship a helper binary, add production signal/process
+  behavior, poll filesystem state for crash timing, or claim abrupt power-loss
+  durability from process-death tests.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

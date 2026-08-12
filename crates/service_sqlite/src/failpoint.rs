@@ -3,7 +3,13 @@
 use core::fmt;
 
 #[cfg(test)]
-use std::sync::{Arc, Mutex};
+use std::{
+    io::{self, Write},
+    sync::{Arc, Condvar, Mutex},
+};
+
+#[cfg(test)]
+const PROCESS_BARRIER_READY: &[u8] = b"\nRSHR_STEP073_READY\n";
 
 /// Closed inventory of durability edges exercised by the crash-boundary harness.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,18 +132,63 @@ struct TestState {
     fired: bool,
     reached: Vec<DurabilityFailpoint>,
     observations: Vec<(DurabilityFailpoint, u8)>,
+    process_barrier: Option<TestProcessBarrier>,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+struct TestProcessBarrier {
+    point: DurabilityFailpoint,
+    occurrence: u8,
+    seen: u8,
+    gate: Arc<TestProcessBarrierGate>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct TestProcessBarrierGate {
+    state: Mutex<TestProcessBarrierGateState>,
+    changed: Condvar,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct TestProcessBarrierGateState {
+    ready: bool,
+    released: bool,
 }
 
 impl DurabilityFailpoints {
     pub(crate) fn hit(&self, point: DurabilityFailpoint) -> Result<(), DurabilityFailpointError> {
         #[cfg(test)]
         {
-            let mut state = self.state.lock().map_err(|_| DurabilityFailpointError)?;
-            if state.reached.len() < DurabilityFailpoint::ALL.len() {
-                state.reached.push(point);
+            let (injected, process_gate) = {
+                let mut state = self.state.lock().map_err(|_| DurabilityFailpointError)?;
+                if state.reached.len() < DurabilityFailpoint::ALL.len() {
+                    state.reached.push(point);
+                }
+                let injected = state.armed == Some(point) && !state.fired;
+                let process_gate = if !state.fired {
+                    state.process_barrier.as_mut().and_then(|barrier| {
+                        if barrier.point != point {
+                            return None;
+                        }
+                        barrier.seen = barrier.seen.saturating_add(1);
+                        (barrier.seen == barrier.occurrence).then(|| Arc::clone(&barrier.gate))
+                    })
+                } else {
+                    None
+                };
+                if injected || process_gate.is_some() {
+                    state.fired = true;
+                }
+                (injected, process_gate)
+            };
+            if let Some(process_gate) = process_gate {
+                process_gate.notify_and_wait()?;
+                return Err(DurabilityFailpointError);
             }
-            if state.armed == Some(point) && !state.fired {
-                state.fired = true;
+            if injected {
                 return Err(DurabilityFailpointError);
             }
         }
@@ -154,8 +205,57 @@ impl DurabilityFailpoints {
                 fired: false,
                 reached: Vec::new(),
                 observations: Vec::new(),
+                process_barrier: None,
             })),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn process_barrier(point: DurabilityFailpoint, occurrence: u8) -> Self {
+        assert!(
+            matches!(occurrence, 1 | 2),
+            "process occurrence must be 1 or 2"
+        );
+        Self {
+            state: Arc::new(Mutex::new(TestState {
+                armed: None,
+                fired: false,
+                reached: Vec::new(),
+                observations: Vec::new(),
+                process_barrier: Some(TestProcessBarrier {
+                    point,
+                    occurrence,
+                    seen: 0,
+                    gate: Arc::new(TestProcessBarrierGate::default()),
+                }),
+            })),
+        }
+    }
+
+    #[cfg(test)]
+    fn wait_for_process_barrier(&self) {
+        let gate = self
+            .state
+            .lock()
+            .expect("durability failpoint state")
+            .process_barrier
+            .as_ref()
+            .map(|barrier| Arc::clone(&barrier.gate))
+            .expect("process barrier");
+        gate.wait_until_ready();
+    }
+
+    #[cfg(test)]
+    fn release_process_barrier(&self) {
+        let gate = self
+            .state
+            .lock()
+            .expect("durability failpoint state")
+            .process_barrier
+            .as_ref()
+            .map(|barrier| Arc::clone(&barrier.gate))
+            .expect("process barrier");
+        gate.release();
     }
 
     #[cfg(test)]
@@ -202,6 +302,44 @@ impl DurabilityFailpoints {
     }
 }
 
+#[cfg(test)]
+impl TestProcessBarrierGate {
+    fn notify_and_wait(&self) -> Result<(), DurabilityFailpointError> {
+        {
+            let mut state = self.state.lock().map_err(|_| DurabilityFailpointError)?;
+            state.ready = true;
+            self.changed.notify_all();
+        }
+        let mut stdout = io::stdout().lock();
+        stdout
+            .write_all(PROCESS_BARRIER_READY)
+            .and_then(|()| stdout.flush())
+            .map_err(|_| DurabilityFailpointError)?;
+        let state = self.state.lock().map_err(|_| DurabilityFailpointError)?;
+        drop(
+            self.changed
+                .wait_while(state, |state| !state.released)
+                .map_err(|_| DurabilityFailpointError)?,
+        );
+        Ok(())
+    }
+
+    fn wait_until_ready(&self) {
+        let state = self.state.lock().expect("process barrier gate");
+        drop(
+            self.changed
+                .wait_while(state, |state| !state.ready)
+                .expect("process barrier ready"),
+        );
+    }
+
+    fn release(&self) {
+        let mut state = self.state.lock().expect("process barrier gate");
+        state.released = true;
+        self.changed.notify_all();
+    }
+}
+
 impl fmt::Debug for DurabilityFailpoints {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("DurabilityFailpoints([redacted])")
@@ -223,6 +361,7 @@ impl std::error::Error for DurabilityFailpointError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
 
     #[test]
     fn every_closed_point_fires_once_on_its_owned_plan() {
@@ -251,5 +390,25 @@ mod tests {
             DurabilityFailpoints::default().hit(DurabilityFailpoint::CloseBeforeDrain),
             Ok(())
         );
+    }
+
+    #[test]
+    fn process_barrier_waits_for_the_selected_occurrence_and_releases_once() {
+        let point = DurabilityFailpoint::MarkerAdvanceAfterDirectorySync;
+        let plan = DurabilityFailpoints::process_barrier(point, 2);
+        let worker_plan = plan.clone();
+        let worker = thread::spawn(move || {
+            assert_eq!(worker_plan.hit(point), Ok(()));
+            worker_plan.hit(point)
+        });
+
+        plan.wait_for_process_barrier();
+        assert!(plan.fired());
+        plan.release_process_barrier();
+        assert_eq!(
+            worker.join().expect("barrier worker"),
+            Err(DurabilityFailpointError)
+        );
+        assert_eq!(plan.reached(), [point, point]);
     }
 }

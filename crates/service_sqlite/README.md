@@ -260,7 +260,22 @@ exported from the crate root. There is no process-global failpoint state,
 environment or configuration selector, Cargo feature, hidden task, timer,
 panic, or process-exit behavior. These deterministic in-process edges qualify
 error ordering, rollback, cleanup, recovery evidence, and one-shot retry
-semantics; process crashes and signals remain a separate qualification layer.
+semantics.
+
+Process-crash qualification remains test-only and reuses Cargo's private
+library and integration-test binaries; the crate ships no helper executable or
+signal handler. A parent sends one bounded temporary root over stdin, waits for
+a fixed stdout readiness token from an occurrence-aware failpoint barrier, and
+then issues `SIGKILL`. The suite proves cross-process writer contention and
+lock release plus five restore boundaries: orphan-stage refusal before a
+durable marker, prepared rollback, interrupted marker-scratch promotion,
+installed-replacement recovery, and terminal-marker cleanup. A permissive
+child umask cannot broaden the fixed `0700` state directory or `0600` lock,
+database, stage, backup, marker, and marker-scratch artifacts. Linux execution
+is required for OS-level qualification; macOS execution is developer evidence,
+and unsupported targets compile the production library without the native
+process harness. These tests exercise process death at named durable edges and
+do not claim abrupt power-loss or storage-device durability behavior.
 
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness

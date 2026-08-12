@@ -22,10 +22,12 @@ const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
 const RESTORE_FINALIZE_SOURCE: &str = include_str!("../src/restore/finalize.rs");
 const RESTORE_RECOVER_SOURCE: &str = include_str!("../src/restore/recover.rs");
 const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
+const RESTORE_PROCESS_TEST_SOURCE: &str = include_str!("../src/restore/process_tests.rs");
 const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status/mod.rs");
 const DISK_SOURCE: &str = include_str!("../src/status/disk.rs");
 const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
+const WRITER_PROCESS_TEST_SOURCE: &str = include_str!("writer_authority.rs");
 
 #[test]
 fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
@@ -248,7 +250,14 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "no failpoint type or selector is exported from the crate root",
         "no process-global failpoint state, environment or configuration selector, Cargo feature",
         "hidden task, timer, panic, or process-exit behavior",
-        "process crashes and signals remain a separate qualification layer",
+        "Process-crash qualification remains test-only",
+        "one bounded temporary root over stdin",
+        "fixed stdout readiness token from an occurrence-aware failpoint barrier",
+        "orphan-stage refusal before a durable marker",
+        "interrupted marker-scratch promotion",
+        "permissive child umask cannot broaden",
+        "Linux execution is required for OS-level qualification",
+        "do not claim abrupt power-loss or storage-device durability behavior",
     ] {
         assert!(
             readme_words.contains(required),
@@ -482,6 +491,78 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "Step 072 integration source is missing `{required}`"
         );
     }
+    for required in [
+        "pub(crate) fn process_barrier",
+        "occurrence: u8",
+        "RSHR_STEP073_READY",
+        "Condvar",
+        "wait_while",
+    ] {
+        assert!(
+            FAILPOINT_SOURCE.contains(required),
+            "Step 073 process barrier is missing `{required}`"
+        );
+    }
+    for required in [
+        "mod process_tests;",
+        "#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]",
+    ] {
+        assert!(
+            RESTORE_ROOT_SOURCE.contains(required),
+            "Step 073 restore test boundary is missing `{required}`"
+        );
+    }
+    for required in [
+        "child_before_prepared_marker",
+        "child_after_prepared_marker",
+        "child_after_live_retained_scratch_sync",
+        "child_after_replacement_install_sync",
+        "child_after_terminal_marker_sync",
+        "MarkerBeforeCreate",
+        "MarkerAdvanceAfterWriteAndFileSync",
+        "MarkerAdvanceAfterDirectorySync, 2",
+        "--ignored",
+        "--exact",
+        "Stdio::piped()",
+        "Signal::KILL",
+        "status.signal(), Some(9)",
+        "assert_recovery_permissions",
+        "ServiceSqliteErrorKind::Recovery",
+    ] {
+        assert!(
+            RESTORE_PROCESS_TEST_SOURCE.contains(required),
+            "Step 073 restore process harness is missing `{required}`"
+        );
+    }
+    for required in [
+        "writer_authority_holder_child_probe",
+        "RSHR_STEP073_WRITER_READY",
+        "--ignored",
+        "Stdio::piped()",
+        "Signal::KILL",
+        "status.signal(), Some(9)",
+        "assert_lock_permissions",
+    ] {
+        assert!(
+            WRITER_PROCESS_TEST_SOURCE.contains(required),
+            "Step 073 writer process harness is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "std::env::var",
+        "env::var_os",
+        ".env(",
+        "ready.is_file",
+        "thread::sleep",
+        "remove_dir_all",
+        "process::exit",
+    ] {
+        assert!(
+            !RESTORE_PROCESS_TEST_SOURCE.contains(forbidden),
+            "Step 073 restore process harness contains forbidden `{forbidden}`"
+        );
+    }
+    assert!(!ROOT.contains("process_tests"));
 
     for required in [
         "radroots.service-backup",
