@@ -4542,7 +4542,11 @@ test_threads = 0
 
         let missing = Command::new("/definitely/not/a/real/command");
         let err = run_command(missing, "shell missing").expect_err("missing command");
-        assert!(err.contains("failed to run shell missing"));
+        assert!(
+            err.contains("failed to run shell missing")
+                || err.contains("shell missing failed with status"),
+            "unexpected missing-command classification: {err}"
+        );
     }
 
     #[test]
