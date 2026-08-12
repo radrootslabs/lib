@@ -223,6 +223,31 @@ new check or authority release. A retry uses a newly injected wall-clock time.
 The strict backup and restore integrity verifier remains a separate fail-closed
 boundary.
 
+State-filesystem capacity inspection is an explicit synchronous input for
+doctor checks and authoritative admission. `MinimumFreeBytes` must be supplied
+and is constrained to `1..=i64::MAX`; it has no default. The value
+`268435456` is the exact governed configuration and test vector, not an
+implicit universal threshold. On Linux and macOS the platform adapter opens the
+owner-owned state directory that is not group/other writable without following
+links, retains and revalidates its identity, and uses `fstatvfs` to measure
+bytes available to the unprivileged service user. Other platforms fail closed.
+
+A successful immutable snapshot is `ready` when available bytes are greater
+than or equal to the configured minimum and `low_disk` when they are below it.
+Low disk rejects or pauses new authoritative admission; measurement failure is
+a typed unavailable error and is never fabricated as low-disk evidence. A
+consumer may cache the successful snapshot and later project low disk to the
+stable `database_low_disk` readiness reason. `/readyz` remains passive and must
+read only that caller-owned cached state; it never invokes the capacity
+adapter. The measurement is advisory rather than a space reservation and does
+not guarantee a later write.
+
+Capacity inspection is host-independent and performs no database open, pool
+operation, SQLite query, filesystem mutation, ambient time read, timer, task,
+or hidden sampling. Service configuration, threshold defaults, cache refresh,
+status persistence, admission wiring, and route projection remain consumer
+responsibilities.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

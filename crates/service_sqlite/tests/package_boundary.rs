@@ -22,7 +22,8 @@ const RESTORE_FINALIZE_SOURCE: &str = include_str!("../src/restore/finalize.rs")
 const RESTORE_RECOVER_SOURCE: &str = include_str!("../src/restore/recover.rs");
 const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
 const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
-const STATUS_SOURCE: &str = include_str!("../src/status.rs");
+const STATUS_SOURCE: &str = include_str!("../src/status/mod.rs");
+const DISK_SOURCE: &str = include_str!("../src/status/disk.rs");
 const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
 
 #[test]
@@ -220,6 +221,19 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "before any new check or authority release",
         "retry uses a newly injected wall-clock time",
         "strict backup and restore integrity verifier remains a separate fail-closed boundary",
+        "State-filesystem capacity inspection is an explicit synchronous input",
+        "`MinimumFreeBytes` must be supplied and is constrained to `1..=i64::MAX`; it has no default",
+        "`268435456` is the exact governed configuration and test vector, not an implicit universal threshold",
+        "owner-owned state directory that is not group/other writable",
+        "uses `fstatvfs` to measure bytes available to the unprivileged service user",
+        "successful immutable snapshot is `ready` when available bytes are greater than or equal",
+        "`low_disk` when they are below it",
+        "measurement failure is a typed unavailable error and is never fabricated as low-disk evidence",
+        "project low disk to the stable `database_low_disk` readiness reason",
+        "`/readyz` remains passive",
+        "measurement is advisory rather than a space reservation",
+        "performs no database open, pool operation, SQLite query, filesystem mutation, ambient time read, timer, task",
+        "Service configuration, threshold defaults, cache refresh, status persistence, admission wiring, and route projection remain consumer responsibilities",
     ] {
         assert!(
             readme_words.contains(required),
@@ -257,6 +271,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         .split_once("#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]")
         .map(|(production, _)| production)
         .expect("integrity inspection source must keep test seams separated");
+    let disk_production = DISK_SOURCE
+        .split_once("#[cfg(test)]\nmod tests")
+        .map(|(production, _)| production)
+        .expect("disk inspection source must keep tests separated");
     let restore_marker_production = RESTORE_MARKER_SOURCE
         .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
@@ -323,10 +341,65 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "StorageHealth",
         "StorageIntegrity",
         "StorageStatus",
+        "MinimumFreeBytes",
+        "PlatformStateFilesystemCapacitySource",
+        "StateFilesystemCapacity",
+        "StateFilesystemCapacityError",
+        "StateFilesystemCapacityReadiness",
+        "StateFilesystemCapacitySource",
+        "inspect_state_filesystem_capacity",
     ] {
         assert!(
             ROOT.contains(required),
             "crate root is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "MAXIMUM_MINIMUM_FREE_BYTES: u64 = i64::MAX as u64",
+        "pub const fn new(value: u64)",
+        "StateFilesystemCapacityReadiness::Ready",
+        "StateFilesystemCapacityReadiness::LowDisk",
+        "available_bytes >= minimum_free_bytes.get()",
+        "pub trait StateFilesystemCapacitySource",
+        "pub struct PlatformStateFilesystemCapacitySource",
+        "pub fn inspect_state_filesystem_capacity",
+        "OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC",
+        "fstatvfs(&held)",
+        "capacity.f_bavail",
+        "capacity.f_frsize",
+        "u32::from(status.st_mode) & 0o022",
+        "UnsupportedPlatform",
+    ] {
+        assert!(
+            disk_production.contains(required),
+            "Step 071 disk inspection source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "ServiceSqliteHost",
+        "readyz",
+        "database_low_disk",
+        "sqlx",
+        "rusqlite",
+        "tokio",
+        "SystemTime",
+        "Instant",
+        "spawn",
+        "sleep",
+        "create_dir",
+        "write(",
+        "Default for MinimumFreeBytes",
+    ] {
+        assert!(
+            !disk_production.contains(forbidden),
+            "Step 071 disk inspection source contains deferred authority `{forbidden}`"
+        );
+    }
+    for forbidden in ["rustix::", "RawFd", "OwnedFd", "BorrowedFd"] {
+        assert!(
+            !ROOT.contains(forbidden),
+            "Step 071 crate root exposes dependency or raw descriptor `{forbidden}`"
         );
     }
 

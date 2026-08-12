@@ -49,4 +49,8 @@ pub use migration::{
 };
 pub use open::{OpenMode, ServiceSqlitePathError, ServiceSqlitePaths};
 pub use restore::{StagedServiceRestore, finalize_staged_restore, stage_verified_restore};
-pub use status::{StorageHealth, StorageIntegrity, StorageStatus};
+pub use status::{
+    MinimumFreeBytes, PlatformStateFilesystemCapacitySource, StateFilesystemCapacity,
+    StateFilesystemCapacityError, StateFilesystemCapacityReadiness, StateFilesystemCapacitySource,
+    StorageHealth, StorageIntegrity, StorageStatus, inspect_state_filesystem_capacity,
+};

@@ -1,8 +1,16 @@
 //! Passive storage status values for the service-owned status envelope.
 
+mod disk;
+
 use core::num::NonZeroU32;
 
 use serde::Serialize;
+
+pub use disk::{
+    MinimumFreeBytes, PlatformStateFilesystemCapacitySource, StateFilesystemCapacity,
+    StateFilesystemCapacityError, StateFilesystemCapacityReadiness, StateFilesystemCapacitySource,
+    inspect_state_filesystem_capacity,
+};
 
 /// Service-neutral storage health classification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

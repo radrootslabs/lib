@@ -264,6 +264,19 @@ Before editing code:
   connection and its explicit close future until the SQLx worker terminates;
   retry and host close resume that cleanup before proceeding. A retry must
   inject a new timestamp.
+- State-filesystem capacity inspection is an explicit, synchronous,
+  host-independent doctor and admission input. Callers must supply a positive
+  `MinimumFreeBytes`; there is no default threshold. The platform adapter
+  measures unprivileged available bytes through a retained owner-owned state
+  directory descriptor that is not group/other writable, and the immutable
+  result classifies exact equality as
+  ready and anything below the policy as low disk. Measurement failure is a
+  typed unavailable result, never fabricated low-disk evidence. Consumers may
+  cache a successful snapshot and project low disk to the stable
+  `database_low_disk` reason, but passive readiness handlers must never invoke
+  the adapter. Keep inspection advisory: do not add a reservation, host/pool or
+  SQLite dependency, ambient timer, background sampler, service default, or
+  status persistence to this crate.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist
