@@ -254,6 +254,7 @@ enum PrivateCloseDriver {
         future: BoxFuture<'static, Result<(), ServiceSqliteError>>,
         authority_error: Option<ServiceSqliteError>,
         checkpoint_error: Option<ServiceSqliteError>,
+        connection_close_error: Option<ServiceSqliteError>,
     },
     Complete(Option<ServiceSqliteErrorKind>),
 }
@@ -406,18 +407,48 @@ impl PrivateConnectionPool {
     /// The inner result is terminal and may be cached by the host.
     pub(crate) async fn close_explicit(
         &self,
+        failpoints: &crate::failpoint::DurabilityFailpoints,
     ) -> Result<Result<(), ServiceSqliteError>, ServiceSqliteError> {
+        let mut authority_error = self.validate().err();
+        let before_drain = failpoints
+            .hit(crate::failpoint::DurabilityFailpoint::CloseBeforeDrain)
+            .map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+            });
+        authority_error = authority_error.or_else(|| self.validate().err());
+        if authority_error.is_none() {
+            before_drain?;
+        }
         self.pool.close().await;
-        let terminal = if self.mode.requires_writer_authority() {
-            self.drive_writable_close().await
-        } else {
-            self.validate()
+        let after_drain = failpoints
+            .hit(crate::failpoint::DurabilityFailpoint::CloseAfterDrain)
+            .map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+            });
+        authority_error = authority_error.or_else(|| self.validate().err());
+        let terminal = match authority_error {
+            Some(authority) => Err(authority),
+            None => {
+                after_drain?;
+                if self.mode.requires_writer_authority() {
+                    self.drive_writable_close(failpoints).await
+                } else {
+                    self.validate()
+                }
+            }
         };
-        self.release_resources()?;
-        Ok(terminal)
+        let release_error = self.release_resources(failpoints)?;
+        Ok(match (terminal, release_error) {
+            (Err(error), _) if error.kind() == ServiceSqliteErrorKind::Authority => Err(error),
+            (_, Some(release_error)) => Err(release_error),
+            (terminal, None) => terminal,
+        })
     }
 
-    async fn drive_writable_close(&self) -> Result<(), ServiceSqliteError> {
+    async fn drive_writable_close(
+        &self,
+        failpoints: &crate::failpoint::DurabilityFailpoints,
+    ) -> Result<(), ServiceSqliteError> {
         let mut driver = self.close_driver.lock().await;
         loop {
             match &mut *driver {
@@ -479,6 +510,19 @@ impl PrivateConnectionPool {
                         #[cfg(test)]
                         self.close_phase
                             .store(TEST_CLOSE_PHASE_CHECKPOINT, Ordering::Release);
+                        checkpoint_error = failpoints
+                            .hit(crate::failpoint::DurabilityFailpoint::CloseBeforeCheckpoint)
+                            .map_err(|source| {
+                                ServiceSqliteError::with_source(
+                                    ServiceSqliteErrorKind::Pragma,
+                                    source,
+                                )
+                            })
+                            .err();
+                        authority_error =
+                            authority_error.or_else(|| self.validate_writer_authority().err());
+                    }
+                    if checkpoint_error.is_none() && authority_error.is_none() {
                         checkpoint_error =
                             sqlx::query_as::<_, (i64, i64, i64)>("PRAGMA wal_checkpoint(TRUNCATE)")
                                 .fetch_one(&mut *connection)
@@ -497,9 +541,27 @@ impl PrivateConnectionPool {
                                     }
                                 })
                                 .err();
+                        if checkpoint_error.is_none() {
+                            checkpoint_error = failpoints
+                                .hit(crate::failpoint::DurabilityFailpoint::CloseAfterCheckpoint)
+                                .map_err(|source| {
+                                    ServiceSqliteError::with_source(
+                                        ServiceSqliteErrorKind::Pragma,
+                                        source,
+                                    )
+                                })
+                                .err();
+                        }
                         authority_error =
                             authority_error.or_else(|| self.validate_writer_authority().err());
                     }
+
+                    let connection_close_error = failpoints
+                        .hit(crate::failpoint::DurabilityFailpoint::CloseBeforeConnectionClose)
+                        .map_err(|source| {
+                            ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+                        })
+                        .err();
 
                     let connected = core::mem::replace(&mut *driver, PrivateCloseDriver::Pending);
                     let PrivateCloseDriver::Connected(connection) = connected else {
@@ -517,20 +579,30 @@ impl PrivateConnectionPool {
                         future: close,
                         authority_error,
                         checkpoint_error,
+                        connection_close_error,
                     };
                 }
                 PrivateCloseDriver::Closing {
                     future,
                     authority_error,
                     checkpoint_error,
+                    connection_close_error,
                 } => {
                     let close_error = future.as_mut().await.err();
+                    let injected_after_close = failpoints
+                        .hit(crate::failpoint::DurabilityFailpoint::CloseAfterConnectionClose)
+                        .map_err(|source| {
+                            ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+                        })
+                        .err();
                     let authority_error = authority_error
                         .take()
                         .or_else(|| self.validate_writer_authority().err());
                     let error = authority_error
                         .or_else(|| checkpoint_error.take())
-                        .or(close_error);
+                        .or_else(|| connection_close_error.take())
+                        .or(close_error)
+                        .or(injected_after_close);
                     #[cfg(test)]
                     self.close_phase.store(6, Ordering::Release);
                     *driver =
@@ -544,7 +616,15 @@ impl PrivateConnectionPool {
         }
     }
 
-    fn release_resources(&self) -> Result<(), ServiceSqliteError> {
+    fn release_resources(
+        &self,
+        failpoints: &crate::failpoint::DurabilityFailpoints,
+    ) -> Result<Option<ServiceSqliteError>, ServiceSqliteError> {
+        failpoints
+            .hit(crate::failpoint::DurabilityFailpoint::CloseBeforeAuthorityRelease)
+            .map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Authority, source)
+            })?;
         let mut resources = self.resources.lock().map_err(|_| {
             connection_error(
                 ServiceSqliteErrorKind::Authority,
@@ -570,7 +650,12 @@ impl PrivateConnectionPool {
                 resources.inspection_guard.take();
             }
         }
-        Ok(())
+        Ok(failpoints
+            .hit(crate::failpoint::DurabilityFailpoint::CloseAfterAuthorityRelease)
+            .map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Authority, source)
+            })
+            .err())
     }
 }
 
@@ -2906,12 +2991,16 @@ mod tests {
                 future: close,
                 authority_error: None,
                 checkpoint_error: None,
+                connection_close_error: None,
             };
         }
         let pool = Arc::new(pool);
         let close_task = tokio::spawn({
             let pool = Arc::clone(&pool);
-            async move { pool.close_explicit().await }
+            async move {
+                pool.close_explicit(&crate::failpoint::DurabilityFailpoints::default())
+                    .await
+            }
         });
         entered.notified().await;
         close_task.abort();
@@ -2928,7 +3017,7 @@ mod tests {
         ));
 
         release.notify_one();
-        pool.close_explicit()
+        pool.close_explicit(&crate::failpoint::DurabilityFailpoints::default())
             .await
             .expect("authority release is proven")
             .expect("retained connection closes explicitly");

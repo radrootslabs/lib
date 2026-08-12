@@ -10,6 +10,7 @@ const BACKUP_VERIFY_SOURCE: &str = include_str!("../src/backup/verify.rs");
 const CONFIG_SOURCE: &str = include_str!("../src/config.rs");
 const CONNECTION_SOURCE: &str = include_str!("../src/connection.rs");
 const ERROR_SOURCE: &str = include_str!("../src/error.rs");
+const FAILPOINT_SOURCE: &str = include_str!("../src/failpoint.rs");
 const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
 const INTEGRITY_SOURCE: &str = include_str!("../src/integrity/mod.rs");
 const INTEGRITY_CATALOG_SOURCE: &str = include_str!("../src/integrity/catalog.rs");
@@ -69,6 +70,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "config",
             "connection",
             "error",
+            "failpoint",
             "initialize",
             "integrity",
             "metadata",
@@ -234,6 +236,19 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "measurement is advisory rather than a space reservation",
         "performs no database open, pool operation, SQLite query, filesystem mutation, ambient time read, timer, task",
         "Service configuration, threshold defaults, cache refresh, status persistence, admission wiring, and route projection remain consumer responsibilities",
+        "Durability fault injection is a private test-only mechanism",
+        "closed instance-scoped controller can arm exactly one named before/after boundary",
+        "returns one injected error the first time that boundary is reached; later hits are no-ops",
+        "complete inventory covers database initialization, runner-owned transaction begin and commit",
+        "online-backup creation/copy/synchronization",
+        "restore-marker creation and advancement",
+        "both restore rename/synchronization steps",
+        "explicit host drain/checkpoint/connection-close/authority-release",
+        "ordinary controller has zero behavior",
+        "no failpoint type or selector is exported from the crate root",
+        "no process-global failpoint state, environment or configuration selector, Cargo feature",
+        "hidden task, timer, panic, or process-exit behavior",
+        "process crashes and signals remain a separate qualification layer",
     ] {
         assert!(
             readme_words.contains(required),
@@ -400,6 +415,71 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             !ROOT.contains(forbidden),
             "Step 071 crate root exposes dependency or raw descriptor `{forbidden}`"
+        );
+    }
+
+    let failpoint_production = FAILPOINT_SOURCE
+        .split_once("#[cfg(test)]\nmod tests")
+        .map(|(production, _)| production)
+        .expect("failpoint source must keep tests separated");
+    for required in [
+        "pub(crate) enum DurabilityFailpoint",
+        "pub(crate) struct DurabilityFailpoints",
+        "InitializeBeforeCreate",
+        "InitializeAfterReservationDirectorySync",
+        "InitializeAfterCommitDirectorySync",
+        "TransactionBeforeBegin",
+        "TransactionAfterCommit",
+        "BackupBeforeCreate",
+        "BackupAfterDirectorySync",
+        "MarkerBeforeCreate",
+        "MarkerAfterDirectorySync",
+        "MarkerAdvanceBeforeWriteAndFileSync",
+        "MarkerAdvanceAfterDirectorySync",
+        "RestoreBeforeRetainLiveRename",
+        "RestoreAfterInstallStageSync",
+        "CloseBeforeDrain",
+        "CloseAfterAuthorityRelease",
+        "pub(crate) fn hit",
+        "#[cfg(test)]\n    pub(crate) fn armed",
+        "DurabilityFailpoints([redacted])",
+    ] {
+        assert!(
+            failpoint_production.contains(required),
+            "Step 072 failpoint source is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub enum DurabilityFailpoint",
+        "pub struct DurabilityFailpoints",
+        "static ",
+        "std::env",
+        "SystemTime",
+        "Instant",
+        "tokio::",
+        "spawn",
+        "sleep",
+        "panic!",
+        "process::exit",
+    ] {
+        assert!(
+            !failpoint_production.contains(forbidden),
+            "Step 072 failpoint source contains forbidden authority `{forbidden}`"
+        );
+    }
+    assert!(!ROOT.contains("pub use failpoint"));
+    assert!(!MANIFEST.contains("[features]"));
+    for (source, required) in [
+        (INITIALIZE_SOURCE, "InitializeBeforeCreate"),
+        (CONNECTION_SOURCE, "TransactionAfterCommit"),
+        (BACKUP_CAPTURE_SOURCE, "BackupAfterDirectorySync"),
+        (RESTORE_MARKER_SOURCE, "MarkerAdvanceAfterDirectorySync"),
+        (RESTORE_FINALIZE_SOURCE, "RestoreAfterInstallStageSync"),
+        (OPEN_SOURCE, "CloseAfterAuthorityRelease"),
+    ] {
+        assert!(
+            source.contains(required),
+            "Step 072 integration source is missing `{required}`"
         );
     }
 

@@ -248,6 +248,20 @@ or hidden sampling. Service configuration, threshold defaults, cache refresh,
 status persistence, admission wiring, and route projection remain consumer
 responsibilities.
 
+Durability fault injection is a private test-only mechanism. A closed
+instance-scoped controller can arm exactly one named before/after boundary and
+returns one injected error the first time that boundary is reached; later hits
+are no-ops. The complete inventory covers database initialization, runner-owned
+transaction begin and commit, online-backup creation/copy/synchronization,
+restore-marker creation and advancement, both restore rename/synchronization
+steps, and explicit host drain/checkpoint/connection-close/authority-release.
+An ordinary controller has zero behavior, and no failpoint type or selector is
+exported from the crate root. There is no process-global failpoint state,
+environment or configuration selector, Cargo feature, hidden task, timer,
+panic, or process-exit behavior. These deterministic in-process edges qualify
+error ordering, rollback, cleanup, recovery evidence, and one-shot retry
+semantics; process crashes and signals remain a separate qualification layer.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

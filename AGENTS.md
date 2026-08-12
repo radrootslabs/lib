@@ -277,6 +277,14 @@ Before editing code:
   the adapter. Keep inspection advisory: do not add a reservation, host/pool or
   SQLite dependency, ambient timer, background sampler, service default, or
   status persistence to this crate.
+- Durability failpoints are private, instance-scoped test mechanics only. Keep
+  a closed before/after inventory across initialization, transaction commit,
+  online backup, restore-marker persistence, restore rename/synchronization,
+  and explicit close. One armed controller may fail one selected edge once;
+  ordinary controllers have zero behavior. Never export failpoint types, use
+  process-global failpoint state, select a point from environment or service
+  configuration, or add a Cargo feature that alters production behavior.
+  Process-level crash and signal qualification remains a separate layer.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

@@ -605,11 +605,29 @@ mod store {
             marker: &RestoreRecoveryMarker,
             on_durable: impl FnOnce(),
         ) -> Result<Self, ServiceSqliteError> {
+            let failpoints = crate::failpoint::DurabilityFailpoints::default();
+            Self::create_with_durable_callback_and_failpoints(
+                paths,
+                authority,
+                marker,
+                &failpoints,
+                on_durable,
+            )
+        }
+
+        pub(crate) fn create_with_durable_callback_and_failpoints(
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            marker: &RestoreRecoveryMarker,
+            failpoints: &crate::failpoint::DurabilityFailpoints,
+            on_durable: impl FnOnce(),
+        ) -> Result<Self, ServiceSqliteError> {
             Self::create_with_operations(
                 paths,
                 authority,
                 marker,
                 &SystemStoreOperations,
+                failpoints,
                 on_durable,
             )
         }
@@ -626,6 +644,7 @@ mod store {
                 authority,
                 marker,
                 &AuthorityDriftAfterSyncStoreOperations,
+                &crate::failpoint::DurabilityFailpoints::default(),
                 on_durable,
             )
         }
@@ -635,6 +654,7 @@ mod store {
             authority: &WriterAuthority,
             marker: &RestoreRecoveryMarker,
             operations: &dyn StoreOperations,
+            failpoints: &crate::failpoint::DurabilityFailpoints,
             on_durable: impl FnOnce(),
         ) -> Result<Self, ServiceSqliteError> {
             authority.validate_for(paths)?;
@@ -663,18 +683,41 @@ mod store {
                 require_absent(&directory, MARKER_NEXT_FILE_NAME)
             })?
             .map_err(restore_store)?;
+            authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerBeforeCreate,
+                )
+            })?
+            .map_err(restore_store)?;
             let (marker_file, marker_identity) = authority_checked(authority, paths, || {
                 let file = create_marker_file(&directory, MARKER_FILE_NAME)?;
                 let identity = file_identity(&file)?;
                 Ok::<_, StoreFailure>((file, identity))
             })?
             .map_err(restore_store)?;
+            if let Err(cause) = hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::MarkerAfterCreate,
+            ) {
+                cleanup_with_authority(
+                    authority,
+                    paths,
+                    &directory,
+                    MARKER_FILE_NAME,
+                    marker_identity,
+                )?;
+                return Err(restore_store(cause));
+            }
             let write_result = authority_checked(authority, paths, || {
                 write_and_sync(
                     &marker_file,
                     marker.canonical_bytes(),
                     &directory,
                     operations,
+                    failpoints,
+                    Some(crate::failpoint::DurabilityFailpoint::MarkerBeforeFileSync),
+                    Some(crate::failpoint::DurabilityFailpoint::MarkerAfterFileSync),
                 )
             })?;
             if let Err(cause) = write_result {
@@ -688,6 +731,19 @@ mod store {
                 return Err(restore_store(cause));
             }
             authority.validate_for(paths)?;
+            if let Err(cause) = hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::MarkerBeforeDirectorySync,
+            ) {
+                cleanup_with_authority(
+                    authority,
+                    paths,
+                    &directory,
+                    MARKER_FILE_NAME,
+                    marker_identity,
+                )?;
+                return Err(restore_store(cause));
+            }
             if operations.sync_directory(&directory).is_err() {
                 authority.validate_for(paths)?;
                 cleanup_with_authority(
@@ -703,7 +759,12 @@ mod store {
             // this point. The caller must transfer ownership of every bound
             // artifact before any subsequent fallible validation.
             on_durable();
+            let after_directory_sync = hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::MarkerAfterDirectorySync,
+            );
             authority.validate_for(paths)?;
+            after_directory_sync.map_err(restore_store)?;
             let binding = Self {
                 directory,
                 directory_identity,
@@ -822,12 +883,24 @@ mod store {
             authority: &WriterAuthority,
             next: RestoreRecoveryPhase,
         ) -> Result<Self, ServiceSqliteError> {
+            let failpoints = crate::failpoint::DurabilityFailpoints::default();
+            self.advance_with_failpoints(paths, authority, next, &failpoints)
+        }
+
+        pub(crate) fn advance_with_failpoints(
+            self,
+            paths: &ServiceSqlitePaths,
+            authority: &WriterAuthority,
+            next: RestoreRecoveryPhase,
+            failpoints: &crate::failpoint::DurabilityFailpoints,
+        ) -> Result<Self, ServiceSqliteError> {
             self.advance_with_operations(
                 paths,
                 authority,
                 next,
                 &SystemStoreOperations,
                 ServiceSqliteErrorKind::Restore,
+                failpoints,
             )
         }
 
@@ -843,6 +916,7 @@ mod store {
                 next,
                 &SystemStoreOperations,
                 ServiceSqliteErrorKind::Recovery,
+                &crate::failpoint::DurabilityFailpoints::default(),
             )
         }
 
@@ -853,6 +927,7 @@ mod store {
             next: RestoreRecoveryPhase,
             operations: &dyn StoreOperations,
             operation_kind: ServiceSqliteErrorKind,
+            failpoints: &crate::failpoint::DurabilityFailpoints,
         ) -> Result<Self, ServiceSqliteError> {
             authority_checked(authority, paths, || {
                 self.validate_inner(paths, true, operation_kind)
@@ -879,12 +954,31 @@ mod store {
                 Ok::<_, StoreFailure>((file, identity))
             })?
             .map_err(|cause| operation_store(operation_kind, cause))?;
+            let before_write = authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerAdvanceBeforeWriteAndFileSync,
+                )
+            })?;
+            if let Err(cause) = before_write {
+                cleanup_with_authority(
+                    authority,
+                    paths,
+                    &self.directory,
+                    MARKER_NEXT_FILE_NAME,
+                    scratch_identity,
+                )?;
+                return Err(operation_store(operation_kind, cause));
+            }
             let scratch_write = authority_checked(authority, paths, || {
                 write_and_sync(
                     &scratch,
                     next_marker.canonical_bytes(),
                     &self.directory,
                     operations,
+                    failpoints,
+                    None,
+                    None,
                 )
             })?;
             if let Err(cause) = scratch_write {
@@ -897,6 +991,13 @@ mod store {
                 )?;
                 return Err(operation_store(operation_kind, cause));
             }
+            authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerAdvanceAfterWriteAndFileSync,
+                )
+            })?
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             authority_checked(authority, paths, || {
                 self.validate_inner(paths, false, operation_kind)
             })??;
@@ -918,6 +1019,22 @@ mod store {
                 )?;
                 return Err(operation_store(operation_kind, StoreFailure::Conflict));
             }
+            let before_replace = authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerAdvanceBeforeReplace,
+                )
+            })?;
+            if let Err(cause) = before_replace {
+                cleanup_with_authority(
+                    authority,
+                    paths,
+                    &self.directory,
+                    MARKER_NEXT_FILE_NAME,
+                    scratch_identity,
+                )?;
+                return Err(operation_store(operation_kind, cause));
+            }
             let replacement = authority_checked(authority, paths, || {
                 operations
                     .replace_marker(&self.directory)
@@ -933,6 +1050,20 @@ mod store {
                 )?;
                 return Err(operation_store(operation_kind, StoreFailure::Rename));
             }
+            authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerAdvanceAfterReplace,
+                )
+            })?
+            .map_err(|cause| operation_store(operation_kind, cause))?;
+            authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerAdvanceBeforeDirectorySync,
+                )
+            })?
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             let parent_sync = authority_checked(authority, paths, || {
                 operations
                     .sync_directory(&self.directory)
@@ -941,6 +1072,13 @@ mod store {
             if parent_sync.is_err() {
                 return Err(operation_store(operation_kind, StoreFailure::Sync));
             }
+            authority_checked(authority, paths, || {
+                hit(
+                    failpoints,
+                    crate::failpoint::DurabilityFailpoint::MarkerAdvanceAfterDirectorySync,
+                )
+            })?
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             let (marker_file, marker_identity, reread) =
                 authority_checked(authority, paths, || {
                     let file = open_marker_file(&self.directory, MARKER_FILE_NAME)?;
@@ -979,6 +1117,7 @@ mod store {
                 next,
                 &FailingStoreOperations { failure },
                 ServiceSqliteErrorKind::Restore,
+                &crate::failpoint::DurabilityFailpoints::default(),
             )
         }
 
@@ -996,6 +1135,7 @@ mod store {
                 next,
                 &FailingStoreOperations { failure },
                 ServiceSqliteErrorKind::Recovery,
+                &crate::failpoint::DurabilityFailpoints::default(),
             )
         }
 
@@ -1362,12 +1502,29 @@ mod store {
         bytes: &[u8],
         directory: &File,
         operations: &dyn StoreOperations,
+        failpoints: &crate::failpoint::DurabilityFailpoints,
+        before_sync: Option<crate::failpoint::DurabilityFailpoint>,
+        after_sync: Option<crate::failpoint::DurabilityFailpoint>,
     ) -> Result<(), StoreFailure> {
         let mut file = file.try_clone().map_err(|_| StoreFailure::Write)?;
         file.write_all(bytes).map_err(|_| StoreFailure::Write)?;
+        if let Some(before_sync) = before_sync {
+            hit(failpoints, before_sync)?;
+        }
         operations
             .sync_file(&file, directory)
-            .map_err(|_| StoreFailure::Sync)
+            .map_err(|_| StoreFailure::Sync)?;
+        if let Some(after_sync) = after_sync {
+            hit(failpoints, after_sync)?;
+        }
+        Ok(())
+    }
+
+    fn hit(
+        failpoints: &crate::failpoint::DurabilityFailpoints,
+        point: crate::failpoint::DurabilityFailpoint,
+    ) -> Result<(), StoreFailure> {
+        failpoints.hit(point).map_err(|_| StoreFailure::Injected)
     }
 
     fn read_marker(file: &File) -> Result<RestoreRecoveryMarker, StoreFailure> {
@@ -1429,6 +1586,7 @@ mod store {
         Sync,
         Rename,
         Conflict,
+        Injected,
         Contract(RestoreMarkerContractError),
     }
 
@@ -1445,6 +1603,7 @@ mod store {
                 Self::Sync => "restore marker durability could not be proven",
                 Self::Rename => "restore marker replacement failed",
                 Self::Conflict => "restore marker binding changed",
+                Self::Injected => "restore marker durability boundary failed",
                 Self::Contract(error) => return error.fmt(formatter),
             })
         }

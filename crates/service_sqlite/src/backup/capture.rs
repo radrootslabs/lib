@@ -170,6 +170,7 @@ pub(crate) async fn capture_online_backup(
     active: &Arc<AtomicBool>,
     staging_directory: &Path,
     created_at_unix_ms: BackupCreatedAtUnixMs,
+    failpoints: &crate::failpoint::DurabilityFailpoints,
 ) -> Result<ServiceBackupManifest, ServiceSqliteError> {
     capture_online_backup_with_operations(
         pool,
@@ -178,6 +179,7 @@ pub(crate) async fn capture_online_backup(
         staging_directory,
         created_at_unix_ms,
         Arc::new(SystemCaptureOperations),
+        failpoints,
     )
     .await
 }
@@ -201,6 +203,7 @@ pub(crate) async fn test_capture_online_backup_with_sync_failure(
             failure,
             parent_syncs: core::sync::atomic::AtomicU8::new(0),
         }),
+        &crate::failpoint::DurabilityFailpoints::default(),
     )
     .await
 }
@@ -212,6 +215,7 @@ async fn capture_online_backup_with_operations(
     staging_directory: &Path,
     created_at_unix_ms: BackupCreatedAtUnixMs,
     operations: Arc<dyn CaptureOperations>,
+    failpoints: &crate::failpoint::DurabilityFailpoints,
 ) -> Result<ServiceBackupManifest, ServiceSqliteError> {
     if !matches!(
         pool.mode(),
@@ -252,6 +256,7 @@ async fn capture_online_backup_with_operations(
         created_at_unix_ms,
         cancellation,
         operations,
+        failpoints: failpoints.clone(),
     };
     let joined = tokio::task::spawn_blocking(move || worker.run()).await;
     test_async_phase(TEST_CAPTURE_PHASE_JOIN_AWAITED).await;
@@ -315,6 +320,7 @@ struct CaptureWorker {
     created_at_unix_ms: BackupCreatedAtUnixMs,
     cancellation: Arc<AtomicBool>,
     operations: Arc<dyn CaptureOperations>,
+    failpoints: crate::failpoint::DurabilityFailpoints,
 }
 
 impl CaptureWorker {
@@ -323,7 +329,17 @@ impl CaptureWorker {
         self.validator.validate()?;
         self.test_phase(TEST_CAPTURE_PHASE_BEFORE_CREATE);
         self.check_cancelled()?;
+        self.hit_checked(
+            None,
+            crate::failpoint::DurabilityFailpoint::BackupBeforeCreate,
+            BackupFailureKind::CreateStaging,
+        )?;
         let mut staging = StagingGuard::create(&self.staging, self.operations.as_ref())?;
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupAfterCreate,
+            BackupFailureKind::CreateStaging,
+        )?;
         self.test_phase(TEST_CAPTURE_PHASE_STAGING_CREATED);
         #[cfg(test)]
         if TEST_CAPTURE_PANIC_WORKER.load(Ordering::Acquire) {
@@ -341,6 +357,11 @@ impl CaptureWorker {
         self.validator.validate()?;
         staging.validate()?;
 
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupBeforeCopy,
+            BackupFailureKind::Capture,
+        )?;
         {
             let backup = match rusqlite::backup::Backup::new(&source, &mut destination) {
                 Ok(backup) => backup,
@@ -368,6 +389,11 @@ impl CaptureWorker {
                 }
             }
         }
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupAfterCopy,
+            BackupFailureKind::Capture,
+        )?;
         staging.record_sidecars();
 
         self.test_phase(TEST_CAPTURE_PHASE_POST_COPY);
@@ -394,11 +420,31 @@ impl CaptureWorker {
         staging.validate_inventory()?;
         self.check_cancelled()?;
 
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupBeforeFileSync,
+            BackupFailureKind::SyncState,
+        )?;
         staging.sync_state(self.operations.as_ref())?;
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupAfterFileSync,
+            BackupFailureKind::SyncState,
+        )?;
         let (byte_length, digest) = staging.hash_state(&self.cancellation)?;
         self.test_phase(TEST_CAPTURE_PHASE_PRE_FINAL_SYNC);
         self.check_cancelled()?;
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupBeforeDirectorySync,
+            BackupFailureKind::SyncStaging,
+        )?;
         staging.sync_directories(self.operations.as_ref())?;
+        self.hit_checked(
+            Some(&staging),
+            crate::failpoint::DurabilityFailpoint::BackupAfterDirectorySync,
+            BackupFailureKind::SyncParent,
+        )?;
         self.validator.validate()?;
         staging.validate()?;
         staging.validate_inventory()?;
@@ -454,6 +500,26 @@ impl CaptureWorker {
         } else {
             Ok(())
         }
+    }
+
+    fn hit_checked(
+        &self,
+        staging: Option<&StagingGuard>,
+        point: crate::failpoint::DurabilityFailpoint,
+        failure: BackupFailureKind,
+    ) -> Result<(), ServiceSqliteError> {
+        #[cfg(test)]
+        self.failpoints
+            .observe(point, TEST_CAPTURE_PHASE.load(Ordering::Acquire));
+        let injected = self
+            .failpoints
+            .hit(point)
+            .map_err(|source| backup_source(failure, source));
+        self.validator.validate()?;
+        if let Some(staging) = staging {
+            staging.validate()?;
+        }
+        injected
     }
 
     fn test_phase(&self, phase: u8) {

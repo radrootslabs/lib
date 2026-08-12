@@ -51,6 +51,8 @@ pub struct ServiceSqliteHost {
     backup_active: Arc<AtomicBool>,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     integrity_driver: tokio::sync::Mutex<IntegrityInspectionDriver>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    failpoints: crate::failpoint::DurabilityFailpoints,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -276,7 +278,7 @@ impl ServiceSqliteHost {
                 let validation = self.pool.validate();
                 (cleanup, validation)
             };
-            let close = self.pool.close_explicit().await;
+            let close = self.pool.close_explicit(&self.failpoints).await;
             match close {
                 Err(retryable) => Err(retryable),
                 Ok(terminal) => {
@@ -321,6 +323,7 @@ impl ServiceSqliteHost {
                 &self.backup_active,
                 staging_directory,
                 created_at_unix_ms,
+                &self.failpoints,
             )
             .await
         }
@@ -435,6 +438,16 @@ impl ServiceSqliteHost {
         self.pool
             .validate()
             .map_err(ServiceSqliteTransactionError::not_committed)?;
+        let before_begin = self
+            .failpoints
+            .hit(crate::failpoint::DurabilityFailpoint::TransactionBeforeBegin)
+            .map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+            });
+        self.pool
+            .validate()
+            .map_err(ServiceSqliteTransactionError::not_committed)?;
+        before_begin.map_err(ServiceSqliteTransactionError::not_committed)?;
         let mut transaction = match match self.pool.mode() {
             OpenMode::Initialize | OpenMode::ReadWriteExisting => {
                 connection.begin_with("BEGIN IMMEDIATE").await
@@ -448,9 +461,33 @@ impl ServiceSqliteHost {
                 )));
             }
         };
-        self.pool
-            .validate()
-            .map_err(ServiceSqliteTransactionError::not_committed)?;
+        let injected_after_begin = self
+            .failpoints
+            .hit(crate::failpoint::DurabilityFailpoint::TransactionAfterBegin)
+            .map_err(|source| {
+                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+            });
+        let after_begin = self.pool.validate().and(injected_after_begin);
+        if let Err(error) = after_begin {
+            let permit = gate.permit_runner_rollback();
+            let rollback = transaction.rollback().await.map_err(sqlite_source);
+            drop(permit);
+            let rollback_was_confirmed =
+                gate.rejected_commit_rolled_back() && !connection.is_in_transaction();
+            let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
+            let authority = self.pool.validate();
+            if let Some(rollback_error) = authority
+                .err()
+                .or_else(|| rollback.err().filter(|_| !rollback_was_confirmed))
+                .or_else(|| remove.err())
+            {
+                return Err(ServiceSqliteTransactionError::rollback_failed(
+                    None,
+                    rollback_error,
+                ));
+            }
+            return Err(ServiceSqliteTransactionError::not_committed(error));
+        }
 
         let operation_result = {
             let database_control_rejected = Arc::new(AtomicBool::new(false));
@@ -518,6 +555,18 @@ impl ServiceSqliteHost {
                 &database_control_rejected,
             )
             .await;
+        let precommit = match precommit {
+            Ok(()) => {
+                let injected = self
+                    .failpoints
+                    .hit(crate::failpoint::DurabilityFailpoint::TransactionBeforeCommit)
+                    .map_err(|source| {
+                        ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+                    });
+                self.pool.validate().and(injected)
+            }
+            Err(error) => Err(error),
+        };
         if let Err(error) = precommit {
             let permit = gate.permit_runner_rollback();
             let rollback = transaction.rollback().await.map_err(sqlite_source);
@@ -526,11 +575,10 @@ impl ServiceSqliteHost {
                 gate.rejected_commit_rolled_back() && !connection.is_in_transaction();
             let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
             let authority = self.pool.validate();
-            if let Some(rollback_error) = rollback
+            if let Some(rollback_error) = authority
                 .err()
-                .filter(|_| !rollback_was_confirmed)
+                .or_else(|| rollback.err().filter(|_| !rollback_was_confirmed))
                 .or_else(|| remove.err())
-                .or_else(|| authority.err())
             {
                 return Err(ServiceSqliteTransactionError::rollback_failed(
                     None,
@@ -543,16 +591,22 @@ impl ServiceSqliteHost {
         let permit = gate.permit_outer_commit();
         let commit = transaction.commit().await.map_err(sqlite_source);
         drop(permit);
-        let commit = match commit {
-            Ok(()) => Ok(()),
-            Err(error) => Err(ServiceSqliteTransactionError::commit_outcome_unknown(error)),
+        let injected_after_commit = if commit.is_ok() {
+            self.failpoints
+                .hit(crate::failpoint::DurabilityFailpoint::TransactionAfterCommit)
+                .map_err(|source| {
+                    ServiceSqliteError::with_source(ServiceSqliteErrorKind::Open, source)
+                })
+        } else {
+            Ok(())
         };
         let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
-        commit?;
-        remove.map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
         self.pool
             .validate()
             .map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
+        commit.map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
+        remove.map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
+        injected_after_commit.map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
         let final_policy = crate::migration::read_connection_policy(&mut connection)
             .await
             .map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
@@ -650,7 +704,13 @@ impl ServiceSqliteHost {
             close_state: tokio::sync::Mutex::new(ServiceSqliteHostCloseState::Pending),
             backup_active: Arc::new(AtomicBool::new(false)),
             integrity_driver: tokio::sync::Mutex::new(IntegrityInspectionDriver::Idle),
+            failpoints: crate::failpoint::DurabilityFailpoints::default(),
         }
+    }
+
+    #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+    fn arm_durability_failpoint(&self, point: crate::failpoint::DurabilityFailpoint) {
+        self.failpoints.arm(point);
     }
 
     fn lifecycle_state(&self) -> &'static str {
@@ -2753,6 +2813,263 @@ mod tests {
         assert!(!format!("{error:?}").contains("operation-secret"));
         assert!(!error.to_string().contains("operation-secret"));
         assert_eq!(row_count(&host).await, 1);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn transaction_durability_edges_preserve_exact_commit_semantics() {
+        use crate::failpoint::DurabilityFailpoint;
+
+        for (point, expected_reached) in [
+            (
+                DurabilityFailpoint::TransactionBeforeBegin,
+                &[DurabilityFailpoint::TransactionBeforeBegin][..],
+            ),
+            (
+                DurabilityFailpoint::TransactionAfterBegin,
+                &[
+                    DurabilityFailpoint::TransactionBeforeBegin,
+                    DurabilityFailpoint::TransactionAfterBegin,
+                ][..],
+            ),
+            (
+                DurabilityFailpoint::TransactionBeforeCommit,
+                &[
+                    DurabilityFailpoint::TransactionBeforeBegin,
+                    DurabilityFailpoint::TransactionAfterBegin,
+                    DurabilityFailpoint::TransactionBeforeCommit,
+                ][..],
+            ),
+            (
+                DurabilityFailpoint::TransactionAfterCommit,
+                &[
+                    DurabilityFailpoint::TransactionBeforeBegin,
+                    DurabilityFailpoint::TransactionAfterBegin,
+                    DurabilityFailpoint::TransactionBeforeCommit,
+                    DurabilityFailpoint::TransactionAfterCommit,
+                ][..],
+            ),
+        ] {
+            let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+            host.arm_durability_failpoint(point);
+            let error = host
+                .transaction(|transaction| {
+                    Box::pin(async move {
+                        sqlx::query("INSERT INTO host_probe (value) VALUES (72)")
+                            .execute(&mut *transaction)
+                            .await
+                            .map(|_| ())
+                    })
+                })
+                .await
+                .expect_err("injected transaction edge");
+            let reached = host.failpoints.reached();
+            if point == DurabilityFailpoint::TransactionAfterCommit {
+                assert_eq!(
+                    error.kind(),
+                    ServiceSqliteTransactionErrorKind::CommitOutcomeUnknown
+                );
+                assert_eq!(row_count(&host).await, 1);
+            } else {
+                assert_eq!(
+                    error.kind(),
+                    ServiceSqliteTransactionErrorKind::NotCommitted
+                );
+                assert_eq!(row_count(&host).await, 0);
+            }
+            assert!(host.failpoints.fired());
+            assert_eq!(reached, expected_reached);
+            host.close()
+                .await
+                .expect("close host after transaction edge");
+        }
+
+        let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        host.arm_durability_failpoint(DurabilityFailpoint::TransactionBeforeCommit);
+        let error = host
+            .transaction(|transaction| {
+                Box::pin(async move {
+                    let _ = sqlx::raw_sql(
+                        "PRAGMA trusted_schema=ON; INSERT INTO host_probe (value) VALUES (73)",
+                    )
+                    .execute(&mut *transaction)
+                    .await;
+                    Ok::<_, Infallible>(())
+                })
+            })
+            .await
+            .expect_err("precommit policy rejection must precede the commit-edge hook");
+        assert_eq!(
+            error.kind(),
+            ServiceSqliteTransactionErrorKind::NotCommitted
+        );
+        assert!(!host.failpoints.fired());
+        assert_eq!(
+            host.failpoints.reached(),
+            [
+                DurabilityFailpoint::TransactionBeforeBegin,
+                DurabilityFailpoint::TransactionAfterBegin,
+            ]
+        );
+        host.failpoints.disarm();
+        assert_eq!(row_count(&host).await, 0);
+        host.close().await.expect("close policy-drift host");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn backup_durability_edges_fail_once_clean_exact_stage_and_recover() {
+        use crate::failpoint::DurabilityFailpoint;
+
+        let _serial = CAPTURE_TEST_LOCK.lock().await;
+        for (index, (point, expected_phase)) in [
+            (DurabilityFailpoint::BackupBeforeCreate, 1),
+            (DurabilityFailpoint::BackupAfterCreate, 1),
+            (DurabilityFailpoint::BackupBeforeCopy, 2),
+            (DurabilityFailpoint::BackupAfterCopy, 3),
+            (DurabilityFailpoint::BackupBeforeFileSync, 4),
+            (DurabilityFailpoint::BackupAfterFileSync, 4),
+            (DurabilityFailpoint::BackupBeforeDirectorySync, 5),
+            (DurabilityFailpoint::BackupAfterDirectorySync, 5),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+            let stage = root.path().join(format!("failpoint-backup-{index}"));
+            host.arm_durability_failpoint(point);
+            let error = host
+                .capture_online_backup(
+                    &stage,
+                    crate::BackupCreatedAtUnixMs::new(1_700_000_072_000).expect("capture time"),
+                )
+                .await
+                .expect_err("injected backup edge");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Backup);
+            assert!(host.failpoints.fired());
+            assert_eq!(host.failpoints.reached().last(), Some(&point));
+            assert_eq!(
+                host.failpoints.observation(point),
+                Some(expected_phase),
+                "backup failpoint must fire in its named lifecycle phase"
+            );
+            assert!(!stage.exists(), "owned failed stage is cleaned");
+            let recovery = root.path().join(format!("recovered-backup-{index}"));
+            host.capture_online_backup(
+                &recovery,
+                crate::BackupCreatedAtUnixMs::new(1_700_000_072_001).expect("capture time"),
+            )
+            .await
+            .expect("one-shot failpoint permits retry");
+            assert!(recovery.join(crate::BACKUP_STATE_MEMBER_NAME).is_file());
+            host.close().await.expect("close backup host");
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn close_durability_edges_are_once_only_retryable_or_terminal() {
+        use crate::failpoint::DurabilityFailpoint;
+
+        let all_close_edges = [
+            DurabilityFailpoint::CloseBeforeDrain,
+            DurabilityFailpoint::CloseAfterDrain,
+            DurabilityFailpoint::CloseBeforeCheckpoint,
+            DurabilityFailpoint::CloseAfterCheckpoint,
+            DurabilityFailpoint::CloseBeforeConnectionClose,
+            DurabilityFailpoint::CloseAfterConnectionClose,
+            DurabilityFailpoint::CloseBeforeAuthorityRelease,
+            DurabilityFailpoint::CloseAfterAuthorityRelease,
+        ];
+        for (point, expected, retryable, expected_phase, expected_reached) in [
+            (
+                DurabilityFailpoint::CloseBeforeDrain,
+                ServiceSqliteErrorKind::Open,
+                true,
+                0,
+                &all_close_edges[..1],
+            ),
+            (
+                DurabilityFailpoint::CloseAfterDrain,
+                ServiceSqliteErrorKind::Open,
+                true,
+                0,
+                &all_close_edges[..2],
+            ),
+            (
+                DurabilityFailpoint::CloseBeforeCheckpoint,
+                ServiceSqliteErrorKind::Pragma,
+                false,
+                6,
+                &[
+                    DurabilityFailpoint::CloseBeforeDrain,
+                    DurabilityFailpoint::CloseAfterDrain,
+                    DurabilityFailpoint::CloseBeforeCheckpoint,
+                    DurabilityFailpoint::CloseBeforeConnectionClose,
+                    DurabilityFailpoint::CloseAfterConnectionClose,
+                    DurabilityFailpoint::CloseBeforeAuthorityRelease,
+                    DurabilityFailpoint::CloseAfterAuthorityRelease,
+                ][..],
+            ),
+            (
+                DurabilityFailpoint::CloseAfterCheckpoint,
+                ServiceSqliteErrorKind::Pragma,
+                false,
+                6,
+                &all_close_edges[..],
+            ),
+            (
+                DurabilityFailpoint::CloseBeforeConnectionClose,
+                ServiceSqliteErrorKind::Open,
+                false,
+                6,
+                &all_close_edges[..],
+            ),
+            (
+                DurabilityFailpoint::CloseAfterConnectionClose,
+                ServiceSqliteErrorKind::Open,
+                false,
+                6,
+                &all_close_edges[..],
+            ),
+            (
+                DurabilityFailpoint::CloseBeforeAuthorityRelease,
+                ServiceSqliteErrorKind::Authority,
+                true,
+                6,
+                &all_close_edges[..7],
+            ),
+            (
+                DurabilityFailpoint::CloseAfterAuthorityRelease,
+                ServiceSqliteErrorKind::Authority,
+                false,
+                6,
+                &all_close_edges[..],
+            ),
+        ] {
+            let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+            host.arm_durability_failpoint(point);
+            let error = host.close().await.expect_err("injected close edge");
+            assert_eq!(error.kind(), expected);
+            assert!(host.failpoints.fired());
+            assert_eq!(host.failpoints.reached(), expected_reached);
+            assert_eq!(
+                host.pool.close_phase(),
+                expected_phase,
+                "close failpoint must fire in its named driver phase"
+            );
+            if retryable {
+                host.close().await.expect("one-shot close edge resumes");
+            } else {
+                assert_eq!(
+                    host.close()
+                        .await
+                        .expect_err("terminal close result is cached")
+                        .kind(),
+                    expected
+                );
+            }
+        }
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

@@ -53,6 +53,7 @@ where
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
+        let failpoints = crate::failpoint::DurabilityFailpoints::default();
         initialize_with_ops(
             paths,
             authority,
@@ -60,6 +61,7 @@ where
             schema_catalog,
             initialize_schema,
             &SystemInitializationOperations,
+            &failpoints,
         )
         .await
     }
@@ -91,6 +93,8 @@ enum InitializationFailureKind {
     DirectorySyncFailed,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     CleanupFailed,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    InjectedFailure,
 }
 
 struct InitializationCause {
@@ -154,6 +158,10 @@ impl fmt::Display for InitializationCause {
             }
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             InitializationFailureKind::CleanupFailed => "SQLite initialization cleanup failed",
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            InitializationFailureKind::InjectedFailure => {
+                "SQLite initialization durability boundary failed"
+            }
         })
     }
 }
@@ -335,11 +343,31 @@ mod supported {
             Ok(())
         }
 
-        fn commit(&mut self, canonical_path: &std::path::Path) -> Result<(), InitializationCause> {
+        fn commit(
+            &mut self,
+            canonical_path: &std::path::Path,
+            failpoints: &crate::failpoint::DurabilityFailpoints,
+        ) -> Result<(), InitializationCause> {
+            hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::InitializeBeforeFileSync,
+            )?;
             self.operations.sync_database(&self.database)?;
+            hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::InitializeAfterFileSync,
+            )?;
             self.validate()?;
             self.validate_canonical_path(canonical_path)?;
+            hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::InitializeBeforeCommitDirectorySync,
+            )?;
             self.operations.sync_directory(self.directory)?;
+            hit(
+                failpoints,
+                crate::failpoint::DurabilityFailpoint::InitializeAfterCommitDirectorySync,
+            )?;
             self.committed = true;
             Ok(())
         }
@@ -452,6 +480,7 @@ mod supported {
         schema_catalog: &SchemaCatalog,
         initialize_schema: F,
         operations: &O,
+        failpoints: &crate::failpoint::DurabilityFailpoints,
     ) -> Result<WriterAuthority, ServiceSqliteError>
     where
         F: FnOnce(PathBuf) -> Fut,
@@ -459,9 +488,32 @@ mod supported {
         E: Error + Send + Sync + 'static,
         O: InitializationOperations,
     {
+        hit(
+            failpoints,
+            crate::failpoint::DurabilityFailpoint::InitializeBeforeCreate,
+        )
+        .map_err(initialization_error)?;
         let mut pending = PendingDatabase::create(authority.directory(), operations)
             .map_err(initialization_error)?;
+        if let Err(error) = hit(
+            failpoints,
+            crate::failpoint::DurabilityFailpoint::InitializeAfterCreate,
+        ) {
+            return fail_with_rollback(pending, error).await;
+        }
+        if let Err(error) = hit(
+            failpoints,
+            crate::failpoint::DurabilityFailpoint::InitializeBeforeReservationDirectorySync,
+        ) {
+            return fail_with_rollback(pending, error).await;
+        }
         if let Err(error) = operations.sync_directory(authority.directory()) {
+            return fail_with_rollback(pending, error).await;
+        }
+        if let Err(error) = hit(
+            failpoints,
+            crate::failpoint::DurabilityFailpoint::InitializeAfterReservationDirectorySync,
+        ) {
             return fail_with_rollback(pending, error).await;
         }
         if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
@@ -520,11 +572,20 @@ mod supported {
         if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
             return fail_with_rollback(pending, error).await;
         }
-        if let Err(error) = pending.commit(paths.state_database()) {
+        if let Err(error) = pending.commit(paths.state_database(), failpoints) {
             return fail_with_rollback(pending, error).await;
         }
         drop(pending);
         Ok(authority)
+    }
+
+    fn hit(
+        failpoints: &crate::failpoint::DurabilityFailpoints,
+        point: crate::failpoint::DurabilityFailpoint,
+    ) -> Result<(), InitializationCause> {
+        failpoints.hit(point).map_err(|source| {
+            InitializationCause::with_source(InitializationFailureKind::InjectedFailure, source)
+        })
     }
 
     #[cfg(test)]
@@ -1042,6 +1103,7 @@ mod supported {
                         &schema_catalog,
                         |_| ready(Err::<(), _>(CallbackFailure)),
                         &operations,
+                        &crate::failpoint::DurabilityFailpoints::default(),
                     )
                     .await
                 } else {
@@ -1052,6 +1114,7 @@ mod supported {
                         &schema_catalog,
                         |_| ready(Ok::<(), CallbackFailure>(())),
                         &operations,
+                        &crate::failpoint::DurabilityFailpoints::default(),
                     )
                     .await
                 };
@@ -1092,6 +1155,101 @@ mod supported {
                     }
                     _ => unreachable!(),
                 }
+            }
+        }
+
+        #[tokio::test(flavor = "current_thread")]
+        async fn every_initialization_durability_edge_fails_once_and_rolls_back() {
+            use crate::failpoint::{DurabilityFailpoint, DurabilityFailpoints};
+
+            for (index, (point, expected_events)) in [
+                (DurabilityFailpoint::InitializeBeforeCreate, &[][..]),
+                (
+                    DurabilityFailpoint::InitializeAfterCreate,
+                    &["unlink_database", "sync_directory"][..],
+                ),
+                (
+                    DurabilityFailpoint::InitializeBeforeReservationDirectorySync,
+                    &["unlink_database", "sync_directory"][..],
+                ),
+                (
+                    DurabilityFailpoint::InitializeAfterReservationDirectorySync,
+                    &["sync_directory", "unlink_database", "sync_directory"][..],
+                ),
+                (
+                    DurabilityFailpoint::InitializeBeforeFileSync,
+                    &["sync_directory", "unlink_database", "sync_directory"][..],
+                ),
+                (
+                    DurabilityFailpoint::InitializeAfterFileSync,
+                    &[
+                        "sync_directory",
+                        "sync_database",
+                        "unlink_database",
+                        "sync_directory",
+                    ][..],
+                ),
+                (
+                    DurabilityFailpoint::InitializeBeforeCommitDirectorySync,
+                    &[
+                        "sync_directory",
+                        "sync_database",
+                        "unlink_database",
+                        "sync_directory",
+                    ][..],
+                ),
+                (
+                    DurabilityFailpoint::InitializeAfterCommitDirectorySync,
+                    &[
+                        "sync_directory",
+                        "sync_database",
+                        "sync_directory",
+                        "unlink_database",
+                        "sync_directory",
+                    ][..],
+                ),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let root = tempfile::tempdir().expect("root");
+                let paths = paths(root.path(), &format!("failpoint-{index}"));
+                prepare(&paths);
+                let metadata = metadata(&paths);
+                let schema_catalog = base_schema_catalog();
+                let authority = WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                    .expect("authority acquisition")
+                    .expect("initialize authority");
+                let failpoints = DurabilityFailpoints::armed(point);
+                let operations = RecordingOperations::default();
+                let error = initialize_with_ops(
+                    &paths,
+                    authority,
+                    &metadata,
+                    &schema_catalog,
+                    |_| ready(Ok::<(), CallbackFailure>(())),
+                    &operations,
+                    &failpoints,
+                )
+                .await
+                .expect_err("durability edge must fail");
+                assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
+                assert!(failpoints.fired());
+                assert_eq!(
+                    failpoints.reached().last(),
+                    Some(&point),
+                    "named edge must be the last reached boundary"
+                );
+                assert_eq!(
+                    operations.events.borrow().as_slice(),
+                    expected_events,
+                    "named before/after edge must bracket the expected sync operation"
+                );
+                assert!(!paths.state_database().exists());
+                let mut recovered = WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                    .expect("reacquire after rollback")
+                    .expect("initialize authority");
+                recovered.release().expect("release recovered authority");
             }
         }
     }

@@ -78,11 +78,17 @@ pub async fn finalize_staged_restore(
 ) -> Result<(), ServiceSqliteError> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
+        let failpoints = crate::failpoint::DurabilityFailpoints::default();
         let cancellation = Arc::new(AtomicU8::new(CANCELLABLE));
         let cancellation_on_drop = CancellationOnDrop::new(Arc::clone(&cancellation));
         let native = staged.into_native();
         let result = tokio::task::spawn_blocking(move || {
-            finalize_native(native, &cancellation, &SystemFinalizeOperations)
+            finalize_native(
+                native,
+                &cancellation,
+                &SystemFinalizeOperations,
+                &failpoints,
+            )
         })
         .await
         .map_err(|source| finalize_source(FinalizeFailureKind::Join, source))?;
@@ -102,6 +108,7 @@ fn finalize_native(
     staged: NativeStagedServiceRestore,
     cancellation: &AtomicU8,
     operations: &dyn FinalizeOperations,
+    failpoints: &crate::failpoint::DurabilityFailpoints,
 ) -> Result<(), ServiceSqliteError> {
     staged.validate()?;
     check_cancel(cancellation)?;
@@ -160,18 +167,20 @@ fn finalize_native(
             on_durable,
         )
     } else {
-        RestoreMarkerBinding::create_with_durable_callback(
+        RestoreMarkerBinding::create_with_durable_callback_and_failpoints(
             staged.paths(),
             staged.authority(),
             &marker,
+            failpoints,
             on_durable,
         )
     };
     #[cfg(not(test))]
-    let marker_result = RestoreMarkerBinding::create_with_durable_callback(
+    let marker_result = RestoreMarkerBinding::create_with_durable_callback_and_failpoints(
         staged.paths(),
         staged.authority(),
         &marker,
+        failpoints,
         on_durable,
     );
     let mut marker = marker_result?;
@@ -180,36 +189,44 @@ fn finalize_native(
         &staged,
         operations,
         RenameStep::RetainLive,
-        LIVE_FILE_NAME,
-        BACKUP_FILE_NAME,
-        &live,
-        live_artifact,
+        RenameArtifact {
+            source_name: LIVE_FILE_NAME,
+            destination_name: BACKUP_FILE_NAME,
+            held: &live,
+            expected: live_artifact,
+        },
+        failpoints,
     )?;
     authority_checked(&staged, || {
         operations.after_directory_sync(staged.directory(), RenameStep::RetainLive)
     })??;
-    marker = marker.advance(
+    marker = marker.advance_with_failpoints(
         staged.paths(),
         staged.authority(),
         RestoreRecoveryPhase::LiveRetained,
+        failpoints,
     )?;
 
     rename_and_sync(
         &staged,
         operations,
         RenameStep::InstallStage,
-        STAGED_FILE_NAME,
-        LIVE_FILE_NAME,
-        staged.staged_file(),
-        staged.artifact(),
+        RenameArtifact {
+            source_name: STAGED_FILE_NAME,
+            destination_name: LIVE_FILE_NAME,
+            held: staged.staged_file(),
+            expected: staged.artifact(),
+        },
+        failpoints,
     )?;
     authority_checked(&staged, || {
         operations.after_directory_sync(staged.directory(), RenameStep::InstallStage)
     })??;
-    marker = marker.advance(
+    marker = marker.advance_with_failpoints(
         staged.paths(),
         staged.authority(),
         RestoreRecoveryPhase::ReplacementInstalled,
+        failpoints,
     )?;
     if marker.marker().phase() != RestoreRecoveryPhase::ReplacementInstalled {
         return Err(finalize_error(FinalizeFailureKind::Marker));
@@ -225,22 +242,58 @@ fn rename_and_sync(
     staged: &NativeStagedServiceRestore,
     operations: &dyn FinalizeOperations,
     step: RenameStep,
-    source_name: &str,
-    destination_name: &str,
-    held: &File,
-    expected: RestoreArtifactExpectation,
+    artifact: RenameArtifact<'_>,
+    failpoints: &crate::failpoint::DurabilityFailpoints,
 ) -> Result<(), ServiceSqliteError> {
     authority_checked(staged, || {
-        verify_named_artifact(staged.directory(), source_name, held, expected, None)
+        verify_named_artifact(
+            staged.directory(),
+            artifact.source_name,
+            artifact.held,
+            artifact.expected,
+            None,
+        )
+    })??;
+    authority_checked(staged, || {
+        hit(
+            failpoints,
+            step.before_rename_failpoint(),
+            step.rename_failure(),
+        )
     })??;
     let rename = authority_checked(staged, || {
         operations
-            .rename(staged.directory(), source_name, destination_name, step)
+            .rename(
+                staged.directory(),
+                artifact.source_name,
+                artifact.destination_name,
+                step,
+            )
             .map_err(|source| finalize_source(step.rename_failure(), source))
     })?;
     rename?;
     authority_checked(staged, || {
-        verify_named_artifact(staged.directory(), destination_name, held, expected, None)
+        hit(
+            failpoints,
+            step.after_rename_failpoint(),
+            step.rename_failure(),
+        )
+    })??;
+    authority_checked(staged, || {
+        verify_named_artifact(
+            staged.directory(),
+            artifact.destination_name,
+            artifact.held,
+            artifact.expected,
+            None,
+        )
+    })??;
+    authority_checked(staged, || {
+        hit(
+            failpoints,
+            step.before_sync_failpoint(),
+            step.sync_failure(),
+        )
     })??;
     let sync = authority_checked(staged, || {
         operations
@@ -249,7 +302,16 @@ fn rename_and_sync(
     })?;
     sync?;
     authority_checked(staged, || {
-        verify_named_artifact(staged.directory(), destination_name, held, expected, None)
+        hit(failpoints, step.after_sync_failpoint(), step.sync_failure())
+    })??;
+    authority_checked(staged, || {
+        verify_named_artifact(
+            staged.directory(),
+            artifact.destination_name,
+            artifact.held,
+            artifact.expected,
+            None,
+        )
     })??;
     Ok(())
 }
@@ -431,6 +493,14 @@ enum RenameStep {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+struct RenameArtifact<'a> {
+    source_name: &'static str,
+    destination_name: &'static str,
+    held: &'a File,
+    expected: RestoreArtifactExpectation,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl RenameStep {
     const fn rename_failure(self) -> FinalizeFailureKind {
         match self {
@@ -443,6 +513,44 @@ impl RenameStep {
         match self {
             Self::RetainLive => FinalizeFailureKind::SyncRetained,
             Self::InstallStage => FinalizeFailureKind::SyncInstalled,
+        }
+    }
+
+    const fn before_rename_failpoint(self) -> crate::failpoint::DurabilityFailpoint {
+        match self {
+            Self::RetainLive => {
+                crate::failpoint::DurabilityFailpoint::RestoreBeforeRetainLiveRename
+            }
+            Self::InstallStage => {
+                crate::failpoint::DurabilityFailpoint::RestoreBeforeInstallStageRename
+            }
+        }
+    }
+
+    const fn after_rename_failpoint(self) -> crate::failpoint::DurabilityFailpoint {
+        match self {
+            Self::RetainLive => crate::failpoint::DurabilityFailpoint::RestoreAfterRetainLiveRename,
+            Self::InstallStage => {
+                crate::failpoint::DurabilityFailpoint::RestoreAfterInstallStageRename
+            }
+        }
+    }
+
+    const fn before_sync_failpoint(self) -> crate::failpoint::DurabilityFailpoint {
+        match self {
+            Self::RetainLive => crate::failpoint::DurabilityFailpoint::RestoreBeforeRetainLiveSync,
+            Self::InstallStage => {
+                crate::failpoint::DurabilityFailpoint::RestoreBeforeInstallStageSync
+            }
+        }
+    }
+
+    const fn after_sync_failpoint(self) -> crate::failpoint::DurabilityFailpoint {
+        match self {
+            Self::RetainLive => crate::failpoint::DurabilityFailpoint::RestoreAfterRetainLiveSync,
+            Self::InstallStage => {
+                crate::failpoint::DurabilityFailpoint::RestoreAfterInstallStageSync
+            }
         }
     }
 }
@@ -584,12 +692,31 @@ pub(crate) async fn test_finalize_with_failure(
             native,
             &AtomicU8::new(CANCELLABLE),
             &FailingFinalizeOperations,
+            &crate::failpoint::DurabilityFailpoints::default(),
         )
     })
     .await
     .map_err(|source| finalize_source(FinalizeFailureKind::Join, source))?;
     TEST_FINALIZE_FAILURE.store(0, Ordering::Release);
     result
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) async fn test_finalize_with_failpoint(
+    staged: StagedServiceRestore,
+    failpoints: crate::failpoint::DurabilityFailpoints,
+) -> Result<(), ServiceSqliteError> {
+    let native = staged.into_native();
+    tokio::task::spawn_blocking(move || {
+        finalize_native(
+            native,
+            &AtomicU8::new(CANCELLABLE),
+            &SystemFinalizeOperations,
+            &failpoints,
+        )
+    })
+    .await
+    .map_err(|source| finalize_source(FinalizeFailureKind::Join, source))?
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
@@ -716,4 +843,15 @@ fn finalize_source(
             source: Some(Box::new(source)),
         },
     )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn hit(
+    failpoints: &crate::failpoint::DurabilityFailpoints,
+    point: crate::failpoint::DurabilityFailpoint,
+    kind: FinalizeFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    failpoints
+        .hit(point)
+        .map_err(|source| finalize_source(kind, source))
 }

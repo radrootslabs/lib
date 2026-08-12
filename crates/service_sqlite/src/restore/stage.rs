@@ -1244,7 +1244,8 @@ mod tests {
     use crate::restore::finalize::{
         TEST_FINALIZE_BLOCK_PHASE, TEST_FINALIZE_PHASE, TEST_PHASE_AFTER_PREPARED,
         TEST_PHASE_BEFORE_PREPARED, TEST_PHASE_COMMIT_OWNED,
-        reset_test_controls as reset_finalize_controls, test_finalize_with_failure,
+        reset_test_controls as reset_finalize_controls, test_finalize_with_failpoint,
+        test_finalize_with_failure,
     };
     use crate::restore::{RestoreMarkerBinding, RestoreRecoveryMarker, RestoreRecoveryPhase};
     use crate::{
@@ -2212,6 +2213,106 @@ mod tests {
                 recovery_path(&fixture, MARKER_NEXT_FILE_NAME).exists(),
                 matches!(failure, 4 | 8)
             );
+        }
+        reset_finalize_controls();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn every_marker_and_restore_durability_edge_is_wired_once() {
+        use crate::failpoint::{DurabilityFailpoint, DurabilityFailpoints};
+
+        let _serial = STAGE_TEST_LOCK.lock().await;
+        for point in [
+            DurabilityFailpoint::MarkerBeforeCreate,
+            DurabilityFailpoint::MarkerAfterCreate,
+            DurabilityFailpoint::MarkerBeforeFileSync,
+            DurabilityFailpoint::MarkerAfterFileSync,
+            DurabilityFailpoint::MarkerBeforeDirectorySync,
+            DurabilityFailpoint::MarkerAfterDirectorySync,
+            DurabilityFailpoint::MarkerAdvanceBeforeWriteAndFileSync,
+            DurabilityFailpoint::MarkerAdvanceAfterWriteAndFileSync,
+            DurabilityFailpoint::MarkerAdvanceBeforeReplace,
+            DurabilityFailpoint::MarkerAdvanceAfterReplace,
+            DurabilityFailpoint::MarkerAdvanceBeforeDirectorySync,
+            DurabilityFailpoint::MarkerAdvanceAfterDirectorySync,
+            DurabilityFailpoint::RestoreBeforeRetainLiveRename,
+            DurabilityFailpoint::RestoreAfterRetainLiveRename,
+            DurabilityFailpoint::RestoreBeforeRetainLiveSync,
+            DurabilityFailpoint::RestoreAfterRetainLiveSync,
+            DurabilityFailpoint::RestoreBeforeInstallStageRename,
+            DurabilityFailpoint::RestoreAfterInstallStageRename,
+            DurabilityFailpoint::RestoreBeforeInstallStageSync,
+            DurabilityFailpoint::RestoreAfterInstallStageSync,
+        ] {
+            reset_finalize_controls();
+            let fixture = Fixture::new().await;
+            let staged = stage_verified_restore(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                fixture.proof(),
+            )
+            .await
+            .expect("stage");
+            let failpoints = DurabilityFailpoints::armed(point);
+            let error = test_finalize_with_failpoint(staged, failpoints.clone())
+                .await
+                .expect_err("injected marker or restore edge");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+            assert!(failpoints.fired(), "edge was not reached: {point:?}");
+            assert!(
+                failpoints.reached().contains(&point),
+                "named marker/rename edge must be observed"
+            );
+            assert!(
+                fixture.paths.state_database().exists()
+                    || recovery_path(&fixture, BACKUP_FILE_NAME).exists(),
+                "live content remains represented by an exact governed artifact"
+            );
+            let topology = (
+                fixture.paths.state_database().exists(),
+                fixture.staged_path().exists(),
+                recovery_path(&fixture, BACKUP_FILE_NAME).exists(),
+                recovery_path(&fixture, MARKER_FILE_NAME).exists(),
+            );
+            match point {
+                DurabilityFailpoint::MarkerBeforeCreate
+                | DurabilityFailpoint::MarkerAfterCreate
+                | DurabilityFailpoint::MarkerBeforeFileSync
+                | DurabilityFailpoint::MarkerAfterFileSync
+                | DurabilityFailpoint::MarkerBeforeDirectorySync => {
+                    assert_eq!(topology, (true, false, false, false));
+                }
+                DurabilityFailpoint::MarkerAfterDirectorySync
+                | DurabilityFailpoint::RestoreBeforeRetainLiveRename => {
+                    assert_eq!(topology, (true, true, false, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::Prepared);
+                }
+                DurabilityFailpoint::RestoreAfterRetainLiveRename
+                | DurabilityFailpoint::RestoreBeforeRetainLiveSync
+                | DurabilityFailpoint::RestoreAfterRetainLiveSync
+                | DurabilityFailpoint::MarkerAdvanceBeforeWriteAndFileSync
+                | DurabilityFailpoint::MarkerAdvanceAfterWriteAndFileSync
+                | DurabilityFailpoint::MarkerAdvanceBeforeReplace => {
+                    assert_eq!(topology, (false, true, true, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::Prepared);
+                }
+                DurabilityFailpoint::MarkerAdvanceAfterReplace
+                | DurabilityFailpoint::MarkerAdvanceBeforeDirectorySync
+                | DurabilityFailpoint::MarkerAdvanceAfterDirectorySync
+                | DurabilityFailpoint::RestoreBeforeInstallStageRename => {
+                    assert_eq!(topology, (false, true, true, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::LiveRetained);
+                }
+                DurabilityFailpoint::RestoreAfterInstallStageRename
+                | DurabilityFailpoint::RestoreBeforeInstallStageSync
+                | DurabilityFailpoint::RestoreAfterInstallStageSync => {
+                    assert_eq!(topology, (true, false, true, true));
+                    assert_eq!(marker_phase(&fixture), RestoreRecoveryPhase::LiveRetained);
+                }
+                _ => unreachable!("complete marker/restore failpoint inventory"),
+            }
         }
         reset_finalize_controls();
     }

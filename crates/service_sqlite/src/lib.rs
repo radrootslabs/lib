@@ -7,6 +7,8 @@ mod backup;
 mod config;
 mod connection;
 mod error;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod failpoint;
 mod initialize;
 mod integrity;
 mod metadata;
