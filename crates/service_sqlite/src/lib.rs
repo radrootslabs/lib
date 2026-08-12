@@ -33,8 +33,9 @@ pub use error::{
 };
 pub use initialize::initialize_database;
 pub use integrity::{
-    SchemaCatalog, SchemaCatalogContractError, SchemaDigest, SchemaObject, SchemaObjectKind,
-    SchemaVersionCatalog,
+    IntegrityCheckOutcome, IntegrityCheckedAtUnixMs, IntegrityDiagnosticCode, SchemaCatalog,
+    SchemaCatalogContractError, SchemaDigest, SchemaObject, SchemaObjectKind, SchemaVersionCatalog,
+    ServiceSqliteIntegrityReport,
 };
 pub use metadata::{
     ServiceDatabaseIdentity, ServiceDatabaseMetadata, ServiceSqliteApplicationId,

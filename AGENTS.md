@@ -251,6 +251,19 @@ Before editing code:
   `Recovery` evidence. Do not expose recovery controls, add a background task
   or hidden timeout, repair without writer authority, or fold Step 070
   integrity/status APIs and the later process failpoint harness into recovery.
+- Explicit active integrity inspection belongs only to
+  `ServiceSqliteHost::inspect_integrity`. It admits at most one check per host,
+  uses one governed read snapshot, accepts an injected positive wall-clock
+  timestamp, and returns only the closed SQLite/foreign-key outcomes plus at
+  most two stable diagnostic codes in canonical order. Preserve authority
+  precedence after every await. Do not expose raw SQLite diagnostics, paths,
+  SQL, pool handles, or dependency errors; persist or cache the result; read an
+  ambient clock; create a timer/task; or weaken the strict restore/backup
+  integrity verifier. Callers own the monotonic deadline by cancelling the
+  future. The host-owned integrity driver must retain a cancelled in-flight
+  connection and its explicit close future until the SQLx worker terminates;
+  retry and host close resume that cleanup before proceeding. A retry must
+  inject a new timestamp.
 - Runtime-management flows consume a sealed `RuntimeContext` for every service
   instance. They must not reconstruct service paths from raw identifiers,
   ambient selectors, or manager-owned roots, and registries must not persist

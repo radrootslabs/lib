@@ -1,11 +1,22 @@
 //! Exact schema-object catalog verification.
 
 pub(crate) mod catalog;
+mod inspection;
 
 pub use catalog::{
     SchemaCatalog, SchemaCatalogContractError, SchemaDigest, SchemaObject, SchemaObjectKind,
     SchemaVersionCatalog,
 };
+pub use inspection::{
+    IntegrityCheckOutcome, IntegrityCheckedAtUnixMs, IntegrityDiagnosticCode,
+    ServiceSqliteIntegrityReport,
+};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use inspection::inspect_database_integrity;
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(crate) use inspection::test_seam as integrity_test_seam;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use core::fmt;

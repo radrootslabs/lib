@@ -199,6 +199,30 @@ cancelled. A later cancelled SQLite open is retried by rereading the already
 durable, marker-free state. Finalization itself does not reconcile or reopen the
 database.
 
+`ServiceSqliteHost::inspect_integrity` is the explicit active operator check.
+It is available on initialized, writable-existing, and read-only inspection
+hosts, admits at most one check per host, and uses one deferred read transaction
+as the SQLite snapshot. The caller injects a positive wall-clock
+`IntegrityCheckedAtUnixMs`; the library does not read an ambient clock or
+create a timer. The completed report contains only `verified` or `failed` for
+SQLite integrity and foreign keys, plus at most the fixed
+`sqlite_integrity_failed` and `foreign_key_violation` diagnostic codes in that
+canonical order. It can be projected to the passive `StorageIntegrity`
+vocabulary, but the library does not persist or cache the report.
+
+The check never publishes raw SQLite diagnostics, table or row identity,
+filesystem paths, SQL, or dependency errors. Inability to execute, decode, or
+finish either bounded check is an `Integrity` error rather than a fabricated
+completed result. Authority is revalidated after every await and has precedence
+over integrity classification. The operation has no hidden timeout or task.
+Callers own a positive monotonic deadline by dropping the future; cancellation
+returns no report, writes nothing, quarantines the checked-out connection, and
+leaves it in a host-owned close driver. Retry or host close explicitly awaits
+that retained close future until the prior SQLite worker terminates before any
+new check or authority release. A retry uses a newly injected wall-clock time.
+The strict backup and restore integrity verifier remains a separate fail-closed
+boundary.
+
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
 policy remain with the consuming service. The crate does not provide callers

@@ -13,6 +13,7 @@ const ERROR_SOURCE: &str = include_str!("../src/error.rs");
 const INITIALIZE_SOURCE: &str = include_str!("../src/initialize.rs");
 const INTEGRITY_SOURCE: &str = include_str!("../src/integrity/mod.rs");
 const INTEGRITY_CATALOG_SOURCE: &str = include_str!("../src/integrity/catalog.rs");
+const INTEGRITY_INSPECTION_SOURCE: &str = include_str!("../src/integrity/inspection.rs");
 const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
@@ -196,6 +197,29 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "Recovery has no await point or hidden task",
         "each synchronous filesystem step and its authority checks complete",
         "Finalization itself does not reconcile or reopen the database",
+        "`ServiceSqliteHost::inspect_integrity` is the explicit active operator check",
+        "available on initialized, writable-existing, and read-only inspection hosts",
+        "admits at most one check per host",
+        "uses one deferred read transaction as the SQLite snapshot",
+        "caller injects a positive wall-clock `IntegrityCheckedAtUnixMs`",
+        "does not read an ambient clock or create a timer",
+        "only `verified` or `failed` for SQLite integrity and foreign keys",
+        "at most the fixed `sqlite_integrity_failed` and `foreign_key_violation` diagnostic codes",
+        "canonical order",
+        "projected to the passive `StorageIntegrity` vocabulary",
+        "does not persist or cache the report",
+        "never publishes raw SQLite diagnostics, table or row identity",
+        "Inability to execute, decode, or finish either bounded check is an `Integrity` error",
+        "Authority is revalidated after every await and has precedence",
+        "operation has no hidden timeout or task",
+        "Callers own a positive monotonic deadline by dropping the future",
+        "cancellation returns no report, writes nothing, quarantines the checked-out connection",
+        "leaves it in a host-owned close driver",
+        "Retry or host close explicitly awaits that retained close future",
+        "until the prior SQLite worker terminates",
+        "before any new check or authority release",
+        "retry uses a newly injected wall-clock time",
+        "strict backup and restore integrity verifier remains a separate fail-closed boundary",
     ] {
         assert!(
             readme_words.contains(required),
@@ -229,6 +253,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     let backup_verify_production = BACKUP_VERIFY_SOURCE
         .split_once("#[cfg(test)]")
         .map_or(BACKUP_VERIFY_SOURCE, |(production, _)| production);
+    let integrity_inspection_production = INTEGRITY_INSPECTION_SOURCE
+        .split_once("#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]")
+        .map(|(production, _)| production)
+        .expect("integrity inspection source must keep test seams separated");
     let restore_marker_production = RESTORE_MARKER_SOURCE
         .split_once("#[cfg(test)]\nmod tests")
         .map(|(production, _)| production)
@@ -274,6 +302,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "MigrationKind",
         "MigrationName",
         "MigrationTransactionExecutor",
+        "IntegrityCheckOutcome",
+        "IntegrityCheckedAtUnixMs",
+        "IntegrityDiagnosticCode",
+        "ServiceSqliteIntegrityReport",
         "SchemaCatalog",
         "SchemaCatalogContractError",
         "SchemaDigest",
@@ -386,6 +418,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "must reread authoritative state before any idempotent retry",
         "pub async fn close(&self)",
         "pub async fn capture_online_backup(",
+        "pub async fn inspect_integrity(",
         "closing.store(true, Ordering::Release)",
         "close_state.lock().await",
         "ServiceSqliteHostCloseState::Complete",
@@ -431,6 +464,62 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             !connection_production.contains(forbidden) && !ROOT.contains(forbidden),
             "Step 061 source exposes forbidden raw authority `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "pub struct IntegrityCheckedAtUnixMs",
+        "pub enum IntegrityCheckOutcome",
+        "pub enum IntegrityDiagnosticCode",
+        "pub struct ServiceSqliteIntegrityReport",
+        "SqliteIntegrityFailed",
+        "ForeignKeyViolation",
+        "Box<[IntegrityDiagnosticCode]>",
+        "pub const fn storage_integrity",
+        "PRAGMA integrity_check(1)",
+        "SELECT 1 FROM pragma_foreign_key_check LIMIT 1",
+        "connection.begin().await",
+        "transaction.rollback().await",
+        "validate()?",
+    ] {
+        assert!(
+            integrity_inspection_production.contains(required),
+            "Step 070 integrity inspection source is missing `{required}`"
+        );
+    }
+    for required in [
+        "integrity_driver: tokio::sync::Mutex<IntegrityInspectionDriver>",
+        ".try_lock()",
+        "driver.close_retained().await",
+        "QuarantinedConnection::new",
+        "crate::integrity::inspect_database_integrity",
+        "connection.trust()",
+    ] {
+        assert!(
+            connection_production.contains(required),
+            "Step 070 host integration is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub use sqlx",
+        "SqlitePool",
+        "PoolConnection",
+        "SystemTime",
+        "Instant",
+        "tokio::time",
+        "tokio::task",
+        "spawn",
+        "std::fs",
+        "OpenOptions",
+        "write_all",
+        "persist",
+        "cache",
+        "myc_",
+        "rhi_",
+    ] {
+        assert!(
+            !integrity_inspection_production.contains(forbidden),
+            "Step 070 integrity inspection contains forbidden authority `{forbidden}`"
         );
     }
 

@@ -21,8 +21,8 @@ use sqlx::{
 use crate::{
     MigrationApplicationOutcome, MigrationAppliedAtUnixSeconds, MigrationBuildIdentity,
     MigrationCallbackBinding, MigrationCatalog, OpenMode, SchemaCatalog, ServiceDatabaseIdentity,
-    ServiceSqliteConnectionOptions, ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqlitePaths,
-    WriterAuthority,
+    ServiceSqliteConnectionOptions, ServiceSqliteError, ServiceSqliteErrorKind,
+    ServiceSqliteIntegrityReport, ServiceSqlitePaths, WriterAuthority,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -49,12 +49,86 @@ pub struct ServiceSqliteHost {
     close_state: tokio::sync::Mutex<ServiceSqliteHostCloseState>,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     backup_active: Arc<AtomicBool>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    integrity_driver: tokio::sync::Mutex<IntegrityInspectionDriver>,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 enum ServiceSqliteHostCloseState {
     Pending,
     Complete(Option<ServiceSqliteErrorKind>),
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+enum IntegrityInspectionDriver {
+    Idle,
+    Connected(QuarantinedConnection),
+    Closing(BoxFuture<'static, Result<(), sqlx::Error>>),
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IntegrityInspectionDriverFailure {
+    Invariant,
+    ConnectionClose,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl IntegrityInspectionDriver {
+    async fn close_retained(&mut self) -> Result<(), IntegrityInspectionDriverFailure> {
+        loop {
+            match self {
+                Self::Idle => return Ok(()),
+                Self::Connected(_) => {
+                    let Self::Connected(connection) = core::mem::replace(self, Self::Idle) else {
+                        return Err(IntegrityInspectionDriverFailure::Invariant);
+                    };
+                    *self = Self::Closing(
+                        connection
+                            .into_close_future()
+                            .ok_or(IntegrityInspectionDriverFailure::Invariant)?,
+                    );
+                }
+                Self::Closing(close) => {
+                    #[cfg(test)]
+                    crate::integrity::integrity_test_seam::pause(
+                        crate::integrity::integrity_test_seam::PHASE_CONNECTION_CLOSE_AWAITING,
+                    )
+                    .await;
+                    let result = close.await;
+                    *self = Self::Idle;
+                    #[cfg(test)]
+                    if crate::integrity::integrity_test_seam::take_connection_close_failure() {
+                        return Err(IntegrityInspectionDriverFailure::ConnectionClose);
+                    }
+                    return result.map_err(|_| IntegrityInspectionDriverFailure::ConnectionClose);
+                }
+            }
+        }
+    }
+
+    fn connection_mut(&mut self) -> Result<&mut SqliteConnection, ServiceSqliteError> {
+        match self {
+            Self::Connected(connection) => Ok(connection),
+            Self::Idle | Self::Closing(_) => {
+                Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))
+            }
+        }
+    }
+
+    fn return_to_pool(&mut self) -> Result<(), ServiceSqliteError> {
+        let Self::Connected(mut connection) = core::mem::replace(self, Self::Idle) else {
+            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
+        };
+        connection.trust();
+        drop(connection);
+        Ok(())
+    }
+
+    #[cfg(test)]
+    const fn is_idle(&self) -> bool {
+        matches!(self, Self::Idle)
+    }
 }
 
 impl ServiceSqliteHost {
@@ -193,10 +267,20 @@ impl ServiceSqliteHost {
             if let ServiceSqliteHostCloseState::Complete(kind) = *state {
                 return kind.map_or(Ok(()), |kind| Err(ServiceSqliteError::new(kind)));
             }
+            let (integrity_cleanup, integrity_validation) = {
+                let mut driver = self.integrity_driver.lock().await;
+                let cleanup = driver
+                    .close_retained()
+                    .await
+                    .map_err(|_| ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
+                let validation = self.pool.validate();
+                (cleanup, validation)
+            };
             let close = self.pool.close_explicit().await;
             match close {
                 Err(retryable) => Err(retryable),
                 Ok(terminal) => {
+                    let terminal = integrity_validation.and(terminal).and(integrity_cleanup);
                     *state = ServiceSqliteHostCloseState::Complete(
                         terminal.as_ref().err().map(ServiceSqliteError::kind),
                     );
@@ -243,6 +327,32 @@ impl ServiceSqliteHost {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             let _ = (staging_directory, created_at_unix_ms);
+            Err(unsupported_host())
+        }
+    }
+
+    /// Runs one explicit bounded integrity inspection over a single read snapshot.
+    ///
+    /// The caller injects the wall-clock completion time and owns any monotonic
+    /// deadline. The host admits at most one inspection at a time. Dropping this
+    /// future before it returns publishes no report, persists no status, and
+    /// leaves the checked-out connection in a host-owned explicit-close driver.
+    /// Retry or host close finishes that close before another check or authority
+    /// release; a retry must inject a new time.
+    /// Completed SQLite and foreign-key failures are returned only as fixed safe
+    /// diagnostic codes. An inability to execute or decode either check is an
+    /// `Integrity` error.
+    pub async fn inspect_integrity(
+        &self,
+        checked_at: crate::IntegrityCheckedAtUnixMs,
+    ) -> Result<ServiceSqliteIntegrityReport, ServiceSqliteError> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.inspect_integrity_supported(checked_at).await
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = checked_at;
             Err(unsupported_host())
         }
     }
@@ -476,6 +586,62 @@ impl ServiceSqliteHost {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    async fn inspect_integrity_supported(
+        &self,
+        checked_at: crate::IntegrityCheckedAtUnixMs,
+    ) -> Result<ServiceSqliteIntegrityReport, ServiceSqliteError> {
+        if self.closing.load(Ordering::Acquire) {
+            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
+        }
+        let mut driver = self
+            .integrity_driver
+            .try_lock()
+            .map_err(|_| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
+        let cleanup = driver.close_retained().await;
+        self.pool.validate()?;
+        cleanup.map_err(|_| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
+        if self.closing.load(Ordering::Acquire) {
+            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
+        }
+        self.pool.validate()?;
+        let connection = self.pool.acquire().await;
+        self.pool.validate()?;
+        *driver = IntegrityInspectionDriver::Connected(QuarantinedConnection::new(connection?));
+        if self.closing.load(Ordering::Acquire) {
+            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
+        }
+        let report = crate::integrity::inspect_database_integrity(
+            driver.connection_mut()?,
+            checked_at,
+            || self.pool.validate(),
+        )
+        .await;
+        let validation = self.pool.validate();
+        match (validation, report) {
+            (Err(error), _) => {
+                let cleanup = driver.close_retained().await;
+                let validation = self.pool.validate();
+                if error.kind() == ServiceSqliteErrorKind::Authority {
+                    return Err(error);
+                }
+                validation?;
+                cleanup.map_err(|_| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
+                Err(error)
+            }
+            (Ok(()), Err(error)) => {
+                let cleanup = driver.close_retained().await;
+                self.pool.validate()?;
+                cleanup.map_err(|_| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
+                Err(error)
+            }
+            (Ok(()), Ok(report)) => {
+                driver.return_to_pool()?;
+                Ok(report)
+            }
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn from_pool(mode: OpenMode, pool: crate::open::PrivateConnectionPool) -> Self {
         Self {
             mode,
@@ -483,6 +649,7 @@ impl ServiceSqliteHost {
             closing: AtomicBool::new(false),
             close_state: tokio::sync::Mutex::new(ServiceSqliteHostCloseState::Pending),
             backup_active: Arc::new(AtomicBool::new(false)),
+            integrity_driver: tokio::sync::Mutex::new(IntegrityInspectionDriver::Idle),
         }
     }
 
@@ -813,6 +980,11 @@ impl QuarantinedConnection {
     fn trust(&mut self) {
         self.trusted = true;
     }
+
+    fn into_close_future(mut self) -> Option<BoxFuture<'static, Result<(), sqlx::Error>>> {
+        let connection = self.connection.take()?;
+        Some(Box::pin(async move { connection.close().await }))
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1045,6 +1217,514 @@ mod tests {
         })
         .await
         .expect("count rows")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn integrity_checked_at(value: u64) -> crate::IntegrityCheckedAtUnixMs {
+        crate::IntegrityCheckedAtUnixMs::new(value).expect("integrity inspection time")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn integrity_inspection_is_explicit_safe_and_available_in_every_host_mode() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        let (_root, paths, identity, migrations, schema, initialized) = initialized_host().await;
+
+        let initialized_report = initialized
+            .inspect_integrity(integrity_checked_at(1_700_000_000_500))
+            .await
+            .expect("inspect initialized host");
+        assert_eq!(initialized.mode(), OpenMode::Initialize);
+        assert_eq!(
+            initialized_report.sqlite(),
+            crate::IntegrityCheckOutcome::Verified
+        );
+        assert_eq!(
+            initialized_report.foreign_keys(),
+            crate::IntegrityCheckOutcome::Verified
+        );
+        assert!(initialized_report.diagnostics().is_empty());
+        assert_eq!(
+            initialized_report.storage_integrity(),
+            crate::StorageIntegrity::Verified
+        );
+        initialized.close().await.expect("close initialized host");
+
+        let (writable, outcome) = ServiceSqliteHost::open_read_write_existing(
+            &paths,
+            &identity,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_001).expect("migration time"),
+            &build_identity(),
+            &[],
+        )
+        .await
+        .expect("open writable host");
+        assert_eq!(outcome.applied_count(), 0);
+        let writable_report = writable
+            .inspect_integrity(integrity_checked_at(1_700_000_000_501))
+            .await
+            .expect("inspect writable host");
+        assert_eq!(writable.mode(), OpenMode::ReadWriteExisting);
+        assert_eq!(
+            writable_report.storage_integrity(),
+            crate::StorageIntegrity::Verified
+        );
+        writable.close().await.expect("close writable host");
+
+        let read_only = ServiceSqliteHost::open_read_only_inspection(
+            &paths,
+            &identity,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+        )
+        .await
+        .expect("open read-only host");
+        let read_only_report = read_only
+            .inspect_integrity(integrity_checked_at(1_700_000_000_502))
+            .await
+            .expect("inspect read-only host");
+        assert_eq!(read_only.mode(), OpenMode::ReadOnlyInspection);
+        assert_eq!(
+            read_only_report.storage_integrity(),
+            crate::StorageIntegrity::Verified
+        );
+        read_only.close().await.expect("close read-only host");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn integrity_inspection_is_single_admission_cancel_safe_and_close_drained() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_BEFORE_SQLITE,
+        );
+        let first = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_510))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_BEFORE_SQLITE
+        {
+            tokio::task::yield_now().await;
+        }
+        let concurrent = host
+            .inspect_integrity(integrity_checked_at(1_700_000_000_511))
+            .await
+            .expect_err("second integrity inspection is rejected");
+        assert_eq!(concurrent.kind(), ServiceSqliteErrorKind::Integrity);
+        first.abort();
+        assert!(
+            first
+                .await
+                .expect_err("inspection is cancelled")
+                .is_cancelled()
+        );
+        crate::integrity::integrity_test_seam::release();
+        assert!(
+            !host.integrity_driver.lock().await.is_idle(),
+            "cancelled SQLx connection remains host-owned until explicit cleanup"
+        );
+
+        let recovered = host
+            .inspect_integrity(integrity_checked_at(1_700_000_000_512))
+            .await
+            .expect("inspection recovers after cancellation");
+        assert_eq!(
+            recovered.storage_integrity(),
+            crate::StorageIntegrity::Verified
+        );
+
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_BEFORE_FOREIGN_KEYS,
+        );
+        let timed_out = tokio::time::timeout(
+            Duration::from_millis(20),
+            host.inspect_integrity(integrity_checked_at(1_700_000_000_513)),
+        )
+        .await;
+        assert!(timed_out.is_err(), "caller deadline cancels inspection");
+        crate::integrity::integrity_test_seam::release();
+        assert!(!host.integrity_driver.lock().await.is_idle());
+
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_BEFORE_ROLLBACK,
+        );
+        let pre_rollback = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_514))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_BEFORE_ROLLBACK
+        {
+            tokio::task::yield_now().await;
+        }
+        pre_rollback.abort();
+        assert!(
+            pre_rollback
+                .await
+                .expect_err("pre-rollback inspection is cancelled")
+                .is_cancelled()
+        );
+        crate::integrity::integrity_test_seam::release();
+        assert!(!host.integrity_driver.lock().await.is_idle());
+        host.inspect_integrity(integrity_checked_at(1_700_000_000_515))
+            .await
+            .expect("inspection recovers after pre-rollback cancellation");
+
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_BEFORE_ROLLBACK,
+        );
+        let admitted = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_516))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_BEFORE_ROLLBACK
+        {
+            tokio::task::yield_now().await;
+        }
+        let close = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move { host.close().await }
+        });
+        while !host.closing.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+        let rejected = host
+            .inspect_integrity(integrity_checked_at(1_700_000_000_517))
+            .await
+            .expect_err("closing host rejects inspection");
+        assert_eq!(rejected.kind(), ServiceSqliteErrorKind::Open);
+        assert!(!close.is_finished());
+        crate::integrity::integrity_test_seam::release();
+        admitted
+            .await
+            .expect("admitted inspection task joins")
+            .expect("admitted inspection completes");
+        close
+            .await
+            .expect("close task joins")
+            .expect("close drains admitted inspection");
+        let closed = host
+            .inspect_integrity(integrity_checked_at(1_700_000_000_518))
+            .await
+            .expect_err("closed host rejects inspection");
+        assert_eq!(closed.kind(), ServiceSqliteErrorKind::Open);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn integrity_inspection_preserves_authority_precedence_after_await() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_BEFORE_FOREIGN_KEYS,
+        );
+        let inspection = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_520))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_BEFORE_FOREIGN_KEYS
+        {
+            tokio::task::yield_now().await;
+        }
+        let retired_lock = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("retired-integrity-state.lock");
+        fs::rename(paths.state_lock(), &retired_lock).expect("retire writer lock");
+        crate::integrity::integrity_test_seam::release();
+        let error = inspection
+            .await
+            .expect("inspection task joins")
+            .expect_err("authority drift rejects inspection");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        fs::rename(&retired_lock, paths.state_lock()).expect("restore writer lock");
+        host.close().await.expect("close host after restored lock");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn observed_authority_drift_precedes_transient_restore_and_close_failure() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        crate::integrity::integrity_test_seam::inject_connection_close_failure(false);
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_BEFORE_FOREIGN_KEYS,
+        );
+        let inspection = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_525))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_BEFORE_FOREIGN_KEYS
+        {
+            tokio::task::yield_now().await;
+        }
+
+        let retired_lock = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("transient-integrity-state.lock");
+        fs::rename(paths.state_lock(), &retired_lock).expect("retire writer lock");
+        crate::integrity::integrity_test_seam::block(
+            crate::integrity::integrity_test_seam::PHASE_CONNECTION_CLOSE_AWAITING,
+        );
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_CONNECTION_CLOSE_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+
+        fs::rename(&retired_lock, paths.state_lock()).expect("restore writer lock");
+        crate::integrity::integrity_test_seam::inject_connection_close_failure(true);
+        crate::integrity::integrity_test_seam::release();
+        let error = inspection
+            .await
+            .expect("inspection task joins")
+            .expect_err("observed authority drift remains terminal");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        assert!(host.integrity_driver.lock().await.is_idle());
+        host.close().await.expect("close host after restored lock");
+        crate::integrity::integrity_test_seam::inject_connection_close_failure(false);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn cancelled_real_sqlite_work_is_explicitly_closed_before_retry_or_host_close() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(true);
+        let cancelled = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_530))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_SQLITE_EXECUTION_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+        assert!(!cancelled.is_finished(), "SQLite probe remains in flight");
+        cancelled.abort();
+        assert!(
+            cancelled
+                .await
+                .expect_err("real SQLite inspection is cancelled")
+                .is_cancelled()
+        );
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(false);
+        assert!(!host.integrity_driver.lock().await.is_idle());
+
+        let cancelled_cleanup = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_531))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_CONNECTION_CLOSE_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+        cancelled_cleanup.abort();
+        assert!(
+            cancelled_cleanup
+                .await
+                .expect_err("retained close retry is cancelled")
+                .is_cancelled()
+        );
+        assert!(!host.integrity_driver.lock().await.is_idle());
+
+        let recovered = host
+            .inspect_integrity(integrity_checked_at(1_700_000_000_532))
+            .await
+            .expect("retry explicitly closes prior SQLite worker before inspecting");
+        assert_eq!(
+            recovered.storage_integrity(),
+            crate::StorageIntegrity::Verified
+        );
+        assert!(host.integrity_driver.lock().await.is_idle());
+
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(true);
+        let cancelled = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_533))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_SQLITE_EXECUTION_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+        cancelled.abort();
+        assert!(
+            cancelled
+                .await
+                .expect_err("second real SQLite inspection is cancelled")
+                .is_cancelled()
+        );
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(false);
+        assert!(!host.integrity_driver.lock().await.is_idle());
+        host.close()
+            .await
+            .expect("host close explicitly terminates retained SQLite worker");
+        assert!(host.integrity_driver.lock().await.is_idle());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn retained_integrity_close_releases_authority_and_caches_concurrent_lock_drift() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(true);
+        let inspection = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_540))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_SQLITE_EXECUTION_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+        inspection.abort();
+        assert!(
+            inspection
+                .await
+                .expect_err("real integrity work is cancelled")
+                .is_cancelled()
+        );
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(false);
+
+        let close = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move { host.close().await }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_CONNECTION_CLOSE_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+        let retired_lock = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("retired-integrity-close-state.lock");
+        fs::rename(paths.state_lock(), &retired_lock).expect("retire held writer lock");
+        fs::write(paths.state_lock(), b"").expect("create replacement writer lock");
+        fs::set_permissions(paths.state_lock(), fs::Permissions::from_mode(0o600))
+            .expect("replacement writer lock mode");
+
+        let error = close
+            .await
+            .expect("close task joins")
+            .expect_err("authority drift is terminal");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        let repeated = host.close().await.expect_err("terminal result is cached");
+        assert_eq!(repeated.kind(), ServiceSqliteErrorKind::Authority);
+        assert!(host.integrity_driver.lock().await.is_idle());
+
+        fs::remove_file(paths.state_lock()).expect("remove replacement writer lock");
+        fs::rename(&retired_lock, paths.state_lock()).expect("restore original writer lock");
+        let mut authority = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("authority reacquisition")
+            .expect("writer authority");
+        authority.release().expect("release reacquired authority");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn retained_integrity_close_failure_is_cached_as_open_and_releases_authority() {
+        let _serial = crate::integrity::integrity_test_seam::LOCK.lock().await;
+        crate::integrity::integrity_test_seam::release();
+        crate::integrity::integrity_test_seam::inject_connection_close_failure(false);
+        let (_root, paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let host = Arc::new(host);
+
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(true);
+        let inspection = tokio::spawn({
+            let host = Arc::clone(&host);
+            async move {
+                host.inspect_integrity(integrity_checked_at(1_700_000_000_550))
+                    .await
+            }
+        });
+        while crate::integrity::integrity_test_seam::reached()
+            != crate::integrity::integrity_test_seam::PHASE_SQLITE_EXECUTION_AWAITING
+        {
+            tokio::task::yield_now().await;
+        }
+        inspection.abort();
+        assert!(
+            inspection
+                .await
+                .expect_err("real integrity work is cancelled")
+                .is_cancelled()
+        );
+        crate::integrity::integrity_test_seam::enable_real_sqlite_probe(false);
+        assert!(!host.integrity_driver.lock().await.is_idle());
+
+        crate::integrity::integrity_test_seam::inject_connection_close_failure(true);
+        let error = host
+            .close()
+            .await
+            .expect_err("retained connection close failure is terminal");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Open);
+        let repeated = host.close().await.expect_err("terminal result is cached");
+        assert_eq!(repeated.kind(), ServiceSqliteErrorKind::Open);
+        assert!(host.integrity_driver.lock().await.is_idle());
+
+        let mut authority = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("authority reacquisition")
+            .expect("writer authority");
+        authority.release().expect("release reacquired authority");
+        crate::integrity::integrity_test_seam::inject_connection_close_failure(false);
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
