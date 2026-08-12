@@ -395,7 +395,7 @@ fn validate_bundle_path(path: &Path) -> Result<(), ServiceSqliteError> {
 fn validate_directory(directory: &File) -> Result<FileIdentity, ServiceSqliteError> {
     let status = fstat(directory)
         .map_err(|source| verification_source(VerificationFailureKind::BundleDirectory, source))?;
-    let mode = u32::from(status.st_mode) & 0o777;
+    let mode = crate::native_metadata::mode(status.st_mode) & 0o777;
     if !FileType::from_raw_mode(status.st_mode).is_dir()
         || status.st_uid != geteuid().as_raw()
         || !matches!(mode, 0o500 | 0o700)
@@ -409,11 +409,11 @@ fn validate_directory(directory: &File) -> Result<FileIdentity, ServiceSqliteErr
 fn validate_state(file: &File) -> Result<(FileIdentity, u64), ServiceSqliteError> {
     let status = fstat(file)
         .map_err(|source| verification_source(VerificationFailureKind::Inventory, source))?;
-    let mode = u32::from(status.st_mode) & 0o777;
+    let mode = crate::native_metadata::mode(status.st_mode) & 0o777;
     let length = u64::try_from(status.st_size)
         .map_err(|_| verification_error(VerificationFailureKind::MemberLength))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
         || !matches!(mode, 0o400 | 0o600)
     {
@@ -428,7 +428,7 @@ fn validate_state(file: &File) -> Result<(FileIdentity, u64), ServiceSqliteError
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn file_identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqliteError> {
     Ok(FileIdentity {
-        device: u64::try_from(status.st_dev)
+        device: crate::native_metadata::device(status.st_dev)
             .map_err(|_| verification_error(VerificationFailureKind::BindingChanged))?,
         inode: status.st_ino,
     })

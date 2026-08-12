@@ -362,12 +362,12 @@ fn verify_named_artifact(
     validate_status(&held_status, Some(expected.byte_length()))?;
     validate_status(&current_status, Some(expected.byte_length()))?;
     let held_identity = (
-        u64::try_from(held_status.st_dev)
+        crate::native_metadata::device(held_status.st_dev)
             .map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?,
         held_status.st_ino,
     );
     let current_identity = (
-        u64::try_from(current_status.st_dev)
+        crate::native_metadata::device(current_status.st_dev)
             .map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?,
         current_status.st_ino,
     );
@@ -388,9 +388,9 @@ fn validate_status(
     let length =
         u64::try_from(status.st_size).map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
         || length == 0
         || length > i64::MAX as u64
         || expected_length.is_some_and(|expected| length != expected)

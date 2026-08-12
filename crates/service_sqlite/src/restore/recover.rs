@@ -331,8 +331,8 @@ fn artifact_has_identity(
 ) -> Result<bool, ServiceSqliteError> {
     let status =
         fstat(file).map_err(|source| recovery_source(RecoveryFailureKind::Artifact, source))?;
-    let device =
-        u64::try_from(status.st_dev).map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
+    let device = crate::native_metadata::device(status.st_dev)
+        .map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
     Ok((device, status.st_ino) == (expected.device(), expected.inode()))
 }
 
@@ -343,14 +343,14 @@ fn verify_artifact(
 ) -> Result<(), ServiceSqliteError> {
     let status =
         fstat(file).map_err(|source| recovery_source(RecoveryFailureKind::Artifact, source))?;
-    let device =
-        u64::try_from(status.st_dev).map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
+    let device = crate::native_metadata::device(status.st_dev)
+        .map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
     let length =
         u64::try_from(status.st_size).map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
         || (device, status.st_ino) != (expected.device(), expected.inode())
         || length != expected.byte_length()
         || length == 0
@@ -1016,7 +1016,7 @@ mod tests {
         let file = File::open(path).expect("open artifact");
         let status = fstat(&file).expect("artifact status");
         RestoreArtifactExpectation::new(
-            u64::try_from(status.st_dev).expect("device"),
+            crate::native_metadata::device(status.st_dev).expect("device"),
             status.st_ino,
             u64::try_from(status.st_size).expect("length"),
             hash_exact(

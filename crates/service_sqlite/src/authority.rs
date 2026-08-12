@@ -193,7 +193,7 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
     validate_directory(
         FileType::from_raw_mode(directory_status.st_mode).is_dir(),
         directory_status.st_uid,
-        u32::from(directory_status.st_mode),
+        crate::native_metadata::mode(directory_status.st_mode),
         geteuid().as_raw(),
     )?;
 
@@ -207,7 +207,7 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
     let lock_status = fstat(&descriptor).map_err(|_| WriterAuthorityCause::LockUnavailable)?;
     validate_lock(
         FileType::from_raw_mode(lock_status.st_mode).is_file(),
-        u64::from(lock_status.st_nlink),
+        crate::native_metadata::link_count(lock_status.st_nlink),
         lock_status.st_uid,
         geteuid().as_raw(),
     )?;
@@ -215,13 +215,13 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
         .map_err(|_| WriterAuthorityCause::LockUnavailable)?;
 
     let lock_status = fstat(&descriptor).map_err(|_| WriterAuthorityCause::LockUnavailable)?;
-    if u32::from(lock_status.st_mode) & 0o777 != 0o600 {
+    if crate::native_metadata::mode(lock_status.st_mode) & 0o777 != 0o600 {
         return Err(WriterAuthorityCause::LockUnavailable);
     }
-    let directory_device = u64::try_from(directory_status.st_dev)
+    let directory_device = crate::native_metadata::device(directory_status.st_dev)
         .map_err(|_| WriterAuthorityCause::StateDirectoryUnavailable)?;
-    let lock_device =
-        u64::try_from(lock_status.st_dev).map_err(|_| WriterAuthorityCause::LockUnavailable)?;
+    let lock_device = crate::native_metadata::device(lock_status.st_dev)
+        .map_err(|_| WriterAuthorityCause::LockUnavailable)?;
     let file = File::from(descriptor);
     let directory = File::from(directory);
     match FileExt::try_lock_exclusive(&file) {
@@ -313,16 +313,16 @@ fn validate_authority_binding(
         fstat(&authority.directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
     let current_directory_status =
         fstat(&current_directory).map_err(|_| WriterAuthorityCause::Mismatched)?;
-    let held_directory_device =
-        u64::try_from(held_directory.st_dev).map_err(|_| WriterAuthorityCause::Mismatched)?;
-    let current_directory_device = u64::try_from(current_directory_status.st_dev)
+    let held_directory_device = crate::native_metadata::device(held_directory.st_dev)
+        .map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current_directory_device = crate::native_metadata::device(current_directory_status.st_dev)
         .map_err(|_| WriterAuthorityCause::Mismatched)?;
     if !FileType::from_raw_mode(held_directory.st_mode).is_dir()
         || held_directory.st_uid != geteuid().as_raw()
-        || u32::from(held_directory.st_mode) & 0o022 != 0
+        || crate::native_metadata::mode(held_directory.st_mode) & 0o022 != 0
         || !FileType::from_raw_mode(current_directory_status.st_mode).is_dir()
         || current_directory_status.st_uid != geteuid().as_raw()
-        || u32::from(current_directory_status.st_mode) & 0o022 != 0
+        || crate::native_metadata::mode(current_directory_status.st_mode) & 0o022 != 0
         || held_directory_device != authority.directory_device
         || held_directory.st_ino != authority.directory_inode
         || current_directory_device != authority.directory_device
@@ -346,18 +346,18 @@ fn validate_authority_binding(
     )
     .map_err(|_| WriterAuthorityCause::Mismatched)?;
     let current_lock_status = fstat(&current_lock).map_err(|_| WriterAuthorityCause::Mismatched)?;
-    let held_lock_device =
-        u64::try_from(held_lock.st_dev).map_err(|_| WriterAuthorityCause::Mismatched)?;
-    let current_lock_device =
-        u64::try_from(current_lock_status.st_dev).map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let held_lock_device = crate::native_metadata::device(held_lock.st_dev)
+        .map_err(|_| WriterAuthorityCause::Mismatched)?;
+    let current_lock_device = crate::native_metadata::device(current_lock_status.st_dev)
+        .map_err(|_| WriterAuthorityCause::Mismatched)?;
     if !FileType::from_raw_mode(held_lock.st_mode).is_file()
-        || u64::from(held_lock.st_nlink) != 1
+        || crate::native_metadata::link_count(held_lock.st_nlink) != 1
         || held_lock.st_uid != geteuid().as_raw()
-        || u32::from(held_lock.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(held_lock.st_mode) & 0o777 != 0o600
         || !FileType::from_raw_mode(current_lock_status.st_mode).is_file()
-        || u64::from(current_lock_status.st_nlink) != 1
+        || crate::native_metadata::link_count(current_lock_status.st_nlink) != 1
         || current_lock_status.st_uid != geteuid().as_raw()
-        || u32::from(current_lock_status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(current_lock_status.st_mode) & 0o777 != 0o600
         || held_lock_device != authority.lock_device
         || held_lock.st_ino != authority.lock_inode
         || current_lock_device != authority.lock_device

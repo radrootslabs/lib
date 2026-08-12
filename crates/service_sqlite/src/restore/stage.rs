@@ -664,7 +664,7 @@ fn directory_identity(directory: &File) -> Result<FileIdentity, ServiceSqliteErr
         fstat(directory).map_err(|source| restore_source(RestoreFailureKind::Layout, source))?;
     if !FileType::from_raw_mode(status.st_mode).is_dir()
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o022 != 0
+        || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
     {
         return Err(restore_error(RestoreFailureKind::Layout));
     }
@@ -682,7 +682,7 @@ fn stage_identity(staged: &File) -> Result<FileIdentity, ServiceSqliteError> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn status_identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqliteError> {
     Ok(FileIdentity {
-        device: u64::try_from(status.st_dev)
+        device: crate::native_metadata::device(status.st_dev)
             .map_err(|_| restore_error(RestoreFailureKind::StagedChanged))?,
         inode: status.st_ino,
     })
@@ -801,9 +801,9 @@ fn validate_closed_live(
     let status =
         fstat(&live).map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
     {
         return Err(restore_error(RestoreFailureKind::LiveState));
     }
@@ -815,7 +815,8 @@ fn validate_closed_live(
     let live = File::from(live);
     let digest = hash_exact(&live, length)?;
     let artifact = RestoreArtifactExpectation::new(
-        u64::try_from(status.st_dev).map_err(|_| restore_error(RestoreFailureKind::LiveState))?,
+        crate::native_metadata::device(status.st_dev)
+            .map_err(|_| restore_error(RestoreFailureKind::LiveState))?,
         status.st_ino,
         length,
         digest,
@@ -848,14 +849,14 @@ fn validate_live_binding(
     .map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
     let status =
         fstat(&current).map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
-    let device =
-        u64::try_from(status.st_dev).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
+    let device = crate::native_metadata::device(status.st_dev)
+        .map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
     let length =
         u64::try_from(status.st_size).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
         || (device, status.st_ino) != (expected.device(), expected.inode())
         || length != expected.byte_length()
     {
@@ -898,9 +899,9 @@ fn validate_stage_status(
     let length = u64::try_from(status.st_size)
         .map_err(|_| restore_error(RestoreFailureKind::StagedChanged))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
         || expected_length.is_some_and(|expected| length != expected)
     {
         return Err(restore_error(RestoreFailureKind::StagedChanged));

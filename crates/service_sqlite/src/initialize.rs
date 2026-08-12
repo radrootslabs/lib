@@ -282,14 +282,14 @@ mod supported {
                 AtFlags::SYMLINK_NOFOLLOW,
             )
             .map_err(|_| InitializationCause::new(InitializationFailureKind::DatabaseReplaced))?;
-            let device = u64::try_from(status.st_dev).map_err(|_| {
+            let device = crate::native_metadata::device(status.st_dev).map_err(|_| {
                 InitializationCause::new(InitializationFailureKind::InvalidDatabase)
             })?;
             let current = validate_status(
                 FileType::from_raw_mode(status.st_mode).is_file(),
-                u64::from(status.st_nlink),
+                crate::native_metadata::link_count(status.st_nlink),
                 status.st_uid,
-                u32::from(status.st_mode),
+                crate::native_metadata::mode(status.st_mode),
                 device,
                 status.st_ino,
             )?;
@@ -308,7 +308,7 @@ mod supported {
                 AtFlags::SYMLINK_NOFOLLOW,
             )
             .map_err(|_| InitializationCause::new(InitializationFailureKind::DatabaseReplaced))?;
-            let device = u64::try_from(status.st_dev).map_err(|_| {
+            let device = crate::native_metadata::device(status.st_dev).map_err(|_| {
                 InitializationCause::new(InitializationFailureKind::DatabaseReplaced)
             })?;
             Ok(FileIdentity {
@@ -324,14 +324,14 @@ mod supported {
             let status = lstat(path).map_err(|_| {
                 InitializationCause::new(InitializationFailureKind::DatabaseReplaced)
             })?;
-            let device = u64::try_from(status.st_dev).map_err(|_| {
+            let device = crate::native_metadata::device(status.st_dev).map_err(|_| {
                 InitializationCause::new(InitializationFailureKind::InvalidDatabase)
             })?;
             let current = validate_status(
                 FileType::from_raw_mode(status.st_mode).is_file(),
-                u64::from(status.st_nlink),
+                crate::native_metadata::link_count(status.st_nlink),
                 status.st_uid,
-                u32::from(status.st_mode),
+                crate::native_metadata::mode(status.st_mode),
                 device,
                 status.st_ino,
             )?;
@@ -399,13 +399,13 @@ mod supported {
     ) -> Result<FileIdentity, InitializationCause> {
         let status = fstat(descriptor)
             .map_err(|_| InitializationCause::new(InitializationFailureKind::InvalidDatabase))?;
-        let device = u64::try_from(status.st_dev)
+        let device = crate::native_metadata::device(status.st_dev)
             .map_err(|_| InitializationCause::new(InitializationFailureKind::InvalidDatabase))?;
         validate_status(
             FileType::from_raw_mode(status.st_mode).is_file(),
-            u64::from(status.st_nlink),
+            crate::native_metadata::link_count(status.st_nlink),
             status.st_uid,
-            u32::from(status.st_mode),
+            crate::native_metadata::mode(status.st_mode),
             device,
             status.st_ino,
         )
@@ -416,7 +416,7 @@ mod supported {
     ) -> Result<FileIdentity, InitializationCause> {
         let status = fstat(descriptor)
             .map_err(|_| InitializationCause::new(InitializationFailureKind::InvalidDatabase))?;
-        let device = u64::try_from(status.st_dev)
+        let device = crate::native_metadata::device(status.st_dev)
             .map_err(|_| InitializationCause::new(InitializationFailureKind::InvalidDatabase))?;
         Ok(FileIdentity {
             device,

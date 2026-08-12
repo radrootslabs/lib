@@ -945,7 +945,7 @@ fn created_directory_identity(
         .map_err(|source| backup_source(BackupFailureKind::StagingReplaced, source))?;
     if !FileType::from_raw_mode(status.st_mode).is_dir()
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o022 != 0
+        || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
     {
         return Err(backup_error(BackupFailureKind::StagingReplaced));
     }
@@ -964,7 +964,7 @@ fn validate_directory_descriptor(
 ) -> Result<FileIdentity, ServiceSqliteError> {
     let status = fstat(directory)
         .map_err(|source| backup_source(BackupFailureKind::InvalidStagingParent, source))?;
-    let mode = u32::from(status.st_mode) & 0o777;
+    let mode = crate::native_metadata::mode(status.st_mode) & 0o777;
     if !FileType::from_raw_mode(status.st_mode).is_dir()
         || status.st_uid != geteuid().as_raw()
         || if exact_owner_mode {
@@ -982,9 +982,9 @@ fn validate_file_descriptor(file: &File) -> Result<FileIdentity, ServiceSqliteEr
     let status = fstat(file)
         .map_err(|source| backup_source(BackupFailureKind::InvalidStagingInventory, source))?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o777 != 0o600
+        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
     {
         return Err(backup_error(BackupFailureKind::InvalidStagingInventory));
     }
@@ -1067,7 +1067,7 @@ fn current_entry_identity(directory: &File, name: &OsStr) -> Option<FileIdentity
 fn safe_sidecar_identity(directory: &File, name: &str) -> Option<FileIdentity> {
     let status = statat(directory, name, AtFlags::SYMLINK_NOFOLLOW).ok()?;
     if !FileType::from_raw_mode(status.st_mode).is_file()
-        || u64::from(status.st_nlink) != 1
+        || crate::native_metadata::link_count(status.st_nlink) != 1
         || status.st_uid != geteuid().as_raw()
     {
         return None;
@@ -1077,7 +1077,7 @@ fn safe_sidecar_identity(directory: &File, name: &str) -> Option<FileIdentity> {
 
 fn identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqliteError> {
     Ok(FileIdentity {
-        device: u64::try_from(status.st_dev)
+        device: crate::native_metadata::device(status.st_dev)
             .map_err(|_| backup_error(BackupFailureKind::StagingReplaced))?,
         inode: status.st_ino,
     })

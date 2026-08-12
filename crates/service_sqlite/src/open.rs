@@ -1239,7 +1239,7 @@ impl ReadOnlyInspectionGuard {
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         if !FileType::from_raw_mode(directory_status.st_mode).is_dir()
             || directory_status.st_uid != geteuid().as_raw()
-            || u32::from(directory_status.st_mode) & 0o022 != 0
+            || crate::native_metadata::mode(directory_status.st_mode) & 0o022 != 0
         {
             return Err(inspection_error(
                 ConnectionFailureKind::InspectionUnavailable,
@@ -1256,9 +1256,9 @@ impl ReadOnlyInspectionGuard {
         let lock_status = fstat(&lock)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         if !FileType::from_raw_mode(lock_status.st_mode).is_file()
-            || u64::from(lock_status.st_nlink) != 1
+            || crate::native_metadata::link_count(lock_status.st_nlink) != 1
             || lock_status.st_uid != geteuid().as_raw()
-            || u32::from(lock_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(lock_status.st_mode) & 0o777 != 0o600
         {
             return Err(inspection_error(
                 ConnectionFailureKind::InspectionUnavailable,
@@ -1302,9 +1302,9 @@ impl ReadOnlyInspectionGuard {
             )
         })?;
         if !FileType::from_raw_mode(database_status.st_mode).is_file()
-            || u64::from(database_status.st_nlink) != 1
+            || crate::native_metadata::link_count(database_status.st_nlink) != 1
             || database_status.st_uid != geteuid().as_raw()
-            || u32::from(database_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(database_status.st_mode) & 0o777 != 0o600
         {
             return Err(connection_error(
                 ServiceSqliteErrorKind::Open,
@@ -1332,11 +1332,11 @@ impl ReadOnlyInspectionGuard {
         }
         Ok(Self {
             lock: Some(lock),
-            lock_device: u64::try_from(lock_status.st_dev)
+            lock_device: crate::native_metadata::device(lock_status.st_dev)
                 .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
             lock_inode: lock_status.st_ino,
             directory,
-            directory_device: u64::try_from(directory_status.st_dev)
+            directory_device: crate::native_metadata::device(directory_status.st_dev)
                 .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?,
             directory_inode: directory_status.st_ino,
             _database: database,
@@ -1364,16 +1364,16 @@ impl ReadOnlyInspectionGuard {
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let held_directory_status = fstat(&self.directory)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        let directory_device = u64::try_from(directory_status.st_dev)
+        let directory_device = crate::native_metadata::device(directory_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        let held_directory_device = u64::try_from(held_directory_status.st_dev)
+        let held_directory_device = crate::native_metadata::device(held_directory_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         if !FileType::from_raw_mode(directory_status.st_mode).is_dir()
             || directory_status.st_uid != geteuid().as_raw()
-            || u32::from(directory_status.st_mode) & 0o022 != 0
+            || crate::native_metadata::mode(directory_status.st_mode) & 0o022 != 0
             || !FileType::from_raw_mode(held_directory_status.st_mode).is_dir()
             || held_directory_status.st_uid != geteuid().as_raw()
-            || u32::from(held_directory_status.st_mode) & 0o022 != 0
+            || crate::native_metadata::mode(held_directory_status.st_mode) & 0o022 != 0
             || directory_device != self.directory_device
             || directory_status.st_ino != self.directory_inode
             || held_directory_device != self.directory_device
@@ -1399,18 +1399,18 @@ impl ReadOnlyInspectionGuard {
             .ok_or_else(|| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let held_lock_status = fstat(held_lock)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        let lock_device = u64::try_from(lock_status.st_dev)
+        let lock_device = crate::native_metadata::device(lock_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        let held_lock_device = u64::try_from(held_lock_status.st_dev)
+        let held_lock_device = crate::native_metadata::device(held_lock_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         if !FileType::from_raw_mode(lock_status.st_mode).is_file()
-            || u64::from(lock_status.st_nlink) != 1
+            || crate::native_metadata::link_count(lock_status.st_nlink) != 1
             || lock_status.st_uid != geteuid().as_raw()
-            || u32::from(lock_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(lock_status.st_mode) & 0o777 != 0o600
             || !FileType::from_raw_mode(held_lock_status.st_mode).is_file()
-            || u64::from(held_lock_status.st_nlink) != 1
+            || crate::native_metadata::link_count(held_lock_status.st_nlink) != 1
             || held_lock_status.st_uid != geteuid().as_raw()
-            || u32::from(held_lock_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(held_lock_status.st_mode) & 0o777 != 0o600
             || lock_device != self.lock_device
             || lock_status.st_ino != self.lock_inode
             || held_lock_device != self.lock_device
@@ -1505,9 +1505,9 @@ impl DirectoryBinding {
             )
         })?;
         if !FileType::from_raw_mode(database_status.st_mode).is_file()
-            || u64::from(database_status.st_nlink) != 1
+            || crate::native_metadata::link_count(database_status.st_nlink) != 1
             || database_status.st_uid != geteuid().as_raw()
-            || u32::from(database_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(database_status.st_mode) & 0o777 != 0o600
         {
             return Err(connection_error(
                 ServiceSqliteErrorKind::Authority,
@@ -1522,20 +1522,24 @@ impl DirectoryBinding {
                     ConnectionFailureKind::AuthorityMismatch,
                 )
             })?),
-            directory_device: u64::try_from(directory_status.st_dev).map_err(|_| {
-                connection_error(
-                    ServiceSqliteErrorKind::Authority,
-                    ConnectionFailureKind::AuthorityMismatch,
-                )
-            })?,
+            directory_device: crate::native_metadata::device(directory_status.st_dev).map_err(
+                |_| {
+                    connection_error(
+                        ServiceSqliteErrorKind::Authority,
+                        ConnectionFailureKind::AuthorityMismatch,
+                    )
+                },
+            )?,
             directory_inode: directory_status.st_ino,
             database: Arc::new(File::from(database)),
-            database_device: u64::try_from(database_status.st_dev).map_err(|_| {
-                connection_error(
-                    ServiceSqliteErrorKind::Authority,
-                    ConnectionFailureKind::AuthorityMismatch,
-                )
-            })?,
+            database_device: crate::native_metadata::device(database_status.st_dev).map_err(
+                |_| {
+                    connection_error(
+                        ServiceSqliteErrorKind::Authority,
+                        ConnectionFailureKind::AuthorityMismatch,
+                    )
+                },
+            )?,
             database_inode: database_status.st_ino,
         })
     }
@@ -1580,28 +1584,30 @@ impl DirectoryBinding {
                 ConnectionFailureKind::AuthorityMismatch,
             )
         })?;
-        let directory_device = u64::try_from(directory_status.st_dev).map_err(|_| {
-            connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            )
-        })?;
-        let held_directory_device = u64::try_from(held_directory_status.st_dev).map_err(|_| {
-            connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            )
-        })?;
+        let directory_device =
+            crate::native_metadata::device(directory_status.st_dev).map_err(|_| {
+                connection_error(
+                    ServiceSqliteErrorKind::Authority,
+                    ConnectionFailureKind::AuthorityMismatch,
+                )
+            })?;
+        let held_directory_device = crate::native_metadata::device(held_directory_status.st_dev)
+            .map_err(|_| {
+                connection_error(
+                    ServiceSqliteErrorKind::Authority,
+                    ConnectionFailureKind::AuthorityMismatch,
+                )
+            })?;
         if directory_device != self.directory_device
             || directory_status.st_ino != self.directory_inode
             || held_directory_device != self.directory_device
             || held_directory_status.st_ino != self.directory_inode
             || !FileType::from_raw_mode(directory_status.st_mode).is_dir()
             || directory_status.st_uid != geteuid().as_raw()
-            || u32::from(directory_status.st_mode) & 0o022 != 0
+            || crate::native_metadata::mode(directory_status.st_mode) & 0o022 != 0
             || !FileType::from_raw_mode(held_directory_status.st_mode).is_dir()
             || held_directory_status.st_uid != geteuid().as_raw()
-            || u32::from(held_directory_status.st_mode) & 0o022 != 0
+            || crate::native_metadata::mode(held_directory_status.st_mode) & 0o022 != 0
         {
             return Err(connection_error(
                 ServiceSqliteErrorKind::Authority,
@@ -1633,26 +1639,28 @@ impl DirectoryBinding {
                 ConnectionFailureKind::AuthorityMismatch,
             )
         })?;
-        let database_device = u64::try_from(database_status.st_dev).map_err(|_| {
-            connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            )
-        })?;
-        let held_database_device = u64::try_from(held_database_status.st_dev).map_err(|_| {
-            connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            )
-        })?;
+        let database_device =
+            crate::native_metadata::device(database_status.st_dev).map_err(|_| {
+                connection_error(
+                    ServiceSqliteErrorKind::Authority,
+                    ConnectionFailureKind::AuthorityMismatch,
+                )
+            })?;
+        let held_database_device = crate::native_metadata::device(held_database_status.st_dev)
+            .map_err(|_| {
+                connection_error(
+                    ServiceSqliteErrorKind::Authority,
+                    ConnectionFailureKind::AuthorityMismatch,
+                )
+            })?;
         if !FileType::from_raw_mode(database_status.st_mode).is_file()
-            || u64::from(database_status.st_nlink) != 1
+            || crate::native_metadata::link_count(database_status.st_nlink) != 1
             || database_status.st_uid != geteuid().as_raw()
-            || u32::from(database_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(database_status.st_mode) & 0o777 != 0o600
             || !FileType::from_raw_mode(held_database_status.st_mode).is_file()
-            || u64::from(held_database_status.st_nlink) != 1
+            || crate::native_metadata::link_count(held_database_status.st_nlink) != 1
             || held_database_status.st_uid != geteuid().as_raw()
-            || u32::from(held_database_status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(held_database_status.st_mode) & 0o777 != 0o600
             || database_device != self.database_device
             || database_status.st_ino != self.database_inode
             || held_database_device != self.database_device

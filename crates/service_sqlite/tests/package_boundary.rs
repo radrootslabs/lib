@@ -22,6 +22,7 @@ const INTEGRITY_CATALOG_SOURCE: &str = include_str!("../src/integrity/catalog.rs
 const INTEGRITY_INSPECTION_SOURCE: &str = include_str!("../src/integrity/inspection.rs");
 const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
+const NATIVE_METADATA_SOURCE: &str = include_str!("../src/native_metadata.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
 const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
 const RESTORE_FINALIZE_SOURCE: &str = include_str!("../src/restore/finalize.rs");
@@ -122,6 +123,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "integrity",
             "metadata",
             "migration",
+            "native_metadata",
             "open",
             "restore",
             "status",
@@ -529,12 +531,32 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "fstatvfs(&held)",
         "capacity.f_bavail",
         "capacity.f_frsize",
-        "u32::from(status.st_mode) & 0o022",
+        "crate::native_metadata::mode(status.st_mode) & 0o022",
         "UnsupportedPlatform",
     ] {
         assert!(
             disk_production.contains(required),
             "Step 071 disk inspection source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "pub(crate) fn mode<T>",
+        "T: Into<u32>",
+        "pub(crate) fn link_count<T>",
+        "T: Into<u64>",
+        "pub(crate) fn device<T>",
+        "T: TryInto<u64>",
+    ] {
+        assert!(
+            NATIVE_METADATA_SOURCE.contains(required),
+            "native metadata normalization is missing `{required}`"
+        );
+    }
+    for forbidden in ["pub fn mode", "pub fn link_count", "pub fn device"] {
+        assert!(
+            !NATIVE_METADATA_SOURCE.contains(forbidden),
+            "native metadata normalization exposes `{forbidden}`"
         );
     }
     for forbidden in [
@@ -1504,7 +1526,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "directory_device",
         "WAL_FILE_NAME",
         "SHARED_MEMORY_FILE_NAME",
-        "u32::from(directory_status.st_mode) & 0o022",
+        "crate::native_metadata::mode(directory_status.st_mode) & 0o022",
     ] {
         assert!(
             OPEN_SOURCE.contains(required),

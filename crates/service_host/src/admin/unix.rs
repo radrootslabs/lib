@@ -174,7 +174,7 @@ impl UnixAdminSocketWriterAuthority {
         } else {
             Mode::RWXU
         };
-        let directory_mode: u32 = directory_permissions.bits().into();
+        let directory_mode = normalize_mode(directory_permissions.bits());
         fchmod(&directory, directory_permissions).map_err(|error| {
             UnixAdminSocketError::RuntimeDirectoryPermissions {
                 kind: errno_kind(error),
@@ -226,6 +226,13 @@ impl UnixAdminSocketWriterAuthority {
         }
         Ok(())
     }
+}
+
+fn normalize_mode<T>(raw: T) -> u32
+where
+    T: Into<u32>,
+{
+    raw.into()
 }
 
 /// A bound Unix admin listener with policy-aligned modes and identity-safe cleanup.
@@ -564,7 +571,7 @@ mod tests {
         assert_eq!(UNIX_ADMIN_OWNER_SOCKET_MODE, 0o600);
         assert_eq!(UNIX_ADMIN_GROUP_DIRECTORY_MODE, 0o750);
         assert_eq!(UNIX_ADMIN_GROUP_SOCKET_MODE, 0o660);
-        assert_eq!(u32::from(Mode::RWXU.bits()), 0o700);
+        assert_eq!(normalize_mode(Mode::RWXU.bits()), 0o700);
     }
 
     #[cfg(target_os = "linux")]

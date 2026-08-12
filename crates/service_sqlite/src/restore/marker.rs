@@ -1316,7 +1316,7 @@ mod store {
         let status = fstat(file).map_err(|_| StoreFailure::Directory)?;
         if !FileType::from_raw_mode(status.st_mode).is_dir()
             || status.st_uid != geteuid().as_raw()
-            || u32::from(status.st_mode) & 0o022 != 0
+            || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
         {
             return Err(StoreFailure::Directory);
         }
@@ -1387,9 +1387,9 @@ mod store {
     fn file_identity(file: &File) -> Result<FileIdentity, StoreFailure> {
         let status = fstat(file).map_err(|_| StoreFailure::Marker)?;
         if !FileType::from_raw_mode(status.st_mode).is_file()
-            || u64::from(status.st_nlink) != 1
+            || crate::native_metadata::link_count(status.st_nlink) != 1
             || status.st_uid != geteuid().as_raw()
-            || u32::from(status.st_mode) & 0o777 != 0o600
+            || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
         {
             return Err(StoreFailure::Marker);
         }

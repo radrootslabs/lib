@@ -13,6 +13,8 @@ mod initialize;
 mod integrity;
 mod metadata;
 mod migration;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod native_metadata;
 mod open;
 mod restore;
 mod status;

@@ -230,7 +230,7 @@ fn validate_directory_status(
 
     if !FileType::from_raw_mode(status.st_mode).is_dir()
         || status.st_uid != geteuid().as_raw()
-        || u32::from(status.st_mode) & 0o022 != 0
+        || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
     {
         return Err(StateFilesystemCapacityError::MeasurementUnavailable);
     }
