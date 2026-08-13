@@ -303,6 +303,7 @@ fn validate_exceptions(root: &Path, contract: &Contract) -> Result<(), String> {
         "CARGO-YANKED-SPIN-0.9.8".to_owned(),
         "RUSTSEC-2024-0384".to_owned(),
         "RUSTSEC-2024-0421".to_owned(),
+        "RUSTSEC-2026-0243".to_owned(),
     ]);
     let actual = contract
         .advisory_exception
@@ -333,6 +334,12 @@ fn validate_exceptions(root: &Path, contract: &Contract) -> Result<(), String> {
                 exception.package == "idna"
                     && exception.affected_version == "0.5.0"
                     && exception.classification == "vulnerability"
+                    && exception.remove_when == "nostr >=0.45.0 stable"
+            }
+            "RUSTSEC-2026-0243" => {
+                exception.package == "nostr-relay-pool"
+                    && exception.affected_version == "0.44.3"
+                    && exception.classification == "unmaintained"
                     && exception.remove_when == "nostr >=0.45.0 stable"
             }
             "CARGO-YANKED-SPIN-0.9.8" => {

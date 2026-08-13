@@ -16,6 +16,7 @@ all-features = true
 ignore = [
   "RUSTSEC-2024-0384", # `instant` is an unmaintained, non-vulnerability Nostr 0.44 dependency.
   "RUSTSEC-2024-0421",
+  "RUSTSEC-2026-0243", # `nostr-relay-pool` is unmaintained and moves into `nostr-sdk` at 0.45.
 ]
 
 [licenses]

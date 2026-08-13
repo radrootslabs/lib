@@ -33,6 +33,15 @@ mitigation = "radroots_transport_nostr canonicalizes every relay URL with url >=
 remove_when = "nostr >=0.45.0 stable"
 
 [[advisory_exception]]
+id = "RUSTSEC-2026-0243"
+package = "nostr-relay-pool"
+affected_version = "0.44.3"
+introduced_by = "nostr-sdk 0.44.1 and radroots_transport_nostr"
+classification = "unmaintained"
+mitigation = "The advisory reports no vulnerability; retain the locked release line only until the governed Nostr 0.45 migration."
+remove_when = "nostr >=0.45.0 stable"
+
+[[advisory_exception]]
 id = "CARGO-YANKED-SPIN-0.9.8"
 package = "spin"
 affected_version = "0.9.8"
