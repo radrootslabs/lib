@@ -634,7 +634,6 @@ fn verify_descriptor(
         })
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 struct RetrievedBytes {
     final_url: BlobUrl,
     bytes: Vec<u8>,
