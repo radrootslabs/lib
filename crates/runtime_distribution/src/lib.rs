@@ -3,6 +3,7 @@
 pub mod error;
 pub mod model;
 pub mod resolve;
+pub mod service;
 
 pub use error::RadrootsRuntimeDistributionError;
 pub use model::{
@@ -10,18 +11,33 @@ pub use model::{
     RadrootsRuntimeDistributionContract, RuntimeDistributionEntry, TargetSet, TargetSpec,
 };
 pub use resolve::{
-    RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact,
-    RuntimeArtifactRequest,
+    RUNTIME_DISTRIBUTION_SCHEMA, RUNTIME_DISTRIBUTION_SCHEMA_VERSION,
+    RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact, ResolvedServiceTarget,
+    RuntimeArtifactRequest, ServiceTargetRequest,
+};
+pub use service::{
+    HardenedServiceTarget, HardenedServiceTargets, ServiceAdminBasePath, ServiceAdminTransport,
+    ServiceConfigurationFormat, ServiceInstanceSupport, ServiceOperationsSurface,
+    ServiceRunStatePolicy, ServiceStateInitialization, ServiceStatusSurface, ServiceSupportPosture,
+    ServiceTier1Target,
 };
 
 #[cfg(test)]
 mod tests {
+    use radroots_runtime_paths::ServiceId;
     use toml::Value;
 
     use super::{
-        RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionError,
-        RadrootsRuntimeDistributionResolver, RuntimeArtifactRequest,
+        HardenedServiceTarget, RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionContract,
+        RadrootsRuntimeDistributionError, RadrootsRuntimeDistributionResolver,
+        RuntimeArtifactRequest, RuntimeDistributionEntry, ServiceAdminBasePath,
+        ServiceAdminTransport, ServiceConfigurationFormat, ServiceInstanceSupport,
+        ServiceOperationsSurface, ServiceRunStatePolicy, ServiceStateInitialization,
+        ServiceStatusSurface, ServiceSupportPosture, ServiceTargetRequest, ServiceTier1Target,
     };
+
+    const HARDENED_SERVICE_CONTRACT: &str =
+        include_str!("../tests/fixtures/hardened_service_targets.v1.toml");
 
     const CONTRACT: &str = r#"
 schema = "radroots-runtime-distribution"
@@ -184,6 +200,34 @@ artifact_adapter = "mojo_workspace_archive"
 target_set = "mojo_workspace_default"
 default_channel = "stable"
 human_installable = false
+
+[service_targets.myc]
+service_id = "myc"
+instance_support = "multiple"
+config_format = "toml"
+state_initialization = "explicit"
+run_state_policy = "existing_only"
+admin_transport = "http11_over_unix_domain_socket"
+admin_base_path = "/v1"
+admin_contract_version = 1
+status_surface = "local_admin_service_status_v1"
+operations_surface = "cached_livez_readyz_metrics"
+support_posture = "target"
+tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+[service_targets.rhi]
+service_id = "rhi"
+instance_support = "multiple"
+config_format = "toml"
+state_initialization = "explicit"
+run_state_policy = "existing_only"
+admin_transport = "http11_over_unix_domain_socket"
+admin_base_path = "/v1"
+admin_contract_version = 1
+status_surface = "local_admin_service_status_v1"
+operations_surface = "cached_livez_readyz_metrics"
+support_posture = "target"
+tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 "#;
 
     fn contract_value() -> Value {
@@ -217,10 +261,7 @@ human_installable = false
     fn parse_str_rejects_invalid_toml() {
         let err = RadrootsRuntimeDistributionResolver::parse_str("schema = [")
             .expect_err("invalid toml should fail");
-        assert_eq!(
-            std::mem::discriminant(&err),
-            std::mem::discriminant(&RadrootsRuntimeDistributionError::Parse(String::new()))
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::Parse);
     }
 
     #[test]
@@ -232,13 +273,7 @@ human_installable = false
         let err = RadrootsRuntimeDistributionResolver::parse_str(&raw)
             .expect_err("unexpected schema should fail");
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnexpectedSchema {
-                expected: RUNTIME_DISTRIBUTION_SCHEMA,
-                found: "wrong-schema".to_string(),
-            }
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnexpectedSchema);
     }
 
     #[test]
@@ -319,12 +354,7 @@ human_installable = false
             })
             .expect_err("mobile runtime should not be installable");
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::RuntimeNotInstallable(
-                "community-app-ios".to_string()
-            )
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::RuntimeNotInstallable);
     }
 
     #[test]
@@ -342,10 +372,7 @@ human_installable = false
             })
             .expect_err("bootstrap runtime should not be installable");
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::RuntimeNotInstallable("hyf".to_string())
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::RuntimeNotInstallable);
     }
 
     #[test]
@@ -363,10 +390,7 @@ human_installable = false
             })
             .expect_err("candidate channel should be inactive");
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::InactiveChannel("candidate".to_string())
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::InactiveChannel);
     }
 
     #[test]
@@ -385,10 +409,7 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnknownRuntime("missing-runtime".to_string())
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnknownRuntime);
     }
 
     #[test]
@@ -407,10 +428,7 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnknownChannel("beta".to_string())
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnknownChannel);
     }
 
     #[test]
@@ -428,14 +446,7 @@ human_installable = false
             })
             .expect_err("windows target should be unsupported");
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnsupportedPlatform {
-                runtime_id: "radrootsd".to_string(),
-                os: "windows".to_string(),
-                arch: "amd64".to_string(),
-            }
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnsupportedPlatform);
     }
 
     #[test]
@@ -461,10 +472,7 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::MissingTargetSet("community-app-ios".to_string())
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::MissingTargetSet);
     }
 
     #[test]
@@ -492,10 +500,7 @@ human_installable = false
 
         assert_eq!(
             err,
-            RadrootsRuntimeDistributionError::UnknownArtifactAdapter {
-                runtime_id: "cli".to_string(),
-                adapter_id: "missing_adapter".to_string(),
-            }
+            RadrootsRuntimeDistributionError::UnknownArtifactAdapter
         );
     }
 
@@ -522,14 +527,7 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnsupportedPlatform {
-                runtime_id: "cli".to_string(),
-                os: "linux".to_string(),
-                arch: "amd64".to_string(),
-            }
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnsupportedPlatform);
     }
 
     #[test]
@@ -550,14 +548,7 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnknownTarget {
-                runtime_id: "cli".to_string(),
-                target_set_id: "cli_default".to_string(),
-                target_id: "missing-target".to_string(),
-            }
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnknownTarget);
     }
 
     #[test]
@@ -603,13 +594,7 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::UnknownArchiveFormat {
-                target_id: "x86_64-unknown-linux-gnu".to_string(),
-                archive_format_id: "tar.xz".to_string(),
-            }
-        );
+        assert_eq!(err, RadrootsRuntimeDistributionError::UnknownArchiveFormat);
     }
 
     #[test]
@@ -632,12 +617,229 @@ human_installable = false
             },
         );
 
-        assert_eq!(
-            err,
-            RadrootsRuntimeDistributionError::MissingArchiveFormat {
-                runtime_id: "community-app-desktop".to_string(),
-                target_id: "aarch64-apple-darwin".to_string(),
+        assert_eq!(err, RadrootsRuntimeDistributionError::MissingArchiveFormat);
+    }
+
+    #[test]
+    fn durable_contract_resolves_exact_hardened_service_metadata() {
+        let resolver = RadrootsRuntimeDistributionResolver::parse_str(HARDENED_SERVICE_CONTRACT)
+            .expect("hardened service contract");
+
+        for service in ["myc", "rhi"] {
+            let service_id = ServiceId::new(service).expect("service id");
+            let metadata = resolver
+                .service_target(&service_id)
+                .expect("service metadata");
+            assert_eq!(metadata.service_id(), &service_id);
+            assert_eq!(
+                metadata.instance_support(),
+                ServiceInstanceSupport::Multiple
+            );
+            assert_eq!(metadata.config_format(), ServiceConfigurationFormat::Toml);
+            assert_eq!(metadata.config_format().as_str(), "toml");
+            assert_eq!(
+                metadata.state_initialization(),
+                ServiceStateInitialization::Explicit
+            );
+            assert_eq!(
+                metadata.run_state_policy(),
+                ServiceRunStatePolicy::ExistingOnly
+            );
+            assert_eq!(
+                metadata.admin_transport(),
+                ServiceAdminTransport::Http11OverUnixDomainSocket
+            );
+            assert_eq!(metadata.admin_base_path(), ServiceAdminBasePath::V1);
+            assert_eq!(metadata.admin_contract_version(), 1);
+            assert_eq!(
+                metadata.status_surface(),
+                ServiceStatusSurface::LocalAdminServiceStatusV1
+            );
+            assert_eq!(
+                metadata.operations_surface(),
+                ServiceOperationsSurface::CachedLivezReadyzMetrics
+            );
+            assert_eq!(
+                metadata.operations_surface().routes(),
+                ["/livez", "/readyz", "/metrics"]
+            );
+            assert_eq!(metadata.support_posture(), ServiceSupportPosture::Target);
+            assert_eq!(metadata.tier_1_targets(), ServiceTier1Target::ALL);
+
+            for target in ServiceTier1Target::ALL {
+                let resolved = resolver
+                    .resolve_service_target(&ServiceTargetRequest {
+                        service_id: &service_id,
+                        target_id: target.as_str(),
+                    })
+                    .expect("eligible target");
+                assert_eq!(resolved.service_id(), &service_id);
+                assert_eq!(resolved.target(), target);
             }
+        }
+
+        let targets = &resolver.contract().service_targets;
+        assert_eq!(targets.len(), 2);
+        assert!(!targets.is_empty());
+        assert_eq!(
+            targets
+                .iter()
+                .map(|(service, _)| service)
+                .collect::<Vec<_>>(),
+            ["myc", "rhi"]
         );
+    }
+
+    #[test]
+    fn hardened_services_are_metadata_only_and_reject_unsupported_targets() {
+        let resolver = RadrootsRuntimeDistributionResolver::parse_str(HARDENED_SERVICE_CONTRACT)
+            .expect("hardened service contract");
+        let myc = ServiceId::new("myc").expect("myc");
+
+        for target_id in ["aarch64-apple-darwin", "x86_64-pc-windows-msvc", "linux-64"] {
+            assert_eq!(
+                resolver.resolve_service_target(&ServiceTargetRequest {
+                    service_id: &myc,
+                    target_id,
+                }),
+                Err(RadrootsRuntimeDistributionError::UnsupportedServiceTarget)
+            );
+        }
+        assert_eq!(
+            resolver.resolve_artifact(&RuntimeArtifactRequest {
+                runtime_id: "myc",
+                os: "linux",
+                arch: "amd64",
+                version: "1.0.0",
+                channel: None,
+            }),
+            Err(RadrootsRuntimeDistributionError::UnknownRuntime)
+        );
+    }
+
+    #[test]
+    fn hardened_services_reject_parsed_and_direct_artifact_authority() {
+        let raw = format!(
+            "{HARDENED_SERVICE_CONTRACT}\n\
+             [[runtime]]\n\
+             id = \"myc\"\n\
+             distribution_state = \"defined\"\n\
+             release_unit = \"myc\"\n\
+             package_name = \"radroots_myc\"\n\
+             artifact_adapter = \"rust_binary_archive\"\n\
+             default_channel = \"stable\"\n\
+             human_installable = true\n"
+        );
+        assert_eq!(
+            RadrootsRuntimeDistributionResolver::parse_str(&raw).expect_err("parsed bypass"),
+            RadrootsRuntimeDistributionError::HardenedServiceArtifactDeferred
+        );
+
+        let mut contract =
+            toml::from_str::<RadrootsRuntimeDistributionContract>(HARDENED_SERVICE_CONTRACT)
+                .expect("direct contract");
+        contract.runtime.push(RuntimeDistributionEntry {
+            id: "rhi".to_owned(),
+            distribution_state: "defined".to_owned(),
+            release_unit: "rhi".to_owned(),
+            package_name: "radroots_rhi".to_owned(),
+            binary_name: None,
+            artifact_adapter: "rust_binary_archive".to_owned(),
+            target_set: None,
+            default_channel: "stable".to_owned(),
+            human_installable: true,
+            notes: None,
+        });
+        assert_eq!(
+            RadrootsRuntimeDistributionResolver::new(contract).expect_err("direct bypass"),
+            RadrootsRuntimeDistributionError::HardenedServiceArtifactDeferred
+        );
+    }
+
+    #[test]
+    fn hardened_service_contract_rejects_schema_drift_unknown_fields_and_inventory_drift() {
+        for raw in [
+            HARDENED_SERVICE_CONTRACT.replace("schema_version = 1", "schema_version = 2"),
+            format!("{HARDENED_SERVICE_CONTRACT}\nunknown = true\n"),
+            HARDENED_SERVICE_CONTRACT.replace("service_id = \"rhi\"", "service_id = \"other\""),
+            HARDENED_SERVICE_CONTRACT.replace(
+                "  \"aarch64-unknown-linux-gnu\",\n]",
+                "  \"aarch64-apple-darwin\",\n]",
+            ),
+        ] {
+            assert!(RadrootsRuntimeDistributionResolver::parse_str(&raw).is_err());
+        }
+
+        let mut missing_service: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        missing_service["service_targets"]
+            .as_table_mut()
+            .expect("service target table")
+            .remove("rhi");
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&missing_service).expect("missing-service contract")
+            )
+            .is_err()
+        );
+
+        let mut mismatched_service: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        let targets = mismatched_service["service_targets"]
+            .as_table_mut()
+            .expect("service target table");
+        targets["myc"]["service_id"] = Value::String("rhi".to_owned());
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&mismatched_service).expect("mismatched-service contract")
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn standalone_hardened_service_target_rejects_contract_drift() {
+        let contract: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        let target =
+            toml::to_string(&contract["service_targets"]["myc"]).expect("standalone target");
+        let parsed = toml::from_str::<HardenedServiceTarget>(&target).expect("valid target");
+        assert_eq!(parsed.service_id().as_str(), "myc");
+
+        for raw in [
+            target.replace("admin_contract_version = 1", "admin_contract_version = 99"),
+            target.replace("service_id = \"myc\"", "service_id = \"unsupported\""),
+            target.replace(
+                "\"x86_64-unknown-linux-gnu\", \"aarch64-unknown-linux-gnu\"",
+                "\"aarch64-unknown-linux-gnu\"",
+            ),
+        ] {
+            assert!(toml::from_str::<HardenedServiceTarget>(&raw).is_err());
+        }
+    }
+
+    #[test]
+    fn distribution_errors_do_not_expose_contract_values_or_parser_causes() {
+        use std::error::Error as _;
+
+        for (raw, secret) in [
+            (
+                HARDENED_SERVICE_CONTRACT.replace(
+                    "schema = \"radroots-runtime-distribution\"",
+                    "schema = \"secret-contract-value\"",
+                ),
+                "secret-contract-value",
+            ),
+            (
+                "credential = 'secret-value'\ninvalid = [".to_owned(),
+                "secret-value",
+            ),
+        ] {
+            let error =
+                RadrootsRuntimeDistributionResolver::parse_str(&raw).expect_err("invalid contract");
+            let rendered = format!("{error} {error:?}");
+            assert!(!rendered.contains(secret));
+            assert!(error.source().is_none());
+        }
     }
 }

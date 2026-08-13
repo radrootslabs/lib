@@ -691,6 +691,48 @@ mod tests {
     }
 
     #[test]
+    fn empty_filter_preserves_match_all_query_and_subscription_semantics() {
+        let _guard = test_hooks_guard();
+        reset_test_flags();
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("nostrdb");
+        let config = RadrootsNostrdbConfig::new(&db_dir);
+        let nostrdb = RadrootsNostrdb::open(config).expect("database should open");
+
+        let subscription =
+            RadrootsNostrdbSubscriptionSpec::single(RadrootsNostrdbFilterSpec::new());
+        let handle = nostrdb
+            .subscribe(&subscription)
+            .expect("empty-filter subscription should succeed");
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = EventBuilder::text_note("empty filter match-all")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        nostrdb
+            .ingest_event(&event, RadrootsNostrdbIngestSource::client())
+            .expect("ingest should succeed");
+
+        let query = RadrootsNostrdbQuerySpec::single(RadrootsNostrdbFilterSpec::new(), 50);
+        let mut queried = Vec::new();
+        let mut notified = Vec::new();
+        for _ in 0..40 {
+            queried = nostrdb.query_notes(&query).expect("query should succeed");
+            notified = nostrdb.poll_for_note_keys(handle, 32);
+            if !queried.is_empty() && !notified.is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+
+        assert!(queried.iter().any(|note| note.id_hex == event.id.to_hex()));
+        assert!(!notified.is_empty());
+        nostrdb
+            .unsubscribe(handle)
+            .expect("unsubscribe should succeed");
+    }
+
+    #[test]
     fn query_notes_empty_filters_returns_empty() {
         let _guard = test_hooks_guard();
         reset_test_flags();

@@ -1,0 +1,32 @@
+[package]
+name = "radroots_service_sqlite"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Reusable SQLite mechanics for Radroots service state"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[dependencies]
+fs2 = { workspace = true }
+futures = { workspace = true }
+radroots_runtime_paths = { workspace = true }
+radroots_storage = { workspace = true }
+rusqlite = { workspace = true, features = ["backup", "bundled"] }
+rustix = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
+tokio = { workspace = true, features = ["rt", "sync"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

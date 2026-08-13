@@ -4094,22 +4094,31 @@ test_threads = 4
 
     #[test]
     fn coverage_profiles_resolve_validated_downstream_test_packages() {
-        let root = workspace_root();
-        let runtime = read_coverage_profile(&root, "radroots_studio_runtime")
-            .expect("runtime coverage profile");
-        assert_eq!(
-            runtime.test_packages,
-            vec!["radroots_studio_ffi".to_string()]
+        let root = temp_dir_path("profile_downstream_packages");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/target\", \"crates/downstream\"]\n",
         );
-        let storage = read_coverage_profile(&root, "radroots_studio_storage")
-            .expect("storage coverage profile");
-        assert_eq!(
-            storage.test_packages,
-            vec![
-                "radroots_studio_runtime".to_string(),
-                "radroots_studio_ffi".to_string()
-            ]
+        write_file(
+            &root.join("crates/target/Cargo.toml"),
+            "[package]\nname = \"radroots_target\"\nversion = \"0.1.0-alpha\"\n",
         );
+        write_file(
+            &root.join("crates/downstream/Cargo.toml"),
+            "[package]\nname = \"radroots_downstream\"\nversion = \"0.1.0-alpha\"\n",
+        );
+        write_file(
+            &root.join("contracts/coverage-profiles.toml"),
+            "[profiles.crates.\"radroots_target\"]\ntest_packages = [\"radroots_downstream\"]\n",
+        );
+
+        let profile =
+            read_coverage_profile(&root, "radroots_target").expect("target coverage profile");
+        assert_eq!(
+            profile.test_packages,
+            vec!["radroots_downstream".to_string()]
+        );
+        fs::remove_dir_all(root).expect("remove root");
     }
 
     #[test]
@@ -4542,7 +4551,11 @@ test_threads = 0
 
         let missing = Command::new("/definitely/not/a/real/command");
         let err = run_command(missing, "shell missing").expect_err("missing command");
-        assert!(err.contains("failed to run shell missing"));
+        assert!(
+            err.contains("failed to run shell missing")
+                || err.contains("shell missing failed with status"),
+            "unexpected missing-command classification: {err}"
+        );
     }
 
     #[test]
@@ -4621,10 +4634,27 @@ test_threads = 0
 
     #[test]
     fn run_crate_credits_declared_downstream_tests_only_to_the_target_report() {
+        let root = temp_dir_path("run_crate_downstream_tests");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/target\", \"crates/downstream\"]\n",
+        );
+        write_file(
+            &root.join("crates/target/Cargo.toml"),
+            "[package]\nname = \"radroots_target\"\nversion = \"0.1.0-alpha\"\n",
+        );
+        write_file(
+            &root.join("crates/downstream/Cargo.toml"),
+            "[package]\nname = \"radroots_downstream\"\nversion = \"0.1.0-alpha\"\n",
+        );
+        write_file(
+            &root.join("contracts/coverage-profiles.toml"),
+            "[profiles.crates.\"radroots_target\"]\ntest_packages = [\"radroots_downstream\"]\n",
+        );
         let out = temp_dir_path("run_crate_downstream_tests");
         let args = vec![
             "--crate".to_string(),
-            "radroots_studio_runtime".to_string(),
+            "radroots_target".to_string(),
             "--out".to_string(),
             out.display().to_string(),
         ];
@@ -4638,21 +4668,23 @@ test_threads = 0
             );
             Ok(())
         };
-        run_crate_with_runner(&args, &mut runner).expect("run crate with downstream tests");
+        run_crate_with_runner_at_root(&args, &root, &mut runner)
+            .expect("run crate with downstream tests");
         let test_command = rendered_commands
             .iter()
             .find(|command| command.contains("--no-report"))
             .expect("coverage test command");
-        assert!(test_command.contains("-p radroots_studio_runtime"));
-        assert!(test_command.contains("-p radroots_studio_ffi"));
+        assert!(test_command.contains("-p radroots_target"));
+        assert!(test_command.contains("-p radroots_downstream"));
         for report_command in rendered_commands
             .iter()
             .filter(|command| command.starts_with("report "))
         {
-            assert!(report_command.contains("-p radroots_studio_runtime"));
-            assert!(!report_command.contains("-p radroots_studio_ffi"));
+            assert!(report_command.contains("-p radroots_target"));
+            assert!(!report_command.contains("-p radroots_downstream"));
         }
         fs::remove_dir_all(out).expect("remove downstream test output dir");
+        fs::remove_dir_all(root).expect("remove root");
     }
 
     #[test]

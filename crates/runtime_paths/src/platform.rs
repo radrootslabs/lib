@@ -8,6 +8,7 @@ pub enum RadrootsPlatform {
     Windows,
     Android,
     Ios,
+    Other,
 }
 
 impl RadrootsPlatform {
@@ -36,14 +37,21 @@ impl RadrootsPlatform {
     }
 
     #[must_use]
-    #[cfg(all(
-        not(target_os = "android"),
-        not(target_os = "ios"),
-        not(target_os = "macos"),
-        not(target_os = "windows")
-    ))]
+    #[cfg(target_os = "linux")]
     pub fn current() -> Self {
         Self::Linux
+    }
+
+    #[must_use]
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "windows"
+    )))]
+    pub fn current() -> Self {
+        Self::Other
     }
 
     #[must_use]
@@ -60,6 +68,7 @@ impl fmt::Display for RadrootsPlatform {
             Self::Windows => "windows",
             Self::Android => "android",
             Self::Ios => "ios",
+            Self::Other => "other",
         })
     }
 }
@@ -86,28 +95,18 @@ impl fmt::Display for RadrootsPathProfile {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RadrootsHostEnvironment {
     pub home_dir: Option<PathBuf>,
+    pub xdg_config_home: Option<PathBuf>,
+    pub xdg_data_home: Option<PathBuf>,
+    pub xdg_state_home: Option<PathBuf>,
+    pub xdg_cache_home: Option<PathBuf>,
+    pub xdg_runtime_dir: Option<PathBuf>,
     pub appdata_dir: Option<PathBuf>,
     pub localappdata_dir: Option<PathBuf>,
-    pub programdata_dir: Option<PathBuf>,
-}
-
-impl RadrootsHostEnvironment {
-    #[must_use]
-    pub fn from_current_process() -> Self {
-        Self {
-            home_dir: std::env::var_os("HOME").map(PathBuf::from),
-            appdata_dir: std::env::var_os("APPDATA").map(PathBuf::from),
-            localappdata_dir: std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
-            programdata_dir: std::env::var_os("ProgramData").map(PathBuf::from),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use super::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
+    use super::{RadrootsPathProfile, RadrootsPlatform};
 
     #[test]
     fn current_matches_compiled_target_platform() {
@@ -119,13 +118,16 @@ mod tests {
         let expected = RadrootsPlatform::Macos;
         #[cfg(target_os = "windows")]
         let expected = RadrootsPlatform::Windows;
-        #[cfg(all(
-            not(target_os = "android"),
-            not(target_os = "ios"),
-            not(target_os = "macos"),
-            not(target_os = "windows")
-        ))]
+        #[cfg(target_os = "linux")]
         let expected = RadrootsPlatform::Linux;
+        #[cfg(not(any(
+            target_os = "android",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "windows"
+        )))]
+        let expected = RadrootsPlatform::Other;
 
         assert_eq!(RadrootsPlatform::current(), expected);
     }
@@ -137,6 +139,7 @@ mod tests {
         assert!(!RadrootsPlatform::Windows.is_unix_like());
         assert!(!RadrootsPlatform::Android.is_unix_like());
         assert!(!RadrootsPlatform::Ios.is_unix_like());
+        assert!(!RadrootsPlatform::Other.is_unix_like());
     }
 
     #[test]
@@ -146,6 +149,7 @@ mod tests {
         assert_eq!(RadrootsPlatform::Windows.to_string(), "windows");
         assert_eq!(RadrootsPlatform::Android.to_string(), "android");
         assert_eq!(RadrootsPlatform::Ios.to_string(), "ios");
+        assert_eq!(RadrootsPlatform::Other.to_string(), "other");
 
         assert_eq!(
             RadrootsPathProfile::InteractiveUser.to_string(),
@@ -156,24 +160,6 @@ mod tests {
         assert_eq!(
             RadrootsPathProfile::MobileNative.to_string(),
             "mobile_native"
-        );
-    }
-
-    #[test]
-    fn host_environment_reads_current_process_variables() {
-        let env = RadrootsHostEnvironment::from_current_process();
-        assert_eq!(env.home_dir, std::env::var_os("HOME").map(PathBuf::from));
-        assert_eq!(
-            env.appdata_dir,
-            std::env::var_os("APPDATA").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.localappdata_dir,
-            std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
-        );
-        assert_eq!(
-            env.programdata_dir,
-            std::env::var_os("ProgramData").map(PathBuf::from)
         );
     }
 }

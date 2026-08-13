@@ -9,7 +9,14 @@ distribution contract resolution for the `radroots` core libraries.
    archive formats;
  * a schema constant and resolver for selecting a matching runtime artifact;
  * request and resolved-artifact types used by bootstrap and installer code;
+ * an exact, typed Myc/RHI service-target inventory for multiple-instance TOML
+   services with explicit existing-state startup, Unix local administration,
+   cached operations endpoints, and Linux x86_64/aarch64 Tier-1 eligibility;
  * TOML-backed contract handling for modular runtime deployment metadata.
+
+The hardened service-target inventory is metadata-only. It deliberately does
+not define Myc or RHI binaries, packages, archives, channels, artifact names,
+or qualified support claims.
 
 ## Copyright
 

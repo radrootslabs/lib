@@ -88,6 +88,7 @@ let
       curl
       findutils
       gawk
+      git-filter-repo
       gitMinimal
       gnugrep
       gnumake

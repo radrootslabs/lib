@@ -1,0 +1,1272 @@
+pub mod radroots_service_host
+pub use radroots_service_host::InstanceId
+pub use radroots_service_host::ServiceId
+pub macro radroots_service_host::compile_time_build_info!
+pub enum radroots_service_host::AdminClientErrorKind
+pub radroots_service_host::AdminClientErrorKind::Connect
+pub radroots_service_host::AdminClientErrorKind::Deadline
+pub radroots_service_host::AdminClientErrorKind::MalformedResponse
+pub radroots_service_host::AdminClientErrorKind::QueryLimit
+pub radroots_service_host::AdminClientErrorKind::RequestEncoding
+pub radroots_service_host::AdminClientErrorKind::RequestLimit
+pub radroots_service_host::AdminClientErrorKind::ResponseContentType
+pub radroots_service_host::AdminClientErrorKind::ResponseHeaders
+pub radroots_service_host::AdminClientErrorKind::ResponseHttpVersion
+pub radroots_service_host::AdminClientErrorKind::ResponseLimit
+pub radroots_service_host::AdminClientErrorKind::ServerFailure
+pub radroots_service_host::AdminClientErrorKind::SocketPath
+pub radroots_service_host::AdminClientErrorKind::Transport
+pub radroots_service_host::AdminClientErrorKind::UnsupportedContractVersion
+pub enum radroots_service_host::AdminClientTargetError
+pub radroots_service_host::AdminClientTargetError::AuthorityForbidden
+pub radroots_service_host::AdminClientTargetError::Empty
+pub radroots_service_host::AdminClientTargetError::EmptySegment
+pub radroots_service_host::AdminClientTargetError::InvalidPercentEncoding
+pub radroots_service_host::AdminClientTargetError::InvalidUri
+pub radroots_service_host::AdminClientTargetError::PathTooLong
+pub radroots_service_host::AdminClientTargetError::PatternForbidden
+pub radroots_service_host::AdminClientTargetError::TooLong
+pub radroots_service_host::AdminClientTargetError::WrongVersionPrefix
+impl core::error::Error for radroots_service_host::AdminClientTargetError
+impl core::fmt::Display for radroots_service_host::AdminClientTargetError
+pub fn radroots_service_host::AdminClientTargetError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminErrorCodeError
+pub radroots_service_host::AdminErrorCodeError::Empty
+pub radroots_service_host::AdminErrorCodeError::InvalidCharacter
+pub radroots_service_host::AdminErrorCodeError::TooLong
+impl core::error::Error for radroots_service_host::AdminErrorCodeError
+impl core::fmt::Display for radroots_service_host::AdminErrorCodeError
+pub fn radroots_service_host::AdminErrorCodeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminErrorMessageError
+pub radroots_service_host::AdminErrorMessageError::ControlCharacter
+pub radroots_service_host::AdminErrorMessageError::Empty
+pub radroots_service_host::AdminErrorMessageError::TooLong
+impl core::error::Error for radroots_service_host::AdminErrorMessageError
+impl core::fmt::Display for radroots_service_host::AdminErrorMessageError
+pub fn radroots_service_host::AdminErrorMessageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminHttpMethod
+pub radroots_service_host::AdminHttpMethod::Get
+pub radroots_service_host::AdminHttpMethod::Post
+pub enum radroots_service_host::AdminIdentifierError
+pub radroots_service_host::AdminIdentifierError::Empty
+pub radroots_service_host::AdminIdentifierError::Empty::field: radroots_service_host::AdminIdentifierField
+pub radroots_service_host::AdminIdentifierError::TooLong
+pub radroots_service_host::AdminIdentifierError::TooLong::field: radroots_service_host::AdminIdentifierField
+impl core::error::Error for radroots_service_host::AdminIdentifierError
+impl core::fmt::Display for radroots_service_host::AdminIdentifierError
+pub fn radroots_service_host::AdminIdentifierError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminIdentifierField
+pub radroots_service_host::AdminIdentifierField::CorrelationId
+pub radroots_service_host::AdminIdentifierField::OperationId
+pub enum radroots_service_host::AdminPayloadError
+pub radroots_service_host::AdminPayloadError::Encoding
+pub radroots_service_host::AdminPayloadError::NullForbidden
+impl core::error::Error for radroots_service_host::AdminPayloadError
+impl core::fmt::Display for radroots_service_host::AdminPayloadError
+pub fn radroots_service_host::AdminPayloadError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminPeerAuthorizationPolicyError
+pub radroots_service_host::AdminPeerAuthorizationPolicyError::AdminGroupUnsupported
+pub radroots_service_host::AdminPeerAuthorizationPolicyError::InvalidAdminGroupId
+impl core::error::Error for radroots_service_host::AdminPeerAuthorizationPolicyError
+impl core::fmt::Display for radroots_service_host::AdminPeerAuthorizationPolicyError
+pub fn radroots_service_host::AdminPeerAuthorizationPolicyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminPeerAuthorizationSupport
+pub radroots_service_host::AdminPeerAuthorizationSupport::LinuxSoPeerCredRequired
+pub radroots_service_host::AdminPeerAuthorizationSupport::MacOsFilesystemOwnerPermissionsOnly
+pub radroots_service_host::AdminPeerAuthorizationSupport::Unsupported
+impl radroots_service_host::AdminPeerAuthorizationSupport
+pub const fn radroots_service_host::AdminPeerAuthorizationSupport::current() -> Self
+pub enum radroots_service_host::AdminRequestDecodeError
+pub radroots_service_host::AdminRequestDecodeError::Empty
+pub radroots_service_host::AdminRequestDecodeError::Malformed
+impl core::error::Error for radroots_service_host::AdminRequestDecodeError
+impl core::fmt::Display for radroots_service_host::AdminRequestDecodeError
+pub fn radroots_service_host::AdminRequestDecodeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminRouteFailureStatus
+pub radroots_service_host::AdminRouteFailureStatus::BadRequest
+pub radroots_service_host::AdminRouteFailureStatus::Conflict
+pub radroots_service_host::AdminRouteFailureStatus::Internal
+pub radroots_service_host::AdminRouteFailureStatus::NotFound
+pub radroots_service_host::AdminRouteFailureStatus::Unavailable
+pub enum radroots_service_host::AdminRouteOutcomeError
+pub radroots_service_host::AdminRouteOutcomeError::Encoding
+pub radroots_service_host::AdminRouteOutcomeError::InvalidPayload
+pub radroots_service_host::AdminRouteOutcomeError::ResponseLimit
+impl core::error::Error for radroots_service_host::AdminRouteOutcomeError
+impl core::fmt::Display for radroots_service_host::AdminRouteOutcomeError
+pub fn radroots_service_host::AdminRouteOutcomeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminRoutePathError
+pub radroots_service_host::AdminRoutePathError::DuplicateParameter
+pub radroots_service_host::AdminRoutePathError::Empty
+pub radroots_service_host::AdminRoutePathError::EmptySegment
+pub radroots_service_host::AdminRoutePathError::InvalidCharacter
+pub radroots_service_host::AdminRoutePathError::InvalidParameter
+pub radroots_service_host::AdminRoutePathError::TooLong
+pub radroots_service_host::AdminRoutePathError::WrongVersionPrefix
+impl core::error::Error for radroots_service_host::AdminRoutePathError
+impl core::fmt::Display for radroots_service_host::AdminRoutePathError
+pub fn radroots_service_host::AdminRoutePathError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminRouteRegistrationError
+pub radroots_service_host::AdminRouteRegistrationError::Ambiguous
+pub radroots_service_host::AdminRouteRegistrationError::Duplicate
+pub radroots_service_host::AdminRouteRegistrationError::InvalidPath(radroots_service_host::AdminRoutePathError)
+impl core::error::Error for radroots_service_host::AdminRouteRegistrationError
+impl core::fmt::Display for radroots_service_host::AdminRouteRegistrationError
+pub fn radroots_service_host::AdminRouteRegistrationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminServerConfigError
+pub radroots_service_host::AdminServerConfigError::NoRoutes
+pub radroots_service_host::AdminServerConfigError::ResponseLimitTooSmall
+impl core::error::Error for radroots_service_host::AdminServerConfigError
+impl core::fmt::Display for radroots_service_host::AdminServerConfigError
+pub fn radroots_service_host::AdminServerConfigError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminServerError
+pub radroots_service_host::AdminServerError::Accept
+pub radroots_service_host::AdminServerError::Accept::kind: core::io::error::ErrorKind
+pub radroots_service_host::AdminServerError::ConnectionTaskPanicked
+pub radroots_service_host::AdminServerError::ListenerClone
+pub radroots_service_host::AdminServerError::ListenerClone::kind: core::io::error::ErrorKind
+pub radroots_service_host::AdminServerError::ListenerRegistration
+pub radroots_service_host::AdminServerError::ListenerRegistration::kind: core::io::error::ErrorKind
+impl core::error::Error for radroots_service_host::AdminServerError
+impl core::fmt::Display for radroots_service_host::AdminServerError
+pub fn radroots_service_host::AdminServerError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::AdminTransportLimitField
+pub radroots_service_host::AdminTransportLimitField::ConcurrentConnections
+pub radroots_service_host::AdminTransportLimitField::HeaderBytes
+pub radroots_service_host::AdminTransportLimitField::HeaderCount
+pub radroots_service_host::AdminTransportLimitField::IdleTimeout
+pub radroots_service_host::AdminTransportLimitField::QueryItems
+pub radroots_service_host::AdminTransportLimitField::RequestBodyUtf8Bytes
+pub radroots_service_host::AdminTransportLimitField::RequestDeadline
+pub radroots_service_host::AdminTransportLimitField::ResponseBodyUtf8Bytes
+impl radroots_service_host::AdminTransportLimitField
+pub const fn radroots_service_host::AdminTransportLimitField::maximum(self) -> u64
+pub enum radroots_service_host::AdminTransportLimitsError
+pub radroots_service_host::AdminTransportLimitsError::ExceedsMaximum
+pub radroots_service_host::AdminTransportLimitsError::ExceedsMaximum::field: radroots_service_host::AdminTransportLimitField
+pub radroots_service_host::AdminTransportLimitsError::Zero
+pub radroots_service_host::AdminTransportLimitsError::Zero::field: radroots_service_host::AdminTransportLimitField
+impl core::error::Error for radroots_service_host::AdminTransportLimitsError
+impl core::fmt::Display for radroots_service_host::AdminTransportLimitsError
+pub fn radroots_service_host::AdminTransportLimitsError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::BoundedCountError
+pub radroots_service_host::BoundedCountError::ExceedsMaximum
+pub radroots_service_host::BoundedCountError::InvalidMaximum
+pub radroots_service_host::BoundedCountError::Zero
+impl core::error::Error for radroots_service_host::BoundedCountError
+impl core::fmt::Display for radroots_service_host::BoundedCountError
+pub fn radroots_service_host::BoundedCountError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::BuildInfoError
+pub radroots_service_host::BuildInfoError::InvalidValue(radroots_service_host::BuildInfoField)
+pub radroots_service_host::BuildInfoError::MissingVariable(&'static str)
+impl core::error::Error for radroots_service_host::BuildInfoError
+impl core::fmt::Display for radroots_service_host::BuildInfoError
+pub fn radroots_service_host::BuildInfoError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::BuildInfoField
+pub radroots_service_host::BuildInfoField::ContractVersion
+pub radroots_service_host::BuildInfoField::FeatureProfile
+pub radroots_service_host::BuildInfoField::LibRevision
+pub radroots_service_host::BuildInfoField::RustVersion
+pub radroots_service_host::BuildInfoField::ServiceCommit
+pub radroots_service_host::BuildInfoField::ServiceVersion
+pub radroots_service_host::BuildInfoField::Target
+impl core::fmt::Display for radroots_service_host::BuildInfoField
+pub fn radroots_service_host::BuildInfoField::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::BuildMode
+pub radroots_service_host::BuildMode::Development
+pub radroots_service_host::BuildMode::Release
+pub enum radroots_service_host::ByteLimitError
+pub radroots_service_host::ByteLimitError::Invalid
+pub radroots_service_host::ByteLimitError::Overflow
+pub radroots_service_host::ByteLimitError::Zero
+impl core::error::Error for radroots_service_host::ByteLimitError
+impl core::fmt::Display for radroots_service_host::ByteLimitError
+pub fn radroots_service_host::ByteLimitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::CommonMetricGroup
+pub radroots_service_host::CommonMetricGroup::Build
+pub radroots_service_host::CommonMetricGroup::Phase
+pub radroots_service_host::CommonMetricGroup::Storage
+pub radroots_service_host::CommonMetricGroup::Task
+pub radroots_service_host::CommonMetricGroup::Transport
+pub enum radroots_service_host::CommonReasonCode
+pub radroots_service_host::CommonReasonCode::AdminListenerFailed
+pub radroots_service_host::CommonReasonCode::DatabaseLowDisk
+pub radroots_service_host::CommonReasonCode::DatabaseReadOnly
+pub radroots_service_host::CommonReasonCode::DatabaseSchemaMismatch
+pub radroots_service_host::CommonReasonCode::IdentityUnavailable
+pub radroots_service_host::CommonReasonCode::OperationsListenerFailed
+pub radroots_service_host::CommonReasonCode::OutboxInvariantFailed
+pub radroots_service_host::CommonReasonCode::PublicationBacklogExceeded
+pub radroots_service_host::CommonReasonCode::RequiredRelayUnavailable
+pub radroots_service_host::CommonReasonCode::ShutdownInProgress
+pub radroots_service_host::CommonReasonCode::SignerProviderUnavailable
+pub radroots_service_host::CommonReasonCode::SubscriberNotActive
+impl radroots_service_host::CommonReasonCode
+pub const fn radroots_service_host::CommonReasonCode::as_str(self) -> &'static str
+impl core::convert::From<radroots_service_host::CommonReasonCode> for radroots_service_host::ReasonCode
+pub fn radroots_service_host::ReasonCode::from(radroots_service_host::CommonReasonCode) -> Self
+pub enum radroots_service_host::ConfigDocumentErrorKind
+pub radroots_service_host::ConfigDocumentErrorKind::InvalidSchema
+pub radroots_service_host::ConfigDocumentErrorKind::InvalidSchemaVersion
+pub radroots_service_host::ConfigDocumentErrorKind::InvalidUtf8
+pub radroots_service_host::ConfigDocumentErrorKind::MalformedToml
+pub radroots_service_host::ConfigDocumentErrorKind::MissingSchema
+pub radroots_service_host::ConfigDocumentErrorKind::MissingSchemaVersion
+pub radroots_service_host::ConfigDocumentErrorKind::NotFound
+pub radroots_service_host::ConfigDocumentErrorKind::Read
+pub radroots_service_host::ConfigDocumentErrorKind::SchemaMismatch
+pub radroots_service_host::ConfigDocumentErrorKind::TooLarge
+pub radroots_service_host::ConfigDocumentErrorKind::TypedDocument
+pub radroots_service_host::ConfigDocumentErrorKind::UnsupportedSchemaVersion
+pub enum radroots_service_host::ConfigDocumentExpectationError
+pub radroots_service_host::ConfigDocumentExpectationError::InvalidSchema
+pub radroots_service_host::ConfigDocumentExpectationError::InvalidSchemaVersion
+impl core::error::Error for radroots_service_host::ConfigDocumentExpectationError
+impl core::fmt::Display for radroots_service_host::ConfigDocumentExpectationError
+pub fn radroots_service_host::ConfigDocumentExpectationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::ConfigurationSource
+pub radroots_service_host::ConfigurationSource::DerivedRepoLocal
+pub radroots_service_host::ConfigurationSource::ExplicitConfig
+pub enum radroots_service_host::EntropyError
+pub radroots_service_host::EntropyError::Unavailable
+impl core::error::Error for radroots_service_host::EntropyError
+impl core::fmt::Display for radroots_service_host::EntropyError
+pub fn radroots_service_host::EntropyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::HostErrorCode
+pub radroots_service_host::HostErrorCode::AdminTransport
+pub radroots_service_host::HostErrorCode::ConfigDocument
+pub radroots_service_host::HostErrorCode::InvalidHostContract
+pub radroots_service_host::HostErrorCode::Lifecycle
+pub radroots_service_host::HostErrorCode::OperationsBind
+pub radroots_service_host::HostErrorCode::OperationsServe
+pub radroots_service_host::HostErrorCode::PathContext
+pub radroots_service_host::HostErrorCode::TaskFailure
+impl radroots_service_host::HostErrorCode
+pub const fn radroots_service_host::HostErrorCode::as_str(self) -> &'static str
+impl core::fmt::Display for radroots_service_host::HostErrorCode
+pub fn radroots_service_host::HostErrorCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::HostErrorKind
+pub radroots_service_host::HostErrorKind::AdminTransport
+pub radroots_service_host::HostErrorKind::ConfigDocument
+pub radroots_service_host::HostErrorKind::InvalidHostContract
+pub radroots_service_host::HostErrorKind::Lifecycle
+pub radroots_service_host::HostErrorKind::OperationsBind
+pub radroots_service_host::HostErrorKind::OperationsServe
+pub radroots_service_host::HostErrorKind::PathContext
+pub radroots_service_host::HostErrorKind::TaskFailure
+impl radroots_service_host::HostErrorKind
+pub const fn radroots_service_host::HostErrorKind::safe_error(self) -> radroots_service_host::SafeHostError
+pub enum radroots_service_host::IntegrityState
+pub radroots_service_host::IntegrityState::Failed
+pub radroots_service_host::IntegrityState::VerificationRequired
+pub radroots_service_host::IntegrityState::Verified
+pub enum radroots_service_host::LoggingFormat
+pub radroots_service_host::LoggingFormat::Json
+impl core::fmt::Display for radroots_service_host::LoggingFormat
+pub fn radroots_service_host::LoggingFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_service_host::LoggingFormat
+pub type radroots_service_host::LoggingFormat::Err = radroots_service_host::LoggingFormatError
+pub fn radroots_service_host::LoggingFormat::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_service_host::LoggingFormat
+pub fn radroots_service_host::LoggingFormat::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::LoggingFormat
+pub fn radroots_service_host::LoggingFormat::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub enum radroots_service_host::LoggingFormatError
+pub radroots_service_host::LoggingFormatError::Unsupported
+impl core::error::Error for radroots_service_host::LoggingFormatError
+impl core::fmt::Display for radroots_service_host::LoggingFormatError
+pub fn radroots_service_host::LoggingFormatError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::MetricHealthState
+pub radroots_service_host::MetricHealthState::Degraded
+pub radroots_service_host::MetricHealthState::ReadOnly
+pub radroots_service_host::MetricHealthState::Ready
+pub radroots_service_host::MetricHealthState::RepairRequired
+pub radroots_service_host::MetricHealthState::Unavailable
+pub radroots_service_host::MetricHealthState::Unready
+pub enum radroots_service_host::MetricKind
+pub radroots_service_host::MetricKind::Counter
+pub radroots_service_host::MetricKind::Gauge
+pub enum radroots_service_host::MetricLabelKey
+pub radroots_service_host::MetricLabelKey::Classification
+pub radroots_service_host::MetricLabelKey::Outcome
+pub radroots_service_host::MetricLabelKey::Phase
+pub radroots_service_host::MetricLabelKey::RelayId
+pub radroots_service_host::MetricLabelKey::Revision
+pub radroots_service_host::MetricLabelKey::State
+pub radroots_service_host::MetricLabelKey::Storage
+pub radroots_service_host::MetricLabelKey::Task
+pub radroots_service_host::MetricLabelKey::Transport
+pub radroots_service_host::MetricLabelKey::Version
+impl radroots_service_host::MetricLabelKey
+pub const fn radroots_service_host::MetricLabelKey::as_str(self) -> &'static str
+pub enum radroots_service_host::MetricTaskOutcome
+pub radroots_service_host::MetricTaskOutcome::ExpectedCompletion
+pub radroots_service_host::MetricTaskOutcome::JoinFailed
+pub radroots_service_host::MetricTaskOutcome::OptionalFailure
+pub radroots_service_host::MetricTaskOutcome::TaskPanicked
+pub radroots_service_host::MetricTaskOutcome::TaskReturnedError
+pub radroots_service_host::MetricTaskOutcome::UnexpectedCancellation
+pub radroots_service_host::MetricTaskOutcome::UnexpectedCompletion
+pub enum radroots_service_host::MetricValue
+pub radroots_service_host::MetricValue::Counter(u64)
+pub radroots_service_host::MetricValue::Gauge(i64)
+pub enum radroots_service_host::MetricsContractError
+pub radroots_service_host::MetricsContractError::DuplicateDescriptor
+pub radroots_service_host::MetricsContractError::DuplicateLabelKey
+pub radroots_service_host::MetricsContractError::DuplicateSample
+pub radroots_service_host::MetricsContractError::ForbiddenLabelKey
+pub radroots_service_host::MetricsContractError::InvalidComponentId
+pub radroots_service_host::MetricsContractError::InvalidHelp
+pub radroots_service_host::MetricsContractError::InvalidLabelValue
+pub radroots_service_host::MetricsContractError::InvalidMetricName
+pub radroots_service_host::MetricsContractError::InvalidStableRelayId
+pub radroots_service_host::MetricsContractError::LabelSetMismatch
+pub radroots_service_host::MetricsContractError::TooManyDescriptors
+pub radroots_service_host::MetricsContractError::TooManyLabels
+pub radroots_service_host::MetricsContractError::TooManySamples
+pub radroots_service_host::MetricsContractError::UnknownDescriptor
+pub radroots_service_host::MetricsContractError::ValueKindMismatch
+impl core::error::Error for radroots_service_host::MetricsContractError
+impl core::fmt::Display for radroots_service_host::MetricsContractError
+pub fn radroots_service_host::MetricsContractError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::MetricsRenderError
+pub radroots_service_host::MetricsRenderError::InvalidMaximum
+pub radroots_service_host::MetricsRenderError::ResponseTooLarge
+impl core::error::Error for radroots_service_host::MetricsRenderError
+impl core::fmt::Display for radroots_service_host::MetricsRenderError
+pub fn radroots_service_host::MetricsRenderError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::MonotonicClockError
+pub radroots_service_host::MonotonicClockError::DeadlineOverflow
+impl core::error::Error for radroots_service_host::MonotonicClockError
+impl core::fmt::Display for radroots_service_host::MonotonicClockError
+pub fn radroots_service_host::MonotonicClockError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::OperationsBindPolicy
+pub radroots_service_host::OperationsBindPolicy::LoopbackOnly
+pub radroots_service_host::OperationsBindPolicy::Public
+pub enum radroots_service_host::OperationsConfigError
+pub radroots_service_host::OperationsConfigError::DisabledField
+pub radroots_service_host::OperationsConfigError::DisabledField::field: radroots_service_host::OperationsConfigField
+pub radroots_service_host::OperationsConfigError::Limits(radroots_service_host::OperationsTransportLimitsError)
+pub radroots_service_host::OperationsConfigError::Listen(radroots_service_host::OperationsListenAddressError)
+pub radroots_service_host::OperationsConfigError::MissingListen
+pub radroots_service_host::OperationsConfigError::PublicBindRequiresPolicy
+impl core::error::Error for radroots_service_host::OperationsConfigError
+pub fn radroots_service_host::OperationsConfigError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_service_host::OperationsConfigError
+pub fn radroots_service_host::OperationsConfigError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::OperationsConfigField
+pub radroots_service_host::OperationsConfigField::BindPolicy
+pub radroots_service_host::OperationsConfigField::Limits
+pub radroots_service_host::OperationsConfigField::Listen
+pub enum radroots_service_host::OperationsListenAddressError
+pub radroots_service_host::OperationsListenAddressError::Invalid
+pub radroots_service_host::OperationsListenAddressError::PortZero
+impl core::error::Error for radroots_service_host::OperationsListenAddressError
+impl core::fmt::Display for radroots_service_host::OperationsListenAddressError
+pub fn radroots_service_host::OperationsListenAddressError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::OperationsServerError
+pub radroots_service_host::OperationsServerError::Accept
+pub radroots_service_host::OperationsServerError::Accept::kind: core::io::error::ErrorKind
+pub radroots_service_host::OperationsServerError::Bind
+pub radroots_service_host::OperationsServerError::Bind::kind: core::io::error::ErrorKind
+pub radroots_service_host::OperationsServerError::ConnectionTaskPanicked
+pub radroots_service_host::OperationsServerError::Disabled
+pub radroots_service_host::OperationsServerError::HeaderLimitBelowParserFloor
+pub radroots_service_host::OperationsServerError::LocalAddress
+pub radroots_service_host::OperationsServerError::LocalAddress::kind: core::io::error::ErrorKind
+impl core::error::Error for radroots_service_host::OperationsServerError
+impl core::fmt::Display for radroots_service_host::OperationsServerError
+pub fn radroots_service_host::OperationsServerError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::OperationsTransportLimitField
+pub radroots_service_host::OperationsTransportLimitField::ConcurrentConnections
+pub radroots_service_host::OperationsTransportLimitField::HeaderBytes
+pub radroots_service_host::OperationsTransportLimitField::HeaderCount
+pub radroots_service_host::OperationsTransportLimitField::IdleTimeout
+pub radroots_service_host::OperationsTransportLimitField::RequestDeadline
+pub radroots_service_host::OperationsTransportLimitField::ResponseBodyUtf8Bytes
+impl radroots_service_host::OperationsTransportLimitField
+pub const fn radroots_service_host::OperationsTransportLimitField::maximum(self) -> u64
+pub enum radroots_service_host::OperationsTransportLimitsError
+pub radroots_service_host::OperationsTransportLimitsError::ExceedsMaximum
+pub radroots_service_host::OperationsTransportLimitsError::ExceedsMaximum::field: radroots_service_host::OperationsTransportLimitField
+pub radroots_service_host::OperationsTransportLimitsError::Zero
+pub radroots_service_host::OperationsTransportLimitsError::Zero::field: radroots_service_host::OperationsTransportLimitField
+impl core::error::Error for radroots_service_host::OperationsTransportLimitsError
+impl core::fmt::Display for radroots_service_host::OperationsTransportLimitsError
+pub fn radroots_service_host::OperationsTransportLimitsError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::OptionalOperationsBind
+pub radroots_service_host::OptionalOperationsBind::Disabled
+pub radroots_service_host::OptionalOperationsBind::Listen(radroots_service_host::OperationsListenAddress)
+impl radroots_service_host::OptionalOperationsBind
+pub const fn radroots_service_host::OptionalOperationsBind::address(self) -> core::option::Option<radroots_service_host::OperationsListenAddress>
+pub const fn radroots_service_host::OptionalOperationsBind::disabled() -> Self
+pub fn radroots_service_host::OptionalOperationsBind::into_listener_config(self, radroots_service_host::OperationsBindPolicy, radroots_service_host::OperationsTransportLimits) -> core::result::Result<radroots_service_host::OperationsListenerConfig, radroots_service_host::OperationsConfigError>
+pub const fn radroots_service_host::OptionalOperationsBind::is_enabled(self) -> bool
+pub const fn radroots_service_host::OptionalOperationsBind::listen(radroots_service_host::OperationsListenAddress) -> Self
+impl core::default::Default for radroots_service_host::OptionalOperationsBind
+pub fn radroots_service_host::OptionalOperationsBind::default() -> Self
+impl core::fmt::Debug for radroots_service_host::OptionalOperationsBind
+pub fn radroots_service_host::OptionalOperationsBind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_service_host::OptionalOperationsBind
+pub fn radroots_service_host::OptionalOperationsBind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_service_host::OptionalOperationsBind
+pub type radroots_service_host::OptionalOperationsBind::Err = radroots_service_host::OptionalOperationsBindError
+pub fn radroots_service_host::OptionalOperationsBind::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_service_host::OptionalOperationsBind
+pub fn radroots_service_host::OptionalOperationsBind::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::OptionalOperationsBind
+pub fn radroots_service_host::OptionalOperationsBind::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub enum radroots_service_host::OptionalOperationsBindError
+pub radroots_service_host::OptionalOperationsBindError::Invalid
+impl core::error::Error for radroots_service_host::OptionalOperationsBindError
+impl core::fmt::Display for radroots_service_host::OptionalOperationsBindError
+pub fn radroots_service_host::OptionalOperationsBindError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::PersistenceHealth
+pub radroots_service_host::PersistenceHealth::ReadOnly
+pub radroots_service_host::PersistenceHealth::Ready
+pub radroots_service_host::PersistenceHealth::RepairRequired
+pub radroots_service_host::PersistenceHealth::Unavailable
+pub enum radroots_service_host::PositiveDurationError
+pub radroots_service_host::PositiveDurationError::Invalid
+pub radroots_service_host::PositiveDurationError::Overflow
+pub radroots_service_host::PositiveDurationError::Zero
+impl core::error::Error for radroots_service_host::PositiveDurationError
+impl core::fmt::Display for radroots_service_host::PositiveDurationError
+pub fn radroots_service_host::PositiveDurationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::ProcessSignal
+pub radroots_service_host::ProcessSignal::Interrupt
+pub radroots_service_host::ProcessSignal::Terminate
+impl radroots_service_host::ProcessSignal
+pub const fn radroots_service_host::ProcessSignal::as_str(self) -> &'static str
+impl core::fmt::Display for radroots_service_host::ProcessSignal
+pub fn radroots_service_host::ProcessSignal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::ProcessSignalAction
+pub radroots_service_host::ProcessSignalAction::BeginGracefulShutdown
+pub radroots_service_host::ProcessSignalAction::BeginGracefulShutdown::signal: radroots_service_host::ProcessSignal
+pub radroots_service_host::ProcessSignalAction::ForceTermination
+pub radroots_service_host::ProcessSignalAction::ForceTermination::signal: radroots_service_host::ProcessSignal
+impl radroots_service_host::ProcessSignalAction
+pub const fn radroots_service_host::ProcessSignalAction::forces_termination(self) -> bool
+pub const fn radroots_service_host::ProcessSignalAction::signal(self) -> radroots_service_host::ProcessSignal
+pub enum radroots_service_host::ProcessSignalStage
+pub radroots_service_host::ProcessSignalStage::FirstCancellation
+pub radroots_service_host::ProcessSignalStage::ForceTermination
+pub enum radroots_service_host::ProviderHealth
+pub radroots_service_host::ProviderHealth::Degraded
+pub radroots_service_host::ProviderHealth::Ready
+pub radroots_service_host::ProviderHealth::Unavailable
+pub enum radroots_service_host::ServicePhase
+pub radroots_service_host::ServicePhase::Degraded
+pub radroots_service_host::ServicePhase::Failed
+pub radroots_service_host::ServicePhase::Ready
+pub radroots_service_host::ServicePhase::Starting
+pub radroots_service_host::ServicePhase::Stopping
+pub radroots_service_host::ServicePhase::Unready
+impl radroots_service_host::ServicePhase
+pub const fn radroots_service_host::ServicePhase::can_transition_to(self, Self) -> bool
+pub enum radroots_service_host::ShutdownConfigError
+pub radroots_service_host::ShutdownConfigError::ZeroGrace
+impl core::error::Error for radroots_service_host::ShutdownConfigError
+impl core::fmt::Display for radroots_service_host::ShutdownConfigError
+pub fn radroots_service_host::ShutdownConfigError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::ShutdownDisposition
+pub radroots_service_host::ShutdownDisposition::Completed
+pub radroots_service_host::ShutdownDisposition::Forced
+pub radroots_service_host::ShutdownDisposition::Forced::unfinished: radroots_service_host::UnfinishedWork
+pub radroots_service_host::ShutdownDisposition::GraceExpired
+pub radroots_service_host::ShutdownDisposition::GraceExpired::unfinished: radroots_service_host::UnfinishedWork
+pub radroots_service_host::ShutdownDisposition::PhaseFailed
+pub radroots_service_host::ShutdownDisposition::PhaseFailed::phase: radroots_service_host::ShutdownPhase
+pub radroots_service_host::ShutdownDisposition::PhaseFailed::unfinished: radroots_service_host::UnfinishedWork
+pub radroots_service_host::ShutdownDisposition::TaskFailed
+pub radroots_service_host::ShutdownDisposition::TaskFailed::kind: radroots_service_host::SupervisionFailureKind
+pub enum radroots_service_host::ShutdownPhase
+pub radroots_service_host::ShutdownPhase::CancelIngress
+pub radroots_service_host::ShutdownPhase::CloseNetwork
+pub radroots_service_host::ShutdownPhase::CloseSockets
+pub radroots_service_host::ShutdownPhase::CloseSqlite
+pub radroots_service_host::ShutdownPhase::DrainOperations
+pub radroots_service_host::ShutdownPhase::PersistRecoverableWork
+pub radroots_service_host::ShutdownPhase::RejectNewMutations
+pub enum radroots_service_host::ShutdownStartError
+pub radroots_service_host::ShutdownStartError::Deadline(radroots_service_host::MonotonicClockError)
+impl core::error::Error for radroots_service_host::ShutdownStartError
+pub fn radroots_service_host::ShutdownStartError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_service_host::ShutdownStartError
+pub fn radroots_service_host::ShutdownStartError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::StatusContractError
+pub radroots_service_host::StatusContractError::IllegalTransition
+pub radroots_service_host::StatusContractError::IllegalTransition::from: radroots_service_host::ServicePhase
+pub radroots_service_host::StatusContractError::IllegalTransition::to: radroots_service_host::ServicePhase
+pub radroots_service_host::StatusContractError::InvalidReadiness
+pub radroots_service_host::StatusContractError::InvalidReadiness::phase: radroots_service_host::ServicePhase
+pub radroots_service_host::StatusContractError::InvalidReadiness::readiness: radroots_service_host::Readiness
+pub radroots_service_host::StatusContractError::InvalidReasonCode
+pub radroots_service_host::StatusContractError::TooManyReasonCodes
+pub radroots_service_host::StatusContractError::TooManyReasonCodes::maximum: usize
+impl core::error::Error for radroots_service_host::StatusContractError
+impl core::fmt::Display for radroots_service_host::StatusContractError
+pub fn radroots_service_host::StatusContractError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::StatusEncodingError
+pub radroots_service_host::StatusEncodingError::EncodingFailed
+pub radroots_service_host::StatusEncodingError::ResponseTooLarge
+impl core::error::Error for radroots_service_host::StatusEncodingError
+impl core::fmt::Display for radroots_service_host::StatusEncodingError
+pub fn radroots_service_host::StatusEncodingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::StatusModelError
+pub radroots_service_host::StatusModelError::ConfigurationServiceMismatch
+pub radroots_service_host::StatusModelError::InvalidDetailField
+pub radroots_service_host::StatusModelError::InvalidSchemaVersion
+pub radroots_service_host::StatusModelError::InvalidSha256Digest
+pub radroots_service_host::StatusModelError::InvalidStatusId
+pub radroots_service_host::StatusModelError::UptimeOverflow
+impl core::error::Error for radroots_service_host::StatusModelError
+impl core::fmt::Display for radroots_service_host::StatusModelError
+pub fn radroots_service_host::StatusModelError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::SupervisedTaskExitStatus
+pub radroots_service_host::SupervisedTaskExitStatus::ExpectedCompletion
+pub radroots_service_host::SupervisedTaskExitStatus::OptionalFailure
+pub enum radroots_service_host::SupervisionFailureKind
+pub radroots_service_host::SupervisionFailureKind::JoinFailed
+pub radroots_service_host::SupervisionFailureKind::TaskPanicked
+pub radroots_service_host::SupervisionFailureKind::TaskReturnedError
+pub radroots_service_host::SupervisionFailureKind::UnexpectedCancellation
+pub radroots_service_host::SupervisionFailureKind::UnexpectedCompletion
+pub enum radroots_service_host::TaskClassification
+pub radroots_service_host::TaskClassification::Critical
+pub radroots_service_host::TaskClassification::OneShot
+pub radroots_service_host::TaskClassification::Optional
+impl radroots_service_host::TaskClassification
+pub const fn radroots_service_host::TaskClassification::completion_expectation(self) -> radroots_service_host::TaskCompletionExpectation
+pub const fn radroots_service_host::TaskClassification::failure_is_fatal(self) -> bool
+pub const fn radroots_service_host::TaskClassification::requires_shutdown_phase(self) -> bool
+pub enum radroots_service_host::TaskCompletionExpectation
+pub radroots_service_host::TaskCompletionExpectation::AfterCancellation
+pub radroots_service_host::TaskCompletionExpectation::CompletesOnce
+pub radroots_service_host::TaskCompletionExpectation::MayComplete
+pub enum radroots_service_host::TaskMetadataError
+pub radroots_service_host::TaskMetadataError::InvalidShutdownPhaseAssignment
+pub radroots_service_host::TaskMetadataError::InvalidTaskName
+impl core::error::Error for radroots_service_host::TaskMetadataError
+impl core::fmt::Display for radroots_service_host::TaskMetadataError
+pub fn radroots_service_host::TaskMetadataError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::TaskRegistrationError
+pub radroots_service_host::TaskRegistrationError::DuplicateName
+pub radroots_service_host::TaskRegistrationError::NoRuntime
+impl core::error::Error for radroots_service_host::TaskRegistrationError
+impl core::fmt::Display for radroots_service_host::TaskRegistrationError
+pub fn radroots_service_host::TaskRegistrationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::TransportHealth
+pub radroots_service_host::TransportHealth::Degraded
+pub radroots_service_host::TransportHealth::Ready
+pub radroots_service_host::TransportHealth::Unavailable
+pub enum radroots_service_host::UnfinishedWork
+pub radroots_service_host::UnfinishedWork::FatalAuthoritative
+pub radroots_service_host::UnfinishedWork::None
+pub radroots_service_host::UnfinishedWork::RecoverableOptional
+pub enum radroots_service_host::UnixAdminSocketError
+pub radroots_service_host::UnixAdminSocketError::InvalidSocketPath
+pub radroots_service_host::UnixAdminSocketError::ListenerConfiguration
+pub radroots_service_host::UnixAdminSocketError::ListenerConfiguration::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryChanged
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryGroup
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryGroup::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryNotAbsolute
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryNotDirectory
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryPermissions
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryPermissions::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryUnavailable
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryUnavailable::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::RuntimeDirectoryWrongOwner
+pub radroots_service_host::UnixAdminSocketError::SocketActive
+pub radroots_service_host::UnixAdminSocketError::SocketBind
+pub radroots_service_host::UnixAdminSocketError::SocketBind::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::SocketGroup
+pub radroots_service_host::UnixAdminSocketError::SocketGroup::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::SocketLivenessUnproven
+pub radroots_service_host::UnixAdminSocketError::SocketPathUnavailable
+pub radroots_service_host::UnixAdminSocketError::SocketPathUnavailable::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::SocketPathWrongOwner
+pub radroots_service_host::UnixAdminSocketError::SocketPathWrongType
+pub radroots_service_host::UnixAdminSocketError::SocketPermissions
+pub radroots_service_host::UnixAdminSocketError::SocketPermissions::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::StaleSocketCleanup
+pub radroots_service_host::UnixAdminSocketError::StaleSocketCleanup::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::WriterAlreadyActive
+pub radroots_service_host::UnixAdminSocketError::WriterLockInvalidType
+pub radroots_service_host::UnixAdminSocketError::WriterLockUnavailable
+pub radroots_service_host::UnixAdminSocketError::WriterLockUnavailable::kind: core::io::error::ErrorKind
+pub radroots_service_host::UnixAdminSocketError::WriterLockWrongOwner
+impl core::error::Error for radroots_service_host::UnixAdminSocketError
+impl core::fmt::Display for radroots_service_host::UnixAdminSocketError
+pub fn radroots_service_host::UnixAdminSocketError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_service_host::WallClockError
+pub radroots_service_host::WallClockError::BeforeUnixEpoch
+impl core::error::Error for radroots_service_host::WallClockError
+impl core::fmt::Display for radroots_service_host::WallClockError
+pub fn radroots_service_host::WallClockError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminClient
+impl radroots_service_host::AdminClient
+pub async fn radroots_service_host::AdminClient::get<T>(&self, &radroots_service_host::AdminClientTarget) -> core::result::Result<radroots_service_host::AdminSuccessResponse<T>, radroots_service_host::AdminClientError> where T: serde_core::de::DeserializeOwned + serde_core::ser::Serialize
+pub const fn radroots_service_host::AdminClient::limits(&self) -> radroots_service_host::AdminTransportLimits
+pub async fn radroots_service_host::AdminClient::mutate<RequestBody, ResponseBody>(&self, &radroots_service_host::AdminClientTarget, radroots_service_host::AdminOperationId, core::option::Option<radroots_service_host::AdminCorrelationId>, RequestBody) -> core::result::Result<radroots_service_host::AdminSuccessResponse<ResponseBody>, radroots_service_host::AdminClientError> where RequestBody: serde_core::ser::Serialize, ResponseBody: serde_core::de::DeserializeOwned + serde_core::ser::Serialize
+pub fn radroots_service_host::AdminClient::new(impl core::convert::Into<std::path::PathBuf>, radroots_service_host::AdminTransportLimits) -> core::result::Result<Self, radroots_service_host::AdminClientError>
+pub fn radroots_service_host::AdminClient::socket_path(&self) -> &std::path::Path
+impl core::fmt::Debug for radroots_service_host::AdminClient
+pub fn radroots_service_host::AdminClient::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminClientError
+impl radroots_service_host::AdminClientError
+pub const fn radroots_service_host::AdminClientError::failure(&self) -> core::option::Option<&radroots_service_host::AdminFailureResponse>
+pub const fn radroots_service_host::AdminClientError::io_kind(&self) -> core::option::Option<core::io::error::ErrorKind>
+pub const fn radroots_service_host::AdminClientError::kind(&self) -> radroots_service_host::AdminClientErrorKind
+impl core::error::Error for radroots_service_host::AdminClientError
+pub fn radroots_service_host::AdminClientError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_service_host::AdminClientError
+pub fn radroots_service_host::AdminClientError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_service_host::AdminClientError
+pub fn radroots_service_host::AdminClientError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminClientTarget
+impl radroots_service_host::AdminClientTarget
+pub fn radroots_service_host::AdminClientTarget::as_str(&self) -> &str
+pub fn radroots_service_host::AdminClientTarget::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminClientTargetError>
+pub fn radroots_service_host::AdminClientTarget::path(&self) -> &str
+pub fn radroots_service_host::AdminClientTarget::query(&self) -> core::option::Option<&str>
+impl core::fmt::Debug for radroots_service_host::AdminClientTarget
+pub fn radroots_service_host::AdminClientTarget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminContractVersionError
+impl radroots_service_host::AdminContractVersionError
+pub const fn radroots_service_host::AdminContractVersionError::received(self) -> u32
+pub fn radroots_service_host::AdminContractVersionError::response(self, radroots_service_host::AdminCorrelationId) -> radroots_service_host::AdminFailureResponse
+impl core::error::Error for radroots_service_host::AdminContractVersionError
+impl core::fmt::Display for radroots_service_host::AdminContractVersionError
+pub fn radroots_service_host::AdminContractVersionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminCorrelationId(_)
+impl radroots_service_host::AdminCorrelationId
+pub fn radroots_service_host::AdminCorrelationId::as_str(&self) -> &str
+pub fn radroots_service_host::AdminCorrelationId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
+impl core::fmt::Display for radroots_service_host::AdminCorrelationId
+pub fn radroots_service_host::AdminCorrelationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_service_host::AdminCorrelationId
+pub fn radroots_service_host::AdminCorrelationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::AdminCorrelationId
+pub fn radroots_service_host::AdminCorrelationId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::AdminError
+impl radroots_service_host::AdminError
+pub fn radroots_service_host::AdminError::code(&self) -> &radroots_service_host::AdminErrorCode
+pub fn radroots_service_host::AdminError::from_host_error(&radroots_service_host::HostError) -> Self
+pub fn radroots_service_host::AdminError::message(&self) -> &radroots_service_host::AdminErrorMessage
+pub const fn radroots_service_host::AdminError::new(radroots_service_host::AdminErrorCode, radroots_service_host::AdminErrorMessage) -> Self
+pub struct radroots_service_host::AdminErrorCode(_)
+impl radroots_service_host::AdminErrorCode
+pub fn radroots_service_host::AdminErrorCode::as_str(&self) -> &str
+pub fn radroots_service_host::AdminErrorCode::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminErrorCodeError>
+impl core::fmt::Display for radroots_service_host::AdminErrorCode
+pub fn radroots_service_host::AdminErrorCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_service_host::AdminErrorCode
+pub fn radroots_service_host::AdminErrorCode::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::AdminErrorCode
+pub fn radroots_service_host::AdminErrorCode::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::AdminErrorMessage(_)
+impl radroots_service_host::AdminErrorMessage
+pub fn radroots_service_host::AdminErrorMessage::as_str(&self) -> &str
+pub fn radroots_service_host::AdminErrorMessage::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminErrorMessageError>
+impl core::fmt::Display for radroots_service_host::AdminErrorMessage
+pub fn radroots_service_host::AdminErrorMessage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_service_host::AdminErrorMessage
+pub fn radroots_service_host::AdminErrorMessage::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::AdminErrorMessage
+pub fn radroots_service_host::AdminErrorMessage::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::AdminFailureResponse
+impl radroots_service_host::AdminFailureResponse
+pub const fn radroots_service_host::AdminFailureResponse::correlation_id(&self) -> &radroots_service_host::AdminCorrelationId
+pub const fn radroots_service_host::AdminFailureResponse::error(&self) -> &radroots_service_host::AdminError
+pub const fn radroots_service_host::AdminFailureResponse::new(radroots_service_host::AdminCorrelationId, radroots_service_host::AdminError) -> Self
+pub fn radroots_service_host::AdminFailureResponse::unsupported_contract_version(radroots_service_host::AdminCorrelationId) -> Self
+pub struct radroots_service_host::AdminMutationRequest<T>
+impl<T> radroots_service_host::AdminMutationRequest<T> where T: serde_core::ser::Serialize
+pub const fn radroots_service_host::AdminMutationRequest<T>::contract_version(&self) -> u32
+pub fn radroots_service_host::AdminMutationRequest<T>::correlation_id(&self) -> core::option::Option<&radroots_service_host::AdminCorrelationId>
+pub fn radroots_service_host::AdminMutationRequest<T>::into_request(self) -> T
+pub fn radroots_service_host::AdminMutationRequest<T>::new(radroots_service_host::AdminOperationId, core::option::Option<radroots_service_host::AdminCorrelationId>, T) -> core::result::Result<Self, radroots_service_host::AdminPayloadError>
+pub const fn radroots_service_host::AdminMutationRequest<T>::operation_id(&self) -> &radroots_service_host::AdminOperationId
+pub const fn radroots_service_host::AdminMutationRequest<T>::request(&self) -> &T
+pub fn radroots_service_host::AdminMutationRequest<T>::validate_contract_version(&self) -> core::result::Result<(), radroots_service_host::AdminContractVersionError>
+impl<T> core::fmt::Debug for radroots_service_host::AdminMutationRequest<T>
+pub fn radroots_service_host::AdminMutationRequest<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminOperationId(_)
+impl radroots_service_host::AdminOperationId
+pub fn radroots_service_host::AdminOperationId::as_str(&self) -> &str
+pub fn radroots_service_host::AdminOperationId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
+impl core::fmt::Display for radroots_service_host::AdminOperationId
+pub fn radroots_service_host::AdminOperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_service_host::AdminOperationId
+pub fn radroots_service_host::AdminOperationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::AdminOperationId
+pub fn radroots_service_host::AdminOperationId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::AdminPeerAuthorizationPolicy
+impl radroots_service_host::AdminPeerAuthorizationPolicy
+pub const fn radroots_service_host::AdminPeerAuthorizationPolicy::admin_gid(self) -> core::option::Option<u32>
+pub const fn radroots_service_host::AdminPeerAuthorizationPolicy::owner_only() -> Self
+pub const fn radroots_service_host::AdminPeerAuthorizationPolicy::support(self) -> radroots_service_host::AdminPeerAuthorizationSupport
+pub fn radroots_service_host::AdminPeerAuthorizationPolicy::with_admin_gid(u32) -> core::result::Result<Self, radroots_service_host::AdminPeerAuthorizationPolicyError>
+impl core::default::Default for radroots_service_host::AdminPeerAuthorizationPolicy
+pub fn radroots_service_host::AdminPeerAuthorizationPolicy::default() -> Self
+pub struct radroots_service_host::AdminRequest
+impl radroots_service_host::AdminRequest
+pub fn radroots_service_host::AdminRequest::body(&self) -> &[u8]
+pub const fn radroots_service_host::AdminRequest::correlation_id(&self) -> &radroots_service_host::AdminCorrelationId
+pub fn radroots_service_host::AdminRequest::decode_json<T>(&self) -> core::result::Result<T, radroots_service_host::AdminRequestDecodeError> where T: serde_core::de::DeserializeOwned
+pub const fn radroots_service_host::AdminRequest::method(&self) -> radroots_service_host::AdminHttpMethod
+pub fn radroots_service_host::AdminRequest::parameter(&self, &str) -> core::option::Option<&str>
+pub const fn radroots_service_host::AdminRequest::path(&self) -> &radroots_service_host::AdminRoutePath
+pub fn radroots_service_host::AdminRequest::query(&self) -> core::option::Option<&str>
+pub fn radroots_service_host::AdminRequest::success<T>(&self, &T) -> core::result::Result<radroots_service_host::AdminRouteOutcome, radroots_service_host::AdminRouteOutcomeError> where T: serde_core::ser::Serialize
+impl core::fmt::Debug for radroots_service_host::AdminRequest
+pub fn radroots_service_host::AdminRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminRouteFailure
+impl radroots_service_host::AdminRouteFailure
+pub const fn radroots_service_host::AdminRouteFailure::error(&self) -> &radroots_service_host::AdminError
+pub const fn radroots_service_host::AdminRouteFailure::new(radroots_service_host::AdminRouteFailureStatus, radroots_service_host::AdminError) -> Self
+pub const fn radroots_service_host::AdminRouteFailure::status(&self) -> radroots_service_host::AdminRouteFailureStatus
+pub struct radroots_service_host::AdminRouteOutcome(_)
+impl radroots_service_host::AdminRouteOutcome
+pub const fn radroots_service_host::AdminRouteOutcome::failure(radroots_service_host::AdminRouteFailure) -> Self
+impl core::fmt::Debug for radroots_service_host::AdminRouteOutcome
+pub fn radroots_service_host::AdminRouteOutcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminRoutePath
+impl radroots_service_host::AdminRoutePath
+pub fn radroots_service_host::AdminRoutePath::as_str(&self) -> &str
+pub fn radroots_service_host::AdminRoutePath::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminRoutePathError>
+pub struct radroots_service_host::AdminRouter
+impl radroots_service_host::AdminRouter
+pub fn radroots_service_host::AdminRouter::new() -> Self
+pub fn radroots_service_host::AdminRouter::route<F, Fut>(&mut self, radroots_service_host::AdminHttpMethod, impl core::convert::Into<alloc::string::String>, F) -> core::result::Result<(), radroots_service_host::AdminRouteRegistrationError> where F: core::ops::function::Fn(radroots_service_host::AdminRequest) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = radroots_service_host::AdminRouteOutcome> + core::marker::Send + 'static
+impl core::fmt::Debug for radroots_service_host::AdminRouter
+pub fn radroots_service_host::AdminRouter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminServer
+impl radroots_service_host::AdminServer
+pub fn radroots_service_host::AdminServer::new<E>(radroots_service_host::AdminRouter, radroots_service_host::AdminTransportLimits, E) -> core::result::Result<Self, radroots_service_host::AdminServerConfigError> where E: radroots_service_host::EntropySource + 'static
+pub async fn radroots_service_host::AdminServer::serve(self, radroots_service_host::UnixAdminSocketBinding, radroots_service_host::CancellationToken) -> core::result::Result<(), radroots_service_host::AdminServerError>
+pub fn radroots_service_host::AdminServer::with_system_entropy(radroots_service_host::AdminRouter, radroots_service_host::AdminTransportLimits) -> core::result::Result<Self, radroots_service_host::AdminServerConfigError>
+impl core::fmt::Debug for radroots_service_host::AdminServer
+pub fn radroots_service_host::AdminServer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminSuccessResponse<T>
+impl<T> radroots_service_host::AdminSuccessResponse<T> where T: serde_core::ser::Serialize
+pub const fn radroots_service_host::AdminSuccessResponse<T>::correlation_id(&self) -> &radroots_service_host::AdminCorrelationId
+pub fn radroots_service_host::AdminSuccessResponse<T>::into_result(self) -> T
+pub fn radroots_service_host::AdminSuccessResponse<T>::new(radroots_service_host::AdminCorrelationId, T) -> core::result::Result<Self, radroots_service_host::AdminPayloadError>
+pub const fn radroots_service_host::AdminSuccessResponse<T>::result(&self) -> &T
+impl<T> core::fmt::Debug for radroots_service_host::AdminSuccessResponse<T>
+pub fn radroots_service_host::AdminSuccessResponse<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::AdminTransportLimitValues
+pub radroots_service_host::AdminTransportLimitValues::concurrent_connections: u32
+pub radroots_service_host::AdminTransportLimitValues::header_bytes: u32
+pub radroots_service_host::AdminTransportLimitValues::header_count: u32
+pub radroots_service_host::AdminTransportLimitValues::idle_timeout: core::time::Duration
+pub radroots_service_host::AdminTransportLimitValues::query_items: u32
+pub radroots_service_host::AdminTransportLimitValues::request_body_utf8_bytes: u32
+pub radroots_service_host::AdminTransportLimitValues::request_deadline: core::time::Duration
+pub radroots_service_host::AdminTransportLimitValues::response_body_utf8_bytes: u32
+pub struct radroots_service_host::AdminTransportLimits
+impl radroots_service_host::AdminTransportLimits
+pub const radroots_service_host::AdminTransportLimits::DEFAULT: Self
+pub const fn radroots_service_host::AdminTransportLimits::concurrent_connections(self) -> u32
+pub const fn radroots_service_host::AdminTransportLimits::header_bytes(self) -> u32
+pub const fn radroots_service_host::AdminTransportLimits::header_count(self) -> u32
+pub const fn radroots_service_host::AdminTransportLimits::idle_timeout(self) -> core::time::Duration
+pub fn radroots_service_host::AdminTransportLimits::new(radroots_service_host::AdminTransportLimitValues) -> core::result::Result<Self, radroots_service_host::AdminTransportLimitsError>
+pub const fn radroots_service_host::AdminTransportLimits::query_items(self) -> u32
+pub const fn radroots_service_host::AdminTransportLimits::request_body_utf8_bytes(self) -> u32
+pub const fn radroots_service_host::AdminTransportLimits::request_deadline(self) -> core::time::Duration
+pub const fn radroots_service_host::AdminTransportLimits::response_body_utf8_bytes(self) -> u32
+pub const fn radroots_service_host::AdminTransportLimits::values(self) -> radroots_service_host::AdminTransportLimitValues
+impl core::default::Default for radroots_service_host::AdminTransportLimits
+pub fn radroots_service_host::AdminTransportLimits::default() -> Self
+pub struct radroots_service_host::BoundOperationsServer
+impl radroots_service_host::BoundOperationsServer
+pub const fn radroots_service_host::BoundOperationsServer::local_address(&self) -> core::net::socket_addr::SocketAddr
+pub async fn radroots_service_host::BoundOperationsServer::serve(self, radroots_service_host::CancellationToken) -> core::result::Result<(), radroots_service_host::OperationsServerError>
+impl core::fmt::Debug for radroots_service_host::BoundOperationsServer
+pub fn radroots_service_host::BoundOperationsServer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::BoundedCount<const MAXIMUM: u32>(_)
+impl<const MAXIMUM: u32> radroots_service_host::BoundedCount<MAXIMUM>
+pub const fn radroots_service_host::BoundedCount<MAXIMUM>::maximum() -> u32
+pub const fn radroots_service_host::BoundedCount<MAXIMUM>::new(u32) -> core::result::Result<Self, radroots_service_host::BoundedCountError>
+pub const fn radroots_service_host::BoundedCount<MAXIMUM>::value(self) -> u32
+impl<'de, const MAXIMUM: u32> serde_core::de::Deserialize<'de> for radroots_service_host::BoundedCount<MAXIMUM>
+pub fn radroots_service_host::BoundedCount<MAXIMUM>::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+impl<const MAXIMUM: u32> core::fmt::Display for radroots_service_host::BoundedCount<MAXIMUM>
+pub fn radroots_service_host::BoundedCount<MAXIMUM>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<const MAXIMUM: u32> serde_core::ser::Serialize for radroots_service_host::BoundedCount<MAXIMUM>
+pub fn radroots_service_host::BoundedCount<MAXIMUM>::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub struct radroots_service_host::BoundedMetricsSnapshot
+impl radroots_service_host::BoundedMetricsSnapshot
+pub fn radroots_service_host::BoundedMetricsSnapshot::descriptors(&self) -> &[radroots_service_host::MetricDescriptor]
+pub fn radroots_service_host::BoundedMetricsSnapshot::new(impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::MetricDescriptor>, impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::MetricSample>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::BoundedMetricsSnapshot::render(&self, usize) -> core::result::Result<alloc::vec::Vec<u8>, radroots_service_host::MetricsRenderError>
+pub fn radroots_service_host::BoundedMetricsSnapshot::samples(&self) -> &[radroots_service_host::MetricSample]
+impl core::fmt::Debug for radroots_service_host::BoundedMetricsSnapshot
+pub fn radroots_service_host::BoundedMetricsSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::BuildInfo
+impl radroots_service_host::BuildInfo
+pub const fn radroots_service_host::BuildInfo::contract_versions(&self) -> radroots_service_host::ContractVersions
+pub fn radroots_service_host::BuildInfo::feature_profile(&self) -> &str
+pub fn radroots_service_host::BuildInfo::from_compile_time(radroots_service_host::BuildMode, radroots_service_host::BuildInfoEnvironment<'_>) -> core::result::Result<Self, radroots_service_host::BuildInfoError>
+pub fn radroots_service_host::BuildInfo::lib_revision(&self) -> &str
+pub fn radroots_service_host::BuildInfo::rust_version(&self) -> &str
+pub fn radroots_service_host::BuildInfo::service_commit(&self) -> &str
+pub fn radroots_service_host::BuildInfo::service_version(&self) -> &str
+pub fn radroots_service_host::BuildInfo::status_projection(&self) -> radroots_service_host::StatusBuildInfo<'_>
+pub fn radroots_service_host::BuildInfo::target(&self) -> &str
+pub struct radroots_service_host::BuildInfoEnvironment<'a>
+pub radroots_service_host::BuildInfoEnvironment::contract_versions: radroots_service_host::ContractVersions
+pub radroots_service_host::BuildInfoEnvironment::feature_profile: core::option::Option<&'a str>
+pub radroots_service_host::BuildInfoEnvironment::lib_revision: core::option::Option<&'a str>
+pub radroots_service_host::BuildInfoEnvironment::rust_version: core::option::Option<&'a str>
+pub radroots_service_host::BuildInfoEnvironment::service_commit: core::option::Option<&'a str>
+pub radroots_service_host::BuildInfoEnvironment::service_version: core::option::Option<&'a str>
+pub radroots_service_host::BuildInfoEnvironment::target: core::option::Option<&'a str>
+pub struct radroots_service_host::ByteLimit(_)
+impl radroots_service_host::ByteLimit
+pub const fn radroots_service_host::ByteLimit::bytes(self) -> u64
+pub const fn radroots_service_host::ByteLimit::new(u64) -> core::result::Result<Self, radroots_service_host::ByteLimitError>
+impl core::fmt::Display for radroots_service_host::ByteLimit
+pub fn radroots_service_host::ByteLimit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_service_host::ByteLimit
+pub type radroots_service_host::ByteLimit::Err = radroots_service_host::ByteLimitError
+pub fn radroots_service_host::ByteLimit::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_service_host::ByteLimit
+pub fn radroots_service_host::ByteLimit::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::ByteLimit
+pub fn radroots_service_host::ByteLimit::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::CachedServiceState<M>
+impl<M> radroots_service_host::CachedServiceState<M>
+pub const fn radroots_service_host::CachedServiceState<M>::metrics(&self) -> &M
+pub const fn radroots_service_host::CachedServiceState<M>::new(radroots_service_host::ServiceOperationalState, M) -> Self
+pub const fn radroots_service_host::CachedServiceState<M>::operational(&self) -> &radroots_service_host::ServiceOperationalState
+pub struct radroots_service_host::CachedServiceStatePublisher<M>
+impl<M> radroots_service_host::CachedServiceStatePublisher<M>
+pub fn radroots_service_host::CachedServiceStatePublisher<M>::publish(&mut self, radroots_service_host::CachedServiceState<M>) -> core::result::Result<(), radroots_service_host::StatusContractError>
+pub fn radroots_service_host::CachedServiceStatePublisher<M>::subscribe(&self) -> radroots_service_host::CachedServiceStateReader<M>
+pub struct radroots_service_host::CachedServiceStateReader<M>
+impl<M> radroots_service_host::CachedServiceStateReader<M>
+pub async fn radroots_service_host::CachedServiceStateReader<M>::changed(&mut self) -> core::result::Result<alloc::sync::Arc<radroots_service_host::CachedServiceState<M>>, radroots_service_host::StatusPublisherDropped>
+pub fn radroots_service_host::CachedServiceStateReader<M>::snapshot(&self) -> alloc::sync::Arc<radroots_service_host::CachedServiceState<M>>
+impl<M> core::clone::Clone for radroots_service_host::CachedServiceStateReader<M>
+pub fn radroots_service_host::CachedServiceStateReader<M>::clone(&self) -> Self
+pub struct radroots_service_host::CancellationToken
+impl radroots_service_host::CancellationToken
+pub fn radroots_service_host::CancellationToken::cancel(&self)
+pub async fn radroots_service_host::CancellationToken::cancelled(&self)
+pub fn radroots_service_host::CancellationToken::child_token(&self) -> Self
+pub fn radroots_service_host::CancellationToken::is_cancelled(&self) -> bool
+pub fn radroots_service_host::CancellationToken::new() -> Self
+impl core::fmt::Debug for radroots_service_host::CancellationToken
+pub fn radroots_service_host::CancellationToken::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::ConfigDocumentError
+impl radroots_service_host::ConfigDocumentError
+pub const fn radroots_service_host::ConfigDocumentError::io_kind(&self) -> core::option::Option<core::io::error::ErrorKind>
+pub const fn radroots_service_host::ConfigDocumentError::kind(&self) -> radroots_service_host::ConfigDocumentErrorKind
+pub const fn radroots_service_host::ConfigDocumentError::location(&self) -> core::option::Option<radroots_service_host::ConfigDocumentLocation>
+pub fn radroots_service_host::ConfigDocumentError::trusted_source_path(&self) -> &std::path::Path
+impl core::error::Error for radroots_service_host::ConfigDocumentError
+impl core::fmt::Debug for radroots_service_host::ConfigDocumentError
+pub fn radroots_service_host::ConfigDocumentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_service_host::ConfigDocumentError
+pub fn radroots_service_host::ConfigDocumentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::ConfigDocumentExpectation
+impl radroots_service_host::ConfigDocumentExpectation
+pub fn radroots_service_host::ConfigDocumentExpectation::new(impl core::convert::Into<alloc::boxed::Box<str>>, u32) -> core::result::Result<Self, radroots_service_host::ConfigDocumentExpectationError>
+pub fn radroots_service_host::ConfigDocumentExpectation::schema(&self) -> &str
+pub const fn radroots_service_host::ConfigDocumentExpectation::schema_version(&self) -> u32
+impl core::fmt::Debug for radroots_service_host::ConfigDocumentExpectation
+pub fn radroots_service_host::ConfigDocumentExpectation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::ConfigDocumentLocation
+impl radroots_service_host::ConfigDocumentLocation
+pub const fn radroots_service_host::ConfigDocumentLocation::column(self) -> u32
+pub const fn radroots_service_host::ConfigDocumentLocation::line(self) -> u32
+pub struct radroots_service_host::ConfigurationIdentity
+impl radroots_service_host::ConfigurationIdentity
+pub fn radroots_service_host::ConfigurationIdentity::for_service(&radroots_runtime_paths::identifier::ServiceId, radroots_service_host::Sha256Digest, radroots_service_host::ConfigurationSource) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub struct radroots_service_host::ContractVersions
+impl radroots_service_host::ContractVersions
+pub const fn radroots_service_host::ContractVersions::admin(self) -> u32
+pub const fn radroots_service_host::ContractVersions::config(self) -> u32
+pub fn radroots_service_host::ContractVersions::new(u32, u32, u32, u32, u32) -> core::result::Result<Self, radroots_service_host::BuildInfoError>
+pub const fn radroots_service_host::ContractVersions::provider(self) -> u32
+pub const fn radroots_service_host::ContractVersions::state(self) -> u32
+pub const fn radroots_service_host::ContractVersions::status(self) -> u32
+pub struct radroots_service_host::GracefulShutdown
+impl radroots_service_host::GracefulShutdown
+pub const fn radroots_service_host::GracefulShutdown::grace(&self) -> core::time::Duration
+pub fn radroots_service_host::GracefulShutdown::new(core::time::Duration) -> core::result::Result<Self, radroots_service_host::ShutdownConfigError>
+pub const fn radroots_service_host::GracefulShutdown::phase_failure(&self) -> core::option::Option<&radroots_service_host::ShutdownPhaseFailure>
+pub async fn radroots_service_host::GracefulShutdown::run<C, F>(&mut self, &C, &mut radroots_service_host::TaskSupervisor, &mut dyn radroots_service_host::ShutdownPhaseHandler, F) -> core::result::Result<radroots_service_host::ShutdownSummary, radroots_service_host::ShutdownStartError> where C: radroots_service_host::MonotonicClock, F: core::future::future::Future<Output = ()> + core::marker::Send
+pub const fn radroots_service_host::GracefulShutdown::task_failure(&self) -> core::option::Option<&radroots_service_host::SupervisionFailure>
+pub struct radroots_service_host::HostError
+impl radroots_service_host::HostError
+pub const fn radroots_service_host::HostError::kind(&self) -> radroots_service_host::HostErrorKind
+pub const fn radroots_service_host::HostError::new(radroots_service_host::HostErrorKind) -> Self
+pub const fn radroots_service_host::HostError::safe_error(&self) -> radroots_service_host::SafeHostError
+pub fn radroots_service_host::HostError::with_source(radroots_service_host::HostErrorKind, impl core::error::Error + core::marker::Send + core::marker::Sync + 'static) -> Self
+impl core::error::Error for radroots_service_host::HostError
+pub fn radroots_service_host::HostError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_service_host::HostError
+pub fn radroots_service_host::HostError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::MetricComponentId(_)
+impl radroots_service_host::MetricComponentId
+pub fn radroots_service_host::MetricComponentId::as_str(&self) -> &str
+pub fn radroots_service_host::MetricComponentId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub struct radroots_service_host::MetricDescriptor
+impl radroots_service_host::MetricDescriptor
+pub const fn radroots_service_host::MetricDescriptor::group(&self) -> radroots_service_host::CommonMetricGroup
+pub const fn radroots_service_host::MetricDescriptor::kind(&self) -> radroots_service_host::MetricKind
+pub fn radroots_service_host::MetricDescriptor::label_keys(&self) -> &[radroots_service_host::MetricLabelKey]
+pub fn radroots_service_host::MetricDescriptor::name(&self) -> &radroots_service_host::MetricName
+pub fn radroots_service_host::MetricDescriptor::new(radroots_service_host::CommonMetricGroup, radroots_service_host::MetricName, impl core::convert::Into<alloc::string::String>, radroots_service_host::MetricKind, impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::MetricLabelKey>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+impl core::fmt::Debug for radroots_service_host::MetricDescriptor
+pub fn radroots_service_host::MetricDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::MetricLabel
+impl radroots_service_host::MetricLabel
+pub fn radroots_service_host::MetricLabel::build_revision(&radroots_service_host::BuildInfo) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::MetricLabel::build_version(&radroots_service_host::BuildInfo) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::MetricLabel::classification(radroots_service_host::TaskClassification) -> Self
+pub fn radroots_service_host::MetricLabel::health_state(radroots_service_host::MetricHealthState) -> Self
+pub const fn radroots_service_host::MetricLabel::key(&self) -> radroots_service_host::MetricLabelKey
+pub fn radroots_service_host::MetricLabel::phase(radroots_service_host::ServicePhase) -> Self
+pub fn radroots_service_host::MetricLabel::relay_id(radroots_service_host::StableRelayId) -> Self
+pub fn radroots_service_host::MetricLabel::storage(radroots_service_host::MetricComponentId) -> Self
+pub fn radroots_service_host::MetricLabel::task(&radroots_service_host::TaskName) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::MetricLabel::task_outcome(radroots_service_host::MetricTaskOutcome) -> Self
+pub fn radroots_service_host::MetricLabel::transport(radroots_service_host::MetricComponentId) -> Self
+pub fn radroots_service_host::MetricLabel::value(&self) -> &str
+impl core::fmt::Debug for radroots_service_host::MetricLabel
+pub fn radroots_service_host::MetricLabel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::MetricName(_)
+impl radroots_service_host::MetricName
+pub fn radroots_service_host::MetricName::as_str(&self) -> &str
+pub fn radroots_service_host::MetricName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub struct radroots_service_host::MetricSample
+impl radroots_service_host::MetricSample
+pub fn radroots_service_host::MetricSample::labels(&self) -> &[radroots_service_host::MetricLabel]
+pub fn radroots_service_host::MetricSample::name(&self) -> &radroots_service_host::MetricName
+pub fn radroots_service_host::MetricSample::new(radroots_service_host::MetricName, radroots_service_host::MetricValue, impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::MetricLabel>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub const fn radroots_service_host::MetricSample::value(&self) -> radroots_service_host::MetricValue
+impl core::fmt::Debug for radroots_service_host::MetricSample
+pub fn radroots_service_host::MetricSample::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::MonotonicDeadline(_)
+impl radroots_service_host::MonotonicDeadline
+pub fn radroots_service_host::MonotonicDeadline::is_reached_at(self, radroots_service_host::MonotonicTime) -> bool
+pub const fn radroots_service_host::MonotonicDeadline::time(self) -> radroots_service_host::MonotonicTime
+pub struct radroots_service_host::MonotonicTime(_)
+impl radroots_service_host::MonotonicTime
+pub fn radroots_service_host::MonotonicTime::checked_deadline_after(self, core::time::Duration) -> core::result::Result<radroots_service_host::MonotonicDeadline, radroots_service_host::MonotonicClockError>
+pub const fn radroots_service_host::MonotonicTime::duration_since_origin(self) -> core::time::Duration
+pub const fn radroots_service_host::MonotonicTime::from_duration_since_origin(core::time::Duration) -> Self
+pub struct radroots_service_host::OperationsHealthResponse
+impl radroots_service_host::OperationsHealthResponse
+pub const fn radroots_service_host::OperationsHealthResponse::body(&self) -> &'static [u8]
+pub const fn radroots_service_host::OperationsHealthResponse::content_type(&self) -> &'static str
+pub const fn radroots_service_host::OperationsHealthResponse::status(&self) -> http::status::StatusCode
+pub struct radroots_service_host::OperationsListenAddress(_)
+impl radroots_service_host::OperationsListenAddress
+pub const fn radroots_service_host::OperationsListenAddress::is_loopback(self) -> bool
+pub fn radroots_service_host::OperationsListenAddress::new(core::net::socket_addr::SocketAddr) -> core::result::Result<Self, radroots_service_host::OperationsListenAddressError>
+pub const fn radroots_service_host::OperationsListenAddress::socket_addr(self) -> core::net::socket_addr::SocketAddr
+impl core::fmt::Display for radroots_service_host::OperationsListenAddress
+pub fn radroots_service_host::OperationsListenAddress::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_service_host::OperationsListenAddress
+pub type radroots_service_host::OperationsListenAddress::Err = radroots_service_host::OperationsListenAddressError
+pub fn radroots_service_host::OperationsListenAddress::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_service_host::OperationsListenAddress
+pub fn radroots_service_host::OperationsListenAddress::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub struct radroots_service_host::OperationsListenerConfig
+impl radroots_service_host::OperationsListenerConfig
+pub const fn radroots_service_host::OperationsListenerConfig::bind_policy(self) -> core::option::Option<radroots_service_host::OperationsBindPolicy>
+pub const fn radroots_service_host::OperationsListenerConfig::disabled() -> Self
+pub fn radroots_service_host::OperationsListenerConfig::enabled(radroots_service_host::OperationsListenAddress, radroots_service_host::OperationsBindPolicy, radroots_service_host::OperationsTransportLimits) -> core::result::Result<Self, radroots_service_host::OperationsConfigError>
+pub const fn radroots_service_host::OperationsListenerConfig::is_enabled(self) -> bool
+pub const fn radroots_service_host::OperationsListenerConfig::limits(self) -> core::option::Option<radroots_service_host::OperationsTransportLimits>
+pub const fn radroots_service_host::OperationsListenerConfig::listen(self) -> core::option::Option<radroots_service_host::OperationsListenAddress>
+impl core::default::Default for radroots_service_host::OperationsListenerConfig
+pub fn radroots_service_host::OperationsListenerConfig::default() -> Self
+impl core::fmt::Debug for radroots_service_host::OperationsListenerConfig
+pub fn radroots_service_host::OperationsListenerConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_service_host::OperationsListenerConfig
+pub fn radroots_service_host::OperationsListenerConfig::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::OperationsListenerConfig
+pub fn radroots_service_host::OperationsListenerConfig::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::OperationsServer
+impl radroots_service_host::OperationsServer
+pub async fn radroots_service_host::OperationsServer::bind(self) -> core::result::Result<radroots_service_host::BoundOperationsServer, radroots_service_host::OperationsServerError>
+pub fn radroots_service_host::OperationsServer::new(radroots_service_host::OperationsListenerConfig, radroots_service_host::CachedServiceStateReader<radroots_service_host::BoundedMetricsSnapshot>) -> core::result::Result<Self, radroots_service_host::OperationsServerError>
+pub fn radroots_service_host::OperationsServer::new_with_clock<C>(radroots_service_host::OperationsListenerConfig, radroots_service_host::CachedServiceStateReader<radroots_service_host::BoundedMetricsSnapshot>, C) -> core::result::Result<Self, radroots_service_host::OperationsServerError> where C: radroots_service_host::MonotonicClock + 'static
+impl core::fmt::Debug for radroots_service_host::OperationsServer
+pub fn radroots_service_host::OperationsServer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::OperationsTransportLimitValues
+pub radroots_service_host::OperationsTransportLimitValues::concurrent_connections: u32
+pub radroots_service_host::OperationsTransportLimitValues::header_bytes: u32
+pub radroots_service_host::OperationsTransportLimitValues::header_count: u32
+pub radroots_service_host::OperationsTransportLimitValues::idle_timeout: core::time::Duration
+pub radroots_service_host::OperationsTransportLimitValues::request_deadline: core::time::Duration
+pub radroots_service_host::OperationsTransportLimitValues::response_body_utf8_bytes: u32
+pub struct radroots_service_host::OperationsTransportLimits
+impl radroots_service_host::OperationsTransportLimits
+pub const radroots_service_host::OperationsTransportLimits::DEFAULT: Self
+pub const fn radroots_service_host::OperationsTransportLimits::concurrent_connections(self) -> u32
+pub const fn radroots_service_host::OperationsTransportLimits::header_bytes(self) -> u32
+pub const fn radroots_service_host::OperationsTransportLimits::header_count(self) -> u32
+pub const fn radroots_service_host::OperationsTransportLimits::idle_timeout(self) -> core::time::Duration
+pub fn radroots_service_host::OperationsTransportLimits::new(radroots_service_host::OperationsTransportLimitValues) -> core::result::Result<Self, radroots_service_host::OperationsTransportLimitsError>
+pub const fn radroots_service_host::OperationsTransportLimits::request_deadline(self) -> core::time::Duration
+pub const fn radroots_service_host::OperationsTransportLimits::response_body_utf8_bytes(self) -> u32
+pub const fn radroots_service_host::OperationsTransportLimits::values(self) -> radroots_service_host::OperationsTransportLimitValues
+impl core::default::Default for radroots_service_host::OperationsTransportLimits
+pub fn radroots_service_host::OperationsTransportLimits::default() -> Self
+impl serde_core::ser::Serialize for radroots_service_host::OperationsTransportLimits
+pub fn radroots_service_host::OperationsTransportLimits::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub struct radroots_service_host::PersistenceSummary
+impl radroots_service_host::PersistenceSummary
+pub fn radroots_service_host::PersistenceSummary::new(radroots_service_host::PersistenceHealth, u32, u64, radroots_service_host::IntegrityState, radroots_service_host::ReasonCodes) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub struct radroots_service_host::PositiveDuration(_)
+impl radroots_service_host::PositiveDuration
+pub const fn radroots_service_host::PositiveDuration::duration(self) -> core::time::Duration
+pub fn radroots_service_host::PositiveDuration::nanoseconds(self) -> u64
+pub fn radroots_service_host::PositiveDuration::new(core::time::Duration) -> core::result::Result<Self, radroots_service_host::PositiveDurationError>
+impl core::fmt::Display for radroots_service_host::PositiveDuration
+pub fn radroots_service_host::PositiveDuration::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_service_host::PositiveDuration
+pub type radroots_service_host::PositiveDuration::Err = radroots_service_host::PositiveDurationError
+pub fn radroots_service_host::PositiveDuration::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_service_host::PositiveDuration
+pub fn radroots_service_host::PositiveDuration::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::PositiveDuration
+pub fn radroots_service_host::PositiveDuration::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::ProcessSignalAdapter<S>
+impl<S> radroots_service_host::ProcessSignalAdapter<S> where S: radroots_service_host::ProcessSignalSource
+pub fn radroots_service_host::ProcessSignalAdapter<S>::into_inner(self) -> S
+pub const fn radroots_service_host::ProcessSignalAdapter<S>::new(S) -> Self
+pub async fn radroots_service_host::ProcessSignalAdapter<S>::next_action(&mut self) -> core::result::Result<radroots_service_host::ProcessSignalAction, radroots_service_host::ProcessSignalSourceClosed>
+pub const fn radroots_service_host::ProcessSignalAdapter<S>::stage(&self) -> radroots_service_host::ProcessSignalStage
+pub struct radroots_service_host::ProcessSignalSourceClosed
+impl radroots_service_host::ProcessSignalSourceClosed
+pub const fn radroots_service_host::ProcessSignalSourceClosed::stage(self) -> radroots_service_host::ProcessSignalStage
+impl core::error::Error for radroots_service_host::ProcessSignalSourceClosed
+impl core::fmt::Display for radroots_service_host::ProcessSignalSourceClosed
+pub fn radroots_service_host::ProcessSignalSourceClosed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::Readiness(_)
+impl radroots_service_host::Readiness
+pub const radroots_service_host::Readiness::NOT_READY: Self
+pub const radroots_service_host::Readiness::READY: Self
+pub const fn radroots_service_host::Readiness::is_ready(self) -> bool
+pub struct radroots_service_host::ReasonCode(_)
+impl radroots_service_host::ReasonCode
+pub fn radroots_service_host::ReasonCode::as_str(&self) -> &str
+pub fn radroots_service_host::ReasonCode::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::StatusContractError>
+impl core::convert::From<radroots_service_host::CommonReasonCode> for radroots_service_host::ReasonCode
+pub fn radroots_service_host::ReasonCode::from(radroots_service_host::CommonReasonCode) -> Self
+impl core::fmt::Display for radroots_service_host::ReasonCode
+pub fn radroots_service_host::ReasonCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_service_host::ReasonCode
+pub type radroots_service_host::ReasonCode::Err = radroots_service_host::StatusContractError
+pub fn radroots_service_host::ReasonCode::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_service_host::ReasonCode
+pub fn radroots_service_host::ReasonCode::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::ReasonCode
+pub fn radroots_service_host::ReasonCode::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::ReasonCodes(_)
+impl radroots_service_host::ReasonCodes
+pub fn radroots_service_host::ReasonCodes::as_slice(&self) -> &[radroots_service_host::ReasonCode]
+pub const fn radroots_service_host::ReasonCodes::empty() -> Self
+pub fn radroots_service_host::ReasonCodes::is_empty(&self) -> bool
+pub fn radroots_service_host::ReasonCodes::new(impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::ReasonCode>) -> core::result::Result<Self, radroots_service_host::StatusContractError>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_service_host::ReasonCodes
+pub fn radroots_service_host::ReasonCodes::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_host::SafeHostError
+impl radroots_service_host::SafeHostError
+pub const fn radroots_service_host::SafeHostError::code(self) -> radroots_service_host::HostErrorCode
+pub const fn radroots_service_host::SafeHostError::code_str(self) -> &'static str
+pub const fn radroots_service_host::SafeHostError::message(self) -> &'static str
+impl core::fmt::Display for radroots_service_host::SafeHostError
+pub fn radroots_service_host::SafeHostError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::ServiceOperationalState
+impl radroots_service_host::ServiceOperationalState
+pub fn radroots_service_host::ServiceOperationalState::new(radroots_service_host::ServicePhase, radroots_service_host::Readiness, radroots_service_host::ReasonCodes) -> core::result::Result<Self, radroots_service_host::StatusContractError>
+pub const fn radroots_service_host::ServiceOperationalState::phase(&self) -> radroots_service_host::ServicePhase
+pub const fn radroots_service_host::ServiceOperationalState::readiness(&self) -> radroots_service_host::Readiness
+pub const fn radroots_service_host::ServiceOperationalState::reasons(&self) -> &radroots_service_host::ReasonCodes
+pub fn radroots_service_host::ServiceOperationalState::transition_to(&mut self, radroots_service_host::ServicePhase, radroots_service_host::Readiness, radroots_service_host::ReasonCodes) -> core::result::Result<(), radroots_service_host::StatusContractError>
+pub struct radroots_service_host::ServiceStatus<D> where D: radroots_service_host::ServiceStatusDetail
+impl<D> radroots_service_host::ServiceStatus<D> where D: radroots_service_host::ServiceStatusDetail
+pub fn radroots_service_host::ServiceStatus<D>::instance(&self) -> &radroots_runtime_paths::identifier::InstanceId
+pub fn radroots_service_host::ServiceStatus<D>::new(radroots_runtime_paths::identifier::ServiceId, radroots_runtime_paths::identifier::InstanceId, radroots_service_host::ServiceOperationalState, radroots_service_host::UptimeMillis, radroots_service_host::BuildInfo, radroots_service_host::ConfigurationIdentity, radroots_service_host::PersistenceSummary, <D as radroots_service_host::ServiceStatusDetail>::Provider, <D as radroots_service_host::ServiceStatusDetail>::Transport, D) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub fn radroots_service_host::ServiceStatus<D>::service(&self) -> &radroots_runtime_paths::identifier::ServiceId
+pub fn radroots_service_host::ServiceStatus<D>::state(&self) -> &radroots_service_host::ServiceOperationalState
+pub fn radroots_service_host::ServiceStatus<D>::to_bounded_json(&self) -> core::result::Result<alloc::vec::Vec<u8>, radroots_service_host::StatusEncodingError>
+impl<D> serde_core::ser::Serialize for radroots_service_host::ServiceStatus<D> where D: radroots_service_host::ServiceStatusDetail
+pub fn radroots_service_host::ServiceStatus<D>::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+pub struct radroots_service_host::Sha256Digest(_)
+impl radroots_service_host::Sha256Digest
+pub fn radroots_service_host::Sha256Digest::as_str(&self) -> &str
+pub fn radroots_service_host::Sha256Digest::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub struct radroots_service_host::ShutdownPhaseFailure
+impl radroots_service_host::ShutdownPhaseFailure
+pub const fn radroots_service_host::ShutdownPhaseFailure::error(&self) -> &radroots_service_host::HostError
+pub const fn radroots_service_host::ShutdownPhaseFailure::phase(&self) -> radroots_service_host::ShutdownPhase
+impl core::error::Error for radroots_service_host::ShutdownPhaseFailure
+pub fn radroots_service_host::ShutdownPhaseFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_service_host::ShutdownPhaseFailure
+pub fn radroots_service_host::ShutdownPhaseFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_service_host::ShutdownPhaseFailure
+pub fn radroots_service_host::ShutdownPhaseFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::ShutdownSummary
+impl radroots_service_host::ShutdownSummary
+pub const fn radroots_service_host::ShutdownSummary::deadline(self) -> radroots_service_host::MonotonicDeadline
+pub const fn radroots_service_host::ShutdownSummary::disposition(self) -> radroots_service_host::ShutdownDisposition
+pub struct radroots_service_host::StableRelayId(_)
+impl radroots_service_host::StableRelayId
+pub fn radroots_service_host::StableRelayId::as_str(&self) -> &str
+pub fn radroots_service_host::StableRelayId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub struct radroots_service_host::StatusBuildInfo<'a>
+pub struct radroots_service_host::StatusId(_)
+impl radroots_service_host::StatusId
+pub fn radroots_service_host::StatusId::as_str(&self) -> &str
+pub fn radroots_service_host::StatusId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub struct radroots_service_host::StatusPublisherDropped
+impl core::error::Error for radroots_service_host::StatusPublisherDropped
+impl core::fmt::Display for radroots_service_host::StatusPublisherDropped
+pub fn radroots_service_host::StatusPublisherDropped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::SupervisedTaskExit
+impl radroots_service_host::SupervisedTaskExit
+pub const fn radroots_service_host::SupervisedTaskExit::metadata(&self) -> &radroots_service_host::TaskMetadata
+pub fn radroots_service_host::SupervisedTaskExit::source(&self) -> core::option::Option<&(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>
+pub const fn radroots_service_host::SupervisedTaskExit::status(&self) -> radroots_service_host::SupervisedTaskExitStatus
+impl core::fmt::Debug for radroots_service_host::SupervisedTaskExit
+pub fn radroots_service_host::SupervisedTaskExit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::SupervisionFailure
+impl radroots_service_host::SupervisionFailure
+pub const fn radroots_service_host::SupervisionFailure::kind(&self) -> radroots_service_host::SupervisionFailureKind
+pub const fn radroots_service_host::SupervisionFailure::metadata(&self) -> core::option::Option<&radroots_service_host::TaskMetadata>
+impl core::error::Error for radroots_service_host::SupervisionFailure
+pub fn radroots_service_host::SupervisionFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_service_host::SupervisionFailure
+pub fn radroots_service_host::SupervisionFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_service_host::SupervisionFailure
+pub fn radroots_service_host::SupervisionFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::SystemEntropy
+impl radroots_service_host::EntropySource for radroots_service_host::SystemEntropy
+pub fn radroots_service_host::SystemEntropy::fill_bytes(&self, &mut [u8]) -> core::result::Result<(), radroots_service_host::EntropyError>
+pub struct radroots_service_host::SystemMonotonicClock
+impl radroots_service_host::SystemMonotonicClock
+pub fn radroots_service_host::SystemMonotonicClock::new() -> Self
+impl core::default::Default for radroots_service_host::SystemMonotonicClock
+pub fn radroots_service_host::SystemMonotonicClock::default() -> Self
+impl radroots_service_host::MonotonicClock for radroots_service_host::SystemMonotonicClock
+pub fn radroots_service_host::SystemMonotonicClock::deadline_after(&self, core::time::Duration) -> core::result::Result<radroots_service_host::MonotonicDeadline, radroots_service_host::MonotonicClockError>
+pub fn radroots_service_host::SystemMonotonicClock::now_monotonic(&self) -> radroots_service_host::MonotonicTime
+pub struct radroots_service_host::SystemWallClock
+impl radroots_service_host::WallClock for radroots_service_host::SystemWallClock
+pub fn radroots_service_host::SystemWallClock::now_utc(&self) -> core::result::Result<radroots_service_host::UnixTimeSeconds, radroots_service_host::WallClockError>
+pub struct radroots_service_host::TaskMetadata
+impl radroots_service_host::TaskMetadata
+pub const fn radroots_service_host::TaskMetadata::classification(&self) -> radroots_service_host::TaskClassification
+pub const fn radroots_service_host::TaskMetadata::name(&self) -> &radroots_service_host::TaskName
+pub fn radroots_service_host::TaskMetadata::new(radroots_service_host::TaskName, radroots_service_host::TaskClassification, core::option::Option<radroots_service_host::ShutdownPhase>) -> core::result::Result<Self, radroots_service_host::TaskMetadataError>
+pub const fn radroots_service_host::TaskMetadata::shutdown_phase(&self) -> core::option::Option<radroots_service_host::ShutdownPhase>
+pub struct radroots_service_host::TaskName(_)
+impl radroots_service_host::TaskName
+pub fn radroots_service_host::TaskName::as_str(&self) -> &str
+pub fn radroots_service_host::TaskName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::TaskMetadataError>
+impl core::fmt::Display for radroots_service_host::TaskName
+pub fn radroots_service_host::TaskName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::TaskSupervisor
+impl radroots_service_host::TaskSupervisor
+pub fn radroots_service_host::TaskSupervisor::cancellation_token(&self) -> radroots_service_host::CancellationToken
+pub fn radroots_service_host::TaskSupervisor::is_empty(&self) -> bool
+pub async fn radroots_service_host::TaskSupervisor::join_next(&mut self) -> core::option::Option<core::result::Result<radroots_service_host::SupervisedTaskExit, radroots_service_host::SupervisionFailure>>
+pub fn radroots_service_host::TaskSupervisor::new() -> Self
+pub fn radroots_service_host::TaskSupervisor::request_cancellation(&self)
+pub fn radroots_service_host::TaskSupervisor::spawn<F, Fut>(&mut self, radroots_service_host::TaskMetadata, F) -> core::result::Result<(), radroots_service_host::TaskRegistrationError> where F: core::ops::function::FnOnce(radroots_service_host::CancellationToken) -> Fut + core::marker::Send + 'static, Fut: core::future::future::Future<Output = core::result::Result<(), radroots_service_host::HostError>> + core::marker::Send + 'static
+pub async fn radroots_service_host::TaskSupervisor::supervise(&mut self) -> core::result::Result<alloc::vec::Vec<radroots_service_host::SupervisedTaskExit>, radroots_service_host::SupervisionFailure>
+pub fn radroots_service_host::TaskSupervisor::task_count(&self) -> usize
+impl core::default::Default for radroots_service_host::TaskSupervisor
+pub fn radroots_service_host::TaskSupervisor::default() -> Self
+pub struct radroots_service_host::UnixAdminSocketBinding
+impl radroots_service_host::UnixAdminSocketBinding
+pub async fn radroots_service_host::UnixAdminSocketBinding::bind(radroots_service_host::UnixAdminSocketWriterAuthority, impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, radroots_service_host::UnixAdminSocketError>
+pub const fn radroots_service_host::UnixAdminSocketBinding::peer_authorization(&self) -> radroots_service_host::AdminPeerAuthorizationPolicy
+impl core::fmt::Debug for radroots_service_host::UnixAdminSocketBinding
+pub fn radroots_service_host::UnixAdminSocketBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for radroots_service_host::UnixAdminSocketBinding
+pub fn radroots_service_host::UnixAdminSocketBinding::drop(&mut self)
+pub struct radroots_service_host::UnixAdminSocketWriterAuthority
+impl radroots_service_host::UnixAdminSocketWriterAuthority
+pub fn radroots_service_host::UnixAdminSocketWriterAuthority::acquire(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, radroots_service_host::UnixAdminSocketError>
+pub fn radroots_service_host::UnixAdminSocketWriterAuthority::acquire_with_peer_authorization(impl core::convert::AsRef<std::path::Path>, radroots_service_host::AdminPeerAuthorizationPolicy) -> core::result::Result<Self, radroots_service_host::UnixAdminSocketError>
+impl core::fmt::Debug for radroots_service_host::UnixAdminSocketWriterAuthority
+pub fn radroots_service_host::UnixAdminSocketWriterAuthority::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_host::UnixTimeSeconds(_)
+impl radroots_service_host::UnixTimeSeconds
+pub const fn radroots_service_host::UnixTimeSeconds::get(self) -> u64
+pub const fn radroots_service_host::UnixTimeSeconds::new(u64) -> Self
+pub struct radroots_service_host::UptimeMillis(_)
+impl radroots_service_host::UptimeMillis
+pub fn radroots_service_host::UptimeMillis::from_duration(core::time::Duration) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub const fn radroots_service_host::UptimeMillis::get(self) -> u64
+pub const radroots_service_host::ADMIN_CONTRACT_VERSION: u32
+pub const radroots_service_host::ADMIN_CORRELATION_ID_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::ADMIN_ERROR_CODE_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::ADMIN_ERROR_MESSAGE_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::ADMIN_MIN_RESPONSE_BODY_UTF8_BYTES: u32
+pub const radroots_service_host::ADMIN_OPERATION_ID_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::ADMIN_ROUTE_PARAMETER_NAME_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::ADMIN_ROUTE_PARAMETER_VALUE_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::ADMIN_ROUTE_PATH_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::CONFIGURATION_SCHEMA_VERSION: u32
+pub const radroots_service_host::CONFIG_DOCUMENT_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::CONFIG_SCHEMA_ID_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::LIVEZ_PATH: &str
+pub const radroots_service_host::METRICS_CONTENT_TYPE: &str
+pub const radroots_service_host::METRICS_MAX_DESCRIPTORS: usize
+pub const radroots_service_host::METRICS_MAX_LABELS_PER_SAMPLE: usize
+pub const radroots_service_host::METRICS_MAX_RENDER_UTF8_BYTES: usize
+pub const radroots_service_host::METRICS_MAX_SAMPLES: usize
+pub const radroots_service_host::METRICS_PATH: &str
+pub const radroots_service_host::OPERATIONS_HEALTH_CONTENT_TYPE: &str
+pub const radroots_service_host::OPERATIONS_HTTP_MIN_HEADER_BYTES: u32
+pub const radroots_service_host::READYZ_PATH: &str
+pub const radroots_service_host::SERVICE_STATUS_CONTRACT_VERSION: u32
+pub const radroots_service_host::SERVICE_STATUS_MAX_UTF8_BYTES: usize
+pub const radroots_service_host::UNIX_ADMIN_ACTIVE_PROBE_TIMEOUT: core::time::Duration
+pub const radroots_service_host::UNIX_ADMIN_GROUP_DIRECTORY_MODE: u32
+pub const radroots_service_host::UNIX_ADMIN_GROUP_SOCKET_MODE: u32
+pub const radroots_service_host::UNIX_ADMIN_OWNER_DIRECTORY_MODE: u32
+pub const radroots_service_host::UNIX_ADMIN_OWNER_SOCKET_MODE: u32
+pub trait radroots_service_host::EntropySource: core::marker::Send + core::marker::Sync
+pub fn radroots_service_host::EntropySource::fill_bytes(&self, &mut [u8]) -> core::result::Result<(), radroots_service_host::EntropyError>
+impl radroots_service_host::EntropySource for radroots_service_host::SystemEntropy
+pub fn radroots_service_host::SystemEntropy::fill_bytes(&self, &mut [u8]) -> core::result::Result<(), radroots_service_host::EntropyError>
+pub trait radroots_service_host::MonotonicClock: core::marker::Send + core::marker::Sync
+pub fn radroots_service_host::MonotonicClock::deadline_after(&self, core::time::Duration) -> core::result::Result<radroots_service_host::MonotonicDeadline, radroots_service_host::MonotonicClockError>
+pub fn radroots_service_host::MonotonicClock::now_monotonic(&self) -> radroots_service_host::MonotonicTime
+impl radroots_service_host::MonotonicClock for radroots_service_host::SystemMonotonicClock
+pub fn radroots_service_host::SystemMonotonicClock::deadline_after(&self, core::time::Duration) -> core::result::Result<radroots_service_host::MonotonicDeadline, radroots_service_host::MonotonicClockError>
+pub fn radroots_service_host::SystemMonotonicClock::now_monotonic(&self) -> radroots_service_host::MonotonicTime
+pub trait radroots_service_host::ProcessSignalSource: core::marker::Send
+pub fn radroots_service_host::ProcessSignalSource::next_signal(&mut self) -> radroots_service_host::ProcessSignalFuture<'_>
+pub trait radroots_service_host::ServiceStatusDetail: serde_core::ser::Serialize
+pub type radroots_service_host::ServiceStatusDetail::Provider: serde_core::ser::Serialize
+pub type radroots_service_host::ServiceStatusDetail::Transport: serde_core::ser::Serialize
+pub const radroots_service_host::ServiceStatusDetail::FIELD_NAME: &'static str
+pub trait radroots_service_host::ShutdownPhaseHandler: core::marker::Send
+pub fn radroots_service_host::ShutdownPhaseHandler::enter(&mut self, radroots_service_host::ShutdownPhase) -> radroots_service_host::ShutdownPhaseFuture<'_>
+pub trait radroots_service_host::WallClock: core::marker::Send + core::marker::Sync
+pub fn radroots_service_host::WallClock::now_utc(&self) -> core::result::Result<radroots_service_host::UnixTimeSeconds, radroots_service_host::WallClockError>
+impl radroots_service_host::WallClock for radroots_service_host::SystemWallClock
+pub fn radroots_service_host::SystemWallClock::now_utc(&self) -> core::result::Result<radroots_service_host::UnixTimeSeconds, radroots_service_host::WallClockError>
+pub fn radroots_service_host::cached_service_state<M>(radroots_service_host::CachedServiceState<M>) -> (radroots_service_host::CachedServiceStatePublisher<M>, radroots_service_host::CachedServiceStateReader<M>)
+pub fn radroots_service_host::livez<M>(&radroots_service_host::CachedServiceStateReader<M>) -> radroots_service_host::OperationsHealthResponse
+pub fn radroots_service_host::load_config_document<T>(&std::path::Path, &radroots_service_host::ConfigDocumentExpectation) -> core::result::Result<T, radroots_service_host::ConfigDocumentError> where T: serde_core::de::DeserializeOwned
+pub fn radroots_service_host::readyz<M>(&radroots_service_host::CachedServiceStateReader<M>) -> radroots_service_host::OperationsHealthResponse
+pub type radroots_service_host::ProcessSignalFuture<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::option::Option<radroots_service_host::ProcessSignal>> + core::marker::Send + 'a)>>
+pub type radroots_service_host::ShutdownPhaseFuture<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), radroots_service_host::HostError>> + core::marker::Send + 'a)>>

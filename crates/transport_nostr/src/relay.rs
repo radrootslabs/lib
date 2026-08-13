@@ -389,6 +389,8 @@ mod tests {
         assert!(RelayUrl::parse("wss://localhost", RelayUrlPolicy::Local).is_ok());
         assert!(RelayUrl::parse("wss://localhost", RelayUrlPolicy::Public).is_err());
         assert!(!public_hostname("localhost."));
+        assert!(!public_hostname("intranet"));
+        assert!(!public_hostname("host.localhost"));
         assert!(RelayUrl::parse("wss://host.local", RelayUrlPolicy::Public).is_err());
         assert!(RelayUrl::parse("wss://host.home.arpa", RelayUrlPolicy::Public).is_err());
         assert!(RelayUrl::parse("wss://private.example", RelayUrlPolicy::PrivateNetwork).is_ok());

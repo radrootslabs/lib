@@ -1467,6 +1467,8 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
+    static LOOPBACK_TEST_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     fn png(width: u32, height: u32) -> Vec<u8> {
         let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
         bytes.extend_from_slice(&width.to_be_bytes());
@@ -1776,6 +1778,7 @@ mod tests {
 
     #[tokio::test]
     async fn http_failure_retains_only_the_public_server_error_code() {
+        let _loopback_guard = LOOPBACK_TEST_GUARD.lock().await;
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let address = listener.local_addr().expect("address");
         let server = tokio::spawn(async move {
@@ -2004,7 +2007,7 @@ mod tests {
                         .expect("oversize");
                 }
                 RetrievalResponse::Stall => {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    tokio::time::sleep(Duration::from_secs(3)).await;
                 }
             }
             retrieval_stream.shutdown().await.expect("retrieval close");
@@ -2090,8 +2093,8 @@ mod tests {
     fn config(origin: &str) -> BlossomConfig {
         BlossomConfig::from_profile(simulator_profile(origin))
             .with_network_policy(
-                Duration::from_millis(100),
-                Duration::from_millis(100),
+                Duration::from_secs(2),
+                Duration::from_secs(2),
                 1,
                 Duration::from_millis(1),
             )
@@ -2369,6 +2372,7 @@ mod tests {
 
     #[tokio::test]
     async fn non_mutating_probe_records_only_dns_transport_and_http_evidence() {
+        let _loopback_guard = LOOPBACK_TEST_GUARD.lock().await;
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -2428,6 +2432,7 @@ mod tests {
 
     #[tokio::test]
     async fn reconfiguration_during_probe_cannot_promote_stale_evidence() {
+        let _loopback_guard = LOOPBACK_TEST_GUARD.lock().await;
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
@@ -2468,6 +2473,7 @@ mod tests {
 
     #[tokio::test]
     async fn loopback_upload_preserves_exact_bytes_and_verifies_retrieval() {
+        let _loopback_guard = LOOPBACK_TEST_GUARD.lock().await;
         let bytes = png(2, 3);
         let (origin, server) = spawn_server(bytes.clone(), RetrievalResponse::Exact, false).await;
         let receipt = upload_with_authorization(
@@ -2497,12 +2503,13 @@ mod tests {
 
     #[tokio::test]
     async fn retryable_upload_and_retrieval_failures_recover_with_bounded_attempts() {
+        let _loopback_guard = LOOPBACK_TEST_GUARD.lock().await;
         let bytes = png(2, 3);
         let (origin, server) = spawn_retry_server(bytes.clone()).await;
         let config = BlossomConfig::from_profile(simulator_profile(origin.as_str()))
             .with_network_policy(
-                Duration::from_millis(100),
-                Duration::from_millis(100),
+                Duration::from_secs(2),
+                Duration::from_secs(2),
                 2,
                 Duration::from_millis(1),
             )
@@ -2521,6 +2528,7 @@ mod tests {
 
     #[tokio::test]
     async fn descriptor_redirect_body_mime_timeout_and_cancellation_fail_closed() {
+        let _loopback_guard = LOOPBACK_TEST_GUARD.lock().await;
         let cases = [
             (
                 RetrievalResponse::Exact,

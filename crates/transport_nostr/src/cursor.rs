@@ -69,6 +69,7 @@ mod tests {
         let cursor = RelayCursor::new(10, "b".repeat(64)).expect("cursor");
         assert!(cursor.precedes(11, &"0".repeat(64)));
         assert!(cursor.precedes(10, &"c".repeat(64)));
+        assert!(!cursor.precedes(9, &"f".repeat(64)));
         assert!(!cursor.precedes(10, &"b".repeat(64)));
         assert!(cursor.page_precedes(9, &"f".repeat(64)));
         assert!(cursor.page_precedes(10, &"a".repeat(64)));

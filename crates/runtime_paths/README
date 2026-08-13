@@ -1,17 +1,129 @@
 # radroots_runtime_paths
 
-This is the README for `radroots_runtime_paths`, which provides canonical
-runtime path selection and contract helpers for the `radroots` core libraries.
+`radroots_runtime_paths` provides canonical, typed runtime paths for Radroots
+core libraries. Its public API is exposed only from the crate root. It performs
+no filesystem I/O, creates no directories, and never reads the ambient process
+environment.
 
 ## Overview
 
- * default file-name and bootstrap-path helpers for local runtime layouts;
- * platform, host-environment, namespace, and path-profile types for path
-   decisions;
- * resolver, override, and runtime-selection helpers that produce structured
-   `RadrootsPaths` outputs;
- * service and app contract helpers for active profile, override, and root
-   selection reporting.
+- Validated service and instance identifiers define the sole canonical
+  `services/<service>/<instance>` namespace.
+- Callers inject the platform, host-environment roots, profile, and typed
+  bootstrap provenance.
+- A sealed `RuntimeContext` is the only public service-instance path
+  construction boundary.
+- Service paths and common artifacts are non-forgeable immutable views.
+- Pure shared geonames and runtime-store helpers remain independent of
+  service-instance path selection.
+
+The former generic app/service/worker/shared namespace, raw root containers,
+path overrides, process-environment selectors, and bootstrap path helpers are
+intentionally removed. Callers must construct typed bootstrap provenance and
+resolve a `RuntimeContext` from an explicitly injected resolver.
+
+## Example
+
+The following deterministic Linux service-host example resolves one Myc
+instance and its common artifacts without consulting or changing the host:
+
+```rust
+use std::path::Path;
+
+use radroots_runtime_paths::{
+    InstanceId, RadrootsHostEnvironment, RadrootsPathProfile,
+    RadrootsPathResolver, RadrootsPlatform, RuntimeContext,
+    RuntimeContextBootstrap, RuntimeContextSource, ServiceId,
+    default_service_instance_artifacts,
+};
+
+let resolver = RadrootsPathResolver::new(
+    RadrootsPlatform::Linux,
+    RadrootsHostEnvironment::default(),
+);
+let bootstrap = RuntimeContextBootstrap::new(
+    RadrootsPathProfile::ServiceHost,
+    None,
+    RuntimeContextSource::SafeDefault,
+    RuntimeContextSource::BootstrapCli,
+)?;
+let context = RuntimeContext::resolve(
+    &resolver,
+    bootstrap,
+    ServiceId::new("myc")?,
+    InstanceId::new("primary")?,
+)?;
+let artifacts = default_service_instance_artifacts(context.paths());
+
+assert_eq!(
+    context.paths().config(),
+    Path::new("/etc/radroots/services/myc/primary"),
+);
+assert_eq!(
+    artifacts.config(),
+    Path::new("/etc/radroots/services/myc/primary/config.toml"),
+);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+## Root Profiles
+
+Every root below receives the suffix `services/<service>/<instance>`. The
+service instance's `state` directory is derived from the selected data root.
+
+| Profile | Config root | Data/state root | Cache root | Logs root | Run root | Secrets root |
+| --- | --- | --- | --- | --- | --- | --- |
+| Linux `ServiceHost` | `/etc/radroots` | `/var/lib/radroots` | `/var/cache/radroots` | `/var/log/radroots` | `/run/radroots` | `/etc/radroots/secrets` |
+| Linux `InteractiveUser` | `$XDG_CONFIG_HOME/radroots` | `$XDG_DATA_HOME/radroots` | `$XDG_CACHE_HOME/radroots` | `$XDG_STATE_HOME/radroots/logs` | `$XDG_RUNTIME_DIR/radroots` | `$XDG_CONFIG_HOME/radroots/secrets` |
+| macOS `InteractiveUser` | `$HOME/Library/Application Support/Radroots/config` | `$HOME/Library/Application Support/Radroots/data` | `$HOME/Library/Caches/Radroots` | `$HOME/Library/Logs/Radroots` | `$HOME/Library/Application Support/Radroots/run` | `$HOME/Library/Application Support/Radroots/secrets` |
+| Windows `InteractiveUser` | `%APPDATA%\Radroots\config` | `%LOCALAPPDATA%\Radroots\data` | `%LOCALAPPDATA%\Radroots\cache` | `%LOCALAPPDATA%\Radroots\logs` | `%LOCALAPPDATA%\Radroots\run` | `%APPDATA%\Radroots\secrets` |
+| `RepoLocal` | `<base>/config` | `<base>/data` | `<base>/cache` | `<base>/logs` | `<base>/run` | `<base>/secrets` |
+
+Linux XDG inputs must be absolute. Empty, missing, or relative config, data,
+state, and cache values use the corresponding absolute `HOME` defaults:
+`.config`, `.local/share`, `.local/state`, and `.cache`. An absolute
+`XDG_RUNTIME_DIR` is mandatory and has no fallback. Windows interactive
+resolution requires both injected `APPDATA` and `LOCALAPPDATA`. Repo-local
+resolution requires one explicit absolute, non-root base with no parent
+traversal. Repo-local never becomes an implicit or production fallback.
+
+## Common Artifacts
+
+| Artifact | Canonical location within the instance |
+| --- | --- |
+| Configuration | `<config>/config.toml` |
+| SQLite state | `<state>/state.sqlite` |
+| SQLite writer lock | `<state>/state.lock` |
+| Local admin socket | `<run>/admin.sock` |
+| Credential artifact | `<secrets>/<validated-credential-name>` |
+
+The crate derives these paths but does not provision, open, inspect, remove, or
+set permissions on them. Callers own those operations and their security
+policy. The shared geonames and runtime-store helpers are pure joins over
+caller-supplied roots and do not select or alter a `RuntimeContext`.
+
+## Support Caveats
+
+Deterministic path behavior is not a qualification claim. Linux service-host
+on x86_64 and aarch64 is eligible for Tier 1 only after all release gates pass.
+Linux and macOS interactive and explicit repo-local profiles on x86_64 and
+aarch64 are developer-target behavior. Linux rootless OCI on x86_64 and
+aarch64 is also only a target: it uses the Linux behavior with explicit mounts,
+has no separate native path profile, and requires its own qualification gates.
+macOS support does not imply launchd packaging, system-wide paths, or Linux
+peer-credential equivalence. Windows interactive and repo-local derivation is
+implemented but unsupported and carries no v1 support claim.
+
+Non-Linux `ServiceHost`, `MobileNative`, Android/iOS/Other interactive,
+mobile/browser/WASI service use, and every unlisted profile/platform pairing
+are unsupported. Successful compilation or path derivation does not change a
+target's qualification posture.
+
+## Public API Baseline
+
+The final reviewed root-only API is frozen in the
+[runtime-paths API baseline](../../contracts/api_baselines/radroots_runtime_paths.txt)
+and checked by the package boundary tests.
 
 ## Copyright
 

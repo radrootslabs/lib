@@ -13,6 +13,7 @@ documentation = "https://docs.rs/radroots_runtime_distribution"
 readme = "README"
 
 [dependencies]
+radroots_runtime_paths = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 toml = { workspace = true }

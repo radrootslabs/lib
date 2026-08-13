@@ -1,0 +1,35 @@
+[package]
+name = "radroots_service_host"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Reusable service-host mechanics for Radroots services"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[dependencies]
+bytes = { workspace = true }
+fs2 = { workspace = true }
+getrandom = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+radroots_runtime_paths = { workspace = true }
+rustix = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["raw_value", "std"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+tokio-util = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "rt", "sync", "test-util", "time"] }
+
+[lints]
+workspace = true

@@ -27,12 +27,3 @@ test_threads = 1
 no_default_features = false
 features = ["full"]
 test_threads = 1
-
-[profiles.crates."radroots_studio_application"]
-test_packages = ["radroots_studio_runtime", "radroots_studio_ffi"]
-
-[profiles.crates."radroots_studio_runtime"]
-test_packages = ["radroots_studio_ffi"]
-
-[profiles.crates."radroots_studio_storage"]
-test_packages = ["radroots_studio_runtime", "radroots_studio_ffi"]

@@ -31,6 +31,8 @@ members = [
   "crates/runtime_paths",
   "crates/runtime_distribution",
   "crates/runtime_manager",
+  "crates/service_host",
+  "crates/service_sqlite",
   "crates/trade",
   "crates/transport",
   "crates/mesh",
@@ -40,14 +42,6 @@ members = [
   "crates/mobile_core",
   "crates/mobile_ffi",
   "crates/mobile_wasm",
-  "crates/studio_application",
-  "crates/studio_domain",
-  "crates/studio_ffi",
-  "crates/studio_nostr",
-  "crates/studio_preferences",
-  "crates/studio_runtime",
-  "crates/studio_storage",
-  "crates/studio_uniffi_bindgen",
   "crates/core_bindings",
   "crates/event_bindings",
   "crates/event_codec_wasm",
@@ -135,6 +129,8 @@ radroots_protocol = { package = "radroots_protocol", path = "crates/protocol", v
 radroots_runtime_paths = { path = "crates/runtime_paths", version = "=0.1.0-alpha", default-features = false }
 radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "=0.1.0-alpha", default-features = false }
 radroots_runtime_manager = { path = "crates/runtime_manager", version = "=0.1.0-alpha", default-features = false }
+radroots_service_host = { path = "crates/service_host", version = "=0.1.0-alpha", default-features = false }
+radroots_service_sqlite = { path = "crates/service_sqlite", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_nostr = { package = "radroots_transport_nostr", path = "crates/transport_nostr", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_reticulum = { path = "crates/transport_reticulum", version = "=0.1.0-alpha", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "=0.1.0-alpha", default-features = false }
@@ -165,14 +161,6 @@ radroots_mobile_bindgen = { path = "crates/mobile_bindgen", version = "=0.1.0-al
 radroots_mobile_core = { path = "crates/mobile_core", version = "=0.1.0-alpha", default-features = false }
 radroots_mobile_ffi = { path = "crates/mobile_ffi", version = "=0.1.0-alpha" }
 radroots_mobile_wasm = { path = "crates/mobile_wasm", version = "=0.1.0-alpha" }
-radroots_studio_application = { path = "crates/studio_application", version = "=0.1.0-alpha" }
-radroots_studio_domain = { path = "crates/studio_domain", version = "=0.1.0-alpha" }
-radroots_studio_ffi = { path = "crates/studio_ffi", version = "=0.1.0-alpha" }
-radroots_studio_nostr = { path = "crates/studio_nostr", version = "=0.1.0-alpha" }
-radroots_studio_preferences = { path = "crates/studio_preferences", version = "=0.1.0-alpha" }
-radroots_studio_runtime = { path = "crates/studio_runtime", version = "=0.1.0-alpha" }
-radroots_studio_storage = { path = "crates/studio_storage", version = "=0.1.0-alpha" }
-radroots_studio_uniffi_bindgen = { path = "crates/studio_uniffi_bindgen", version = "=0.1.0-alpha" }
 radroots_simplex_app_store = { path = "crates/simplex_app_store", version = "=0.1.0-alpha", default-features = false }
 radroots_sdk = { path = "crates/sdk", version = "=0.1.0-alpha", default-features = false }
 radroots_sdk_ffi = { path = "crates/sdk_ffi", version = "=0.1.0-alpha" }
@@ -187,6 +175,7 @@ aes-gcm = { version = "0.10.3", default-features = false, features = [
 async-wsocket = { version = "0.13.2" }
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 bincode = { version = "1.3.3" }
+bytes = { version = "1" }
 chacha20poly1305 = { version = "0.10.1", default-features = false, features = [
   "alloc",
 ] }
@@ -203,6 +192,10 @@ fs2 = { version = "0.4" }
 getrandom = { version = "0.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hmac = { version = "0.12", default-features = false }
+http = { version = "1" }
+http-body-util = { version = "0.1" }
+hyper = { version = "1", features = ["client", "http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 hex = { version = "0.4" }
 jiff-tzdb = { version = "=0.1.8", default-features = false }
 jsonschema = { version = "0.48.1", default-features = false }
@@ -267,6 +260,7 @@ tempfile = { version = "3" }
 tar = { version = "0.4" }
 thiserror = { version = "1" }
 tokio = { version = "1" }
+tokio-util = { version = "0.7", features = ["rt"] }
 tokio-tungstenite = { version = "0.26.2", default-features = false, features = [
   "connect",
   "rustls-tls-webpki-roots",

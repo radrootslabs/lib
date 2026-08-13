@@ -1,0 +1,495 @@
+pub mod radroots_runtime_paths
+pub enum radroots_runtime_paths::RadrootsPathProfile
+pub radroots_runtime_paths::RadrootsPathProfile::InteractiveUser
+pub radroots_runtime_paths::RadrootsPathProfile::MobileNative
+pub radroots_runtime_paths::RadrootsPathProfile::RepoLocal
+pub radroots_runtime_paths::RadrootsPathProfile::ServiceHost
+impl core::clone::Clone for radroots_runtime_paths::RadrootsPathProfile
+pub fn radroots_runtime_paths::RadrootsPathProfile::clone(&self) -> radroots_runtime_paths::RadrootsPathProfile
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsPathProfile
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsPathProfile
+pub fn radroots_runtime_paths::RadrootsPathProfile::eq(&self, &radroots_runtime_paths::RadrootsPathProfile) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsPathProfile
+pub fn radroots_runtime_paths::RadrootsPathProfile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::RadrootsPathProfile
+pub fn radroots_runtime_paths::RadrootsPathProfile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::RadrootsPathProfile
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsPathProfile
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsPathProfile
+impl core::marker::Send for radroots_runtime_paths::RadrootsPathProfile
+impl core::marker::Sync for radroots_runtime_paths::RadrootsPathProfile
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsPathProfile
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsPathProfile
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsPathProfile
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsPathProfile
+pub enum radroots_runtime_paths::RadrootsPlatform
+pub radroots_runtime_paths::RadrootsPlatform::Android
+pub radroots_runtime_paths::RadrootsPlatform::Ios
+pub radroots_runtime_paths::RadrootsPlatform::Linux
+pub radroots_runtime_paths::RadrootsPlatform::Macos
+pub radroots_runtime_paths::RadrootsPlatform::Other
+pub radroots_runtime_paths::RadrootsPlatform::Windows
+impl radroots_runtime_paths::RadrootsPlatform
+pub fn radroots_runtime_paths::RadrootsPlatform::current() -> Self
+pub fn radroots_runtime_paths::RadrootsPlatform::is_unix_like(self) -> bool
+impl core::clone::Clone for radroots_runtime_paths::RadrootsPlatform
+pub fn radroots_runtime_paths::RadrootsPlatform::clone(&self) -> radroots_runtime_paths::RadrootsPlatform
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsPlatform
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsPlatform
+pub fn radroots_runtime_paths::RadrootsPlatform::eq(&self, &radroots_runtime_paths::RadrootsPlatform) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsPlatform
+pub fn radroots_runtime_paths::RadrootsPlatform::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::RadrootsPlatform
+pub fn radroots_runtime_paths::RadrootsPlatform::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::RadrootsPlatform
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsPlatform
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsPlatform
+impl core::marker::Send for radroots_runtime_paths::RadrootsPlatform
+impl core::marker::Sync for radroots_runtime_paths::RadrootsPlatform
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsPlatform
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsPlatform
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsPlatform
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsPlatform
+pub enum radroots_runtime_paths::RadrootsRuntimePathsError
+pub radroots_runtime_paths::RadrootsRuntimePathsError::InvalidHomeDir
+pub radroots_runtime_paths::RadrootsRuntimePathsError::InvalidHomeDir::platform: radroots_runtime_paths::RadrootsPlatform
+pub radroots_runtime_paths::RadrootsRuntimePathsError::InvalidRepoLocalRoot
+pub radroots_runtime_paths::RadrootsRuntimePathsError::MissingHomeDir
+pub radroots_runtime_paths::RadrootsRuntimePathsError::MissingHomeDir::platform: radroots_runtime_paths::RadrootsPlatform
+pub radroots_runtime_paths::RadrootsRuntimePathsError::MissingRepoLocalRoot
+pub radroots_runtime_paths::RadrootsRuntimePathsError::MissingWindowsUserDirs
+pub radroots_runtime_paths::RadrootsRuntimePathsError::MissingXdgRuntimeDir
+pub radroots_runtime_paths::RadrootsRuntimePathsError::SharedAccountsDataRootMissingParent
+pub radroots_runtime_paths::RadrootsRuntimePathsError::SharedAccountsDataRootMissingParent::path: std::path::PathBuf
+pub radroots_runtime_paths::RadrootsRuntimePathsError::UnsupportedProfilePlatform
+pub radroots_runtime_paths::RadrootsRuntimePathsError::UnsupportedProfilePlatform::platform: radroots_runtime_paths::RadrootsPlatform
+pub radroots_runtime_paths::RadrootsRuntimePathsError::UnsupportedProfilePlatform::profile: radroots_runtime_paths::RadrootsPathProfile
+impl core::clone::Clone for radroots_runtime_paths::RadrootsRuntimePathsError
+pub fn radroots_runtime_paths::RadrootsRuntimePathsError::clone(&self) -> radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsRuntimePathsError
+pub fn radroots_runtime_paths::RadrootsRuntimePathsError::eq(&self, &radroots_runtime_paths::RadrootsRuntimePathsError) -> bool
+impl core::error::Error for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsRuntimePathsError
+pub fn radroots_runtime_paths::RadrootsRuntimePathsError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::RadrootsRuntimePathsError
+pub fn radroots_runtime_paths::RadrootsRuntimePathsError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::marker::Send for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::marker::Sync for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsRuntimePathsError
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsRuntimePathsError
+pub enum radroots_runtime_paths::RuntimeContextError
+pub radroots_runtime_paths::RuntimeContextError::InvalidBootstrapBinding
+pub radroots_runtime_paths::RuntimeContextError::PathSelection
+impl core::clone::Clone for radroots_runtime_paths::RuntimeContextError
+pub fn radroots_runtime_paths::RuntimeContextError::clone(&self) -> radroots_runtime_paths::RuntimeContextError
+impl core::cmp::Eq for radroots_runtime_paths::RuntimeContextError
+impl core::cmp::PartialEq for radroots_runtime_paths::RuntimeContextError
+pub fn radroots_runtime_paths::RuntimeContextError::eq(&self, &radroots_runtime_paths::RuntimeContextError) -> bool
+impl core::error::Error for radroots_runtime_paths::RuntimeContextError
+impl core::fmt::Debug for radroots_runtime_paths::RuntimeContextError
+pub fn radroots_runtime_paths::RuntimeContextError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::RuntimeContextError
+pub fn radroots_runtime_paths::RuntimeContextError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::RuntimeContextError
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RuntimeContextError
+impl core::marker::Freeze for radroots_runtime_paths::RuntimeContextError
+impl core::marker::Send for radroots_runtime_paths::RuntimeContextError
+impl core::marker::Sync for radroots_runtime_paths::RuntimeContextError
+impl core::marker::Unpin for radroots_runtime_paths::RuntimeContextError
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RuntimeContextError
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RuntimeContextError
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RuntimeContextError
+pub enum radroots_runtime_paths::RuntimeContextSource
+pub radroots_runtime_paths::RuntimeContextSource::BootstrapCli
+pub radroots_runtime_paths::RuntimeContextSource::DerivedPath
+pub radroots_runtime_paths::RuntimeContextSource::SafeDefault
+pub radroots_runtime_paths::RuntimeContextSource::Toml
+impl core::clone::Clone for radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSource::clone(&self) -> radroots_runtime_paths::RuntimeContextSource
+impl core::cmp::Eq for radroots_runtime_paths::RuntimeContextSource
+impl core::cmp::PartialEq for radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSource::eq(&self, &radroots_runtime_paths::RuntimeContextSource) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::RuntimeContextSource
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RuntimeContextSource
+impl serde_core::ser::Serialize for radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSource::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl core::marker::Freeze for radroots_runtime_paths::RuntimeContextSource
+impl core::marker::Send for radroots_runtime_paths::RuntimeContextSource
+impl core::marker::Sync for radroots_runtime_paths::RuntimeContextSource
+impl core::marker::Unpin for radroots_runtime_paths::RuntimeContextSource
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RuntimeContextSource
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RuntimeContextSource
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RuntimeContextSource
+pub enum radroots_runtime_paths::ServiceCredentialArtifactNameError
+pub radroots_runtime_paths::ServiceCredentialArtifactNameError::Empty
+pub radroots_runtime_paths::ServiceCredentialArtifactNameError::InvalidBoundary
+pub radroots_runtime_paths::ServiceCredentialArtifactNameError::InvalidCharacter
+pub radroots_runtime_paths::ServiceCredentialArtifactNameError::TooLong
+pub radroots_runtime_paths::ServiceCredentialArtifactNameError::TooLong::maximum: usize
+impl core::clone::Clone for radroots_runtime_paths::ServiceCredentialArtifactNameError
+pub fn radroots_runtime_paths::ServiceCredentialArtifactNameError::clone(&self) -> radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::cmp::Eq for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::cmp::PartialEq for radroots_runtime_paths::ServiceCredentialArtifactNameError
+pub fn radroots_runtime_paths::ServiceCredentialArtifactNameError::eq(&self, &radroots_runtime_paths::ServiceCredentialArtifactNameError) -> bool
+impl core::error::Error for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::fmt::Debug for radroots_runtime_paths::ServiceCredentialArtifactNameError
+pub fn radroots_runtime_paths::ServiceCredentialArtifactNameError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::ServiceCredentialArtifactNameError
+pub fn radroots_runtime_paths::ServiceCredentialArtifactNameError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::marker::Freeze for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::marker::Send for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::marker::Sync for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::marker::Unpin for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::ServiceCredentialArtifactNameError
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::ServiceCredentialArtifactNameError
+pub enum radroots_runtime_paths::ServiceIdentityError
+pub radroots_runtime_paths::ServiceIdentityError::Empty
+pub radroots_runtime_paths::ServiceIdentityError::Empty::kind: radroots_runtime_paths::ServiceIdentityKind
+pub radroots_runtime_paths::ServiceIdentityError::InvalidBoundary
+pub radroots_runtime_paths::ServiceIdentityError::InvalidBoundary::kind: radroots_runtime_paths::ServiceIdentityKind
+pub radroots_runtime_paths::ServiceIdentityError::InvalidCharacter
+pub radroots_runtime_paths::ServiceIdentityError::InvalidCharacter::kind: radroots_runtime_paths::ServiceIdentityKind
+pub radroots_runtime_paths::ServiceIdentityError::TooLong
+pub radroots_runtime_paths::ServiceIdentityError::TooLong::kind: radroots_runtime_paths::ServiceIdentityKind
+pub radroots_runtime_paths::ServiceIdentityError::TooLong::maximum: usize
+impl core::clone::Clone for radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::ServiceIdentityError::clone(&self) -> radroots_runtime_paths::ServiceIdentityError
+impl core::cmp::Eq for radroots_runtime_paths::ServiceIdentityError
+impl core::cmp::PartialEq for radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::ServiceIdentityError::eq(&self, &radroots_runtime_paths::ServiceIdentityError) -> bool
+impl core::error::Error for radroots_runtime_paths::ServiceIdentityError
+impl core::fmt::Debug for radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::ServiceIdentityError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::ServiceIdentityError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::ServiceIdentityError
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::ServiceIdentityError
+impl core::marker::Freeze for radroots_runtime_paths::ServiceIdentityError
+impl core::marker::Send for radroots_runtime_paths::ServiceIdentityError
+impl core::marker::Sync for radroots_runtime_paths::ServiceIdentityError
+impl core::marker::Unpin for radroots_runtime_paths::ServiceIdentityError
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::ServiceIdentityError
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::ServiceIdentityError
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::ServiceIdentityError
+pub enum radroots_runtime_paths::ServiceIdentityKind
+pub radroots_runtime_paths::ServiceIdentityKind::Instance
+pub radroots_runtime_paths::ServiceIdentityKind::Service
+impl core::clone::Clone for radroots_runtime_paths::ServiceIdentityKind
+pub fn radroots_runtime_paths::ServiceIdentityKind::clone(&self) -> radroots_runtime_paths::ServiceIdentityKind
+impl core::cmp::Eq for radroots_runtime_paths::ServiceIdentityKind
+impl core::cmp::PartialEq for radroots_runtime_paths::ServiceIdentityKind
+pub fn radroots_runtime_paths::ServiceIdentityKind::eq(&self, &radroots_runtime_paths::ServiceIdentityKind) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::ServiceIdentityKind
+pub fn radroots_runtime_paths::ServiceIdentityKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::ServiceIdentityKind
+pub fn radroots_runtime_paths::ServiceIdentityKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for radroots_runtime_paths::ServiceIdentityKind
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::ServiceIdentityKind
+impl core::marker::Freeze for radroots_runtime_paths::ServiceIdentityKind
+impl core::marker::Send for radroots_runtime_paths::ServiceIdentityKind
+impl core::marker::Sync for radroots_runtime_paths::ServiceIdentityKind
+impl core::marker::Unpin for radroots_runtime_paths::ServiceIdentityKind
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::ServiceIdentityKind
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::ServiceIdentityKind
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::ServiceIdentityKind
+pub struct radroots_runtime_paths::InstanceId(_)
+impl radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::as_str(&self) -> &str
+pub fn radroots_runtime_paths::InstanceId::into_string(self) -> alloc::string::String
+pub fn radroots_runtime_paths::InstanceId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_runtime_paths::ServiceIdentityError>
+impl core::clone::Clone for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::clone(&self) -> radroots_runtime_paths::InstanceId
+impl core::cmp::Eq for radroots_runtime_paths::InstanceId
+impl core::cmp::Ord for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::cmp(&self, &radroots_runtime_paths::InstanceId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::eq(&self, &radroots_runtime_paths::InstanceId) -> bool
+impl core::cmp::PartialOrd for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::partial_cmp(&self, &radroots_runtime_paths::InstanceId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::AsRef<str> for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::as_ref(&self) -> &str
+impl core::convert::From<radroots_runtime_paths::InstanceId> for alloc::string::String
+pub fn alloc::string::String::from(radroots_runtime_paths::InstanceId) -> Self
+impl core::convert::TryFrom<alloc::string::String> for radroots_runtime_paths::InstanceId
+pub type radroots_runtime_paths::InstanceId::Error = radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::InstanceId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::InstanceId
+impl core::str::traits::FromStr for radroots_runtime_paths::InstanceId
+pub type radroots_runtime_paths::InstanceId::Err = radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::InstanceId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::InstanceId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for radroots_runtime_paths::InstanceId
+impl core::marker::Send for radroots_runtime_paths::InstanceId
+impl core::marker::Sync for radroots_runtime_paths::InstanceId
+impl core::marker::Unpin for radroots_runtime_paths::InstanceId
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::InstanceId
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::InstanceId
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::InstanceId
+pub struct radroots_runtime_paths::RadrootsHostEnvironment
+pub radroots_runtime_paths::RadrootsHostEnvironment::appdata_dir: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::home_dir: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::localappdata_dir: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::xdg_cache_home: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::xdg_config_home: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::xdg_data_home: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::xdg_runtime_dir: core::option::Option<std::path::PathBuf>
+pub radroots_runtime_paths::RadrootsHostEnvironment::xdg_state_home: core::option::Option<std::path::PathBuf>
+impl core::clone::Clone for radroots_runtime_paths::RadrootsHostEnvironment
+pub fn radroots_runtime_paths::RadrootsHostEnvironment::clone(&self) -> radroots_runtime_paths::RadrootsHostEnvironment
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsHostEnvironment
+pub fn radroots_runtime_paths::RadrootsHostEnvironment::eq(&self, &radroots_runtime_paths::RadrootsHostEnvironment) -> bool
+impl core::default::Default for radroots_runtime_paths::RadrootsHostEnvironment
+pub fn radroots_runtime_paths::RadrootsHostEnvironment::default() -> radroots_runtime_paths::RadrootsHostEnvironment
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsHostEnvironment
+pub fn radroots_runtime_paths::RadrootsHostEnvironment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::marker::Send for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::marker::Sync for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsHostEnvironment
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsHostEnvironment
+pub struct radroots_runtime_paths::RadrootsPathResolver
+impl radroots_runtime_paths::RadrootsPathResolver
+pub fn radroots_runtime_paths::RadrootsPathResolver::new(radroots_runtime_paths::RadrootsPlatform, radroots_runtime_paths::RadrootsHostEnvironment) -> Self
+pub fn radroots_runtime_paths::RadrootsPathResolver::platform(&self) -> radroots_runtime_paths::RadrootsPlatform
+impl core::clone::Clone for radroots_runtime_paths::RadrootsPathResolver
+pub fn radroots_runtime_paths::RadrootsPathResolver::clone(&self) -> radroots_runtime_paths::RadrootsPathResolver
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsPathResolver
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsPathResolver
+pub fn radroots_runtime_paths::RadrootsPathResolver::eq(&self, &radroots_runtime_paths::RadrootsPathResolver) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsPathResolver
+pub fn radroots_runtime_paths::RadrootsPathResolver::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsPathResolver
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsPathResolver
+impl core::marker::Send for radroots_runtime_paths::RadrootsPathResolver
+impl core::marker::Sync for radroots_runtime_paths::RadrootsPathResolver
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsPathResolver
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsPathResolver
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsPathResolver
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsPathResolver
+pub struct radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::admin_socket(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::config(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::state_database(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::state_lock(&self) -> &std::path::Path
+impl core::clone::Clone for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::clone(&self) -> radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::eq(&self, &radroots_runtime_paths::RadrootsServiceInstanceArtifacts) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+pub fn radroots_runtime_paths::RadrootsServiceInstanceArtifacts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::marker::Send for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::marker::Sync for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+pub struct radroots_runtime_paths::RadrootsServiceInstancePaths
+impl radroots_runtime_paths::RadrootsServiceInstancePaths
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::cache(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::config(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::logs(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::run(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::secrets(&self) -> &std::path::Path
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::state(&self) -> &std::path::Path
+impl core::clone::Clone for radroots_runtime_paths::RadrootsServiceInstancePaths
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::clone(&self) -> radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::cmp::Eq for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::cmp::PartialEq for radroots_runtime_paths::RadrootsServiceInstancePaths
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::eq(&self, &radroots_runtime_paths::RadrootsServiceInstancePaths) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RadrootsServiceInstancePaths
+pub fn radroots_runtime_paths::RadrootsServiceInstancePaths::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::marker::Freeze for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::marker::Send for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::marker::Sync for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::marker::Unpin for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RadrootsServiceInstancePaths
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RadrootsServiceInstancePaths
+pub struct radroots_runtime_paths::RuntimeContext
+impl radroots_runtime_paths::RuntimeContext
+pub fn radroots_runtime_paths::RuntimeContext::instance(&self) -> &radroots_runtime_paths::InstanceId
+pub fn radroots_runtime_paths::RuntimeContext::paths(&self) -> &radroots_runtime_paths::RadrootsServiceInstancePaths
+pub fn radroots_runtime_paths::RuntimeContext::profile(&self) -> radroots_runtime_paths::RadrootsPathProfile
+pub fn radroots_runtime_paths::RuntimeContext::resolve(&radroots_runtime_paths::RadrootsPathResolver, radroots_runtime_paths::RuntimeContextBootstrap, radroots_runtime_paths::ServiceId, radroots_runtime_paths::InstanceId) -> core::result::Result<Self, radroots_runtime_paths::RuntimeContextError>
+pub fn radroots_runtime_paths::RuntimeContext::service(&self) -> &radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::RuntimeContext::sources(&self) -> &radroots_runtime_paths::RuntimeContextSources
+impl core::clone::Clone for radroots_runtime_paths::RuntimeContext
+pub fn radroots_runtime_paths::RuntimeContext::clone(&self) -> radroots_runtime_paths::RuntimeContext
+impl core::cmp::Eq for radroots_runtime_paths::RuntimeContext
+impl core::cmp::PartialEq for radroots_runtime_paths::RuntimeContext
+pub fn radroots_runtime_paths::RuntimeContext::eq(&self, &radroots_runtime_paths::RuntimeContext) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RuntimeContext
+pub fn radroots_runtime_paths::RuntimeContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RuntimeContext
+impl serde_core::ser::Serialize for radroots_runtime_paths::RuntimeContext
+pub fn radroots_runtime_paths::RuntimeContext::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl core::marker::Freeze for radroots_runtime_paths::RuntimeContext
+impl core::marker::Send for radroots_runtime_paths::RuntimeContext
+impl core::marker::Sync for radroots_runtime_paths::RuntimeContext
+impl core::marker::Unpin for radroots_runtime_paths::RuntimeContext
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RuntimeContext
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RuntimeContext
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RuntimeContext
+pub struct radroots_runtime_paths::RuntimeContextBootstrap
+impl radroots_runtime_paths::RuntimeContextBootstrap
+pub fn radroots_runtime_paths::RuntimeContextBootstrap::new(radroots_runtime_paths::RadrootsPathProfile, core::option::Option<std::path::PathBuf>, radroots_runtime_paths::RuntimeContextSource, radroots_runtime_paths::RuntimeContextSource) -> core::result::Result<Self, radroots_runtime_paths::RuntimeContextError>
+pub fn radroots_runtime_paths::RuntimeContextBootstrap::profile(&self) -> radroots_runtime_paths::RadrootsPathProfile
+impl core::clone::Clone for radroots_runtime_paths::RuntimeContextBootstrap
+pub fn radroots_runtime_paths::RuntimeContextBootstrap::clone(&self) -> radroots_runtime_paths::RuntimeContextBootstrap
+impl core::cmp::Eq for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::cmp::PartialEq for radroots_runtime_paths::RuntimeContextBootstrap
+pub fn radroots_runtime_paths::RuntimeContextBootstrap::eq(&self, &radroots_runtime_paths::RuntimeContextBootstrap) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RuntimeContextBootstrap
+pub fn radroots_runtime_paths::RuntimeContextBootstrap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::marker::Freeze for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::marker::Send for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::marker::Sync for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::marker::Unpin for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RuntimeContextBootstrap
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RuntimeContextBootstrap
+pub struct radroots_runtime_paths::RuntimeContextSources
+impl radroots_runtime_paths::RuntimeContextSources
+pub fn radroots_runtime_paths::RuntimeContextSources::instance(&self) -> radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSources::paths(&self) -> radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSources::profile(&self) -> radroots_runtime_paths::RuntimeContextSource
+pub fn radroots_runtime_paths::RuntimeContextSources::repo_local_root(&self) -> core::option::Option<radroots_runtime_paths::RuntimeContextSource>
+pub fn radroots_runtime_paths::RuntimeContextSources::service(&self) -> radroots_runtime_paths::RuntimeContextSource
+impl core::clone::Clone for radroots_runtime_paths::RuntimeContextSources
+pub fn radroots_runtime_paths::RuntimeContextSources::clone(&self) -> radroots_runtime_paths::RuntimeContextSources
+impl core::cmp::Eq for radroots_runtime_paths::RuntimeContextSources
+impl core::cmp::PartialEq for radroots_runtime_paths::RuntimeContextSources
+pub fn radroots_runtime_paths::RuntimeContextSources::eq(&self, &radroots_runtime_paths::RuntimeContextSources) -> bool
+impl core::fmt::Debug for radroots_runtime_paths::RuntimeContextSources
+pub fn radroots_runtime_paths::RuntimeContextSources::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::RuntimeContextSources
+impl serde_core::ser::Serialize for radroots_runtime_paths::RuntimeContextSources
+pub fn radroots_runtime_paths::RuntimeContextSources::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl core::marker::Freeze for radroots_runtime_paths::RuntimeContextSources
+impl core::marker::Send for radroots_runtime_paths::RuntimeContextSources
+impl core::marker::Sync for radroots_runtime_paths::RuntimeContextSources
+impl core::marker::Unpin for radroots_runtime_paths::RuntimeContextSources
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::RuntimeContextSources
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::RuntimeContextSources
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::RuntimeContextSources
+pub struct radroots_runtime_paths::ServiceCredentialArtifactName(_)
+impl radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::as_str(&self) -> &str
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_runtime_paths::ServiceCredentialArtifactNameError>
+impl core::clone::Clone for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::clone(&self) -> radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::cmp::Eq for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::cmp::Ord for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::cmp(&self, &radroots_runtime_paths::ServiceCredentialArtifactName) -> core::cmp::Ordering
+impl core::cmp::PartialEq for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::eq(&self, &radroots_runtime_paths::ServiceCredentialArtifactName) -> bool
+impl core::cmp::PartialOrd for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::partial_cmp(&self, &radroots_runtime_paths::ServiceCredentialArtifactName) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::AsRef<str> for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::as_ref(&self) -> &str
+impl core::fmt::Debug for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for radroots_runtime_paths::ServiceCredentialArtifactName
+pub fn radroots_runtime_paths::ServiceCredentialArtifactName::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::marker::Freeze for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::marker::Send for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::marker::Sync for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::marker::Unpin for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::ServiceCredentialArtifactName
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::ServiceCredentialArtifactName
+pub struct radroots_runtime_paths::ServiceId(_)
+impl radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::as_str(&self) -> &str
+pub fn radroots_runtime_paths::ServiceId::into_string(self) -> alloc::string::String
+pub fn radroots_runtime_paths::ServiceId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_runtime_paths::ServiceIdentityError>
+impl core::clone::Clone for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::clone(&self) -> radroots_runtime_paths::ServiceId
+impl core::cmp::Eq for radroots_runtime_paths::ServiceId
+impl core::cmp::Ord for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::cmp(&self, &radroots_runtime_paths::ServiceId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::eq(&self, &radroots_runtime_paths::ServiceId) -> bool
+impl core::cmp::PartialOrd for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::partial_cmp(&self, &radroots_runtime_paths::ServiceId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::AsRef<str> for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::as_ref(&self) -> &str
+impl core::convert::From<radroots_runtime_paths::ServiceId> for alloc::string::String
+pub fn alloc::string::String::from(radroots_runtime_paths::ServiceId) -> Self
+impl core::convert::TryFrom<alloc::string::String> for radroots_runtime_paths::ServiceId
+pub type radroots_runtime_paths::ServiceId::Error = radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::ServiceId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for radroots_runtime_paths::ServiceId
+impl core::str::traits::FromStr for radroots_runtime_paths::ServiceId
+pub type radroots_runtime_paths::ServiceId::Err = radroots_runtime_paths::ServiceIdentityError
+pub fn radroots_runtime_paths::ServiceId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_runtime_paths::ServiceId
+pub fn radroots_runtime_paths::ServiceId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for radroots_runtime_paths::ServiceId
+impl core::marker::Send for radroots_runtime_paths::ServiceId
+impl core::marker::Sync for radroots_runtime_paths::ServiceId
+impl core::marker::Unpin for radroots_runtime_paths::ServiceId
+impl core::marker::UnsafeUnpin for radroots_runtime_paths::ServiceId
+impl core::panic::unwind_safe::RefUnwindSafe for radroots_runtime_paths::ServiceId
+impl core::panic::unwind_safe::UnwindSafe for radroots_runtime_paths::ServiceId
+pub const radroots_runtime_paths::DEFAULT_CONFIG_FILE_NAME: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_GEONAMES_NAMESPACE: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_GEONAMES_NAMESPACE_KIND: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_KIND: &str
+pub const radroots_runtime_paths::DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_VALUE: &str
+pub const radroots_runtime_paths::INSTANCE_ID_MAX_BYTES: usize
+pub const radroots_runtime_paths::SERVICE_ADMIN_SOCKET_FILE_NAME: &str
+pub const radroots_runtime_paths::SERVICE_CREDENTIAL_ARTIFACT_NAME_MAX_BYTES: usize
+pub const radroots_runtime_paths::SERVICE_ID_MAX_BYTES: usize
+pub const radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME: &str
+pub const radroots_runtime_paths::SERVICE_STATE_LOCK_FILE_NAME: &str
+pub fn radroots_runtime_paths::default_service_instance_artifacts(&radroots_runtime_paths::RadrootsServiceInstancePaths) -> radroots_runtime_paths::RadrootsServiceInstanceArtifacts
+pub fn radroots_runtime_paths::default_shared_geonames_database_file_name(&str) -> alloc::string::String
+pub fn radroots_runtime_paths::default_shared_geonames_database_path_from_cache_root(impl core::convert::AsRef<std::path::Path>, &str) -> std::path::PathBuf
+pub fn radroots_runtime_paths::default_shared_geonames_root_from_cache_root(impl core::convert::AsRef<std::path::Path>) -> std::path::PathBuf
+pub fn radroots_runtime_paths::default_shared_runtime_store_database_path_from_data_root(impl core::convert::AsRef<std::path::Path>) -> std::path::PathBuf
+pub fn radroots_runtime_paths::default_shared_runtime_store_database_path_from_shared_accounts_data_root(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<std::path::PathBuf, radroots_runtime_paths::RadrootsRuntimePathsError>
+pub fn radroots_runtime_paths::default_shared_runtime_store_root_from_data_root(impl core::convert::AsRef<std::path::Path>) -> std::path::PathBuf
+pub fn radroots_runtime_paths::default_shared_runtime_store_root_from_shared_accounts_data_root(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<std::path::PathBuf, radroots_runtime_paths::RadrootsRuntimePathsError>
+pub fn radroots_runtime_paths::service_credential_artifact_path(&radroots_runtime_paths::RadrootsServiceInstancePaths, &radroots_runtime_paths::ServiceCredentialArtifactName) -> std::path::PathBuf
