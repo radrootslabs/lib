@@ -268,7 +268,7 @@ mod tests {
         source::{EventProvenance, NextPage, ObservedEvent},
     };
 
-    use crate::{ClientBuilder, error::ErrorKind};
+    use crate::{ClientBuilder, error::ErrorKind, sync::HostPolicy};
 
     const PUBLIC_KEY: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
@@ -523,6 +523,69 @@ mod tests {
         assert_eq!(
             client.sync().expect_err("closed").kind(),
             ErrorKind::ClientClosed
+        );
+    }
+
+    #[tokio::test]
+    async fn host_policy_and_remaining_operation_wrappers_preserve_native_results() {
+        assert!(HostPolicy::new(0, 1, 1).is_err());
+        let policy = HostPolicy::default();
+        assert_eq!(policy, HostPolicy::standard());
+        let (clock, ids, deadlines) = policy.composition();
+        assert!(clock.now_unix_ms().expect("system clock") > 0);
+        let first = ids.next_id(OperationKind::Pull).expect("random id");
+        let second = ids.next_id(OperationKind::Pull).expect("random id");
+        assert_ne!(first, second);
+
+        let storage = Arc::new(MemoryStorage::new(
+            SourceGeneration::new([9; 32]).expect("generation"),
+        ));
+        let engine = Engine::builder(
+            storage.clone(),
+            Arc::new(FixedClock),
+            Arc::new(SequenceIds(AtomicU8::new(20))),
+            deadlines,
+        )
+        .source(Arc::new(CancelledSource))
+        .build()
+        .expect("engine");
+        let client = ClientBuilder::new()
+            .storage(storage)
+            .sync_engine(engine)
+            .build()
+            .expect("client");
+        let operations = client.sync().expect("open client").expect("sync");
+        let admission = RegistryPolicy::verified();
+
+        assert_eq!(
+            operations.ingest(invalid_observation(), &admission).await,
+            Err(Error::VerificationFailed)
+        );
+
+        let request = push_request();
+        let operation_id = request.operation_id();
+        operations
+            .prepare_push(request.clone())
+            .await
+            .expect("durable preparation");
+        assert_eq!(
+            operations.admit_signed(operation_id).await,
+            Err(Error::InvalidSignerOutput)
+        );
+        let cancellation = operations
+            .cancel_push(operation_id)
+            .await
+            .expect("cancel prepared push");
+        assert_eq!(
+            cancellation.status().operation().operation_id().as_bytes(),
+            operation_id.as_bytes()
+        );
+        assert!(cancellation.changed());
+
+        let submitted = push_request();
+        assert_eq!(
+            operations.submit_push(submitted).await,
+            Err(Error::MissingSigner)
         );
     }
 }
