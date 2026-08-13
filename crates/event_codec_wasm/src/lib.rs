@@ -1389,10 +1389,10 @@ mod tests {
     type BindingEncoder = fn(&str) -> Result<String, RadrootsJsValue>;
 
     const POST_AUTHORED_VECTORS: &str = include_str!(
-        "../../../../lib/contracts/conformance/vectors/post/verified_profiles.v1.json"
+        "../../../contracts/conformance/vectors/post/verified_profiles.v1.json"
     );
     const COMMENT_AUTHORED_VECTORS: &str = include_str!(
-        "../../../../lib/contracts/conformance/vectors/comment/verified_profile.v1.json"
+        "../../../contracts/conformance/vectors/comment/verified_profile.v1.json"
     );
 
     #[derive(Deserialize)]
