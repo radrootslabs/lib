@@ -251,4 +251,27 @@ mod tests {
         assert!(serde_json::from_str::<ServiceId>("\"../myc\"").is_err());
         assert!(serde_json::from_str::<InstanceId>("\"UPPER\"").is_err());
     }
+
+    #[test]
+    fn identifier_conversion_traits_preserve_validated_text() {
+        let service = "myc"
+            .parse::<ServiceId>()
+            .expect("parse service identifier");
+        assert_eq!(service.as_ref(), "myc");
+        assert_eq!(String::from(service), "myc");
+
+        let service =
+            ServiceId::try_from(String::from("rhi")).expect("convert owned service identifier");
+        assert_eq!(service.into_string(), "rhi");
+
+        let instance = "primary"
+            .parse::<InstanceId>()
+            .expect("parse instance identifier");
+        assert_eq!(instance.as_ref(), "primary");
+        assert_eq!(String::from(instance), "primary");
+
+        let instance = InstanceId::try_from(String::from("secondary"))
+            .expect("convert owned instance identifier");
+        assert_eq!(instance.into_string(), "secondary");
+    }
 }

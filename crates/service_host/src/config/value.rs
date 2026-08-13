@@ -578,9 +578,13 @@ mod tests {
 
     #[test]
     fn duration_zero_invalid_and_overflow_inputs_fail_closed() {
-        for source in ["", "1", "0s", "01s", "+1s", "-1s", "1.5s", "1S", " 1s"] {
+        for source in ["", "1", "s", "0s", "01s", "+1s", "-1s", "1.5s", "1S", " 1s"] {
             assert!(source.parse::<PositiveDuration>().is_err(), "{source}");
         }
+        assert_eq!(
+            PositiveDuration::new(Duration::ZERO),
+            Err(PositiveDurationError::Zero)
+        );
         assert_eq!(
             "18446744073709551616ns"
                 .parse::<PositiveDuration>()
@@ -620,9 +624,12 @@ mod tests {
 
     #[test]
     fn byte_zero_invalid_and_overflow_inputs_fail_closed() {
-        for source in ["", "1", "0B", "01B", "+1B", "-1B", "1.5KiB", "1KB", " 1B"] {
+        for source in [
+            "", "1", "B", "0B", "01B", "+1B", "-1B", "1.5KiB", "1KB", " 1B",
+        ] {
             assert!(source.parse::<ByteLimit>().is_err(), "{source}");
         }
+        assert_eq!(ByteLimit::new(0), Err(ByteLimitError::Zero));
         assert_eq!(
             "18446744073709551616B".parse::<ByteLimit>().unwrap_err(),
             ByteLimitError::Overflow

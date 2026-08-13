@@ -149,13 +149,15 @@ fn verify_backup_bundle_native(
     expected_identity: &ServiceDatabaseIdentity,
     maximum_state_bytes: NonZeroU64,
 ) -> Result<VerifiedServiceBackup, ServiceSqliteError> {
-    if manifest_bytes.len() > crate::BACKUP_MANIFEST_CANONICAL_MAX_BYTES {
-        return Err(verification_error(VerificationFailureKind::Manifest));
-    }
+    require_verification_condition(
+        manifest_bytes.len() <= crate::BACKUP_MANIFEST_CANONICAL_MAX_BYTES,
+        VerificationFailureKind::Manifest,
+    )?;
     let actual_manifest_digest: [u8; 32] = Sha256::digest(manifest_bytes).into();
-    if &actual_manifest_digest != expected_manifest_digest.as_bytes() {
-        return Err(verification_error(VerificationFailureKind::ManifestDigest));
-    }
+    require_verification_condition(
+        &actual_manifest_digest == expected_manifest_digest.as_bytes(),
+        VerificationFailureKind::ManifestDigest,
+    )?;
     let manifest = ServiceBackupManifest::from_canonical_bytes(manifest_bytes)
         .map_err(|source| verification_source(VerificationFailureKind::Manifest, source))?;
     verify_manifest_intent(&manifest, expected_identity)?;
@@ -164,16 +166,19 @@ fn verify_backup_bundle_native(
         .members()
         .first()
         .ok_or_else(|| verification_error(VerificationFailureKind::Inventory))?;
-    if member.byte_length() > i64::MAX as u64 || member.byte_length() > maximum_state_bytes.get() {
-        return Err(verification_error(VerificationFailureKind::MemberLength));
-    }
+    require_verification_condition(
+        member.byte_length() <= i64::MAX as u64
+            && member.byte_length() <= maximum_state_bytes.get(),
+        VerificationFailureKind::MemberLength,
+    )?;
 
     let binding = VerifiedBundleBinding::open(bundle_directory, member.byte_length())?;
     binding.validate_inventory()?;
     let first_digest = binding.hash_state(maximum_state_bytes)?;
-    if &first_digest != member.sha256().as_bytes() {
-        return Err(verification_error(VerificationFailureKind::MemberDigest));
-    }
+    require_verification_condition(
+        &first_digest == member.sha256().as_bytes(),
+        VerificationFailureKind::MemberDigest,
+    )?;
     binding.validate()?;
 
     let connection = open_sqlite_from_retained_state(&binding)?;
@@ -188,9 +193,7 @@ fn verify_backup_bundle_native(
 
     binding.validate_inventory()?;
     let final_digest = binding.hash_state(maximum_state_bytes)?;
-    if &final_digest != member.sha256().as_bytes() || final_digest != first_digest {
-        return Err(verification_error(VerificationFailureKind::MemberDigest));
-    }
+    require_backup_digests(&first_digest, &final_digest, member.sha256().as_bytes())?;
     binding.validate()?;
 
     Ok(VerifiedServiceBackup {
@@ -201,17 +204,35 @@ fn verify_backup_bundle_native(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_backup_digests(
+    first: &[u8; 32],
+    final_digest: &[u8; 32],
+    expected: &[u8; 32],
+) -> Result<(), ServiceSqliteError> {
+    require_verification_condition(
+        crate::all_constraints([
+            first == expected,
+            final_digest == expected,
+            first == final_digest,
+        ]),
+        VerificationFailureKind::MemberDigest,
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn verify_manifest_intent(
     manifest: &ServiceBackupManifest,
     expected: &ServiceDatabaseIdentity,
 ) -> Result<(), ServiceSqliteError> {
-    if manifest.service() != expected.service()
-        || manifest.instance() != expected.instance()
-        || manifest.source_generation() != expected.source_generation()
-        || manifest.state_schema_version() > expected.supported_state_schema_version()
-    {
-        return Err(verification_error(VerificationFailureKind::Intent));
-    }
+    require_verification_condition(
+        crate::all_constraints([
+            manifest.service() == expected.service(),
+            manifest.instance() == expected.instance(),
+            manifest.source_generation() == expected.source_generation(),
+            manifest.state_schema_version() <= expected.supported_state_schema_version(),
+        ]),
+        VerificationFailureKind::Intent,
+    )?;
     Ok(())
 }
 
@@ -257,9 +278,10 @@ impl VerifiedBundleBinding {
             .map_err(|source| verification_source(VerificationFailureKind::Inventory, source))?,
         );
         let (state_identity, state_length) = validate_state(&state)?;
-        if state_length != expected_length {
-            return Err(verification_error(VerificationFailureKind::MemberLength));
-        }
+        require_verification_condition(
+            state_length == expected_length,
+            VerificationFailureKind::MemberLength,
+        )?;
         let binding = Self {
             path: path.to_path_buf(),
             directory,
@@ -283,11 +305,14 @@ impl VerifiedBundleBinding {
                 verification_source(VerificationFailureKind::BindingChanged, source)
             })?,
         );
-        if validate_directory(&self.directory)? != self.directory_identity
-            || validate_directory(&current_directory)? != self.directory_identity
-        {
-            return Err(verification_error(VerificationFailureKind::BindingChanged));
-        }
+        require_verification_condition(
+            validate_directory(&self.directory)? == self.directory_identity,
+            VerificationFailureKind::BindingChanged,
+        )?;
+        require_verification_condition(
+            validate_directory(&current_directory)? == self.directory_identity,
+            VerificationFailureKind::BindingChanged,
+        )?;
         let current_state = File::from(
             openat(
                 &self.directory,
@@ -301,9 +326,10 @@ impl VerifiedBundleBinding {
         );
         for state in [&self.state, &current_state] {
             let (identity, length) = validate_state(state)?;
-            if identity != self.state_identity || length != self.state_length {
-                return Err(verification_error(VerificationFailureKind::BindingChanged));
-            }
+            require_verification_condition(
+                (identity, length) == (self.state_identity, self.state_length),
+                VerificationFailureKind::BindingChanged,
+            )?;
         }
         Ok(())
     }
@@ -325,14 +351,16 @@ impl VerifiedBundleBinding {
             meaningful = meaningful
                 .checked_add(1)
                 .ok_or_else(|| verification_error(VerificationFailureKind::Inventory))?;
-            if meaningful > 1 || name != crate::BACKUP_STATE_MEMBER_NAME.as_bytes() {
-                return Err(verification_error(VerificationFailureKind::Inventory));
-            }
+            require_verification_condition(
+                crate::all_constraints([
+                    meaningful <= 1,
+                    name == crate::BACKUP_STATE_MEMBER_NAME.as_bytes(),
+                ]),
+                VerificationFailureKind::Inventory,
+            )?;
             seen_state = true;
         }
-        if !seen_state {
-            return Err(verification_error(VerificationFailureKind::Inventory));
-        }
+        require_verification_condition(seen_state, VerificationFailureKind::Inventory)?;
         self.validate()
     }
 
@@ -361,14 +389,16 @@ impl VerifiedBundleBinding {
                         .map_err(|_| verification_error(VerificationFailureKind::MemberLength))?,
                 )
                 .ok_or_else(|| verification_error(VerificationFailureKind::MemberLength))?;
-            if length > i64::MAX as u64 || length > maximum.get() {
-                return Err(verification_error(VerificationFailureKind::MemberLength));
-            }
+            require_verification_condition(
+                crate::all_constraints([length <= i64::MAX as u64, length <= maximum.get()]),
+                VerificationFailureKind::MemberLength,
+            )?;
             hasher.update(&buffer[..count]);
         }
-        if length == 0 || length != self.state_length {
-            return Err(verification_error(VerificationFailureKind::MemberLength));
-        }
+        require_verification_condition(
+            crate::all_constraints([length != 0, length == self.state_length]),
+            VerificationFailureKind::MemberLength,
+        )?;
         self.validate()?;
         Ok(hasher.finalize().into())
     }
@@ -376,18 +406,20 @@ impl VerifiedBundleBinding {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn validate_bundle_path(path: &Path) -> Result<(), ServiceSqliteError> {
-    if !path.is_absolute()
-        || path.as_os_str().as_bytes().is_empty()
-        || path.as_os_str().as_bytes().len() > MAX_BUNDLE_PATH_BYTES
-        || path.components().any(|part| {
-            matches!(
-                part,
-                std::path::Component::CurDir | std::path::Component::ParentDir
-            )
-        })
-    {
-        return Err(verification_error(VerificationFailureKind::BundleDirectory));
-    }
+    require_verification_condition(
+        crate::all_constraints([
+            path.is_absolute(),
+            !path.as_os_str().as_bytes().is_empty(),
+            path.as_os_str().as_bytes().len() <= MAX_BUNDLE_PATH_BYTES,
+            !path.components().any(|part| {
+                matches!(
+                    part,
+                    std::path::Component::CurDir | std::path::Component::ParentDir
+                )
+            }),
+        ]),
+        VerificationFailureKind::BundleDirectory,
+    )?;
     Ok(())
 }
 
@@ -396,12 +428,15 @@ fn validate_directory(directory: &File) -> Result<FileIdentity, ServiceSqliteErr
     let status = fstat(directory)
         .map_err(|source| verification_source(VerificationFailureKind::BundleDirectory, source))?;
     let mode = crate::native_metadata::mode(status.st_mode) & 0o777;
-    if !FileType::from_raw_mode(status.st_mode).is_dir()
-        || status.st_uid != geteuid().as_raw()
-        || !matches!(mode, 0o500 | 0o700)
-    {
-        return Err(verification_error(VerificationFailureKind::Permissions));
-    }
+    require_verification_condition(
+        crate::native_metadata::restrictive_directory(
+            FileType::from_raw_mode(status.st_mode).is_dir(),
+            status.st_uid,
+            geteuid().as_raw(),
+            mode,
+        ),
+        VerificationFailureKind::Permissions,
+    )?;
     file_identity(&status)
 }
 
@@ -412,16 +447,20 @@ fn validate_state(file: &File) -> Result<(FileIdentity, u64), ServiceSqliteError
     let mode = crate::native_metadata::mode(status.st_mode) & 0o777;
     let length = u64::try_from(status.st_size)
         .map_err(|_| verification_error(VerificationFailureKind::MemberLength))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || !matches!(mode, 0o400 | 0o600)
-    {
-        return Err(verification_error(VerificationFailureKind::Permissions));
-    }
-    if length == 0 || length > i64::MAX as u64 {
-        return Err(verification_error(VerificationFailureKind::MemberLength));
-    }
+    require_verification_condition(
+        crate::native_metadata::restrictive_regular_file(
+            FileType::from_raw_mode(status.st_mode).is_file(),
+            crate::native_metadata::link_count(status.st_nlink),
+            status.st_uid,
+            geteuid().as_raw(),
+            mode,
+        ),
+        VerificationFailureKind::Permissions,
+    )?;
+    require_verification_condition(
+        crate::native_metadata::valid_artifact_length(length, None),
+        VerificationFailureKind::MemberLength,
+    )?;
     Ok((file_identity(&status)?, length))
 }
 
@@ -472,10 +511,17 @@ fn verify_connection_policy(connection: &Connection) -> Result<(), ServiceSqlite
     let trusted_schema: i64 = connection
         .pragma_query_value(None, "trusted_schema", |row| row.get(0))
         .map_err(integrity_source)?;
-    if query_only != 1 || trusted_schema != 0 {
-        return Err(integrity_error(IntegrityFailureKind::Policy));
-    }
-    Ok(())
+    require_verification_connection_policy(query_only, trusted_schema)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_verification_connection_policy(
+    query_only: i64,
+    trusted_schema: i64,
+) -> Result<(), ServiceSqliteError> {
+    crate::all_constraints([query_only == 1, trusted_schema == 0])
+        .then_some(())
+        .ok_or_else(|| integrity_error(IntegrityFailureKind::Policy))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -488,15 +534,27 @@ fn verify_database_inventory(connection: &Connection) -> Result<(), ServiceSqlit
         .next()
         .map_err(integrity_source)?
         .ok_or_else(|| integrity_error(IntegrityFailureKind::DatabaseInventory))?;
-    let sequence = first.get_ref(0).map_err(integrity_source)?;
-    let name = first.get_ref(1).map_err(integrity_source)?;
-    if !matches!(sequence, ValueRef::Integer(0)) || !matches!(name, ValueRef::Text(b"main")) {
-        return Err(integrity_error(IntegrityFailureKind::DatabaseInventory));
-    }
-    if rows.next().map_err(integrity_source)?.is_some() {
-        return Err(integrity_error(IntegrityFailureKind::DatabaseInventory));
-    }
-    Ok(())
+    let sequence_matches = matches!(
+        first.get_ref(0).map_err(integrity_source)?,
+        ValueRef::Integer(0)
+    );
+    let name_matches = matches!(
+        first.get_ref(1).map_err(integrity_source)?,
+        ValueRef::Text(b"main")
+    );
+    let has_extra = rows.next().map_err(integrity_source)?.is_some();
+    require_verification_database_inventory(sequence_matches, name_matches, has_extra)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_verification_database_inventory(
+    sequence_matches: bool,
+    name_matches: bool,
+    has_extra: bool,
+) -> Result<(), ServiceSqliteError> {
+    crate::all_constraints([sequence_matches, name_matches, !has_extra])
+        .then_some(())
+        .ok_or_else(|| integrity_error(IntegrityFailureKind::DatabaseInventory))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -518,13 +576,13 @@ fn verify_database_metadata(
         .next()
         .map_err(metadata_source)?
         .ok_or_else(metadata_error)?;
-    if !matches!(
-        object.get_ref(0).map_err(metadata_source)?,
-        ValueRef::Text(b"table")
-    ) || object_rows.next().map_err(metadata_source)?.is_some()
-    {
-        return Err(metadata_error());
-    }
+    crate::require_condition(
+        matches!(
+            object.get_ref(0).map_err(metadata_source)?,
+            ValueRef::Text(b"table")
+        ) && object_rows.next().map_err(metadata_source)?.is_none(),
+        ServiceSqliteErrorKind::Metadata,
+    )?;
 
     let application_id: i64 = connection
         .pragma_query_value(None, "application_id", |row| row.get(0))
@@ -568,9 +626,10 @@ fn verify_database_metadata(
     let generation: Option<Vec<u8>> = row.get(3).map_err(metadata_source)?;
     let schema: Option<i64> = row.get(4).map_err(metadata_source)?;
     let created_at: Option<i64> = row.get(5).map_err(metadata_source)?;
-    if rows.next().map_err(metadata_source)?.is_some() {
-        return Err(metadata_error());
-    }
+    crate::require_condition(
+        rows.next().map_err(metadata_source)?.is_none(),
+        ServiceSqliteErrorKind::Metadata,
+    )?;
     let (Some(1), Some(service), Some(instance), Some(generation), Some(schema), Some(created_at)) =
         (singleton, service, instance, generation, schema, created_at)
     else {
@@ -584,18 +643,17 @@ fn verify_database_metadata(
         .ok_or_else(metadata_error)?;
     let created_at = u64::try_from(created_at).map_err(|_| metadata_error())?;
 
-    if service != *expected.service()
-        || instance != *expected.instance()
-        || generation != expected.source_generation()
-        || application_id != expected.application_id()
-        || service != *manifest.service()
-        || instance != *manifest.instance()
-        || generation != manifest.source_generation()
-        || schema != manifest.state_schema_version()
-        || schema > expected.supported_state_schema_version()
-    {
-        return Err(metadata_error());
-    }
+    require_verification_metadata_projection([
+        service == *expected.service(),
+        instance == *expected.instance(),
+        generation == expected.source_generation(),
+        application_id == expected.application_id(),
+        service == *manifest.service(),
+        instance == *manifest.instance(),
+        generation == manifest.source_generation(),
+        schema == manifest.state_schema_version(),
+        schema <= expected.supported_state_schema_version(),
+    ])?;
     ServiceDatabaseMetadata::from_verified_backup(
         service,
         instance,
@@ -617,25 +675,50 @@ fn verify_integrity(connection: &Connection) -> Result<(), ServiceSqliteError> {
         .next()
         .map_err(integrity_source)?
         .ok_or_else(|| integrity_error(IntegrityFailureKind::Sqlite))?;
-    let value = row.get_ref(0).map_err(integrity_source)?;
-    if !matches!(
-        value,
-        ValueRef::Text(bytes)
-            if !bytes.is_empty()
-                && bytes.len() <= MAX_INTEGRITY_RESULT_UTF8_BYTES
-                && bytes == b"ok"
-    ) || rows.next().map_err(integrity_source)?.is_some()
-    {
-        return Err(integrity_error(IntegrityFailureKind::Sqlite));
-    }
+    let projection =
+        verification_integrity_value_projection(row.get_ref(0).map_err(integrity_source)?);
+    let has_extra = rows.next().map_err(integrity_source)?.is_some();
+    require_verification_integrity_projection(projection, has_extra)?;
     let violation = connection
         .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
         .optional()
         .map_err(integrity_source)?;
-    if violation.is_some() {
-        return Err(integrity_error(IntegrityFailureKind::ForeignKeys));
-    }
+    require_integrity_condition(violation.is_none(), IntegrityFailureKind::ForeignKeys)?;
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_verification_metadata_projection(matches: [bool; 9]) -> Result<(), ServiceSqliteError> {
+    crate::require_condition(
+        crate::all_constraints(matches),
+        ServiceSqliteErrorKind::Metadata,
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn verification_integrity_value_projection(value: ValueRef<'_>) -> [bool; 4] {
+    [
+        matches!(value, ValueRef::Text(_)),
+        matches!(value, ValueRef::Text(bytes) if !bytes.is_empty()),
+        matches!(value, ValueRef::Text(bytes) if bytes.len() <= MAX_INTEGRITY_RESULT_UTF8_BYTES),
+        matches!(value, ValueRef::Text(b"ok")),
+    ]
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_verification_integrity_projection(
+    projection: [bool; 4],
+    has_extra: bool,
+) -> Result<(), ServiceSqliteError> {
+    crate::all_constraints([
+        projection[0],
+        projection[1],
+        projection[2],
+        projection[3],
+        !has_extra,
+    ])
+    .then_some(())
+    .ok_or_else(|| integrity_error(IntegrityFailureKind::Sqlite))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -704,6 +787,18 @@ fn verification_error(kind: VerificationFailureKind) -> ServiceSqliteError {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_verification_condition(
+    condition: bool,
+    kind: VerificationFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(verification_error(kind))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn verification_source(
     kind: VerificationFailureKind,
     source: impl Error + Send + Sync + 'static,
@@ -751,6 +846,18 @@ fn integrity_error(kind: IntegrityFailureKind) -> ServiceSqliteError {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_integrity_condition(
+    condition: bool,
+    kind: IntegrityFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(integrity_error(kind))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn integrity_source(source: rusqlite::Error) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Integrity, source)
 }
@@ -781,6 +888,159 @@ mod tests {
             process::Command,
         },
     };
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn verification_projection_helpers_reject_every_independent_drift() {
+        let digest = [7_u8; 32];
+        assert!(require_backup_digests(&digest, &digest, &digest).is_ok());
+        for changed in 0..3 {
+            let mut values = [digest; 3];
+            values[changed][0] ^= 1;
+            assert!(require_backup_digests(&values[0], &values[1], &values[2]).is_err());
+        }
+
+        assert!(require_verification_connection_policy(1, 0).is_ok());
+        for values in [(0, 0), (1, 1), (0, 1)] {
+            assert!(require_verification_connection_policy(values.0, values.1).is_err());
+        }
+
+        assert!(require_verification_database_inventory(true, true, false).is_ok());
+        for (sequence, name, extra) in [
+            (false, true, false),
+            (true, false, false),
+            (false, false, false),
+            (true, true, true),
+        ] {
+            assert!(require_verification_database_inventory(sequence, name, extra).is_err());
+        }
+
+        assert!(require_verification_metadata_projection([true; 9]).is_ok());
+        for changed in 0..9 {
+            let mut matches = [true; 9];
+            matches[changed] = false;
+            assert!(require_verification_metadata_projection(matches).is_err());
+        }
+
+        assert!(
+            require_verification_integrity_projection(
+                verification_integrity_value_projection(ValueRef::Text(b"ok")),
+                false,
+            )
+            .is_ok()
+        );
+        for (value, extra) in [
+            (ValueRef::Null, false),
+            (ValueRef::Text(b""), false),
+            (
+                ValueRef::Text(&[b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1]),
+                false,
+            ),
+            (ValueRef::Text(b"not ok"), false),
+            (ValueRef::Text(b"ok"), true),
+        ] {
+            assert!(
+                require_verification_integrity_projection(
+                    verification_integrity_value_projection(value),
+                    extra,
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn verification_and_integrity_failure_inventories_are_complete() {
+        let verification_cases = [
+            (
+                VerificationFailureKind::Manifest,
+                "backup manifest is invalid",
+            ),
+            (
+                VerificationFailureKind::ManifestDigest,
+                "backup manifest digest does not match",
+            ),
+            (
+                VerificationFailureKind::Intent,
+                "backup intent does not match",
+            ),
+            (
+                VerificationFailureKind::BundleDirectory,
+                "backup bundle directory is invalid",
+            ),
+            (
+                VerificationFailureKind::Inventory,
+                "backup member inventory is invalid",
+            ),
+            (
+                VerificationFailureKind::Permissions,
+                "backup permissions are invalid",
+            ),
+            (
+                VerificationFailureKind::MemberLength,
+                "backup member length is invalid",
+            ),
+            (
+                VerificationFailureKind::MemberDigest,
+                "backup member digest does not match",
+            ),
+            (
+                VerificationFailureKind::BindingChanged,
+                "backup member binding changed",
+            ),
+        ];
+        for (kind, message) in verification_cases {
+            let plain = VerificationFailure { kind, source: None };
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+            let sourced = VerificationFailure {
+                kind,
+                source: Some(Box::new(std::io::Error::other("private-cause"))),
+            };
+            assert_eq!(sourced.to_string(), message);
+            assert!(sourced.source().is_some());
+            assert!(format!("{sourced:?}").contains("[redacted]"));
+            assert!(require_verification_condition(true, kind).is_ok());
+            assert_eq!(
+                require_verification_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                ServiceSqliteErrorKind::Backup
+            );
+        }
+
+        for (kind, message) in [
+            (
+                IntegrityFailureKind::Policy,
+                "backup SQLite policy is invalid",
+            ),
+            (
+                IntegrityFailureKind::DatabaseInventory,
+                "backup database inventory is invalid",
+            ),
+            (
+                IntegrityFailureKind::Sqlite,
+                "backup SQLite integrity is invalid",
+            ),
+            (
+                IntegrityFailureKind::ForeignKeys,
+                "backup foreign-key integrity is invalid",
+            ),
+        ] {
+            let failure = IntegrityFailure(kind);
+            assert_eq!(failure.to_string(), message);
+            assert!(failure.source().is_none());
+            assert!(format!("{failure:?}").contains(&format!("{kind:?}")));
+            assert!(require_integrity_condition(true, kind).is_ok());
+            assert_eq!(
+                require_integrity_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                ServiceSqliteErrorKind::Integrity
+            );
+        }
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     struct Fixture {

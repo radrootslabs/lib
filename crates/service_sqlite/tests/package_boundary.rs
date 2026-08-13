@@ -531,7 +531,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "fstatvfs(&held)",
         "capacity.f_bavail",
         "capacity.f_frsize",
-        "crate::native_metadata::mode(status.st_mode) & 0o022",
+        "crate::native_metadata::secure_directory(",
         "UnsupportedPlatform",
     ] {
         assert!(
@@ -547,6 +547,13 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "T: Into<u64>",
         "pub(crate) fn device<T>",
         "T: TryInto<u64>",
+        "pub(crate) fn sqlite_wal_header",
+        "header[18] == 2,",
+        "header[19] == 2,",
+        "crate::all_constraints([",
+        "pub(crate) fn secure_directory",
+        "pub(crate) fn exact_regular_file",
+        "pub(crate) fn identity_pair_matches",
     ] {
         assert!(
             NATIVE_METADATA_SOURCE.contains(required),
@@ -729,7 +736,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "BACKUP_MANIFEST_CANONICAL_MAX_BYTES: usize = 1_024",
         "BACKUP_STATE_MEMBER_NAME: &str = \"state.sqlite\"",
         "pub fn from_canonical_bytes",
-        "manifest.canonical_bytes.as_ref() != bytes",
+        "manifest.canonical_bytes.as_ref() == bytes",
+        "BackupManifestContractError::NonCanonicalEncoding",
         "serde(deny_unknown_fields)",
         "Sha256::digest(&canonical_bytes)",
         "pub(crate) fn from_capture",
@@ -973,8 +981,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC",
         "OFlags::RDONLY | OFlags::NONBLOCK | OFlags::NOFOLLOW | OFlags::CLOEXEC",
         "Dir::read_from(&self.directory)",
-        "matches!(mode, 0o500 | 0o700)",
-        "matches!(mode, 0o400 | 0o600)",
+        "crate::native_metadata::restrictive_directory(",
+        "crate::native_metadata::restrictive_regular_file(",
         "open_sqlite_from_retained_state",
         "/proc/self/fd/{descriptor}",
         "/dev/fd/{descriptor}",
@@ -987,7 +995,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ValueRef::Text(b\"table\")",
         "PRAGMA integrity_check(1)",
         "PRAGMA foreign_key_check",
-        "state_schema_version() > expected.supported_state_schema_version()",
+        "state_schema_version() <= expected.supported_state_schema_version()",
         "binding.hash_state(maximum_state_bytes)",
     ] {
         assert!(
@@ -1417,8 +1425,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         ".row_buffer_size(ROW_BUFFER_CAPACITY)",
         ".immutable(true)",
         "\"query_only\"",
-        "sqlite_header[18] != 2",
-        "sqlite_header[19] != 2",
+        "crate::native_metadata::sqlite_wal_header(&sqlite_header)",
         "WAL_FILE_NAME",
         "SHARED_MEMORY_FILE_NAME",
         ".min_connections(1)",
@@ -1526,7 +1533,9 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "directory_device",
         "WAL_FILE_NAME",
         "SHARED_MEMORY_FILE_NAME",
-        "crate::native_metadata::mode(directory_status.st_mode) & 0o022",
+        "crate::native_metadata::secure_directory(",
+        "crate::native_metadata::exact_regular_file(",
+        "crate::native_metadata::identity_pair_matches(",
     ] {
         assert!(
             OPEN_SOURCE.contains(required),

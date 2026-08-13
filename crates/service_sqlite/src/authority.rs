@@ -68,9 +68,11 @@ impl WriterAuthority {
         &self,
         paths: &ServiceSqlitePaths,
     ) -> Result<(), ServiceSqliteError> {
-        if !self.is_held() || self.database_path != paths.state_database() {
-            return Err(authority_error(WriterAuthorityCause::Mismatched));
-        }
+        require_authority_condition(
+            self.is_held() && self.database_path == paths.state_database(),
+            WriterAuthorityCause::Mismatched,
+        )
+        .map_err(authority_error)?;
 
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         validate_authority_binding(self, paths).map_err(authority_error)?;
@@ -215,9 +217,10 @@ fn acquire_supported(paths: &ServiceSqlitePaths) -> Result<WriterAuthority, Writ
         .map_err(|_| WriterAuthorityCause::LockUnavailable)?;
 
     let lock_status = fstat(&descriptor).map_err(|_| WriterAuthorityCause::LockUnavailable)?;
-    if crate::native_metadata::mode(lock_status.st_mode) & 0o777 != 0o600 {
-        return Err(WriterAuthorityCause::LockUnavailable);
-    }
+    require_authority_condition(
+        crate::native_metadata::mode(lock_status.st_mode) & 0o777 == 0o600,
+        WriterAuthorityCause::LockUnavailable,
+    )?;
     let directory_device = crate::native_metadata::device(directory_status.st_dev)
         .map_err(|_| WriterAuthorityCause::StateDirectoryUnavailable)?;
     let lock_device = crate::native_metadata::device(lock_status.st_dev)
@@ -317,19 +320,31 @@ fn validate_authority_binding(
         .map_err(|_| WriterAuthorityCause::Mismatched)?;
     let current_directory_device = crate::native_metadata::device(current_directory_status.st_dev)
         .map_err(|_| WriterAuthorityCause::Mismatched)?;
-    if !FileType::from_raw_mode(held_directory.st_mode).is_dir()
-        || held_directory.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(held_directory.st_mode) & 0o022 != 0
-        || !FileType::from_raw_mode(current_directory_status.st_mode).is_dir()
-        || current_directory_status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(current_directory_status.st_mode) & 0o022 != 0
-        || held_directory_device != authority.directory_device
-        || held_directory.st_ino != authority.directory_inode
-        || current_directory_device != authority.directory_device
-        || current_directory_status.st_ino != authority.directory_inode
-    {
-        return Err(WriterAuthorityCause::Mismatched);
-    }
+    require_authority_condition(
+        crate::all_constraints([
+            crate::native_metadata::secure_directory(
+                FileType::from_raw_mode(held_directory.st_mode).is_dir(),
+                held_directory.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(held_directory.st_mode),
+            ),
+            crate::native_metadata::secure_directory(
+                FileType::from_raw_mode(current_directory_status.st_mode).is_dir(),
+                current_directory_status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(current_directory_status.st_mode),
+            ),
+            crate::native_metadata::identity_pair_matches(
+                held_directory_device,
+                held_directory.st_ino,
+                current_directory_device,
+                current_directory_status.st_ino,
+                authority.directory_device,
+                authority.directory_inode,
+            ),
+        ]),
+        WriterAuthorityCause::Mismatched,
+    )?;
 
     let current_lock = openat(
         &current_directory,
@@ -350,22 +365,42 @@ fn validate_authority_binding(
         .map_err(|_| WriterAuthorityCause::Mismatched)?;
     let current_lock_device = crate::native_metadata::device(current_lock_status.st_dev)
         .map_err(|_| WriterAuthorityCause::Mismatched)?;
-    if !FileType::from_raw_mode(held_lock.st_mode).is_file()
-        || crate::native_metadata::link_count(held_lock.st_nlink) != 1
-        || held_lock.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(held_lock.st_mode) & 0o777 != 0o600
-        || !FileType::from_raw_mode(current_lock_status.st_mode).is_file()
-        || crate::native_metadata::link_count(current_lock_status.st_nlink) != 1
-        || current_lock_status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(current_lock_status.st_mode) & 0o777 != 0o600
-        || held_lock_device != authority.lock_device
-        || held_lock.st_ino != authority.lock_inode
-        || current_lock_device != authority.lock_device
-        || current_lock_status.st_ino != authority.lock_inode
-    {
-        return Err(WriterAuthorityCause::Mismatched);
-    }
+    require_authority_condition(
+        crate::all_constraints([
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(held_lock.st_mode).is_file(),
+                crate::native_metadata::link_count(held_lock.st_nlink),
+                held_lock.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(held_lock.st_mode),
+            ),
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(current_lock_status.st_mode).is_file(),
+                crate::native_metadata::link_count(current_lock_status.st_nlink),
+                current_lock_status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(current_lock_status.st_mode),
+            ),
+            crate::native_metadata::identity_pair_matches(
+                held_lock_device,
+                held_lock.st_ino,
+                current_lock_device,
+                current_lock_status.st_ino,
+                authority.lock_device,
+                authority.lock_inode,
+            ),
+        ]),
+        WriterAuthorityCause::Mismatched,
+    )?;
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_authority_condition(
+    condition: bool,
+    cause: WriterAuthorityCause,
+) -> Result<(), WriterAuthorityCause> {
+    condition.then_some(()).ok_or(cause)
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
@@ -585,6 +620,8 @@ mod tests {
             assert!(!display.contains('/'));
             assert!(!display.contains(".sqlite"));
             assert!(!display.contains("state.lock"));
+            assert!(require_authority_condition(true, cause).is_ok());
+            assert_eq!(require_authority_condition(false, cause), Err(cause));
         }
     }
 }

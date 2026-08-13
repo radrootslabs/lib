@@ -195,6 +195,7 @@ mod tests {
     #[test]
     fn owner_policy_is_stable_and_group_policy_is_platform_bounded() {
         let owner = AdminPeerAuthorizationPolicy::owner_only();
+        assert_eq!(AdminPeerAuthorizationPolicy::default(), owner);
         assert_eq!(owner.admin_gid(), None);
         assert_eq!(owner.support(), AdminPeerAuthorizationSupport::current());
         assert_eq!(
@@ -205,6 +206,9 @@ mod tests {
                 AdminPeerAuthorizationPolicyError::AdminGroupUnsupported
             })
         );
+        let error = AdminPeerAuthorizationPolicyError::InvalidAdminGroupId;
+        assert!(!error.to_string().is_empty());
+        assert!(error.source().is_none());
         #[cfg(target_os = "linux")]
         assert_eq!(
             AdminPeerAuthorizationPolicy::with_admin_gid(42)

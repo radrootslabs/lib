@@ -542,6 +542,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn supervision_retains_only_the_first_of_multiple_fatal_failures() {
+        let mut supervisor = TaskSupervisor::new();
+        for name in ["first_failure", "second_failure"] {
+            supervisor
+                .spawn(metadata(name, TaskClassification::Critical), |_| async {
+                    Err(HostError::new(HostErrorKind::TaskFailure))
+                })
+                .unwrap();
+        }
+
+        let error = supervisor.supervise().await.unwrap_err();
+        assert_eq!(error.kind(), SupervisionFailureKind::TaskReturnedError);
+        assert!(matches!(
+            error.metadata().unwrap().name().as_str(),
+            "first_failure" | "second_failure"
+        ));
+        assert!(supervisor.is_empty());
+    }
+
+    #[tokio::test]
+    async fn optional_panic_is_an_observable_nonfatal_exit() {
+        let mut supervisor = TaskSupervisor::new();
+        supervisor
+            .spawn(
+                metadata("optional_panic", TaskClassification::Optional),
+                |_| async {
+                    panic!("redacted optional panic");
+                    #[allow(unreachable_code)]
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        let exit = supervisor.join_next().await.unwrap().unwrap();
+        assert_eq!(exit.status(), SupervisedTaskExitStatus::OptionalFailure);
+        assert!(exit.source().is_some());
+        assert!(supervisor.is_empty());
+    }
+
+    #[tokio::test]
     async fn externally_cancelled_critical_task_may_complete_successfully() {
         let mut supervisor = TaskSupervisor::new();
         supervisor

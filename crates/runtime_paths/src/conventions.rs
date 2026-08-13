@@ -287,6 +287,7 @@ mod tests {
         let paths = context.paths();
         let name =
             ServiceCredentialArtifactName::new("identity.secret.json").expect("credential name");
+        assert_eq!(name.as_ref(), "identity.secret.json");
         assert_eq!(
             format!("{name:?}"),
             "ServiceCredentialArtifactName([redacted])"
@@ -390,6 +391,13 @@ mod tests {
                 &shared_accounts_data_root
             )
             .expect("shared runtime-store root"),
+            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/runtime_store")
+        );
+        assert_eq!(
+            default_shared_runtime_store_root_from_shared_accounts_data_root(
+                shared_accounts_data_root.clone()
+            )
+            .expect("owned shared runtime-store root"),
             PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/runtime_store")
         );
         assert_eq!(

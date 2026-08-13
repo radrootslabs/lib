@@ -5,7 +5,7 @@ use std::error::Error;
 
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
-use crate::ServiceSqlitePaths;
+use crate::{ServiceSqliteErrorKind, ServiceSqlitePaths};
 
 const MAXIMUM_MINIMUM_FREE_BYTES: u64 = i64::MAX as u64;
 
@@ -211,13 +211,22 @@ fn available_bytes_native(paths: &ServiceSqlitePaths) -> Result<u64, StateFilesy
     let final_held_status =
         fstat(&held).map_err(|_| StateFilesystemCapacityError::MeasurementUnavailable)?;
     validate_directory_status(&final_held_status)?;
-    if current_status.st_dev != held_status.st_dev
-        || current_status.st_ino != held_status.st_ino
-        || final_held_status.st_dev != held_status.st_dev
-        || final_held_status.st_ino != held_status.st_ino
-    {
-        return Err(StateFilesystemCapacityError::MeasurementUnavailable);
-    }
+    let expected_device = crate::native_metadata::device(held_status.st_dev)
+        .map_err(|_| StateFilesystemCapacityError::MeasurementUnavailable)?;
+    crate::require_condition(
+        crate::native_metadata::identity_pair_matches(
+            crate::native_metadata::device(final_held_status.st_dev)
+                .map_err(|_| StateFilesystemCapacityError::MeasurementUnavailable)?,
+            final_held_status.st_ino,
+            crate::native_metadata::device(current_status.st_dev)
+                .map_err(|_| StateFilesystemCapacityError::MeasurementUnavailable)?,
+            current_status.st_ino,
+            expected_device,
+            held_status.st_ino,
+        ),
+        ServiceSqliteErrorKind::Authority,
+    )
+    .map_err(|_| StateFilesystemCapacityError::MeasurementUnavailable)?;
     Ok(available)
 }
 
@@ -228,10 +237,12 @@ fn validate_directory_status(
     use rustix::fs::FileType;
     use rustix::process::geteuid;
 
-    if !FileType::from_raw_mode(status.st_mode).is_dir()
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
-    {
+    if !crate::native_metadata::secure_directory(
+        FileType::from_raw_mode(status.st_mode).is_dir(),
+        status.st_uid,
+        geteuid().as_raw(),
+        crate::native_metadata::mode(status.st_mode),
+    ) {
         return Err(StateFilesystemCapacityError::MeasurementUnavailable);
     }
     Ok(())

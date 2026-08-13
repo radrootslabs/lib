@@ -173,18 +173,21 @@ impl ServiceBackupManifest {
     /// owns expected-intent, length, digest, SQLite identity, and integrity
     /// qualification.
     pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, BackupManifestContractError> {
-        if bytes.is_empty() {
-            return Err(BackupManifestContractError::MalformedEncoding);
-        }
-        if bytes.len() > BACKUP_MANIFEST_CANONICAL_MAX_BYTES {
-            return Err(BackupManifestContractError::ManifestTooLarge);
-        }
+        require_manifest_condition(
+            !bytes.is_empty(),
+            BackupManifestContractError::MalformedEncoding,
+        )?;
+        require_manifest_condition(
+            bytes.len() <= BACKUP_MANIFEST_CANONICAL_MAX_BYTES,
+            BackupManifestContractError::ManifestTooLarge,
+        )?;
         let wire: WireManifest = serde_json::from_slice(bytes)
             .map_err(|_| BackupManifestContractError::MalformedEncoding)?;
         let manifest = Self::from_wire(wire)?;
-        if manifest.canonical_bytes.as_ref() != bytes {
-            return Err(BackupManifestContractError::NonCanonicalEncoding);
-        }
+        require_manifest_condition(
+            manifest.canonical_bytes.as_ref() == bytes,
+            BackupManifestContractError::NonCanonicalEncoding,
+        )?;
         Ok(manifest)
     }
 
@@ -269,12 +272,14 @@ impl ServiceBackupManifest {
     }
 
     fn from_wire(wire: WireManifest) -> Result<Self, BackupManifestContractError> {
-        if wire.schema != BACKUP_MANIFEST_SCHEMA {
-            return Err(BackupManifestContractError::InvalidSchema);
-        }
-        if wire.schema_version != BACKUP_MANIFEST_SCHEMA_VERSION {
-            return Err(BackupManifestContractError::UnsupportedVersion);
-        }
+        require_manifest_condition(
+            wire.schema == BACKUP_MANIFEST_SCHEMA,
+            BackupManifestContractError::InvalidSchema,
+        )?;
+        require_manifest_condition(
+            wire.schema_version == BACKUP_MANIFEST_SCHEMA_VERSION,
+            BackupManifestContractError::UnsupportedVersion,
+        )?;
         let service = ServiceId::new(wire.service)
             .map_err(|_| BackupManifestContractError::InvalidServiceIdentity)?;
         let instance = InstanceId::new(wire.instance)
@@ -288,22 +293,26 @@ impl ServiceBackupManifest {
         let [member] = wire.members.as_slice() else {
             return Err(BackupManifestContractError::InvalidMemberInventory);
         };
-        if member.name != BACKUP_STATE_MEMBER_NAME {
-            return Err(BackupManifestContractError::InvalidMemberName);
-        }
-        if member.byte_length == 0 {
-            return Err(BackupManifestContractError::InvalidMemberLength);
-        }
+        require_manifest_condition(
+            member.name == BACKUP_STATE_MEMBER_NAME,
+            BackupManifestContractError::InvalidMemberName,
+        )?;
+        require_manifest_condition(
+            member.byte_length != 0,
+            BackupManifestContractError::InvalidMemberLength,
+        )?;
         let member_sha256 = BackupMemberSha256(
             decode_hex_32(&member.sha256)
                 .ok_or(BackupManifestContractError::InvalidMemberDigest)?,
         );
-        if wire.integrity.sqlite != INTEGRITY_OK || wire.integrity.foreign_keys != INTEGRITY_OK {
-            return Err(BackupManifestContractError::InvalidIntegrity);
-        }
-        if wire.protected_material_included {
-            return Err(BackupManifestContractError::ProtectedMaterialIncluded);
-        }
+        require_manifest_condition(
+            wire.integrity.sqlite == INTEGRITY_OK && wire.integrity.foreign_keys == INTEGRITY_OK,
+            BackupManifestContractError::InvalidIntegrity,
+        )?;
+        require_manifest_condition(
+            !wire.protected_material_included,
+            BackupManifestContractError::ProtectedMaterialIncluded,
+        )?;
         Self::build(
             service,
             instance,
@@ -325,9 +334,10 @@ impl ServiceBackupManifest {
         state_byte_length: u64,
         state_sha256: BackupMemberSha256,
     ) -> Result<Self, BackupManifestContractError> {
-        if state_byte_length == 0 {
-            return Err(BackupManifestContractError::InvalidMemberLength);
-        }
+        require_manifest_condition(
+            state_byte_length != 0,
+            BackupManifestContractError::InvalidMemberLength,
+        )?;
         let source_generation_hex = encode_hex(source_generation.as_bytes());
         let state_sha256_hex = encode_hex(state_sha256.as_bytes());
         let canonical = CanonicalManifest {
@@ -351,9 +361,10 @@ impl ServiceBackupManifest {
         };
         let canonical_bytes = serde_json::to_vec(&canonical)
             .map_err(|_| BackupManifestContractError::EncodingFailure)?;
-        if canonical_bytes.len() > BACKUP_MANIFEST_CANONICAL_MAX_BYTES {
-            return Err(BackupManifestContractError::ManifestTooLarge);
-        }
+        require_manifest_condition(
+            canonical_bytes.len() <= BACKUP_MANIFEST_CANONICAL_MAX_BYTES,
+            BackupManifestContractError::ManifestTooLarge,
+        )?;
         let digest = BackupManifestSha256(Sha256::digest(&canonical_bytes).into());
         Ok(Self {
             service,
@@ -369,6 +380,13 @@ impl ServiceBackupManifest {
             digest,
         })
     }
+}
+
+fn require_manifest_condition(
+    condition: bool,
+    error: BackupManifestContractError,
+) -> Result<(), BackupManifestContractError> {
+    condition.then_some(()).ok_or(error)
 }
 
 impl fmt::Debug for ServiceBackupManifest {
@@ -504,9 +522,7 @@ fn encode_hex(bytes: &[u8; 32]) -> String {
 }
 
 fn decode_hex_32(value: &str) -> Option<[u8; 32]> {
-    if value.len() != 64 {
-        return None;
-    }
+    (value.len() == 64).then_some(())?;
     let mut decoded = [0_u8; 32];
     for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
         let high = decode_lower_hex(pair[0])?;
@@ -596,6 +612,18 @@ mod tests {
         );
         assert_eq!(manifest.integrity().sqlite(), INTEGRITY_OK);
         assert_eq!(manifest.integrity().foreign_keys(), INTEGRITY_OK);
+        assert_eq!(
+            format!("{:?}", manifest.integrity()),
+            "BackupManifestIntegrity"
+        );
+        assert_eq!(
+            format!("{:?}", BackupMemberSha256::from_bytes([0xab; 32])),
+            "BackupMemberSha256([redacted])"
+        );
+        assert_eq!(
+            format!("{:?}", BackupManifestSha256::from_bytes([0xcd; 32])),
+            "BackupManifestSha256([redacted])"
+        );
         assert!(!manifest.protected_material_included());
         assert_eq!(
             encode_hex(manifest.digest().as_bytes()),
@@ -622,10 +650,23 @@ mod tests {
         )
         .expect("captured manifest model");
         assert_eq!(manifest.canonical_bytes(), CANONICAL.as_bytes());
+        assert_eq!(
+            ServiceBackupManifest::from_capture(
+                &metadata,
+                BackupCreatedAtUnixMs::new(1_700_000_000_000).expect("backup time"),
+                0,
+                BackupMemberSha256::from_bytes([0xab; 32]),
+            ),
+            Err(BackupManifestContractError::InvalidMemberLength)
+        );
     }
 
     #[test]
     fn noncanonical_and_ambiguous_encodings_fail_closed() {
+        assert_eq!(
+            ServiceBackupManifest::from_canonical_bytes(b""),
+            Err(BackupManifestContractError::MalformedEncoding)
+        );
         let reordered = CANONICAL.replacen(
             "\"schema\":\"radroots.service-backup\",\"schema_version\":1",
             "\"schema_version\":1,\"schema\":\"radroots.service-backup\"",
@@ -819,5 +860,41 @@ mod tests {
             error.to_string(),
             "backup manifest member digest is invalid"
         );
+        for error in [
+            BackupManifestContractError::ManifestTooLarge,
+            BackupManifestContractError::MalformedEncoding,
+            BackupManifestContractError::NonCanonicalEncoding,
+            BackupManifestContractError::EncodingFailure,
+            BackupManifestContractError::InvalidSchema,
+            BackupManifestContractError::UnsupportedVersion,
+            BackupManifestContractError::InvalidServiceIdentity,
+            BackupManifestContractError::InvalidInstanceIdentity,
+            BackupManifestContractError::InvalidSourceGeneration,
+            BackupManifestContractError::InvalidStateSchemaVersion,
+            BackupManifestContractError::InvalidCreationTime,
+            BackupManifestContractError::InvalidMemberInventory,
+            BackupManifestContractError::InvalidMemberName,
+            BackupManifestContractError::InvalidMemberLength,
+            BackupManifestContractError::InvalidMemberDigest,
+            BackupManifestContractError::InvalidIntegrity,
+            BackupManifestContractError::ProtectedMaterialIncluded,
+        ] {
+            assert!(!error.to_string().is_empty());
+            assert!(error.source().is_none());
+        }
+        for error in [
+            BackupManifestContractError::ManifestTooLarge,
+            BackupManifestContractError::MalformedEncoding,
+            BackupManifestContractError::NonCanonicalEncoding,
+            BackupManifestContractError::InvalidSchema,
+            BackupManifestContractError::UnsupportedVersion,
+            BackupManifestContractError::InvalidMemberName,
+            BackupManifestContractError::InvalidMemberLength,
+            BackupManifestContractError::InvalidIntegrity,
+            BackupManifestContractError::ProtectedMaterialIncluded,
+        ] {
+            assert!(require_manifest_condition(true, error).is_ok());
+            assert_eq!(require_manifest_condition(false, error), Err(error));
+        }
     }
 }

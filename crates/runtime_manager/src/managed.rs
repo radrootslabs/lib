@@ -795,9 +795,10 @@ mod tests {
         inspect_runtime_logs, inspect_runtime_status, load_management_context,
         resolve_runtime_target, runtime_group,
     };
+    use crate::paths::resolve_instance_paths;
     use crate::{
-        HARDENED_MANAGEMENT_CONTRACT, ManagedRuntimeInstallState, RadrootsRuntimeManagerError,
-        parse_contract_str,
+        HARDENED_MANAGEMENT_CONTRACT, ManagedRuntimeHealthState, ManagedRuntimeInstallState,
+        ManagedRuntimeInstanceRecord, RadrootsRuntimeManagerError, parse_contract_str,
     };
 
     const CONTRACT: &str = HARDENED_MANAGEMENT_CONTRACT;
@@ -1044,5 +1045,176 @@ mod tests {
         ] {
             assert!(parse_contract_str(&raw).is_err());
         }
+    }
+
+    #[test]
+    fn sealed_target_accessors_debug_and_all_metadata_groups_are_qualified() {
+        let dir = tempdir().expect("tempdir");
+        let manager = manager(dir.path());
+        let mut target = resolve_runtime_target(&manager, context("myc", "primary", dir.path()))
+            .expect("target");
+
+        assert_eq!(target.instance_source(), RuntimeContextSource::BootstrapCli);
+        assert_eq!(
+            target.runtime_group(),
+            ManagedRuntimeGroup::DefinedManagedTarget
+        );
+        assert_eq!(target.management_mode(), Some("interactive_user_managed"));
+        assert!(target.mode_contract().is_some());
+        assert!(target.bootstrap().is_none());
+        assert!(target.instance_record().is_none());
+        assert!(target.predicted_paths().is_none());
+        assert!(!format!("{target:?}").contains(dir.path().to_string_lossy().as_ref()));
+        assert!(!format!("{manager:?}").contains(dir.path().to_string_lossy().as_ref()));
+
+        for (group, label, posture) in [
+            (
+                ManagedRuntimeGroup::ActiveManagedTarget,
+                "active_managed_target",
+                "active_managed_target",
+            ),
+            (
+                ManagedRuntimeGroup::DefinedManagedTarget,
+                "defined_managed_target",
+                "defined_future_target",
+            ),
+            (
+                ManagedRuntimeGroup::BootstrapOnly,
+                "bootstrap_only",
+                "bootstrap_only_direct_binding",
+            ),
+            (ManagedRuntimeGroup::Unknown, "unknown", "unknown_runtime"),
+        ] {
+            target.runtime_group = group;
+            assert_eq!(target.runtime_group().as_str(), label);
+            assert_eq!(target.runtime_group().posture(), posture);
+
+            let status = inspect_runtime_status(&target, &["start".to_owned()]);
+            let logs = inspect_runtime_logs(&target);
+            let config = inspect_runtime_config(&target);
+            let action = inspect_runtime_action(&target, ManagedRuntimeLifecycleAction::ConfigSet);
+            assert!(!status.view.detail.is_empty());
+            assert!(!logs.view.detail.is_empty());
+            assert!(!config.view.detail.is_empty());
+            assert!(!action.view.detail.is_empty());
+        }
+    }
+
+    #[test]
+    fn dormant_active_target_paths_cover_registry_tracking_and_health_states() {
+        let dir = tempdir().expect("tempdir");
+        let manager = manager(dir.path());
+        let runtime_context = context("myc", "primary", dir.path());
+        let mut target = resolve_runtime_target(&manager, runtime_context).expect("target");
+        let paths = resolve_instance_paths(manager.shared_paths(), target.context());
+        fs::create_dir_all(paths.logs_dir()).expect("logs dir");
+        fs::create_dir_all(paths.config_dir()).expect("config dir");
+        fs::create_dir_all(paths.run_dir()).expect("run dir");
+        fs::write(paths.stdout_log_path(), "stdout").expect("stdout");
+        fs::write(paths.stderr_log_path(), "stderr").expect("stderr");
+        fs::write(paths.config_path(), "enabled = true").expect("config");
+
+        target.runtime_group = ManagedRuntimeGroup::ActiveManagedTarget;
+        target.predicted_paths = Some(paths.clone());
+        target.instance_record = Some(ManagedRuntimeInstanceRecord::new(
+            target.context(),
+            ManagedRuntimeInstallState::Installed,
+        ));
+
+        let status = inspect_runtime_status(&target, &["start".to_owned()]);
+        assert_eq!(
+            status.availability,
+            ManagedRuntimeInspectionAvailability::Success
+        );
+        assert_eq!(status.view.state, "installed");
+        assert_eq!(status.view.health_state, "stopped");
+        assert_eq!(status.view.lifecycle_actions, ["start"]);
+
+        let logs = inspect_runtime_logs(&target);
+        assert!(logs.view.stdout_log_present);
+        assert!(logs.view.stderr_log_present);
+        let config = inspect_runtime_config(&target);
+        assert_eq!(config.view.state, "ready");
+        assert!(config.view.config_present);
+
+        for state in [
+            ManagedRuntimeInstallState::NotInstalled,
+            ManagedRuntimeInstallState::Configured,
+            ManagedRuntimeInstallState::Failed,
+        ] {
+            target.instance_record =
+                Some(ManagedRuntimeInstanceRecord::new(target.context(), state));
+            let status = inspect_runtime_status(&target, &[]);
+            assert!(!status.view.install_state.is_empty());
+            assert!(!status.view.health_state.is_empty());
+        }
+
+        target.instance_record = None;
+        assert_eq!(
+            inspect_runtime_status(&target, &[]).view.state,
+            "not_installed"
+        );
+        assert_eq!(inspect_runtime_config(&target).view.state, "not_installed");
+
+        for action in [
+            ManagedRuntimeLifecycleAction::Install,
+            ManagedRuntimeLifecycleAction::Uninstall,
+            ManagedRuntimeLifecycleAction::Start,
+            ManagedRuntimeLifecycleAction::Stop,
+            ManagedRuntimeLifecycleAction::Restart,
+            ManagedRuntimeLifecycleAction::ConfigSet,
+        ] {
+            assert_eq!(
+                inspect_runtime_action(&target, action).view.action,
+                action.as_str()
+            );
+        }
+
+        for state in [
+            ManagedRuntimeHealthState::NotInstalled,
+            ManagedRuntimeHealthState::Stopped,
+            ManagedRuntimeHealthState::Starting,
+            ManagedRuntimeHealthState::Running,
+            ManagedRuntimeHealthState::Degraded,
+            ManagedRuntimeHealthState::Failed,
+        ] {
+            assert!(!super::health_state_label(state).is_empty());
+        }
+    }
+
+    #[test]
+    fn unsupported_registration_and_all_runtime_group_memberships_are_explicit() {
+        let dir = tempdir().expect("tempdir");
+        let mut manager = manager(dir.path());
+        let unsupported = context("other", "default", dir.path());
+        assert_eq!(
+            manager.register_instance(&unsupported, ManagedRuntimeInstallState::Installed),
+            Err(RadrootsRuntimeManagerError::UnsupportedServiceTarget)
+        );
+        assert_eq!(
+            manager.remove_instance(&unsupported),
+            Err(RadrootsRuntimeManagerError::UnsupportedServiceTarget)
+        );
+
+        let mut contract = manager.contract().clone();
+        contract.managed_runtime_targets.active = vec!["active".to_owned()];
+        contract.managed_runtime_targets.defined = vec!["defined".to_owned()];
+        contract.managed_runtime_targets.bootstrap_only = vec!["bootstrap".to_owned()];
+        assert_eq!(
+            runtime_group(&contract, "active"),
+            ManagedRuntimeGroup::ActiveManagedTarget
+        );
+        assert_eq!(
+            runtime_group(&contract, "defined"),
+            ManagedRuntimeGroup::DefinedManagedTarget
+        );
+        assert_eq!(
+            runtime_group(&contract, "bootstrap"),
+            ManagedRuntimeGroup::BootstrapOnly
+        );
+        assert_eq!(
+            runtime_group(&contract, "other"),
+            ManagedRuntimeGroup::Unknown
+        );
     }
 }

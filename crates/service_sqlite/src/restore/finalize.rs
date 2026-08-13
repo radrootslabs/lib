@@ -228,9 +228,10 @@ fn finalize_native(
         RestoreRecoveryPhase::ReplacementInstalled,
         failpoints,
     )?;
-    if marker.marker().phase() != RestoreRecoveryPhase::ReplacementInstalled {
-        return Err(finalize_error(FinalizeFailureKind::Marker));
-    }
+    require_finalize_condition(
+        marker.marker().phase() == RestoreRecoveryPhase::ReplacementInstalled,
+        FinalizeFailureKind::Marker,
+    )?;
     staged.validate_finalization_authority()?;
     drop(marker);
     drop(staged);
@@ -371,12 +372,21 @@ fn verify_named_artifact(
             .map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?,
         current_status.st_ino,
     );
-    if held_identity != (expected.device(), expected.inode())
-        || current_identity != held_identity
-        || hash_exact(held, expected.byte_length(), cancellation)? != expected.sha256()
-    {
-        return Err(finalize_error(FinalizeFailureKind::Artifact));
-    }
+    require_finalize_condition(
+        crate::native_metadata::identity_pair_matches(
+            held_identity.0,
+            held_identity.1,
+            current_identity.0,
+            current_identity.1,
+            expected.device(),
+            expected.inode(),
+        ),
+        FinalizeFailureKind::Artifact,
+    )?;
+    require_finalize_condition(
+        hash_exact(held, expected.byte_length(), cancellation)? == expected.sha256(),
+        FinalizeFailureKind::Artifact,
+    )?;
     Ok(())
 }
 
@@ -387,16 +397,19 @@ fn validate_status(
 ) -> Result<(), ServiceSqliteError> {
     let length =
         u64::try_from(status.st_size).map_err(|_| finalize_error(FinalizeFailureKind::Artifact))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-        || length == 0
-        || length > i64::MAX as u64
-        || expected_length.is_some_and(|expected| length != expected)
-    {
-        return Err(finalize_error(FinalizeFailureKind::Artifact));
-    }
+    require_finalize_condition(
+        crate::all_constraints([
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(status.st_mode).is_file(),
+                crate::native_metadata::link_count(status.st_nlink),
+                status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(status.st_mode),
+            ),
+            crate::native_metadata::valid_artifact_length(length, expected_length),
+        ]),
+        FinalizeFailureKind::Artifact,
+    )?;
     Ok(())
 }
 
@@ -428,9 +441,10 @@ fn hash_exact(
             )
             .ok_or_else(|| finalize_error(FinalizeFailureKind::Hash))?;
     }
-    if cancellation.is_some_and(|state| state.load(Ordering::Acquire) == CANCELLED) {
-        return Err(finalize_error(FinalizeFailureKind::Cancelled));
-    }
+    require_finalize_condition(
+        !cancellation.is_some_and(|state| state.load(Ordering::Acquire) == CANCELLED),
+        FinalizeFailureKind::Cancelled,
+    )?;
     let mut extra = [0_u8; 1];
     if file
         .read_at(&mut extra, expected_length)
@@ -448,6 +462,18 @@ fn check_cancel(cancellation: &AtomicU8) -> Result<(), ServiceSqliteError> {
         Err(finalize_error(FinalizeFailureKind::Cancelled))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_finalize_condition(
+    condition: bool,
+    kind: FinalizeFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(finalize_error(kind))
     }
 }
 
@@ -586,6 +612,7 @@ struct SystemFinalizeOperations;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl FinalizeOperations for SystemFinalizeOperations {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn rename(
         &self,
         directory: &File,
@@ -603,6 +630,7 @@ impl FinalizeOperations for SystemFinalizeOperations {
         .map_err(std::io::Error::from)
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn sync_directory(&self, directory: &File, _step: RenameStep) -> std::io::Result<()> {
         directory.sync_all()
     }
@@ -854,4 +882,137 @@ fn hit(
     failpoints
         .hit(point)
         .map_err(|source| finalize_source(kind, source))
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod tests {
+    use std::io::Write;
+
+    use sha2::{Digest, Sha256};
+
+    use super::*;
+
+    #[test]
+    fn finalize_failure_inventory_is_complete_and_source_aware() {
+        let cases = [
+            (FinalizeFailureKind::Live, "live restore source is invalid"),
+            (
+                FinalizeFailureKind::Artifact,
+                "restore artifact binding changed",
+            ),
+            (FinalizeFailureKind::Hash, "restore artifact hash failed"),
+            (
+                FinalizeFailureKind::SyncLive,
+                "live restore source sync failed",
+            ),
+            (
+                FinalizeFailureKind::SyncStaged,
+                "staged restore sync failed",
+            ),
+            (
+                FinalizeFailureKind::Marker,
+                "restore marker transition failed",
+            ),
+            (
+                FinalizeFailureKind::RetainLive,
+                "live restore retention failed",
+            ),
+            (
+                FinalizeFailureKind::SyncRetained,
+                "retained restore sync failed",
+            ),
+            (
+                FinalizeFailureKind::InstallStage,
+                "restore installation failed",
+            ),
+            (
+                FinalizeFailureKind::SyncInstalled,
+                "installed restore sync failed",
+            ),
+            (
+                FinalizeFailureKind::Cancelled,
+                "restore finalization was cancelled",
+            ),
+            (
+                FinalizeFailureKind::Join,
+                "restore finalization worker failed",
+            ),
+        ];
+        for (kind, message) in cases {
+            let plain = FinalizeFailure { kind, source: None };
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+            let sourced = FinalizeFailure {
+                kind,
+                source: Some(Box::new(std::io::Error::other("private-cause"))),
+            };
+            assert_eq!(sourced.to_string(), message);
+            assert!(sourced.source().is_some());
+            assert!(format!("{sourced:?}").contains("[redacted]"));
+            assert!(require_finalize_condition(true, kind).is_ok());
+            assert_eq!(
+                require_finalize_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                ServiceSqliteErrorKind::Restore
+            );
+        }
+    }
+
+    #[test]
+    fn hash_and_cancellation_boundaries_fail_closed() {
+        let root = tempfile::tempdir().expect("root");
+        let path = root.path().join("artifact.sqlite");
+        let payload = b"finalize-artifact";
+        std::fs::write(&path, payload).expect("artifact");
+        let file = File::open(&path).expect("open artifact");
+        let length = u64::try_from(payload.len()).expect("length");
+        let digest: [u8; 32] = Sha256::digest(payload).into();
+        assert_eq!(hash_exact(&file, length, None).expect("exact hash"), digest);
+        assert_eq!(
+            hash_exact(&file, length + 1, None)
+                .expect_err("short artifact")
+                .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+        assert_eq!(
+            hash_exact(&file, length - 1, None)
+                .expect_err("long artifact")
+                .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+
+        let cancelled = AtomicU8::new(CANCELLED);
+        assert_eq!(
+            hash_exact(&file, length, Some(&cancelled))
+                .expect_err("pre-read cancellation")
+                .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+        assert_eq!(
+            check_cancel(&cancelled).expect_err("cancelled").kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+        assert_eq!(
+            claim_commit_ownership(&cancelled)
+                .expect_err("cancelled ownership handoff")
+                .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+        let active = AtomicU8::new(CANCELLABLE);
+        check_cancel(&active).expect("active");
+        claim_commit_ownership(&active).expect("commit ownership");
+        assert_eq!(active.load(Ordering::Acquire), COMMIT_OWNED);
+
+        let empty_path = root.path().join("empty.sqlite");
+        let mut empty = File::create(&empty_path).expect("empty artifact");
+        empty.flush().expect("flush empty artifact");
+        let empty = File::open(empty_path).expect("open empty artifact");
+        assert_eq!(
+            hash_exact(&empty, 1, None)
+                .expect_err("zero-byte read")
+                .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+    }
 }

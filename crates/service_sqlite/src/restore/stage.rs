@@ -168,22 +168,36 @@ fn validate_intent(
 ) -> Result<(), ServiceSqliteError> {
     let metadata = verified.database_metadata();
     let manifest = verified.manifest();
-    if !expected.matches_paths(paths)
-        || expected.supported_state_schema_version().get() != migrations.current_version()
-        || !schema.matches_migrations(migrations)
-        || metadata.service() != expected.service()
-        || metadata.instance() != expected.instance()
-        || metadata.source_generation() != expected.source_generation()
-        || metadata.application_id() != expected.application_id()
-        || metadata.state_schema_version() > expected.supported_state_schema_version()
-        || manifest.service() != metadata.service()
-        || manifest.instance() != metadata.instance()
-        || manifest.source_generation() != metadata.source_generation()
-        || manifest.state_schema_version() != metadata.state_schema_version()
-    {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
-    }
+    crate::require_condition(
+        stage_intent_matches(paths, expected, migrations, schema, metadata, manifest),
+        ServiceSqliteErrorKind::Metadata,
+    )?;
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn stage_intent_matches(
+    paths: &ServiceSqlitePaths,
+    expected: &ServiceDatabaseIdentity,
+    migrations: &MigrationCatalog,
+    schema: &SchemaCatalog,
+    metadata: &ServiceDatabaseMetadata,
+    manifest: &crate::ServiceBackupManifest,
+) -> bool {
+    crate::all_constraints([
+        expected.matches_paths(paths),
+        expected.supported_state_schema_version().get() == migrations.current_version(),
+        schema.matches_migrations(migrations),
+        metadata.service() == expected.service(),
+        metadata.instance() == expected.instance(),
+        metadata.source_generation() == expected.source_generation(),
+        metadata.application_id() == expected.application_id(),
+        metadata.state_schema_version() <= expected.supported_state_schema_version(),
+        manifest.service() == metadata.service(),
+        manifest.instance() == metadata.instance(),
+        manifest.source_generation() == metadata.source_generation(),
+        manifest.state_schema_version() == metadata.state_schema_version(),
+    ])
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -213,9 +227,10 @@ async fn run_stage(
     .map_err(|source| restore_source(RestoreFailureKind::Join, source))?;
     let mut staged = copied?;
     staged.validate()?;
-    if cancellation.load(Ordering::Acquire) {
-        return Err(restore_error(RestoreFailureKind::Cancelled));
-    }
+    require_restore_condition(
+        !cancellation.load(Ordering::Acquire),
+        RestoreFailureKind::Cancelled,
+    )?;
 
     let connect_options = staged.connect_options()?;
     staged.validate()?;
@@ -223,9 +238,12 @@ async fn run_stage(
     staged.validate()?;
     let mut connection =
         connected.map_err(|source| restore_source(RestoreFailureKind::OpenStaged, source))?;
-    if cancellation.load(Ordering::Acquire) {
+    if let Err(error) = require_restore_condition(
+        !cancellation.load(Ordering::Acquire),
+        RestoreFailureKind::Cancelled,
+    ) {
         close_after(&mut staged, connection).await?;
-        return Err(restore_error(RestoreFailureKind::Cancelled));
+        return Err(error);
     }
 
     let verification = verify_staged_connection(
@@ -241,9 +259,10 @@ async fn run_stage(
     staged.validate()?;
     verification?;
     close.map_err(|source| restore_source(RestoreFailureKind::CloseStaged, source))?;
-    if cancellation.load(Ordering::Acquire) {
-        return Err(restore_error(RestoreFailureKind::Cancelled));
-    }
+    require_restore_condition(
+        !cancellation.load(Ordering::Acquire),
+        RestoreFailureKind::Cancelled,
+    )?;
 
     let final_cancellation = Arc::clone(&cancellation);
     tokio::task::spawn_blocking(move || staged.finalize(&final_cancellation))
@@ -281,9 +300,10 @@ async fn verify_staged_connection(
     let metadata = crate::metadata::verify_database_metadata(connection, expected).await;
     staged.validate()?;
     let metadata = metadata?;
-    if metadata != staged.metadata {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
-    }
+    crate::require_condition(
+        metadata == staged.metadata,
+        ServiceSqliteErrorKind::Metadata,
+    )?;
     let phase = test_async_phase(TEST_PHASE_METADATA, cancellation).await;
     staged.validate()?;
     phase?;
@@ -293,9 +313,10 @@ async fn verify_staged_connection(
         crate::migration::verify_migration_history(connection, migrations, schema, false).await;
     staged.validate()?;
     let version = history?;
-    if version != staged.metadata.state_schema_version().get() {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Migration));
-    }
+    crate::require_condition(
+        version == staged.metadata.state_schema_version().get(),
+        ServiceSqliteErrorKind::Migration,
+    )?;
     let phase = test_async_phase(TEST_PHASE_HISTORY, cancellation).await;
     staged.validate()?;
     phase?;
@@ -351,15 +372,52 @@ async fn verify_read_only_policy(
         .fetch_all(connection)
         .await
         .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
-    if query_only != 1
-        || trusted_schema != 0
-        || databases.len() != 1
-        || databases[0].try_get::<i64, _>(0).ok() != Some(0)
-        || databases[0].try_get::<String, _>(1).ok().as_deref() != Some("main")
-    {
-        return Err(restore_error(RestoreFailureKind::Policy));
-    }
+    let first_sequence = databases
+        .first()
+        .and_then(|row| row.try_get::<i64, _>(0).ok());
+    let first_name = databases
+        .first()
+        .and_then(|row| row.try_get::<String, _>(1).ok());
+    require_restore_condition(
+        read_only_policy_matches(
+            query_only,
+            trusted_schema,
+            databases.len(),
+            first_sequence,
+            first_name.as_deref(),
+        ),
+        RestoreFailureKind::Policy,
+    )?;
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn read_only_policy_matches(
+    query_only: i64,
+    trusted_schema: i64,
+    database_count: usize,
+    first_sequence: Option<i64>,
+    first_name: Option<&str>,
+) -> bool {
+    crate::all_constraints([
+        query_only == 1,
+        trusted_schema == 0,
+        database_count == 1,
+        first_sequence == Some(0),
+        first_name == Some("main"),
+    ])
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_restore_condition(
+    condition: bool,
+    kind: RestoreFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(restore_error(kind))
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -476,14 +534,15 @@ impl NativeStagedServiceRestore {
         let post_copy = test_blocking_phase(TEST_PHASE_POST_COPY, cancellation);
         result.validate()?;
         post_copy?;
-        if layout
-            .staged()
-            .file_name()
-            .is_none_or(|name| name != STAGED_FILE_NAME)
-            || Some(layout.state_directory().as_path()) != result.paths.state_database().parent()
-        {
-            return Err(restore_error(RestoreFailureKind::Layout));
-        }
+        require_restore_condition(
+            layout
+                .staged()
+                .file_name()
+                .is_some_and(|name| name == STAGED_FILE_NAME)
+                && Some(layout.state_directory().as_path())
+                    == result.paths.state_database().parent(),
+            RestoreFailureKind::Layout,
+        )?;
         Ok(result)
     }
 
@@ -507,9 +566,10 @@ impl NativeStagedServiceRestore {
         let digest = hash_exact(&self.staged, self.artifact.byte_length());
         self.validate()?;
         let digest = digest?;
-        if digest != self.artifact.sha256() {
-            return Err(restore_error(RestoreFailureKind::StagedChanged));
-        }
+        require_restore_condition(
+            digest == self.artifact.sha256(),
+            RestoreFailureKind::StagedChanged,
+        )?;
         let header = validate_sqlite_header(&self.staged);
         self.validate()?;
         header?;
@@ -534,9 +594,10 @@ impl NativeStagedServiceRestore {
             .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
         authority.validate_for(&self.paths)?;
         let result = (|| {
-            if directory_identity(&self.directory)? != self.directory_identity {
-                return Err(restore_error(RestoreFailureKind::StagedChanged));
-            }
+            require_restore_condition(
+                directory_identity(&self.directory)? == self.directory_identity,
+                RestoreFailureKind::StagedChanged,
+            )?;
             validate_stage_binding(
                 &self.directory,
                 &self.staged,
@@ -565,9 +626,7 @@ impl NativeStagedServiceRestore {
         let valid_directory = directory_identity(&self.directory)
             .is_ok_and(|identity| identity == self.directory_identity);
         authority.validate_for(&self.paths)?;
-        if !valid_directory {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Authority));
-        }
+        crate::require_condition(valid_directory, ServiceSqliteErrorKind::Authority)?;
         Ok(())
     }
 
@@ -578,9 +637,10 @@ impl NativeStagedServiceRestore {
             .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Authority))?;
         authority.validate_for(&self.paths)?;
         let result = (|| {
-            if directory_identity(&self.directory)? != self.directory_identity {
-                return Err(restore_error(RestoreFailureKind::StagedChanged));
-            }
+            require_restore_condition(
+                directory_identity(&self.directory)? == self.directory_identity,
+                RestoreFailureKind::StagedChanged,
+            )?;
             validate_stage_binding(&self.directory, &self.staged, self.staged_identity, 0)
         })();
         authority.validate_for(&self.paths)?;
@@ -662,12 +722,15 @@ struct FileIdentity {
 fn directory_identity(directory: &File) -> Result<FileIdentity, ServiceSqliteError> {
     let status =
         fstat(directory).map_err(|source| restore_source(RestoreFailureKind::Layout, source))?;
-    if !FileType::from_raw_mode(status.st_mode).is_dir()
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
-    {
-        return Err(restore_error(RestoreFailureKind::Layout));
-    }
+    require_restore_condition(
+        crate::native_metadata::secure_directory(
+            FileType::from_raw_mode(status.st_mode).is_dir(),
+            status.st_uid,
+            geteuid().as_raw(),
+            crate::native_metadata::mode(status.st_mode),
+        ),
+        RestoreFailureKind::Layout,
+    )?;
     status_identity(&status)
 }
 
@@ -735,9 +798,7 @@ fn create_stage(directory: &File) -> Result<PendingStage, ServiceSqliteError> {
             .as_ref()
             .expect("pending stage retains its file"),
     )?;
-    if confirmed != identity {
-        return Err(restore_error(RestoreFailureKind::StagedChanged));
-    }
+    require_restore_condition(confirmed == identity, RestoreFailureKind::StagedChanged)?;
     Ok(pending)
 }
 
@@ -800,18 +861,22 @@ fn validate_closed_live(
     .map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
     let status =
         fstat(&live).map_err(|source| restore_source(RestoreFailureKind::LiveState, source))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-    {
-        return Err(restore_error(RestoreFailureKind::LiveState));
-    }
+    require_restore_condition(
+        crate::native_metadata::exact_regular_file(
+            FileType::from_raw_mode(status.st_mode).is_file(),
+            crate::native_metadata::link_count(status.st_nlink),
+            status.st_uid,
+            geteuid().as_raw(),
+            crate::native_metadata::mode(status.st_mode),
+        ),
+        RestoreFailureKind::LiveState,
+    )?;
     let length =
         u64::try_from(status.st_size).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
-    if length == 0 || length > i64::MAX as u64 {
-        return Err(restore_error(RestoreFailureKind::LiveState));
-    }
+    require_restore_condition(
+        crate::native_metadata::valid_artifact_length(length, None),
+        RestoreFailureKind::LiveState,
+    )?;
     let live = File::from(live);
     let digest = hash_exact(&live, length)?;
     let artifact = RestoreArtifactExpectation::new(
@@ -853,15 +918,20 @@ fn validate_live_binding(
         .map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
     let length =
         u64::try_from(status.st_size).map_err(|_| restore_error(RestoreFailureKind::LiveState))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-        || (device, status.st_ino) != (expected.device(), expected.inode())
-        || length != expected.byte_length()
-    {
-        return Err(restore_error(RestoreFailureKind::LiveState));
-    }
+    require_restore_condition(
+        crate::all_constraints([
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(status.st_mode).is_file(),
+                crate::native_metadata::link_count(status.st_nlink),
+                status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(status.st_mode),
+            ),
+            (device, status.st_ino) == (expected.device(), expected.inode()),
+            crate::native_metadata::valid_artifact_length(length, Some(expected.byte_length())),
+        ]),
+        RestoreFailureKind::LiveState,
+    )?;
     Ok(())
 }
 
@@ -885,9 +955,19 @@ fn validate_stage_binding(
         .map_err(|source| restore_source(RestoreFailureKind::StagedChanged, source))?;
     validate_stage_status(&held_status, Some(expected_length))?;
     validate_stage_status(&current_status, Some(expected_length))?;
-    if status_identity(&held_status)? != identity || status_identity(&current_status)? != identity {
-        return Err(restore_error(RestoreFailureKind::StagedChanged));
-    }
+    let held_identity = status_identity(&held_status)?;
+    let current_identity = status_identity(&current_status)?;
+    require_restore_condition(
+        crate::native_metadata::identity_pair_matches(
+            held_identity.device,
+            held_identity.inode,
+            current_identity.device,
+            current_identity.inode,
+            identity.device,
+            identity.inode,
+        ),
+        RestoreFailureKind::StagedChanged,
+    )?;
     Ok(())
 }
 
@@ -898,14 +978,23 @@ fn validate_stage_status(
 ) -> Result<(), ServiceSqliteError> {
     let length = u64::try_from(status.st_size)
         .map_err(|_| restore_error(RestoreFailureKind::StagedChanged))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-        || expected_length.is_some_and(|expected| length != expected)
-    {
-        return Err(restore_error(RestoreFailureKind::StagedChanged));
-    }
+    let length_matches = match expected_length {
+        Some(expected) => length == expected,
+        None => true,
+    };
+    require_restore_condition(
+        crate::all_constraints([
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(status.st_mode).is_file(),
+                crate::native_metadata::link_count(status.st_nlink),
+                status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(status.st_mode),
+            ),
+            length_matches,
+        ]),
+        RestoreFailureKind::StagedChanged,
+    )?;
     Ok(())
 }
 
@@ -1058,14 +1147,10 @@ fn validate_sqlite_header(file: &File) -> Result<(), ServiceSqliteError> {
     let mut header = [0_u8; 20];
     file.read_exact(&mut header)
         .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
-    let write_version = header[18];
-    let read_version = header[19];
-    if &header[..16] != b"SQLite format 3\0"
-        || !matches!(write_version, 1 | 2)
-        || read_version != write_version
-    {
-        return Err(restore_error(RestoreFailureKind::Policy));
-    }
+    require_restore_condition(
+        crate::native_metadata::sqlite_header(&header),
+        RestoreFailureKind::Policy,
+    )?;
     Ok(())
 }
 
@@ -1089,7 +1174,15 @@ fn cleanup_exact_stage(
         fstat(held).map_err(|source| restore_source(RestoreFailureKind::Cleanup, source))?;
     let current_status =
         fstat(&current).map_err(|source| restore_source(RestoreFailureKind::Cleanup, source))?;
-    if status_identity(&held_status)? != identity || status_identity(&current_status)? != identity {
+    if require_restore_condition(
+        (
+            status_identity(&held_status)?,
+            status_identity(&current_status)?,
+        ) == (identity, identity),
+        RestoreFailureKind::Cleanup,
+    )
+    .is_err()
+    {
         return Ok(());
     }
     unlinkat(directory, STAGED_FILE_NAME, AtFlags::empty())
@@ -1258,6 +1351,222 @@ mod tests {
 
     static STAGE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+    #[test]
+    fn restore_failure_inventory_is_complete_and_source_aware() {
+        let cases = [
+            (RestoreFailureKind::Layout, "restore layout is invalid"),
+            (
+                RestoreFailureKind::LiveState,
+                "live state is not closed and canonical",
+            ),
+            (
+                RestoreFailureKind::RecoveryEvidence,
+                "prior restore evidence is present",
+            ),
+            (
+                RestoreFailureKind::StageCollision,
+                "restore staging destination exists",
+            ),
+            (
+                RestoreFailureKind::CreateStage,
+                "restore staging could not be created",
+            ),
+            (
+                RestoreFailureKind::SourceChanged,
+                "verified backup binding changed",
+            ),
+            (RestoreFailureKind::Copy, "verified backup copy failed"),
+            (
+                RestoreFailureKind::HashStaged,
+                "restore staging hash failed",
+            ),
+            (
+                RestoreFailureKind::StagedChanged,
+                "restore staging binding changed",
+            ),
+            (
+                RestoreFailureKind::OpenStaged,
+                "restore staging could not be opened",
+            ),
+            (
+                RestoreFailureKind::Policy,
+                "restore verification policy failed",
+            ),
+            (
+                RestoreFailureKind::SyncStaged,
+                "restore staging sync failed",
+            ),
+            (
+                RestoreFailureKind::SyncDirectory,
+                "restore directory sync failed",
+            ),
+            (
+                RestoreFailureKind::CloseStaged,
+                "restore verification close failed",
+            ),
+            (
+                RestoreFailureKind::Cleanup,
+                "restore staging cleanup failed",
+            ),
+            (
+                RestoreFailureKind::Cancelled,
+                "restore staging was cancelled",
+            ),
+            (RestoreFailureKind::Join, "restore staging worker failed"),
+        ];
+        for (kind, message) in cases {
+            let plain = RestoreFailure { kind, source: None };
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+            let sourced = RestoreFailure {
+                kind,
+                source: Some(Box::new(std::io::Error::other("private-cause"))),
+            };
+            assert_eq!(sourced.to_string(), message);
+            assert!(sourced.source().is_some());
+            let debug = format!("{sourced:?}");
+            assert!(debug.contains("[redacted]"));
+            assert!(!debug.contains("private-cause"));
+            assert!(require_restore_condition(true, kind).is_ok());
+            assert_eq!(
+                require_restore_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                ServiceSqliteErrorKind::Restore
+            );
+        }
+    }
+
+    #[test]
+    fn read_only_policy_projection_rejects_each_independent_drift() {
+        assert!(read_only_policy_matches(1, 0, 1, Some(0), Some("main")));
+        assert!(!read_only_policy_matches(0, 0, 1, Some(0), Some("main")));
+        assert!(!read_only_policy_matches(1, 1, 1, Some(0), Some("main")));
+        assert!(!read_only_policy_matches(1, 0, 2, Some(0), Some("main")));
+        assert!(!read_only_policy_matches(1, 0, 1, Some(1), Some("main")));
+        assert!(!read_only_policy_matches(1, 0, 1, Some(0), Some("temp")));
+        assert!(!read_only_policy_matches(1, 0, 0, None, None));
+    }
+
+    #[test]
+    fn exact_copy_hash_and_cleanup_helpers_fail_closed() {
+        let root = tempfile::tempdir().expect("root");
+        let payload = b"restore-stage-payload";
+        let digest: [u8; 32] = Sha256::digest(payload).into();
+        let source_path = root.path().join("source.sqlite");
+        fs::write(&source_path, payload).expect("source");
+        let source = File::open(&source_path).expect("open source");
+
+        let destination_path = root.path().join("destination.sqlite");
+        let destination = std::fs::OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&destination_path)
+            .expect("open destination");
+        let active = AtomicBool::new(false);
+        copy_exact(
+            &source,
+            &destination,
+            u64::try_from(payload.len()).expect("length"),
+            digest,
+            &active,
+        )
+        .expect("exact copy");
+        assert_eq!(fs::read(&destination_path).expect("destination"), payload);
+        assert_eq!(
+            hash_exact(&destination, u64::try_from(payload.len()).expect("length"))
+                .expect("exact hash"),
+            digest
+        );
+
+        for (name, expected_length, expected_digest, cancelled) in [
+            (
+                "short.sqlite",
+                u64::try_from(payload.len() + 1).expect("short length"),
+                digest,
+                false,
+            ),
+            (
+                "long.sqlite",
+                u64::try_from(payload.len() - 1).expect("long length"),
+                digest,
+                false,
+            ),
+            (
+                "digest.sqlite",
+                u64::try_from(payload.len()).expect("digest length"),
+                [0; 32],
+                false,
+            ),
+            (
+                "cancelled.sqlite",
+                u64::try_from(payload.len()).expect("cancelled length"),
+                digest,
+                true,
+            ),
+        ] {
+            let path = root.path().join(name);
+            let output = std::fs::OpenOptions::new()
+                .create_new(true)
+                .read(true)
+                .write(true)
+                .open(path)
+                .expect("open negative destination");
+            let cancellation = AtomicBool::new(cancelled);
+            let error = copy_exact(
+                &source,
+                &output,
+                expected_length,
+                expected_digest,
+                &cancellation,
+            )
+            .expect_err("copy must fail closed");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+        }
+
+        assert_eq!(
+            hash_exact(
+                &destination,
+                u64::try_from(payload.len() + 1).expect("short hash length")
+            )
+            .expect_err("short hash input")
+            .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+        assert_eq!(
+            hash_exact(
+                &destination,
+                u64::try_from(payload.len() - 1).expect("long hash length")
+            )
+            .expect_err("long hash input")
+            .kind(),
+            ServiceSqliteErrorKind::Restore
+        );
+
+        let directory = File::open(root.path()).expect("open directory");
+        let staged_path = root.path().join(STAGED_FILE_NAME);
+        fs::write(&staged_path, b"owned-stage").expect("owned stage");
+        let held = File::open(&staged_path).expect("open owned stage");
+        let identity = status_identity(&fstat(&held).expect("owned status")).expect("identity");
+        cleanup_exact_stage(&directory, &held, identity).expect("cleanup owned stage");
+        assert!(!staged_path.exists());
+        cleanup_exact_stage(&directory, &held, identity).expect("absent cleanup is idempotent");
+
+        fs::write(&staged_path, b"original-stage").expect("original stage");
+        let original = File::open(&staged_path).expect("open original stage");
+        let original_identity =
+            status_identity(&fstat(&original).expect("original status")).expect("identity");
+        fs::rename(&staged_path, root.path().join("retained-original")).expect("retain original");
+        fs::write(&staged_path, b"foreign-stage").expect("foreign replacement");
+        cleanup_exact_stage(&directory, &original, original_identity)
+            .expect("replacement is preserved");
+        assert_eq!(
+            fs::read(&staged_path).expect("replacement"),
+            b"foreign-stage"
+        );
+    }
+
     struct Fixture {
         _root: tempfile::TempDir,
         paths: ServiceSqlitePaths,
@@ -1378,7 +1687,182 @@ mod tests {
         }
     }
 
+    fn manifest_for(metadata: &ServiceDatabaseMetadata) -> ServiceBackupManifest {
+        ServiceBackupManifest::from_capture(
+            metadata,
+            BackupCreatedAtUnixMs::new(1_700_000_000_123).expect("capture time"),
+            4_096,
+            BackupMemberSha256::from_bytes([9; 32]),
+        )
+        .expect("manifest")
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn staging_intent_rejects_each_independent_identity_and_catalog_drift() {
+        let fixture = Fixture::new().await;
+        assert!(stage_intent_matches(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            &fixture.metadata,
+            &fixture.manifest,
+        ));
+
+        let alternate_paths = paths_for(fixture._root.path(), "rhi", "secondary");
+        let alternate_identity = ServiceDatabaseIdentity::new(
+            &alternate_paths,
+            fixture.metadata.source_generation(),
+            NonZeroU32::new(1).expect("schema"),
+            fixture.metadata.application_id(),
+        );
+        assert!(!stage_intent_matches(
+            &fixture.paths,
+            &alternate_identity,
+            &fixture.migrations,
+            &fixture.schema,
+            &fixture.metadata,
+            &fixture.manifest,
+        ));
+
+        let migration = MigrationDescriptor::sql(
+            2,
+            "add_stage_probe",
+            "SELECT 1",
+            MigrationChecksum::for_sql("SELECT 1"),
+        )
+        .expect("migration");
+        let migrations_v2 = MigrationCatalog::new([migration]).expect("v2 migrations");
+        let v1_digest = SchemaVersionCatalog::computed_digest(1, []).expect("v1 digest");
+        let v1 = SchemaVersionCatalog::new(1, [], v1_digest).expect("v1 schema");
+        let v2_digest = SchemaVersionCatalog::computed_digest(2, []).expect("v2 digest");
+        let v2 = SchemaVersionCatalog::new(2, [], v2_digest).expect("v2 schema");
+        let schema_v2 = SchemaCatalog::new(&migrations_v2, [v1, v2]).expect("v2 catalog");
+        let identity_v2 = ServiceDatabaseIdentity::new(
+            &fixture.paths,
+            fixture.metadata.source_generation(),
+            NonZeroU32::new(2).expect("schema"),
+            fixture.metadata.application_id(),
+        );
+        assert!(stage_intent_matches(
+            &fixture.paths,
+            &identity_v2,
+            &migrations_v2,
+            &schema_v2,
+            &fixture.metadata,
+            &fixture.manifest,
+        ));
+        assert!(!stage_intent_matches(
+            &fixture.paths,
+            &identity_v2,
+            &fixture.migrations,
+            &fixture.schema,
+            &fixture.metadata,
+            &fixture.manifest,
+        ));
+        assert!(!stage_intent_matches(
+            &fixture.paths,
+            &identity_v2,
+            &migrations_v2,
+            &fixture.schema,
+            &fixture.metadata,
+            &fixture.manifest,
+        ));
+
+        let generation = SourceGeneration::new([8; 32]).expect("alternate generation");
+        let alternate_application =
+            ServiceSqliteApplicationId::new(0x5244_5352).expect("alternate application ID");
+        let identity_drifts = [
+            ServiceDatabaseMetadata::from_verified_backup(
+                fixture.metadata.service().clone(),
+                fixture.metadata.instance().clone(),
+                generation,
+                fixture.metadata.state_schema_version(),
+                fixture.metadata.created_at_unix_ms(),
+                fixture.metadata.application_id(),
+            )
+            .expect("generation drift"),
+            ServiceDatabaseMetadata::from_verified_backup(
+                fixture.metadata.service().clone(),
+                fixture.metadata.instance().clone(),
+                fixture.metadata.source_generation(),
+                fixture.metadata.state_schema_version(),
+                fixture.metadata.created_at_unix_ms(),
+                alternate_application,
+            )
+            .expect("application drift"),
+            ServiceDatabaseMetadata::from_verified_backup(
+                ServiceId::new("rhi").expect("service"),
+                fixture.metadata.instance().clone(),
+                fixture.metadata.source_generation(),
+                fixture.metadata.state_schema_version(),
+                fixture.metadata.created_at_unix_ms(),
+                fixture.metadata.application_id(),
+            )
+            .expect("service drift"),
+            ServiceDatabaseMetadata::from_verified_backup(
+                fixture.metadata.service().clone(),
+                InstanceId::new("secondary").expect("instance"),
+                fixture.metadata.source_generation(),
+                fixture.metadata.state_schema_version(),
+                fixture.metadata.created_at_unix_ms(),
+                fixture.metadata.application_id(),
+            )
+            .expect("instance drift"),
+        ];
+        for metadata in &identity_drifts {
+            let manifest = manifest_for(metadata);
+            assert!(!stage_intent_matches(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                metadata,
+                &manifest,
+            ));
+        }
+
+        let metadata_v2 = ServiceDatabaseMetadata::from_verified_backup(
+            fixture.metadata.service().clone(),
+            fixture.metadata.instance().clone(),
+            fixture.metadata.source_generation(),
+            NonZeroU32::new(2).expect("schema"),
+            fixture.metadata.created_at_unix_ms(),
+            fixture.metadata.application_id(),
+        )
+        .expect("v2 metadata");
+        let manifest_v2 = manifest_for(&metadata_v2);
+        assert!(!stage_intent_matches(
+            &fixture.paths,
+            &fixture.identity,
+            &fixture.migrations,
+            &fixture.schema,
+            &metadata_v2,
+            &manifest_v2,
+        ));
+
+        for manifest in [
+            manifest_for(&identity_drifts[0]),
+            manifest_for(&identity_drifts[2]),
+            manifest_for(&identity_drifts[3]),
+            manifest_v2,
+        ] {
+            assert!(!stage_intent_matches(
+                &fixture.paths,
+                &fixture.identity,
+                &fixture.migrations,
+                &fixture.schema,
+                &fixture.metadata,
+                &manifest,
+            ));
+        }
+    }
+
     fn paths(root: &Path) -> ServiceSqlitePaths {
+        paths_for(root, "myc", "primary")
+    }
+
+    fn paths_for(root: &Path, service: &str, instance: &str) -> ServiceSqlitePaths {
         let context = RuntimeContext::resolve(
             &RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default()),
             RuntimeContextBootstrap::new(
@@ -1388,8 +1872,8 @@ mod tests {
                 RuntimeContextSource::BootstrapCli,
             )
             .expect("bootstrap"),
-            ServiceId::new("myc").expect("service"),
-            InstanceId::new("primary").expect("instance"),
+            ServiceId::new(service).expect("service"),
+            InstanceId::new(instance).expect("instance"),
         )
         .expect("runtime context");
         ServiceSqlitePaths::from_runtime_context(&context).expect("SQLite paths")
@@ -1496,7 +1980,6 @@ mod tests {
         )
         .await
         .unwrap_or_else(|error| {
-            use std::error::Error as _;
             panic!(
                 "stage restore: {:?} / {:?}",
                 error.kind(),

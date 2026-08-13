@@ -30,10 +30,10 @@ mod tests {
     use super::{
         HardenedServiceTarget, RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionContract,
         RadrootsRuntimeDistributionError, RadrootsRuntimeDistributionResolver,
-        RuntimeArtifactRequest, RuntimeDistributionEntry, ServiceConfigurationFormat,
-        ServiceInstanceSupport, ServiceOperationsSurface, ServiceRunStatePolicy,
-        ServiceStateInitialization, ServiceSupportPosture, ServiceTargetRequest,
-        ServiceTier1Target,
+        RuntimeArtifactRequest, RuntimeDistributionEntry, ServiceAdminBasePath,
+        ServiceAdminTransport, ServiceConfigurationFormat, ServiceInstanceSupport,
+        ServiceOperationsSurface, ServiceRunStatePolicy, ServiceStateInitialization,
+        ServiceStatusSurface, ServiceSupportPosture, ServiceTargetRequest, ServiceTier1Target,
     };
 
     const HARDENED_SERVICE_CONTRACT: &str =
@@ -636,6 +636,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
                 ServiceInstanceSupport::Multiple
             );
             assert_eq!(metadata.config_format(), ServiceConfigurationFormat::Toml);
+            assert_eq!(metadata.config_format().as_str(), "toml");
             assert_eq!(
                 metadata.state_initialization(),
                 ServiceStateInitialization::Explicit
@@ -643,6 +644,16 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
             assert_eq!(
                 metadata.run_state_policy(),
                 ServiceRunStatePolicy::ExistingOnly
+            );
+            assert_eq!(
+                metadata.admin_transport(),
+                ServiceAdminTransport::Http11OverUnixDomainSocket
+            );
+            assert_eq!(metadata.admin_base_path(), ServiceAdminBasePath::V1);
+            assert_eq!(metadata.admin_contract_version(), 1);
+            assert_eq!(
+                metadata.status_surface(),
+                ServiceStatusSurface::LocalAdminServiceStatusV1
             );
             assert_eq!(
                 metadata.operations_surface(),
@@ -666,6 +677,17 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
                 assert_eq!(resolved.target(), target);
             }
         }
+
+        let targets = &resolver.contract().service_targets;
+        assert_eq!(targets.len(), 2);
+        assert!(!targets.is_empty());
+        assert_eq!(
+            targets
+                .iter()
+                .map(|(service, _)| service)
+                .collect::<Vec<_>>(),
+            ["myc", "rhi"]
+        );
     }
 
     #[test]
@@ -747,6 +769,32 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         ] {
             assert!(RadrootsRuntimeDistributionResolver::parse_str(&raw).is_err());
         }
+
+        let mut missing_service: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        missing_service["service_targets"]
+            .as_table_mut()
+            .expect("service target table")
+            .remove("rhi");
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&missing_service).expect("missing-service contract")
+            )
+            .is_err()
+        );
+
+        let mut mismatched_service: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        let targets = mismatched_service["service_targets"]
+            .as_table_mut()
+            .expect("service target table");
+        targets["myc"]["service_id"] = Value::String("rhi".to_owned());
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&mismatched_service).expect("mismatched-service contract")
+            )
+            .is_err()
+        );
     }
 
     #[test]

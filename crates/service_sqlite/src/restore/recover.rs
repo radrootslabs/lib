@@ -280,11 +280,14 @@ fn observe_artifacts(
             verify_artifact(&file, marker.live())?;
             LiveArtifact::Original
         }
-        Some(file) if artifact_has_identity(&file, marker.staged())? => {
+        Some(file) => {
+            require_recovery_condition(
+                artifact_has_identity(&file, marker.staged())?,
+                RecoveryFailureKind::Artifact,
+            )?;
             verify_artifact(&file, marker.staged())?;
             LiveArtifact::Replacement(file)
         }
-        Some(_) => return Err(recovery_error(RecoveryFailureKind::Artifact)),
     };
     let staged = observe_expected(directory, STAGED_FILE_NAME, marker.staged())?;
     let backup = observe_expected(directory, BACKUP_FILE_NAME, marker.backup())?;
@@ -347,18 +350,24 @@ fn verify_artifact(
         .map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
     let length =
         u64::try_from(status.st_size).map_err(|_| recovery_error(RecoveryFailureKind::Artifact))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-        || (device, status.st_ino) != (expected.device(), expected.inode())
-        || length != expected.byte_length()
-        || length == 0
-        || length > i64::MAX as u64
-        || hash_exact(file, expected.byte_length())? != expected.sha256()
-    {
-        return Err(recovery_error(RecoveryFailureKind::Artifact));
-    }
+    require_recovery_condition(
+        crate::all_constraints([
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(status.st_mode).is_file(),
+                crate::native_metadata::link_count(status.st_nlink),
+                status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(status.st_mode),
+            ),
+            (device, status.st_ino) == (expected.device(), expected.inode()),
+            crate::native_metadata::valid_artifact_length(length, Some(expected.byte_length())),
+        ]),
+        RecoveryFailureKind::Artifact,
+    )?;
+    require_recovery_condition(
+        hash_exact(file, expected.byte_length())? == expected.sha256(),
+        RecoveryFailureKind::Artifact,
+    )?;
     Ok(())
 }
 
@@ -400,6 +409,18 @@ fn require_absent(directory: &File, name: &str) -> Result<(), ServiceSqliteError
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_recovery_condition(
+    condition: bool,
+    kind: RecoveryFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(recovery_error(kind))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn hash_exact(file: &File, expected_length: u64) -> Result<[u8; 32], ServiceSqliteError> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; HASH_BUFFER_BYTES];
@@ -410,9 +431,7 @@ fn hash_exact(file: &File, expected_length: u64) -> Result<[u8; 32], ServiceSqli
         let read = file
             .read_at(&mut buffer[..requested], offset)
             .map_err(|source| recovery_source(RecoveryFailureKind::Hash, source))?;
-        if read == 0 {
-            return Err(recovery_error(RecoveryFailureKind::Hash));
-        }
+        require_recovery_condition(read != 0, RecoveryFailureKind::Hash)?;
         hasher.update(&buffer[..read]);
         offset = offset
             .checked_add(
@@ -421,13 +440,12 @@ fn hash_exact(file: &File, expected_length: u64) -> Result<[u8; 32], ServiceSqli
             .ok_or_else(|| recovery_error(RecoveryFailureKind::Hash))?;
     }
     let mut extra = [0_u8; 1];
-    if file
-        .read_at(&mut extra, expected_length)
-        .map_err(|source| recovery_source(RecoveryFailureKind::Hash, source))?
-        != 0
-    {
-        return Err(recovery_error(RecoveryFailureKind::Hash));
-    }
+    require_recovery_condition(
+        file.read_at(&mut extra, expected_length)
+            .map_err(|source| recovery_source(RecoveryFailureKind::Hash, source))?
+            == 0,
+        RecoveryFailureKind::Hash,
+    )?;
     Ok(hasher.finalize().into())
 }
 
@@ -545,6 +563,105 @@ mod tests {
 
     const OLD_BYTES: &[u8] = b"old-live-state";
     const NEW_BYTES: &[u8] = b"new-restored-state";
+
+    #[test]
+    fn recovery_failure_inventory_is_complete_and_source_aware() {
+        let cases = [
+            (
+                RecoveryFailureKind::Intent,
+                "restore recovery intent does not match",
+            ),
+            (
+                RecoveryFailureKind::Topology,
+                "restore recovery topology is ambiguous",
+            ),
+            (
+                RecoveryFailureKind::Artifact,
+                "restore recovery artifact is invalid",
+            ),
+            (
+                RecoveryFailureKind::Hash,
+                "restore recovery artifact hash failed",
+            ),
+            (
+                RecoveryFailureKind::InstallReplacement,
+                "restore recovery replacement installation failed",
+            ),
+            (
+                RecoveryFailureKind::DirectorySync,
+                "restore recovery directory durability failed",
+            ),
+            (
+                RecoveryFailureKind::Cleanup,
+                "restore recovery cleanup failed",
+            ),
+        ];
+        for (kind, message) in cases {
+            let plain = RecoveryFailure { kind, source: None };
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+            let sourced = RecoveryFailure {
+                kind,
+                source: Some(Box::new(std::io::Error::other("private-cause"))),
+            };
+            assert_eq!(sourced.to_string(), message);
+            assert!(sourced.source().is_some());
+            assert!(format!("{sourced:?}").contains("[redacted]"));
+            assert!(require_recovery_condition(true, kind).is_ok());
+            assert_eq!(
+                require_recovery_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                ServiceSqliteErrorKind::Recovery
+            );
+        }
+    }
+
+    #[test]
+    fn observed_artifact_topology_predicates_cover_every_boolean_combination() {
+        fn observed(live: u8, staged: bool, backup: bool) -> ObservedArtifacts {
+            let live = match live {
+                0 => LiveArtifact::Absent,
+                1 => LiveArtifact::Original,
+                2 => LiveArtifact::Replacement(File::open("/dev/null").expect("replacement")),
+                _ => unreachable!("test topology is closed"),
+            };
+            let artifact =
+                RestoreArtifactExpectation::new(1, 2, 1, [3; 32]).expect("artifact expectation");
+            ObservedArtifacts {
+                live,
+                staged: staged.then(|| File::open("/dev/null").expect("staged")),
+                backup: backup.then(|| File::open("/dev/null").expect("backup")),
+                marker_live: artifact,
+                marker_staged: artifact,
+            }
+        }
+
+        for live in 0..=2 {
+            for staged in [false, true] {
+                for backup in [false, true] {
+                    let observed = observed(live, staged, backup);
+                    assert_eq!(observed.can_roll_back_prepared(), live == 1 && !backup);
+                    assert_eq!(
+                        observed.proves_live_retained(),
+                        live == 0 && staged && backup
+                    );
+                    assert_eq!(
+                        observed.needs_replacement_install(),
+                        live == 0 && staged && backup
+                    );
+                    assert_eq!(
+                        observed.proves_replacement_installed(),
+                        live == 2 && !staged && backup
+                    );
+                    assert_eq!(
+                        observed.proves_replacement_installed_or_cleanup(),
+                        live == 2 && !staged
+                    );
+                }
+            }
+        }
+    }
 
     struct Fixture {
         _root: tempfile::TempDir,

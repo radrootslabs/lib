@@ -794,6 +794,14 @@ fn migration_source(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_migration_condition(
+    condition: bool,
+    kind: MigrationFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    condition.then_some(()).ok_or_else(|| migration_error(kind))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(Clone, PartialEq, Eq)]
 struct AppliedMigration {
     version: u32,
@@ -810,9 +818,10 @@ pub(crate) async fn verify_migration_history(
     schema_catalog: &SchemaCatalog,
     require_current: bool,
 ) -> Result<u32, ServiceSqliteError> {
-    if !schema_catalog.matches_migrations(catalog) {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
-    }
+    schema_catalog
+        .matches_migrations(catalog)
+        .then_some(())
+        .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
     let mut transaction = connection
         .begin()
         .await
@@ -895,9 +904,10 @@ where
     V: FnMut() -> Result<(), ServiceSqliteError>,
     O: FnMut() -> Result<(), ServiceSqliteError>,
 {
-    if !schema_catalog.matches_migrations(catalog) {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
-    }
+    schema_catalog
+        .matches_migrations(catalog)
+        .then_some(())
+        .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
     let callbacks = validate_callback_bindings(catalog, callback_bindings)?;
     let mut initial_version = None;
     let mut applied_count = 0_u32;
@@ -948,17 +958,19 @@ where
         let execution_result = execute_descriptor(&mut transaction, descriptor, &callbacks).await;
         validate_authority()?;
         execution_result?;
-        if commit_gate.control_violation_observed() {
-            return Err(migration_error(MigrationFailureKind::Execution));
-        }
+        require_migration_condition(
+            !commit_gate.control_violation_observed(),
+            MigrationFailureKind::Execution,
+        )?;
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
         let policy_result = read_connection_policy(&mut transaction).await;
         validate_authority()?;
-        if policy_result? != initial_policy {
-            return Err(migration_error(MigrationFailureKind::Execution));
-        }
+        require_migration_condition(
+            policy_result? == initial_policy,
+            MigrationFailureKind::Execution,
+        )?;
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
@@ -984,20 +996,23 @@ where
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
-        if commit_gate.control_violation_observed() {
-            return Err(migration_error(MigrationFailureKind::Execution));
-        }
+        require_migration_condition(
+            !commit_gate.control_violation_observed(),
+            MigrationFailureKind::Execution,
+        )?;
         let policy_result = read_connection_policy(&mut transaction).await;
         validate_authority()?;
-        if policy_result? != initial_policy {
-            return Err(migration_error(MigrationFailureKind::Execution));
-        }
+        require_migration_condition(
+            policy_result? == initial_policy,
+            MigrationFailureKind::Execution,
+        )?;
         let transaction_result = assert_governed_transaction(&mut transaction).await;
         validate_authority()?;
         transaction_result?;
-        if commit_gate.control_violation_observed() {
-            return Err(migration_error(MigrationFailureKind::Execution));
-        }
+        require_migration_condition(
+            !commit_gate.control_violation_observed(),
+            MigrationFailureKind::Execution,
+        )?;
         let permit = commit_gate.permit_outer_commit();
         let commit_result = transaction.commit().await;
         drop(permit);
@@ -1046,13 +1061,15 @@ fn validate_callback_bindings(
             .iter()
             .find(|descriptor| descriptor.target_version() == binding.target_version)
             .ok_or_else(|| migration_error(MigrationFailureKind::CallbackBinding))?;
-        if descriptor.kind() != MigrationKind::Callback
-            || descriptor.name() != binding.name
-            || descriptor.checksum() != binding.checksum
-            || callbacks
-                .insert(binding.target_version, binding.callback)
-                .is_some()
-        {
+        let unique = callbacks
+            .insert(binding.target_version, binding.callback)
+            .is_none();
+        if !crate::all_constraints([
+            descriptor.kind() == MigrationKind::Callback,
+            descriptor.name() == binding.name,
+            descriptor.checksum() == binding.checksum,
+            unique,
+        ]) {
             return Err(migration_error(MigrationFailureKind::CallbackBinding));
         }
     }
@@ -1118,9 +1135,7 @@ pub(crate) async fn read_connection_policy(
         .fetch_one(&mut *connection)
         .await
         .map_err(text)?;
-    if journal_mode.len() > 16 {
-        return Err(migration_error(MigrationFailureKind::Execution));
-    }
+    require_migration_condition(journal_mode.len() <= 16, MigrationFailureKind::Execution)?;
     let synchronous = sqlx::query_scalar::<_, i64>("PRAGMA synchronous")
         .fetch_one(&mut *connection)
         .await
@@ -1153,9 +1168,7 @@ pub(crate) async fn read_connection_policy(
     .fetch_all(connection)
     .await
     .map_err(text)?;
-    if databases != ["main"] {
-        return Err(migration_error(MigrationFailureKind::Execution));
-    }
+    require_migration_condition(databases == ["main"], MigrationFailureKind::Execution)?;
     Ok(MigrationConnectionPolicy {
         application_id,
         journal_mode,
@@ -1203,9 +1216,10 @@ async fn insert_migration_row(
     .execute(connection)
     .await
     .map_err(|source| migration_source(MigrationFailureKind::LedgerWrite, source))?;
-    if result.rows_affected() != 1 {
-        return Err(migration_error(MigrationFailureKind::LedgerWrite));
-    }
+    require_migration_condition(
+        result.rows_affected() == 1,
+        MigrationFailureKind::LedgerWrite,
+    )?;
     Ok(())
 }
 
@@ -1225,9 +1239,10 @@ async fn advance_schema_version(
     .execute(connection)
     .await
     .map_err(|source| migration_source(MigrationFailureKind::MetadataAdvance, source))?;
-    if result.rows_affected() != 1 {
-        return Err(migration_error(MigrationFailureKind::MetadataAdvance));
-    }
+    require_migration_condition(
+        result.rows_affected() == 1,
+        MigrationFailureKind::MetadataAdvance,
+    )?;
     Ok(())
 }
 
@@ -1311,9 +1326,10 @@ async fn read_migration_history(
     .fetch_all(connection)
     .await
     .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?;
-    if rows.len() > MAX_MIGRATION_COUNT {
-        return Err(migration_error(MigrationFailureKind::HistoryCorrupt));
-    }
+    require_migration_condition(
+        rows.len() <= MAX_MIGRATION_COUNT,
+        MigrationFailureKind::HistoryCorrupt,
+    )?;
     rows.iter().map(parse_applied_migration).collect()
 }
 
@@ -1410,19 +1426,22 @@ fn validate_migration_prefix(
     version: u32,
     history: &[AppliedMigration],
 ) -> Result<(), ServiceSqliteError> {
-    if version < BASE_SCHEMA_VERSION || version > catalog.current_version() {
-        return Err(migration_error(MigrationFailureKind::CatalogMismatch));
-    }
+    require_migration_condition(
+        version >= BASE_SCHEMA_VERSION && version <= catalog.current_version(),
+        MigrationFailureKind::CatalogMismatch,
+    )?;
     let expected_len = usize::try_from(version - BASE_SCHEMA_VERSION)
         .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?;
-    if history.len() != expected_len {
-        return Err(migration_error(MigrationFailureKind::CatalogMismatch));
-    }
+    require_migration_condition(
+        history.len() == expected_len,
+        MigrationFailureKind::CatalogMismatch,
+    )?;
     for (applied, descriptor) in history.iter().zip(catalog.descriptors()) {
-        if applied.version != descriptor.target_version()
-            || applied.name != descriptor.name().as_str()
-            || applied.checksum != descriptor.checksum()
-        {
+        if !crate::all_constraints([
+            applied.version == descriptor.target_version(),
+            applied.name == descriptor.name().as_str(),
+            applied.checksum == descriptor.checksum(),
+        ]) {
             return Err(migration_error(MigrationFailureKind::CatalogMismatch));
         }
         let _ = (applied.applied_at, &applied.build);
@@ -1433,6 +1452,76 @@ fn validate_migration_prefix(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn migration_failure_inventory_is_complete_and_source_aware() {
+        use std::error::Error as _;
+
+        let cases = [
+            (
+                MigrationFailureKind::CatalogMismatch,
+                "migration catalog does not match state",
+            ),
+            (
+                MigrationFailureKind::HistoryCorrupt,
+                "migration history is corrupt",
+            ),
+            (
+                MigrationFailureKind::CallbackBinding,
+                "migration callback binding is invalid",
+            ),
+            (
+                MigrationFailureKind::Execution,
+                "migration execution failed",
+            ),
+            (
+                MigrationFailureKind::LedgerWrite,
+                "migration ledger write failed",
+            ),
+            (
+                MigrationFailureKind::MetadataAdvance,
+                "migration metadata advance failed",
+            ),
+            (
+                MigrationFailureKind::Commit,
+                "migration commit outcome is unavailable",
+            ),
+        ];
+        for (kind, message) in cases {
+            let plain = MigrationFailure(kind);
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+
+            let sourced = MigrationSource {
+                kind,
+                source: Box::new(std::io::Error::other("private-cause")),
+            };
+            assert_eq!(sourced.to_string(), message);
+            assert!(sourced.source().is_some());
+            let debug = format!("{sourced:?}");
+            assert!(debug.contains("[redacted]"));
+            assert!(!debug.contains("private-cause"));
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn migration_condition_classifier_preserves_every_stable_kind() {
+        for kind in [
+            MigrationFailureKind::CatalogMismatch,
+            MigrationFailureKind::CallbackBinding,
+            MigrationFailureKind::HistoryCorrupt,
+            MigrationFailureKind::Execution,
+            MigrationFailureKind::LedgerWrite,
+            MigrationFailureKind::MetadataAdvance,
+            MigrationFailureKind::Commit,
+        ] {
+            assert!(require_migration_condition(true, kind).is_ok());
+            let error = require_migration_condition(false, kind).expect_err("failure");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+        }
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use std::{
@@ -2759,6 +2848,84 @@ mod tests {
                     .expect_err("corrupt time or build")
                     .kind(),
                 ServiceSqliteErrorKind::Migration
+            );
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn every_migration_ledger_projection_rejects_wrong_storage_and_values() {
+        let descriptor = sql(2, "create_alpha", SQL_TWO);
+        let catalog = MigrationCatalog::new([descriptor.clone()]).unwrap();
+        let schema_catalog = unchanged_schema_catalog(&catalog);
+        let wrong_storage_updates = [
+            "UPDATE schema_migrations SET version = '2' WHERE rowid = 1",
+            "UPDATE schema_migrations SET name = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET checksum = 'checksum' WHERE rowid = 1",
+            "UPDATE schema_migrations SET applied_at_unix_s = '0' WHERE rowid = 1",
+            "UPDATE schema_migrations SET service_version = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET service_commit = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET lib_revision = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET rust_version = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET target = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET feature_profile = 2 WHERE rowid = 1",
+            "UPDATE schema_migrations SET config_contract_version = '1' WHERE rowid = 1",
+            "UPDATE schema_migrations SET state_contract_version = '2' WHERE rowid = 1",
+            "UPDATE schema_migrations SET admin_contract_version = '3' WHERE rowid = 1",
+            "UPDATE schema_migrations SET status_contract_version = '4' WHERE rowid = 1",
+            "UPDATE schema_migrations SET provider_contract_version = '5' WHERE rowid = 1",
+        ];
+        let invalid_value_updates = [
+            "UPDATE schema_migrations SET version = -1 WHERE rowid = 1",
+            "UPDATE schema_migrations SET version = 4294967296 WHERE rowid = 1",
+            "UPDATE schema_migrations SET name = 'BadName' WHERE rowid = 1",
+            "UPDATE schema_migrations SET checksum = zeroblob(31) WHERE rowid = 1",
+            "UPDATE schema_migrations SET applied_at_unix_s = -1 WHERE rowid = 1",
+            "UPDATE schema_migrations SET service_version = 'bad value' WHERE rowid = 1",
+            "UPDATE schema_migrations SET service_commit = 'bad' WHERE rowid = 1",
+            "UPDATE schema_migrations SET lib_revision = 'bad' WHERE rowid = 1",
+            "UPDATE schema_migrations SET rust_version = 'bad value' WHERE rowid = 1",
+            "UPDATE schema_migrations SET target = 'bad value' WHERE rowid = 1",
+            "UPDATE schema_migrations SET feature_profile = 'bad value' WHERE rowid = 1",
+            "UPDATE schema_migrations SET config_contract_version = 0 WHERE rowid = 1",
+            "UPDATE schema_migrations SET state_contract_version = -1 WHERE rowid = 1",
+            "UPDATE schema_migrations SET admin_contract_version = 4294967296 WHERE rowid = 1",
+            "UPDATE schema_migrations SET status_contract_version = 0 WHERE rowid = 1",
+            "UPDATE schema_migrations SET provider_contract_version = 0 WHERE rowid = 1",
+        ];
+
+        for update in wrong_storage_updates
+            .into_iter()
+            .chain(invalid_value_updates)
+        {
+            let mut connection = initialized_memory_database().await;
+            replace_with_permissive_ledger(&mut connection).await;
+            insert_permissive_history_row(
+                &mut connection,
+                2,
+                descriptor.name().as_str(),
+                descriptor.checksum().as_bytes(),
+                0,
+                "0.1.0-alpha",
+            )
+            .await;
+            sqlx::raw_sql(update)
+                .execute(&mut connection)
+                .await
+                .expect("corrupt ledger projection");
+            sqlx::query(
+                "UPDATE radroots_service_metadata SET state_schema_version = 2 WHERE singleton = 1",
+            )
+            .execute(&mut connection)
+            .await
+            .unwrap();
+            assert_eq!(
+                verify_migration_history(&mut connection, &catalog, &schema_catalog, false)
+                    .await
+                    .expect_err("corrupt ledger projection")
+                    .kind(),
+                ServiceSqliteErrorKind::Migration,
+                "accepted corrupt projection update `{update}`"
             );
         }
     }

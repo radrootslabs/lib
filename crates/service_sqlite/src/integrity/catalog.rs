@@ -357,9 +357,11 @@ impl SchemaCatalog {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn matches_migrations(&self, migrations: &MigrationCatalog) -> bool {
-        self.migration_catalog_digest == migrations.digest()
-            && self.versions.len()
-                == usize::try_from(migrations.current_version()).unwrap_or(usize::MAX)
+        crate::all_constraints([
+            self.migration_catalog_digest == migrations.digest(),
+            self.versions.len()
+                == usize::try_from(migrations.current_version()).unwrap_or(usize::MAX),
+        ])
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -520,16 +522,20 @@ fn validate_service_object(
     table_name: &str,
     sql: &str,
 ) -> Result<(), SchemaCatalogContractError> {
-    if !valid_name(name) || !valid_name(table_name) {
+    if !crate::all_constraints([valid_name(name), valid_name(table_name)]) {
         return Err(SchemaCatalogContractError::InvalidName);
     }
-    if is_reserved(name) || is_reserved(table_name) {
+    if !crate::all_constraints([!is_reserved(name), !is_reserved(table_name)]) {
         return Err(SchemaCatalogContractError::ReservedName);
     }
     if (kind == SchemaObjectKind::Table) != (name == table_name) {
         return Err(SchemaCatalogContractError::InvalidBinding);
     }
-    if sql.is_empty() || sql.len() > MAX_SCHEMA_SQL_UTF8_BYTES || sql.as_bytes().contains(&0) {
+    if !crate::all_constraints([
+        !sql.is_empty(),
+        sql.len() <= MAX_SCHEMA_SQL_UTF8_BYTES,
+        !sql.as_bytes().contains(&0),
+    ]) {
         return Err(SchemaCatalogContractError::InvalidSql);
     }
     Ok(())
@@ -565,14 +571,18 @@ fn validate_object_set(objects: &[SchemaObject]) -> Result<(), SchemaCatalogCont
 
 fn valid_name(value: &str) -> bool {
     let bytes = value.as_bytes();
-    !bytes.is_empty()
-        && bytes.len() <= MAX_SCHEMA_NAME_UTF8_BYTES
-        && bytes[0].is_ascii_lowercase()
-        && bytes[bytes.len() - 1].is_ascii_alphanumeric()
-        && !bytes.windows(2).any(|pair| pair == b"__")
-        && bytes
+    if bytes.is_empty() {
+        return false;
+    }
+    crate::all_constraints([
+        bytes.len() <= MAX_SCHEMA_NAME_UTF8_BYTES,
+        bytes[0].is_ascii_lowercase(),
+        bytes[bytes.len() - 1].is_ascii_alphanumeric(),
+        !bytes.windows(2).any(|pair| pair == b"__"),
+        bytes
             .iter()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_')
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_'),
+    ])
 }
 
 fn is_reserved(value: &str) -> bool {
@@ -754,6 +764,12 @@ mod tests {
             ),
             Err(SchemaCatalogContractError::InvalidName)
         );
+        for invalid in ["2alpha", "alpha_", "alpha-beta"] {
+            assert_eq!(
+                SchemaObject::computed_digest(SchemaObjectKind::Table, invalid, invalid, "x"),
+                Err(SchemaCatalogContractError::InvalidName)
+            );
+        }
 
         let maximum_sql = Box::leak("x".repeat(MAX_SCHEMA_SQL_UTF8_BYTES).into_boxed_str());
         assert!(
@@ -774,6 +790,21 @@ mod tests {
                 excessive_sql,
             ),
             Err(SchemaCatalogContractError::InvalidSql)
+        );
+        assert_eq!(
+            SchemaObject::computed_digest(SchemaObjectKind::Table, "nul_sql", "nul_sql", "x\0y",),
+            Err(SchemaCatalogContractError::InvalidSql)
+        );
+
+        assert_eq!(
+            SchemaObject::new(
+                SchemaObjectKind::Table,
+                "alpha",
+                "alpha",
+                TABLE_SQL,
+                SchemaDigest::from_bytes([0; 32]),
+            ),
+            Err(SchemaCatalogContractError::ObjectDigestMismatch)
         );
     }
 
@@ -846,6 +877,18 @@ mod tests {
         let migrations = empty_migrations();
         let digest = SchemaVersionCatalog::computed_digest(1, []).unwrap();
         let v1 = SchemaVersionCatalog::new(1, [], digest).unwrap();
+        assert_eq!(
+            SchemaVersionCatalog::new(0, [], SchemaDigest::from_bytes([0; 32])),
+            Err(SchemaCatalogContractError::InvalidVersionSequence)
+        );
+        assert_eq!(
+            SchemaVersionCatalog::computed_digest(0, []),
+            Err(SchemaCatalogContractError::InvalidVersionSequence)
+        );
+        assert_eq!(
+            SchemaVersionCatalog::new(1, [], SchemaDigest::from_bytes([0; 32])),
+            Err(SchemaCatalogContractError::SnapshotDigestMismatch)
+        );
         assert!(SchemaCatalog::new(&migrations, [v1]).is_ok());
         assert_eq!(
             SchemaCatalog::new(&migrations, []),
@@ -885,5 +928,34 @@ mod tests {
             SchemaCatalog::new(&maximum_migrations, [v1, duplicate]),
             Err(SchemaCatalogContractError::InvalidVersionSequence)
         );
+
+        let excessive_objects = std::iter::repeat_with(table).take(MAX_SCHEMA_OBJECT_COUNT + 1);
+        assert_eq!(
+            SchemaVersionCatalog::new(1, excessive_objects, SchemaDigest::from_bytes([0; 32])),
+            Err(SchemaCatalogContractError::TooManyObjects)
+        );
+
+        let gap_v2 = SchemaVersionCatalog { version: 2, ..v1 };
+        assert_eq!(
+            SchemaCatalog::new(&migrations, [gap_v2]),
+            Err(SchemaCatalogContractError::InvalidVersionSequence)
+        );
+
+        let v1_for_exact = v1;
+        let exact = SchemaCatalog::new(&migrations, [v1_for_exact]).expect("exact catalog");
+        assert!(exact.matches_migrations(&migrations));
+        assert_eq!(exact.version(0), None);
+        assert_eq!(exact.version(1), Some(v1));
+        assert_eq!(exact.version(2), None);
+
+        let callback = crate::MigrationDescriptor::callback(
+            2,
+            "next_schema",
+            b"definition",
+            MigrationChecksum::for_callback(b"definition"),
+        )
+        .expect("migration");
+        let other_migrations = MigrationCatalog::new([callback]).expect("other migrations");
+        assert!(!exact.matches_migrations(&other_migrations));
     }
 }

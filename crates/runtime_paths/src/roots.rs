@@ -341,6 +341,7 @@ mod tests {
     fn service_host_linux_uses_canonical_roots() {
         let resolver =
             RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+        assert_eq!(resolver.platform(), RadrootsPlatform::Linux);
         assert_eq!(
             resolver
                 .resolve(RadrootsPathProfile::ServiceHost, None)

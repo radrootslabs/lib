@@ -302,6 +302,11 @@ mod tests {
                 Err(AdminTransportLimitsError::ExceedsMaximum { field })
             );
         }
+        let error = AdminTransportLimitsError::Zero {
+            field: AdminTransportLimitField::HeaderCount,
+        };
+        assert!(!error.to_string().is_empty());
+        assert!(error.source().is_none());
     }
 
     #[test]

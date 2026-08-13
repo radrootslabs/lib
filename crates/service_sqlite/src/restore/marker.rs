@@ -214,20 +214,24 @@ impl RestoreRecoveryMarker {
     }
 
     pub(crate) fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, RestoreMarkerContractError> {
-        if bytes.is_empty() {
-            return Err(RestoreMarkerContractError::MalformedEncoding);
-        }
-        if bytes.len() > RESTORE_MARKER_MAX_BYTES {
-            return Err(RestoreMarkerContractError::MarkerTooLarge);
-        }
+        require_marker_contract(
+            !bytes.is_empty(),
+            RestoreMarkerContractError::MalformedEncoding,
+        )?;
+        require_marker_contract(
+            bytes.len() <= RESTORE_MARKER_MAX_BYTES,
+            RestoreMarkerContractError::MarkerTooLarge,
+        )?;
         let wire: WireMarker = serde_json::from_slice(bytes)
             .map_err(|_| RestoreMarkerContractError::MalformedEncoding)?;
-        if wire.schema != RESTORE_MARKER_SCHEMA {
-            return Err(RestoreMarkerContractError::UnsupportedValue);
-        }
-        if wire.schema_version != RESTORE_MARKER_SCHEMA_VERSION {
-            return Err(RestoreMarkerContractError::UnsupportedValue);
-        }
+        require_marker_contract(
+            wire.schema == RESTORE_MARKER_SCHEMA,
+            RestoreMarkerContractError::UnsupportedValue,
+        )?;
+        require_marker_contract(
+            wire.schema_version == RESTORE_MARKER_SCHEMA_VERSION,
+            RestoreMarkerContractError::UnsupportedValue,
+        )?;
         let marker = Self::build(
             RestoreRecoveryPhase::parse(&wire.phase)?,
             ServiceId::new(wire.service)
@@ -247,12 +251,14 @@ impl RestoreRecoveryMarker {
         )?;
         let claimed = decode_hex_32(&wire.marker_sha256)?;
         let actual = marker_checksum(&marker.payload_bytes()?);
-        if claimed != actual {
-            return Err(RestoreMarkerContractError::ChecksumMismatch);
-        }
-        if marker.canonical_bytes.as_ref() != bytes {
-            return Err(RestoreMarkerContractError::NonCanonicalEncoding);
-        }
+        require_marker_contract(
+            claimed == actual,
+            RestoreMarkerContractError::ChecksumMismatch,
+        )?;
+        require_marker_contract(
+            marker.canonical_bytes.as_ref() == bytes,
+            RestoreMarkerContractError::NonCanonicalEncoding,
+        )?;
         Ok(marker)
     }
 
@@ -280,9 +286,10 @@ impl RestoreRecoveryMarker {
         &self,
         next: RestoreRecoveryPhase,
     ) -> Result<Self, RestoreMarkerContractError> {
-        if !self.phase.may_transition_to(next) {
-            return Err(RestoreMarkerContractError::IllegalTransition);
-        }
+        require_marker_contract(
+            self.phase.may_transition_to(next),
+            RestoreMarkerContractError::IllegalTransition,
+        )?;
         if self.phase == next {
             return Ok(self.clone());
         }
@@ -313,9 +320,13 @@ impl RestoreRecoveryMarker {
         staged: RestoreArtifactExpectation,
         backup: RestoreArtifactExpectation,
     ) -> Result<Self, RestoreMarkerContractError> {
-        if live != backup || (live.device, live.inode) == (staged.device, staged.inode) {
-            return Err(RestoreMarkerContractError::InvalidIdentity);
-        }
+        require_marker_contract(
+            crate::all_constraints([
+                live == backup,
+                (live.device, live.inode) != (staged.device, staged.inode),
+            ]),
+            RestoreMarkerContractError::InvalidIdentity,
+        )?;
         let mut marker = Self {
             phase,
             service,
@@ -334,9 +345,10 @@ impl RestoreRecoveryMarker {
         let canonical = marker.wire(&checksum);
         let canonical_bytes = serde_json::to_vec(&canonical)
             .map_err(|_| RestoreMarkerContractError::EncodingFailure)?;
-        if canonical_bytes.len() > RESTORE_MARKER_MAX_BYTES {
-            return Err(RestoreMarkerContractError::MarkerTooLarge);
-        }
+        require_marker_contract(
+            canonical_bytes.len() <= RESTORE_MARKER_MAX_BYTES,
+            RestoreMarkerContractError::MarkerTooLarge,
+        )?;
         marker.canonical_bytes = canonical_bytes.into_boxed_slice();
         Ok(marker)
     }
@@ -370,15 +382,20 @@ impl RestoreRecoveryMarker {
     }
 
     fn matches_paths(&self, paths: &ServiceSqlitePaths) -> bool {
-        self.service == *paths.service() && self.instance == *paths.instance()
+        crate::all_constraints([
+            self.service == *paths.service(),
+            self.instance == *paths.instance(),
+        ])
     }
 
     pub(crate) fn matches_identity(&self, identity: &ServiceDatabaseIdentity) -> bool {
-        self.service == *identity.service()
-            && self.instance == *identity.instance()
-            && self.source_generation == identity.source_generation()
-            && self.application_id == identity.application_id()
-            && self.state_schema_version <= identity.supported_state_schema_version()
+        crate::all_constraints([
+            self.service == *identity.service(),
+            self.instance == *identity.instance(),
+            self.source_generation == identity.source_generation(),
+            self.application_id == identity.application_id(),
+            self.state_schema_version <= identity.supported_state_schema_version(),
+        ])
     }
 }
 
@@ -404,6 +421,30 @@ pub(crate) enum RestoreMarkerContractError {
     InvalidIdentity,
     InvalidLayout,
     IllegalTransition,
+}
+
+fn require_marker_contract(
+    condition: bool,
+    error: RestoreMarkerContractError,
+) -> Result<(), RestoreMarkerContractError> {
+    if condition { Ok(()) } else { Err(error) }
+}
+
+fn layout_uses_fixed_marker_name(layout: &RestoreRecoveryLayout) -> bool {
+    layout
+        .marker
+        .file_name()
+        .is_some_and(|name| name == MARKER_FILE_NAME)
+}
+
+fn interrupted_successor_matches(
+    current: &RestoreRecoveryMarker,
+    scratch: &RestoreRecoveryMarker,
+) -> bool {
+    scratch.phase() != current.phase()
+        && current
+            .transitioned_to(scratch.phase())
+            .is_ok_and(|expected| expected.canonical_bytes() == scratch.canonical_bytes())
 }
 
 impl fmt::Display for RestoreMarkerContractError {
@@ -658,16 +699,16 @@ mod store {
             on_durable: impl FnOnce(),
         ) -> Result<Self, ServiceSqliteError> {
             authority.validate_for(paths)?;
-            if !marker.matches_paths(paths) {
-                return Err(restore_contract(
-                    RestoreMarkerContractError::InvalidIdentity,
-                ));
-            }
-            if marker.phase() != RestoreRecoveryPhase::Prepared {
-                return Err(restore_contract(
-                    RestoreMarkerContractError::IllegalTransition,
-                ));
-            }
+            require_marker_contract(
+                marker.matches_paths(paths),
+                RestoreMarkerContractError::InvalidIdentity,
+            )
+            .map_err(restore_contract)?;
+            require_marker_contract(
+                marker.phase() == RestoreRecoveryPhase::Prepared,
+                RestoreMarkerContractError::IllegalTransition,
+            )
+            .map_err(restore_contract)?;
             let layout = RestoreRecoveryLayout::for_paths(paths).map_err(restore_contract)?;
             let directory = authority_checked(authority, paths, || {
                 authority
@@ -744,7 +785,10 @@ mod store {
                 )?;
                 return Err(restore_store(cause));
             }
-            if operations.sync_directory(&directory).is_err() {
+            if let Err(cause) = require_store_condition(
+                operations.sync_directory(&directory).is_ok(),
+                StoreFailure::Sync,
+            ) {
                 authority.validate_for(paths)?;
                 cleanup_with_authority(
                     authority,
@@ -753,7 +797,7 @@ mod store {
                     MARKER_FILE_NAME,
                     marker_identity,
                 )?;
-                return Err(restore_store(StoreFailure::Sync));
+                return Err(restore_store(cause));
             }
             // The marker contents and its directory entry are durable from
             // this point. The caller must transfer ownership of every bound
@@ -773,13 +817,11 @@ mod store {
                 marker: marker.clone(),
             };
             authority_checked(authority, paths, || binding.validate_for_restore(paths))??;
-            if layout
-                .marker
-                .file_name()
-                .is_none_or(|name| name != MARKER_FILE_NAME)
-            {
-                return Err(restore_contract(RestoreMarkerContractError::InvalidLayout));
-            }
+            require_marker_contract(
+                layout_uses_fixed_marker_name(&layout),
+                RestoreMarkerContractError::InvalidLayout,
+            )
+            .map_err(restore_contract)?;
             Ok(binding)
         }
 
@@ -801,11 +843,11 @@ mod store {
             };
             let marker_identity = file_identity(&marker_file).map_err(recovery_store)?;
             let marker = read_marker(&marker_file).map_err(recovery_store)?;
-            if !marker.matches_paths(paths) {
-                return Err(recovery_contract(
-                    RestoreMarkerContractError::InvalidIdentity,
-                ));
-            }
+            require_marker_contract(
+                marker.matches_paths(paths),
+                RestoreMarkerContractError::InvalidIdentity,
+            )
+            .map_err(recovery_contract)?;
             let binding = Self {
                 directory,
                 directory_identity,
@@ -851,11 +893,11 @@ mod store {
                     .map_err(recovery_store)?;
             let marker = authority_checked(authority, paths, || read_marker(&marker_file))?
                 .map_err(recovery_store)?;
-            if !marker.matches_paths(paths) {
-                return Err(recovery_contract(
-                    RestoreMarkerContractError::InvalidIdentity,
-                ));
-            }
+            require_marker_contract(
+                marker.matches_paths(paths),
+                RestoreMarkerContractError::InvalidIdentity,
+            )
+            .map_err(recovery_contract)?;
             let binding = Self {
                 directory,
                 directory_identity,
@@ -866,13 +908,11 @@ mod store {
             authority_checked(authority, paths, || {
                 binding.validate_inner(paths, false, ServiceSqliteErrorKind::Recovery)
             })??;
-            if layout
-                .marker
-                .file_name()
-                .is_none_or(|name| name != MARKER_FILE_NAME)
-            {
-                return Err(recovery_contract(RestoreMarkerContractError::InvalidLayout));
-            }
+            require_marker_contract(
+                layout_uses_fixed_marker_name(&layout),
+                RestoreMarkerContractError::InvalidLayout,
+            )
+            .map_err(recovery_contract)?;
             authority.validate_for(paths)?;
             Ok(Some(binding))
         }
@@ -934,9 +974,11 @@ mod store {
             })??;
             let current = authority_checked(authority, paths, || read_marker(&self.marker_file))?
                 .map_err(|cause| operation_store(operation_kind, cause))?;
-            if current.canonical_bytes() != self.marker.canonical_bytes() {
-                return Err(operation_store(operation_kind, StoreFailure::Conflict));
-            }
+            require_store_condition(
+                current.canonical_bytes() == self.marker.canonical_bytes(),
+                StoreFailure::Conflict,
+            )
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             let next_marker = self
                 .marker
                 .transitioned_to(next)
@@ -1009,7 +1051,7 @@ mod store {
                 )
             })?
             .map_err(|cause| operation_store(operation_kind, cause))?;
-            if !scratch_matches {
+            if let Err(cause) = require_store_condition(scratch_matches, StoreFailure::Conflict) {
                 cleanup_with_authority(
                     authority,
                     paths,
@@ -1017,7 +1059,7 @@ mod store {
                     MARKER_NEXT_FILE_NAME,
                     scratch_identity,
                 )?;
-                return Err(operation_store(operation_kind, StoreFailure::Conflict));
+                return Err(operation_store(operation_kind, cause));
             }
             let before_replace = authority_checked(authority, paths, || {
                 hit(
@@ -1040,7 +1082,7 @@ mod store {
                     .replace_marker(&self.directory)
                     .map_err(|_| StoreFailure::Rename)
             })?;
-            if replacement.is_err() {
+            if let Err(cause) = require_store_condition(replacement.is_ok(), StoreFailure::Rename) {
                 cleanup_with_authority(
                     authority,
                     paths,
@@ -1048,7 +1090,7 @@ mod store {
                     MARKER_NEXT_FILE_NAME,
                     scratch_identity,
                 )?;
-                return Err(operation_store(operation_kind, StoreFailure::Rename));
+                return Err(operation_store(operation_kind, cause));
             }
             authority_checked(authority, paths, || {
                 hit(
@@ -1069,9 +1111,8 @@ mod store {
                     .sync_directory(&self.directory)
                     .map_err(|_| StoreFailure::Sync)
             })?;
-            if parent_sync.is_err() {
-                return Err(operation_store(operation_kind, StoreFailure::Sync));
-            }
+            require_store_condition(parent_sync.is_ok(), StoreFailure::Sync)
+                .map_err(|cause| operation_store(operation_kind, cause))?;
             authority_checked(authority, paths, || {
                 hit(
                     failpoints,
@@ -1087,9 +1128,11 @@ mod store {
                     Ok::<_, StoreFailure>((file, identity, marker))
                 })?
                 .map_err(|cause| operation_store(operation_kind, cause))?;
-            if reread.canonical_bytes() != next_marker.canonical_bytes() {
-                return Err(operation_store(operation_kind, StoreFailure::Conflict));
-            }
+            require_store_condition(
+                reread.canonical_bytes() == next_marker.canonical_bytes(),
+                StoreFailure::Conflict,
+            )
+            .map_err(|cause| operation_store(operation_kind, cause))?;
             let binding = Self {
                 directory: self.directory,
                 directory_identity: self.directory_identity,
@@ -1160,16 +1203,12 @@ mod store {
             };
             let scratch_marker = authority_checked(authority, paths, || read_marker(&scratch))?
                 .map_err(recovery_store)?;
+            require_store_condition(
+                interrupted_successor_matches(&self.marker, &scratch_marker),
+                StoreFailure::Conflict,
+            )
+            .map_err(recovery_store)?;
             let next = scratch_marker.phase();
-            let expected = self.marker.transitioned_to(next);
-            if next == self.marker.phase()
-                || match expected {
-                    Ok(expected) => expected.canonical_bytes() != scratch_marker.canonical_bytes(),
-                    Err(_) => true,
-                }
-            {
-                return Err(recovery_store(StoreFailure::Conflict));
-            }
             Ok(Some(next))
         }
 
@@ -1205,9 +1244,11 @@ mod store {
                 .marker
                 .transitioned_to(expected_phase)
                 .map_err(recovery_contract)?;
-            if scratch_marker.canonical_bytes() != expected.canonical_bytes() {
-                return Err(recovery_store(StoreFailure::Conflict));
-            }
+            require_store_condition(
+                scratch_marker.canonical_bytes() == expected.canonical_bytes(),
+                StoreFailure::Conflict,
+            )
+            .map_err(recovery_store)?;
             before_exact_removal();
             // Preserve the valid current marker even if the scratch pathname
             // was replaced after an interrupted advance. Remove only the
@@ -1279,31 +1320,40 @@ mod store {
             )
             .map_err(|_| authority_store(StoreFailure::Directory))?;
             let current_directory = File::from(current_directory);
-            if validate_directory(&self.directory).map_err(authority_store)?
-                != self.directory_identity
-                || validate_directory(&current_directory).map_err(authority_store)?
-                    != self.directory_identity
-            {
-                return Err(authority_store(StoreFailure::Conflict));
-            }
+            require_store_condition(
+                validate_directory(&self.directory).map_err(authority_store)?
+                    == self.directory_identity,
+                StoreFailure::Conflict,
+            )
+            .map_err(authority_store)?;
+            require_store_condition(
+                validate_directory(&current_directory).map_err(authority_store)?
+                    == self.directory_identity,
+                StoreFailure::Conflict,
+            )
+            .map_err(authority_store)?;
             let current_marker = open_marker_file(&current_directory, MARKER_FILE_NAME)
                 .map_err(|cause| operation_store(operation_kind, cause))?;
-            if file_identity(&self.marker_file)
-                .map_err(|cause| operation_store(operation_kind, cause))?
-                != self.marker_identity
-                || file_identity(&current_marker)
+            require_store_condition(
+                file_identity(&self.marker_file)
                     .map_err(|cause| operation_store(operation_kind, cause))?
-                    != self.marker_identity
-            {
-                return Err(operation_store(operation_kind, StoreFailure::Conflict));
-            }
-            if read_marker(&self.marker_file)
+                    == self.marker_identity,
+                StoreFailure::Conflict,
+            )
+            .map_err(|cause| operation_store(operation_kind, cause))?;
+            require_store_condition(
+                file_identity(&current_marker)
+                    .map_err(|cause| operation_store(operation_kind, cause))?
+                    == self.marker_identity,
+                StoreFailure::Conflict,
+            )
+            .map_err(|cause| operation_store(operation_kind, cause))?;
+            let marker_bytes_match = read_marker(&self.marker_file)
                 .map_err(|cause| operation_store(operation_kind, cause))?
                 .canonical_bytes()
-                != self.marker.canonical_bytes()
-            {
-                return Err(operation_store(operation_kind, StoreFailure::Conflict));
-            }
+                == self.marker.canonical_bytes();
+            require_store_condition(marker_bytes_match, StoreFailure::Conflict)
+                .map_err(|cause| operation_store(operation_kind, cause))?;
             if require_no_scratch {
                 require_absent(&current_directory, MARKER_NEXT_FILE_NAME)
                     .map_err(|cause| operation_store(operation_kind, cause))?;
@@ -1314,10 +1364,12 @@ mod store {
 
     fn validate_directory(file: &File) -> Result<FileIdentity, StoreFailure> {
         let status = fstat(file).map_err(|_| StoreFailure::Directory)?;
-        if !FileType::from_raw_mode(status.st_mode).is_dir()
-            || status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
-        {
+        if !crate::native_metadata::secure_directory(
+            FileType::from_raw_mode(status.st_mode).is_dir(),
+            status.st_uid,
+            geteuid().as_raw(),
+            crate::native_metadata::mode(status.st_mode),
+        ) {
             return Err(StoreFailure::Directory);
         }
         identity(status.st_dev, status.st_ino)
@@ -1386,11 +1438,13 @@ mod store {
 
     fn file_identity(file: &File) -> Result<FileIdentity, StoreFailure> {
         let status = fstat(file).map_err(|_| StoreFailure::Marker)?;
-        if !FileType::from_raw_mode(status.st_mode).is_file()
-            || crate::native_metadata::link_count(status.st_nlink) != 1
-            || status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-        {
+        if !crate::native_metadata::exact_regular_file(
+            FileType::from_raw_mode(status.st_mode).is_file(),
+            crate::native_metadata::link_count(status.st_nlink),
+            status.st_uid,
+            geteuid().as_raw(),
+            crate::native_metadata::mode(status.st_mode),
+        ) {
             return Err(StoreFailure::Marker);
         }
         identity(status.st_dev, status.st_ino)
@@ -1412,14 +1466,17 @@ mod store {
     struct SystemStoreOperations;
 
     impl StoreOperations for SystemStoreOperations {
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn sync_file(&self, file: &File, _directory: &File) -> std::io::Result<()> {
             file.sync_all()
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn sync_directory(&self, directory: &File) -> std::io::Result<()> {
             directory.sync_all()
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn replace_marker(&self, directory: &File) -> std::io::Result<()> {
             renameat(
                 directory,
@@ -1566,9 +1623,7 @@ mod store {
         expected: FileIdentity,
     ) -> Result<(), StoreFailure> {
         let current = open_marker_file(directory, name)?;
-        if file_identity(&current)? != expected {
-            return Err(StoreFailure::Conflict);
-        }
+        require_store_condition(file_identity(&current)? == expected, StoreFailure::Conflict)?;
         unlinkat(directory, name, AtFlags::empty()).map_err(|_| StoreFailure::Conflict)?;
         directory.sync_all().map_err(|_| StoreFailure::Sync)?;
         require_absent(directory, name)
@@ -1588,6 +1643,10 @@ mod store {
         Conflict,
         Injected,
         Contract(RestoreMarkerContractError),
+    }
+
+    fn require_store_condition(condition: bool, error: StoreFailure) -> Result<(), StoreFailure> {
+        if condition { Ok(()) } else { Err(error) }
     }
 
     impl fmt::Display for StoreFailure {
@@ -1642,6 +1701,63 @@ mod store {
         ));
         ServiceSqliteError::with_source(kind, cause)
     }
+
+    #[cfg(test)]
+    mod failure_tests {
+
+        use super::*;
+
+        #[test]
+        fn store_failure_inventory_is_complete_and_source_free() {
+            let contract = RestoreMarkerContractError::ChecksumMismatch;
+            for (failure, message) in [
+                (
+                    StoreFailure::Directory,
+                    "restore marker directory is invalid",
+                ),
+                (StoreFailure::Marker, "restore marker file is invalid"),
+                (StoreFailure::Missing, "restore marker file is missing"),
+                (
+                    StoreFailure::Collision,
+                    "restore marker artifact already exists",
+                ),
+                (
+                    StoreFailure::Permissions,
+                    "restore marker permissions are invalid",
+                ),
+                (StoreFailure::Read, "restore marker could not be read"),
+                (StoreFailure::Write, "restore marker could not be written"),
+                (
+                    StoreFailure::Sync,
+                    "restore marker durability could not be proven",
+                ),
+                (StoreFailure::Rename, "restore marker replacement failed"),
+                (StoreFailure::Conflict, "restore marker binding changed"),
+                (
+                    StoreFailure::Injected,
+                    "restore marker durability boundary failed",
+                ),
+                (
+                    StoreFailure::Contract(contract),
+                    "restore marker checksum does not match",
+                ),
+            ] {
+                assert_eq!(failure.to_string(), message);
+                assert!(failure.source().is_none());
+                assert!(format!("{failure:?}").contains(&format!("{failure:?}")));
+                assert_eq!(require_store_condition(true, failure), Ok(()));
+                assert_eq!(require_store_condition(false, failure), Err(failure));
+                for kind in [
+                    ServiceSqliteErrorKind::Restore,
+                    ServiceSqliteErrorKind::Recovery,
+                ] {
+                    let error = operation_store(kind, failure);
+                    assert_eq!(error.kind(), kind);
+                    assert!(error.source().is_some());
+                }
+            }
+        }
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1651,6 +1767,7 @@ pub(crate) use store::TestStoreFailure;
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use radroots_runtime_paths::{
         InstanceId, RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver,
@@ -1658,6 +1775,56 @@ mod tests {
     };
 
     fn paths(root: &Path) -> ServiceSqlitePaths {
+        paths_for(root, "myc", "primary")
+    }
+
+    #[test]
+    fn marker_contract_failure_inventory_is_complete_and_source_free() {
+        for (kind, message) in [
+            (
+                RestoreMarkerContractError::MarkerTooLarge,
+                "restore marker exceeds its byte limit",
+            ),
+            (
+                RestoreMarkerContractError::MalformedEncoding,
+                "restore marker encoding is malformed",
+            ),
+            (
+                RestoreMarkerContractError::NonCanonicalEncoding,
+                "restore marker encoding is not canonical",
+            ),
+            (
+                RestoreMarkerContractError::EncodingFailure,
+                "restore marker could not be encoded",
+            ),
+            (
+                RestoreMarkerContractError::UnsupportedValue,
+                "restore marker schema or value is unsupported",
+            ),
+            (
+                RestoreMarkerContractError::ChecksumMismatch,
+                "restore marker checksum does not match",
+            ),
+            (
+                RestoreMarkerContractError::InvalidIdentity,
+                "restore marker identity is invalid",
+            ),
+            (
+                RestoreMarkerContractError::InvalidLayout,
+                "restore recovery layout is invalid",
+            ),
+            (
+                RestoreMarkerContractError::IllegalTransition,
+                "restore marker transition is illegal",
+            ),
+        ] {
+            assert_eq!(kind.to_string(), message);
+            assert!(kind.source().is_none());
+            assert!(format!("{kind:?}").contains(&format!("{kind:?}")));
+        }
+    }
+
+    fn paths_for(root: &Path, service: &str, instance: &str) -> ServiceSqlitePaths {
         let context = RuntimeContext::resolve(
             &RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default()),
             RuntimeContextBootstrap::new(
@@ -1667,8 +1834,8 @@ mod tests {
                 RuntimeContextSource::BootstrapCli,
             )
             .expect("bootstrap"),
-            ServiceId::new("myc").expect("service"),
-            InstanceId::new("primary").expect("instance"),
+            ServiceId::new(service).expect("service"),
+            InstanceId::new(instance).expect("instance"),
         )
         .expect("context");
         ServiceSqlitePaths::from_runtime_context(&context).expect("paths")
@@ -1731,6 +1898,52 @@ mod tests {
     }
 
     #[test]
+    fn marker_identity_matching_binds_each_dimension() {
+        let root = tempfile::tempdir().expect("root");
+        let paths = paths(root.path());
+        let marker = marker(&paths);
+        let exact = ServiceDatabaseIdentity::new(
+            &paths,
+            SourceGeneration::new([7; 32]).expect("generation"),
+            NonZeroU32::new(3).expect("schema"),
+            ServiceSqliteApplicationId::new(0x5244_5254).expect("application"),
+        );
+        assert!(marker.matches_identity(&exact));
+        let other_service_paths = paths_for(root.path(), "rhi", "primary");
+        assert!(!marker.matches_identity(&ServiceDatabaseIdentity::new(
+            &other_service_paths,
+            exact.source_generation(),
+            exact.supported_state_schema_version(),
+            exact.application_id(),
+        )));
+        let other_instance_paths = paths_for(root.path(), "myc", "secondary");
+        assert!(!marker.matches_identity(&ServiceDatabaseIdentity::new(
+            &other_instance_paths,
+            exact.source_generation(),
+            exact.supported_state_schema_version(),
+            exact.application_id(),
+        )));
+        assert!(!marker.matches_identity(&ServiceDatabaseIdentity::new(
+            &paths,
+            SourceGeneration::new([9; 32]).expect("generation"),
+            exact.supported_state_schema_version(),
+            exact.application_id(),
+        )));
+        assert!(!marker.matches_identity(&ServiceDatabaseIdentity::new(
+            &paths,
+            exact.source_generation(),
+            exact.supported_state_schema_version(),
+            ServiceSqliteApplicationId::new(7).expect("application"),
+        )));
+        assert!(!marker.matches_identity(&ServiceDatabaseIdentity::new(
+            &paths,
+            exact.source_generation(),
+            NonZeroU32::new(2).expect("schema ceiling"),
+            exact.application_id(),
+        )));
+    }
+
+    #[test]
     fn all_phase_edges_and_idempotent_bytes_are_exact() {
         let root = tempfile::tempdir().expect("root");
         let prepared = marker(&paths(root.path()));
@@ -1780,9 +1993,18 @@ mod tests {
         let root = tempfile::tempdir().expect("root");
         let marker = marker(&paths(root.path()));
         let text = std::str::from_utf8(marker.canonical_bytes()).expect("text");
+        assert_eq!(
+            RestoreRecoveryMarker::from_canonical_bytes(b""),
+            Err(RestoreMarkerContractError::MalformedEncoding)
+        );
         for altered in [
             format!(" {text}"),
+            text.replace(
+                "\"schema\":\"radroots.service-sqlite.restore-marker\"",
+                "\"schema\":\"other\"",
+            ),
             text.replace("\"schema_version\":1", "\"schema_version\":2"),
+            text.replace("\"phase\":\"prepared\"", "\"phase\":\"unknown\""),
             text.replace("\"phase\":\"prepared\"", "\"phase\":null"),
             text.replace(
                 "\"service\":\"myc\"",
@@ -1793,6 +2015,11 @@ mod tests {
                 "\"unknown\":1,\"schema_version\":1,\"phase\"",
             ),
             text.replace("\"device\":1,\"inode\":2", "\"inode\":2,\"device\":1"),
+            text.replace("\"source_generation\":\"07", "\"source_generation\":\"0"),
+            text.replace("\"source_generation\":\"07", "\"source_generation\":\"A7"),
+            text.replace("\"state_schema_version\":3", "\"state_schema_version\":0"),
+            text.replace("\"application_id\":1380209236", "\"application_id\":0"),
+            text.replace("\"byte_length\":4096", "\"byte_length\":0"),
             text.replace("\"marker_sha256\":\"0", "\"marker_sha256\":\"A"),
         ] {
             assert!(
@@ -2160,8 +2387,8 @@ mod tests {
     fn marker_errors_and_debug_are_path_content_and_digest_free() {
         let root = tempfile::tempdir().expect("secret-root");
         let paths = paths(root.path());
-        let marker = marker(&paths);
-        let debug = format!("{marker:?}");
+        let redacted_marker = marker(&paths);
+        let debug = format!("{redacted_marker:?}");
         for sensitive in [
             "secret-root",
             "state.sqlite",
@@ -2188,5 +2415,39 @@ mod tests {
             assert!(!rendered.contains('/'));
             assert!(!rendered.contains(".sqlite"));
         }
+        for error in [
+            RestoreMarkerContractError::MarkerTooLarge,
+            RestoreMarkerContractError::MalformedEncoding,
+            RestoreMarkerContractError::NonCanonicalEncoding,
+            RestoreMarkerContractError::EncodingFailure,
+            RestoreMarkerContractError::UnsupportedValue,
+            RestoreMarkerContractError::ChecksumMismatch,
+            RestoreMarkerContractError::InvalidIdentity,
+            RestoreMarkerContractError::InvalidLayout,
+            RestoreMarkerContractError::IllegalTransition,
+        ] {
+            assert_eq!(require_marker_contract(true, error), Ok(()));
+            assert_eq!(require_marker_contract(false, error), Err(error));
+        }
+
+        let layout = RestoreRecoveryLayout::for_paths(&paths).expect("layout");
+        assert!(layout_uses_fixed_marker_name(&layout));
+        let mut invalid_layout = layout;
+        invalid_layout.marker = invalid_layout.marker.with_file_name("other-marker");
+        assert!(!layout_uses_fixed_marker_name(&invalid_layout));
+
+        let prepared = marker(&paths);
+        let retained = prepared
+            .transitioned_to(RestoreRecoveryPhase::LiveRetained)
+            .expect("retained");
+        let installed = retained
+            .transitioned_to(RestoreRecoveryPhase::ReplacementInstalled)
+            .expect("installed");
+        assert!(interrupted_successor_matches(&prepared, &retained));
+        assert!(interrupted_successor_matches(&retained, &installed));
+        assert!(!interrupted_successor_matches(&prepared, &prepared));
+        assert!(!interrupted_successor_matches(&prepared, &installed));
+        let other_prepared = marker(&paths);
+        assert!(!interrupted_successor_matches(&retained, &other_prepared));
     }
 }

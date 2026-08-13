@@ -599,6 +599,7 @@ mod tests {
             RuntimeContextSource::BootstrapCli,
         )
         .expect("bootstrap");
+        assert_eq!(bootstrap.profile(), RadrootsPathProfile::RepoLocal);
         let bootstrap_debug = format!("{bootstrap:?}");
         assert!(bootstrap_debug.contains("repo_local_root: Some(\"[redacted]\")"));
         let context = repo_local_context(PathBuf::from("/sensitive/project-root"));

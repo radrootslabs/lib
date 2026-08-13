@@ -540,4 +540,39 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn public_accessors_and_text_boundaries_are_exact() {
+        let build =
+            BuildInfo::from_compile_time(BuildMode::Release, complete_environment()).unwrap();
+        assert_eq!(build.service_commit(), SERVICE_REVISION);
+        assert_eq!(build.lib_revision(), LIB_REVISION);
+        assert_eq!(build.rust_version(), "1.97.1");
+        assert_eq!(build.target(), "x86_64-unknown-linux-gnu");
+        assert_eq!(build.feature_profile(), "service-host");
+        assert_eq!(build.contract_versions().config(), 1);
+        assert_eq!(build.contract_versions().state(), 2);
+        assert_eq!(build.contract_versions().admin(), 3);
+        assert_eq!(build.contract_versions().status(), 4);
+        assert_eq!(build.contract_versions().provider(), 5);
+
+        assert!(!valid_text(""));
+        assert!(valid_text(&"a".repeat(BUILD_INFO_TEXT_MAX_BYTES)));
+        assert!(!valid_text(&"a".repeat(BUILD_INFO_TEXT_MAX_BYTES + 1)));
+        assert!(valid_text("a.b_c:d-e"));
+        assert!(!valid_text("a/b"));
+
+        let mut environment = complete_environment();
+        environment.service_commit = Some(DEVELOPMENT_REVISION);
+        environment.lib_revision = Some(DEVELOPMENT_REVISION);
+        assert!(BuildInfo::from_compile_time(BuildMode::Development, environment).is_ok());
+
+        for error in [
+            BuildInfoError::InvalidValue(BuildInfoField::Target),
+            BuildInfoError::MissingVariable(BUILD_TARGET_ENV),
+        ] {
+            assert!(!error.to_string().is_empty());
+            assert!(std::error::Error::source(&error).is_none());
+        }
+    }
 }

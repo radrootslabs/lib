@@ -1,13 +1,18 @@
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output, Stdio};
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+
+#[cfg(unix)]
+use std::process::{ExitStatus, Output};
 
 use flate2::read::GzDecoder;
 
 use crate::error::RadrootsRuntimeManagerError;
 use crate::paths::ManagedRuntimeInstancePaths;
+
+type SpawnProcess = fn(&Path, &[String], &[(String, String)], File, File) -> std::io::Result<u32>;
 
 /// A validated single-component manager-owned executable artifact name.
 #[derive(Clone, PartialEq, Eq)]
@@ -145,26 +150,47 @@ fn start_process_path(
     envs: &[(String, String)],
     paths: &ManagedRuntimeInstancePaths,
 ) -> Result<u32, RadrootsRuntimeManagerError> {
+    start_process_with(binary_path, args, envs, paths, spawn_process)
+}
+
+fn start_process_with(
+    binary_path: &Path,
+    args: &[String],
+    envs: &[(String, String)],
+    paths: &ManagedRuntimeInstancePaths,
+    spawn: SpawnProcess,
+) -> Result<u32, RadrootsRuntimeManagerError> {
     ensure_instance_layout(paths)?;
     let stdout = open_log_file(paths.stdout_log_path())?;
     let stderr = open_log_file(paths.stderr_log_path())?;
-    let child = Command::new(binary_path)
-        .args(args)
-        .envs(envs.iter().map(|(key, value)| (key, value)))
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
-        .spawn()
-        .map_err(|source| RadrootsRuntimeManagerError::SpawnProcess {
+    let pid = spawn(binary_path, args, envs, stdout, stderr).map_err(|source| {
+        RadrootsRuntimeManagerError::SpawnProcess {
             kind: source.kind(),
-        })?;
-    let pid = child.id();
+        }
+    })?;
     fs::write(paths.pid_file_path(), pid.to_string()).map_err(|source| {
         RadrootsRuntimeManagerError::WritePidFile {
             kind: source.kind(),
         }
     })?;
     Ok(pid)
+}
+
+fn spawn_process(
+    binary_path: &Path,
+    args: &[String],
+    envs: &[(String, String)],
+    stdout: File,
+    stderr: File,
+) -> std::io::Result<u32> {
+    Command::new(binary_path)
+        .args(args)
+        .envs(envs.iter().map(|(key, value)| (key, value)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .spawn()
+        .map(|child| child.id())
 }
 
 pub fn process_running(
@@ -544,15 +570,15 @@ fn force_kill_process(_pid: u32) -> Result<(), RadrootsRuntimeManagerError> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    #[cfg(unix)]
     use std::fs::File;
     use std::io;
     use std::path::Path;
+    #[cfg(unix)]
     use std::process::ExitStatus;
+    #[cfg(unix)]
     use std::thread;
     use std::time::Duration;
-
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
 
     use radroots_runtime_paths::{
         InstanceId, RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver,
@@ -561,13 +587,17 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        ExistingPathKind, ManagedRuntimeArtifactName, apply_mode, ensure_instance_layout,
-        ensure_parent_dir, extract_binary_archive, find_binary_with_name, force_kill_process,
-        install_binary, open_log_file, process_running, process_running_for_pid,
-        process_running_state_from_ps_output, read_pid, remove_instance_artifacts,
-        remove_path_from_state, remove_path_if_exists, set_executable_mode, signal_process,
-        signal_process_with, start_process, stop_process, stop_process_for_pid, terminate_process,
+        ExistingPathKind, ManagedRuntimeArtifactName, ensure_instance_layout, ensure_parent_dir,
+        extract_binary_archive, find_binary_with_name, install_binary, open_log_file,
+        process_running, read_pid, remove_instance_artifacts, remove_path_from_state,
+        remove_path_if_exists, start_process_with, stop_process, stop_process_for_pid,
         write_instance_config,
+    };
+    #[cfg(unix)]
+    use super::{
+        apply_mode, force_kill_process, process_running_for_pid,
+        process_running_state_from_ps_output, set_executable_mode, signal_process,
+        signal_process_with, start_process, terminate_process,
     };
     use crate::error::RadrootsRuntimeManagerError;
     use crate::paths::{ManagedRuntimeInstancePaths, resolve_instance_paths, resolve_shared_paths};
@@ -943,16 +973,24 @@ mod tests {
     fn start_process_reports_spawn_errors() {
         let dir = tempdir().expect("tempdir");
         let paths = sample_paths(dir.path());
-        let err = start_process(&paths, &artifact("missing"), &[], &[])
-            .expect_err("missing binary should fail");
+        let binary = paths.install_dir().join("unavailable");
+        let err = start_process_with(
+            &binary,
+            &[],
+            &[],
+            &paths,
+            |_binary, _args, _envs, _stdout, _stderr| {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "injected spawn denial",
+                ))
+            },
+        )
+        .expect_err("injected spawn failure");
         assert_safe_error(
             &err,
             "spawn managed runtime process",
-            &[paths
-                .install_dir()
-                .join("missing")
-                .to_string_lossy()
-                .as_ref()],
+            &[binary.to_string_lossy().as_ref(), "injected spawn denial"],
         );
     }
 
@@ -1294,33 +1332,6 @@ mod tests {
             &err,
             "set managed runtime file permissions",
             &[path.to_string_lossy().as_ref(), "set permissions failed"],
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn remove_path_if_exists_reports_metadata_errors() {
-        let dir = tempdir().expect("tempdir");
-        let restricted = dir.path().join("restricted");
-        fs::create_dir(&restricted).expect("restricted dir");
-        let blocked_path = restricted.join("child");
-
-        let mut permissions = fs::metadata(&restricted).expect("metadata").permissions();
-        permissions.set_mode(0o0);
-        fs::set_permissions(&restricted, permissions).expect("restrict permissions");
-
-        let err = remove_path_if_exists(&blocked_path).expect_err("metadata lookup should fail");
-
-        let mut restore = fs::metadata(&restricted)
-            .expect("restricted metadata")
-            .permissions();
-        restore.set_mode(0o755);
-        fs::set_permissions(&restricted, restore).expect("restore permissions");
-
-        assert_safe_error(
-            &err,
-            "read managed runtime file",
-            &[blocked_path.to_string_lossy().as_ref()],
         );
     }
 

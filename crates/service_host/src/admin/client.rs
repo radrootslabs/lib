@@ -435,6 +435,7 @@ struct ConnectionDriver {
 struct ClientUnixStream(tokio::net::UnixStream);
 
 impl AsyncRead for ClientUnixStream {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn poll_read(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -445,6 +446,7 @@ impl AsyncRead for ClientUnixStream {
 }
 
 impl AsyncWrite for ClientUnixStream {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn poll_write(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -453,6 +455,7 @@ impl AsyncWrite for ClientUnixStream {
         Pin::new(&mut self.0).poll_write(context, buffer)
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn poll_flush(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -1172,5 +1175,149 @@ mod tests {
         tokio::time::timeout(std::time::Duration::from_secs(1), dropped.notified())
             .await
             .expect("aborted driver task must drop");
+    }
+
+    #[test]
+    fn strict_response_target_and_error_helpers_cover_the_full_value_surface() {
+        for (document, expected) in [
+            ("true", Value::Bool(true)),
+            ("-3", Value::Number((-3).into())),
+            ("4", Value::Number(4_u64.into())),
+            (
+                "2.5",
+                Value::Number(serde_json::Number::from_f64(2.5).unwrap()),
+            ),
+            (r#""text""#, Value::String("text".to_owned())),
+            ("[true,2]", serde_json::json!([true, 2])),
+            (r#"{"value":3}"#, serde_json::json!({"value": 3})),
+        ] {
+            assert_eq!(
+                serde_json::from_str::<StrictJsonValue>(document).unwrap().0,
+                expected
+            );
+        }
+        for rejected in ["null", "[1,null]", r#"{"same":1,"same":2}"#] {
+            assert!(serde_json::from_str::<StrictJsonValue>(rejected).is_err());
+        }
+
+        let target = AdminClientTarget::new("/v1/items/value%2D1?page=1&limit=2").unwrap();
+        assert_eq!(target.as_str(), "/v1/items/value%2D1?page=1&limit=2");
+        assert_eq!(target.path(), "/v1/items/value%2D1");
+        assert_eq!(target.query(), Some("page=1&limit=2"));
+        assert_eq!(query_item_count(None), 0);
+        assert_eq!(query_item_count(Some("")), 0);
+        assert_eq!(query_item_count(target.query()), 2);
+        assert!(valid_percent_encoding(b"/v1/items/%2d"));
+        assert!(!valid_percent_encoding(b"/v1/items/%"));
+        assert!(!valid_percent_encoding(b"/v1/items/%2"));
+        assert!(!valid_percent_encoding(b"/v1/items/%GG"));
+        assert!(!valid_percent_encoding(b"/v1/items/%G0"));
+        assert!(!valid_percent_encoding(b"/v1/items/%0G"));
+
+        let invalid_targets = [
+            (String::new(), AdminClientTargetError::Empty),
+            (
+                "x".repeat(ADMIN_CLIENT_TARGET_MAX_UTF8_BYTES + 1),
+                AdminClientTargetError::TooLong,
+            ),
+            (
+                "http://[invalid".to_owned(),
+                AdminClientTargetError::InvalidUri,
+            ),
+            (
+                "http://localhost/v1/status".to_owned(),
+                AdminClientTargetError::AuthorityForbidden,
+            ),
+            (
+                "/v2/status".to_owned(),
+                AdminClientTargetError::WrongVersionPrefix,
+            ),
+            (
+                format!("/v1/{}", "x".repeat(ADMIN_ROUTE_PATH_MAX_UTF8_BYTES)),
+                AdminClientTargetError::PathTooLong,
+            ),
+            (
+                "/v1//status".to_owned(),
+                AdminClientTargetError::EmptySegment,
+            ),
+            (
+                "/v1/{status}".to_owned(),
+                AdminClientTargetError::PatternForbidden,
+            ),
+            (
+                "/v1/items/%GG".to_owned(),
+                AdminClientTargetError::InvalidPercentEncoding,
+            ),
+        ];
+        for (target, expected) in invalid_targets {
+            assert_eq!(AdminClientTarget::new(target).unwrap_err(), expected);
+        }
+        assert!(!AdminClientTargetError::Empty.to_string().is_empty());
+        assert_eq!(
+            AdminClient::new("relative.sock", AdminTransportLimits::DEFAULT)
+                .unwrap_err()
+                .kind(),
+            AdminClientErrorKind::SocketPath
+        );
+        assert_eq!(
+            AdminClient::new("/", AdminTransportLimits::DEFAULT)
+                .unwrap_err()
+                .kind(),
+            AdminClientErrorKind::SocketPath
+        );
+
+        let mut headers = HeaderMap::new();
+        assert!(!is_json_content_type(&headers));
+        assert_eq!(content_length(&headers), None);
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_CONTENT_TYPE));
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_static("12"));
+        assert!(is_json_content_type(&headers));
+        assert_eq!(content_length(&headers), Some(12));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_static("invalid"));
+        assert!(is_json_content_type(&headers));
+        assert_eq!(content_length(&headers), None);
+        assert!(header_bytes(&headers) > 0);
+
+        let failure = AdminFailureResponse::new(
+            AdminCorrelationId::new("safe-correlation").unwrap(),
+            known_error("known_failure", "known failure"),
+        );
+        let server = AdminClientError::server(failure.clone());
+        assert_eq!(server.kind(), AdminClientErrorKind::ServerFailure);
+        assert_eq!(server.failure(), Some(&failure));
+        assert_eq!(server.io_kind(), None);
+        assert!(server.source().is_none());
+        assert!(!server.to_string().is_empty());
+
+        let connect = AdminClientError::connect(io::Error::new(
+            io::ErrorKind::ConnectionRefused,
+            "sensitive socket",
+        ));
+        assert_eq!(connect.kind(), AdminClientErrorKind::Connect);
+        assert_eq!(connect.io_kind(), Some(io::ErrorKind::ConnectionRefused));
+        assert!(connect.source().is_some());
+        assert!(!format!("{connect:?}").contains("sensitive socket"));
+
+        let malformed = decode_response::<EchoResponse>(StatusCode::OK, b"[]").unwrap_err();
+        assert_eq!(malformed.kind(), AdminClientErrorKind::MalformedResponse);
+        let unsupported = decode_response::<EchoResponse>(
+            StatusCode::OK,
+            br#"{"contract_version":2,"ok":true,"correlation_id":"safe","result":{"value":"x"}}"#,
+        )
+        .unwrap_err();
+        assert_eq!(
+            unsupported.kind(),
+            AdminClientErrorKind::UnsupportedContractVersion
+        );
+
+        use std::io::Write as _;
+        let mut writer = CappedWriter::new(4);
+        writer.flush().unwrap();
+        assert_eq!(writer.write(b"four").unwrap(), 4);
+        assert!(writer.write(b"x").is_err());
     }
 }

@@ -6,6 +6,7 @@ mod recover;
 mod stage;
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod process_tests;
 
 pub use finalize::finalize_staged_restore;

@@ -109,14 +109,17 @@ trait CaptureOperations: Send + Sync {
 struct SystemCaptureOperations;
 
 impl CaptureOperations for SystemCaptureOperations {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn sync_state(&self, state: &File) -> io::Result<()> {
         state.sync_all()
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn sync_staging(&self, staging: &File) -> io::Result<()> {
         staging.sync_all()
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn sync_parent(&self, parent: &File) -> io::Result<()> {
         parent.sync_all()
     }
@@ -217,21 +220,22 @@ async fn capture_online_backup_with_operations(
     operations: Arc<dyn CaptureOperations>,
     failpoints: &crate::failpoint::DurabilityFailpoints,
 ) -> Result<ServiceBackupManifest, ServiceSqliteError> {
-    if !matches!(
-        pool.mode(),
-        OpenMode::Initialize | OpenMode::ReadWriteExisting
-    ) || closing.load(Ordering::Acquire)
-    {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-    }
+    crate::require_condition(
+        matches!(
+            pool.mode(),
+            OpenMode::Initialize | OpenMode::ReadWriteExisting
+        ) && !closing.load(Ordering::Acquire),
+        ServiceSqliteErrorKind::Open,
+    )?;
     let staging = StagingPath::new(staging_directory)?;
     let permit = CapturePermit::acquire(Arc::clone(active))?;
     pool.validate()?;
     let mut admission = pool.acquire().await?;
     pool.validate()?;
-    if closing.load(Ordering::Acquire) {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-    }
+    crate::require_condition(
+        !closing.load(Ordering::Acquire),
+        ServiceSqliteErrorKind::Open,
+    )?;
     let metadata = crate::metadata::verify_database_metadata(&mut admission, pool.identity()).await;
     #[cfg(test)]
     let metadata = if TEST_CAPTURE_INJECT_METADATA_FAILURE.load(Ordering::Acquire) {
@@ -667,7 +671,10 @@ impl StagingGuard {
                 return Err(error);
             }
         };
-        if opened_directory_identity != created_directory_identity {
+        if let Err(error) = require_backup_condition(
+            opened_directory_identity == created_directory_identity,
+            BackupFailureKind::StagingReplaced,
+        ) {
             cleanup_partial_staging(
                 &parent,
                 &path.name,
@@ -675,7 +682,7 @@ impl StagingGuard {
                 Some(&directory),
                 None,
             );
-            return Err(backup_error(BackupFailureKind::StagingReplaced));
+            return Err(error);
         }
         if let Err(source) = fchmod(&directory, Mode::RUSR | Mode::WUSR | Mode::XUSR) {
             cleanup_partial_staging(
@@ -801,9 +808,13 @@ impl StagingGuard {
             .transpose()
             .map_err(|source| backup_source(BackupFailureKind::InvalidStagingInventory, source))?
             .ok_or_else(|| backup_error(BackupFailureKind::InvalidStagingInventory))?;
-        if first.file_name() != OsStr::new(STATE_FILE_NAME) || entries.next().is_some() {
-            return Err(backup_error(BackupFailureKind::InvalidStagingInventory));
-        }
+        require_backup_condition(
+            crate::all_constraints([
+                first.file_name() == OsStr::new(STATE_FILE_NAME),
+                entries.next().is_none(),
+            ]),
+            BackupFailureKind::InvalidStagingInventory,
+        )?;
         Ok(())
     }
 
@@ -828,9 +839,10 @@ impl StagingGuard {
         let mut length = 0_u64;
         let mut buffer = [0_u8; HASH_BUFFER_BYTES];
         loop {
-            if cancellation.load(Ordering::Acquire) {
-                return Err(backup_error(BackupFailureKind::Cancelled));
-            }
+            require_backup_condition(
+                !cancellation.load(Ordering::Acquire),
+                BackupFailureKind::Cancelled,
+            )?;
             let count = state
                 .read(&mut buffer)
                 .map_err(|source| backup_source(BackupFailureKind::HashState, source))?;
@@ -842,14 +854,10 @@ impl StagingGuard {
                     u64::try_from(count).map_err(|_| backup_error(BackupFailureKind::HashState))?,
                 )
                 .ok_or_else(|| backup_error(BackupFailureKind::HashState))?;
-            if length > i64::MAX as u64 {
-                return Err(backup_error(BackupFailureKind::HashState));
-            }
+            require_backup_condition(length <= i64::MAX as u64, BackupFailureKind::HashState)?;
             hasher.update(&buffer[..count]);
         }
-        if length == 0 {
-            return Err(backup_error(BackupFailureKind::HashState));
-        }
+        require_backup_condition(length != 0, BackupFailureKind::HashState)?;
         self.validate()?;
         Ok((length, hasher.finalize().into()))
     }
@@ -943,10 +951,12 @@ fn created_directory_identity(
 ) -> Result<FileIdentity, ServiceSqliteError> {
     let status = statat(parent, name, AtFlags::SYMLINK_NOFOLLOW)
         .map_err(|source| backup_source(BackupFailureKind::StagingReplaced, source))?;
-    if !FileType::from_raw_mode(status.st_mode).is_dir()
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o022 != 0
-    {
+    if !crate::native_metadata::secure_directory(
+        FileType::from_raw_mode(status.st_mode).is_dir(),
+        status.st_uid,
+        geteuid().as_raw(),
+        crate::native_metadata::mode(status.st_mode),
+    ) {
         return Err(backup_error(BackupFailureKind::StagingReplaced));
     }
     identity(&status)
@@ -965,14 +975,22 @@ fn validate_directory_descriptor(
     let status = fstat(directory)
         .map_err(|source| backup_source(BackupFailureKind::InvalidStagingParent, source))?;
     let mode = crate::native_metadata::mode(status.st_mode) & 0o777;
-    if !FileType::from_raw_mode(status.st_mode).is_dir()
-        || status.st_uid != geteuid().as_raw()
-        || if exact_owner_mode {
-            mode != 0o700
-        } else {
-            mode & 0o022 != 0
-        }
-    {
+    let valid = if exact_owner_mode {
+        crate::native_metadata::exact_directory(
+            FileType::from_raw_mode(status.st_mode).is_dir(),
+            status.st_uid,
+            geteuid().as_raw(),
+            mode,
+        )
+    } else {
+        crate::native_metadata::secure_directory(
+            FileType::from_raw_mode(status.st_mode).is_dir(),
+            status.st_uid,
+            geteuid().as_raw(),
+            mode,
+        )
+    };
+    if !valid {
         return Err(backup_error(BackupFailureKind::InvalidStagingParent));
     }
     identity(&status)
@@ -981,11 +999,13 @@ fn validate_directory_descriptor(
 fn validate_file_descriptor(file: &File) -> Result<FileIdentity, ServiceSqliteError> {
     let status = fstat(file)
         .map_err(|source| backup_source(BackupFailureKind::InvalidStagingInventory, source))?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-        || crate::native_metadata::mode(status.st_mode) & 0o777 != 0o600
-    {
+    if !crate::native_metadata::exact_regular_file(
+        FileType::from_raw_mode(status.st_mode).is_file(),
+        crate::native_metadata::link_count(status.st_nlink),
+        status.st_uid,
+        geteuid().as_raw(),
+        crate::native_metadata::mode(status.st_mode),
+    ) {
         return Err(backup_error(BackupFailureKind::InvalidStagingInventory));
     }
     identity(&status)
@@ -1005,11 +1025,14 @@ fn validate_reopened_directory(
         )
         .map_err(|source| backup_source(BackupFailureKind::StagingReplaced, source))?,
     );
-    if validate_directory_descriptor(&current, exact_owner_mode)? != expected
-        || validate_directory_descriptor(held, exact_owner_mode)? != expected
-    {
-        return Err(backup_error(BackupFailureKind::StagingReplaced));
-    }
+    require_backup_condition(
+        validate_directory_descriptor(&current, exact_owner_mode)? == expected,
+        BackupFailureKind::StagingReplaced,
+    )?;
+    require_backup_condition(
+        validate_directory_descriptor(held, exact_owner_mode)? == expected,
+        BackupFailureKind::StagingReplaced,
+    )?;
     Ok(())
 }
 
@@ -1028,11 +1051,14 @@ fn validate_directory_entry(
         )
         .map_err(|source| backup_source(BackupFailureKind::StagingReplaced, source))?,
     );
-    if validate_directory_descriptor(&current, true)? != expected
-        || validate_directory_descriptor(held, true)? != expected
-    {
-        return Err(backup_error(BackupFailureKind::StagingReplaced));
-    }
+    require_backup_condition(
+        validate_directory_descriptor(&current, true)? == expected,
+        BackupFailureKind::StagingReplaced,
+    )?;
+    require_backup_condition(
+        validate_directory_descriptor(held, true)? == expected,
+        BackupFailureKind::StagingReplaced,
+    )?;
     Ok(())
 }
 
@@ -1051,11 +1077,14 @@ fn validate_file_entry(
         )
         .map_err(|source| backup_source(BackupFailureKind::StagingReplaced, source))?,
     );
-    if validate_file_descriptor(&current)? != expected
-        || validate_file_descriptor(held)? != expected
-    {
-        return Err(backup_error(BackupFailureKind::StagingReplaced));
-    }
+    require_backup_condition(
+        validate_file_descriptor(&current)? == expected,
+        BackupFailureKind::StagingReplaced,
+    )?;
+    require_backup_condition(
+        validate_file_descriptor(held)? == expected,
+        BackupFailureKind::StagingReplaced,
+    )?;
     Ok(())
 }
 
@@ -1066,10 +1095,12 @@ fn current_entry_identity(directory: &File, name: &OsStr) -> Option<FileIdentity
 
 fn safe_sidecar_identity(directory: &File, name: &str) -> Option<FileIdentity> {
     let status = statat(directory, name, AtFlags::SYMLINK_NOFOLLOW).ok()?;
-    if !FileType::from_raw_mode(status.st_mode).is_file()
-        || crate::native_metadata::link_count(status.st_nlink) != 1
-        || status.st_uid != geteuid().as_raw()
-    {
+    if !crate::native_metadata::regular_owner_single_link(
+        FileType::from_raw_mode(status.st_mode).is_file(),
+        crate::native_metadata::link_count(status.st_nlink),
+        status.st_uid,
+        geteuid().as_raw(),
+    ) {
         return None;
     }
     identity(&status).ok()
@@ -1100,17 +1131,19 @@ fn verify_database_inventory(connection: &Connection) -> Result<(), ServiceSqlit
     let name: String = first
         .get(1)
         .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-    if sequence != 0 || name != "main" {
-        return Err(backup_error(BackupFailureKind::Capture));
-    }
-    if rows
+    let has_extra = rows
         .next()
         .map_err(|source| backup_source(BackupFailureKind::Capture, source))?
-        .is_some()
-    {
-        return Err(backup_error(BackupFailureKind::Capture));
-    }
+        .is_some();
+    require_backup_condition(
+        database_inventory_matches(sequence, &name, has_extra),
+        BackupFailureKind::Capture,
+    )?;
     Ok(())
+}
+
+fn database_inventory_matches(sequence: i64, name: &str, has_extra: bool) -> bool {
+    crate::all_constraints([sequence == 0, name == "main", !has_extra])
 }
 
 fn verify_database_metadata(
@@ -1127,9 +1160,13 @@ fn verify_database_metadata(
             |row| row.get(0),
         )
         .map_err(metadata_source)?;
-    if row_count != 1 || application_id != i64::from(expected.application_id().get()) {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
-    }
+    crate::require_condition(
+        crate::all_constraints([
+            row_count == 1,
+            application_id == i64::from(expected.application_id().get()),
+        ]),
+        ServiceSqliteErrorKind::Metadata,
+    )?;
     let row = connection
         .query_row(
             "SELECT
@@ -1167,14 +1204,16 @@ fn verify_database_metadata(
     else {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
     };
-    if service != expected.service().as_str()
-        || instance != expected.instance().as_str()
-        || generation.as_slice() != expected.source_generation().as_bytes()
-        || schema != i64::from(expected.state_schema_version().get())
-        || created_at != i64::try_from(expected.created_at_unix_ms()).unwrap_or(-1)
-    {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
-    }
+    crate::require_condition(
+        crate::all_constraints([
+            service == expected.service().as_str(),
+            instance == expected.instance().as_str(),
+            generation.as_slice() == expected.source_generation().as_bytes(),
+            schema == i64::from(expected.state_schema_version().get()),
+            created_at == i64::try_from(expected.created_at_unix_ms()).unwrap_or(-1),
+        ]),
+        ServiceSqliteErrorKind::Metadata,
+    )?;
     Ok(())
 }
 
@@ -1188,21 +1227,22 @@ fn verify_integrity(connection: &Connection) -> Result<(), ServiceSqliteError> {
         .map_err(integrity_source)?
         .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
     let result = row.get_ref(0).map_err(integrity_source)?;
-    if !integrity_projection_is_ok(result) || rows.next().map_err(integrity_source)?.is_some() {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
-    }
+    crate::require_condition(
+        integrity_projection_is_ok(result) && rows.next().map_err(integrity_source)?.is_none(),
+        ServiceSqliteErrorKind::Integrity,
+    )?;
     let mut statement = connection
         .prepare("PRAGMA foreign_key_check")
         .map_err(integrity_source)?;
-    if statement
-        .query([])
-        .map_err(integrity_source)?
-        .next()
-        .map_err(integrity_source)?
-        .is_some()
-    {
-        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
-    }
+    crate::require_condition(
+        statement
+            .query([])
+            .map_err(integrity_source)?
+            .next()
+            .map_err(integrity_source)?
+            .is_none(),
+        ServiceSqliteErrorKind::Integrity,
+    )?;
     Ok(())
 }
 
@@ -1289,6 +1329,17 @@ fn backup_error(kind: BackupFailureKind) -> ServiceSqliteError {
     )
 }
 
+fn require_backup_condition(
+    condition: bool,
+    kind: BackupFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(backup_error(kind))
+    }
+}
+
 fn backup_source(
     kind: BackupFailureKind,
     source: impl Error + Send + Sync + 'static,
@@ -1312,11 +1363,104 @@ fn metadata_source(source: rusqlite::Error) -> ServiceSqliteError {
 
 #[cfg(test)]
 mod tests {
+    use core::num::NonZeroU32;
     use std::os::unix::fs::{PermissionsExt, symlink};
 
+    use radroots_runtime_paths::{InstanceId, ServiceId};
+    use radroots_storage::event::SourceGeneration;
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn backup_failure_inventory_is_complete_and_source_aware() {
+        let cases = [
+            (
+                BackupFailureKind::InvalidStagingPath,
+                "backup staging path is invalid",
+            ),
+            (
+                BackupFailureKind::InvalidStagingParent,
+                "backup staging parent is invalid",
+            ),
+            (
+                BackupFailureKind::StagingCollision,
+                "backup staging destination already exists",
+            ),
+            (
+                BackupFailureKind::CreateStaging,
+                "backup staging directory could not be created",
+            ),
+            (
+                BackupFailureKind::CreateState,
+                "backup state member could not be created",
+            ),
+            (
+                BackupFailureKind::StagingReplaced,
+                "backup staging identity changed",
+            ),
+            (
+                BackupFailureKind::InvalidStagingInventory,
+                "backup staging inventory is invalid",
+            ),
+            (
+                BackupFailureKind::AlreadyActive,
+                "another backup capture is active",
+            ),
+            (BackupFailureKind::Capture, "online backup capture failed"),
+            (
+                BackupFailureKind::Cancelled,
+                "online backup capture was cancelled",
+            ),
+            (
+                BackupFailureKind::HashState,
+                "backup state member could not be hashed",
+            ),
+            (
+                BackupFailureKind::SyncState,
+                "backup state member could not be synchronized",
+            ),
+            (
+                BackupFailureKind::SyncStaging,
+                "backup staging directory could not be synchronized",
+            ),
+            (
+                BackupFailureKind::SyncParent,
+                "backup staging parent could not be synchronized",
+            ),
+            (
+                BackupFailureKind::Manifest,
+                "backup manifest could not be constructed",
+            ),
+            (BackupFailureKind::Join, "backup worker could not be joined"),
+        ];
+        for (kind, message) in cases {
+            let plain = BackupFailure { kind, source: None };
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+            assert!(format!("{plain:?}").contains("source: None"));
+
+            let sourced = BackupFailure {
+                kind,
+                source: Some(Box::new(std::io::Error::other("private-cause"))),
+            };
+            assert_eq!(sourced.to_string(), message);
+            assert_eq!(
+                sourced.source().expect("source").to_string(),
+                "private-cause"
+            );
+            let debug = format!("{sourced:?}");
+            assert!(debug.contains("[redacted]"));
+            assert!(!debug.contains("private-cause"));
+            assert!(require_backup_condition(true, kind).is_ok());
+            assert_eq!(
+                require_backup_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                ServiceSqliteErrorKind::Backup
+            );
+        }
+    }
 
     #[test]
     fn staging_path_rejects_relative_parent_and_oversize_inputs() {
@@ -1354,6 +1498,119 @@ mod tests {
             );
         }
         assert!(!path.full.exists());
+    }
+
+    #[test]
+    fn staging_guard_success_inventory_hash_sync_commit_and_empty_failure_are_exercised() {
+        let root = tempdir().expect("root");
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("parent mode");
+
+        let empty_path = StagingPath::new(&root.path().join("empty-stage")).expect("empty path");
+        let empty = StagingGuard::create(&empty_path, &SystemCaptureOperations).expect("empty");
+        assert!(empty.hash_state(&AtomicBool::new(false)).is_err());
+        drop(empty);
+
+        let path = StagingPath::new(&root.path().join("complete-stage")).expect("path");
+        let mut staging =
+            StagingGuard::create(&path, &SystemCaptureOperations).expect("complete stage");
+        std::fs::write(staging.state_path(), b"captured-state").expect("state bytes");
+        staging.validate_inventory().expect("singleton inventory");
+        let (length, digest) = staging
+            .hash_state(&AtomicBool::new(false))
+            .expect("hash state");
+        assert_eq!(length, 14);
+        assert_eq!(digest, Sha256::digest(b"captured-state").as_slice());
+        staging
+            .sync_state(&SystemCaptureOperations)
+            .expect("sync state");
+        staging
+            .sync_directories(&SystemCaptureOperations)
+            .expect("sync directories");
+        staging.commit();
+        drop(staging);
+        assert!(path.full.exists());
+        std::fs::remove_file(path.full.join(STATE_FILE_NAME)).expect("remove state");
+        std::fs::remove_dir(path.full).expect("remove stage");
+    }
+
+    #[test]
+    fn staging_inventory_and_sidecar_cleanup_bind_exact_entries() {
+        let root = tempdir().expect("root");
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("parent mode");
+        let path = StagingPath::new(&root.path().join("backup-stage")).expect("path");
+        let mut staging = StagingGuard::create(&path, &SystemCaptureOperations).expect("staging");
+        std::fs::write(staging.state_path(), b"state").expect("state bytes");
+        let wal = path.full.join(KNOWN_SIDECARS[0]);
+        std::fs::write(&wal, b"sidecar").expect("sidecar");
+        std::fs::set_permissions(&wal, std::fs::Permissions::from_mode(0o600))
+            .expect("sidecar mode");
+        assert!(staging.validate_inventory().is_err());
+        staging.record_sidecars();
+        drop(staging);
+        assert!(!path.full.exists());
+
+        let path = StagingPath::new(&root.path().join("unsafe-sidecar-stage")).expect("path");
+        let mut staging = StagingGuard::create(&path, &SystemCaptureOperations).expect("staging");
+        std::fs::write(staging.state_path(), b"state").expect("state bytes");
+        let wal = path.full.join(KNOWN_SIDECARS[0]);
+        std::fs::write(&wal, b"unsafe-sidecar").expect("sidecar");
+        std::fs::set_permissions(&wal, std::fs::Permissions::from_mode(0o666))
+            .expect("unsafe sidecar mode");
+        let outside_wal = root.path().join("unsafe-sidecar-alias");
+        std::fs::hard_link(&wal, &outside_wal).expect("make sidecar unsafe by link count");
+        staging.record_sidecars();
+        drop(staging);
+        assert_eq!(
+            std::fs::read(wal).expect("unsafe sidecar preserved"),
+            b"unsafe-sidecar"
+        );
+        assert_eq!(
+            std::fs::read(outside_wal).expect("outside sidecar link preserved"),
+            b"unsafe-sidecar"
+        );
+    }
+
+    #[test]
+    fn hash_cancellation_partial_cleanup_and_directory_replacement_are_exact() {
+        let root = tempdir().expect("root");
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("parent mode");
+
+        let cancelled_path = StagingPath::new(&root.path().join("cancelled-stage")).expect("path");
+        let cancelled =
+            StagingGuard::create(&cancelled_path, &SystemCaptureOperations).expect("staging");
+        std::fs::write(cancelled.state_path(), b"state").expect("state bytes");
+        assert!(cancelled.hash_state(&AtomicBool::new(true)).is_err());
+        drop(cancelled);
+
+        let exact_path = StagingPath::new(&root.path().join("exact-stage")).expect("path");
+        let exact = StagingGuard::create(&exact_path, &SystemCaptureOperations).expect("staging");
+        cleanup_partial_staging(
+            &exact.parent,
+            &exact.path.name,
+            Some(exact.directory_identity),
+            Some(&exact.directory),
+            Some(exact.state_identity),
+        );
+        assert!(!exact_path.full.exists());
+        drop(exact);
+
+        let replaced_path = StagingPath::new(&root.path().join("replaced-stage")).expect("path");
+        let replaced =
+            StagingGuard::create(&replaced_path, &SystemCaptureOperations).expect("staging");
+        let retired = root.path().join("retired-stage");
+        std::fs::rename(&replaced_path.full, &retired).expect("retire governed directory");
+        std::fs::create_dir(&replaced_path.full).expect("replacement directory");
+        std::fs::set_permissions(&replaced_path.full, std::fs::Permissions::from_mode(0o700))
+            .expect("replacement mode");
+        std::fs::write(replaced_path.full.join("foreign"), b"foreign").expect("foreign entry");
+        drop(replaced);
+        assert_eq!(
+            std::fs::read(replaced_path.full.join("foreign")).expect("replacement survives"),
+            b"foreign"
+        );
     }
 
     #[test]
@@ -1513,11 +1770,110 @@ mod tests {
     #[test]
     fn integrity_projection_bounds_corrupt_text_before_semantic_acceptance() {
         assert!(integrity_projection_is_ok(ValueRef::Text(b"ok")));
+        assert!(!integrity_projection_is_ok(ValueRef::Text(b"")));
+        assert!(!integrity_projection_is_ok(ValueRef::Text(b"not-ok")));
         let maximum = vec![b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES];
         assert!(!integrity_projection_is_ok(ValueRef::Text(&maximum)));
         let over_maximum = vec![b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1];
         assert!(!integrity_projection_is_ok(ValueRef::Text(&over_maximum)));
         assert!(!integrity_projection_is_ok(ValueRef::Null));
+    }
+
+    #[test]
+    fn capture_database_inventory_rejects_each_independent_projection_drift() {
+        assert!(database_inventory_matches(0, "main", false));
+        assert!(!database_inventory_matches(1, "main", false));
+        assert!(!database_inventory_matches(0, "temp", false));
+        assert!(!database_inventory_matches(0, "main", true));
+    }
+
+    fn metadata_fixture() -> (Connection, ServiceDatabaseMetadata) {
+        let metadata = ServiceDatabaseMetadata::from_verified_backup(
+            ServiceId::new("myc").expect("service"),
+            InstanceId::new("primary").expect("instance"),
+            SourceGeneration::new([7; 32]).expect("generation"),
+            NonZeroU32::new(1).expect("schema"),
+            1_234,
+            crate::ServiceSqliteApplicationId::new(0x5244_5254).expect("application ID"),
+        )
+        .expect("metadata");
+        let connection = Connection::open_in_memory().expect("database");
+        connection
+            .execute_batch(&format!(
+                "PRAGMA application_id = {};
+                 CREATE TABLE radroots_service_metadata (
+                    singleton INTEGER,
+                    service_id TEXT,
+                    instance_id TEXT,
+                    source_generation BLOB,
+                    state_schema_version INTEGER,
+                    created_at_unix_ms INTEGER
+                 );",
+                metadata.application_id().get()
+            ))
+            .expect("metadata schema");
+        connection
+            .execute(
+                "INSERT INTO radroots_service_metadata VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![
+                    metadata.service().as_str(),
+                    metadata.instance().as_str(),
+                    metadata.source_generation().as_bytes().as_slice(),
+                    i64::from(metadata.state_schema_version().get()),
+                    i64::try_from(metadata.created_at_unix_ms()).expect("time"),
+                ],
+            )
+            .expect("metadata row");
+        (connection, metadata)
+    }
+
+    #[test]
+    fn capture_database_inventory_metadata_and_integrity_accept_exact_state() {
+        let (connection, metadata) = metadata_fixture();
+        verify_database_inventory(&connection).expect("main-only inventory");
+        verify_database_metadata(&connection, &metadata).expect("exact metadata");
+        verify_integrity(&connection).expect("healthy database");
+
+        connection
+            .execute_batch("ATTACH DATABASE ':memory:' AS extra")
+            .expect("attach extra");
+        assert!(verify_database_inventory(&connection).is_err());
+    }
+
+    #[test]
+    fn capture_metadata_rejects_every_independent_identity_drift() {
+        for statement in [
+            "PRAGMA application_id = 1",
+            "INSERT INTO radroots_service_metadata SELECT 2, service_id, instance_id, source_generation, state_schema_version, created_at_unix_ms FROM radroots_service_metadata",
+            "UPDATE radroots_service_metadata SET service_id = 'rhi'",
+            "UPDATE radroots_service_metadata SET instance_id = 'secondary'",
+            "UPDATE radroots_service_metadata SET source_generation = zeroblob(32)",
+            "UPDATE radroots_service_metadata SET state_schema_version = 2",
+            "UPDATE radroots_service_metadata SET created_at_unix_ms = 1235",
+            "UPDATE radroots_service_metadata SET service_id = NULL",
+        ] {
+            let (connection, metadata) = metadata_fixture();
+            connection.execute_batch(statement).expect("apply drift");
+            assert!(
+                verify_database_metadata(&connection, &metadata).is_err(),
+                "drift must fail: {statement}"
+            );
+        }
+    }
+
+    #[test]
+    fn capture_integrity_rejects_foreign_key_violations() {
+        let connection = Connection::open_in_memory().expect("database");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = OFF;
+                 CREATE TABLE parent(id INTEGER PRIMARY KEY);
+                 CREATE TABLE child(parent_id INTEGER REFERENCES parent(id));
+                 INSERT INTO child(parent_id) VALUES (41);",
+            )
+            .expect("foreign-key violation fixture");
+        let error = verify_integrity(&connection).expect_err("foreign-key drift must fail");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
     }
 
     #[test]

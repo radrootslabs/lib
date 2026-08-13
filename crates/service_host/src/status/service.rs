@@ -458,6 +458,41 @@ mod tests {
         const FIELD_NAME: &'static str = "myc";
     }
 
+    struct FailingDetail;
+
+    impl Serialize for FailingDetail {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("injected detail failure"))
+        }
+    }
+
+    impl ServiceStatusDetail for FailingDetail {
+        type Provider = Provider;
+        type Transport = Transport;
+        const FIELD_NAME: &'static str = "myc";
+    }
+
+    #[derive(Serialize)]
+    struct ReservedDetail;
+
+    impl ServiceStatusDetail for ReservedDetail {
+        type Provider = Provider;
+        type Transport = Transport;
+        const FIELD_NAME: &'static str = "service";
+    }
+
+    #[derive(Serialize)]
+    struct MismatchedDetail;
+
+    impl ServiceStatusDetail for MismatchedDetail {
+        type Provider = Provider;
+        type Transport = Transport;
+        const FIELD_NAME: &'static str = "rhi";
+    }
+
     fn status(detail: Detail) -> ServiceStatus<Detail> {
         let build = BuildInfo::from_compile_time(
             BuildMode::Release,
@@ -603,5 +638,125 @@ mod tests {
             UptimeMillis::from_duration(Duration::MAX),
             Err(StatusModelError::UptimeOverflow)
         );
+    }
+
+    #[test]
+    fn model_accessors_reserved_fields_and_encoding_errors_are_closed() {
+        let ordinary = status(Detail {
+            active_connections: 1,
+        });
+        assert_eq!(ordinary.service().as_str(), "myc");
+        assert_eq!(ordinary.instance().as_str(), "default");
+        assert_eq!(ordinary.state().phase(), ServicePhase::Degraded);
+        assert_eq!(ordinary.uptime.get(), 120_000);
+        assert_eq!(
+            ordinary.configuration.schema.as_str(),
+            "radroots.myc.config"
+        );
+        assert_eq!(ordinary.configuration.digest.as_str(), "a".repeat(64));
+
+        assert_eq!(
+            PersistenceSummary::new(
+                PersistenceHealth::Unavailable,
+                0,
+                0,
+                IntegrityState::Failed,
+                super::super::ReasonCodes::empty(),
+            ),
+            Err(StatusModelError::InvalidSchemaVersion)
+        );
+        assert!(Sha256Digest::new("0".repeat(64)).is_ok());
+        assert_eq!(
+            Sha256Digest::new(format!("{}g", "a".repeat(63))),
+            Err(StatusModelError::InvalidSha256Digest)
+        );
+
+        let failing = ServiceStatus::new(
+            ordinary.service,
+            ordinary.instance,
+            ordinary.state,
+            ordinary.uptime,
+            ordinary.build,
+            ordinary.configuration,
+            ordinary.persistence,
+            ordinary.provider,
+            ordinary.transport,
+            FailingDetail,
+        )
+        .unwrap();
+        assert_eq!(
+            failing.to_bounded_json(),
+            Err(StatusEncodingError::EncodingFailed)
+        );
+
+        let ordinary = status(Detail {
+            active_connections: 1,
+        });
+        let service = ServiceId::new("service").unwrap();
+        let configuration = ConfigurationIdentity::for_service(
+            &service,
+            Sha256Digest::new("b".repeat(64)).unwrap(),
+            ConfigurationSource::DerivedRepoLocal,
+        )
+        .unwrap();
+        assert!(matches!(
+            ServiceStatus::new(
+                service,
+                ordinary.instance,
+                ordinary.state,
+                ordinary.uptime,
+                ordinary.build,
+                configuration,
+                ordinary.persistence,
+                ordinary.provider,
+                ordinary.transport,
+                ReservedDetail,
+            ),
+            Err(StatusModelError::InvalidDetailField)
+        ));
+
+        let ordinary = status(Detail {
+            active_connections: 1,
+        });
+        assert!(matches!(
+            ServiceStatus::new(
+                ordinary.service,
+                ordinary.instance,
+                ordinary.state,
+                ordinary.uptime,
+                ordinary.build,
+                ordinary.configuration,
+                ordinary.persistence,
+                ordinary.provider,
+                ordinary.transport,
+                MismatchedDetail,
+            ),
+            Err(StatusModelError::InvalidDetailField)
+        ));
+
+        let mut writer = BoundedWriter::new(2);
+        assert_eq!(writer.write(b"ab").unwrap(), 2);
+        writer.flush().unwrap();
+        assert!(writer.write(b"c").is_err());
+        assert!(writer.exceeded);
+
+        for error in [
+            StatusModelError::InvalidStatusId,
+            StatusModelError::InvalidSha256Digest,
+            StatusModelError::InvalidSchemaVersion,
+            StatusModelError::ConfigurationServiceMismatch,
+            StatusModelError::InvalidDetailField,
+            StatusModelError::UptimeOverflow,
+        ] {
+            assert!(!error.to_string().is_empty());
+            assert!(std::error::Error::source(&error).is_none());
+        }
+        for error in [
+            StatusEncodingError::EncodingFailed,
+            StatusEncodingError::ResponseTooLarge,
+        ] {
+            assert!(!error.to_string().is_empty());
+            assert!(std::error::Error::source(&error).is_none());
+        }
     }
 }

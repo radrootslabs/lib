@@ -178,6 +178,95 @@ fn initialization_error(cause: InitializationCause) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Create, cause)
 }
 
+fn require_initialization_condition(
+    condition: bool,
+    kind: InitializationFailureKind,
+) -> Result<(), InitializationCause> {
+    condition
+        .then_some(())
+        .ok_or_else(|| InitializationCause::new(kind))
+}
+
+#[cfg(test)]
+mod failure_tests {
+
+    use super::*;
+
+    #[test]
+    fn initialization_failure_inventory_is_complete_and_source_aware() {
+        let mut cases = vec![
+            (
+                InitializationFailureKind::UnsupportedMode,
+                "SQLite initialization requires initialize mode",
+            ),
+            (
+                InitializationFailureKind::CreateUnavailable,
+                "SQLite state could not be reserved",
+            ),
+        ];
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        cases.extend([
+            (
+                InitializationFailureKind::StateAlreadyExists,
+                "SQLite state already exists",
+            ),
+            (
+                InitializationFailureKind::InvalidDatabase,
+                "SQLite state file has invalid metadata",
+            ),
+            (
+                InitializationFailureKind::SchemaInitializationFailed,
+                "SQLite schema initialization failed",
+            ),
+            (
+                InitializationFailureKind::DatabaseSyncFailed,
+                "SQLite state could not be synchronized",
+            ),
+            (
+                InitializationFailureKind::DatabaseReplaced,
+                "SQLite state identity changed during initialization",
+            ),
+            (
+                InitializationFailureKind::DirectorySyncFailed,
+                "SQLite state directory could not be synchronized",
+            ),
+            (
+                InitializationFailureKind::CleanupFailed,
+                "SQLite initialization cleanup failed",
+            ),
+            (
+                InitializationFailureKind::InjectedFailure,
+                "SQLite initialization durability boundary failed",
+            ),
+        ]);
+
+        for (kind, message) in cases {
+            let plain = InitializationCause::new(kind);
+            assert_eq!(plain.to_string(), message);
+            assert!(plain.source().is_none());
+            assert!(format!("{plain:?}").contains("source: None"));
+            assert!(require_initialization_condition(true, kind).is_ok());
+            assert_eq!(
+                require_initialization_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind,
+                kind
+            );
+
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            {
+                let sourced =
+                    InitializationCause::with_source(kind, std::io::Error::other("private-cause"));
+                assert_eq!(sourced.to_string(), message);
+                assert!(sourced.source().is_some());
+                let debug = format!("{sourced:?}");
+                assert!(debug.contains("[redacted]"));
+                assert!(!debug.contains("private-cause"));
+            }
+        }
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod supported {
     use std::fs::File;
@@ -204,18 +293,21 @@ mod supported {
     pub(super) struct SystemInitializationOperations;
 
     impl InitializationOperations for SystemInitializationOperations {
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn sync_database(&self, database: &File) -> Result<(), InitializationCause> {
             database.sync_all().map_err(|_| {
                 InitializationCause::new(InitializationFailureKind::DatabaseSyncFailed)
             })
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn sync_directory(&self, directory: &File) -> Result<(), InitializationCause> {
             directory.sync_all().map_err(|_| {
                 InitializationCause::new(InitializationFailureKind::DirectorySyncFailed)
             })
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn unlink_database(&self, directory: &File) -> Result<(), InitializationCause> {
             unlinkat(
                 directory,
@@ -267,11 +359,10 @@ mod supported {
 
         fn validate(&self) -> Result<(), InitializationCause> {
             let descriptor_identity = validate_descriptor(&self.database)?;
-            if descriptor_identity != self.identity {
-                return Err(InitializationCause::new(
-                    InitializationFailureKind::InvalidDatabase,
-                ));
-            }
+            require_initialization_condition(
+                descriptor_identity == self.identity,
+                InitializationFailureKind::InvalidDatabase,
+            )?;
             self.validate_entry()
         }
 
@@ -293,11 +384,10 @@ mod supported {
                 device,
                 status.st_ino,
             )?;
-            if current != self.identity {
-                return Err(InitializationCause::new(
-                    InitializationFailureKind::DatabaseReplaced,
-                ));
-            }
+            require_initialization_condition(
+                current == self.identity,
+                InitializationFailureKind::DatabaseReplaced,
+            )?;
             Ok(())
         }
 
@@ -335,11 +425,10 @@ mod supported {
                 device,
                 status.st_ino,
             )?;
-            if current != self.identity {
-                return Err(InitializationCause::new(
-                    InitializationFailureKind::DatabaseReplaced,
-                ));
-            }
+            require_initialization_condition(
+                current == self.identity,
+                InitializationFailureKind::DatabaseReplaced,
+            )?;
             Ok(())
         }
 
@@ -376,11 +465,10 @@ mod supported {
             if self.committed {
                 return Ok(());
             }
-            if self.current_entry_identity()? != self.identity {
-                return Err(InitializationCause::new(
-                    InitializationFailureKind::DatabaseReplaced,
-                ));
-            }
+            require_initialization_condition(
+                self.current_entry_identity()? == self.identity,
+                InitializationFailureKind::DatabaseReplaced,
+            )?;
             self.operations.unlink_database(self.directory)?;
             self.operations.sync_directory(self.directory)?;
             self.committed = true;
@@ -432,32 +520,39 @@ mod supported {
         device: u64,
         inode: u64,
     ) -> Result<FileIdentity, InitializationCause> {
-        if !is_regular_file
-            || link_count != 1
-            || actual_uid != geteuid().as_raw()
-            || mode & 0o777 != 0o600
-        {
-            return Err(InitializationCause::new(
-                InitializationFailureKind::InvalidDatabase,
-            ));
-        }
+        require_initialization_condition(
+            crate::native_metadata::exact_regular_file(
+                is_regular_file,
+                link_count,
+                actual_uid,
+                geteuid().as_raw(),
+                mode,
+            ),
+            InitializationFailureKind::InvalidDatabase,
+        )?;
         Ok(FileIdentity { device, inode })
+    }
+
+    fn rollback_failure(
+        primary: InitializationCause,
+        cleanup: Result<(), InitializationCause>,
+    ) -> ServiceSqliteError {
+        match cleanup {
+            Ok(()) => initialization_error(primary),
+            Err(_cleanup) if primary.kind == InitializationFailureKind::DatabaseReplaced => {
+                initialization_error(primary)
+            }
+            Err(cleanup) => {
+                initialization_error(InitializationCause::with_source(cleanup.kind, primary))
+            }
+        }
     }
 
     async fn fail_with_rollback<O: InitializationOperations>(
         mut pending: PendingDatabase<'_, O>,
         primary: InitializationCause,
     ) -> Result<WriterAuthority, ServiceSqliteError> {
-        match pending.rollback() {
-            Ok(()) => Err(initialization_error(primary)),
-            Err(_cleanup) if primary.kind == InitializationFailureKind::DatabaseReplaced => {
-                Err(initialization_error(primary))
-            }
-            Err(cleanup) => Err(initialization_error(InitializationCause::with_source(
-                cleanup.kind,
-                primary,
-            ))),
-        }
+        Err(rollback_failure(primary, pending.rollback()))
     }
 
     async fn fail_metadata_with_rollback<O: InitializationOperations>(
@@ -847,6 +942,31 @@ mod supported {
         }
 
         #[tokio::test(flavor = "current_thread")]
+        async fn mismatched_metadata_paths_have_zero_callback_and_filesystem_effects() {
+            let root = tempfile::tempdir().expect("root");
+            let expected_paths = paths(root.path(), "expected");
+            let other = paths(root.path(), "other");
+            let called = Cell::new(false);
+            let other_metadata = metadata(&other);
+            let error = initialize_database(
+                &expected_paths,
+                OpenMode::Initialize,
+                &other_metadata,
+                &base_schema_catalog(),
+                |_| {
+                    called.set(true);
+                    ready(Ok::<(), CallbackFailure>(()))
+                },
+            )
+            .await
+            .expect_err("metadata paths must reject");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+            assert!(!called.get());
+            assert!(!expected_paths.state_database().exists());
+            assert!(!expected_paths.state_lock().exists());
+        }
+
+        #[tokio::test(flavor = "current_thread")]
         async fn callback_failure_cleans_up_releases_authority_and_preserves_trusted_cause() {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "callback-failure");
@@ -1156,6 +1276,43 @@ mod supported {
                     _ => unreachable!(),
                 }
             }
+        }
+
+        #[test]
+        fn rollback_failure_classifier_preserves_primary_and_cleanup_precedence() {
+            let ordinary =
+                || InitializationCause::new(InitializationFailureKind::SchemaInitializationFailed);
+            let replaced = || InitializationCause::new(InitializationFailureKind::DatabaseReplaced);
+            let cleanup = || InitializationCause::new(InitializationFailureKind::CleanupFailed);
+
+            let ordinary_success = rollback_failure(ordinary(), Ok(()));
+            assert_eq!(ordinary_success.kind(), ServiceSqliteErrorKind::Create);
+            assert_eq!(
+                ordinary_success
+                    .source()
+                    .map(ToString::to_string)
+                    .as_deref(),
+                Some("SQLite schema initialization failed")
+            );
+
+            let replaced_failure = rollback_failure(replaced(), Err(cleanup()));
+            assert_eq!(replaced_failure.kind(), ServiceSqliteErrorKind::Create);
+            assert_eq!(
+                replaced_failure
+                    .source()
+                    .map(ToString::to_string)
+                    .as_deref(),
+                Some("SQLite state identity changed during initialization")
+            );
+
+            let cleanup_failure = rollback_failure(ordinary(), Err(cleanup()));
+            assert_eq!(cleanup_failure.kind(), ServiceSqliteErrorKind::Create);
+            let outer = cleanup_failure.source().expect("cleanup source");
+            assert_eq!(outer.to_string(), "SQLite initialization cleanup failed");
+            assert_eq!(
+                outer.source().map(ToString::to_string).as_deref(),
+                Some("SQLite schema initialization failed")
+            );
         }
 
         #[tokio::test(flavor = "current_thread")]

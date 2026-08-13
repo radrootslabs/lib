@@ -505,6 +505,7 @@ impl AsyncRead for PrefixedTcpStream {
 }
 
 impl AsyncWrite for PrefixedTcpStream {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn poll_write(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -513,6 +514,7 @@ impl AsyncWrite for PrefixedTcpStream {
         Pin::new(&mut self.stream).poll_write(context, buffer)
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn poll_flush(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -520,6 +522,7 @@ impl AsyncWrite for PrefixedTcpStream {
         Pin::new(&mut self.stream).poll_flush(context)
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -554,6 +557,20 @@ mod tests {
             idle_timeout: Duration::from_millis(200),
         })
         .unwrap()
+    }
+
+    #[test]
+    fn fixed_response_fails_closed_when_the_configured_body_cap_is_smaller() {
+        let mut values = limits().values();
+        values.response_body_utf8_bytes = 1;
+        let limits = OperationsTransportLimits::new(values).unwrap();
+        let response = fixed_response(
+            StatusCode::OK,
+            OPERATIONS_HEALTH_CONTENT_TYPE,
+            b"too large",
+            limits,
+        );
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     fn snapshot(
@@ -829,6 +846,22 @@ mod tests {
         calls: AtomicUsize,
     }
 
+    struct PreRenderDeadlineClock {
+        calls: AtomicUsize,
+    }
+
+    impl MonotonicClock for PreRenderDeadlineClock {
+        fn now_monotonic(&self) -> MonotonicTime {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            let elapsed = if call == 0 {
+                Duration::ZERO
+            } else {
+                Duration::from_millis(2)
+            };
+            MonotonicTime::from_duration_since_origin(elapsed)
+        }
+    }
+
     impl MonotonicClock for PostRenderDeadlineClock {
         fn now_monotonic(&self) -> MonotonicTime {
             let call = self.calls.fetch_add(1, Ordering::SeqCst);
@@ -864,6 +897,36 @@ mod tests {
 
         let response =
             raw_request(address, b"GET /metrics HTTP/1.1\r\nhost: localhost\r\n\r\n").await;
+        assert!(response_text(&response).starts_with("HTTP/1.1 504 Gateway Timeout\r\n"));
+        assert!(response_text(&response).ends_with("request timeout\n"));
+
+        cancellation.cancel();
+        assert_eq!(task.await.unwrap(), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn already_reached_request_deadline_never_dispatches_the_route() {
+        let mut values = limits().values();
+        values.request_deadline = Duration::from_millis(1);
+        let limits = OperationsTransportLimits::new(values).unwrap();
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 9);
+        let server = OperationsServer::new_with_clock(
+            config(address, limits),
+            snapshot(ServicePhase::Ready, Readiness::READY),
+            PreRenderDeadlineClock {
+                calls: AtomicUsize::new(0),
+            },
+        )
+        .unwrap()
+        .bind_with_ephemeral_port_for_test()
+        .await
+        .unwrap();
+        let address = server.local_address();
+        let cancellation = CancellationToken::new();
+        let task = tokio::spawn(server.serve(cancellation.clone()));
+
+        let response =
+            raw_request(address, b"GET /livez HTTP/1.1\r\nhost: localhost\r\n\r\n").await;
         assert!(response_text(&response).starts_with("HTTP/1.1 504 Gateway Timeout\r\n"));
         assert!(response_text(&response).ends_with("request timeout\n"));
 

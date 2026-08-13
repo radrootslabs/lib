@@ -555,6 +555,9 @@ trait AdminRouteHandler: Send + Sync {
 
 struct FunctionRouteHandler<F>(F);
 
+// This impl only boxes and forwards a service-owned handler future. End-to-end dispatch remains
+// covered by the server tests; generic closure instantiations add no host policy branches.
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl<F, Fut> AdminRouteHandler for FunctionRouteHandler<F>
 where
     F: Fn(AdminRequest) -> Fut + Send + Sync + 'static,
@@ -1336,6 +1339,19 @@ mod tests {
         response
     }
 
+    async fn exchange_allowing_reset(socket: &std::path::Path, request: &[u8]) -> Vec<u8> {
+        let mut stream = tokio::net::UnixStream::connect(socket)
+            .await
+            .expect("connect admin server");
+        stream.write_all(request).await.expect("write request");
+        let mut response = Vec::new();
+        match stream.read_to_end(&mut response).await {
+            Ok(_) => response,
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => response,
+            Err(error) => panic!("read response: {error}"),
+        }
+    }
+
     #[tokio::test]
     async fn serves_valid_json_with_exact_caller_correlation_and_no_web_headers() {
         let directory = tempfile::tempdir().expect("runtime directory");
@@ -1783,7 +1799,7 @@ mod tests {
         entered.notified().await;
         let second = tokio::time::timeout(
             std::time::Duration::from_millis(200),
-            exchange(&socket, b"GET /v1/block HTTP/1.1\r\nHost: local\r\n\r\n"),
+            exchange_allowing_reset(&socket, b"GET /v1/block HTTP/1.1\r\nHost: local\r\n\r\n"),
         )
         .await
         .expect("second connection must close without waiting");
@@ -1859,6 +1875,14 @@ mod tests {
 
     #[test]
     fn route_and_server_configuration_fail_closed() {
+        assert!(matches!(
+            AdminServer::new(
+                AdminRouter::new(),
+                AdminTransportLimits::DEFAULT,
+                FixedEntropy(1),
+            ),
+            Err(AdminServerConfigError::NoRoutes)
+        ));
         let mut router = AdminRouter::new();
         assert!(matches!(
             router.route(AdminHttpMethod::Get, "/v2/status", |request| async move {
@@ -2030,5 +2054,153 @@ mod tests {
             .success(&serde_json::json!({"secret": true}))
             .expect("outcome");
         assert!(!format!("{outcome:?}").contains("secret"));
+    }
+
+    #[test]
+    fn strict_json_routes_accessors_and_safe_errors_cover_the_full_value_surface() {
+        for (document, expected) in [
+            ("true", Value::Bool(true)),
+            ("-7", Value::Number((-7).into())),
+            ("9", Value::Number(9_u64.into())),
+            (
+                "1.5",
+                Value::Number(serde_json::Number::from_f64(1.5).unwrap()),
+            ),
+            (r#""text""#, Value::String("text".to_owned())),
+            ("[true,2]", serde_json::json!([true, 2])),
+            (r#"{"value":3}"#, serde_json::json!({"value": 3})),
+        ] {
+            assert_eq!(
+                serde_json::from_str::<StrictJsonValue>(document).unwrap().0,
+                expected
+            );
+        }
+        for rejected in ["null", "[1,null]", r#"{"same":1,"same":2}"#] {
+            assert!(serde_json::from_str::<StrictJsonValue>(rejected).is_err());
+        }
+
+        let route = AdminRoutePath::new("/v1/items/{item_id}").unwrap();
+        assert_eq!(route.as_str(), "/v1/items/{item_id}");
+        assert!(route.overlaps(&AdminRoutePath::new("/v1/items/static").unwrap()));
+        assert!(!route.overlaps(&AdminRoutePath::new("/v1/other/static").unwrap()));
+        assert!(!route.overlaps(&AdminRoutePath::new("/v1/items/static/more").unwrap()));
+        assert_eq!(
+            route.match_path("/v1/items/value%2D1").unwrap(),
+            BTreeMap::from([("item_id".to_owned(), "value-1".to_owned())])
+        );
+        for rejected in [
+            "v1/items/value",
+            "/v1/items/value/",
+            "/v1//items/value",
+            "/v1/items",
+            "/v1/other/value",
+            "/v1/items/%",
+            "/v1/items/%GG",
+            "/v1/items/%2F",
+            "/v1/items/%5c",
+            "/v1/items/%00",
+            "/v1/items/%0A",
+            "/v1/items/%FF",
+        ] {
+            assert!(route.match_path(rejected).is_none(), "{rejected}");
+        }
+        assert!(
+            route
+                .match_path(&format!(
+                    "/v1/items/{}",
+                    "x".repeat(ADMIN_ROUTE_PARAMETER_VALUE_MAX_UTF8_BYTES + 1)
+                ))
+                .is_none()
+        );
+
+        let invalid_paths = [
+            ("", AdminRoutePathError::Empty),
+            ("/v2/items", AdminRoutePathError::WrongVersionPrefix),
+            ("/v1/items/", AdminRoutePathError::WrongVersionPrefix),
+            ("/v1//items", AdminRoutePathError::EmptySegment),
+            ("/v1/Items", AdminRoutePathError::InvalidCharacter),
+            ("/v1/{Bad}", AdminRoutePathError::InvalidParameter),
+            ("/v1/{item}/{item}", AdminRoutePathError::DuplicateParameter),
+        ];
+        for (path, expected) in invalid_paths {
+            assert_eq!(AdminRoutePath::new(path).unwrap_err(), expected);
+        }
+        assert_eq!(
+            AdminRoutePath::new(format!(
+                "/v1/{}",
+                "x".repeat(ADMIN_ROUTE_PATH_MAX_UTF8_BYTES)
+            ))
+            .unwrap_err(),
+            AdminRoutePathError::TooLong
+        );
+
+        assert_eq!(
+            AdminHttpMethod::from_http(&Method::GET),
+            Some(AdminHttpMethod::Get)
+        );
+        assert_eq!(
+            AdminHttpMethod::from_http(&Method::POST),
+            Some(AdminHttpMethod::Post)
+        );
+        assert_eq!(AdminHttpMethod::from_http(&Method::DELETE), None);
+
+        let request = AdminRequest {
+            method: AdminHttpMethod::Post,
+            path: route,
+            query: Some("page=1".to_owned()),
+            correlation_id: AdminCorrelationId::new("correlation-1").unwrap(),
+            parameters: BTreeMap::from([("item_id".to_owned(), "item-1".to_owned())]),
+            body: Bytes::from_static(b"true"),
+            response_body_limit: 1024,
+        };
+        assert_eq!(request.method(), AdminHttpMethod::Post);
+        assert_eq!(request.path().as_str(), "/v1/items/{item_id}");
+        assert_eq!(request.query(), Some("page=1"));
+        assert_eq!(request.correlation_id().as_str(), "correlation-1");
+        assert_eq!(request.parameter("item_id"), Some("item-1"));
+        assert_eq!(request.parameter("missing"), None);
+        assert_eq!(request.body(), b"true");
+        assert!(request.decode_json::<bool>().unwrap());
+        let empty = AdminRequest {
+            body: Bytes::new(),
+            ..request
+        };
+        assert_eq!(
+            empty.decode_json::<bool>().unwrap_err(),
+            AdminRequestDecodeError::Empty
+        );
+
+        let error = known_error("stable_error", "stable message");
+        for status in [
+            AdminRouteFailureStatus::BadRequest,
+            AdminRouteFailureStatus::NotFound,
+            AdminRouteFailureStatus::Conflict,
+            AdminRouteFailureStatus::Unavailable,
+            AdminRouteFailureStatus::Internal,
+        ] {
+            assert!(
+                status.http_status().is_client_error() || status.http_status().is_server_error()
+            );
+            let failure = AdminRouteFailure::new(status, error.clone());
+            assert_eq!(failure.status(), status);
+            assert_eq!(failure.error(), &error);
+            assert!(format!("{:?}", AdminRouteOutcome::failure(failure)).contains("Failure"));
+        }
+        for rendered in [
+            AdminRoutePathError::Empty.to_string(),
+            AdminRouteRegistrationError::Duplicate.to_string(),
+            AdminRequestDecodeError::Malformed.to_string(),
+            AdminRouteOutcomeError::Encoding.to_string(),
+            AdminRouteOutcomeError::InvalidPayload.to_string(),
+            AdminRouteOutcomeError::ResponseLimit.to_string(),
+        ] {
+            assert!(!rendered.is_empty());
+        }
+
+        use std::io::Write as _;
+        let mut writer = CappedWriter::new(4);
+        writer.flush().unwrap();
+        assert_eq!(writer.write(b"four").unwrap(), 4);
+        assert!(writer.write(b"x").is_err());
     }
 }

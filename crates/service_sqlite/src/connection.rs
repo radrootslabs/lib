@@ -76,6 +76,69 @@ enum IntegrityInspectionDriverFailure {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn integrity_driver_close_result(
+    result: Result<(), sqlx::Error>,
+    injected_failure: bool,
+) -> Result<(), IntegrityInspectionDriverFailure> {
+    if injected_failure {
+        Err(IntegrityInspectionDriverFailure::ConnectionClose)
+    } else {
+        result.map_err(|_| IntegrityInspectionDriverFailure::ConnectionClose)
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn final_connection_policy_matches(
+    initial: &crate::migration::MigrationConnectionPolicy,
+    final_policy: &crate::migration::MigrationConnectionPolicy,
+) -> Result<(), ServiceSqliteError> {
+    (final_policy == initial)
+        .then_some(())
+        .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Pragma))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn unconfirmed_rollback_error(
+    rollback: Option<ServiceSqliteError>,
+    rollback_was_confirmed: bool,
+) -> Option<ServiceSqliteError> {
+    rollback.filter(|_| !rollback_was_confirmed)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn precondition_rollback_failure(
+    authority: Option<ServiceSqliteError>,
+    rollback: Option<ServiceSqliteError>,
+    rollback_was_confirmed: bool,
+    hook_removal: Option<ServiceSqliteError>,
+) -> Option<ServiceSqliteError> {
+    authority
+        .or_else(|| unconfirmed_rollback_error(rollback, rollback_was_confirmed))
+        .or(hook_removal)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn authority_drift_rollback_failure(
+    rollback: Option<ServiceSqliteError>,
+    rollback_was_confirmed: bool,
+    hook_removal: Option<ServiceSqliteError>,
+) -> Option<ServiceSqliteError> {
+    unconfirmed_rollback_error(rollback, rollback_was_confirmed).or(hook_removal)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn operation_rollback_failure(
+    rollback: Option<ServiceSqliteError>,
+    rollback_was_confirmed: bool,
+    hook_removal: Option<ServiceSqliteError>,
+    authority: Option<ServiceSqliteError>,
+) -> Option<ServiceSqliteError> {
+    unconfirmed_rollback_error(rollback, rollback_was_confirmed)
+        .or(hook_removal)
+        .or(authority)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl IntegrityInspectionDriver {
     async fn close_retained(&mut self) -> Result<(), IntegrityInspectionDriverFailure> {
         loop {
@@ -100,10 +163,11 @@ impl IntegrityInspectionDriver {
                     let result = close.await;
                     *self = Self::Idle;
                     #[cfg(test)]
-                    if crate::integrity::integrity_test_seam::take_connection_close_failure() {
-                        return Err(IntegrityInspectionDriverFailure::ConnectionClose);
-                    }
-                    return result.map_err(|_| IntegrityInspectionDriverFailure::ConnectionClose);
+                    let injected_failure =
+                        crate::integrity::integrity_test_seam::take_connection_close_failure();
+                    #[cfg(not(test))]
+                    let injected_failure = false;
+                    return integrity_driver_close_result(result, injected_failure);
                 }
             }
         }
@@ -407,11 +471,11 @@ impl ServiceSqliteHost {
             ) -> ServiceSqliteTransactionFuture<'a, T, E>
             + Send,
     {
-        if self.closing.load(Ordering::Acquire) {
-            return Err(ServiceSqliteTransactionError::not_committed(
-                ServiceSqliteError::new(ServiceSqliteErrorKind::Open),
-            ));
-        }
+        crate::require_condition(
+            !self.closing.load(Ordering::Acquire),
+            ServiceSqliteErrorKind::Open,
+        )
+        .map_err(ServiceSqliteTransactionError::not_committed)?;
         self.pool
             .validate()
             .map_err(ServiceSqliteTransactionError::not_committed)?;
@@ -476,11 +540,12 @@ impl ServiceSqliteHost {
                 gate.rejected_commit_rolled_back() && !connection.is_in_transaction();
             let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
             let authority = self.pool.validate();
-            if let Some(rollback_error) = authority
-                .err()
-                .or_else(|| rollback.err().filter(|_| !rollback_was_confirmed))
-                .or_else(|| remove.err())
-            {
+            if let Some(rollback_error) = precondition_rollback_failure(
+                authority.err(),
+                rollback.err(),
+                rollback_was_confirmed,
+                remove.err(),
+            ) {
                 return Err(ServiceSqliteTransactionError::rollback_failed(
                     None,
                     rollback_error,
@@ -506,10 +571,11 @@ impl ServiceSqliteHost {
             let rollback_was_confirmed =
                 gate.rejected_commit_rolled_back() && !connection.is_in_transaction();
             let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
-            let rollback_error = rollback
-                .err()
-                .filter(|_| !rollback_was_confirmed)
-                .or_else(|| remove.err());
+            let rollback_error = authority_drift_rollback_failure(
+                rollback.err(),
+                rollback_was_confirmed,
+                remove.err(),
+            );
             return Err(match rollback_error {
                 Some(rollback_error) => {
                     ServiceSqliteTransactionError::rollback_failed(operation_error, rollback_error)
@@ -530,12 +596,12 @@ impl ServiceSqliteHost {
                     gate.rejected_commit_rolled_back() && !connection.is_in_transaction();
                 let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
                 let authority = self.pool.validate();
-                if let Some(error) = rollback
-                    .err()
-                    .filter(|_| !rollback_was_confirmed)
-                    .or_else(|| remove.err())
-                    .or_else(|| authority.err())
-                {
+                if let Some(error) = operation_rollback_failure(
+                    rollback.err(),
+                    rollback_was_confirmed,
+                    remove.err(),
+                    authority.err(),
+                ) {
                     return Err(ServiceSqliteTransactionError::rollback_failed(
                         Some(operation_error),
                         error,
@@ -575,11 +641,12 @@ impl ServiceSqliteHost {
                 gate.rejected_commit_rolled_back() && !connection.is_in_transaction();
             let remove = gate.remove(&mut connection).await.map_err(sqlite_source);
             let authority = self.pool.validate();
-            if let Some(rollback_error) = authority
-                .err()
-                .or_else(|| rollback.err().filter(|_| !rollback_was_confirmed))
-                .or_else(|| remove.err())
-            {
+            if let Some(rollback_error) = precondition_rollback_failure(
+                authority.err(),
+                rollback.err(),
+                rollback_was_confirmed,
+                remove.err(),
+            ) {
                 return Err(ServiceSqliteTransactionError::rollback_failed(
                     None,
                     rollback_error,
@@ -613,11 +680,8 @@ impl ServiceSqliteHost {
         self.pool
             .validate()
             .map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
-        if final_policy != initial_policy {
-            return Err(ServiceSqliteTransactionError::commit_outcome_unknown(
-                ServiceSqliteError::new(ServiceSqliteErrorKind::Pragma),
-            ));
-        }
+        final_connection_policy_matches(&initial_policy, &final_policy)
+            .map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
         crate::metadata::verify_database_metadata(&mut connection, self.pool.identity())
             .await
             .map_err(ServiceSqliteTransactionError::commit_outcome_unknown)?;
@@ -644,9 +708,10 @@ impl ServiceSqliteHost {
         &self,
         checked_at: crate::IntegrityCheckedAtUnixMs,
     ) -> Result<ServiceSqliteIntegrityReport, ServiceSqliteError> {
-        if self.closing.load(Ordering::Acquire) {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-        }
+        crate::require_condition(
+            !self.closing.load(Ordering::Acquire),
+            ServiceSqliteErrorKind::Open,
+        )?;
         let mut driver = self
             .integrity_driver
             .try_lock()
@@ -654,16 +719,18 @@ impl ServiceSqliteHost {
         let cleanup = driver.close_retained().await;
         self.pool.validate()?;
         cleanup.map_err(|_| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
-        if self.closing.load(Ordering::Acquire) {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-        }
+        crate::require_condition(
+            !self.closing.load(Ordering::Acquire),
+            ServiceSqliteErrorKind::Open,
+        )?;
         self.pool.validate()?;
         let connection = self.pool.acquire().await;
         self.pool.validate()?;
         *driver = IntegrityInspectionDriver::Connected(QuarantinedConnection::new(connection?));
-        if self.closing.load(Ordering::Acquire) {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-        }
+        crate::require_condition(
+            !self.closing.load(Ordering::Acquire),
+            ServiceSqliteErrorKind::Open,
+        )?;
         let report = crate::integrity::inspect_database_integrity(
             driver.connection_mut()?,
             checked_at,
@@ -737,14 +804,17 @@ impl ServiceSqliteHost {
         database_control_rejected: &AtomicBool,
     ) -> Result<(), ServiceSqliteError> {
         self.pool.validate()?;
-        if gate.control_violation_observed() || database_control_rejected.load(Ordering::Acquire) {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-        }
+        crate::require_condition(
+            !gate.control_violation_observed()
+                && !database_control_rejected.load(Ordering::Acquire),
+            ServiceSqliteErrorKind::Open,
+        )?;
         crate::migration::assert_governed_transaction(connection).await?;
         self.pool.validate()?;
-        if &crate::migration::read_connection_policy(connection).await? != initial_policy {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Pragma));
-        }
+        crate::require_condition(
+            &crate::migration::read_connection_policy(connection).await? == initial_policy,
+            ServiceSqliteErrorKind::Pragma,
+        )?;
         self.pool.validate()?;
         crate::metadata::verify_database_metadata(connection, self.pool.identity()).await?;
         self.pool.validate()?;
@@ -757,9 +827,10 @@ impl ServiceSqliteHost {
         .await?;
         self.pool.validate()?;
         crate::migration::assert_governed_transaction(connection).await?;
-        if gate.control_violation_observed() {
-            return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Open));
-        }
+        crate::require_condition(
+            !gate.control_violation_observed(),
+            ServiceSqliteErrorKind::Open,
+        )?;
         Ok(())
     }
 }
@@ -1138,6 +1209,104 @@ mod tests {
             InstanceId::new("host-boundary").expect("instance ID"),
         )
         .expect("runtime context")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn rollback_failure_selection_preserves_each_exact_precedence() {
+        let error = || ServiceSqliteError::new(ServiceSqliteErrorKind::Open);
+        for authority in [false, true] {
+            for rollback in [false, true] {
+                for confirmed in [false, true] {
+                    for removal in [false, true] {
+                        let expected_precondition = if authority {
+                            1
+                        } else if rollback && !confirmed {
+                            2
+                        } else if removal {
+                            3
+                        } else {
+                            0
+                        };
+                        let precondition = precondition_rollback_failure(
+                            authority.then(error),
+                            rollback.then(error),
+                            confirmed,
+                            removal.then(error),
+                        );
+                        assert_eq!(
+                            usize::from(precondition.is_some()),
+                            usize::from(expected_precondition != 0)
+                        );
+
+                        let expected_drift = (rollback && !confirmed) || removal;
+                        assert_eq!(
+                            authority_drift_rollback_failure(
+                                rollback.then(error),
+                                confirmed,
+                                removal.then(error),
+                            )
+                            .is_some(),
+                            expected_drift
+                        );
+
+                        let expected_operation = (rollback && !confirmed) || removal || authority;
+                        assert_eq!(
+                            operation_rollback_failure(
+                                rollback.then(error),
+                                confirmed,
+                                removal.then(error),
+                                authority.then(error),
+                            )
+                            .is_some(),
+                            expected_operation
+                        );
+                    }
+                }
+            }
+        }
+        assert!(unconfirmed_rollback_error(Some(error()), false).is_some());
+        assert!(unconfirmed_rollback_error(Some(error()), true).is_none());
+        assert!(unconfirmed_rollback_error(None, false).is_none());
+
+        assert!(integrity_driver_close_result(Ok(()), false).is_ok());
+        assert!(matches!(
+            integrity_driver_close_result(Ok(()), true),
+            Err(IntegrityInspectionDriverFailure::ConnectionClose)
+        ));
+        assert!(matches!(
+            integrity_driver_close_result(Err(sqlx::Error::Protocol("close".to_owned())), false),
+            Err(IntegrityInspectionDriverFailure::ConnectionClose)
+        ));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn final_connection_policy_classifier_preserves_pragma_kind() {
+        let mut first =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(":memory:"))
+                .await
+                .expect("first connection");
+        let mut second =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(":memory:"))
+                .await
+                .expect("second connection");
+        let initial = crate::migration::read_connection_policy(&mut first)
+            .await
+            .expect("initial policy");
+        let same = crate::migration::read_connection_policy(&mut second)
+            .await
+            .expect("same policy");
+        assert!(final_connection_policy_matches(&initial, &same).is_ok());
+        sqlx::query("PRAGMA query_only = ON")
+            .execute(&mut second)
+            .await
+            .expect("change policy");
+        let changed = crate::migration::read_connection_policy(&mut second)
+            .await
+            .expect("changed policy");
+        let error = final_connection_policy_matches(&initial, &changed).expect_err("policy drift");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Pragma);
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

@@ -48,6 +48,84 @@ const WAL_FILE_NAME: &str = "state.sqlite-wal";
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const SHARED_MEMORY_FILE_NAME: &str = "state.sqlite-shm";
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone)]
+struct PoolConnectionValidation {
+    binding: DirectoryBinding,
+    paths: ServiceSqlitePaths,
+    identity: ServiceDatabaseIdentity,
+    catalog: MigrationCatalog,
+    schema_catalog: SchemaCatalog,
+    mode: OpenMode,
+    policy: ServiceSqliteConnectionOptions,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+enum PoolConnectionValidationFailure {
+    Authority,
+    Pragma(sqlx::Error),
+    PolicyMismatch,
+    Metadata,
+    Migration,
+    Integrity,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone)]
+struct PoolConnectionFailureFlags {
+    authority: Arc<AtomicBool>,
+    metadata: Arc<AtomicBool>,
+    migration: Arc<AtomicBool>,
+    integrity: Arc<AtomicBool>,
+    pragma: Arc<AtomicBool>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl PoolConnectionFailureFlags {
+    fn record(&self, failure: &PoolConnectionValidationFailure) {
+        match failure {
+            PoolConnectionValidationFailure::Authority => &self.authority,
+            PoolConnectionValidationFailure::Metadata => &self.metadata,
+            PoolConnectionValidationFailure::Migration => &self.migration,
+            PoolConnectionValidationFailure::Integrity => &self.integrity,
+            PoolConnectionValidationFailure::Pragma(_)
+            | PoolConnectionValidationFailure::PolicyMismatch => &self.pragma,
+        }
+        .store(true, Ordering::Release);
+    }
+
+    fn kind(&self) -> ServiceSqliteErrorKind {
+        connection_failure_kind(
+            self.authority.load(Ordering::Acquire),
+            self.metadata.load(Ordering::Acquire),
+            self.migration.load(Ordering::Acquire),
+            self.integrity.load(Ordering::Acquire),
+            self.pragma.load(Ordering::Acquire),
+        )
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl PoolConnectionValidationFailure {
+    fn into_sqlx(self) -> sqlx::Error {
+        match self {
+            Self::Pragma(source) => source,
+            Self::Authority => {
+                sqlx::Error::Protocol("SQLite connection authority mismatch".to_owned())
+            }
+            Self::PolicyMismatch => {
+                sqlx::Error::Protocol("SQLite connection policy mismatch".to_owned())
+            }
+            Self::Metadata => {
+                sqlx::Error::Protocol("SQLite connection metadata mismatch".to_owned())
+            }
+            Self::Migration | Self::Integrity => {
+                sqlx::Error::Protocol("SQLite migration history mismatch".to_owned())
+            }
+        }
+    }
+}
+
 /// Canonical database and writer-lock paths for one validated service instance.
 ///
 /// Callers cannot forge paths or rebind the service and instance independently:
@@ -739,6 +817,47 @@ pub(crate) async fn open_initialized_connection_pool(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+impl PoolConnectionValidation {
+    async fn validate(
+        &self,
+        connection: &mut SqliteConnection,
+    ) -> Result<(), PoolConnectionValidationFailure> {
+        self.validate_authority()?;
+        let policy_result = connection_policy_matches(connection, self.mode, self.policy).await;
+        self.validate_authority()?;
+        if !policy_result.map_err(PoolConnectionValidationFailure::Pragma)? {
+            return Err(PoolConnectionValidationFailure::PolicyMismatch);
+        }
+        let metadata_result =
+            crate::metadata::verify_database_metadata(connection, &self.identity).await;
+        self.validate_authority()?;
+        metadata_result.map_err(|_| PoolConnectionValidationFailure::Metadata)?;
+        let migration_result = crate::migration::verify_migration_history(
+            connection,
+            &self.catalog,
+            &self.schema_catalog,
+            self.mode == OpenMode::ReadOnlyInspection,
+        )
+        .await;
+        self.validate_authority()?;
+        migration_result.map_err(|error| {
+            if error.kind() == ServiceSqliteErrorKind::Integrity {
+                PoolConnectionValidationFailure::Integrity
+            } else {
+                PoolConnectionValidationFailure::Migration
+            }
+        })?;
+        Ok(())
+    }
+
+    fn validate_authority(&self) -> Result<(), PoolConnectionValidationFailure> {
+        self.binding
+            .validate(&self.paths)
+            .map_err(|_| PoolConnectionValidationFailure::Authority)
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[allow(clippy::too_many_arguments)]
 async fn open_connection_pool(
     paths: &ServiceSqlitePaths,
@@ -823,40 +942,36 @@ async fn open_connection_pool(
     binding.validate(paths)?;
     preflight_close.map_err(|source| connection_source(ServiceSqliteErrorKind::Open, source))?;
 
-    let after_policy = policy;
-    let before_policy = policy;
-    let after_mode = mode;
-    let before_mode = mode;
     let retained_binding = binding.clone();
-    let after_binding = binding.clone();
-    let before_binding = binding.clone();
     let pool_binding = binding;
-    let after_paths = paths.clone();
-    let before_paths = paths.clone();
-    let after_metadata = identity.clone();
-    let before_metadata = identity.clone();
     let retained_catalog = catalog.clone();
     let retained_schema_catalog = schema_catalog.clone();
     let retained_identity = identity.clone();
-    let after_catalog = catalog.clone();
-    let after_schema_catalog = schema_catalog.clone();
-    let before_catalog = catalog.clone();
-    let before_schema_catalog = schema_catalog.clone();
     let authority_failure = Arc::new(AtomicBool::new(false));
     let metadata_failure = Arc::new(AtomicBool::new(false));
     let migration_failure = Arc::new(AtomicBool::new(false));
     let integrity_failure = Arc::new(AtomicBool::new(false));
     let pragma_failure = Arc::new(AtomicBool::new(false));
-    let after_authority_failure = Arc::clone(&authority_failure);
-    let after_metadata_failure = Arc::clone(&metadata_failure);
-    let after_migration_failure = Arc::clone(&migration_failure);
-    let after_integrity_failure = Arc::clone(&integrity_failure);
-    let after_pragma_failure = Arc::clone(&pragma_failure);
-    let before_authority_failure = Arc::clone(&authority_failure);
-    let before_metadata_failure = Arc::clone(&metadata_failure);
-    let before_migration_failure = Arc::clone(&migration_failure);
-    let before_integrity_failure = Arc::clone(&integrity_failure);
-    let before_pragma_failure = Arc::clone(&pragma_failure);
+    let validation = PoolConnectionValidation {
+        binding: retained_binding.clone(),
+        paths: paths.clone(),
+        identity: identity.clone(),
+        catalog: catalog.clone(),
+        schema_catalog: schema_catalog.clone(),
+        mode,
+        policy,
+    };
+    let after_validation = validation.clone();
+    let before_validation = validation;
+    let flags = PoolConnectionFailureFlags {
+        authority: Arc::clone(&authority_failure),
+        metadata: Arc::clone(&metadata_failure),
+        migration: Arc::clone(&migration_failure),
+        integrity: Arc::clone(&integrity_failure),
+        pragma: Arc::clone(&pragma_failure),
+    };
+    let after_flags = flags.clone();
+    let before_flags = flags.clone();
     let pool_result = SqlitePoolOptions::new()
         .min_connections(1)
         .max_connections(policy.max_connections())
@@ -865,172 +980,36 @@ async fn open_connection_pool(
         .max_lifetime(None)
         .test_before_acquire(true)
         .after_connect(move |connection, _metadata| {
-            let binding = after_binding.clone();
-            let paths = after_paths.clone();
-            let metadata = after_metadata.clone();
-            let catalog = after_catalog.clone();
-            let schema_catalog = after_schema_catalog.clone();
-            let authority_failure = Arc::clone(&after_authority_failure);
-            let metadata_failure = Arc::clone(&after_metadata_failure);
-            let migration_failure = Arc::clone(&after_migration_failure);
-            let integrity_failure = Arc::clone(&after_integrity_failure);
-            let pragma_failure = Arc::clone(&after_pragma_failure);
+            let validation = after_validation.clone();
+            let flags = after_flags.clone();
             Box::pin(async move {
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                let policy_result =
-                    connection_policy_matches(connection, after_mode, after_policy).await;
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                let matches = policy_result.inspect_err(|_| {
-                    pragma_failure.store(true, Ordering::Release);
-                })?;
-                if !matches {
-                    pragma_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection policy mismatch".to_owned(),
-                    ));
-                }
-                let metadata_result =
-                    crate::metadata::verify_database_metadata(connection, &metadata).await;
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                if metadata_result.is_err() {
-                    metadata_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection metadata mismatch".to_owned(),
-                    ));
-                }
-                let migration_result = crate::migration::verify_migration_history(
-                    connection,
-                    &catalog,
-                    &schema_catalog,
-                    after_mode == OpenMode::ReadOnlyInspection,
-                )
-                .await;
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                if migration_result.is_err() {
-                    if migration_result
-                        .as_ref()
-                        .is_err_and(|error| error.kind() == ServiceSqliteErrorKind::Integrity)
-                    {
-                        integrity_failure.store(true, Ordering::Release);
-                    } else {
-                        migration_failure.store(true, Ordering::Release);
-                    }
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite migration history mismatch".to_owned(),
-                    ));
-                }
-                Ok(())
+                validation.validate(connection).await.map_err(|failure| {
+                    flags.record(&failure);
+                    failure.into_sqlx()
+                })
             })
         })
         .before_acquire(move |connection, _metadata| {
-            let binding = before_binding.clone();
-            let paths = before_paths.clone();
-            let metadata = before_metadata.clone();
-            let catalog = before_catalog.clone();
-            let schema_catalog = before_schema_catalog.clone();
-            let authority_failure = Arc::clone(&before_authority_failure);
-            let metadata_failure = Arc::clone(&before_metadata_failure);
-            let migration_failure = Arc::clone(&before_migration_failure);
-            let integrity_failure = Arc::clone(&before_integrity_failure);
-            let pragma_failure = Arc::clone(&before_pragma_failure);
+            let validation = before_validation.clone();
+            let flags = before_flags.clone();
             Box::pin(async move {
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                let policy_result =
-                    connection_policy_matches(connection, before_mode, before_policy).await;
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                let matches = policy_result.inspect_err(|_| {
-                    pragma_failure.store(true, Ordering::Release);
-                })?;
-                if !matches {
-                    pragma_failure.store(true, Ordering::Release);
-                    return Ok(false);
-                }
-                let metadata_result =
-                    crate::metadata::verify_database_metadata(connection, &metadata).await;
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                if metadata_result.is_err() {
-                    metadata_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection metadata mismatch".to_owned(),
-                    ));
-                }
-                let migration_result = crate::migration::verify_migration_history(
-                    connection,
-                    &catalog,
-                    &schema_catalog,
-                    before_mode == OpenMode::ReadOnlyInspection,
-                )
-                .await;
-                if binding.validate(&paths).is_err() {
-                    authority_failure.store(true, Ordering::Release);
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite connection authority mismatch".to_owned(),
-                    ));
-                }
-                if migration_result.is_err() {
-                    if migration_result
-                        .as_ref()
-                        .is_err_and(|error| error.kind() == ServiceSqliteErrorKind::Integrity)
-                    {
-                        integrity_failure.store(true, Ordering::Release);
-                    } else {
-                        migration_failure.store(true, Ordering::Release);
+                match validation.validate(connection).await {
+                    Ok(()) => Ok(true),
+                    Err(PoolConnectionValidationFailure::PolicyMismatch) => {
+                        flags.record(&PoolConnectionValidationFailure::PolicyMismatch);
+                        Ok(false)
                     }
-                    return Err(sqlx::Error::Protocol(
-                        "SQLite migration history mismatch".to_owned(),
-                    ));
+                    Err(failure) => {
+                        flags.record(&failure);
+                        Err(failure.into_sqlx())
+                    }
                 }
-                Ok(true)
             })
         })
         .connect_with(connect_options)
         .await;
     pool_binding.validate(paths)?;
-    let pool = pool_result.map_err(|source| {
-        let kind = connection_failure_kind(
-            authority_failure.load(Ordering::Acquire),
-            metadata_failure.load(Ordering::Acquire),
-            migration_failure.load(Ordering::Acquire),
-            integrity_failure.load(Ordering::Acquire),
-            pragma_failure.load(Ordering::Acquire),
-        );
-        connection_source(kind, source)
-    })?;
+    let pool = pool_result.map_err(|source| connection_source(flags.kind(), source))?;
 
     Ok(PrivateConnectionPool {
         pool,
@@ -1141,19 +1120,52 @@ async fn connection_policy_matches(
     let query_only = sqlx::query_scalar::<_, i64>("PRAGMA query_only")
         .fetch_one(&mut *connection)
         .await?;
+    Ok(connection_policy_values_match(
+        ConnectionPolicyValues {
+            journal_mode: &journal_mode,
+            synchronous,
+            foreign_keys,
+            trusted_schema,
+            busy_timeout,
+            query_only,
+        },
+        mode,
+        policy,
+    ))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy)]
+struct ConnectionPolicyValues<'a> {
+    journal_mode: &'a str,
+    synchronous: i64,
+    foreign_keys: i64,
+    trusted_schema: i64,
+    busy_timeout: i64,
+    query_only: i64,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn connection_policy_values_match(
+    values: ConnectionPolicyValues<'_>,
+    mode: OpenMode,
+    policy: ServiceSqliteConnectionOptions,
+) -> bool {
     // SQLite reports `delete` for immutable handles; the inspection guard
     // independently verifies WAL read/write header bytes before this opens.
     let journal_mode_matches = if mode == OpenMode::ReadOnlyInspection {
-        journal_mode.eq_ignore_ascii_case("delete")
+        values.journal_mode.eq_ignore_ascii_case("delete")
     } else {
-        journal_mode.eq_ignore_ascii_case("wal")
+        values.journal_mode.eq_ignore_ascii_case("wal")
     };
-    Ok(journal_mode_matches
-        && synchronous == 2
-        && foreign_keys == 1
-        && trusted_schema == 0
-        && busy_timeout == policy.busy_timeout_milliseconds()
-        && query_only == i64::from(mode == OpenMode::ReadOnlyInspection))
+    crate::all_constraints([
+        journal_mode_matches,
+        values.synchronous == 2,
+        values.foreign_keys == 1,
+        values.trusted_schema == 0,
+        values.busy_timeout == policy.busy_timeout_milliseconds(),
+        values.query_only == i64::from(mode == OpenMode::ReadOnlyInspection),
+    ])
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1199,6 +1211,17 @@ fn connection_error(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_connection_condition(
+    condition: bool,
+    kind: ServiceSqliteErrorKind,
+    cause: ConnectionFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    condition
+        .then_some(())
+        .ok_or_else(|| connection_error(kind, cause))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[allow(
     dead_code,
     reason = "Step 056 keeps dependency causes private until the Step 061 host boundary"
@@ -1237,14 +1260,16 @@ impl ReadOnlyInspectionGuard {
         .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let directory_status = fstat(&directory)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        if !FileType::from_raw_mode(directory_status.st_mode).is_dir()
-            || directory_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(directory_status.st_mode) & 0o022 != 0
-        {
-            return Err(inspection_error(
-                ConnectionFailureKind::InspectionUnavailable,
-            ));
-        }
+        require_connection_condition(
+            crate::native_metadata::secure_directory(
+                FileType::from_raw_mode(directory_status.st_mode).is_dir(),
+                directory_status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(directory_status.st_mode),
+            ),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::InspectionUnavailable,
+        )?;
         let directory = File::from(directory);
         let lock = openat(
             &directory,
@@ -1255,15 +1280,17 @@ impl ReadOnlyInspectionGuard {
         .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let lock_status = fstat(&lock)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        if !FileType::from_raw_mode(lock_status.st_mode).is_file()
-            || crate::native_metadata::link_count(lock_status.st_nlink) != 1
-            || lock_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(lock_status.st_mode) & 0o777 != 0o600
-        {
-            return Err(inspection_error(
-                ConnectionFailureKind::InspectionUnavailable,
-            ));
-        }
+        require_connection_condition(
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(lock_status.st_mode).is_file(),
+                crate::native_metadata::link_count(lock_status.st_nlink),
+                lock_status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(lock_status.st_mode),
+            ),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::InspectionUnavailable,
+        )?;
         let lock = File::from(lock);
         FileExt::try_lock_shared(&lock).map_err(|error| {
             if error.kind() == std::io::ErrorKind::WouldBlock {
@@ -1301,16 +1328,17 @@ impl ReadOnlyInspectionGuard {
                 ConnectionFailureKind::InspectionUnavailable,
             )
         })?;
-        if !FileType::from_raw_mode(database_status.st_mode).is_file()
-            || crate::native_metadata::link_count(database_status.st_nlink) != 1
-            || database_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(database_status.st_mode) & 0o777 != 0o600
-        {
-            return Err(connection_error(
-                ServiceSqliteErrorKind::Open,
-                ConnectionFailureKind::InspectionUnavailable,
-            ));
-        }
+        require_connection_condition(
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(database_status.st_mode).is_file(),
+                crate::native_metadata::link_count(database_status.st_nlink),
+                database_status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(database_status.st_mode),
+            ),
+            ServiceSqliteErrorKind::Open,
+            ConnectionFailureKind::InspectionUnavailable,
+        )?;
         let database = File::from(database);
         let mut sqlite_header = [0_u8; 20];
         std::os::unix::fs::FileExt::read_exact_at(&database, &mut sqlite_header, 0).map_err(
@@ -1321,15 +1349,11 @@ impl ReadOnlyInspectionGuard {
                 )
             },
         )?;
-        if &sqlite_header[..16] != b"SQLite format 3\0"
-            || sqlite_header[18] != 2
-            || sqlite_header[19] != 2
-        {
-            return Err(connection_error(
-                ServiceSqliteErrorKind::Pragma,
-                ConnectionFailureKind::InspectionUnavailable,
-            ));
-        }
+        require_connection_condition(
+            crate::native_metadata::sqlite_wal_header(&sqlite_header),
+            ServiceSqliteErrorKind::Pragma,
+            ConnectionFailureKind::InspectionUnavailable,
+        )?;
         Ok(Self {
             lock: Some(lock),
             lock_device: crate::native_metadata::device(lock_status.st_dev)
@@ -1368,21 +1392,32 @@ impl ReadOnlyInspectionGuard {
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let held_directory_device = crate::native_metadata::device(held_directory_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        if !FileType::from_raw_mode(directory_status.st_mode).is_dir()
-            || directory_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(directory_status.st_mode) & 0o022 != 0
-            || !FileType::from_raw_mode(held_directory_status.st_mode).is_dir()
-            || held_directory_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(held_directory_status.st_mode) & 0o022 != 0
-            || directory_device != self.directory_device
-            || directory_status.st_ino != self.directory_inode
-            || held_directory_device != self.directory_device
-            || held_directory_status.st_ino != self.directory_inode
-        {
-            return Err(inspection_error(
-                ConnectionFailureKind::InspectionUnavailable,
-            ));
-        }
+        require_connection_condition(
+            crate::all_constraints([
+                crate::native_metadata::secure_directory(
+                    FileType::from_raw_mode(directory_status.st_mode).is_dir(),
+                    directory_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(directory_status.st_mode),
+                ),
+                crate::native_metadata::secure_directory(
+                    FileType::from_raw_mode(held_directory_status.st_mode).is_dir(),
+                    held_directory_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(held_directory_status.st_mode),
+                ),
+                crate::native_metadata::identity_pair_matches(
+                    held_directory_device,
+                    held_directory_status.st_ino,
+                    directory_device,
+                    directory_status.st_ino,
+                    self.directory_device,
+                    self.directory_inode,
+                ),
+            ]),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::InspectionUnavailable,
+        )?;
 
         let lock = openat(
             &directory,
@@ -1403,23 +1438,34 @@ impl ReadOnlyInspectionGuard {
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
         let held_lock_device = crate::native_metadata::device(held_lock_status.st_dev)
             .map_err(|_| inspection_error(ConnectionFailureKind::InspectionUnavailable))?;
-        if !FileType::from_raw_mode(lock_status.st_mode).is_file()
-            || crate::native_metadata::link_count(lock_status.st_nlink) != 1
-            || lock_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(lock_status.st_mode) & 0o777 != 0o600
-            || !FileType::from_raw_mode(held_lock_status.st_mode).is_file()
-            || crate::native_metadata::link_count(held_lock_status.st_nlink) != 1
-            || held_lock_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(held_lock_status.st_mode) & 0o777 != 0o600
-            || lock_device != self.lock_device
-            || lock_status.st_ino != self.lock_inode
-            || held_lock_device != self.lock_device
-            || held_lock_status.st_ino != self.lock_inode
-        {
-            return Err(inspection_error(
-                ConnectionFailureKind::InspectionUnavailable,
-            ));
-        }
+        require_connection_condition(
+            crate::all_constraints([
+                crate::native_metadata::exact_regular_file(
+                    FileType::from_raw_mode(lock_status.st_mode).is_file(),
+                    crate::native_metadata::link_count(lock_status.st_nlink),
+                    lock_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(lock_status.st_mode),
+                ),
+                crate::native_metadata::exact_regular_file(
+                    FileType::from_raw_mode(held_lock_status.st_mode).is_file(),
+                    crate::native_metadata::link_count(held_lock_status.st_nlink),
+                    held_lock_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(held_lock_status.st_mode),
+                ),
+                crate::native_metadata::identity_pair_matches(
+                    held_lock_device,
+                    held_lock_status.st_ino,
+                    lock_device,
+                    lock_status.st_ino,
+                    self.lock_device,
+                    self.lock_inode,
+                ),
+            ]),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::InspectionUnavailable,
+        )?;
         for sidecar in [WAL_FILE_NAME, SHARED_MEMORY_FILE_NAME] {
             match statat(&directory, sidecar, AtFlags::SYMLINK_NOFOLLOW) {
                 Err(error) if error == rustix::io::Errno::NOENT => {}
@@ -1504,16 +1550,17 @@ impl DirectoryBinding {
                 ConnectionFailureKind::AuthorityMismatch,
             )
         })?;
-        if !FileType::from_raw_mode(database_status.st_mode).is_file()
-            || crate::native_metadata::link_count(database_status.st_nlink) != 1
-            || database_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(database_status.st_mode) & 0o777 != 0o600
-        {
-            return Err(connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            ));
-        }
+        require_connection_condition(
+            crate::native_metadata::exact_regular_file(
+                FileType::from_raw_mode(database_status.st_mode).is_file(),
+                crate::native_metadata::link_count(database_status.st_nlink),
+                database_status.st_uid,
+                geteuid().as_raw(),
+                crate::native_metadata::mode(database_status.st_mode),
+            ),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::AuthorityMismatch,
+        )?;
         Ok(Self {
             database_path: paths.state_database().to_path_buf(),
             directory: Arc::new(directory.try_clone().map_err(|_| {
@@ -1550,12 +1597,11 @@ impl DirectoryBinding {
             process::geteuid,
         };
 
-        if self.database_path != paths.state_database() {
-            return Err(connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            ));
-        }
+        require_connection_condition(
+            self.database_path == paths.state_database(),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::AuthorityMismatch,
+        )?;
         let directory = open(
             paths.state_database().parent().ok_or_else(|| {
                 connection_error(
@@ -1598,22 +1644,32 @@ impl DirectoryBinding {
                     ConnectionFailureKind::AuthorityMismatch,
                 )
             })?;
-        if directory_device != self.directory_device
-            || directory_status.st_ino != self.directory_inode
-            || held_directory_device != self.directory_device
-            || held_directory_status.st_ino != self.directory_inode
-            || !FileType::from_raw_mode(directory_status.st_mode).is_dir()
-            || directory_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(directory_status.st_mode) & 0o022 != 0
-            || !FileType::from_raw_mode(held_directory_status.st_mode).is_dir()
-            || held_directory_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(held_directory_status.st_mode) & 0o022 != 0
-        {
-            return Err(connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            ));
-        }
+        require_connection_condition(
+            crate::all_constraints([
+                crate::native_metadata::secure_directory(
+                    FileType::from_raw_mode(directory_status.st_mode).is_dir(),
+                    directory_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(directory_status.st_mode),
+                ),
+                crate::native_metadata::secure_directory(
+                    FileType::from_raw_mode(held_directory_status.st_mode).is_dir(),
+                    held_directory_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(held_directory_status.st_mode),
+                ),
+                crate::native_metadata::identity_pair_matches(
+                    held_directory_device,
+                    held_directory_status.st_ino,
+                    directory_device,
+                    directory_status.st_ino,
+                    self.directory_device,
+                    self.directory_inode,
+                ),
+            ]),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::AuthorityMismatch,
+        )?;
 
         let database = openat(
             &directory,
@@ -1653,30 +1709,41 @@ impl DirectoryBinding {
                     ConnectionFailureKind::AuthorityMismatch,
                 )
             })?;
-        if !FileType::from_raw_mode(database_status.st_mode).is_file()
-            || crate::native_metadata::link_count(database_status.st_nlink) != 1
-            || database_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(database_status.st_mode) & 0o777 != 0o600
-            || !FileType::from_raw_mode(held_database_status.st_mode).is_file()
-            || crate::native_metadata::link_count(held_database_status.st_nlink) != 1
-            || held_database_status.st_uid != geteuid().as_raw()
-            || crate::native_metadata::mode(held_database_status.st_mode) & 0o777 != 0o600
-            || database_device != self.database_device
-            || database_status.st_ino != self.database_inode
-            || held_database_device != self.database_device
-            || held_database_status.st_ino != self.database_inode
-        {
-            return Err(connection_error(
-                ServiceSqliteErrorKind::Authority,
-                ConnectionFailureKind::AuthorityMismatch,
-            ));
-        }
+        require_connection_condition(
+            crate::all_constraints([
+                crate::native_metadata::exact_regular_file(
+                    FileType::from_raw_mode(database_status.st_mode).is_file(),
+                    crate::native_metadata::link_count(database_status.st_nlink),
+                    database_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(database_status.st_mode),
+                ),
+                crate::native_metadata::exact_regular_file(
+                    FileType::from_raw_mode(held_database_status.st_mode).is_file(),
+                    crate::native_metadata::link_count(held_database_status.st_nlink),
+                    held_database_status.st_uid,
+                    geteuid().as_raw(),
+                    crate::native_metadata::mode(held_database_status.st_mode),
+                ),
+                crate::native_metadata::identity_pair_matches(
+                    held_database_device,
+                    held_database_status.st_ino,
+                    database_device,
+                    database_status.st_ino,
+                    self.database_device,
+                    self.database_inode,
+                ),
+            ]),
+            ServiceSqliteErrorKind::Authority,
+            ConnectionFailureKind::AuthorityMismatch,
+        )?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use std::path::PathBuf;
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1708,6 +1775,116 @@ mod tests {
     use tokio::sync::Notify;
 
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn connection_failure_inventory_is_complete_and_source_free() {
+        for (kind, message) in [
+            (
+                ConnectionFailureKind::UnsupportedMode,
+                "SQLite initialize mode requires reserved state",
+            ),
+            (
+                ConnectionFailureKind::AuthorityMismatch,
+                "SQLite writer authority is missing or mismatched",
+            ),
+            (
+                ConnectionFailureKind::InspectionUnavailable,
+                "SQLite inspection authority is unavailable",
+            ),
+            (
+                ConnectionFailureKind::InspectionContended,
+                "SQLite inspection requires an offline writer",
+            ),
+            (
+                ConnectionFailureKind::CheckpointBusy,
+                "SQLite close checkpoint could not drain active readers",
+            ),
+        ] {
+            assert_eq!(kind.to_string(), message);
+            assert!(kind.source().is_none());
+            assert!(format!("{kind:?}").contains(&format!("{kind:?}")));
+            let error = connection_error(ServiceSqliteErrorKind::Open, kind);
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Open);
+            assert!(error.source().is_some());
+            assert!(require_connection_condition(true, ServiceSqliteErrorKind::Open, kind).is_ok());
+            let rejected =
+                require_connection_condition(false, ServiceSqliteErrorKind::Authority, kind)
+                    .expect_err("false condition");
+            assert_eq!(rejected.kind(), ServiceSqliteErrorKind::Authority);
+            assert!(rejected.source().is_some());
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn connection_policy_value_matrix_rejects_each_independent_drift() {
+        let policy = ServiceSqliteConnectionOptions::reviewed();
+        let writable = ConnectionPolicyValues {
+            journal_mode: "wal",
+            synchronous: 2,
+            foreign_keys: 1,
+            trusted_schema: 0,
+            busy_timeout: policy.busy_timeout_milliseconds(),
+            query_only: 0,
+        };
+        assert!(connection_policy_values_match(
+            writable,
+            OpenMode::Initialize,
+            policy,
+        ));
+        for values in [
+            ConnectionPolicyValues {
+                journal_mode: "delete",
+                ..writable
+            },
+            ConnectionPolicyValues {
+                synchronous: 1,
+                ..writable
+            },
+            ConnectionPolicyValues {
+                foreign_keys: 0,
+                ..writable
+            },
+            ConnectionPolicyValues {
+                trusted_schema: 1,
+                ..writable
+            },
+            ConnectionPolicyValues {
+                busy_timeout: 1,
+                ..writable
+            },
+            ConnectionPolicyValues {
+                query_only: 1,
+                ..writable
+            },
+        ] {
+            assert!(!connection_policy_values_match(
+                values,
+                OpenMode::Initialize,
+                policy,
+            ));
+        }
+
+        assert!(connection_policy_values_match(
+            ConnectionPolicyValues {
+                journal_mode: "DELETE",
+                query_only: 1,
+                ..writable
+            },
+            OpenMode::ReadOnlyInspection,
+            policy,
+        ));
+        assert!(!connection_policy_values_match(
+            ConnectionPolicyValues {
+                journal_mode: "wal",
+                query_only: 1,
+                ..writable
+            },
+            OpenMode::ReadOnlyInspection,
+            policy,
+        ));
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[derive(Debug, PartialEq, Eq)]
@@ -2370,6 +2547,46 @@ mod tests {
             connection_failure_kind(true, true, true, true, true),
             ServiceSqliteErrorKind::Authority
         );
+
+        for (failure, expected) in [
+            (
+                PoolConnectionValidationFailure::Authority,
+                ServiceSqliteErrorKind::Authority,
+            ),
+            (
+                PoolConnectionValidationFailure::Metadata,
+                ServiceSqliteErrorKind::Metadata,
+            ),
+            (
+                PoolConnectionValidationFailure::Migration,
+                ServiceSqliteErrorKind::Migration,
+            ),
+            (
+                PoolConnectionValidationFailure::Integrity,
+                ServiceSqliteErrorKind::Integrity,
+            ),
+            (
+                PoolConnectionValidationFailure::PolicyMismatch,
+                ServiceSqliteErrorKind::Pragma,
+            ),
+            (
+                PoolConnectionValidationFailure::Pragma(sqlx::Error::Protocol(
+                    "test pragma query failure".to_owned(),
+                )),
+                ServiceSqliteErrorKind::Pragma,
+            ),
+        ] {
+            let flags = PoolConnectionFailureFlags {
+                authority: Arc::new(AtomicBool::new(false)),
+                metadata: Arc::new(AtomicBool::new(false)),
+                migration: Arc::new(AtomicBool::new(false)),
+                integrity: Arc::new(AtomicBool::new(false)),
+                pragma: Arc::new(AtomicBool::new(false)),
+            };
+            flags.record(&failure);
+            assert_eq!(flags.kind(), expected);
+            let _ = failure.into_sqlx();
+        }
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2711,6 +2928,85 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test(flavor = "current_thread")]
+    async fn pool_preflight_rejects_identity_version_and_schema_catalog_drift() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+
+        let (paths, identity, authority) =
+            initialized_authority(directory.path(), "identity-drift").await;
+        let other_paths = ServiceSqlitePaths::from_runtime_context(&runtime_context(
+            RadrootsPathProfile::RepoLocal,
+            Some(directory.path().to_path_buf()),
+            "myc",
+            "other-identity",
+        ))
+        .expect("other paths");
+        let wrong_identity = ServiceDatabaseIdentity::new(
+            &other_paths,
+            identity.source_generation(),
+            identity.supported_state_schema_version(),
+            identity.application_id(),
+        );
+        let Err(error) = open_connection_pool(
+            &paths,
+            &wrong_identity,
+            &base_catalog(),
+            &base_schema_catalog(),
+            OpenMode::Initialize,
+            ServiceSqliteConnectionOptions::reviewed(),
+            Some(authority),
+            None,
+        )
+        .await
+        else {
+            panic!("identity drift must fail");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+
+        let (paths, identity, authority) =
+            initialized_authority(directory.path(), "version-drift").await;
+        let newer_identity = ServiceDatabaseIdentity::new(
+            &paths,
+            identity.source_generation(),
+            NonZeroU32::new(2).expect("newer schema"),
+            identity.application_id(),
+        );
+        let Err(error) = open_connection_pool(
+            &paths,
+            &newer_identity,
+            &base_catalog(),
+            &base_schema_catalog(),
+            OpenMode::Initialize,
+            ServiceSqliteConnectionOptions::reviewed(),
+            Some(authority),
+            None,
+        )
+        .await
+        else {
+            panic!("version drift must fail");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+
+        let (paths, identity, authority) =
+            initialized_authority(directory.path(), "schema-drift-preflight").await;
+        let Err(error) = open_connection_pool(
+            &paths,
+            &identity,
+            &base_catalog(),
+            &migration_schema_catalog(),
+            OpenMode::Initialize,
+            ServiceSqliteConnectionOptions::reviewed(),
+            Some(authority),
+            None,
+        )
+        .await
+        else {
+            panic!("schema catalog drift must fail");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
     async fn pool_checkout_rejects_state_directory_replacement_before_growth() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let policy = ServiceSqliteConnectionOptions::new(Duration::from_millis(500), 2).unwrap();
@@ -2930,6 +3226,95 @@ mod tests {
         }
         assert!(!after.contains_key("state.sqlite-wal"));
         assert!(!after.contains_key("state.sqlite-shm"));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    async fn offline_inspection_fixture() -> (tempfile::TempDir, ServiceSqlitePaths) {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let (paths, writable) =
+            initialized_pool(directory.path(), ServiceSqliteConnectionOptions::reviewed()).await;
+        let authority = writable.close().await.expect("writer authority");
+        drop(authority);
+        (directory, paths)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn read_only_inspection_guard_rejects_each_filesystem_admission_drift() {
+        let (_directory, paths) = offline_inspection_fixture().await;
+        let state_directory = paths.state_database().parent().expect("state directory");
+        fs::set_permissions(state_directory, fs::Permissions::from_mode(0o775))
+            .expect("make state directory writable by group");
+        assert!(ReadOnlyInspectionGuard::acquire(&paths).is_err());
+
+        let (_directory, paths) = offline_inspection_fixture().await;
+        fs::set_permissions(paths.state_lock(), fs::Permissions::from_mode(0o644))
+            .expect("weaken state lock mode");
+        assert!(ReadOnlyInspectionGuard::acquire(&paths).is_err());
+
+        let (_directory, paths) = offline_inspection_fixture().await;
+        let lock_alias = paths
+            .state_lock()
+            .parent()
+            .expect("state directory")
+            .join("state-lock-alias");
+        fs::hard_link(paths.state_lock(), lock_alias).expect("hard-link state lock");
+        assert!(ReadOnlyInspectionGuard::acquire(&paths).is_err());
+
+        let (_directory, paths) = offline_inspection_fixture().await;
+        let authority = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
+            .expect("writer authority");
+        let Err(error) = ReadOnlyInspectionGuard::acquire(&paths) else {
+            panic!("held writer lock must prevent inspection");
+        };
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
+        drop(authority);
+
+        let (_directory, paths) = offline_inspection_fixture().await;
+        fs::set_permissions(paths.state_database(), fs::Permissions::from_mode(0o644))
+            .expect("weaken database mode");
+        assert!(ReadOnlyInspectionGuard::acquire(&paths).is_err());
+
+        let (_directory, paths) = offline_inspection_fixture().await;
+        let database_alias = paths
+            .state_database()
+            .parent()
+            .expect("state directory")
+            .join("state-database-alias");
+        fs::hard_link(paths.state_database(), database_alias).expect("hard-link database");
+        assert!(ReadOnlyInspectionGuard::acquire(&paths).is_err());
+
+        let (_directory, paths) = offline_inspection_fixture().await;
+        let database = fs::OpenOptions::new()
+            .write(true)
+            .open(paths.state_database())
+            .expect("open database header");
+        std::os::unix::fs::FileExt::write_all_at(&database, &[1], 18)
+            .expect("corrupt SQLite write version");
+        assert!(ReadOnlyInspectionGuard::acquire(&paths).is_err());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn read_only_inspection_guard_revalidates_live_directory_and_sidecars() {
+        let (_directory, paths) = offline_inspection_fixture().await;
+        let state_directory = paths.state_database().parent().expect("state directory");
+        let original_mode = fs::metadata(state_directory)
+            .expect("state directory metadata")
+            .permissions()
+            .mode();
+        let guard = ReadOnlyInspectionGuard::acquire(&paths).expect("inspection guard");
+        fs::set_permissions(state_directory, fs::Permissions::from_mode(0o775))
+            .expect("make live directory unsafe");
+        assert!(guard.validate_for(&paths).is_err());
+        fs::set_permissions(
+            state_directory,
+            fs::Permissions::from_mode(original_mode & 0o777),
+        )
+        .expect("restore directory mode");
+        fs::write(state_directory.join(WAL_FILE_NAME), b"stale")
+            .expect("create stale WAL evidence");
+        assert!(guard.validate_for(&paths).is_err());
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

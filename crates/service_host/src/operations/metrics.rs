@@ -761,8 +761,10 @@ fn valid_metric_name(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::error::Error;
 
     use super::*;
+    use crate::{BuildInfoEnvironment, BuildMode, ContractVersions};
 
     fn name(value: &str) -> MetricName {
         MetricName::new(value).unwrap()
@@ -780,6 +782,22 @@ mod tests {
             "safe help",
             kind,
             labels.iter().copied(),
+        )
+        .unwrap()
+    }
+
+    fn build_info() -> BuildInfo {
+        BuildInfo::from_compile_time(
+            BuildMode::Release,
+            BuildInfoEnvironment {
+                service_version: Some("1.2.3"),
+                service_commit: Some("1111111111111111111111111111111111111111"),
+                lib_revision: Some("2222222222222222222222222222222222222222"),
+                rust_version: Some("1.97.0"),
+                target: Some("x86_64-unknown-linux-gnu"),
+                feature_profile: Some("release"),
+                contract_versions: ContractVersions::new(1, 1, 1, 1, 1).unwrap(),
+            },
         )
         .unwrap()
     }
@@ -1139,5 +1157,163 @@ mod tests {
             BoundedMetricsSnapshot::new([descriptor], std::iter::repeat(sample)),
             Err(MetricsContractError::TooManySamples)
         );
+    }
+
+    #[test]
+    fn accessors_debug_errors_and_remaining_bounds_are_exact() {
+        let build = build_info();
+        let version = MetricLabel::build_version(&build).unwrap();
+        let revision = MetricLabel::build_revision(&build).unwrap();
+        assert_eq!(version.key(), MetricLabelKey::Version);
+        assert_eq!(version.value(), "1.2.3");
+        assert_eq!(revision.key(), MetricLabelKey::Revision);
+        assert_eq!(revision.value(), "1111111111111111111111111111111111111111");
+        assert_eq!(
+            format!("{version:?}"),
+            "MetricLabel { key: Version, value: \"[redacted]\" }"
+        );
+
+        let storage_id = MetricComponentId::new("sqlite_writer").unwrap();
+        assert_eq!(storage_id.as_str(), "sqlite_writer");
+        let transport_id = MetricComponentId::new("nostr_relay").unwrap();
+        assert_eq!(transport_id.as_str(), "nostr_relay");
+        assert_eq!(MetricLabel::storage(storage_id).value(), "sqlite_writer");
+        assert_eq!(MetricLabel::transport(transport_id).value(), "nostr_relay");
+        assert!(MetricComponentId::new("a0").is_ok());
+        assert!(MetricComponentId::new("a_").is_ok());
+        assert_eq!(
+            MetricComponentId::new("a-").unwrap_err(),
+            MetricsContractError::InvalidComponentId
+        );
+
+        let metric_name = name("radroots_build_info");
+        assert_eq!(metric_name.as_str(), "radroots_build_info");
+        let build_descriptor = MetricDescriptor::new(
+            CommonMetricGroup::Build,
+            metric_name.clone(),
+            "build identity",
+            MetricKind::Gauge,
+            [MetricLabelKey::Revision, MetricLabelKey::Version],
+        )
+        .unwrap();
+        assert_eq!(build_descriptor.group(), CommonMetricGroup::Build);
+        assert_eq!(build_descriptor.name(), &metric_name);
+        assert_eq!(build_descriptor.kind(), MetricKind::Gauge);
+        assert_eq!(
+            build_descriptor.label_keys(),
+            &[MetricLabelKey::Version, MetricLabelKey::Revision]
+        );
+        assert!(format!("{build_descriptor:?}").contains("help: \"[redacted]\""));
+
+        let sample =
+            MetricSample::new(metric_name, MetricValue::Gauge(1), [revision, version]).unwrap();
+        assert_eq!(sample.name().as_str(), "radroots_build_info");
+        assert_eq!(sample.value(), MetricValue::Gauge(1));
+        assert_eq!(sample.labels().len(), 2);
+        assert!(format!("{sample:?}").contains("label_count: 2"));
+        assert_eq!(
+            MetricSample::new(
+                name("radroots_duplicate_labels"),
+                MetricValue::Gauge(1),
+                [
+                    MetricLabel::phase(ServicePhase::Ready),
+                    MetricLabel::phase(ServicePhase::Degraded),
+                ],
+            ),
+            Err(MetricsContractError::DuplicateLabelKey)
+        );
+
+        let snapshot = BoundedMetricsSnapshot::new([build_descriptor], [sample.clone()]).unwrap();
+        assert_eq!(snapshot.descriptors().len(), 1);
+        assert_eq!(snapshot.samples(), std::slice::from_ref(&sample));
+        assert_eq!(
+            format!("{snapshot:?}"),
+            "BoundedMetricsSnapshot { descriptor_count: 1, sample_count: 1 }"
+        );
+        let rendered = String::from_utf8(snapshot.render(4096).unwrap()).unwrap();
+        assert!(rendered.contains("version=\"1.2.3\",revision="));
+        assert_eq!(
+            BoundedMetricsSnapshot::new(snapshot.descriptors().to_vec(), [sample.clone(), sample]),
+            Err(MetricsContractError::DuplicateSample)
+        );
+
+        let phase_descriptor = descriptor(
+            CommonMetricGroup::Phase,
+            "radroots_phase_limit",
+            MetricKind::Gauge,
+            &[MetricLabelKey::Phase],
+        );
+        let phase_sample = MetricSample::new(
+            name("radroots_phase_limit"),
+            MetricValue::Gauge(1),
+            [MetricLabel::phase(ServicePhase::Ready)],
+        )
+        .unwrap();
+        assert_eq!(
+            BoundedMetricsSnapshot::new(
+                [phase_descriptor],
+                std::iter::repeat_n(phase_sample, METRICS_MAX_SAMPLES + 1),
+            ),
+            Err(MetricsContractError::TooManySamples)
+        );
+
+        for invalid_help in [
+            String::new(),
+            "x".repeat(METRIC_HELP_MAX_BYTES + 1),
+            "unsafe\u{0000}help".to_owned(),
+        ] {
+            assert_eq!(
+                MetricDescriptor::new(
+                    CommonMetricGroup::Phase,
+                    name("radroots_invalid_help"),
+                    invalid_help,
+                    MetricKind::Gauge,
+                    [MetricLabelKey::Phase],
+                ),
+                Err(MetricsContractError::InvalidHelp)
+            );
+        }
+        for invalid_value in ["", "-leading", "contains space"] {
+            assert!(matches!(
+                MetricLabelValue::new(invalid_value),
+                Err(MetricsContractError::InvalidLabelValue)
+            ));
+        }
+        assert!(MetricLabelValue::new("A0._:-").is_ok());
+        assert!(matches!(
+            MetricLabelValue::new("A/"),
+            Err(MetricsContractError::InvalidLabelValue)
+        ));
+        assert!(MetricName::new("_metric").is_ok());
+        assert!(MetricName::new(":metric9").is_ok());
+        assert_eq!(
+            MetricName::new("").unwrap_err(),
+            MetricsContractError::InvalidMetricName
+        );
+        assert_eq!(
+            MetricName::new("9metric").unwrap_err(),
+            MetricsContractError::InvalidMetricName
+        );
+        assert_eq!(
+            MetricName::new("x".repeat(METRIC_NAME_MAX_BYTES + 1)),
+            Err(MetricsContractError::InvalidMetricName)
+        );
+        assert_eq!(
+            StableRelayId::new("x".repeat(STABLE_RELAY_ID_MAX_BYTES + 1)),
+            Err(MetricsContractError::InvalidStableRelayId)
+        );
+        assert_eq!(
+            MetricComponentId::new("x".repeat(METRIC_LABEL_VALUE_MAX_BYTES + 1)),
+            Err(MetricsContractError::InvalidComponentId)
+        );
+
+        for error in [
+            MetricsContractError::InvalidMetricName.to_string(),
+            MetricsRenderError::InvalidMaximum.to_string(),
+        ] {
+            assert!(!error.is_empty());
+        }
+        assert!(MetricsContractError::InvalidMetricName.source().is_none());
+        assert!(MetricsRenderError::ResponseTooLarge.source().is_none());
     }
 }

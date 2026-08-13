@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 //! Reusable, service-neutral SQLite mechanics for Radroots services.
 
@@ -19,6 +20,21 @@ mod open;
 mod restore;
 mod status;
 mod transaction_control;
+
+pub(crate) fn all_constraints<const N: usize>(constraints: [bool; N]) -> bool {
+    constraints.into_iter().all(core::convert::identity)
+}
+
+pub(crate) fn require_condition(
+    condition: bool,
+    kind: ServiceSqliteErrorKind,
+) -> Result<(), ServiceSqliteError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(ServiceSqliteError::new(kind))
+    }
+}
 
 pub use authority::WriterAuthority;
 pub use backup::{
@@ -58,3 +74,32 @@ pub use status::{
     StateFilesystemCapacityError, StateFilesystemCapacityReadiness, StateFilesystemCapacitySource,
     StorageHealth, StorageIntegrity, StorageStatus, inspect_state_filesystem_capacity,
 };
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn shared_condition_classifier_preserves_every_stable_error_kind() {
+        for kind in [
+            ServiceSqliteErrorKind::Authority,
+            ServiceSqliteErrorKind::Open,
+            ServiceSqliteErrorKind::Create,
+            ServiceSqliteErrorKind::Pragma,
+            ServiceSqliteErrorKind::Metadata,
+            ServiceSqliteErrorKind::Migration,
+            ServiceSqliteErrorKind::Backup,
+            ServiceSqliteErrorKind::Restore,
+            ServiceSqliteErrorKind::Integrity,
+            ServiceSqliteErrorKind::Recovery,
+        ] {
+            assert!(require_condition(true, kind).is_ok());
+            assert_eq!(
+                require_condition(false, kind)
+                    .expect_err("false condition")
+                    .kind(),
+                kind
+            );
+        }
+    }
+}

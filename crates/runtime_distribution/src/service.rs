@@ -210,17 +210,21 @@ impl HardenedServiceTarget {
     }
 
     fn has_exact_common_contract(&self) -> bool {
-        self.instance_support == ServiceInstanceSupport::Multiple
-            && self.config_format == ServiceConfigurationFormat::Toml
-            && self.state_initialization == ServiceStateInitialization::Explicit
-            && self.run_state_policy == ServiceRunStatePolicy::ExistingOnly
-            && self.admin_transport == ServiceAdminTransport::Http11OverUnixDomainSocket
-            && self.admin_base_path == ServiceAdminBasePath::V1
-            && self.admin_contract_version == 1
-            && self.status_surface == ServiceStatusSurface::LocalAdminServiceStatusV1
-            && self.operations_surface == ServiceOperationsSurface::CachedLivezReadyzMetrics
-            && self.support_posture == ServiceSupportPosture::Target
-            && self.tier_1_targets == ServiceTier1Target::ALL
+        [
+            self.instance_support == ServiceInstanceSupport::Multiple,
+            self.config_format == ServiceConfigurationFormat::Toml,
+            self.state_initialization == ServiceStateInitialization::Explicit,
+            self.run_state_policy == ServiceRunStatePolicy::ExistingOnly,
+            self.admin_transport == ServiceAdminTransport::Http11OverUnixDomainSocket,
+            self.admin_base_path == ServiceAdminBasePath::V1,
+            self.admin_contract_version == 1,
+            self.status_surface == ServiceStatusSurface::LocalAdminServiceStatusV1,
+            self.operations_surface == ServiceOperationsSurface::CachedLivezReadyzMetrics,
+            self.support_posture == ServiceSupportPosture::Target,
+            self.tier_1_targets == ServiceTier1Target::ALL,
+        ]
+        .into_iter()
+        .all(core::convert::identity)
     }
 }
 

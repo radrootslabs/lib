@@ -524,7 +524,7 @@ fn errno_kind(error: rustix::io::Errno) -> io::ErrorKind {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::symlink;
+    use std::os::unix::fs::{MetadataExt, symlink};
 
     fn mode(path: &Path) -> u32 {
         fs::symlink_metadata(path)
@@ -745,5 +745,124 @@ mod tests {
         };
         assert!(!format!("{error:?}").contains('/'));
         assert!(!error.to_string().contains('/'));
+    }
+
+    #[test]
+    fn helper_admission_checks_bind_every_identity_and_mode_dimension() {
+        let directory = tempfile::tempdir().expect("runtime directory");
+        let uid = geteuid().as_raw();
+        assert!(validate_owner(uid, uid).is_ok());
+        assert_eq!(
+            validate_owner(uid, uid.wrapping_add(1)),
+            Err(UnixAdminSocketError::RuntimeDirectoryWrongOwner)
+        );
+
+        let held_directory = open_secure_directory(directory.path(), uid).unwrap();
+        let wrong_owner = open_writer_lock(&held_directory, uid.wrapping_add(1)).unwrap_err();
+        assert_eq!(wrong_owner, UnixAdminSocketError::WriterLockWrongOwner);
+        drop(held_directory);
+        fs::remove_file(directory.path().join(WRITER_LOCK_FILE_NAME)).unwrap();
+
+        let lock = directory.path().join(WRITER_LOCK_FILE_NAME);
+        fs::write(&lock, b"").unwrap();
+        let alias = directory.path().join("writer-lock-alias");
+        fs::hard_link(&lock, &alias).unwrap();
+        let held_directory = open_secure_directory(directory.path(), uid).unwrap();
+        assert_eq!(
+            open_writer_lock(&held_directory, uid).unwrap_err(),
+            UnixAdminSocketError::WriterLockInvalidType
+        );
+        drop(held_directory);
+        fs::remove_file(alias).unwrap();
+        fs::remove_file(lock).unwrap();
+
+        let socket = directory.path().join("admin.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        let metadata = fs::symlink_metadata(&socket).unwrap();
+        let identity = FileIdentity::from_metadata(&metadata);
+        assert_eq!(inspect_socket(&socket, uid).unwrap(), Some(identity));
+        assert_eq!(
+            inspect_socket(&directory.path().join("missing"), uid).unwrap(),
+            None
+        );
+        assert_eq!(
+            inspect_socket(&socket, uid.wrapping_add(1)).unwrap_err(),
+            UnixAdminSocketError::SocketPathWrongOwner
+        );
+        assert!(verify_bound_socket(&socket, identity, uid, None, mode(&socket)).is_ok());
+        assert_eq!(
+            verify_bound_socket(
+                &socket,
+                FileIdentity {
+                    device: identity.device,
+                    inode: identity.inode.wrapping_add(1),
+                },
+                uid,
+                None,
+                mode(&socket),
+            ),
+            Err(UnixAdminSocketError::SocketPathWrongType)
+        );
+        assert_eq!(
+            verify_bound_socket(&socket, identity, uid.wrapping_add(1), None, mode(&socket)),
+            Err(UnixAdminSocketError::SocketPathWrongOwner)
+        );
+        assert!(matches!(
+            verify_bound_socket(
+                &socket,
+                identity,
+                uid,
+                Some(metadata.gid().wrapping_add(1)),
+                mode(&socket),
+            ),
+            Err(UnixAdminSocketError::SocketGroup { .. })
+        ));
+        assert!(matches!(
+            verify_bound_socket(&socket, identity, uid, None, mode(&socket) ^ 0o100),
+            Err(UnixAdminSocketError::SocketPermissions { .. })
+        ));
+        drop(listener);
+        fs::remove_file(socket).unwrap();
+    }
+
+    #[test]
+    fn live_directory_revalidation_rejects_mode_identity_and_path_drift() {
+        let directory = tempfile::tempdir().expect("runtime directory");
+        let authority = UnixAdminSocketWriterAuthority::acquire(directory.path()).unwrap();
+        assert!(authority.ensure_directory_identity().is_ok());
+        assert_eq!(
+            authority.resolve_socket_path(Path::new("/")).unwrap_err(),
+            UnixAdminSocketError::InvalidSocketPath
+        );
+
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(
+            authority.ensure_directory_identity().unwrap_err(),
+            UnixAdminSocketError::RuntimeDirectoryChanged
+        );
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
+
+        let moved = directory.path().with_extension("held");
+        fs::rename(directory.path(), &moved).unwrap();
+        fs::create_dir(directory.path()).unwrap();
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(
+            authority.ensure_directory_identity().unwrap_err(),
+            UnixAdminSocketError::RuntimeDirectoryChanged
+        );
+        fs::remove_dir(directory.path()).unwrap();
+        fs::rename(&moved, directory.path()).unwrap();
+        assert!(authority.ensure_directory_identity().is_ok());
+
+        let socket = directory.path().join("missing.sock");
+        remove_matching_socket(
+            &authority,
+            &socket,
+            FileIdentity {
+                device: 0,
+                inode: 0,
+            },
+        );
+        assert!(!socket.exists());
     }
 }

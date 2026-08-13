@@ -17,6 +17,10 @@ use sqlx::{Connection, Row, SqliteConnection};
 const MAX_APPLICATION_ID: u32 = i32::MAX as u32;
 const MAX_CREATED_AT_UNIX_MS: u64 = i64::MAX as u64;
 
+const fn valid_creation_time(value: u64) -> bool {
+    value != 0 && value <= MAX_CREATED_AT_UNIX_MS
+}
+
 /// A validated nonzero SQLite application identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ServiceSqliteApplicationId(u32);
@@ -86,7 +90,7 @@ impl ServiceDatabaseMetadata {
         created_at_unix_ms: u64,
         application_id: ServiceSqliteApplicationId,
     ) -> Result<Self, ServiceSqliteMetadataValueError> {
-        if created_at_unix_ms == 0 || created_at_unix_ms > MAX_CREATED_AT_UNIX_MS {
+        if !valid_creation_time(created_at_unix_ms) {
             return Err(ServiceSqliteMetadataValueError::InvalidCreationTime);
         }
         Ok(Self {
@@ -107,7 +111,7 @@ impl ServiceDatabaseMetadata {
         created_at_unix_ms: u64,
         application_id: ServiceSqliteApplicationId,
     ) -> Result<Self, ServiceSqliteMetadataValueError> {
-        if created_at_unix_ms == 0 || created_at_unix_ms > MAX_CREATED_AT_UNIX_MS {
+        if !valid_creation_time(created_at_unix_ms) {
             return Err(ServiceSqliteMetadataValueError::InvalidCreationTime);
         }
         Ok(Self {
@@ -169,7 +173,10 @@ impl ServiceDatabaseMetadata {
     }
 
     pub(crate) fn matches_paths(&self, paths: &ServiceSqlitePaths) -> bool {
-        self.service == *paths.service() && self.instance == *paths.instance()
+        crate::all_constraints([
+            self.service == *paths.service(),
+            self.instance == *paths.instance(),
+        ])
     }
 }
 
@@ -223,7 +230,10 @@ impl ServiceDatabaseIdentity {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn matches_paths(&self, paths: &ServiceSqlitePaths) -> bool {
-        self.service == *paths.service() && self.instance == *paths.instance()
+        crate::all_constraints([
+            self.service == *paths.service(),
+            self.instance == *paths.instance(),
+        ])
     }
 }
 
@@ -290,6 +300,14 @@ impl Error for MetadataFailure {}
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn metadata_error(kind: MetadataFailureKind) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, MetadataFailure(kind))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn require_metadata_condition(
+    condition: bool,
+    kind: MetadataFailureKind,
+) -> Result<(), ServiceSqliteError> {
+    condition.then_some(()).ok_or_else(|| metadata_error(kind))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -378,9 +396,7 @@ pub(crate) async fn write_database_metadata(
         .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
 
     let actual = read_database_metadata(connection).await?;
-    if actual != *expected {
-        return Err(metadata_error(MetadataFailureKind::Mismatch));
-    }
+    require_metadata_condition(actual == *expected, MetadataFailureKind::Mismatch)?;
     Ok(())
 }
 
@@ -390,14 +406,16 @@ pub(crate) async fn verify_database_metadata(
     expected: &ServiceDatabaseIdentity,
 ) -> Result<ServiceDatabaseMetadata, ServiceSqliteError> {
     let actual = read_database_metadata(connection).await?;
-    if actual.service != expected.service
-        || actual.instance != expected.instance
-        || actual.source_generation != expected.source_generation
-        || actual.application_id != expected.application_id
-        || actual.state_schema_version > expected.supported_state_schema_version
-    {
-        return Err(metadata_error(MetadataFailureKind::Mismatch));
-    }
+    require_metadata_condition(
+        crate::all_constraints([
+            actual.service == expected.service,
+            actual.instance == expected.instance,
+            actual.source_generation == expected.source_generation,
+            actual.application_id == expected.application_id,
+            actual.state_schema_version <= expected.supported_state_schema_version,
+        ]),
+        MetadataFailureKind::Mismatch,
+    )?;
     Ok(actual)
 }
 
@@ -450,13 +468,12 @@ async fn read_database_metadata(
             return Err(metadata_error(MetadataFailureKind::Corrupt));
         }
     }
-    if row
-        .try_get::<i64, _>("singleton")
-        .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?
-        != 1
-    {
-        return Err(metadata_error(MetadataFailureKind::Corrupt));
-    }
+    require_metadata_condition(
+        row.try_get::<i64, _>("singleton")
+            .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?
+            == 1,
+        MetadataFailureKind::Corrupt,
+    )?;
     let service = ServiceId::new(
         row.try_get::<String, _>("service_id")
             .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?,
@@ -572,8 +589,31 @@ mod tests {
         crate::SchemaCatalog::new(&migrations, [version]).expect("base schema catalog")
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn metadata_failure_inventory_preserves_kind_and_trusted_source() {
+        for kind in [
+            MetadataFailureKind::AlreadyPresent,
+            MetadataFailureKind::Missing,
+            MetadataFailureKind::Corrupt,
+            MetadataFailureKind::Mismatch,
+            MetadataFailureKind::Storage,
+        ] {
+            assert!(require_metadata_condition(true, kind).is_ok());
+            let error = require_metadata_condition(false, kind).expect_err("false condition");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+            assert!(error.source().is_some());
+            assert!(!error.to_string().contains('/'));
+            assert!(format!("{error:?}").contains("Metadata"));
+        }
+    }
+
     #[test]
     fn application_id_and_creation_time_bounds_are_exact() {
+        assert!(valid_creation_time(1));
+        assert!(valid_creation_time(MAX_CREATED_AT_UNIX_MS));
+        assert!(!valid_creation_time(0));
+        assert!(!valid_creation_time(MAX_CREATED_AT_UNIX_MS + 1));
         assert_eq!(
             ServiceSqliteApplicationId::new(0),
             Err(ServiceSqliteMetadataValueError::InvalidApplicationId)
@@ -873,6 +913,22 @@ mod tests {
                 (1, 'myc', 'primary', randomblob(32), 1, 0)",
             "INSERT INTO radroots_service_metadata VALUES
                 ('1', 'myc', 'primary', randomblob(32), 1, 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 7, 'primary', randomblob(32), 1, 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 7, randomblob(32), 1, 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', 'not-a-generation', 1, 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', randomblob(32), '1', 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', randomblob(32), 1, '1700000000000')",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', randomblob(32), -1, 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', randomblob(32), 4294967296, 1700000000000)",
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', randomblob(32), 1, -1)",
         ];
         for corrupt_row in corrupt_rows {
             let mut connection = memory_connection().await;
@@ -899,5 +955,67 @@ mod tests {
                 "accepted corrupt fixture `{corrupt_row}`"
             );
         }
+
+        for (application_id, statement) in [
+            (0_i64, "PRAGMA application_id = 0"),
+            (-1, "PRAGMA application_id = -1"),
+        ] {
+            let mut connection = memory_connection().await;
+            sqlx::raw_sql(PERMISSIVE_TABLE)
+                .execute(&mut connection)
+                .await
+                .expect("permissive metadata table");
+            sqlx::query(statement)
+                .execute(&mut connection)
+                .await
+                .expect("invalid application ID fixture");
+            sqlx::query(
+                "INSERT INTO radroots_service_metadata VALUES
+                    (1, 'myc', 'primary', randomblob(32), 1, 1700000000000)",
+            )
+            .execute(&mut connection)
+            .await
+            .expect("otherwise valid metadata row");
+            assert_eq!(
+                verify_database_metadata(&mut connection, &expected.identity())
+                    .await
+                    .expect_err("invalid application ID")
+                    .kind(),
+                ServiceSqliteErrorKind::Metadata,
+                "accepted application ID {application_id}"
+            );
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn verified_backup_metadata_rejects_invalid_creation_time() {
+        let service = ServiceId::new("myc").expect("service");
+        let instance = InstanceId::new("primary").expect("instance");
+        let generation = SourceGeneration::new([7; 32]).expect("generation");
+        let schema = NonZeroU32::new(1).expect("schema");
+        let application = ServiceSqliteApplicationId::new(0x5244_5351).expect("application");
+        assert!(
+            ServiceDatabaseMetadata::from_verified_backup(
+                service.clone(),
+                instance.clone(),
+                generation,
+                schema,
+                0,
+                application,
+            )
+            .is_err()
+        );
+        assert!(
+            ServiceDatabaseMetadata::from_verified_backup(
+                service,
+                instance,
+                generation,
+                schema,
+                i64::MAX as u64 + 1,
+                application,
+            )
+            .is_err()
+        );
     }
 }
