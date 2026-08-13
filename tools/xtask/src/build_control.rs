@@ -93,11 +93,8 @@ impl ConsumerRoot {
             .map_err(|error| format!("consumer marker is not UTF-8: {error}"))?
             .trim()
             .to_owned();
-        if !matches!(
-            product.as_str(),
-            "sdk" | "mobile" | "studio" | "myc" | "rhi"
-        ) {
-            return Err("consumer marker must contain sdk, mobile, studio, myc, or rhi".to_owned());
+        if !matches!(product.as_str(), "sdk" | "mobile" | "myc" | "rhi") {
+            return Err("consumer marker must contain sdk, mobile, myc, or rhi".to_owned());
         }
         let source_lock_path = canonical.join(SOURCE_LOCK_NAME);
         let source_lock = parse_source_lock(&source_lock_path)?;
@@ -540,7 +537,6 @@ pub fn artifact(
     let external_names = match product {
         "sdk" => vec!["radroots", "radroots_sdk"],
         "mobile" => vec!["RadrootsFFI", "RadrootsKitBindings"],
-        "studio" => vec!["org.radroots.studio.ffi", "radroots_studio_ffi"],
         _ => return Err("unsupported artifact product".to_owned()),
     };
     let manifest = ArtifactManifest {
@@ -613,7 +609,6 @@ fn validate_artifact_route(product: &str, target: &str, language: &str) -> Resul
             (target, language),
             ("ios", "swift") | ("android", "kotlin") | ("wasm", "javascript")
         ),
-        "studio" => matches!(target, "linux" | "macos" | "windows") && language == "kotlin",
         _ => false,
     };
     if valid {
@@ -1177,7 +1172,7 @@ mod tests {
 
     #[test]
     fn source_lock_supports_a_contained_nested_lockfile() {
-        let mut fixture = Fixture::new("studio");
+        let mut fixture = Fixture::new("sdk");
         let core = fixture.consumer.join("core");
         fs::create_dir(&core).expect("create nested capsule");
         fs::rename(fixture.consumer.join("Cargo.lock"), core.join("Cargo.lock"))

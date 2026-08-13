@@ -33,8 +33,8 @@ This file exists for compatibility with tools that look for AGENTS.md.
   Service-host and service-owned operator contracts must implement or narrow
   that boundary without adding a second transport, exit map, or readiness
   authority.
-- Source-lock consumer identities include `sdk`, `mobile`, `studio`, `myc`,
-  and `rhi`. Only the first three are generated-artifact product identities;
+- Source-lock consumer identities include `sdk`, `mobile`, `myc`, and `rhi`.
+  Only the first two are generated-artifact product identities;
   accepting a service consumer marker must not expose an artifact route.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.

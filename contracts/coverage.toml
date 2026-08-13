@@ -50,11 +50,6 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the coverage-only bindgen entry point has no measured branch records"
 
-[overrides.radroots_studio_uniffi_bindgen]
-require_branches = false
-temporary = true
-reason = "branch coverage is not applicable while the coverage-only bindgen entry point has no measured branch records"
-
 [overrides.radroots_test_fixtures]
 require_branches = false
 temporary = true
@@ -88,14 +83,6 @@ crates = [
   "radroots_signing",
   "radroots_storage",
   "radroots_storage_sqlite",
-  "radroots_studio_application",
-  "radroots_studio_domain",
-  "radroots_studio_ffi",
-  "radroots_studio_nostr",
-  "radroots_studio_preferences",
-  "radroots_studio_runtime",
-  "radroots_studio_storage",
-  "radroots_studio_uniffi_bindgen",
   "radroots_sync",
   "radroots_transport_nostr",
   "radroots_transport_reticulum",

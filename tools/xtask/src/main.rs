@@ -172,7 +172,6 @@ enum SourceMode {
 enum ArtifactProduct {
     Sdk,
     Mobile,
-    Studio,
 }
 
 impl ArtifactProduct {
@@ -180,7 +179,6 @@ impl ArtifactProduct {
         match self {
             Self::Sdk => "sdk",
             Self::Mobile => "mobile",
-            Self::Studio => "studio",
         }
     }
 }
@@ -311,7 +309,7 @@ fn usage() {
         "  cargo xtask source archive-create --source-root <absolute-directory> --revision <full-sha> --output <absolute-bundle>"
     );
     eprintln!(
-        "  cargo xtask artifact --product <sdk|mobile|studio> --target <target> --language <language> --mode <check|write> --consumer-root <absolute-directory> --source-root <absolute-directory> --output <relative-path> --source-date-epoch <seconds> --builder-id <id>"
+        "  cargo xtask artifact --product <sdk|mobile> --target <target> --language <language> --mode <check|write> --consumer-root <absolute-directory> --source-root <absolute-directory> --output <relative-path> --source-date-epoch <seconds> --builder-id <id>"
     );
 }
 
@@ -652,9 +650,8 @@ mod tests {
             [
                 ArtifactProduct::Sdk.as_str(),
                 ArtifactProduct::Mobile.as_str(),
-                ArtifactProduct::Studio.as_str(),
             ],
-            ["sdk", "mobile", "studio"]
+            ["sdk", "mobile"]
         );
         assert_eq!(
             [

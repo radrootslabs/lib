@@ -32,15 +32,6 @@ sha2 = "crypto-reviewed"
 subtle = "crypto-reviewed"
 zeroize = "secret-handling-reviewed"
 
-[policy.radroots_studio_ffi]
-dependency-criteria = { quote = "build-execution-reviewed", syn = "build-execution-reviewed" }
-
-[policy.radroots_studio_storage.dependency-criteria]
-hmac = "crypto-reviewed"
-keyring = "secret-handling-reviewed"
-sha2 = "crypto-reviewed"
-zeroize = "secret-handling-reviewed"
-
 [policy.radroots_transport_nostr.dependency-criteria]
 async-wsocket = "network-parser-reviewed"
 nostr-relay-pool = "network-parser-reviewed"
