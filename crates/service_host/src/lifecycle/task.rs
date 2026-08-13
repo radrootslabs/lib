@@ -226,6 +226,13 @@ mod tests {
             )
             .is_ok()
         );
+        let optional = TaskMetadata::new(
+            name(),
+            TaskClassification::Optional,
+            Some(ShutdownPhase::CloseNetwork),
+        )
+        .unwrap();
+        assert_eq!(optional.shutdown_phase(), Some(ShutdownPhase::CloseNetwork));
         assert_eq!(
             TaskMetadata::new(name(), TaskClassification::Optional, None),
             Err(TaskMetadataError::InvalidShutdownPhaseAssignment)

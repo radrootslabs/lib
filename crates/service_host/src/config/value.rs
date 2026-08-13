@@ -698,6 +698,10 @@ mod tests {
 
     #[test]
     fn optional_operations_bind_is_explicit_redacted_and_policy_checked() {
+        assert_eq!(
+            OptionalOperationsBind::disabled(),
+            OptionalOperationsBind::default()
+        );
         let disabled: OptionalOperationsBind = "disabled".parse().unwrap();
         assert!(!disabled.is_enabled());
         assert_eq!(disabled.address(), None);
@@ -713,6 +717,10 @@ mod tests {
         );
 
         let loopback: OptionalOperationsBind = "127.0.0.1:9100".parse().unwrap();
+        assert_eq!(
+            OptionalOperationsBind::listen(loopback.address().unwrap()),
+            loopback
+        );
         assert!(loopback.is_enabled());
         assert_eq!(loopback.to_string(), "127.0.0.1:9100");
         assert!(!format!("{loopback:?}").contains("127.0.0.1"));

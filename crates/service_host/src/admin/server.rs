@@ -2058,6 +2058,42 @@ mod tests {
 
     #[test]
     fn strict_json_routes_accessors_and_safe_errors_cover_the_full_value_surface() {
+        assert!(valid_parameter_name("item_1"));
+        for rejected in [
+            "",
+            "1item",
+            "Item",
+            "item-name",
+            &"x".repeat(ADMIN_ROUTE_PARAMETER_NAME_MAX_UTF8_BYTES + 1),
+        ] {
+            assert!(!valid_parameter_name(rejected));
+        }
+        assert_eq!(decode_route_parameter(""), None);
+        assert_eq!(decode_route_parameter("plain"), Some("plain".to_owned()));
+
+        for path in ["/", "/v", "/v1", "/version2", "/v2beta"] {
+            assert!(!unknown_major_version(path), "{path}");
+        }
+        for path in ["/v0", "/v2", "/v99/status"] {
+            assert!(unknown_major_version(path), "{path}");
+        }
+        assert_eq!(query_item_count(None), 0);
+        assert_eq!(query_item_count(Some("")), 0);
+        assert_eq!(query_item_count(Some("one")), 1);
+        assert_eq!(query_item_count(Some("one&two")), 2);
+
+        let mut headers = HeaderMap::new();
+        assert!(!is_json_content_type(&headers));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_CONTENT_TYPE));
+        assert!(is_json_content_type(&headers));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+        assert!(is_json_content_type(&headers));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+        assert!(!is_json_content_type(&headers));
+
         for (document, expected) in [
             ("true", Value::Bool(true)),
             ("-7", Value::Number((-7).into())),

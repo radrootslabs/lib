@@ -227,5 +227,8 @@ mod tests {
         assert_eq!(ProcessSignal::Interrupt.as_str(), "interrupt");
         #[cfg(unix)]
         assert_eq!(ProcessSignal::Terminate.as_str(), "terminate");
+
+        let adapter = ProcessSignalAdapter::new(InjectedSignals::new([ProcessSignal::Interrupt]));
+        assert_eq!(adapter.into_inner().events.len(), 1);
     }
 }
