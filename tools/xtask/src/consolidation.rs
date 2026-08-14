@@ -920,9 +920,38 @@ fn validate_history_contract(
 ) -> Result<(), String> {
     let history = read_toml::<HistoryContract>(workspace_root, HISTORY_RELATIVE)?;
     validate_history(&history)?;
+    validate_retired_import_targets(workspace_root, &history.path_map)?;
     validate_import_records(workspace_root, &history)?;
     if let Some(archive_root) = archive_root {
         validate_archives(&history, archive_root)?;
+    }
+    Ok(())
+}
+
+fn validate_retired_import_targets(
+    workspace_root: &Path,
+    path_maps: &[PathMap],
+) -> Result<(), String> {
+    for path_map in path_maps
+        .iter()
+        .filter(|path_map| path_map.disposition == "import_unique_behavior_then_retire")
+    {
+        let target = workspace_root.join(&path_map.target);
+        match fs::symlink_metadata(&target) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "inspect retired import target {}: {error}",
+                    path_map.target
+                ));
+            }
+            Ok(_) => {
+                return Err(format!(
+                    "retired import target remains in the active tree: {}",
+                    path_map.target
+                ));
+            }
+        }
     }
     Ok(())
 }
@@ -2340,6 +2369,24 @@ mod tests {
         assert!(validate_relative_path("../sdk").is_err());
         assert!(validate_relative_path("crates/./sdk").is_err());
         assert!(validate_relative_path("/crates/sdk").is_err());
+    }
+
+    #[test]
+    fn retired_import_targets_must_be_absent() {
+        let root = tempfile::TempDir::new().expect("temporary workspace");
+        let target = "imports/retired_core";
+        let path_maps = vec![PathMap {
+            source_id: "retired_core".to_owned(),
+            source: "legacy/core".to_owned(),
+            target: target.to_owned(),
+            package: "retired_core".to_owned(),
+            license: "MPL-2.0".to_owned(),
+            disposition: "import_unique_behavior_then_retire".to_owned(),
+        }];
+
+        validate_retired_import_targets(root.path(), &path_maps).expect("absent retired import");
+        fs::create_dir_all(root.path().join(target)).expect("create retired import fixture");
+        assert!(validate_retired_import_targets(root.path(), &path_maps).is_err());
     }
 
     #[test]
