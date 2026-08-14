@@ -1,4 +1,4 @@
-schema_version = 1
+schema_version = 2
 
 [package]
 name = "libsqlite3-sys"
@@ -11,4 +11,33 @@ route = [
   "radroots_event_store/sqlite",
   "sqlx/sqlite-bundled",
   "libsqlite3-sys/bundled",
+]
+
+[access]
+high_level_library = "sqlx"
+native_linkage_owner = "sqlx"
+native_linkage_package = "libsqlite3-sys"
+maximum_native_linkages = 1
+forbidden_high_level_dependencies = [
+  "diesel",
+  "refinery",
+  "rusqlite",
+  "sea-orm",
+  "sqlite",
+  "sqlite3",
+]
+
+[sealed_native_adapter]
+owner_package = "radroots_service_sqlite"
+relative_module = "crates/service_sqlite/src/sqlite_native_backup.rs"
+capability = "incremental_online_backup"
+status = "planned"
+
+[migration]
+owner = "rcld-rshr-045"
+status = "in_progress"
+temporary_direct_dependencies = [
+  "radroots_geonames:rusqlite",
+  "radroots_service_sqlite:rusqlite",
+  "workspace:rusqlite",
 ]

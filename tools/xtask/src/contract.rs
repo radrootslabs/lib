@@ -1595,6 +1595,9 @@ struct SqliteRuntimeContract {
     schema_version: u32,
     package: SqliteRuntimePackage,
     activation: SqliteRuntimeActivation,
+    access: SqliteRuntimeAccess,
+    sealed_native_adapter: SqliteRuntimeSealedNativeAdapter,
+    migration: SqliteRuntimeMigration,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1610,6 +1613,33 @@ struct SqliteRuntimePackage {
 #[serde(deny_unknown_fields)]
 struct SqliteRuntimeActivation {
     route: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SqliteRuntimeAccess {
+    high_level_library: String,
+    native_linkage_owner: String,
+    native_linkage_package: String,
+    maximum_native_linkages: u32,
+    forbidden_high_level_dependencies: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SqliteRuntimeSealedNativeAdapter {
+    owner_package: String,
+    relative_module: String,
+    capability: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SqliteRuntimeMigration {
+    owner: String,
+    status: String,
+    temporary_direct_dependencies: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4128,18 +4158,39 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
         "sqlx/sqlite-bundled",
         "libsqlite3-sys/bundled",
     ];
+    const FORBIDDEN_HIGH_LEVEL_DEPENDENCIES: [&str; 6] = [
+        "diesel", "refinery", "rusqlite", "sea-orm", "sqlite", "sqlite3",
+    ];
+    const TEMPORARY_DIRECT_DEPENDENCIES: [&str; 3] = [
+        "radroots_geonames:rusqlite",
+        "radroots_service_sqlite:rusqlite",
+        "workspace:rusqlite",
+    ];
 
     let contract = parse_toml::<SqliteRuntimeContract>(
         &workspace_root.join(SQLITE_RUNTIME_CONTRACT_RELATIVE),
     )?;
-    if contract.schema_version != 1
+    if contract.schema_version != 2
         || contract.package.name != PACKAGE_NAME
         || contract.package.version != PACKAGE_VERSION
         || contract.package.source != PACKAGE_SOURCE
         || contract.activation.route != ACTIVATION_ROUTE
+        || contract.access.high_level_library != "sqlx"
+        || contract.access.native_linkage_owner != "sqlx"
+        || contract.access.native_linkage_package != PACKAGE_NAME
+        || contract.access.maximum_native_linkages != 1
+        || contract.access.forbidden_high_level_dependencies != FORBIDDEN_HIGH_LEVEL_DEPENDENCIES
+        || contract.sealed_native_adapter.owner_package != "radroots_service_sqlite"
+        || contract.sealed_native_adapter.relative_module
+            != "crates/service_sqlite/src/sqlite_native_backup.rs"
+        || contract.sealed_native_adapter.capability != "incremental_online_backup"
+        || contract.sealed_native_adapter.status != "planned"
+        || contract.migration.owner != "rcld-rshr-045"
+        || contract.migration.status != "in_progress"
+        || contract.migration.temporary_direct_dependencies != TEMPORARY_DIRECT_DEPENDENCIES
     {
         return Err(format!(
-            "{SQLITE_RUNTIME_CONTRACT_RELATIVE} must govern the exact crates.io bundled SQLite runtime identity and activation route"
+            "{SQLITE_RUNTIME_CONTRACT_RELATIVE} must govern the exact SQLx access, native SQLite linkage, sealed-adapter, and RCLD-045 migration policy"
         ));
     }
     if contract.package.checksum.len() != 64
@@ -4171,15 +4222,55 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
         ));
     }
 
+    let native_linkages = lock
+        .package
+        .iter()
+        .filter(|package| package.name == contract.access.native_linkage_package)
+        .count();
+    if native_linkages != contract.access.maximum_native_linkages as usize {
+        return Err(format!(
+            "Cargo.lock must contain exactly {} {} native linkage",
+            contract.access.maximum_native_linkages, contract.access.native_linkage_package
+        ));
+    }
+
     let workspace = parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
-    for member in workspace.workspace.members {
+    for member in &workspace.workspace.members {
         let package =
-            parse_toml::<PackageCargoManifest>(&workspace_root.join(&member).join("Cargo.toml"))?;
+            parse_toml::<PackageCargoManifest>(&workspace_root.join(member).join("Cargo.toml"))?;
         if package.package.name == PACKAGE_NAME {
             return Err(format!(
                 "workspace member {member} must not vendor registry package {PACKAGE_NAME}"
             ));
         }
+    }
+
+    let actual_temporary = sqlite_forbidden_direct_dependencies(
+        workspace_root,
+        &workspace.workspace.members,
+        &contract.access.forbidden_high_level_dependencies,
+    )?;
+    let expected_temporary = contract
+        .migration
+        .temporary_direct_dependencies
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if actual_temporary != expected_temporary {
+        return Err(format!(
+            "{SQLITE_RUNTIME_CONTRACT_RELATIVE} temporary direct dependency inventory is stale: expected {expected_temporary:?}, found {actual_temporary:?}"
+        ));
+    }
+
+    let direct_native_dependencies = sqlite_direct_dependency_owners(
+        workspace_root,
+        &workspace.workspace.members,
+        PACKAGE_NAME,
+    )?;
+    if !direct_native_dependencies.is_empty() {
+        return Err(format!(
+            "direct {PACKAGE_NAME} access is forbidden while the sealed native adapter is planned: {direct_native_dependencies:?}"
+        ));
     }
 
     let storage_sqlite =
@@ -4205,6 +4296,90 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
         );
     }
     Ok(())
+}
+
+fn sqlite_forbidden_direct_dependencies(
+    workspace_root: &Path,
+    members: &[String],
+    forbidden: &[String],
+) -> Result<BTreeSet<String>, String> {
+    let forbidden = forbidden
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    sqlite_direct_dependencies_matching(workspace_root, members, |dependency| {
+        forbidden.contains(dependency)
+    })
+}
+
+fn sqlite_direct_dependency_owners(
+    workspace_root: &Path,
+    members: &[String],
+    dependency: &str,
+) -> Result<BTreeSet<String>, String> {
+    sqlite_direct_dependencies_matching(workspace_root, members, |candidate| {
+        candidate == dependency
+    })
+}
+
+fn sqlite_direct_dependencies_matching(
+    workspace_root: &Path,
+    members: &[String],
+    matches: impl Fn(&str) -> bool,
+) -> Result<BTreeSet<String>, String> {
+    let mut found = BTreeSet::new();
+    let workspace_manifest = parse_toml::<toml::Value>(&workspace_root.join("Cargo.toml"))?;
+    if let Some(dependencies) = workspace_manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table)
+    {
+        collect_matching_dependencies("workspace", dependencies, &matches, &mut found);
+    }
+
+    for member in members {
+        let path = workspace_root.join(member).join("Cargo.toml");
+        let manifest = parse_toml::<toml::Value>(&path)?;
+        let owner = manifest
+            .get("package")
+            .and_then(|package| package.get("name"))
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("{} package.name is required", path.display()))?;
+        for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(dependencies) = manifest.get(section).and_then(toml::Value::as_table) {
+                collect_matching_dependencies(owner, dependencies, &matches, &mut found);
+            }
+        }
+        if let Some(targets) = manifest.get("target").and_then(toml::Value::as_table) {
+            for target in targets.values().filter_map(toml::Value::as_table) {
+                for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                    if let Some(dependencies) = target.get(section).and_then(toml::Value::as_table)
+                    {
+                        collect_matching_dependencies(owner, dependencies, &matches, &mut found);
+                    }
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
+fn collect_matching_dependencies(
+    owner: &str,
+    dependencies: &toml::map::Map<String, toml::Value>,
+    matches: &impl Fn(&str) -> bool,
+    found: &mut BTreeSet<String>,
+) {
+    for (alias, specification) in dependencies {
+        let package = specification
+            .as_table()
+            .and_then(|table| table.get("package"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or(alias);
+        if matches(package) {
+            found.insert(format!("{owner}:{package}"));
+        }
+    }
 }
 
 fn validate_changelog_release_notes(
@@ -9325,6 +9500,35 @@ mod tests {
             .join("../..")
             .canonicalize()
             .expect("canonical workspace root")
+    }
+
+    #[test]
+    fn sqlite_runtime_policy_matches_the_exact_migration_inventory() {
+        validate_sqlite_runtime_contract(&workspace_root())
+            .expect("current SQLx and SQLite migration policy must validate");
+    }
+
+    #[test]
+    fn sqlite_dependency_inventory_uses_the_selected_package_not_its_alias() {
+        let manifest = toml::from_str::<toml::Value>(
+            r#"[dependencies]
+database = { package = "rusqlite", version = "1" }
+sqlx = { version = "1" }
+"#,
+        )
+        .expect("dependency fixture");
+        let dependencies = manifest
+            .get("dependencies")
+            .and_then(toml::Value::as_table)
+            .expect("dependency table");
+        let mut found = BTreeSet::new();
+        collect_matching_dependencies(
+            "fixture",
+            dependencies,
+            &|dependency| dependency == "rusqlite",
+            &mut found,
+        );
+        assert_eq!(found, BTreeSet::from(["fixture:rusqlite".to_string()]));
     }
 
     fn validate_generic_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
