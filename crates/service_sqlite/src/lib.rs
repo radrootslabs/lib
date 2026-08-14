@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 //! Reusable, service-neutral SQLite mechanics for Radroots services.
@@ -18,6 +18,12 @@ mod migration;
 mod native_metadata;
 mod open;
 mod restore;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[allow(
+    unsafe_code,
+    reason = "the sealed SQLx-handle adapter owns the missing SQLite online-backup calls"
+)]
+mod sqlite_native_backup;
 mod status;
 mod transaction_control;
 
@@ -25,6 +31,7 @@ pub(crate) fn all_constraints<const N: usize>(constraints: [bool; N]) -> bool {
     constraints.into_iter().all(core::convert::identity)
 }
 
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 pub(crate) fn require_condition(
     condition: bool,
     kind: ServiceSqliteErrorKind,

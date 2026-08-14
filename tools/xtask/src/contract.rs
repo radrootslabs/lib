@@ -33,6 +33,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), String> {
     validate_event_contract_registry_v7_inventory(workspace_root)?;
@@ -4184,7 +4185,7 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
         || contract.sealed_native_adapter.relative_module
             != "crates/service_sqlite/src/sqlite_native_backup.rs"
         || contract.sealed_native_adapter.capability != "incremental_online_backup"
-        || contract.sealed_native_adapter.status != "planned"
+        || contract.sealed_native_adapter.status != "active"
         || contract.migration.owner != "rcld-rshr-045"
         || contract.migration.status != "in_progress"
         || contract.migration.temporary_direct_dependencies != TEMPORARY_DIRECT_DEPENDENCIES
@@ -4267,11 +4268,16 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
         &workspace.workspace.members,
         PACKAGE_NAME,
     )?;
-    if !direct_native_dependencies.is_empty() {
+    let expected_direct_native_dependencies = BTreeSet::from([
+        "radroots_service_sqlite:libsqlite3-sys".to_owned(),
+        "workspace:libsqlite3-sys".to_owned(),
+    ]);
+    if direct_native_dependencies != expected_direct_native_dependencies {
         return Err(format!(
-            "direct {PACKAGE_NAME} access is forbidden while the sealed native adapter is planned: {direct_native_dependencies:?}"
+            "direct {PACKAGE_NAME} access must be limited to the sealed adapter owner: expected {expected_direct_native_dependencies:?}, found {direct_native_dependencies:?}"
         ));
     }
+    validate_sqlite_native_adapter_source(workspace_root, &contract.sealed_native_adapter)?;
 
     let storage_sqlite =
         fs::read_to_string(workspace_root.join("crates/storage_sqlite/Cargo.toml"))
@@ -4294,6 +4300,61 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
             "crates/storage_sqlite/Cargo.toml dependencies.sqlx.features must activate sqlite-bundled"
                 .to_string(),
         );
+    }
+    Ok(())
+}
+
+fn validate_sqlite_native_adapter_source(
+    workspace_root: &Path,
+    adapter: &SqliteRuntimeSealedNativeAdapter,
+) -> Result<(), String> {
+    let adapter_path = workspace_root.join(&adapter.relative_module);
+    let adapter_source = fs::read_to_string(&adapter_path)
+        .map_err(|error| format!("read {}: {error}", adapter_path.display()))?;
+    for required in [
+        "use libsqlite3_sys as ffi;",
+        "LockedSqliteHandle",
+        "ffi::sqlite3_backup_init",
+        "ffi::sqlite3_backup_step",
+        "ffi::sqlite3_backup_finish",
+    ] {
+        if !adapter_source.contains(required) {
+            return Err(format!(
+                "{} must contain the sealed native adapter boundary `{required}`",
+                adapter_path.display()
+            ));
+        }
+    }
+
+    let source_root = workspace_root.join("crates/service_sqlite/src");
+    for entry in WalkDir::new(&source_root).follow_links(false) {
+        let entry = entry.map_err(|error| format!("walk {}: {error}", source_root.display()))?;
+        if !entry.file_type().is_file()
+            || entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                != Some("rs")
+            || entry.path() == adapter_path
+        {
+            continue;
+        }
+        let source = fs::read_to_string(entry.path())
+            .map_err(|error| format!("read {}: {error}", entry.path().display()))?;
+        for forbidden in [
+            "libsqlite3_sys",
+            "sqlite3_backup_",
+            "unsafe {",
+            "unsafe fn ",
+            "unsafe impl ",
+        ] {
+            if source.contains(forbidden) {
+                return Err(format!(
+                    "{} contains native SQLite or unsafe authority outside the sealed adapter: `{forbidden}`",
+                    entry.path().display()
+                ));
+            }
+        }
     }
     Ok(())
 }

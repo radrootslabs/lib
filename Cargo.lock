@@ -3526,6 +3526,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "fs2",
  "futures",
+ "libsqlite3-sys",
  "radroots_runtime_paths",
  "radroots_storage",
  "rusqlite",

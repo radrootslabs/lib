@@ -18,18 +18,22 @@ use std::{
 #[cfg(test)]
 use core::sync::atomic::AtomicU8;
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension, backup::StepResult, types::ValueRef};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, types::ValueRef};
 use rustix::{
     fs::{AtFlags, FileType, Mode, OFlags, fchmod, fstat, mkdirat, open, openat, statat, unlinkat},
     process::geteuid,
 };
 use sha2::{Digest, Sha256};
-use sqlx::{Sqlite, pool::PoolConnection};
+use sqlx::{
+    ConnectOptions, Connection as _, Sqlite, SqliteConnection, pool::PoolConnection,
+    sqlite::SqliteConnectOptions,
+};
 
 use crate::{
     BackupCreatedAtUnixMs, BackupMemberSha256, OpenMode, ServiceBackupManifest,
     ServiceDatabaseMetadata, ServiceSqliteError, ServiceSqliteErrorKind,
     open::{BackupSourceValidator, PrivateConnectionPool},
+    sqlite_native_backup::{NativeBackup, NativeBackupStep},
 };
 
 const MAX_STAGING_PATH_BYTES: usize = 4_096;
@@ -252,7 +256,7 @@ async fn capture_online_backup_with_operations(
     let cancellation = Arc::new(AtomicBool::new(false));
     let cancellation_guard = CaptureCancellation::new(Arc::clone(&cancellation));
     let worker = CaptureWorker {
-        _admission: admission,
+        admission: Some(admission),
         _permit: permit,
         validator,
         metadata,
@@ -261,6 +265,7 @@ async fn capture_online_backup_with_operations(
         cancellation,
         operations,
         failpoints: failpoints.clone(),
+        runtime: tokio::runtime::Handle::current(),
     };
     let joined = tokio::task::spawn_blocking(move || worker.run()).await;
     test_async_phase(TEST_CAPTURE_PHASE_JOIN_AWAITED).await;
@@ -316,7 +321,7 @@ impl Drop for CaptureCancellation {
 }
 
 struct CaptureWorker {
-    _admission: PoolConnection<Sqlite>,
+    admission: Option<PoolConnection<Sqlite>>,
     _permit: CapturePermit,
     validator: BackupSourceValidator,
     metadata: ServiceDatabaseMetadata,
@@ -325,10 +330,11 @@ struct CaptureWorker {
     cancellation: Arc<AtomicBool>,
     operations: Arc<dyn CaptureOperations>,
     failpoints: crate::failpoint::DurabilityFailpoints,
+    runtime: tokio::runtime::Handle,
 }
 
 impl CaptureWorker {
-    fn run(self) -> Result<PendingCapture, ServiceSqliteError> {
+    fn run(mut self) -> Result<PendingCapture, ServiceSqliteError> {
         self.check_cancelled()?;
         self.validator.validate()?;
         self.test_phase(TEST_CAPTURE_PHASE_BEFORE_CREATE);
@@ -353,46 +359,33 @@ impl CaptureWorker {
         self.validator.validate()?;
         staging.validate()?;
 
-        let source = self.open_source()?;
-        let mut destination = self.open_destination(&staging)?;
-        staging.record_sidecars();
+        let source = self.open_inspection_source()?;
         verify_database_inventory(&source)?;
         verify_database_metadata(&source, &self.metadata)?;
+        source
+            .close()
+            .map_err(|(_, source)| backup_source(BackupFailureKind::Capture, source))?;
         self.validator.validate()?;
         staging.validate()?;
+
+        let mut destination = self.open_sqlx_destination(&staging)?;
+        staging.record_sidecars();
 
         self.hit_checked(
             Some(&staging),
             crate::failpoint::DurabilityFailpoint::BackupBeforeCopy,
             BackupFailureKind::Capture,
         )?;
-        {
-            let backup = match rusqlite::backup::Backup::new(&source, &mut destination) {
-                Ok(backup) => backup,
-                Err(source) => {
-                    staging.record_sidecars();
-                    return Err(backup_source(BackupFailureKind::Capture, source));
-                }
-            };
-            loop {
-                self.check_cancelled()?;
-                self.validator.validate()?;
-                staging.validate()?;
-                let step = backup.step(BACKUP_PAGES_PER_STEP);
-                staging.record_sidecars();
-                self.test_phase(TEST_CAPTURE_PHASE_BACKUP_STEPPED);
-                let step =
-                    step.map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-                self.validator.validate()?;
-                staging.validate()?;
-                match step {
-                    StepResult::Done => break,
-                    StepResult::More => {}
-                    StepResult::Busy | StepResult::Locked => thread::yield_now(),
-                    _ => return Err(backup_error(BackupFailureKind::Capture)),
-                }
-            }
-        }
+        let capture_result = self.copy_with_locked_sqlx_handles(&mut destination, &mut staging);
+        let close_result = self
+            .runtime
+            .block_on(destination.close())
+            .map_err(|source| backup_source(BackupFailureKind::Capture, source));
+        staging.record_sidecars();
+        self.validator.validate()?;
+        staging.validate()?;
+        capture_result?;
+        close_result?;
         self.hit_checked(
             Some(&staging),
             crate::failpoint::DurabilityFailpoint::BackupAfterCopy,
@@ -404,6 +397,7 @@ impl CaptureWorker {
         self.check_cancelled()?;
         self.validator.validate()?;
         staging.validate()?;
+        let destination = self.open_inspection_destination(&staging)?;
         verify_database_inventory(&destination)?;
         verify_database_metadata(&destination, &self.metadata)?;
         verify_integrity(&destination)?;
@@ -416,9 +410,6 @@ impl CaptureWorker {
             .close()
             .map_err(|(_, source)| backup_source(BackupFailureKind::Capture, source))?;
         staging.record_sidecars();
-        source
-            .close()
-            .map_err(|(_, source)| backup_source(BackupFailureKind::Capture, source))?;
         self.validator.validate()?;
         staging.validate()?;
         staging.validate_inventory()?;
@@ -463,13 +454,63 @@ impl CaptureWorker {
         .map_err(|source| backup_source(BackupFailureKind::Manifest, source))?;
         Ok(PendingCapture {
             staging,
-            _admission: self._admission,
+            _admission: self
+                .admission
+                .take()
+                .ok_or_else(|| backup_error(BackupFailureKind::Capture))?,
             _permit: self._permit,
             manifest,
         })
     }
 
-    fn open_source(&self) -> Result<Connection, ServiceSqliteError> {
+    fn copy_with_locked_sqlx_handles(
+        &mut self,
+        destination: &mut SqliteConnection,
+        staging: &mut StagingGuard,
+    ) -> Result<(), ServiceSqliteError> {
+        let mut admission = self
+            .admission
+            .take()
+            .ok_or_else(|| backup_error(BackupFailureKind::Capture))?;
+        let result = (|| {
+            let mut source_handle = self
+                .runtime
+                .block_on(admission.lock_handle())
+                .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
+            let mut destination_handle = self
+                .runtime
+                .block_on(destination.lock_handle())
+                .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
+            let mut backup = NativeBackup::start(&mut destination_handle, &mut source_handle)
+                .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
+            loop {
+                self.check_cancelled()?;
+                self.validator.validate()?;
+                staging.validate()?;
+                let step = backup
+                    .step(BACKUP_PAGES_PER_STEP)
+                    .map_err(|source| backup_source(BackupFailureKind::Capture, source));
+                staging.record_sidecars();
+                self.test_phase(TEST_CAPTURE_PHASE_BACKUP_STEPPED);
+                let step = step?;
+                self.validator.validate()?;
+                staging.validate()?;
+                match step {
+                    NativeBackupStep::Done => {
+                        return backup
+                            .finish()
+                            .map_err(|source| backup_source(BackupFailureKind::Capture, source));
+                    }
+                    NativeBackupStep::More => {}
+                    NativeBackupStep::Busy | NativeBackupStep::Locked => thread::yield_now(),
+                }
+            }
+        })();
+        self.admission = Some(admission);
+        result
+    }
+
+    fn open_inspection_source(&self) -> Result<Connection, ServiceSqliteError> {
         self.validator.validate()?;
         let result = Connection::open_with_flags(
             self.validator.database_path(),
@@ -486,7 +527,27 @@ impl CaptureWorker {
         Ok(connection)
     }
 
-    fn open_destination(&self, staging: &StagingGuard) -> Result<Connection, ServiceSqliteError> {
+    fn open_sqlx_destination(
+        &self,
+        staging: &StagingGuard,
+    ) -> Result<SqliteConnection, ServiceSqliteError> {
+        staging.validate()?;
+        let options = SqliteConnectOptions::new()
+            .filename(staging.state_path())
+            .create_if_missing(false)
+            .foreign_keys(false)
+            .disable_statement_logging();
+        let result = self
+            .runtime
+            .block_on(SqliteConnection::connect_with(&options));
+        staging.validate()?;
+        result.map_err(|source| backup_source(BackupFailureKind::Capture, source))
+    }
+
+    fn open_inspection_destination(
+        &self,
+        staging: &StagingGuard,
+    ) -> Result<Connection, ServiceSqliteError> {
         staging.validate()?;
         let result = Connection::open_with_flags(
             staging.state_path(),

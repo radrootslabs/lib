@@ -242,14 +242,14 @@ fn validate_workspace_toolchain(
         ));
     }
     let lints = &manifest.workspace.lints;
-    if lints.rust.unsafe_code != "forbid"
+    if lints.rust.unsafe_code != "deny"
         || lints.rustdoc.broken_intra_doc_links != "deny"
         || lints.clippy.dbg_macro != "deny"
         || lints.clippy.todo != "deny"
         || lints.clippy.unimplemented != "deny"
     {
         return Err(
-            "workspace lints must forbid unsafe code and deny the approved rustdoc/Clippy baseline"
+            "workspace lints must deny unsafe code and deny the approved rustdoc/Clippy baseline"
                 .to_owned(),
         );
     }
@@ -1289,7 +1289,7 @@ adr_required = false
 
     fn complete_workspace_manifest(members: &str) -> String {
         format!(
-            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"forbid\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
+            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"deny\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
         )
     }
 

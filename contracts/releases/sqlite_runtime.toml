@@ -31,7 +31,7 @@ forbidden_high_level_dependencies = [
 owner_package = "radroots_service_sqlite"
 relative_module = "crates/service_sqlite/src/sqlite_native_backup.rs"
 capability = "incremental_online_backup"
-status = "planned"
+status = "active"
 
 [migration]
 owner = "rcld-rshr-045"

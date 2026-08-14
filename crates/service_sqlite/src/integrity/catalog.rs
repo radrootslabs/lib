@@ -355,7 +355,7 @@ impl SchemaCatalog {
         self.digest
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(test, target_os = "linux", target_os = "macos"))]
     pub(crate) fn matches_migrations(&self, migrations: &MigrationCatalog) -> bool {
         crate::all_constraints([
             self.migration_catalog_digest == migrations.digest(),
@@ -364,7 +364,7 @@ impl SchemaCatalog {
         ])
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(test, target_os = "linux", target_os = "macos"))]
     pub(crate) fn version(&self, version: u32) -> Option<SchemaVersionCatalog> {
         let index = usize::try_from(version.checked_sub(1)?).ok()?;
         self.versions.get(index).copied()

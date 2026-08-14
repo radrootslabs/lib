@@ -178,6 +178,7 @@ fn initialization_error(cause: InitializationCause) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Create, cause)
 }
 
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn require_initialization_condition(
     condition: bool,
     kind: InitializationFailureKind,
@@ -194,7 +195,7 @@ mod failure_tests {
 
     #[test]
     fn initialization_failure_inventory_is_complete_and_source_aware() {
-        let mut cases = vec![
+        let cases = [
             (
                 InitializationFailureKind::UnsupportedMode,
                 "SQLite initialization requires initialize mode",
@@ -203,9 +204,10 @@ mod failure_tests {
                 InitializationFailureKind::CreateUnavailable,
                 "SQLite state could not be reserved",
             ),
-        ];
+        ]
+        .into_iter();
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        cases.extend([
+        let cases = cases.chain([
             (
                 InitializationFailureKind::StateAlreadyExists,
                 "SQLite state already exists",

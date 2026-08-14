@@ -5,7 +5,9 @@ use std::error::Error;
 
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
-use crate::{ServiceSqliteErrorKind, ServiceSqlitePaths};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::ServiceSqliteErrorKind;
+use crate::ServiceSqlitePaths;
 
 const MAXIMUM_MINIMUM_FREE_BYTES: u64 = i64::MAX as u64;
 

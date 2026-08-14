@@ -96,7 +96,7 @@ authors = ["Tyson Lupul <tyson@radroots.org>"]
 readme = "README.md"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
 
 [workspace.lints.rustdoc]
@@ -208,6 +208,7 @@ keyring = { version = "3.6.3", default-features = false, features = [
   "vendored",
 ] }
 libc = { version = "0.2" }
+libsqlite3-sys = { version = "=0.37.0", default-features = false }
 nostr = { version = "0.44.7", default-features = false }
 nostr-relay-pool = { version = "0.44.0" }
 nostr-sdk = { version = "0.44.1" }

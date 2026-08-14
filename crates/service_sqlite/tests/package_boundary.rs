@@ -30,6 +30,7 @@ const RESTORE_RECOVER_SOURCE: &str = include_str!("../src/restore/recover.rs");
 const RESTORE_ROOT_SOURCE: &str = include_str!("../src/restore/mod.rs");
 const RESTORE_PROCESS_TEST_SOURCE: &str = include_str!("../src/restore/process_tests.rs");
 const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
+const SQLITE_NATIVE_BACKUP_SOURCE: &str = include_str!("../src/sqlite_native_backup.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status/mod.rs");
 const DISK_SOURCE: &str = include_str!("../src/status/disk.rs");
 const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
@@ -55,6 +56,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         BTreeSet::from([
             "fs2",
             "futures",
+            "libsqlite3-sys",
             "radroots_runtime_paths",
             "radroots_storage",
             "rusqlite",
@@ -126,6 +128,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "native_metadata",
             "open",
             "restore",
+            "sqlite_native_backup",
             "status",
             "transaction_control"
         ])
@@ -925,7 +928,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
     }
 
     for required in [
-        "rusqlite::backup::Backup::new",
+        "NativeBackup::start",
+        "lock_handle()",
         "tokio::task::spawn_blocking",
         "BACKUP_PAGES_PER_STEP",
         "HASH_BUFFER_BYTES",
@@ -949,6 +953,24 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             backup_capture_production.contains(required),
             "Step 064 backup capture source is missing `{required}`"
+        );
+    }
+    for required in [
+        "use libsqlite3_sys as ffi;",
+        "LockedSqliteHandle",
+        "ffi::sqlite3_backup_init",
+        "ffi::sqlite3_backup_step",
+        "ffi::sqlite3_backup_finish",
+    ] {
+        assert!(
+            SQLITE_NATIVE_BACKUP_SOURCE.contains(required),
+            "sealed native backup adapter is missing `{required}`"
+        );
+    }
+    for forbidden in ["pub ", "SqliteConnection", "PoolConnection", "Path", "File"] {
+        assert!(
+            !SQLITE_NATIVE_BACKUP_SOURCE.contains(forbidden),
+            "sealed native backup adapter exposes or owns forbidden authority `{forbidden}`"
         );
     }
     for forbidden in [
