@@ -11,9 +11,9 @@ pub use model::{
     RadrootsRuntimeDistributionContract, RuntimeDistributionEntry, TargetSet, TargetSpec,
 };
 pub use resolve::{
-    RUNTIME_DISTRIBUTION_SCHEMA, RUNTIME_DISTRIBUTION_SCHEMA_VERSION,
-    RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact, ResolvedServiceTarget,
-    RuntimeArtifactRequest, ServiceTargetRequest,
+    RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES, RUNTIME_DISTRIBUTION_SCHEMA,
+    RUNTIME_DISTRIBUTION_SCHEMA_VERSION, RadrootsRuntimeDistributionResolver,
+    ResolvedRuntimeArtifact, ResolvedServiceTarget, RuntimeArtifactRequest, ServiceTargetRequest,
 };
 pub use service::{
     HardenedServiceTarget, HardenedServiceTargets, ServiceAdminBasePath, ServiceAdminTransport,
@@ -28,7 +28,8 @@ mod tests {
     use toml::Value;
 
     use super::{
-        HardenedServiceTarget, RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionContract,
+        HardenedServiceTarget, RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES,
+        RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionContract,
         RadrootsRuntimeDistributionError, RadrootsRuntimeDistributionResolver,
         RuntimeArtifactRequest, RuntimeDistributionEntry, ServiceAdminBasePath,
         ServiceAdminTransport, ServiceConfigurationFormat, ServiceInstanceSupport,
@@ -262,6 +263,33 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         let err = RadrootsRuntimeDistributionResolver::parse_str("schema = [")
             .expect_err("invalid toml should fail");
         assert_eq!(err, RadrootsRuntimeDistributionError::Parse);
+    }
+
+    #[test]
+    fn parse_str_caps_the_complete_document_before_toml_parsing() {
+        let mut exact = CONTRACT.to_owned();
+        exact.push('#');
+        exact.extend(std::iter::repeat_n(
+            'x',
+            RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES - exact.len(),
+        ));
+        assert_eq!(exact.len(), RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES);
+        RadrootsRuntimeDistributionResolver::parse_str(&exact)
+            .expect("exact maximum contract remains admissible");
+
+        exact.push('x');
+        assert_eq!(
+            RadrootsRuntimeDistributionResolver::parse_str(&exact)
+                .expect_err("maximum plus one must fail"),
+            RadrootsRuntimeDistributionError::ContractTooLarge
+        );
+
+        let very_large = format!("{}#{}", CONTRACT, "x".repeat(4 * 1024 * 1024));
+        assert_eq!(
+            RadrootsRuntimeDistributionResolver::parse_str(&very_large)
+                .expect_err("very large contract must fail"),
+            RadrootsRuntimeDistributionError::ContractTooLarge
+        );
     }
 
     #[test]

@@ -7,6 +7,8 @@ use thiserror::Error;
 /// and error-chain traversal therefore cannot disclose them.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum RadrootsRuntimeManagerError {
+    #[error("runtime management contract exceeds its size limit")]
+    ContractTooLarge,
     #[error("parse runtime management contract failed")]
     Parse,
     #[error("runtime management schema is unsupported")]

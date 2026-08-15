@@ -32,6 +32,7 @@ pub use registry::{instance, load_registry, save_registry};
 
 pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots-runtime-management";
 pub const RUNTIME_MANAGEMENT_SCHEMA_VERSION: u32 = 1;
+pub const RUNTIME_MANAGEMENT_CONTRACT_MAX_UTF8_BYTES: usize = 1_048_576;
 
 pub(crate) const HARDENED_MANAGEMENT_CONTRACT: &str =
     include_str!("../tests/fixtures/hardened_service_management.v1.toml");
@@ -39,6 +40,9 @@ pub(crate) const HARDENED_MANAGEMENT_CONTRACT: &str =
 pub fn parse_contract_str(
     raw: &str,
 ) -> Result<RadrootsRuntimeManagementContract, RadrootsRuntimeManagerError> {
+    if raw.len() > RUNTIME_MANAGEMENT_CONTRACT_MAX_UTF8_BYTES {
+        return Err(RadrootsRuntimeManagerError::ContractTooLarge);
+    }
     let contract = toml::from_str::<RadrootsRuntimeManagementContract>(raw)
         .map_err(|_| RadrootsRuntimeManagerError::Parse)?;
     if contract.schema != RUNTIME_MANAGEMENT_SCHEMA {
@@ -67,7 +71,10 @@ pub(crate) fn validate_hardened_management_contract(
 mod tests {
     use std::error::Error as _;
 
-    use super::{HARDENED_MANAGEMENT_CONTRACT, RUNTIME_MANAGEMENT_SCHEMA, parse_contract_str};
+    use super::{
+        HARDENED_MANAGEMENT_CONTRACT, RUNTIME_MANAGEMENT_CONTRACT_MAX_UTF8_BYTES,
+        RUNTIME_MANAGEMENT_SCHEMA, RadrootsRuntimeManagerError, parse_contract_str,
+    };
 
     const CONTRACT: &str = HARDENED_MANAGEMENT_CONTRACT;
 
@@ -82,6 +89,30 @@ mod tests {
         );
         assert!(parse_contract_str(&wrong).is_err());
         assert!(parse_contract_str("schema = [").is_err());
+    }
+
+    #[test]
+    fn contract_parser_caps_the_complete_document_before_toml_parsing() {
+        let mut exact = CONTRACT.to_owned();
+        exact.push('#');
+        exact.extend(std::iter::repeat_n(
+            'x',
+            RUNTIME_MANAGEMENT_CONTRACT_MAX_UTF8_BYTES - exact.len(),
+        ));
+        assert_eq!(exact.len(), RUNTIME_MANAGEMENT_CONTRACT_MAX_UTF8_BYTES);
+        parse_contract_str(&exact).expect("exact maximum contract remains admissible");
+
+        exact.push('x');
+        assert_eq!(
+            parse_contract_str(&exact),
+            Err(RadrootsRuntimeManagerError::ContractTooLarge)
+        );
+
+        let very_large = format!("{}#{}", CONTRACT, "x".repeat(4 * 1024 * 1024));
+        assert_eq!(
+            parse_contract_str(&very_large),
+            Err(RadrootsRuntimeManagerError::ContractTooLarge)
+        );
     }
 
     #[test]

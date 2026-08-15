@@ -19,6 +19,10 @@ runtime lifecycle and inspection helpers for the `radroots` core libraries.
  * cleanup behavior limited to manager-owned install and tracking artifacts,
 preserving canonical service state and secrets.
 
+Complete management TOML documents are rejected before parsing when they
+exceed exactly 1,048,576 UTF-8 bytes. Bounded documents still require the exact
+schema, version, closed field set, and complete hardened-service inventory.
+
 Myc and RHI remain metadata-only management targets until their public CLI,
 Unix-admin, status, and artifact integrations are separately implemented.
 

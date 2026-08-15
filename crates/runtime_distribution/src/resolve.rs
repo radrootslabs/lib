@@ -7,6 +7,7 @@ use radroots_runtime_paths::ServiceId;
 
 pub const RUNTIME_DISTRIBUTION_SCHEMA: &str = "radroots-runtime-distribution";
 pub const RUNTIME_DISTRIBUTION_SCHEMA_VERSION: u32 = 1;
+pub const RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES: usize = 1_048_576;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceTargetRequest<'a> {
@@ -66,6 +67,9 @@ pub struct RadrootsRuntimeDistributionResolver {
 
 impl RadrootsRuntimeDistributionResolver {
     pub fn parse_str(raw: &str) -> Result<Self, RadrootsRuntimeDistributionError> {
+        if raw.len() > RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES {
+            return Err(RadrootsRuntimeDistributionError::ContractTooLarge);
+        }
         let contract = toml::from_str::<RadrootsRuntimeDistributionContract>(raw)
             .map_err(|_| RadrootsRuntimeDistributionError::Parse)?;
         Self::new(contract)

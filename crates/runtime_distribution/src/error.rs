@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum RadrootsRuntimeDistributionError {
+    #[error("runtime distribution contract exceeds its size limit")]
+    ContractTooLarge,
     #[error("parse runtime distribution contract failed")]
     Parse,
     #[error("runtime distribution schema is unsupported")]

@@ -14,6 +14,10 @@ distribution contract resolution for the `radroots` core libraries.
    cached operations endpoints, and Linux x86_64/aarch64 Tier-1 eligibility;
  * TOML-backed contract handling for modular runtime deployment metadata.
 
+Complete TOML documents are rejected before parsing when they exceed exactly
+1,048,576 UTF-8 bytes. Schema, version, unknown-field, and exact-inventory
+validation remains fail closed after bounded admission.
+
 The hardened service-target inventory is metadata-only. It deliberately does
 not define Myc or RHI binaries, packages, archives, channels, artifact names,
 or qualified support claims.
