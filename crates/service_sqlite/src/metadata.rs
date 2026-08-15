@@ -430,16 +430,21 @@ async fn read_database_metadata(
     .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?;
     let rows = sqlx::query(
         "SELECT
-            singleton, service_id, instance_id, source_generation,
+            singleton,
             state_schema_version, created_at_unix_ms,
-            typeof(singleton) AS singleton_type,
-            typeof(service_id) AS service_id_type,
-            typeof(instance_id) AS instance_id_type,
-            typeof(source_generation) AS source_generation_type,
-            typeof(state_schema_version) AS state_schema_version_type,
-            typeof(created_at_unix_ms) AS created_at_unix_ms_type
+            typeof(singleton) = 'integer' AS singleton_type_ok,
+            typeof(service_id) = 'text' AS service_id_type_ok,
+            length(CAST(service_id AS BLOB)) AS service_id_length,
+            substr(CAST(service_id AS BLOB), 1, 129) AS service_id_prefix,
+            typeof(instance_id) = 'text' AS instance_id_type_ok,
+            length(CAST(instance_id AS BLOB)) AS instance_id_length,
+            substr(CAST(instance_id AS BLOB), 1, 129) AS instance_id_prefix,
+            typeof(source_generation) = 'blob' AS source_generation_type_ok,
+            length(source_generation) AS source_generation_length,
+            substr(source_generation, 1, 33) AS source_generation_prefix,
+            typeof(state_schema_version) = 'integer' AS state_schema_version_type_ok,
+            typeof(created_at_unix_ms) = 'integer' AS created_at_unix_ms_type_ok
          FROM radroots_service_metadata
-         ORDER BY singleton
          LIMIT 2",
     )
     .fetch_all(&mut *connection)
@@ -452,21 +457,17 @@ async fn read_database_metadata(
             MetadataFailureKind::Corrupt
         }));
     };
-    for (column, expected_type) in [
-        ("singleton_type", "integer"),
-        ("service_id_type", "text"),
-        ("instance_id_type", "text"),
-        ("source_generation_type", "blob"),
-        ("state_schema_version_type", "integer"),
-        ("created_at_unix_ms_type", "integer"),
+    for column in [
+        "singleton_type_ok",
+        "state_schema_version_type_ok",
+        "created_at_unix_ms_type_ok",
     ] {
-        if row
-            .try_get::<String, _>(column)
-            .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?
-            != expected_type
-        {
-            return Err(metadata_error(MetadataFailureKind::Corrupt));
-        }
+        require_metadata_condition(
+            row.try_get::<i64, _>(column)
+                .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?
+                == 1,
+            MetadataFailureKind::Corrupt,
+        )?;
     }
     require_metadata_condition(
         row.try_get::<i64, _>("singleton")
@@ -474,23 +475,37 @@ async fn read_database_metadata(
             == 1,
         MetadataFailureKind::Corrupt,
     )?;
-    let service = ServiceId::new(
-        row.try_get::<String, _>("service_id")
-            .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?,
+    let service = crate::persisted_value::bounded_utf8(
+        row,
+        "service_id_type_ok",
+        "service_id_length",
+        "service_id_prefix",
+        1,
+        crate::persisted_value::MAX_IDENTIFIER_UTF8_BYTES,
     )
-    .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?;
-    let instance = InstanceId::new(
-        row.try_get::<String, _>("instance_id")
-            .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?,
+    .and_then(|value| ServiceId::new(value).ok())
+    .ok_or_else(|| metadata_error(MetadataFailureKind::Corrupt))?;
+    let instance = crate::persisted_value::bounded_utf8(
+        row,
+        "instance_id_type_ok",
+        "instance_id_length",
+        "instance_id_prefix",
+        1,
+        crate::persisted_value::MAX_IDENTIFIER_UTF8_BYTES,
     )
-    .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?;
-    let source_generation = SourceGeneration::new(
-        row.try_get::<Vec<u8>, _>("source_generation")
-            .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?
-            .try_into()
-            .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?,
+    .and_then(|value| InstanceId::new(value).ok())
+    .ok_or_else(|| metadata_error(MetadataFailureKind::Corrupt))?;
+    let source_generation = crate::persisted_value::bounded_bytes(
+        row,
+        "source_generation_type_ok",
+        "source_generation_length",
+        "source_generation_prefix",
+        32,
+        32,
     )
-    .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?;
+    .and_then(|value| <[u8; 32]>::try_from(value).ok())
+    .and_then(|value| SourceGeneration::new(value).ok())
+    .ok_or_else(|| metadata_error(MetadataFailureKind::Corrupt))?;
     let state_schema_version = NonZeroU32::new(
         u32::try_from(
             row.try_get::<i64, _>("state_schema_version")
@@ -955,6 +970,67 @@ mod tests {
                 "accepted corrupt fixture `{corrupt_row}`"
             );
         }
+
+        let oversized_text = "a".repeat(4 * 1024 * 1024);
+        for column in ["service_id", "instance_id"] {
+            let mut connection = memory_connection().await;
+            sqlx::raw_sql(PERMISSIVE_TABLE)
+                .execute(&mut connection)
+                .await
+                .expect("permissive metadata table");
+            sqlx::query("PRAGMA application_id = 1380209489")
+                .execute(&mut connection)
+                .await
+                .expect("application ID");
+            sqlx::raw_sql(
+                "INSERT INTO radroots_service_metadata VALUES
+                    (1, 'myc', 'primary', randomblob(32), 1, 1700000000000)",
+            )
+            .execute(&mut connection)
+            .await
+            .expect("metadata row");
+            let statement = match column {
+                "service_id" => "UPDATE radroots_service_metadata SET service_id = ?",
+                "instance_id" => "UPDATE radroots_service_metadata SET instance_id = ?",
+                _ => unreachable!("fixed oversized identifier column inventory"),
+            };
+            sqlx::query(statement)
+                .bind(&oversized_text)
+                .execute(&mut connection)
+                .await
+                .expect("oversized persisted identifier");
+            assert_eq!(
+                verify_database_metadata(&mut connection, &expected.identity())
+                    .await
+                    .expect_err("oversized identifier must fail before decode")
+                    .kind(),
+                ServiceSqliteErrorKind::Metadata
+            );
+        }
+
+        let mut oversized_generation = memory_connection().await;
+        sqlx::raw_sql(PERMISSIVE_TABLE)
+            .execute(&mut oversized_generation)
+            .await
+            .expect("permissive metadata table");
+        sqlx::query("PRAGMA application_id = 1380209489")
+            .execute(&mut oversized_generation)
+            .await
+            .expect("application ID");
+        sqlx::query(
+            "INSERT INTO radroots_service_metadata VALUES
+                (1, 'myc', 'primary', zeroblob(4194304), 1, 1700000000000)",
+        )
+        .execute(&mut oversized_generation)
+        .await
+        .expect("oversized persisted generation");
+        assert_eq!(
+            verify_database_metadata(&mut oversized_generation, &expected.identity())
+                .await
+                .expect_err("oversized generation must fail before decode")
+                .kind(),
+            ServiceSqliteErrorKind::Metadata
+        );
 
         for (application_id, statement) in [
             (0_i64, "PRAGMA application_id = 0"),

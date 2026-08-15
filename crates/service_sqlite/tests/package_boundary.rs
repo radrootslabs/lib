@@ -24,6 +24,7 @@ const METADATA_SOURCE: &str = include_str!("../src/metadata.rs");
 const MIGRATION_SOURCE: &str = include_str!("../src/migration.rs");
 const NATIVE_METADATA_SOURCE: &str = include_str!("../src/native_metadata.rs");
 const OPEN_SOURCE: &str = include_str!("../src/open.rs");
+const PERSISTED_VALUE_SOURCE: &str = include_str!("../src/persisted_value.rs");
 const RESTORE_MARKER_SOURCE: &str = include_str!("../src/restore/marker.rs");
 const RESTORE_FINALIZE_SOURCE: &str = include_str!("../src/restore/finalize.rs");
 const RESTORE_RECOVER_SOURCE: &str = include_str!("../src/restore/recover.rs");
@@ -127,6 +128,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "migration",
             "native_metadata",
             "open",
+            "persisted_value",
             "restore",
             "sqlite_native_backup",
             "status",
@@ -135,6 +137,27 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         ])
     );
     assert!(public_modules(ROOT).is_empty());
+    for required in [
+        "pub(crate) const INTEGRITY_CHECK_SQL",
+        "PRAGMA integrity_check(1)",
+        "pub(crate) const MAX_INTEGRITY_RESULT_BYTES: usize = 64",
+        "pub(crate) fn bounded_integrity_bytes",
+        "pub(crate) fn integrity_result_failed",
+        "row.try_get::<&[u8], _>(0)",
+        "pub(crate) fn bounded_bytes",
+        "pub(crate) fn bounded_utf8",
+    ] {
+        assert!(
+            PERSISTED_VALUE_SOURCE.contains(required),
+            "persisted-value boundary is missing `{required}`"
+        );
+    }
+    for forbidden in ["pub mod persisted_value", "pub use persisted_value"] {
+        assert!(
+            !ROOT.contains(forbidden),
+            "persisted-value boundary leaked through `{forbidden}`"
+        );
+    }
     for required in [
         "`ServiceSqliteHost` is the only public connection host",
         "borrowed `ServiceSqliteTransaction` executor",
@@ -797,8 +820,12 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "statement_control_rejected",
         "SAVEPOINT radroots_migration_transaction_probe",
         "FROM pragma_database_list",
-        "CASE WHEN typeof(name) = 'text'",
-        "CASE WHEN typeof(checksum) = 'blob'",
+        "typeof(name) = 'text' AS name_type_ok",
+        "substr(CAST(name AS BLOB), 1, 129) AS name_prefix",
+        "typeof(checksum) = 'blob' AS checksum_type_ok",
+        "substr(checksum, 1, 33) AS checksum_prefix",
+        "crate::persisted_value::bounded_utf8",
+        "crate::persisted_value::bounded_bytes",
     ] {
         assert!(
             migration_production.contains(required),
@@ -906,7 +933,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ForeignKeyViolation",
         "Box<[IntegrityDiagnosticCode]>",
         "pub const fn storage_integrity",
-        "PRAGMA integrity_check(1)",
+        "crate::persisted_value::INTEGRITY_CHECK_SQL",
         "SELECT 1 FROM pragma_foreign_key_check LIMIT 1",
         "connection.begin().await",
         "transaction.rollback().await",
@@ -942,7 +969,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "std::fs",
         "OpenOptions",
         "write_all",
-        "persist",
+        ".persist(",
         "cache",
         "myc_",
         "rhi_",
@@ -962,8 +989,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC",
         "Mode::RUSR | Mode::WUSR | Mode::XUSR",
         "Mode::RUSR | Mode::WUSR",
-        "PRAGMA integrity_check(1)",
-        "MAX_INTEGRITY_RESULT_UTF8_BYTES",
+        "crate::persisted_value::INTEGRITY_CHECK_SQL",
+        "crate::persisted_value::bounded_integrity_bytes",
         "FROM pragma_foreign_key_check",
         "BackupSourceValidator",
         "PoolConnection<Sqlite>",
@@ -1041,7 +1068,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "FROM pragma_database_list",
         "FROM main.sqlite_schema",
         "Some(\"table\")",
-        "PRAGMA integrity_check(1)",
+        "crate::persisted_value::INTEGRITY_CHECK_SQL",
         "FROM pragma_foreign_key_check",
         "state_schema_version() <= expected.supported_state_schema_version()",
         "binding.hash_state(maximum_state_bytes)",
@@ -1154,7 +1181,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "/dev/fd/{descriptor}",
         "PRAGMA query_only = ON",
         "PRAGMA trusted_schema = OFF",
-        "PRAGMA database_list",
+        "FROM pragma_database_list",
         "cleanup_exact_stage",
         "authority.release()",
         "StagedServiceRestore([redacted])",

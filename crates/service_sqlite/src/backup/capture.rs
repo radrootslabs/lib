@@ -38,8 +38,6 @@ use crate::{
 const MAX_STAGING_PATH_BYTES: usize = 4_096;
 const BACKUP_PAGES_PER_STEP: i32 = 64;
 const HASH_BUFFER_BYTES: usize = 16 * 1_024;
-const MAX_ID_UTF8_BYTES: i64 = 128;
-const MAX_INTEGRITY_RESULT_UTF8_BYTES: usize = 64;
 const STATE_FILE_NAME: &str = radroots_runtime_paths::SERVICE_STATE_DATABASE_FILE_NAME;
 const KNOWN_SIDECARS: [&str; 3] = [
     "state.sqlite-wal",
@@ -1165,21 +1163,35 @@ fn identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqliteErro
 async fn verify_database_inventory(
     connection: &mut SqliteConnection,
 ) -> Result<(), ServiceSqliteError> {
-    let rows = sqlx::query("SELECT seq, name FROM pragma_database_list LIMIT 2")
-        .fetch_all(connection)
-        .await
-        .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
+    let rows = sqlx::query(
+        "SELECT
+            seq,
+            typeof(name) = 'text' AS name_type_ok,
+            length(CAST(name AS BLOB)) AS name_length,
+            substr(CAST(name AS BLOB), 1, 5) AS name_prefix
+         FROM pragma_database_list
+         LIMIT 2",
+    )
+    .fetch_all(connection)
+    .await
+    .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
     let first = rows
         .first()
         .ok_or_else(|| backup_error(BackupFailureKind::Capture))?;
     let sequence = first
         .try_get::<i64, _>(0)
         .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-    let name = first
-        .try_get::<String, _>(1)
-        .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
+    let name = crate::persisted_value::bounded_utf8(
+        first,
+        "name_type_ok",
+        "name_length",
+        "name_prefix",
+        1,
+        4,
+    )
+    .ok_or_else(|| backup_error(BackupFailureKind::Capture))?;
     require_backup_condition(
-        database_inventory_matches(sequence, &name, rows.len() > 1),
+        database_inventory_matches(sequence, name, rows.len() > 1),
         BackupFailureKind::Capture,
     )?;
     Ok(())
@@ -1212,15 +1224,15 @@ async fn verify_database_metadata(
     )?;
     let row = sqlx::query(
         "SELECT
-                CASE WHEN typeof(service_id) = 'text'
-                          AND length(CAST(service_id AS BLOB)) BETWEEN 1 AND ?1
-                     THEN service_id END,
-                CASE WHEN typeof(instance_id) = 'text'
-                          AND length(CAST(instance_id AS BLOB)) BETWEEN 1 AND ?1
-                     THEN instance_id END,
-                CASE WHEN typeof(source_generation) = 'blob'
-                          AND length(source_generation) = 32
-                     THEN source_generation END,
+                typeof(service_id) = 'text' AS service_id_type_ok,
+                length(CAST(service_id AS BLOB)) AS service_id_length,
+                substr(CAST(service_id AS BLOB), 1, 129) AS service_id_prefix,
+                typeof(instance_id) = 'text' AS instance_id_type_ok,
+                length(CAST(instance_id AS BLOB)) AS instance_id_length,
+                substr(CAST(instance_id AS BLOB), 1, 129) AS instance_id_prefix,
+                typeof(source_generation) = 'blob' AS source_generation_type_ok,
+                length(source_generation) AS source_generation_length,
+                substr(source_generation, 1, 33) AS source_generation_prefix,
                 CASE WHEN typeof(state_schema_version) = 'integer'
                      THEN state_schema_version END,
                 CASE WHEN typeof(created_at_unix_ms) = 'integer'
@@ -1229,34 +1241,49 @@ async fn verify_database_metadata(
              WHERE singleton = 1
              LIMIT 1",
     )
-    .bind(MAX_ID_UTF8_BYTES)
     .fetch_optional(&mut *connection)
     .await
     .map_err(metadata_source)?;
     let Some(row) = row else {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
     };
-    let service = row
-        .try_get::<Option<String>, _>(0)
-        .map_err(metadata_source)?;
-    let instance = row
-        .try_get::<Option<String>, _>(1)
-        .map_err(metadata_source)?;
-    let generation = row
-        .try_get::<Option<Vec<u8>>, _>(2)
-        .map_err(metadata_source)?;
-    let schema = row.try_get::<Option<i64>, _>(3).map_err(metadata_source)?;
-    let created_at = row.try_get::<Option<i64>, _>(4).map_err(metadata_source)?;
-    let (Some(service), Some(instance), Some(generation), Some(schema), Some(created_at)) =
-        (service, instance, generation, schema, created_at)
-    else {
+    let service = crate::persisted_value::bounded_utf8(
+        &row,
+        "service_id_type_ok",
+        "service_id_length",
+        "service_id_prefix",
+        1,
+        crate::persisted_value::MAX_IDENTIFIER_UTF8_BYTES,
+    )
+    .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata))?;
+    let instance = crate::persisted_value::bounded_utf8(
+        &row,
+        "instance_id_type_ok",
+        "instance_id_length",
+        "instance_id_prefix",
+        1,
+        crate::persisted_value::MAX_IDENTIFIER_UTF8_BYTES,
+    )
+    .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata))?;
+    let generation = crate::persisted_value::bounded_bytes(
+        &row,
+        "source_generation_type_ok",
+        "source_generation_length",
+        "source_generation_prefix",
+        32,
+        32,
+    )
+    .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata))?;
+    let schema = row.try_get::<Option<i64>, _>(9).map_err(metadata_source)?;
+    let created_at = row.try_get::<Option<i64>, _>(10).map_err(metadata_source)?;
+    let (Some(schema), Some(created_at)) = (schema, created_at) else {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
     };
     crate::require_condition(
         crate::all_constraints([
             service == expected.service().as_str(),
             instance == expected.instance().as_str(),
-            generation.as_slice() == expected.source_generation().as_bytes(),
+            generation == expected.source_generation().as_bytes(),
             schema == i64::from(expected.state_schema_version().get()),
             created_at == i64::try_from(expected.created_at_unix_ms()).unwrap_or(-1),
         ]),
@@ -1266,20 +1293,16 @@ async fn verify_database_metadata(
 }
 
 async fn verify_integrity(connection: &mut SqliteConnection) -> Result<(), ServiceSqliteError> {
-    let rows = sqlx::query("PRAGMA integrity_check(1)")
+    let rows = sqlx::query(crate::persisted_value::INTEGRITY_CHECK_SQL)
         .fetch_all(&mut *connection)
         .await
         .map_err(integrity_source)?;
     let row = rows
         .first()
         .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
-    let value = row.try_get::<&str, _>(0).map_err(integrity_source)?;
+    let value = crate::persisted_value::bounded_integrity_bytes(row);
     crate::require_condition(
-        integrity_projection_is_ok(
-            Some("text"),
-            i64::try_from(value.len()).ok(),
-            Some(value.as_bytes()),
-        ) && rows.len() == 1,
+        integrity_projection_is_ok(value) && rows.len() == 1,
         ServiceSqliteErrorKind::Integrity,
     )?;
     let violation = sqlx::query_scalar::<_, i64>("SELECT 1 FROM pragma_foreign_key_check LIMIT 1")
@@ -1290,20 +1313,8 @@ async fn verify_integrity(connection: &mut SqliteConnection) -> Result<(), Servi
     Ok(())
 }
 
-fn integrity_projection_is_ok(
-    value_type: Option<&str>,
-    byte_length: Option<i64>,
-    value: Option<&[u8]>,
-) -> bool {
-    crate::all_constraints([
-        value_type == Some("text"),
-        byte_length.is_some_and(|length| {
-            length > 0
-                && usize::try_from(length)
-                    .is_ok_and(|length| length <= MAX_INTEGRITY_RESULT_UTF8_BYTES)
-        }),
-        value == Some(b"ok"),
-    ])
+fn integrity_projection_is_ok(value: Option<&[u8]>) -> bool {
+    value == Some(b"ok")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1819,34 +1830,10 @@ mod tests {
 
     #[test]
     fn integrity_projection_bounds_corrupt_text_before_semantic_acceptance() {
-        assert!(integrity_projection_is_ok(
-            Some("text"),
-            Some(2),
-            Some(b"ok")
-        ));
-        assert!(!integrity_projection_is_ok(
-            Some("text"),
-            Some(0),
-            Some(b"")
-        ));
-        assert!(!integrity_projection_is_ok(
-            Some("text"),
-            Some(6),
-            Some(b"not-ok")
-        ));
-        let maximum = vec![b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES];
-        assert!(!integrity_projection_is_ok(
-            Some("text"),
-            i64::try_from(maximum.len()).ok(),
-            Some(&maximum)
-        ));
-        let over_maximum = vec![b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1];
-        assert!(!integrity_projection_is_ok(
-            Some("text"),
-            i64::try_from(over_maximum.len()).ok(),
-            Some(&over_maximum)
-        ));
-        assert!(!integrity_projection_is_ok(None, None, None));
+        assert!(integrity_projection_is_ok(Some(b"ok")));
+        assert!(!integrity_projection_is_ok(Some(b"")));
+        assert!(!integrity_projection_is_ok(Some(b"not-ok")));
+        assert!(!integrity_projection_is_ok(None));
     }
 
     #[test]

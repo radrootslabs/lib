@@ -17,6 +17,8 @@ mod migration;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod native_metadata;
 mod open;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod persisted_value;
 mod restore;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[allow(

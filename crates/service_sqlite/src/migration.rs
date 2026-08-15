@@ -1283,42 +1283,40 @@ async fn read_migration_history(
     let rows = sqlx::query(
         "SELECT
             version,
-            CASE WHEN typeof(name) = 'text' AND length(CAST(name AS BLOB)) <= 128
-                 THEN name END AS name,
-            CASE WHEN typeof(checksum) = 'blob' AND length(checksum) <= 32
-                 THEN checksum END AS checksum,
             applied_at_unix_s,
-            CASE WHEN typeof(service_version) = 'text'
-                           AND length(CAST(service_version AS BLOB)) <= 128
-                 THEN service_version END AS service_version,
-            CASE WHEN typeof(service_commit) = 'text'
-                           AND length(CAST(service_commit AS BLOB)) <= 40
-                 THEN service_commit END AS service_commit,
-            CASE WHEN typeof(lib_revision) = 'text'
-                           AND length(CAST(lib_revision AS BLOB)) <= 40
-                 THEN lib_revision END AS lib_revision,
-            CASE WHEN typeof(rust_version) = 'text'
-                           AND length(CAST(rust_version AS BLOB)) <= 128
-                 THEN rust_version END AS rust_version,
-            CASE WHEN typeof(target) = 'text' AND length(CAST(target AS BLOB)) <= 128
-                 THEN target END AS target,
-            CASE WHEN typeof(feature_profile) = 'text'
-                           AND length(CAST(feature_profile AS BLOB)) <= 128
-                 THEN feature_profile END AS feature_profile,
             config_contract_version, state_contract_version, admin_contract_version,
             status_contract_version, provider_contract_version,
-            typeof(version) AS version_type, typeof(name) AS name_type,
-            typeof(checksum) AS checksum_type, typeof(applied_at_unix_s) AS applied_at_type,
-            typeof(service_version) AS service_version_type,
-            typeof(service_commit) AS service_commit_type,
-            typeof(lib_revision) AS lib_revision_type,
-            typeof(rust_version) AS rust_version_type,
-            typeof(target) AS target_type, typeof(feature_profile) AS feature_profile_type,
-            typeof(config_contract_version) AS config_contract_version_type,
-            typeof(state_contract_version) AS state_contract_version_type,
-            typeof(admin_contract_version) AS admin_contract_version_type,
-            typeof(status_contract_version) AS status_contract_version_type,
-            typeof(provider_contract_version) AS provider_contract_version_type
+            typeof(version) = 'integer' AS version_type_ok,
+            typeof(name) = 'text' AS name_type_ok,
+            length(CAST(name AS BLOB)) AS name_length,
+            substr(CAST(name AS BLOB), 1, 129) AS name_prefix,
+            typeof(checksum) = 'blob' AS checksum_type_ok,
+            length(checksum) AS checksum_length,
+            substr(checksum, 1, 33) AS checksum_prefix,
+            typeof(applied_at_unix_s) = 'integer' AS applied_at_type_ok,
+            typeof(service_version) = 'text' AS service_version_type_ok,
+            length(CAST(service_version AS BLOB)) AS service_version_length,
+            substr(CAST(service_version AS BLOB), 1, 129) AS service_version_prefix,
+            typeof(service_commit) = 'text' AS service_commit_type_ok,
+            length(CAST(service_commit AS BLOB)) AS service_commit_length,
+            substr(CAST(service_commit AS BLOB), 1, 41) AS service_commit_prefix,
+            typeof(lib_revision) = 'text' AS lib_revision_type_ok,
+            length(CAST(lib_revision AS BLOB)) AS lib_revision_length,
+            substr(CAST(lib_revision AS BLOB), 1, 41) AS lib_revision_prefix,
+            typeof(rust_version) = 'text' AS rust_version_type_ok,
+            length(CAST(rust_version AS BLOB)) AS rust_version_length,
+            substr(CAST(rust_version AS BLOB), 1, 129) AS rust_version_prefix,
+            typeof(target) = 'text' AS target_type_ok,
+            length(CAST(target AS BLOB)) AS target_length,
+            substr(CAST(target AS BLOB), 1, 129) AS target_prefix,
+            typeof(feature_profile) = 'text' AS feature_profile_type_ok,
+            length(CAST(feature_profile AS BLOB)) AS feature_profile_length,
+            substr(CAST(feature_profile AS BLOB), 1, 129) AS feature_profile_prefix,
+            typeof(config_contract_version) = 'integer' AS config_contract_version_type_ok,
+            typeof(state_contract_version) = 'integer' AS state_contract_version_type_ok,
+            typeof(admin_contract_version) = 'integer' AS admin_contract_version_type_ok,
+            typeof(status_contract_version) = 'integer' AS status_contract_version_type_ok,
+            typeof(provider_contract_version) = 'integer' AS provider_contract_version_type_ok
          FROM schema_migrations
          ORDER BY version
          LIMIT 4097",
@@ -1337,47 +1335,50 @@ async fn read_migration_history(
 fn parse_applied_migration(
     row: &sqlx::sqlite::SqliteRow,
 ) -> Result<AppliedMigration, ServiceSqliteError> {
-    for (column, expected_type) in [
-        ("version_type", "integer"),
-        ("name_type", "text"),
-        ("checksum_type", "blob"),
-        ("applied_at_type", "integer"),
-        ("service_version_type", "text"),
-        ("service_commit_type", "text"),
-        ("lib_revision_type", "text"),
-        ("rust_version_type", "text"),
-        ("target_type", "text"),
-        ("feature_profile_type", "text"),
-        ("config_contract_version_type", "integer"),
-        ("state_contract_version_type", "integer"),
-        ("admin_contract_version_type", "integer"),
-        ("status_contract_version_type", "integer"),
-        ("provider_contract_version_type", "integer"),
+    for column in [
+        "version_type_ok",
+        "applied_at_type_ok",
+        "config_contract_version_type_ok",
+        "state_contract_version_type_ok",
+        "admin_contract_version_type_ok",
+        "status_contract_version_type_ok",
+        "provider_contract_version_type_ok",
     ] {
-        if row
-            .try_get::<String, _>(column)
-            .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?
-            != expected_type
-        {
-            return Err(migration_error(MigrationFailureKind::HistoryCorrupt));
-        }
+        require_migration_condition(
+            row.try_get::<i64, _>(column)
+                .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?
+                == 1,
+            MigrationFailureKind::HistoryCorrupt,
+        )?;
     }
     let version = u32::try_from(
         row.try_get::<i64, _>("version")
             .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?,
     )
     .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?;
-    let name = row
-        .try_get::<String, _>("name")
-        .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?;
-    if !valid_name(&name) {
+    let name = crate::persisted_value::bounded_utf8(
+        row,
+        "name_type_ok",
+        "name_length",
+        "name_prefix",
+        1,
+        MAX_MIGRATION_NAME_UTF8_BYTES,
+    )
+    .ok_or_else(|| migration_error(MigrationFailureKind::HistoryCorrupt))?;
+    if !valid_name(name) {
         return Err(migration_error(MigrationFailureKind::HistoryCorrupt));
     }
-    let checksum: [u8; 32] = row
-        .try_get::<Vec<u8>, _>("checksum")
-        .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))?
-        .try_into()
-        .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?;
+    let checksum: [u8; 32] = crate::persisted_value::bounded_bytes(
+        row,
+        "checksum_type_ok",
+        "checksum_length",
+        "checksum_prefix",
+        32,
+        32,
+    )
+    .ok_or_else(|| migration_error(MigrationFailureKind::HistoryCorrupt))?
+    .try_into()
+    .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?;
     let applied_at = MigrationAppliedAtUnixSeconds::new(
         u64::try_from(
             row.try_get::<i64, _>("applied_at_unix_s")
@@ -1386,9 +1387,16 @@ fn parse_applied_migration(
         .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?,
     )
     .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?;
-    let text = |column| {
-        row.try_get::<String, _>(column)
-            .map_err(|source| migration_source(MigrationFailureKind::HistoryCorrupt, source))
+    let text = |type_column, length_column, prefix_column, minimum, maximum| {
+        crate::persisted_value::bounded_utf8(
+            row,
+            type_column,
+            length_column,
+            prefix_column,
+            minimum,
+            maximum,
+        )
+        .ok_or_else(|| migration_error(MigrationFailureKind::HistoryCorrupt))
     };
     let version_field = |column| {
         u32::try_from(
@@ -1398,12 +1406,48 @@ fn parse_applied_migration(
         .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))
     };
     let build = MigrationBuildIdentity::new(
-        text("service_version")?,
-        text("service_commit")?,
-        text("lib_revision")?,
-        text("rust_version")?,
-        text("target")?,
-        text("feature_profile")?,
+        text(
+            "service_version_type_ok",
+            "service_version_length",
+            "service_version_prefix",
+            1,
+            MAX_MIGRATION_BUILD_ID_UTF8_BYTES,
+        )?,
+        text(
+            "service_commit_type_ok",
+            "service_commit_length",
+            "service_commit_prefix",
+            40,
+            40,
+        )?,
+        text(
+            "lib_revision_type_ok",
+            "lib_revision_length",
+            "lib_revision_prefix",
+            40,
+            40,
+        )?,
+        text(
+            "rust_version_type_ok",
+            "rust_version_length",
+            "rust_version_prefix",
+            1,
+            MAX_MIGRATION_BUILD_ID_UTF8_BYTES,
+        )?,
+        text(
+            "target_type_ok",
+            "target_length",
+            "target_prefix",
+            1,
+            MAX_MIGRATION_BUILD_ID_UTF8_BYTES,
+        )?,
+        text(
+            "feature_profile_type_ok",
+            "feature_profile_length",
+            "feature_profile_prefix",
+            1,
+            MAX_MIGRATION_BUILD_ID_UTF8_BYTES,
+        )?,
         version_field("config_contract_version")?,
         version_field("state_contract_version")?,
         version_field("admin_contract_version")?,
@@ -1413,7 +1457,7 @@ fn parse_applied_migration(
     .map_err(|_| migration_error(MigrationFailureKind::HistoryCorrupt))?;
     Ok(AppliedMigration {
         version,
-        name,
+        name: name.to_owned(),
         checksum: MigrationChecksum::from_bytes(checksum),
         applied_at,
         build,

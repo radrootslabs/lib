@@ -368,23 +368,38 @@ async fn verify_read_only_policy(
         .fetch_one(&mut *connection)
         .await
         .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
-    let databases = sqlx::query("PRAGMA database_list")
-        .fetch_all(connection)
-        .await
-        .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
+    let databases = sqlx::query(
+        "SELECT
+            seq,
+            typeof(name) = 'text' AS name_type_ok,
+            length(CAST(name AS BLOB)) AS name_length,
+            substr(CAST(name AS BLOB), 1, 5) AS name_prefix
+         FROM pragma_database_list
+         LIMIT 2",
+    )
+    .fetch_all(connection)
+    .await
+    .map_err(|source| restore_source(RestoreFailureKind::Policy, source))?;
     let first_sequence = databases
         .first()
         .and_then(|row| row.try_get::<i64, _>(0).ok());
-    let first_name = databases
-        .first()
-        .and_then(|row| row.try_get::<String, _>(1).ok());
+    let first_name = databases.first().and_then(|row| {
+        crate::persisted_value::bounded_utf8(
+            row,
+            "name_type_ok",
+            "name_length",
+            "name_prefix",
+            1,
+            4,
+        )
+    });
     require_restore_condition(
         read_only_policy_matches(
             query_only,
             trusted_schema,
             databases.len(),
             first_sequence,
-            first_name.as_deref(),
+            first_name,
         ),
         RestoreFailureKind::Policy,
     )?;

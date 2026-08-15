@@ -119,12 +119,11 @@ impl ServiceSqliteIntegrityReport {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod native {
-    use sqlx::{Connection, Row, SqliteConnection};
+    use sqlx::{Connection, SqliteConnection};
 
     use super::{IntegrityCheckOutcome, IntegrityCheckedAtUnixMs, ServiceSqliteIntegrityReport};
     use crate::{ServiceSqliteError, ServiceSqliteErrorKind};
 
-    const SQLITE_INTEGRITY_SQL: &str = "PRAGMA integrity_check(1)";
     const FOREIGN_KEY_SQL: &str = "SELECT 1 FROM pragma_foreign_key_check LIMIT 1";
 
     pub(crate) async fn inspect_database_integrity(
@@ -155,15 +154,17 @@ mod native {
 
         #[cfg(test)]
         super::test_seam::pause(super::test_seam::PHASE_BEFORE_SQLITE).await;
-        let sqlite_rows = sqlx::query(SQLITE_INTEGRITY_SQL)
+        let sqlite_rows = sqlx::query(crate::persisted_value::INTEGRITY_CHECK_SQL)
             .fetch_all(&mut *transaction)
             .await;
         validate()?;
         let sqlite = match sqlite_rows {
-            Ok(rows) if rows.len() == 1 => match rows[0].try_get::<&str, _>(0) {
-                Ok(value) => classify_integrity_value(value),
-                Err(_) => return rollback_error(transaction, &mut validate).await,
-            },
+            Ok(rows) if rows.len() == 1 => {
+                match crate::persisted_value::integrity_result_failed(&rows[0]) {
+                    Some(failed) => classify_integrity_failure(failed),
+                    None => return rollback_error(transaction, &mut validate).await,
+                }
+            }
             Ok(_) | Err(_) => return rollback_error(transaction, &mut validate).await,
         };
 
@@ -205,17 +206,17 @@ mod native {
         ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity)
     }
 
-    fn classify_integrity_value(value: &str) -> IntegrityCheckOutcome {
-        if value == "ok" {
-            IntegrityCheckOutcome::Verified
-        } else {
+    fn classify_integrity_failure(failed: bool) -> IntegrityCheckOutcome {
+        if failed {
             IntegrityCheckOutcome::Failed
+        } else {
+            IntegrityCheckOutcome::Verified
         }
     }
 
     #[cfg(test)]
     pub(super) fn classify_test_value(value: &str) -> IntegrityCheckOutcome {
-        classify_integrity_value(value)
+        classify_integrity_failure(value != "ok")
     }
 }
 

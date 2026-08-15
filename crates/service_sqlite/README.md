@@ -24,6 +24,14 @@ sticky for the transaction, so ignoring the immediate SQL error cannot permit
 commit. Runner-owned setup remains private, and the complete connection policy
 is revalidated before commit and before a connection can return to the pool.
 
+Persisted SQLite text and blob values are admitted through bounded projections
+before Rust decoding. Service and instance identifiers, source generations,
+migration names, checksums, build identity, schema text, and database inventory
+values carry an exact SQLite type, reported byte length, capped byte prefix,
+and bounded row count. Integrity diagnostics use a borrowed-byte cap over the
+exact `PRAGMA integrity_check(1)` operation and never convert an unbounded
+diagnostic to UTF-8.
+
 Cancelling a host transaction before the runner enables outer commit
 quarantines its connection and leaves no authoritative transaction effect. A
 service-operation error is returned only after rollback is confirmed; an

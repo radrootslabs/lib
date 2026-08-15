@@ -33,10 +33,6 @@ use {
 const MAX_BUNDLE_PATH_BYTES: usize = 4_096;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const HASH_BUFFER_BYTES: usize = 64 * 1_024;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-const MAX_ID_UTF8_BYTES: i64 = 128;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-const MAX_INTEGRITY_RESULT_UTF8_BYTES: usize = 64;
 
 /// Non-forgeable proof that one retained backup member passed v1 verification.
 ///
@@ -543,15 +539,30 @@ fn require_verification_connection_policy(
 async fn verify_database_inventory(
     connection: &mut SqliteConnection,
 ) -> Result<(), ServiceSqliteError> {
-    let rows = sqlx::query("SELECT seq, name FROM pragma_database_list LIMIT 2")
-        .fetch_all(connection)
-        .await
-        .map_err(integrity_source)?;
+    let rows = sqlx::query(
+        "SELECT
+            seq,
+            typeof(name) = 'text' AS name_type_ok,
+            length(CAST(name AS BLOB)) AS name_length,
+            substr(CAST(name AS BLOB), 1, 5) AS name_prefix
+         FROM pragma_database_list
+         LIMIT 2",
+    )
+    .fetch_all(connection)
+    .await
+    .map_err(integrity_source)?;
     let Some(first) = rows.first() else {
         return Err(integrity_error(IntegrityFailureKind::DatabaseInventory));
     };
     let sequence_matches = first.try_get::<i64, _>(0).ok() == Some(0);
-    let name_matches = first.try_get::<&str, _>(1).ok() == Some("main");
+    let name_matches = crate::persisted_value::bounded_utf8(
+        first,
+        "name_type_ok",
+        "name_length",
+        "name_prefix",
+        1,
+        4,
+    ) == Some("main");
     require_verification_database_inventory(sequence_matches, name_matches, rows.len() > 1)
 }
 
@@ -599,15 +610,15 @@ async fn verify_database_metadata(
     let rows = sqlx::query(
         "SELECT
                 CASE WHEN typeof(singleton) = 'integer' THEN singleton END,
-                CASE WHEN typeof(service_id) = 'text'
-                          AND length(CAST(service_id AS BLOB)) BETWEEN 1 AND ?1
-                     THEN service_id END,
-                CASE WHEN typeof(instance_id) = 'text'
-                          AND length(CAST(instance_id AS BLOB)) BETWEEN 1 AND ?1
-                     THEN instance_id END,
-                CASE WHEN typeof(source_generation) = 'blob'
-                          AND length(source_generation) = 32
-                     THEN source_generation END,
+                typeof(service_id) = 'text' AS service_id_type_ok,
+                length(CAST(service_id AS BLOB)) AS service_id_length,
+                substr(CAST(service_id AS BLOB), 1, 129) AS service_id_prefix,
+                typeof(instance_id) = 'text' AS instance_id_type_ok,
+                length(CAST(instance_id AS BLOB)) AS instance_id_length,
+                substr(CAST(instance_id AS BLOB), 1, 129) AS instance_id_prefix,
+                typeof(source_generation) = 'blob' AS source_generation_type_ok,
+                length(source_generation) AS source_generation_length,
+                substr(source_generation, 1, 33) AS source_generation_prefix,
                 CASE WHEN typeof(state_schema_version) = 'integer'
                      THEN state_schema_version END,
                 CASE WHEN typeof(created_at_unix_ms) = 'integer'
@@ -615,33 +626,51 @@ async fn verify_database_metadata(
              FROM radroots_service_metadata
              LIMIT 2",
     )
-    .bind(MAX_ID_UTF8_BYTES)
     .fetch_all(connection)
     .await
     .map_err(metadata_source)?;
     let row = rows.first().ok_or_else(metadata_error)?;
     let singleton = row.try_get::<Option<i64>, _>(0).map_err(metadata_source)?;
-    let service = row
-        .try_get::<Option<String>, _>(1)
-        .map_err(metadata_source)?;
-    let instance = row
-        .try_get::<Option<String>, _>(2)
-        .map_err(metadata_source)?;
-    let generation = row
-        .try_get::<Option<Vec<u8>>, _>(3)
-        .map_err(metadata_source)?;
-    let schema = row.try_get::<Option<i64>, _>(4).map_err(metadata_source)?;
-    let created_at = row.try_get::<Option<i64>, _>(5).map_err(metadata_source)?;
     crate::require_condition(rows.len() == 1, ServiceSqliteErrorKind::Metadata)?;
-    let (Some(1), Some(service), Some(instance), Some(generation), Some(schema), Some(created_at)) =
-        (singleton, service, instance, generation, schema, created_at)
-    else {
+    if singleton != Some(1) {
+        return Err(metadata_error());
+    }
+    let service = crate::persisted_value::bounded_utf8(
+        row,
+        "service_id_type_ok",
+        "service_id_length",
+        "service_id_prefix",
+        1,
+        crate::persisted_value::MAX_IDENTIFIER_UTF8_BYTES,
+    )
+    .and_then(|value| ServiceId::new(value).ok())
+    .ok_or_else(metadata_error)?;
+    let instance = crate::persisted_value::bounded_utf8(
+        row,
+        "instance_id_type_ok",
+        "instance_id_length",
+        "instance_id_prefix",
+        1,
+        crate::persisted_value::MAX_IDENTIFIER_UTF8_BYTES,
+    )
+    .and_then(|value| InstanceId::new(value).ok())
+    .ok_or_else(metadata_error)?;
+    let generation = crate::persisted_value::bounded_bytes(
+        row,
+        "source_generation_type_ok",
+        "source_generation_length",
+        "source_generation_prefix",
+        32,
+        32,
+    )
+    .and_then(|value| <[u8; 32]>::try_from(value).ok())
+    .and_then(|value| SourceGeneration::new(value).ok())
+    .ok_or_else(metadata_error)?;
+    let schema = row.try_get::<Option<i64>, _>(10).map_err(metadata_source)?;
+    let created_at = row.try_get::<Option<i64>, _>(11).map_err(metadata_source)?;
+    let (Some(schema), Some(created_at)) = (schema, created_at) else {
         return Err(metadata_error());
     };
-    let service = ServiceId::new(service).map_err(|_| metadata_error())?;
-    let instance = InstanceId::new(instance).map_err(|_| metadata_error())?;
-    let generation = SourceGeneration::new(generation.try_into().map_err(|_| metadata_error())?)
-        .map_err(|_| metadata_error())?;
     let schema = NonZeroU32::new(u32::try_from(schema).map_err(|_| metadata_error())?)
         .ok_or_else(metadata_error)?;
     let created_at = u64::try_from(created_at).map_err(|_| metadata_error())?;
@@ -670,20 +699,15 @@ async fn verify_database_metadata(
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn verify_integrity(connection: &mut SqliteConnection) -> Result<(), ServiceSqliteError> {
-    let rows = sqlx::query("PRAGMA integrity_check(1)")
+    let rows = sqlx::query(crate::persisted_value::INTEGRITY_CHECK_SQL)
         .fetch_all(&mut *connection)
         .await
         .map_err(integrity_source)?;
     let row = rows
         .first()
         .ok_or_else(|| integrity_error(IntegrityFailureKind::Sqlite))?;
-    let value = row.try_get::<&str, _>(0).map_err(integrity_source)?;
-    let projection = verification_integrity_value_projection(
-        Some("text"),
-        i64::try_from(value.len()).ok(),
-        Some(value.as_bytes()),
-    );
-    require_verification_integrity_projection(projection, rows.len() > 1)?;
+    let value = crate::persisted_value::bounded_integrity_bytes(row);
+    require_verification_integrity_projection(value == Some(b"ok"), rows.len() > 1)?;
     let violation = sqlx::query_scalar::<_, i64>("SELECT 1 FROM pragma_foreign_key_check LIMIT 1")
         .fetch_optional(connection)
         .await
@@ -701,35 +725,13 @@ fn require_verification_metadata_projection(matches: [bool; 9]) -> Result<(), Se
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn verification_integrity_value_projection(
-    value_type: Option<&str>,
-    byte_length: Option<i64>,
-    value: Option<&[u8]>,
-) -> [bool; 4] {
-    [
-        value_type == Some("text"),
-        byte_length.is_some_and(|length| length > 0),
-        byte_length.is_some_and(|length| {
-            usize::try_from(length).is_ok_and(|length| length <= MAX_INTEGRITY_RESULT_UTF8_BYTES)
-        }),
-        value == Some(b"ok"),
-    ]
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn require_verification_integrity_projection(
-    projection: [bool; 4],
+    value_matches: bool,
     has_extra: bool,
 ) -> Result<(), ServiceSqliteError> {
-    crate::all_constraints([
-        projection[0],
-        projection[1],
-        projection[2],
-        projection[3],
-        !has_extra,
-    ])
-    .then_some(())
-    .ok_or_else(|| integrity_error(IntegrityFailureKind::Sqlite))
+    crate::all_constraints([value_matches, !has_extra])
+        .then_some(())
+        .ok_or_else(|| integrity_error(IntegrityFailureKind::Sqlite))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -944,33 +946,9 @@ mod tests {
             assert!(require_verification_metadata_projection(matches).is_err());
         }
 
-        assert!(
-            require_verification_integrity_projection(
-                verification_integrity_value_projection(Some("text"), Some(2), Some(b"ok")),
-                false,
-            )
-            .is_ok()
-        );
-        let oversized = [b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1];
-        for (value_type, byte_length, value, extra) in [
-            (None, None, None, false),
-            (Some("text"), Some(0), Some(b"".as_slice()), false),
-            (
-                Some("text"),
-                i64::try_from(oversized.len()).ok(),
-                Some(oversized.as_slice()),
-                false,
-            ),
-            (Some("text"), Some(6), Some(b"not ok".as_slice()), false),
-            (Some("text"), Some(2), Some(b"ok".as_slice()), true),
-        ] {
-            assert!(
-                require_verification_integrity_projection(
-                    verification_integrity_value_projection(value_type, byte_length, value),
-                    extra,
-                )
-                .is_err()
-            );
+        assert!(require_verification_integrity_projection(true, false).is_ok());
+        for (value_matches, extra) in [(false, false), (true, true)] {
+            assert!(require_verification_integrity_projection(value_matches, extra).is_err());
         }
     }
 

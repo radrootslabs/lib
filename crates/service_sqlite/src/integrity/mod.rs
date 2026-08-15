@@ -292,11 +292,13 @@ fn require_schema_report_projection(
 pub(crate) async fn verify_database_integrity(
     connection: &mut SqliteConnection,
 ) -> Result<(), ServiceSqliteError> {
-    let rows = sqlx::query("PRAGMA integrity_check(1)")
+    let rows = sqlx::query(crate::persisted_value::INTEGRITY_CHECK_SQL)
         .fetch_all(&mut *connection)
         .await
         .map_err(|_| integrity_error(SchemaIntegrityFailureKind::CatalogCorrupt))?;
-    let value = rows.first().and_then(|row| row.try_get::<&str, _>(0).ok());
+    let value = rows
+        .first()
+        .and_then(crate::persisted_value::bounded_integrity_bytes);
     catalog_corrupt_unless(integrity_projection_matches(rows.len(), value))?;
     let foreign_key_violation =
         sqlx::query_scalar::<_, i64>("SELECT 1 FROM pragma_foreign_key_check LIMIT 1")
@@ -342,10 +344,11 @@ fn require_no_foreign_key_violation(present: bool) -> Result<(), ServiceSqliteEr
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn integrity_projection_matches(row_count: usize, value: Option<&str>) -> bool {
+fn integrity_projection_matches(row_count: usize, value: Option<&[u8]>) -> bool {
     let present = value.is_some();
-    let bounded = value.is_some_and(|value| value.len() <= 64);
-    let exact = value == Some("ok");
+    let bounded = value
+        .is_some_and(|value| value.len() <= crate::persisted_value::MAX_INTEGRITY_RESULT_BYTES);
+    let exact = value == Some(b"ok".as_slice());
     crate::all_constraints([row_count == 1, present, bounded, exact])
 }
 
@@ -401,12 +404,12 @@ mod tests {
 
     #[test]
     fn database_integrity_projection_rejects_each_independent_drift() {
-        assert!(integrity_projection_matches(1, Some("ok")));
-        assert!(!integrity_projection_matches(0, Some("ok")));
-        assert!(!integrity_projection_matches(2, Some("ok")));
+        assert!(integrity_projection_matches(1, Some(b"ok")));
+        assert!(!integrity_projection_matches(0, Some(b"ok")));
+        assert!(!integrity_projection_matches(2, Some(b"ok")));
         assert!(!integrity_projection_matches(1, None));
-        assert!(!integrity_projection_matches(1, Some("not-ok")));
-        let oversized = "x".repeat(65);
+        assert!(!integrity_projection_matches(1, Some(b"not-ok")));
+        let oversized = [b'x'; 65];
         assert!(!integrity_projection_matches(1, Some(&oversized)));
     }
 
