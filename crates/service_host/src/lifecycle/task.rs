@@ -12,12 +12,12 @@ pub const TASK_NAME_MAX_BYTES: usize = 64;
 pub struct TaskName(String);
 
 impl TaskName {
-    pub fn new(value: impl Into<String>) -> Result<Self, TaskMetadataError> {
-        let value = value.into();
-        if !valid_task_name(&value) {
+    pub fn new(value: impl AsRef<str>) -> Result<Self, TaskMetadataError> {
+        let value = value.as_ref();
+        if !valid_task_name(value) {
             return Err(TaskMetadataError::InvalidTaskName);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -184,6 +184,10 @@ mod tests {
             );
         }
         assert!(TaskName::new("a".repeat(TASK_NAME_MAX_BYTES + 1)).is_err());
+        assert_eq!(
+            TaskName::new("a".repeat(4 * 1024 * 1024)),
+            Err(TaskMetadataError::InvalidTaskName)
+        );
     }
 
     #[test]

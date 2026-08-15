@@ -49,8 +49,19 @@ macro_rules! admin_identifier {
         pub struct $name(String);
 
         impl $name {
-            pub fn new(value: impl Into<String>) -> Result<Self, AdminIdentifierError> {
-                let value = value.into();
+            pub fn new(value: impl AsRef<str>) -> Result<Self, AdminIdentifierError> {
+                let value = value.as_ref();
+                let field = $field;
+                if value.is_empty() {
+                    return Err(AdminIdentifierError::Empty { field });
+                }
+                if value.len() > field.maximum_utf8_bytes() {
+                    return Err(AdminIdentifierError::TooLong { field });
+                }
+                Ok(Self(value.to_owned()))
+            }
+
+            fn from_string(value: String) -> Result<Self, AdminIdentifierError> {
                 let field = $field;
                 if value.is_empty() {
                     return Err(AdminIdentifierError::Empty { field });
@@ -87,8 +98,31 @@ macro_rules! admin_identifier {
             where
                 D: Deserializer<'de>,
             {
-                let value = String::deserialize(deserializer)?;
-                Self::new(value).map_err(de::Error::custom)
+                struct Visitor;
+
+                impl<'de> de::Visitor<'de> for Visitor {
+                    type Value = $name;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        formatter.write_str("a bounded admin identifier")
+                    }
+
+                    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                    {
+                        $name::new(value).map_err(E::custom)
+                    }
+
+                    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                    {
+                        $name::from_string(value).map_err(E::custom)
+                    }
+                }
+
+                deserializer.deserialize_str(Visitor)
             }
         }
     };
@@ -116,20 +150,14 @@ impl Error for AdminErrorCodeError {}
 pub struct AdminErrorCode(String);
 
 impl AdminErrorCode {
-    pub fn new(value: impl Into<String>) -> Result<Self, AdminErrorCodeError> {
-        let value = value.into();
-        if value.is_empty() {
-            return Err(AdminErrorCodeError::Empty);
-        }
-        if value.len() > ADMIN_ERROR_CODE_MAX_UTF8_BYTES {
-            return Err(AdminErrorCodeError::TooLong);
-        }
-        let mut bytes = value.bytes();
-        if !matches!(bytes.next(), Some(b'a'..=b'z'))
-            || !bytes.all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_'))
-        {
-            return Err(AdminErrorCodeError::InvalidCharacter);
-        }
+    pub fn new(value: impl AsRef<str>) -> Result<Self, AdminErrorCodeError> {
+        let value = value.as_ref();
+        validate_admin_error_code(value)?;
+        Ok(Self(value.to_owned()))
+    }
+
+    fn from_string(value: String) -> Result<Self, AdminErrorCodeError> {
+        validate_admin_error_code(&value)?;
         Ok(Self(value))
     }
 
@@ -141,6 +169,22 @@ impl AdminErrorCode {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+fn validate_admin_error_code(value: &str) -> Result<(), AdminErrorCodeError> {
+    if value.is_empty() {
+        return Err(AdminErrorCodeError::Empty);
+    }
+    if value.len() > ADMIN_ERROR_CODE_MAX_UTF8_BYTES {
+        return Err(AdminErrorCodeError::TooLong);
+    }
+    let mut bytes = value.bytes();
+    if !matches!(bytes.next(), Some(b'a'..=b'z'))
+        || !bytes.all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_'))
+    {
+        return Err(AdminErrorCodeError::InvalidCharacter);
+    }
+    Ok(())
 }
 
 impl fmt::Display for AdminErrorCode {
@@ -163,8 +207,31 @@ impl<'de> Deserialize<'de> for AdminErrorCode {
     where
         D: Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?;
-        Self::new(value).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = AdminErrorCode;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a bounded lowercase admin error code")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                AdminErrorCode::new(value).map_err(E::custom)
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                AdminErrorCode::from_string(value).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -1290,17 +1357,14 @@ fn checked_non_null(value: &impl Serialize) -> Result<(), AdminPayloadError> {
 pub struct AdminErrorMessage(String);
 
 impl AdminErrorMessage {
-    pub fn new(value: impl Into<String>) -> Result<Self, AdminErrorMessageError> {
-        let value = value.into();
-        if value.is_empty() {
-            return Err(AdminErrorMessageError::Empty);
-        }
-        if value.len() > ADMIN_ERROR_MESSAGE_MAX_UTF8_BYTES {
-            return Err(AdminErrorMessageError::TooLong);
-        }
-        if value.chars().any(char::is_control) {
-            return Err(AdminErrorMessageError::ControlCharacter);
-        }
+    pub fn new(value: impl AsRef<str>) -> Result<Self, AdminErrorMessageError> {
+        let value = value.as_ref();
+        validate_admin_error_message(value)?;
+        Ok(Self(value.to_owned()))
+    }
+
+    fn from_string(value: String) -> Result<Self, AdminErrorMessageError> {
+        validate_admin_error_message(&value)?;
         Ok(Self(value))
     }
 
@@ -1312,6 +1376,19 @@ impl AdminErrorMessage {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+fn validate_admin_error_message(value: &str) -> Result<(), AdminErrorMessageError> {
+    if value.is_empty() {
+        return Err(AdminErrorMessageError::Empty);
+    }
+    if value.len() > ADMIN_ERROR_MESSAGE_MAX_UTF8_BYTES {
+        return Err(AdminErrorMessageError::TooLong);
+    }
+    if value.chars().any(char::is_control) {
+        return Err(AdminErrorMessageError::ControlCharacter);
+    }
+    Ok(())
 }
 
 impl fmt::Display for AdminErrorMessage {
@@ -1334,8 +1411,31 @@ impl<'de> Deserialize<'de> for AdminErrorMessage {
     where
         D: Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?;
-        Self::new(value).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = AdminErrorMessage;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a bounded safe admin error message")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                AdminErrorMessage::new(value).map_err(E::custom)
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                AdminErrorMessage::from_string(value).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -1989,6 +2089,7 @@ mod tests {
         assert!(AdminCorrelationId::new("é".repeat(64)).is_ok());
         assert!(AdminCorrelationId::new(format!("{}x", "é".repeat(64))).is_err());
         assert!(AdminErrorCode::new("valid_code_2").is_ok());
+        assert!(AdminErrorCode::new("x".repeat(ADMIN_ERROR_CODE_MAX_UTF8_BYTES)).is_ok());
         assert!(AdminErrorCode::new("Invalid-Code").is_err());
         assert!(AdminErrorCode::new("valid-code").is_err());
         assert!(AdminErrorMessage::new("x".repeat(ADMIN_ERROR_MESSAGE_MAX_UTF8_BYTES)).is_ok());
@@ -1996,6 +2097,17 @@ mod tests {
             AdminErrorMessage::new("x".repeat(ADMIN_ERROR_MESSAGE_MAX_UTF8_BYTES + 1)).is_err()
         );
         assert!(AdminErrorMessage::new("unsafe\nmessage").is_err());
+
+        let very_large = "x".repeat(4 * 1024 * 1024);
+        assert!(AdminOperationId::new(&very_large).is_err());
+        assert!(AdminCorrelationId::new(&very_large).is_err());
+        assert!(AdminErrorCode::new(&very_large).is_err());
+        assert!(AdminErrorMessage::new(&very_large).is_err());
+        let very_large_json = serde_json::to_string(&very_large).expect("large admin JSON string");
+        assert!(serde_json::from_str::<AdminOperationId>(&very_large_json).is_err());
+        assert!(serde_json::from_str::<AdminCorrelationId>(&very_large_json).is_err());
+        assert!(serde_json::from_str::<AdminErrorCode>(&very_large_json).is_err());
+        assert!(serde_json::from_str::<AdminErrorMessage>(&very_large_json).is_err());
 
         let wrong_success: Result<AdminSuccessResponse<ExampleResult>, _> = serde_json::from_str(
             r#"{"contract_version":1,"ok":false,"correlation_id":"safe-correlation","result":{"state":"committed"}}"#,

@@ -21,12 +21,12 @@ pub const STATUS_ID_MAX_BYTES: usize = 128;
 pub struct StatusId(String);
 
 impl StatusId {
-    pub fn new(value: impl Into<String>) -> Result<Self, StatusModelError> {
-        let value = value.into();
-        if !valid_status_id(&value) {
+    pub fn new(value: impl AsRef<str>) -> Result<Self, StatusModelError> {
+        let value = value.as_ref();
+        if !valid_status_id(value) {
             return Err(StatusModelError::InvalidStatusId);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -41,8 +41,8 @@ impl StatusId {
 pub struct Sha256Digest(String);
 
 impl Sha256Digest {
-    pub fn new(value: impl Into<String>) -> Result<Self, StatusModelError> {
-        let value = value.into();
+    pub fn new(value: impl AsRef<str>) -> Result<Self, StatusModelError> {
+        let value = value.as_ref();
         if value.len() != 64
             || !value
                 .bytes()
@@ -50,7 +50,7 @@ impl Sha256Digest {
         {
             return Err(StatusModelError::InvalidSha256Digest);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -615,8 +615,18 @@ mod tests {
         }
         assert!(StatusId::new("a".repeat(STATUS_ID_MAX_BYTES)).is_ok());
         assert!(StatusId::new("a".repeat(STATUS_ID_MAX_BYTES + 1)).is_err());
+        let very_large = "a".repeat(4 * 1024 * 1024);
+        assert_eq!(
+            StatusId::new(&very_large),
+            Err(StatusModelError::InvalidStatusId)
+        );
         assert!(Sha256Digest::new("a".repeat(63)).is_err());
+        assert!(Sha256Digest::new("a".repeat(64)).is_ok());
         assert!(Sha256Digest::new("A".repeat(64)).is_err());
+        assert_eq!(
+            Sha256Digest::new(&very_large),
+            Err(StatusModelError::InvalidSha256Digest)
+        );
         let myc = ServiceId::new("myc").unwrap();
         assert_eq!(
             validate_configuration_binding(

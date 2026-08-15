@@ -643,7 +643,7 @@ pub fn radroots_service_host::AdminContractVersionError::fmt(&self, &mut core::f
 pub struct radroots_service_host::AdminCorrelationId(_)
 impl radroots_service_host::AdminCorrelationId
 pub fn radroots_service_host::AdminCorrelationId::as_str(&self) -> &str
-pub fn radroots_service_host::AdminCorrelationId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
+pub fn radroots_service_host::AdminCorrelationId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
 impl core::fmt::Display for radroots_service_host::AdminCorrelationId
 pub fn radroots_service_host::AdminCorrelationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_service_host::AdminCorrelationId
@@ -659,7 +659,7 @@ pub const fn radroots_service_host::AdminError::new(radroots_service_host::Admin
 pub struct radroots_service_host::AdminErrorCode(_)
 impl radroots_service_host::AdminErrorCode
 pub fn radroots_service_host::AdminErrorCode::as_str(&self) -> &str
-pub fn radroots_service_host::AdminErrorCode::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminErrorCodeError>
+pub fn radroots_service_host::AdminErrorCode::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminErrorCodeError>
 impl core::fmt::Display for radroots_service_host::AdminErrorCode
 pub fn radroots_service_host::AdminErrorCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_service_host::AdminErrorCode
@@ -669,7 +669,7 @@ pub fn radroots_service_host::AdminErrorCode::deserialize<D>(D) -> core::result:
 pub struct radroots_service_host::AdminErrorMessage(_)
 impl radroots_service_host::AdminErrorMessage
 pub fn radroots_service_host::AdminErrorMessage::as_str(&self) -> &str
-pub fn radroots_service_host::AdminErrorMessage::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminErrorMessageError>
+pub fn radroots_service_host::AdminErrorMessage::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminErrorMessageError>
 impl core::fmt::Display for radroots_service_host::AdminErrorMessage
 pub fn radroots_service_host::AdminErrorMessage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_service_host::AdminErrorMessage
@@ -696,7 +696,7 @@ pub fn radroots_service_host::AdminMutationRequest<T>::fmt(&self, &mut core::fmt
 pub struct radroots_service_host::AdminOperationId(_)
 impl radroots_service_host::AdminOperationId
 pub fn radroots_service_host::AdminOperationId::as_str(&self) -> &str
-pub fn radroots_service_host::AdminOperationId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
+pub fn radroots_service_host::AdminOperationId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
 impl core::fmt::Display for radroots_service_host::AdminOperationId
 pub fn radroots_service_host::AdminOperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_service_host::AdminOperationId
@@ -736,11 +736,11 @@ pub fn radroots_service_host::AdminRouteOutcome::fmt(&self, &mut core::fmt::Form
 pub struct radroots_service_host::AdminRoutePath
 impl radroots_service_host::AdminRoutePath
 pub fn radroots_service_host::AdminRoutePath::as_str(&self) -> &str
-pub fn radroots_service_host::AdminRoutePath::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::AdminRoutePathError>
+pub fn radroots_service_host::AdminRoutePath::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminRoutePathError>
 pub struct radroots_service_host::AdminRouter
 impl radroots_service_host::AdminRouter
 pub fn radroots_service_host::AdminRouter::new() -> Self
-pub fn radroots_service_host::AdminRouter::route<F, Fut>(&mut self, radroots_service_host::AdminHttpMethod, impl core::convert::Into<alloc::string::String>, F) -> core::result::Result<(), radroots_service_host::AdminRouteRegistrationError> where F: core::ops::function::Fn(radroots_service_host::AdminRequest) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = radroots_service_host::AdminRouteOutcome> + core::marker::Send + 'static
+pub fn radroots_service_host::AdminRouter::route<F, Fut>(&mut self, radroots_service_host::AdminHttpMethod, impl core::convert::AsRef<str>, F) -> core::result::Result<(), radroots_service_host::AdminRouteRegistrationError> where F: core::ops::function::Fn(radroots_service_host::AdminRequest) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = radroots_service_host::AdminRouteOutcome> + core::marker::Send + 'static
 impl core::fmt::Debug for radroots_service_host::AdminRouter
 pub fn radroots_service_host::AdminRouter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_service_host::AdminServer
@@ -876,7 +876,7 @@ impl core::fmt::Display for radroots_service_host::ConfigDocumentError
 pub fn radroots_service_host::ConfigDocumentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_service_host::ConfigDocumentExpectation
 impl radroots_service_host::ConfigDocumentExpectation
-pub fn radroots_service_host::ConfigDocumentExpectation::new(impl core::convert::Into<alloc::boxed::Box<str>>, u32) -> core::result::Result<Self, radroots_service_host::ConfigDocumentExpectationError>
+pub fn radroots_service_host::ConfigDocumentExpectation::new(impl core::convert::AsRef<str>, u32) -> core::result::Result<Self, radroots_service_host::ConfigDocumentExpectationError>
 pub fn radroots_service_host::ConfigDocumentExpectation::schema(&self) -> &str
 pub const fn radroots_service_host::ConfigDocumentExpectation::schema_version(&self) -> u32
 impl core::fmt::Debug for radroots_service_host::ConfigDocumentExpectation
@@ -916,14 +916,14 @@ pub fn radroots_service_host::HostError::fmt(&self, &mut core::fmt::Formatter<'_
 pub struct radroots_service_host::MetricComponentId(_)
 impl radroots_service_host::MetricComponentId
 pub fn radroots_service_host::MetricComponentId::as_str(&self) -> &str
-pub fn radroots_service_host::MetricComponentId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::MetricComponentId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
 pub struct radroots_service_host::MetricDescriptor
 impl radroots_service_host::MetricDescriptor
 pub const fn radroots_service_host::MetricDescriptor::group(&self) -> radroots_service_host::CommonMetricGroup
 pub const fn radroots_service_host::MetricDescriptor::kind(&self) -> radroots_service_host::MetricKind
 pub fn radroots_service_host::MetricDescriptor::label_keys(&self) -> &[radroots_service_host::MetricLabelKey]
 pub fn radroots_service_host::MetricDescriptor::name(&self) -> &radroots_service_host::MetricName
-pub fn radroots_service_host::MetricDescriptor::new(radroots_service_host::CommonMetricGroup, radroots_service_host::MetricName, impl core::convert::Into<alloc::string::String>, radroots_service_host::MetricKind, impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::MetricLabelKey>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::MetricDescriptor::new(radroots_service_host::CommonMetricGroup, radroots_service_host::MetricName, impl core::convert::AsRef<str>, radroots_service_host::MetricKind, impl core::iter::traits::collect::IntoIterator<Item = radroots_service_host::MetricLabelKey>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
 impl core::fmt::Debug for radroots_service_host::MetricDescriptor
 pub fn radroots_service_host::MetricDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_service_host::MetricLabel
@@ -945,7 +945,7 @@ pub fn radroots_service_host::MetricLabel::fmt(&self, &mut core::fmt::Formatter<
 pub struct radroots_service_host::MetricName(_)
 impl radroots_service_host::MetricName
 pub fn radroots_service_host::MetricName::as_str(&self) -> &str
-pub fn radroots_service_host::MetricName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::MetricName::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
 pub struct radroots_service_host::MetricSample
 impl radroots_service_host::MetricSample
 pub fn radroots_service_host::MetricSample::labels(&self) -> &[radroots_service_host::MetricLabel]
@@ -1062,7 +1062,7 @@ pub const fn radroots_service_host::Readiness::is_ready(self) -> bool
 pub struct radroots_service_host::ReasonCode(_)
 impl radroots_service_host::ReasonCode
 pub fn radroots_service_host::ReasonCode::as_str(&self) -> &str
-pub fn radroots_service_host::ReasonCode::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::StatusContractError>
+pub fn radroots_service_host::ReasonCode::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::StatusContractError>
 impl core::convert::From<radroots_service_host::CommonReasonCode> for radroots_service_host::ReasonCode
 pub fn radroots_service_host::ReasonCode::from(radroots_service_host::CommonReasonCode) -> Self
 impl core::fmt::Display for radroots_service_host::ReasonCode
@@ -1108,7 +1108,7 @@ pub fn radroots_service_host::ServiceStatus<D>::serialize<S>(&self, S) -> core::
 pub struct radroots_service_host::Sha256Digest(_)
 impl radroots_service_host::Sha256Digest
 pub fn radroots_service_host::Sha256Digest::as_str(&self) -> &str
-pub fn radroots_service_host::Sha256Digest::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub fn radroots_service_host::Sha256Digest::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::StatusModelError>
 pub struct radroots_service_host::ShutdownPhaseFailure
 impl radroots_service_host::ShutdownPhaseFailure
 pub const fn radroots_service_host::ShutdownPhaseFailure::error(&self) -> &radroots_service_host::HostError
@@ -1126,12 +1126,12 @@ pub const fn radroots_service_host::ShutdownSummary::disposition(self) -> radroo
 pub struct radroots_service_host::StableRelayId(_)
 impl radroots_service_host::StableRelayId
 pub fn radroots_service_host::StableRelayId::as_str(&self) -> &str
-pub fn radroots_service_host::StableRelayId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
+pub fn radroots_service_host::StableRelayId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::MetricsContractError>
 pub struct radroots_service_host::StatusBuildInfo<'a>
 pub struct radroots_service_host::StatusId(_)
 impl radroots_service_host::StatusId
 pub fn radroots_service_host::StatusId::as_str(&self) -> &str
-pub fn radroots_service_host::StatusId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::StatusModelError>
+pub fn radroots_service_host::StatusId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::StatusModelError>
 pub struct radroots_service_host::StatusPublisherDropped
 impl core::error::Error for radroots_service_host::StatusPublisherDropped
 impl core::fmt::Display for radroots_service_host::StatusPublisherDropped
@@ -1176,7 +1176,7 @@ pub const fn radroots_service_host::TaskMetadata::shutdown_phase(&self) -> core:
 pub struct radroots_service_host::TaskName(_)
 impl radroots_service_host::TaskName
 pub fn radroots_service_host::TaskName::as_str(&self) -> &str
-pub fn radroots_service_host::TaskName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_service_host::TaskMetadataError>
+pub fn radroots_service_host::TaskName::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::TaskMetadataError>
 impl core::fmt::Display for radroots_service_host::TaskName
 pub fn radroots_service_host::TaskName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_service_host::TaskSupervisor

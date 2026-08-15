@@ -51,7 +51,22 @@ fn runtime_paths_is_unpublished_lint_governed_and_dependency_bounded() {
     for source in SOURCES {
         let production = source.split("#[cfg(test)]").next().unwrap_or(source);
         assert!(!production.contains("std::env"));
+        for forbidden in [
+            "impl Into<String>",
+            "let value = value.into();",
+            "String::deserialize",
+        ] {
+            assert!(
+                !production.contains(forbidden),
+                "bounded runtime-path text boundary still contains `{forbidden}`"
+            );
+        }
     }
+    assert!(
+        SOURCES
+            .iter()
+            .any(|source| source.contains("deserializer.deserialize_str(Visitor)"))
+    );
 }
 
 #[test]
@@ -128,6 +143,7 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
         "## Support Caveats",
         "## Public API Baseline",
         "The final reviewed root-only API",
+        "validated as\n  borrowed UTF-8 before the crate creates their retained strings",
         "```rust",
         "| Linux `ServiceHost` | `/etc/radroots` | `/var/lib/radroots` | `/var/cache/radroots` | `/var/log/radroots` | `/run/radroots` | `/etc/radroots/secrets` |",
         "| Linux `InteractiveUser` | `$XDG_CONFIG_HOME/radroots` | `$XDG_DATA_HOME/radroots` | `$XDG_CACHE_HOME/radroots` | `$XDG_STATE_HOME/radroots/logs` | `$XDG_RUNTIME_DIR/radroots` | `$XDG_CONFIG_HOME/radroots/secrets` |",

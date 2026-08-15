@@ -89,8 +89,8 @@ enum AdminRouteSegment {
 }
 
 impl AdminRoutePath {
-    pub fn new(value: impl Into<String>) -> Result<Self, AdminRoutePathError> {
-        let value = value.into();
+    pub fn new(value: impl AsRef<str>) -> Result<Self, AdminRoutePathError> {
+        let value = value.as_ref();
         if value.is_empty() {
             return Err(AdminRoutePathError::Empty);
         }
@@ -102,7 +102,6 @@ impl AdminRoutePath {
         }
         let mut parameter_names = BTreeSet::new();
         let mut literal_count = 0;
-        let mut segments = Vec::new();
         for segment in value[1..].split('/') {
             if segment.is_empty() {
                 return Err(AdminRoutePathError::EmptySegment);
@@ -114,10 +113,9 @@ impl AdminRoutePath {
                 if !valid_parameter_name(parameter) {
                     return Err(AdminRoutePathError::InvalidParameter);
                 }
-                if !parameter_names.insert(parameter.to_owned()) {
+                if !parameter_names.insert(parameter) {
                     return Err(AdminRoutePathError::DuplicateParameter);
                 }
-                segments.push(AdminRouteSegment::Parameter(parameter.to_owned()));
             } else {
                 if !segment
                     .bytes()
@@ -126,11 +124,22 @@ impl AdminRoutePath {
                     return Err(AdminRoutePathError::InvalidCharacter);
                 }
                 literal_count += 1;
-                segments.push(AdminRouteSegment::Literal(segment.to_owned()));
             }
         }
+        let segments = value[1..]
+            .split('/')
+            .map(|segment| {
+                segment
+                    .strip_prefix('{')
+                    .and_then(|segment| segment.strip_suffix('}'))
+                    .map_or_else(
+                        || AdminRouteSegment::Literal(segment.to_owned()),
+                        |parameter| AdminRouteSegment::Parameter(parameter.to_owned()),
+                    )
+            })
+            .collect();
         Ok(Self {
-            canonical: value,
+            canonical: value.to_owned(),
             segments,
             literal_count,
         })
@@ -587,7 +596,7 @@ impl AdminRouter {
     pub fn route<F, Fut>(
         &mut self,
         method: AdminHttpMethod,
-        path: impl Into<String>,
+        path: impl AsRef<str>,
         handler: F,
     ) -> Result<(), AdminRouteRegistrationError>
     where
@@ -2153,6 +2162,16 @@ mod tests {
         for (path, expected) in invalid_paths {
             assert_eq!(AdminRoutePath::new(path).unwrap_err(), expected);
         }
+        let exact_maximum = format!(
+            "/v1/{}",
+            "x".repeat(ADMIN_ROUTE_PATH_MAX_UTF8_BYTES - "/v1/".len())
+        );
+        assert_eq!(
+            AdminRoutePath::new(&exact_maximum)
+                .expect("exact maximum route")
+                .as_str(),
+            exact_maximum
+        );
         assert_eq!(
             AdminRoutePath::new(format!(
                 "/v1/{}",
@@ -2160,6 +2179,10 @@ mod tests {
             ))
             .unwrap_err(),
             AdminRoutePathError::TooLong
+        );
+        assert_eq!(
+            AdminRoutePath::new(format!("/v1/{}", "x".repeat(4 * 1024 * 1024))),
+            Err(AdminRoutePathError::TooLong)
         );
 
         assert_eq!(

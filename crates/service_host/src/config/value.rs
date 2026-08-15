@@ -1,6 +1,7 @@
 //! Validated service-neutral configuration leaf values.
 
 use core::fmt;
+use core::marker::PhantomData;
 use core::str::FromStr;
 use core::time::Duration;
 use std::error::Error;
@@ -107,9 +108,7 @@ impl<'de> Deserialize<'de> for PositiveDuration {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(D::Error::custom)
+        deserialize_from_str(deserializer)
     }
 }
 
@@ -209,9 +208,7 @@ impl<'de> Deserialize<'de> for ByteLimit {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(D::Error::custom)
+        deserialize_from_str(deserializer)
     }
 }
 
@@ -355,9 +352,7 @@ impl<'de> Deserialize<'de> for LoggingFormat {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(D::Error::custom)
+        deserialize_from_str(deserializer)
     }
 }
 
@@ -478,9 +473,7 @@ impl<'de> Deserialize<'de> for OptionalOperationsBind {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(D::Error::custom)
+        deserialize_from_str(deserializer)
     }
 }
 
@@ -503,6 +496,43 @@ enum HumanQuantityError {
     Invalid,
     Zero,
     Overflow,
+}
+
+fn deserialize_from_str<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    struct FromStrVisitor<T>(PhantomData<T>);
+
+    impl<'de, T> serde::de::Visitor<'de> for FromStrVisitor<T>
+    where
+        T: FromStr,
+        T::Err: fmt::Display,
+    {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a canonical bounded configuration string")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            value.parse().map_err(E::custom)
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            value.parse().map_err(E::custom)
+        }
+    }
+
+    deserializer.deserialize_str(FromStrVisitor(PhantomData))
 }
 
 fn parse_human_quantity(value: &str, units: &[(&str, u64)]) -> Result<u64, HumanQuantityError> {

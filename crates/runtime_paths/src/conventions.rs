@@ -25,8 +25,8 @@ pub const DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME: &str = "runtime_store.sqlit
 pub struct ServiceCredentialArtifactName(String);
 
 impl ServiceCredentialArtifactName {
-    pub fn new(value: impl Into<String>) -> Result<Self, ServiceCredentialArtifactNameError> {
-        let value = value.into();
+    pub fn new(value: impl AsRef<str>) -> Result<Self, ServiceCredentialArtifactNameError> {
+        let value = value.as_ref();
         if value.is_empty() {
             return Err(ServiceCredentialArtifactNameError::Empty);
         }
@@ -46,7 +46,7 @@ impl ServiceCredentialArtifactName {
         {
             return Err(ServiceCredentialArtifactNameError::InvalidCharacter);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -326,6 +326,12 @@ mod tests {
             ServiceCredentialArtifactName::new(
                 "a".repeat(SERVICE_CREDENTIAL_ARTIFACT_NAME_MAX_BYTES + 1)
             ),
+            Err(ServiceCredentialArtifactNameError::TooLong {
+                maximum: SERVICE_CREDENTIAL_ARTIFACT_NAME_MAX_BYTES,
+            })
+        );
+        assert_eq!(
+            ServiceCredentialArtifactName::new("a".repeat(4 * 1024 * 1024)),
             Err(ServiceCredentialArtifactNameError::TooLong {
                 maximum: SERVICE_CREDENTIAL_ARTIFACT_NAME_MAX_BYTES,
             })

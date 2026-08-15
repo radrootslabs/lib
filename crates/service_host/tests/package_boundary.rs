@@ -94,6 +94,7 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     for required in [
         ".take(REASON_CODES_MAX_ITEMS + 1)",
         "deserialize_seq(ReasonCodesVisitor)",
+        "deserializer.deserialize_str(ReasonCodeVisitor)",
     ] {
         assert!(STATUS_SOURCE.contains(required));
     }
@@ -110,6 +111,26 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
         "StrictJsonValue",
     ] {
         assert!(!ADMIN_SOURCE.contains(forbidden));
+    }
+    for source in [
+        CONFIG_DOCUMENT_SOURCE,
+        CONFIG_VALUE_SOURCE,
+        ADMIN_SOURCE,
+        STATUS_SOURCE,
+        LIFECYCLE_SOURCE,
+        OPERATIONS_PRIMITIVES_SOURCE,
+    ] {
+        for forbidden in [
+            "impl Into<String>",
+            "impl Into<Box<str>>",
+            "let value = value.into();",
+            "String::deserialize",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "bounded text boundary still contains `{forbidden}`"
+            );
+        }
     }
     for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
         assert!(!LIFECYCLE_SOURCE.contains(forbidden));
@@ -150,6 +171,7 @@ fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
         "cached_service_state(CachedServiceState::new",
         "parent.child_token()",
         "streamed directly into the capped response writer",
+        "validates borrowed UTF-8 before it creates the",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }

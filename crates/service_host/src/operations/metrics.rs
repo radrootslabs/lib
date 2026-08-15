@@ -63,8 +63,8 @@ pub enum MetricLabelKey {
 pub struct MetricComponentId(String);
 
 impl MetricComponentId {
-    pub fn new(value: impl Into<String>) -> Result<Self, MetricsContractError> {
-        let value = value.into();
+    pub fn new(value: impl AsRef<str>) -> Result<Self, MetricsContractError> {
+        let value = value.as_ref();
         if value.is_empty()
             || value.len() > METRIC_LABEL_VALUE_MAX_BYTES
             || !value.bytes().enumerate().all(|(index, byte)| {
@@ -77,7 +77,7 @@ impl MetricComponentId {
         {
             return Err(MetricsContractError::InvalidComponentId);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -173,12 +173,12 @@ impl MetricLabelKey {
 pub struct MetricName(String);
 
 impl MetricName {
-    pub fn new(value: impl Into<String>) -> Result<Self, MetricsContractError> {
-        let value = value.into();
-        if value.is_empty() || value.len() > METRIC_NAME_MAX_BYTES || !valid_metric_name(&value) {
+    pub fn new(value: impl AsRef<str>) -> Result<Self, MetricsContractError> {
+        let value = value.as_ref();
+        if value.is_empty() || value.len() > METRIC_NAME_MAX_BYTES || !valid_metric_name(value) {
             return Err(MetricsContractError::InvalidMetricName);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -192,8 +192,8 @@ impl MetricName {
 pub struct StableRelayId(String);
 
 impl StableRelayId {
-    pub fn new(value: impl Into<String>) -> Result<Self, MetricsContractError> {
-        let value = value.into();
+    pub fn new(value: impl AsRef<str>) -> Result<Self, MetricsContractError> {
+        let value = value.as_ref();
         if value.is_empty()
             || value.len() > STABLE_RELAY_ID_MAX_BYTES
             || !value.bytes().enumerate().all(|(index, byte)| {
@@ -208,7 +208,7 @@ impl StableRelayId {
         {
             return Err(MetricsContractError::InvalidStableRelayId);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     #[must_use]
@@ -221,8 +221,8 @@ impl StableRelayId {
 struct MetricLabelValue(String);
 
 impl MetricLabelValue {
-    fn new(value: impl Into<String>) -> Result<Self, MetricsContractError> {
-        let value = value.into();
+    fn new(value: impl AsRef<str>) -> Result<Self, MetricsContractError> {
+        let value = value.as_ref();
         if value.is_empty()
             || value.len() > METRIC_LABEL_VALUE_MAX_BYTES
             || !value.bytes().enumerate().all(|(index, byte)| {
@@ -235,7 +235,7 @@ impl MetricLabelValue {
         {
             return Err(MetricsContractError::InvalidLabelValue);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     fn as_str(&self) -> &str {
@@ -292,17 +292,17 @@ impl MetricLabel {
 
     #[must_use]
     pub fn storage(storage: MetricComponentId) -> Self {
-        Self::fixed(MetricLabelKey::Storage, storage.0)
+        Self::fixed_owned(MetricLabelKey::Storage, storage.0)
     }
 
     #[must_use]
     pub fn transport(transport: MetricComponentId) -> Self {
-        Self::fixed(MetricLabelKey::Transport, transport.0)
+        Self::fixed_owned(MetricLabelKey::Transport, transport.0)
     }
 
     #[must_use]
     pub fn relay_id(value: StableRelayId) -> Self {
-        Self::fixed(MetricLabelKey::RelayId, value.0)
+        Self::fixed_owned(MetricLabelKey::RelayId, value.0)
     }
 
     #[must_use]
@@ -332,10 +332,17 @@ impl MetricLabel {
         })
     }
 
-    fn fixed(key: MetricLabelKey, value: impl Into<String>) -> Self {
+    fn fixed(key: MetricLabelKey, value: &'static str) -> Self {
         Self {
             key,
-            value: MetricLabelValue(value.into()),
+            value: MetricLabelValue(value.to_owned()),
+        }
+    }
+
+    fn fixed_owned(key: MetricLabelKey, value: String) -> Self {
+        Self {
+            key,
+            value: MetricLabelValue(value),
         }
     }
 }
@@ -364,11 +371,11 @@ impl MetricDescriptor {
     pub fn new(
         group: CommonMetricGroup,
         name: MetricName,
-        help: impl Into<String>,
+        help: impl AsRef<str>,
         kind: MetricKind,
         label_keys: impl IntoIterator<Item = MetricLabelKey>,
     ) -> Result<Self, MetricsContractError> {
-        let help = help.into();
+        let help = help.as_ref();
         if help.is_empty()
             || help.len() > METRIC_HELP_MAX_BYTES
             || help
@@ -394,7 +401,7 @@ impl MetricDescriptor {
         Ok(Self {
             group,
             name,
-            help,
+            help: help.to_owned(),
             kind,
             label_keys,
         })
@@ -1286,6 +1293,7 @@ mod tests {
         ));
         assert!(MetricName::new("_metric").is_ok());
         assert!(MetricName::new(":metric9").is_ok());
+        assert!(MetricName::new("a".repeat(METRIC_NAME_MAX_BYTES)).is_ok());
         assert_eq!(
             MetricName::new("").unwrap_err(),
             MetricsContractError::InvalidMetricName
@@ -1302,9 +1310,56 @@ mod tests {
             StableRelayId::new("x".repeat(STABLE_RELAY_ID_MAX_BYTES + 1)),
             Err(MetricsContractError::InvalidStableRelayId)
         );
+        assert!(StableRelayId::new("x".repeat(STABLE_RELAY_ID_MAX_BYTES)).is_ok());
         assert_eq!(
             MetricComponentId::new("x".repeat(METRIC_LABEL_VALUE_MAX_BYTES + 1)),
             Err(MetricsContractError::InvalidComponentId)
+        );
+        assert!(MetricComponentId::new("x".repeat(METRIC_LABEL_VALUE_MAX_BYTES)).is_ok());
+        assert!(MetricLabelValue::new("x".repeat(METRIC_LABEL_VALUE_MAX_BYTES)).is_ok());
+        assert!(matches!(
+            MetricLabelValue::new("x".repeat(METRIC_LABEL_VALUE_MAX_BYTES + 1)),
+            Err(MetricsContractError::InvalidLabelValue)
+        ));
+
+        let exact_help = "x".repeat(METRIC_HELP_MAX_BYTES);
+        assert!(
+            MetricDescriptor::new(
+                CommonMetricGroup::Phase,
+                name("radroots_exact_help"),
+                &exact_help,
+                MetricKind::Gauge,
+                [MetricLabelKey::Phase],
+            )
+            .is_ok()
+        );
+
+        let very_large = "x".repeat(4 * 1024 * 1024);
+        assert_eq!(
+            MetricName::new(&very_large),
+            Err(MetricsContractError::InvalidMetricName)
+        );
+        assert_eq!(
+            StableRelayId::new(&very_large),
+            Err(MetricsContractError::InvalidStableRelayId)
+        );
+        assert_eq!(
+            MetricComponentId::new(&very_large),
+            Err(MetricsContractError::InvalidComponentId)
+        );
+        assert!(matches!(
+            MetricLabelValue::new(&very_large),
+            Err(MetricsContractError::InvalidLabelValue)
+        ));
+        assert_eq!(
+            MetricDescriptor::new(
+                CommonMetricGroup::Phase,
+                name("radroots_very_large_help"),
+                &very_large,
+                MetricKind::Gauge,
+                [MetricLabelKey::Phase],
+            ),
+            Err(MetricsContractError::InvalidHelp)
         );
 
         for error in [

@@ -51,8 +51,15 @@ impl CommonReasonCode {
 pub struct ReasonCode(String);
 
 impl ReasonCode {
-    pub fn new(value: impl Into<String>) -> Result<Self, StatusContractError> {
-        let value = value.into();
+    pub fn new(value: impl AsRef<str>) -> Result<Self, StatusContractError> {
+        let value = value.as_ref();
+        if !valid_reason_code(value) {
+            return Err(StatusContractError::InvalidReasonCode);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    fn from_string(value: String) -> Result<Self, StatusContractError> {
         if !valid_reason_code(&value) {
             return Err(StatusContractError::InvalidReasonCode);
         }
@@ -99,7 +106,31 @@ impl<'de> Deserialize<'de> for ReasonCode {
     where
         D: Deserializer<'de>,
     {
-        Self::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        struct ReasonCodeVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ReasonCodeVisitor {
+            type Value = ReasonCode;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a bounded canonical reason code")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ReasonCode::new(value).map_err(E::custom)
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ReasonCode::from_string(value).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_str(ReasonCodeVisitor)
     }
 }
 
@@ -234,6 +265,14 @@ mod tests {
             );
         }
         assert!(ReasonCode::new("a".repeat(REASON_CODE_MAX_BYTES + 1)).is_err());
+
+        let very_large = "a".repeat(4 * 1024 * 1024);
+        assert_eq!(
+            ReasonCode::new(&very_large),
+            Err(StatusContractError::InvalidReasonCode)
+        );
+        let encoded = serde_json::to_string(&very_large).expect("large reason JSON");
+        assert!(serde_json::from_str::<ReasonCode>(&encoded).is_err());
     }
 
     #[test]

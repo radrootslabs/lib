@@ -9,6 +9,9 @@ environment.
 
 - Validated service and instance identifiers define the sole canonical
   `services/<service>/<instance>` namespace.
+- Bounded service, instance, and credential artifact names are validated as
+  borrowed UTF-8 before the crate creates their retained strings; Serde identity
+  decoding uses the same boundary without a second prevalidation copy.
 - Callers inject the platform, host-environment roots, profile, and typed
   bootstrap provenance.
 - A sealed `RuntimeContext` is the only public service-instance path

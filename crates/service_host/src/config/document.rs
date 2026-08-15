@@ -23,18 +23,18 @@ pub struct ConfigDocumentExpectation {
 impl ConfigDocumentExpectation {
     /// Creates an exact expected document identity.
     pub fn new(
-        schema: impl Into<Box<str>>,
+        schema: impl AsRef<str>,
         schema_version: u32,
     ) -> Result<Self, ConfigDocumentExpectationError> {
-        let schema = schema.into();
-        if !valid_schema_id(&schema) {
+        let schema = schema.as_ref();
+        if !valid_schema_id(schema) {
             return Err(ConfigDocumentExpectationError::InvalidSchema);
         }
         if schema_version == 0 {
             return Err(ConfigDocumentExpectationError::InvalidSchemaVersion);
         }
         Ok(Self {
-            schema,
+            schema: schema.to_owned().into_boxed_str(),
             schema_version,
         })
     }
@@ -645,9 +645,16 @@ mod tests {
             ConfigDocumentExpectation::new("bad schema", 1).unwrap_err(),
             ConfigDocumentExpectationError::InvalidSchema
         );
+        assert!(
+            ConfigDocumentExpectation::new("a".repeat(CONFIG_SCHEMA_ID_MAX_UTF8_BYTES), 1).is_ok()
+        );
         assert_eq!(
             ConfigDocumentExpectation::new("a".repeat(CONFIG_SCHEMA_ID_MAX_UTF8_BYTES + 1), 1,)
                 .unwrap_err(),
+            ConfigDocumentExpectationError::InvalidSchema
+        );
+        assert_eq!(
+            ConfigDocumentExpectation::new("a".repeat(4 * 1024 * 1024), 1).unwrap_err(),
             ConfigDocumentExpectationError::InvalidSchema
         );
         assert_eq!(

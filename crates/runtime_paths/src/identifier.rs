@@ -78,8 +78,13 @@ macro_rules! service_identity {
 
         impl $name {
             /// Parses and validates a canonical identifier.
-            pub fn new(value: impl Into<String>) -> Result<Self, ServiceIdentityError> {
-                let value = value.into();
+            pub fn new(value: impl AsRef<str>) -> Result<Self, ServiceIdentityError> {
+                let value = value.as_ref();
+                validate(value, $kind, $maximum)?;
+                Ok(Self(value.to_owned()))
+            }
+
+            fn from_string(value: String) -> Result<Self, ServiceIdentityError> {
                 validate(&value, $kind, $maximum)?;
                 Ok(Self(value))
             }
@@ -121,7 +126,7 @@ macro_rules! service_identity {
             type Error = ServiceIdentityError;
 
             fn try_from(value: String) -> Result<Self, Self::Error> {
-                Self::new(value)
+                Self::from_string(value)
             }
         }
 
@@ -145,8 +150,31 @@ macro_rules! service_identity {
             where
                 D: Deserializer<'de>,
             {
-                let value = String::deserialize(deserializer)?;
-                Self::new(value).map_err(serde::de::Error::custom)
+                struct Visitor;
+
+                impl<'de> serde::de::Visitor<'de> for Visitor {
+                    type Value = $name;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        formatter.write_str("a bounded canonical service identity")
+                    }
+
+                    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        $name::new(value).map_err(E::custom)
+                    }
+
+                    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        $name::from_string(value).map_err(E::custom)
+                    }
+                }
+
+                deserializer.deserialize_str(Visitor)
             }
         }
     };
@@ -212,6 +240,26 @@ mod tests {
                 maximum: INSTANCE_ID_MAX_BYTES,
             })
         );
+        let very_large = "a".repeat(4 * 1024 * 1024);
+        assert!(matches!(
+            ServiceId::new(&very_large),
+            Err(ServiceIdentityError::TooLong {
+                kind: ServiceIdentityKind::Service,
+                maximum: SERVICE_ID_MAX_BYTES,
+            })
+        ));
+        assert!(matches!(
+            InstanceId::new(&very_large),
+            Err(ServiceIdentityError::TooLong {
+                kind: ServiceIdentityKind::Instance,
+                maximum: INSTANCE_ID_MAX_BYTES,
+            })
+        ));
+
+        let service_json = serde_json::to_string(&very_large).expect("large service JSON");
+        assert!(serde_json::from_str::<ServiceId>(&service_json).is_err());
+        let instance_json = serde_json::to_string(&very_large).expect("large instance JSON");
+        assert!(serde_json::from_str::<InstanceId>(&instance_json).is_err());
 
         for invalid in ["Myc", "café", "a.b", "a:b", "a b", "a%b", "a/b", r"a\b"] {
             assert!(ServiceId::new(invalid).is_err(), "accepted `{invalid}`");

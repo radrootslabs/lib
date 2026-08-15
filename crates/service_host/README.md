@@ -101,6 +101,11 @@ or streamed directly into the capped response writer; validation does not
 materialize an intermediate `serde_json::Value` tree. Recursive null rejection
 and duplicate or unknown field rejection remain fail closed.
 
+Every bounded text constructor validates borrowed UTF-8 before it creates the
+retained string. Bounded wire strings use validating Serde visitors, so the
+host does not create a second prevalidation copy of identifiers, safe messages,
+reason codes, task names, routes, or metric vocabulary.
+
 ## Process and runtime ownership
 
 The crate does not parse a CLI, read configuration from environment variables,
