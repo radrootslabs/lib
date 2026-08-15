@@ -15,6 +15,15 @@ runner-owned. Writable host opening finishes every pending governed migration
 before returning, and read-only inspection opens only current migration and
 schema state.
 
+Service-controlled SQL is screened before SQLite compilation through both the
+borrowed transaction executor and migration callback executor. The closed
+statement-control inventory is `PRAGMA`, `ATTACH`, `DETACH`, `BEGIN`, `COMMIT`,
+`END`, `ROLLBACK`, `SAVEPOINT`, and `RELEASE`, regardless of case, whitespace,
+comments, multiple statements, or prepared-query entry point. Rejection is
+sticky for the transaction, so ignoring the immediate SQL error cannot permit
+commit. Runner-owned setup remains private, and the complete connection policy
+is revalidated before commit and before a connection can return to the pool.
+
 Cancelling a host transaction before the runner enables outer commit
 quarantines its connection and leaves no authoritative transaction effect. A
 service-operation error is returned only after rollback is confirmed; an

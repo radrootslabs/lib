@@ -630,13 +630,13 @@ pub type MigrationCallback =
 
 pub struct MigrationTransactionExecutor<'a> {
     connection: &'a mut SqliteConnection,
-    database_control_rejected: bool,
+    statement_control_rejected: bool,
 }
 
 impl MigrationTransactionExecutor<'_> {
     pub async fn execute(&mut self, sql: &'static str) -> Result<(), ServiceSqliteError> {
-        if crate::connection::contains_database_control(sql) {
-            self.database_control_rejected = true;
+        if crate::statement_policy::contains_forbidden_statement_control(sql) {
+            self.statement_control_rejected = true;
             return Err(ServiceSqliteError::new(
                 crate::ServiceSqliteErrorKind::Migration,
             ));
@@ -1084,7 +1084,7 @@ async fn execute_descriptor(
 ) -> Result<(), ServiceSqliteError> {
     let mut executor = MigrationTransactionExecutor {
         connection,
-        database_control_rejected: false,
+        statement_control_rejected: false,
     };
     match descriptor.kind() {
         MigrationKind::Sql => {
@@ -1102,7 +1102,7 @@ async fn execute_descriptor(
             assert_governed_transaction(executor.connection).await?;
         }
     }
-    if executor.database_control_rejected {
+    if executor.statement_control_rejected {
         return Err(migration_error(MigrationFailureKind::Execution));
     }
     Ok(())
@@ -1738,13 +1738,13 @@ mod tests {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn ignored_attachment_callback<'a>(
+    fn ignored_statement_control_callback<'a>(
         executor: &'a mut MigrationTransactionExecutor<'_>,
     ) -> MigrationCallbackFuture<'a> {
-        let sql = IGNORED_ATTACHMENT_SQL
+        let sql = IGNORED_STATEMENT_CONTROL_SQL
             .lock()
-            .expect("attachment SQL mutex")
-            .expect("attachment SQL is installed");
+            .expect("statement-control SQL mutex")
+            .expect("statement-control SQL is installed");
         Box::pin(async move {
             let _ = executor.execute(sql).await;
             Ok(())
@@ -1755,7 +1755,7 @@ mod tests {
     static PENDING_CALLBACK_COUNT: AtomicUsize = AtomicUsize::new(0);
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    static IGNORED_ATTACHMENT_SQL: Mutex<Option<&'static str>> = Mutex::new(None);
+    static IGNORED_STATEMENT_CONTROL_SQL: Mutex<Option<&'static str>> = Mutex::new(None);
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     async fn replace_with_permissive_ledger(connection: &mut SqliteConnection) {
@@ -2387,6 +2387,81 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test(flavor = "current_thread")]
+    async fn migration_sql_rejects_complete_statement_control_inventory_before_execution() {
+        for (name, statement) in [
+            (
+                "reject_pragma",
+                "CREATE TABLE leaked (id INTEGER); /* policy */ PrAgMa\ntrusted_schema=ON",
+            ),
+            (
+                "reject_attach",
+                "CREATE TABLE leaked (id INTEGER); ATTACH ':memory:' AS escaped",
+            ),
+            (
+                "reject_detach",
+                "CREATE TABLE leaked (id INTEGER); DETACH DATABASE escaped",
+            ),
+            (
+                "reject_begin",
+                "CREATE TABLE leaked (id INTEGER); BEGIN DEFERRED",
+            ),
+            ("reject_commit", "CREATE TABLE leaked (id INTEGER); COMMIT"),
+            (
+                "reject_end",
+                "CREATE TABLE leaked (id INTEGER); END TRANSACTION",
+            ),
+            (
+                "reject_rollback",
+                "CREATE TABLE leaked (id INTEGER); ROLLBACK",
+            ),
+            (
+                "reject_savepoint",
+                "CREATE TABLE leaked (id INTEGER); SAVEPOINT escaped",
+            ),
+            (
+                "reject_release",
+                "CREATE TABLE leaked (id INTEGER); RELEASE SAVEPOINT escaped",
+            ),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let database_path = directory.path().join("statement-control.sqlite");
+            let mut connection = initialized_file_database(&database_path).await;
+            let catalog = MigrationCatalog::new([sql(2, name, statement)]).unwrap();
+            let schema_catalog = unchanged_schema_catalog(&catalog);
+            let mut validate = || Ok(());
+            let error = apply_governed_migrations(
+                &mut connection,
+                &catalog,
+                &schema_catalog,
+                MigrationAppliedAtUnixSeconds::new(1_800_000_000).unwrap(),
+                &build_identity(),
+                &[],
+                &mut validate,
+            )
+            .await
+            .expect_err("statement-control migration must be rejected");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Migration);
+            assert_eq!(read_state_schema_version(&mut connection).await.unwrap(), 1);
+            assert!(
+                read_migration_history(&mut connection)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'leaked'",
+                )
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+                0
+            );
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
     async fn migration_executor_rejects_transient_attachment_before_file_creation() {
         let directory = tempfile::tempdir().unwrap();
         let database_path = directory.path().join("main.sqlite");
@@ -2434,7 +2509,9 @@ mod tests {
             )
             .into_boxed_str(),
         );
-        *IGNORED_ATTACHMENT_SQL.lock().expect("attachment SQL mutex") = Some(callback_sql);
+        *IGNORED_STATEMENT_CONTROL_SQL
+            .lock()
+            .expect("statement-control SQL mutex") = Some(callback_sql);
         let mut callback_connection = initialized_file_database(&callback_database_path).await;
         let callback_descriptor = MigrationDescriptor::callback(
             2,
@@ -2447,7 +2524,7 @@ mod tests {
             callback_descriptor.target_version(),
             callback_descriptor.name(),
             callback_descriptor.checksum(),
-            ignored_attachment_callback,
+            ignored_statement_control_callback,
         );
         let callback_catalog = MigrationCatalog::new([callback_descriptor]).unwrap();
         let callback_schema_catalog = unchanged_schema_catalog(&callback_catalog);
@@ -2462,7 +2539,9 @@ mod tests {
         )
         .await
         .expect_err("ignored callback ATTACH/DETACH must still fail the migration");
-        *IGNORED_ATTACHMENT_SQL.lock().expect("attachment SQL mutex") = None;
+        *IGNORED_STATEMENT_CONTROL_SQL
+            .lock()
+            .expect("statement-control SQL mutex") = None;
         assert_eq!(callback_error.kind(), ServiceSqliteErrorKind::Migration);
         assert!(!callback_external_path.exists());
         assert_eq!(

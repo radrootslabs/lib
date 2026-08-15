@@ -24,6 +24,7 @@ mod restore;
     reason = "the sealed SQLx-handle adapter owns the missing SQLite online-backup calls"
 )]
 mod sqlite_native_backup;
+mod statement_policy;
 mod status;
 mod transaction_control;
 

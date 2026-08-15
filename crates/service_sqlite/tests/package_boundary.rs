@@ -33,6 +33,7 @@ const RESTORE_STAGE_SOURCE: &str = include_str!("../src/restore/stage.rs");
 const SQLITE_NATIVE_BACKUP_SOURCE: &str = include_str!("../src/sqlite_native_backup.rs");
 const STATUS_SOURCE: &str = include_str!("../src/status/mod.rs");
 const DISK_SOURCE: &str = include_str!("../src/status/disk.rs");
+const STATEMENT_POLICY_SOURCE: &str = include_str!("../src/statement_policy.rs");
 const TRANSACTION_CONTROL_SOURCE: &str = include_str!("../src/transaction_control.rs");
 const WRITER_PROCESS_TEST_SOURCE: &str = include_str!("writer_authority.rs");
 
@@ -129,6 +130,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
             "restore",
             "sqlite_native_backup",
             "status",
+            "statement_policy",
             "transaction_control"
         ])
     );
@@ -138,6 +140,11 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "borrowed `ServiceSqliteTransaction` executor",
         "transaction begin, commit, rollback, policy",
         "attached-database exclusion",
+        "Service-controlled SQL is screened before SQLite compilation",
+        "statement-control inventory is `PRAGMA`, `ATTACH`, `DETACH`, `BEGIN`, `COMMIT`,",
+        "`END`, `ROLLBACK`, `SAVEPOINT`, and `RELEASE`",
+        "sticky for the transaction",
+        "is revalidated before commit and before a connection can return to the pool",
         "Writable host opening finishes every pending governed migration",
         "read-only inspection opens only current migration and",
         "with raw database authority",
@@ -786,8 +793,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "validate_callback_bindings",
         "advance_schema_version",
         "pub struct MigrationTransactionExecutor",
-        "contains_database_control",
-        "database_control_rejected",
+        "contains_forbidden_statement_control",
+        "statement_control_rejected",
         "SAVEPOINT radroots_migration_transaction_probe",
         "FROM pragma_database_list",
         "CASE WHEN typeof(name) = 'text'",
@@ -812,8 +819,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "connection.close_on_drop()",
         "connection.trust()",
         "RestrictedExecute",
-        "contains_database_control",
-        "RADROOTS_FORBIDDEN_DATABASE_CONTROL",
+        "contains_forbidden_statement_control",
+        "RADROOTS_FORBIDDEN_STATEMENT_CONTROL",
         "OperationRolledBack",
         "RollbackFailed",
         "CommitOutcomeUnknown",
@@ -829,6 +836,26 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             CONNECTION_SOURCE.contains(required),
             "Step 061 connection source is missing `{required}`"
+        );
+    }
+
+    for required in [
+        "pub(crate) fn contains_forbidden_statement_control",
+        "b\"pragma\".as_slice()",
+        "b\"attach\"",
+        "b\"detach\"",
+        "b\"begin\"",
+        "b\"commit\"",
+        "b\"end\"",
+        "b\"rollback\"",
+        "b\"savepoint\"",
+        "b\"release\"",
+        "trigger_definition",
+        "trigger_case_depth",
+    ] {
+        assert!(
+            STATEMENT_POLICY_SOURCE.contains(required),
+            "statement-policy source is missing `{required}`"
         );
     }
 

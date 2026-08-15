@@ -555,14 +555,14 @@ impl ServiceSqliteHost {
         }
 
         let operation_result = {
-            let database_control_rejected = Arc::new(AtomicBool::new(false));
+            let statement_control_rejected = Arc::new(AtomicBool::new(false));
             let mut executor = ServiceSqliteTransaction {
                 connection: &mut transaction,
-                database_control_rejected: Arc::clone(&database_control_rejected),
+                statement_control_rejected: Arc::clone(&statement_control_rejected),
             };
-            (operation(&mut executor).await, database_control_rejected)
+            (operation(&mut executor).await, statement_control_rejected)
         };
-        let (operation_result, database_control_rejected) = operation_result;
+        let (operation_result, statement_control_rejected) = operation_result;
         if let Err(error) = self.pool.validate() {
             let operation_error = operation_result.err();
             let permit = gate.permit_runner_rollback();
@@ -618,7 +618,7 @@ impl ServiceSqliteHost {
                 &mut transaction,
                 &gate,
                 &initial_policy,
-                &database_control_rejected,
+                &statement_control_rejected,
             )
             .await;
         let precommit = match precommit {
@@ -801,12 +801,12 @@ impl ServiceSqliteHost {
         connection: &mut SqliteConnection,
         gate: &crate::transaction_control::TransactionControlGate,
         initial_policy: &crate::migration::MigrationConnectionPolicy,
-        database_control_rejected: &AtomicBool,
+        statement_control_rejected: &AtomicBool,
     ) -> Result<(), ServiceSqliteError> {
         self.pool.validate()?;
         crate::require_condition(
             !gate.control_violation_observed()
-                && !database_control_rejected.load(Ordering::Acquire),
+                && !statement_control_rejected.load(Ordering::Acquire),
             ServiceSqliteErrorKind::Open,
         )?;
         crate::migration::assert_governed_transaction(connection).await?;
@@ -874,12 +874,12 @@ impl fmt::Debug for ServiceSqliteHost {
 /// ```
 pub struct ServiceSqliteTransaction<'connection> {
     connection: &'connection mut SqliteConnection,
-    database_control_rejected: Arc<AtomicBool>,
+    statement_control_rejected: Arc<AtomicBool>,
 }
 
 struct RestrictedExecute<Q> {
     query: Q,
-    database_control_rejected: Arc<AtomicBool>,
+    statement_control_rejected: Arc<AtomicBool>,
 }
 
 impl<'query, Q> Execute<'query, Sqlite> for RestrictedExecute<Q>
@@ -887,7 +887,7 @@ where
     Q: Execute<'query, Sqlite>,
 {
     fn sql(self) -> SqlStr {
-        restricted_sql(self.query.sql(), &self.database_control_rejected)
+        restricted_sql(self.query.sql(), &self.statement_control_rejected)
     }
 
     fn statement(&self) -> Option<&SqliteStatement> {
@@ -905,19 +905,13 @@ where
     }
 }
 
-fn restricted_sql(sql: SqlStr, database_control_rejected: &AtomicBool) -> SqlStr {
-    if contains_database_control(sql.as_str()) {
-        database_control_rejected.store(true, Ordering::Release);
-        SqlStr::from_static("RADROOTS_FORBIDDEN_DATABASE_CONTROL")
+fn restricted_sql(sql: SqlStr, statement_control_rejected: &AtomicBool) -> SqlStr {
+    if crate::statement_policy::contains_forbidden_statement_control(sql.as_str()) {
+        statement_control_rejected.store(true, Ordering::Release);
+        SqlStr::from_static("RADROOTS_FORBIDDEN_STATEMENT_CONTROL")
     } else {
         sql
     }
-}
-
-pub(crate) fn contains_database_control(sql: &str) -> bool {
-    sql.as_bytes()
-        .split(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
-        .any(|token| token.eq_ignore_ascii_case(b"attach") || token.eq_ignore_ascii_case(b"detach"))
 }
 
 impl fmt::Debug for ServiceSqliteTransaction<'_> {
@@ -943,7 +937,7 @@ where
     {
         (&mut *self.connection).fetch_many(RestrictedExecute {
             query,
-            database_control_rejected: Arc::clone(&self.database_control_rejected),
+            statement_control_rejected: Arc::clone(&self.statement_control_rejected),
         })
     }
 
@@ -957,7 +951,7 @@ where
     {
         (&mut *self.connection).fetch_optional(RestrictedExecute {
             query,
-            database_control_rejected: Arc::clone(&self.database_control_rejected),
+            statement_control_rejected: Arc::clone(&self.statement_control_rejected),
         })
     }
 
@@ -970,7 +964,7 @@ where
         'executor: 'e,
     {
         (&mut *self.connection).prepare_with(
-            restricted_sql(sql, &self.database_control_rejected),
+            restricted_sql(sql, &self.statement_control_rejected),
             parameters,
         )
     }
@@ -3279,24 +3273,17 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test]
-    async fn transaction_control_policy_and_attachment_escapes_fail_closed() {
-        for (statement, expected_kind) in [
-            (
-                "INSERT INTO host_probe (value) VALUES (0); COMMIT",
-                ServiceSqliteTransactionErrorKind::RollbackFailed,
-            ),
-            (
-                "ROLLBACK; BEGIN DEFERRED; INSERT INTO host_probe (value) VALUES (1)",
-                ServiceSqliteTransactionErrorKind::NotCommitted,
-            ),
-            (
-                "PRAGMA trusted_schema=ON; INSERT INTO host_probe (value) VALUES (2)",
-                ServiceSqliteTransactionErrorKind::NotCommitted,
-            ),
-            (
-                "ATTACH DATABASE ':memory:' AS extra; INSERT INTO host_probe (value) VALUES (3)",
-                ServiceSqliteTransactionErrorKind::NotCommitted,
-            ),
+    async fn complete_statement_control_inventory_is_sticky_and_fails_closed() {
+        for statement in [
+            "INSERT INTO host_probe (value) VALUES (0); /* policy */ PrAgMa\ntrusted_schema=ON",
+            "INSERT INTO host_probe (value) VALUES (1); ATTACH DATABASE ':memory:' AS extra",
+            "INSERT INTO host_probe (value) VALUES (2); DETACH DATABASE extra",
+            "INSERT INTO host_probe (value) VALUES (3); BEGIN DEFERRED",
+            "INSERT INTO host_probe (value) VALUES (4); COMMIT",
+            "INSERT INTO host_probe (value) VALUES (5); END",
+            "INSERT INTO host_probe (value) VALUES (6); ROLLBACK",
+            "INSERT INTO host_probe (value) VALUES (7); SAVEPOINT escaped",
+            "INSERT INTO host_probe (value) VALUES (8); RELEASE SAVEPOINT escaped",
         ] {
             let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
             let error = host
@@ -3308,7 +3295,10 @@ mod tests {
                 })
                 .await
                 .expect_err("escape attempt must not commit");
-            assert_eq!(error.kind(), expected_kind);
+            assert_eq!(
+                error.kind(),
+                ServiceSqliteTransactionErrorKind::NotCommitted
+            );
             assert!(error.sqlite_error().is_some());
             assert_eq!(row_count(&host).await, 0);
         }
@@ -3334,6 +3324,58 @@ mod tests {
             ServiceSqliteTransactionErrorKind::NotCommitted
         );
         assert_eq!(row_count(&host).await, 0);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn prepared_query_policy_rejection_is_sticky_and_rolls_back_prior_work() {
+        let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let error = host
+            .transaction(|transaction| {
+                Box::pin(async move {
+                    sqlx::query("INSERT INTO host_probe (value) VALUES (11)")
+                        .execute(&mut *transaction)
+                        .await
+                        .expect("ordinary service statement");
+                    let _ = (&mut *transaction)
+                        .prepare(SqlStr::from_static(
+                            "SELECT 1; /* ignored */ PRAGMA trusted_schema=ON",
+                        ))
+                        .await;
+                    Ok::<_, Infallible>(())
+                })
+            })
+            .await
+            .expect_err("ignored prepared-query rejection must block commit");
+        assert_eq!(
+            error.kind(),
+            ServiceSqliteTransactionErrorKind::NotCommitted
+        );
+        assert_eq!(row_count(&host).await, 0);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn control_words_in_values_and_case_expressions_remain_available() {
+        let (_root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
+        let value = host
+            .transaction(|transaction| {
+                Box::pin(async move {
+                    let value = sqlx::query_scalar::<_, String>(
+                        "SELECT CASE WHEN 1 = 1 THEN 'commit' ELSE 'end' END",
+                    )
+                    .fetch_one(&mut *transaction)
+                    .await?;
+                    sqlx::query("INSERT INTO host_probe (value) VALUES (12)")
+                        .execute(&mut *transaction)
+                        .await?;
+                    Ok::<_, sqlx::Error>(value)
+                })
+            })
+            .await
+            .expect("ordinary expression commits");
+        assert_eq!(value, "commit");
+        assert_eq!(row_count(&host).await, 1);
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -3479,25 +3521,6 @@ mod tests {
             stale.sqlite_error().map(ServiceSqliteError::kind),
             Some(ServiceSqliteErrorKind::Authority)
         );
-    }
-
-    #[test]
-    fn database_control_token_screen_is_closed_and_case_insensitive() {
-        for forbidden in [
-            "ATTACH DATABASE 'x' AS extra",
-            "detach database extra",
-            "SELECT 1; /* ignored */ AtTaCh ':memory:' AS x",
-            "SELECT 'attach'",
-        ] {
-            assert!(contains_database_control(forbidden));
-        }
-        for allowed in [
-            "SELECT attachment FROM items",
-            "SELECT detached FROM items",
-            "SELECT COUNT(*) FROM host_probe",
-        ] {
-            assert!(!contains_database_control(allowed));
-        }
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
