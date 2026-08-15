@@ -95,6 +95,12 @@ exclude raw paths, SQL, credentials, payloads, and provider or relay errors.
 Where a host error retains an original cause for trusted inspection, that cause
 is not rendered by its safe projection.
 
+Reason-code iterators and wire arrays stop at the first item beyond their fixed
+maximum. Administration payloads are traversed directly from the bounded input
+or streamed directly into the capped response writer; validation does not
+materialize an intermediate `serde_json::Value` tree. Recursive null rejection
+and duplicate or unknown field rejection remain fail closed.
+
 ## Process and runtime ownership
 
 The crate does not parse a CLI, read configuration from environment variables,

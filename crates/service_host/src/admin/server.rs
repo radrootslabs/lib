@@ -2,7 +2,7 @@
 
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize, de, de::DeserializeOwned};
-use serde_json::{Value, value::RawValue};
+use serde_json::value::RawValue;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::error::Error;
@@ -315,7 +315,7 @@ impl AdminRequest {
                 BoundedEncodingError::Limit => AdminRouteOutcomeError::ResponseLimit,
                 BoundedEncodingError::Encoding => AdminRouteOutcomeError::Encoding,
             })?;
-        let _: StrictJsonValue =
+        let _: StrictJsonPayload =
             serde_json::from_slice(&encoded).map_err(|_| AdminRouteOutcomeError::InvalidPayload)?;
         let encoded =
             String::from_utf8(encoded).expect("serde_json output must always be valid UTF-8");
@@ -440,18 +440,19 @@ struct ServerSuccessEnvelope<'a> {
     result: &'a RawValue,
 }
 
-struct StrictJsonValue(Value);
+#[derive(Clone, Copy)]
+struct StrictJsonPayload;
 
-impl Serialize for StrictJsonValue {
+impl Serialize for StrictJsonPayload {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        self.0.serialize(serializer)
+        serializer.serialize_bool(true)
     }
 }
 
-impl<'de> Deserialize<'de> for StrictJsonValue {
+impl<'de> Deserialize<'de> for StrictJsonPayload {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -463,36 +464,37 @@ impl<'de> Deserialize<'de> for StrictJsonValue {
 struct StrictJsonVisitor;
 
 impl<'de> de::Visitor<'de> for StrictJsonVisitor {
-    type Value = StrictJsonValue;
+    type Value = StrictJsonPayload;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("JSON without duplicate object keys or null values")
     }
 
-    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::Bool(value)))
+    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
-    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::Number(value.into())))
+    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
-    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::Number(value.into())))
+    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
     fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        serde_json::Number::from_f64(value)
-            .map(Value::Number)
-            .map(StrictJsonValue)
-            .ok_or_else(|| E::custom("non-finite JSON number"))
+        if value.is_finite() {
+            Ok(StrictJsonPayload)
+        } else {
+            Err(E::custom("non-finite JSON number"))
+        }
     }
 
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::String(value.to_owned())))
+    fn visit_str<E>(self, _value: &str) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
     fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
@@ -502,8 +504,8 @@ impl<'de> de::Visitor<'de> for StrictJsonVisitor {
         self.visit_str(value)
     }
 
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::String(value)))
+    fn visit_string<E>(self, _value: String) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
     fn visit_none<E>(self) -> Result<Self::Value, E>
@@ -524,26 +526,22 @@ impl<'de> de::Visitor<'de> for StrictJsonVisitor {
     where
         A: de::SeqAccess<'de>,
     {
-        let mut values = Vec::with_capacity(sequence.size_hint().unwrap_or(0));
-        while let Some(value) = sequence.next_element::<StrictJsonValue>()? {
-            values.push(value.0);
-        }
-        Ok(StrictJsonValue(Value::Array(values)))
+        while sequence.next_element::<StrictJsonPayload>()?.is_some() {}
+        Ok(StrictJsonPayload)
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: de::MapAccess<'de>,
     {
-        let mut values = serde_json::Map::with_capacity(map.size_hint().unwrap_or(0));
+        let mut keys = BTreeSet::new();
         while let Some(key) = map.next_key::<String>()? {
-            if values.contains_key(&key) {
+            if !keys.insert(key) {
                 return Err(de::Error::custom("duplicate JSON object key"));
             }
-            let value = map.next_value::<StrictJsonValue>()?;
-            values.insert(key, value.0);
+            map.next_value::<StrictJsonPayload>()?;
         }
-        Ok(StrictJsonValue(Value::Object(values)))
+        Ok(StrictJsonPayload)
     }
 }
 
@@ -984,18 +982,18 @@ async fn process_request(
     }
 
     if method == AdminHttpMethod::Post {
-        let envelope = match serde_json::from_slice::<AdminMutationRequest<StrictJsonValue>>(&body)
-        {
-            Ok(envelope) => envelope,
-            Err(_) => {
-                return failure_response(
-                    StatusCode::BAD_REQUEST,
-                    correlation.current(),
-                    known_error("malformed_json", "admin request body is not valid JSON"),
-                    state.limits,
-                );
-            }
-        };
+        let envelope =
+            match serde_json::from_slice::<AdminMutationRequest<StrictJsonPayload>>(&body) {
+                Ok(envelope) => envelope,
+                Err(_) => {
+                    return failure_response(
+                        StatusCode::BAD_REQUEST,
+                        correlation.current(),
+                        known_error("malformed_json", "admin request body is not valid JSON"),
+                        state.limits,
+                    );
+                }
+            };
         if let Some(caller_correlation) = envelope.correlation_id().cloned() {
             correlation.replace(caller_correlation);
         } else if let Some(error) = deferred_entropy_failure {
@@ -2094,25 +2092,19 @@ mod tests {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
         assert!(!is_json_content_type(&headers));
 
-        for (document, expected) in [
-            ("true", Value::Bool(true)),
-            ("-7", Value::Number((-7).into())),
-            ("9", Value::Number(9_u64.into())),
-            (
-                "1.5",
-                Value::Number(serde_json::Number::from_f64(1.5).unwrap()),
-            ),
-            (r#""text""#, Value::String("text".to_owned())),
-            ("[true,2]", serde_json::json!([true, 2])),
-            (r#"{"value":3}"#, serde_json::json!({"value": 3})),
+        for document in [
+            "true",
+            "-7",
+            "9",
+            "1.5",
+            r#""text""#,
+            "[true,2]",
+            r#"{"value":3}"#,
         ] {
-            assert_eq!(
-                serde_json::from_str::<StrictJsonValue>(document).unwrap().0,
-                expected
-            );
+            serde_json::from_str::<StrictJsonPayload>(document).unwrap();
         }
         for rejected in ["null", "[1,null]", r#"{"same":1,"same":2}"#] {
-            assert!(serde_json::from_str::<StrictJsonValue>(rejected).is_err());
+            assert!(serde_json::from_str::<StrictJsonPayload>(rejected).is_err());
         }
 
         let route = AdminRoutePath::new("/v1/items/{item_id}").unwrap();

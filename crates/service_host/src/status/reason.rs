@@ -115,15 +115,18 @@ impl ReasonCodes {
     }
 
     pub fn new(values: impl IntoIterator<Item = ReasonCode>) -> Result<Self, StatusContractError> {
-        let mut values: Vec<_> = values.into_iter().collect();
-        values.sort_unstable();
-        values.dedup();
-        if values.len() > REASON_CODES_MAX_ITEMS {
-            return Err(StatusContractError::TooManyReasonCodes {
-                maximum: REASON_CODES_MAX_ITEMS,
-            });
+        let mut bounded = Vec::with_capacity(REASON_CODES_MAX_ITEMS);
+        for value in values.into_iter().take(REASON_CODES_MAX_ITEMS + 1) {
+            if bounded.len() == REASON_CODES_MAX_ITEMS {
+                return Err(StatusContractError::TooManyReasonCodes {
+                    maximum: REASON_CODES_MAX_ITEMS,
+                });
+            }
+            bounded.push(value);
         }
-        Ok(Self(values))
+        bounded.sort_unstable();
+        bounded.dedup();
+        Ok(Self(bounded))
     }
 
     #[must_use]
@@ -142,13 +145,43 @@ impl<'de> Deserialize<'de> for ReasonCodes {
     where
         D: Deserializer<'de>,
     {
-        let raw = Vec::<ReasonCode>::deserialize(deserializer)?;
-        if raw.windows(2).any(|pair| pair[0] >= pair[1]) {
-            return Err(serde::de::Error::custom(
-                "reason codes must be unique and canonically sorted",
-            ));
+        struct ReasonCodesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ReasonCodesVisitor {
+            type Value = ReasonCodes;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a bounded canonically sorted reason-code array")
+            }
+
+            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut values = Vec::with_capacity(
+                    sequence
+                        .size_hint()
+                        .unwrap_or(0)
+                        .min(REASON_CODES_MAX_ITEMS),
+                );
+                while let Some(value) = sequence.next_element::<ReasonCode>()? {
+                    if values.len() == REASON_CODES_MAX_ITEMS {
+                        return Err(serde::de::Error::custom(
+                            "reason-code collection exceeds its item limit",
+                        ));
+                    }
+                    if values.last().is_some_and(|previous| previous >= &value) {
+                        return Err(serde::de::Error::custom(
+                            "reason codes must be unique and canonically sorted",
+                        ));
+                    }
+                    values.push(value);
+                }
+                Ok(ReasonCodes(values))
+            }
         }
-        Self::new(raw).map_err(serde::de::Error::custom)
+
+        deserializer.deserialize_seq(ReasonCodesVisitor)
     }
 }
 
@@ -226,5 +259,55 @@ mod tests {
         );
         assert!(serde_json::from_str::<ReasonCodes>(r#"["z_reason","a_reason"]"#).is_err());
         assert!(serde_json::from_str::<ReasonCodes>(r#"["a_reason","a_reason"]"#).is_err());
+    }
+
+    #[test]
+    fn collection_ingestion_stops_at_maximum_plus_one() {
+        use core::cell::Cell;
+
+        struct CountedInfinite<'a> {
+            calls: &'a Cell<usize>,
+            value: ReasonCode,
+        }
+
+        impl Iterator for CountedInfinite<'_> {
+            type Item = ReasonCode;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.calls.set(self.calls.get() + 1);
+                Some(self.value.clone())
+            }
+        }
+
+        let calls = Cell::new(0);
+        assert_eq!(
+            ReasonCodes::new(CountedInfinite {
+                calls: &calls,
+                value: ReasonCode::new("same_reason").unwrap(),
+            }),
+            Err(StatusContractError::TooManyReasonCodes {
+                maximum: REASON_CODES_MAX_ITEMS,
+            })
+        );
+        assert_eq!(calls.get(), REASON_CODES_MAX_ITEMS + 1);
+
+        let maximum = (0..REASON_CODES_MAX_ITEMS)
+            .map(|index| format!("reason_{index:02}"))
+            .collect::<Vec<_>>();
+        let maximum_json = serde_json::to_string(&maximum).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ReasonCodes>(&maximum_json)
+                .unwrap()
+                .as_slice()
+                .len(),
+            REASON_CODES_MAX_ITEMS
+        );
+        let over_maximum = (0..=REASON_CODES_MAX_ITEMS)
+            .map(|index| format!("reason_{index:02}"))
+            .collect::<Vec<_>>();
+        assert!(
+            serde_json::from_str::<ReasonCodes>(&serde_json::to_string(&over_maximum).unwrap())
+                .is_err()
+        );
     }
 }

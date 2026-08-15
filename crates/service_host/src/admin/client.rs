@@ -2,7 +2,7 @@
 
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize, de, de::DeserializeOwned};
-use serde_json::Value;
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -300,7 +300,7 @@ impl AdminClient {
                     AdminClientError::sourced(AdminClientErrorKind::RequestEncoding, error)
                 }
             })?;
-        let _: StrictJsonValue = serde_json::from_slice(&body).map_err(|error| {
+        let _: StrictJsonPayload = serde_json::from_slice(&body).map_err(|error| {
             AdminClientError::sourced(AdminClientErrorKind::RequestEncoding, error)
         })?;
         self.execute(AdminHttpMethod::Post, target, Bytes::from(body))
@@ -521,16 +521,10 @@ fn decode_response<T>(
 where
     T: DeserializeOwned + Serialize,
 {
-    let strict = serde_json::from_slice::<StrictJsonValue>(body).map_err(|error| {
+    let strict = serde_json::from_slice::<StrictResponseEnvelope>(body).map_err(|error| {
         AdminClientError::sourced(AdminClientErrorKind::MalformedResponse, error)
     })?;
-    let version = strict
-        .0
-        .as_object()
-        .and_then(|object| object.get("contract_version"))
-        .and_then(Value::as_u64)
-        .ok_or_else(|| AdminClientError::simple(AdminClientErrorKind::MalformedResponse))?;
-    if version != u64::from(ADMIN_CONTRACT_VERSION) {
+    if strict.contract_version != u64::from(ADMIN_CONTRACT_VERSION) {
         return Err(AdminClientError::simple(
             AdminClientErrorKind::UnsupportedContractVersion,
         ));
@@ -647,9 +641,10 @@ where
     }
 }
 
-struct StrictJsonValue(Value);
+#[derive(Clone, Copy)]
+struct StrictJsonPayload;
 
-impl<'de> Deserialize<'de> for StrictJsonValue {
+impl<'de> Deserialize<'de> for StrictJsonPayload {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -661,36 +656,37 @@ impl<'de> Deserialize<'de> for StrictJsonValue {
 struct StrictJsonVisitor;
 
 impl<'de> de::Visitor<'de> for StrictJsonVisitor {
-    type Value = StrictJsonValue;
+    type Value = StrictJsonPayload;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("JSON without duplicate object keys or null values")
     }
 
-    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::Bool(value)))
+    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
-    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::Number(value.into())))
+    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
-    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::Number(value.into())))
+    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
     fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        serde_json::Number::from_f64(value)
-            .map(Value::Number)
-            .map(StrictJsonValue)
-            .ok_or_else(|| E::custom("non-finite JSON number"))
+        if value.is_finite() {
+            Ok(StrictJsonPayload)
+        } else {
+            Err(E::custom("non-finite JSON number"))
+        }
     }
 
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::String(value.to_owned())))
+    fn visit_str<E>(self, _value: &str) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
     fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
@@ -700,8 +696,8 @@ impl<'de> de::Visitor<'de> for StrictJsonVisitor {
         self.visit_str(value)
     }
 
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
-        Ok(StrictJsonValue(Value::String(value)))
+    fn visit_string<E>(self, _value: String) -> Result<Self::Value, E> {
+        Ok(StrictJsonPayload)
     }
 
     fn visit_none<E>(self) -> Result<Self::Value, E>
@@ -722,26 +718,67 @@ impl<'de> de::Visitor<'de> for StrictJsonVisitor {
     where
         A: de::SeqAccess<'de>,
     {
-        let mut values = Vec::with_capacity(sequence.size_hint().unwrap_or(0));
-        while let Some(value) = sequence.next_element::<StrictJsonValue>()? {
-            values.push(value.0);
-        }
-        Ok(StrictJsonValue(Value::Array(values)))
+        while sequence.next_element::<StrictJsonPayload>()?.is_some() {}
+        Ok(StrictJsonPayload)
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: de::MapAccess<'de>,
     {
-        let mut values = serde_json::Map::with_capacity(map.size_hint().unwrap_or(0));
+        let mut keys = BTreeSet::new();
         while let Some(key) = map.next_key::<String>()? {
-            if values.contains_key(&key) {
+            if !keys.insert(key) {
                 return Err(de::Error::custom("duplicate JSON object key"));
             }
-            let value = map.next_value::<StrictJsonValue>()?;
-            values.insert(key, value.0);
+            map.next_value::<StrictJsonPayload>()?;
         }
-        Ok(StrictJsonValue(Value::Object(values)))
+        Ok(StrictJsonPayload)
+    }
+}
+
+struct StrictResponseEnvelope {
+    contract_version: u64,
+}
+
+impl<'de> Deserialize<'de> for StrictResponseEnvelope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(StrictResponseVisitor)
+    }
+}
+
+struct StrictResponseVisitor;
+
+impl<'de> de::Visitor<'de> for StrictResponseVisitor {
+    type Value = StrictResponseEnvelope;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("an admin response envelope without duplicate keys or null values")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut keys = BTreeSet::new();
+        let mut contract_version = None;
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key.clone()) {
+                return Err(de::Error::custom("duplicate JSON object key"));
+            }
+            if key == "contract_version" {
+                contract_version = Some(map.next_value::<u64>()?);
+            } else {
+                map.next_value::<StrictJsonPayload>()?;
+            }
+        }
+        Ok(StrictResponseEnvelope {
+            contract_version: contract_version
+                .ok_or_else(|| de::Error::missing_field("contract_version"))?,
+        })
     }
 }
 
@@ -1179,25 +1216,19 @@ mod tests {
 
     #[test]
     fn strict_response_target_and_error_helpers_cover_the_full_value_surface() {
-        for (document, expected) in [
-            ("true", Value::Bool(true)),
-            ("-3", Value::Number((-3).into())),
-            ("4", Value::Number(4_u64.into())),
-            (
-                "2.5",
-                Value::Number(serde_json::Number::from_f64(2.5).unwrap()),
-            ),
-            (r#""text""#, Value::String("text".to_owned())),
-            ("[true,2]", serde_json::json!([true, 2])),
-            (r#"{"value":3}"#, serde_json::json!({"value": 3})),
+        for document in [
+            "true",
+            "-3",
+            "4",
+            "2.5",
+            r#""text""#,
+            "[true,2]",
+            r#"{"value":3}"#,
         ] {
-            assert_eq!(
-                serde_json::from_str::<StrictJsonValue>(document).unwrap().0,
-                expected
-            );
+            serde_json::from_str::<StrictJsonPayload>(document).unwrap();
         }
         for rejected in ["null", "[1,null]", r#"{"same":1,"same":2}"#] {
-            assert!(serde_json::from_str::<StrictJsonValue>(rejected).is_err());
+            assert!(serde_json::from_str::<StrictJsonPayload>(rejected).is_err());
         }
 
         let target = AdminClientTarget::new("/v1/items/value%2D1?page=1&limit=2").unwrap();

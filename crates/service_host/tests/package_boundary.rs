@@ -91,6 +91,26 @@ fn service_host_is_unpublished_lint_governed_and_dependency_bounded() {
     assert!(ROOT.contains("pub use radroots_runtime_paths::{InstanceId, ServiceId};"));
     assert!(!STATUS_SOURCE.contains("serde(untagged)"));
     assert!(!ADMIN_SOURCE.contains("serde(untagged)"));
+    for required in [
+        ".take(REASON_CODES_MAX_ITEMS + 1)",
+        "deserialize_seq(ReasonCodesVisitor)",
+    ] {
+        assert!(STATUS_SOURCE.contains(required));
+    }
+    for required in [
+        "struct NonNullSerializer",
+        "struct StrictJsonPayload",
+        "encode_bounded(result, self.response_body_limit)",
+    ] {
+        assert!(ADMIN_SOURCE.contains(required));
+    }
+    for forbidden in [
+        "serde_json::Value",
+        "serde_json::to_value",
+        "StrictJsonValue",
+    ] {
+        assert!(!ADMIN_SOURCE.contains(forbidden));
+    }
     for forbidden in ["tokio::signal", "ctrl_c", "signal_hook"] {
         assert!(!LIFECYCLE_SOURCE.contains(forbidden));
     }
@@ -129,6 +149,7 @@ fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
         "BoundedCount::<64>::new(8)",
         "cached_service_state(CachedServiceState::new",
         "parent.child_token()",
+        "streamed directly into the capped response writer",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
