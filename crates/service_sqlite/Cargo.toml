@@ -17,7 +17,6 @@ futures = { workspace = true }
 libsqlite3-sys = { workspace = true }
 radroots_runtime_paths = { workspace = true }
 radroots_storage = { workspace = true }
-rusqlite = { workspace = true, features = ["backup", "bundled"] }
 rustix = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }

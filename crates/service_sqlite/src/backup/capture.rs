@@ -18,14 +18,13 @@ use std::{
 #[cfg(test)]
 use core::sync::atomic::AtomicU8;
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension, types::ValueRef};
 use rustix::{
     fs::{AtFlags, FileType, Mode, OFlags, fchmod, fstat, mkdirat, open, openat, statat, unlinkat},
     process::geteuid,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{
-    ConnectOptions, Connection as _, Sqlite, SqliteConnection, pool::PoolConnection,
+    ConnectOptions, Connection as _, Row, Sqlite, SqliteConnection, pool::PoolConnection,
     sqlite::SqliteConnectOptions,
 };
 
@@ -359,12 +358,13 @@ impl CaptureWorker {
         self.validator.validate()?;
         staging.validate()?;
 
-        let source = self.open_inspection_source()?;
-        verify_database_inventory(&source)?;
-        verify_database_metadata(&source, &self.metadata)?;
-        source
-            .close()
-            .map_err(|(_, source)| backup_source(BackupFailureKind::Capture, source))?;
+        let source = self
+            .admission
+            .as_mut()
+            .ok_or_else(|| backup_error(BackupFailureKind::Capture))?;
+        self.runtime.block_on(verify_database_inventory(source))?;
+        self.runtime
+            .block_on(verify_database_metadata(source, &self.metadata))?;
         self.validator.validate()?;
         staging.validate()?;
 
@@ -397,18 +397,20 @@ impl CaptureWorker {
         self.check_cancelled()?;
         self.validator.validate()?;
         staging.validate()?;
-        let destination = self.open_inspection_destination(&staging)?;
-        verify_database_inventory(&destination)?;
-        verify_database_metadata(&destination, &self.metadata)?;
-        verify_integrity(&destination)?;
+        let mut destination = self.open_inspection_destination(&staging)?;
+        self.runtime
+            .block_on(verify_database_inventory(&mut destination))?;
+        self.runtime
+            .block_on(verify_database_metadata(&mut destination, &self.metadata))?;
+        self.runtime.block_on(verify_integrity(&mut destination))?;
         staging.record_sidecars();
         self.check_cancelled()?;
         self.validator.validate()?;
         staging.validate()?;
 
-        destination
-            .close()
-            .map_err(|(_, source)| backup_source(BackupFailureKind::Capture, source))?;
+        self.runtime
+            .block_on(destination.close())
+            .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
         staging.record_sidecars();
         self.validator.validate()?;
         staging.validate()?;
@@ -510,23 +512,6 @@ impl CaptureWorker {
         result
     }
 
-    fn open_inspection_source(&self) -> Result<Connection, ServiceSqliteError> {
-        self.validator.validate()?;
-        let result = Connection::open_with_flags(
-            self.validator.database_path(),
-            OpenFlags::SQLITE_OPEN_READ_ONLY
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX
-                | OpenFlags::SQLITE_OPEN_NOFOLLOW,
-        );
-        self.validator.validate()?;
-        let connection =
-            result.map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-        connection
-            .pragma_update(None, "query_only", true)
-            .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-        Ok(connection)
-    }
-
     fn open_sqlx_destination(
         &self,
         staging: &StagingGuard,
@@ -547,14 +532,16 @@ impl CaptureWorker {
     fn open_inspection_destination(
         &self,
         staging: &StagingGuard,
-    ) -> Result<Connection, ServiceSqliteError> {
+    ) -> Result<SqliteConnection, ServiceSqliteError> {
         staging.validate()?;
-        let result = Connection::open_with_flags(
-            staging.state_path(),
-            OpenFlags::SQLITE_OPEN_READ_WRITE
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX
-                | OpenFlags::SQLITE_OPEN_NOFOLLOW,
-        );
+        let options = SqliteConnectOptions::new()
+            .filename(staging.state_path())
+            .create_if_missing(false)
+            .foreign_keys(false)
+            .disable_statement_logging();
+        let result = self
+            .runtime
+            .block_on(SqliteConnection::connect_with(&options));
         staging.validate()?;
         result.map_err(|source| backup_source(BackupFailureKind::Capture, source))
     }
@@ -1175,29 +1162,24 @@ fn identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqliteErro
     })
 }
 
-fn verify_database_inventory(connection: &Connection) -> Result<(), ServiceSqliteError> {
-    let mut statement = connection
-        .prepare("PRAGMA database_list")
-        .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-    let mut rows = statement
-        .query([])
+async fn verify_database_inventory(
+    connection: &mut SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    let rows = sqlx::query("SELECT seq, name FROM pragma_database_list LIMIT 2")
+        .fetch_all(connection)
+        .await
         .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
     let first = rows
-        .next()
-        .map_err(|source| backup_source(BackupFailureKind::Capture, source))?
+        .first()
         .ok_or_else(|| backup_error(BackupFailureKind::Capture))?;
-    let sequence: i64 = first
-        .get(0)
+    let sequence = first
+        .try_get::<i64, _>(0)
         .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-    let name: String = first
-        .get(1)
+    let name = first
+        .try_get::<String, _>(1)
         .map_err(|source| backup_source(BackupFailureKind::Capture, source))?;
-    let has_extra = rows
-        .next()
-        .map_err(|source| backup_source(BackupFailureKind::Capture, source))?
-        .is_some();
     require_backup_condition(
-        database_inventory_matches(sequence, &name, has_extra),
+        database_inventory_matches(sequence, &name, rows.len() > 1),
         BackupFailureKind::Capture,
     )?;
     Ok(())
@@ -1207,20 +1189,20 @@ fn database_inventory_matches(sequence: i64, name: &str, has_extra: bool) -> boo
     crate::all_constraints([sequence == 0, name == "main", !has_extra])
 }
 
-fn verify_database_metadata(
-    connection: &Connection,
+async fn verify_database_metadata(
+    connection: &mut SqliteConnection,
     expected: &ServiceDatabaseMetadata,
 ) -> Result<(), ServiceSqliteError> {
-    let application_id: i64 = connection
-        .pragma_query_value(None, "application_id", |row| row.get(0))
+    let application_id = sqlx::query_scalar::<_, i64>("PRAGMA application_id")
+        .fetch_one(&mut *connection)
+        .await
         .map_err(metadata_source)?;
-    let row_count: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM (SELECT 1 FROM radroots_service_metadata LIMIT 2)",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(metadata_source)?;
+    let row_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM (SELECT 1 FROM radroots_service_metadata LIMIT 2)",
+    )
+    .fetch_one(&mut *connection)
+    .await
+    .map_err(metadata_source)?;
     crate::require_condition(
         crate::all_constraints([
             row_count == 1,
@@ -1228,9 +1210,8 @@ fn verify_database_metadata(
         ]),
         ServiceSqliteErrorKind::Metadata,
     )?;
-    let row = connection
-        .query_row(
-            "SELECT
+    let row = sqlx::query(
+        "SELECT
                 CASE WHEN typeof(service_id) = 'text'
                           AND length(CAST(service_id AS BLOB)) BETWEEN 1 AND ?1
                      THEN service_id END,
@@ -1247,21 +1228,27 @@ fn verify_database_metadata(
              FROM radroots_service_metadata
              WHERE singleton = 1
              LIMIT 1",
-            [MAX_ID_UTF8_BYTES],
-            |row| {
-                Ok((
-                    row.get::<_, Option<String>>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<Vec<u8>>>(2)?,
-                    row.get::<_, Option<i64>>(3)?,
-                    row.get::<_, Option<i64>>(4)?,
-                ))
-            },
-        )
-        .optional()
+    )
+    .bind(MAX_ID_UTF8_BYTES)
+    .fetch_optional(&mut *connection)
+    .await
+    .map_err(metadata_source)?;
+    let Some(row) = row else {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
+    };
+    let service = row
+        .try_get::<Option<String>, _>(0)
         .map_err(metadata_source)?;
-    let Some((Some(service), Some(instance), Some(generation), Some(schema), Some(created_at))) =
-        row
+    let instance = row
+        .try_get::<Option<String>, _>(1)
+        .map_err(metadata_source)?;
+    let generation = row
+        .try_get::<Option<Vec<u8>>, _>(2)
+        .map_err(metadata_source)?;
+    let schema = row.try_get::<Option<i64>, _>(3).map_err(metadata_source)?;
+    let created_at = row.try_get::<Option<i64>, _>(4).map_err(metadata_source)?;
+    let (Some(service), Some(instance), Some(generation), Some(schema), Some(created_at)) =
+        (service, instance, generation, schema, created_at)
     else {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
     };
@@ -1278,43 +1265,45 @@ fn verify_database_metadata(
     Ok(())
 }
 
-fn verify_integrity(connection: &Connection) -> Result<(), ServiceSqliteError> {
-    let mut statement = connection
-        .prepare("PRAGMA integrity_check(1)")
+async fn verify_integrity(connection: &mut SqliteConnection) -> Result<(), ServiceSqliteError> {
+    let rows = sqlx::query("PRAGMA integrity_check(1)")
+        .fetch_all(&mut *connection)
+        .await
         .map_err(integrity_source)?;
-    let mut rows = statement.query([]).map_err(integrity_source)?;
     let row = rows
-        .next()
-        .map_err(integrity_source)?
+        .first()
         .ok_or_else(|| ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity))?;
-    let result = row.get_ref(0).map_err(integrity_source)?;
+    let value = row.try_get::<&str, _>(0).map_err(integrity_source)?;
     crate::require_condition(
-        integrity_projection_is_ok(result) && rows.next().map_err(integrity_source)?.is_none(),
+        integrity_projection_is_ok(
+            Some("text"),
+            i64::try_from(value.len()).ok(),
+            Some(value.as_bytes()),
+        ) && rows.len() == 1,
         ServiceSqliteErrorKind::Integrity,
     )?;
-    let mut statement = connection
-        .prepare("PRAGMA foreign_key_check")
+    let violation = sqlx::query_scalar::<_, i64>("SELECT 1 FROM pragma_foreign_key_check LIMIT 1")
+        .fetch_optional(connection)
+        .await
         .map_err(integrity_source)?;
-    crate::require_condition(
-        statement
-            .query([])
-            .map_err(integrity_source)?
-            .next()
-            .map_err(integrity_source)?
-            .is_none(),
-        ServiceSqliteErrorKind::Integrity,
-    )?;
+    crate::require_condition(violation.is_none(), ServiceSqliteErrorKind::Integrity)?;
     Ok(())
 }
 
-fn integrity_projection_is_ok(value: ValueRef<'_>) -> bool {
-    matches!(
-        value,
-        ValueRef::Text(bytes)
-            if !bytes.is_empty()
-                && bytes.len() <= MAX_INTEGRITY_RESULT_UTF8_BYTES
-                && bytes == b"ok"
-    )
+fn integrity_projection_is_ok(
+    value_type: Option<&str>,
+    byte_length: Option<i64>,
+    value: Option<&[u8]>,
+) -> bool {
+    crate::all_constraints([
+        value_type == Some("text"),
+        byte_length.is_some_and(|length| {
+            length > 0
+                && usize::try_from(length)
+                    .is_ok_and(|length| length <= MAX_INTEGRITY_RESULT_UTF8_BYTES)
+        }),
+        value == Some(b"ok"),
+    ])
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1414,11 +1403,11 @@ fn backup_source(
     )
 }
 
-fn integrity_source(source: rusqlite::Error) -> ServiceSqliteError {
+fn integrity_source(source: sqlx::Error) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Integrity, source)
 }
 
-fn metadata_source(source: rusqlite::Error) -> ServiceSqliteError {
+fn metadata_source(source: sqlx::Error) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
 }
 
@@ -1830,14 +1819,34 @@ mod tests {
 
     #[test]
     fn integrity_projection_bounds_corrupt_text_before_semantic_acceptance() {
-        assert!(integrity_projection_is_ok(ValueRef::Text(b"ok")));
-        assert!(!integrity_projection_is_ok(ValueRef::Text(b"")));
-        assert!(!integrity_projection_is_ok(ValueRef::Text(b"not-ok")));
+        assert!(integrity_projection_is_ok(
+            Some("text"),
+            Some(2),
+            Some(b"ok")
+        ));
+        assert!(!integrity_projection_is_ok(
+            Some("text"),
+            Some(0),
+            Some(b"")
+        ));
+        assert!(!integrity_projection_is_ok(
+            Some("text"),
+            Some(6),
+            Some(b"not-ok")
+        ));
         let maximum = vec![b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES];
-        assert!(!integrity_projection_is_ok(ValueRef::Text(&maximum)));
+        assert!(!integrity_projection_is_ok(
+            Some("text"),
+            i64::try_from(maximum.len()).ok(),
+            Some(&maximum)
+        ));
         let over_maximum = vec![b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1];
-        assert!(!integrity_projection_is_ok(ValueRef::Text(&over_maximum)));
-        assert!(!integrity_projection_is_ok(ValueRef::Null));
+        assert!(!integrity_projection_is_ok(
+            Some("text"),
+            i64::try_from(over_maximum.len()).ok(),
+            Some(&over_maximum)
+        ));
+        assert!(!integrity_projection_is_ok(None, None, None));
     }
 
     #[test]
@@ -1848,7 +1857,7 @@ mod tests {
         assert!(!database_inventory_matches(0, "main", true));
     }
 
-    fn metadata_fixture() -> (Connection, ServiceDatabaseMetadata) {
+    async fn metadata_fixture() -> (SqliteConnection, ServiceDatabaseMetadata) {
         let metadata = ServiceDatabaseMetadata::from_verified_backup(
             ServiceId::new("myc").expect("service"),
             InstanceId::new("primary").expect("instance"),
@@ -1858,10 +1867,11 @@ mod tests {
             crate::ServiceSqliteApplicationId::new(0x5244_5254).expect("application ID"),
         )
         .expect("metadata");
-        let connection = Connection::open_in_memory().expect("database");
-        connection
-            .execute_batch(&format!(
-                "PRAGMA application_id = {};
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("database");
+        let schema = format!(
+            "PRAGMA application_id = {};
                  CREATE TABLE radroots_service_metadata (
                     singleton INTEGER,
                     service_id TEXT,
@@ -1870,39 +1880,46 @@ mod tests {
                     state_schema_version INTEGER,
                     created_at_unix_ms INTEGER
                  );",
-                metadata.application_id().get()
-            ))
+            metadata.application_id().get()
+        );
+        sqlx::raw_sql(sqlx::AssertSqlSafe(schema.as_str()))
+            .execute(&mut connection)
+            .await
             .expect("metadata schema");
-        connection
-            .execute(
-                "INSERT INTO radroots_service_metadata VALUES (1, ?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![
-                    metadata.service().as_str(),
-                    metadata.instance().as_str(),
-                    metadata.source_generation().as_bytes().as_slice(),
-                    i64::from(metadata.state_schema_version().get()),
-                    i64::try_from(metadata.created_at_unix_ms()).expect("time"),
-                ],
-            )
+        sqlx::query("INSERT INTO radroots_service_metadata VALUES (1, ?, ?, ?, ?, ?)")
+            .bind(metadata.service().as_str())
+            .bind(metadata.instance().as_str())
+            .bind(metadata.source_generation().as_bytes().as_slice())
+            .bind(i64::from(metadata.state_schema_version().get()))
+            .bind(i64::try_from(metadata.created_at_unix_ms()).expect("time"))
+            .execute(&mut connection)
+            .await
             .expect("metadata row");
         (connection, metadata)
     }
 
-    #[test]
-    fn capture_database_inventory_metadata_and_integrity_accept_exact_state() {
-        let (connection, metadata) = metadata_fixture();
-        verify_database_inventory(&connection).expect("main-only inventory");
-        verify_database_metadata(&connection, &metadata).expect("exact metadata");
-        verify_integrity(&connection).expect("healthy database");
+    #[tokio::test(flavor = "current_thread")]
+    async fn capture_database_inventory_metadata_and_integrity_accept_exact_state() {
+        let (mut connection, metadata) = metadata_fixture().await;
+        verify_database_inventory(&mut connection)
+            .await
+            .expect("main-only inventory");
+        verify_database_metadata(&mut connection, &metadata)
+            .await
+            .expect("exact metadata");
+        verify_integrity(&mut connection)
+            .await
+            .expect("healthy database");
 
-        connection
-            .execute_batch("ATTACH DATABASE ':memory:' AS extra")
+        sqlx::query("ATTACH DATABASE ':memory:' AS extra")
+            .execute(&mut connection)
+            .await
             .expect("attach extra");
-        assert!(verify_database_inventory(&connection).is_err());
+        assert!(verify_database_inventory(&mut connection).await.is_err());
     }
 
-    #[test]
-    fn capture_metadata_rejects_every_independent_identity_drift() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn capture_metadata_rejects_every_independent_identity_drift() {
         for statement in [
             "PRAGMA application_id = 1",
             "INSERT INTO radroots_service_metadata SELECT 2, service_id, instance_id, source_generation, state_schema_version, created_at_unix_ms FROM radroots_service_metadata",
@@ -1913,27 +1930,37 @@ mod tests {
             "UPDATE radroots_service_metadata SET created_at_unix_ms = 1235",
             "UPDATE radroots_service_metadata SET service_id = NULL",
         ] {
-            let (connection, metadata) = metadata_fixture();
-            connection.execute_batch(statement).expect("apply drift");
+            let (mut connection, metadata) = metadata_fixture().await;
+            sqlx::raw_sql(statement)
+                .execute(&mut connection)
+                .await
+                .expect("apply drift");
             assert!(
-                verify_database_metadata(&connection, &metadata).is_err(),
+                verify_database_metadata(&mut connection, &metadata)
+                    .await
+                    .is_err(),
                 "drift must fail: {statement}"
             );
         }
     }
 
-    #[test]
-    fn capture_integrity_rejects_foreign_key_violations() {
-        let connection = Connection::open_in_memory().expect("database");
-        connection
-            .execute_batch(
-                "PRAGMA foreign_keys = OFF;
+    #[tokio::test(flavor = "current_thread")]
+    async fn capture_integrity_rejects_foreign_key_violations() {
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("database");
+        sqlx::raw_sql(
+            "PRAGMA foreign_keys = OFF;
                  CREATE TABLE parent(id INTEGER PRIMARY KEY);
                  CREATE TABLE child(parent_id INTEGER REFERENCES parent(id));
                  INSERT INTO child(parent_id) VALUES (41);",
-            )
-            .expect("foreign-key violation fixture");
-        let error = verify_integrity(&connection).expect_err("foreign-key drift must fail");
+        )
+        .execute(&mut connection)
+        .await
+        .expect("foreign-key violation fixture");
+        let error = verify_integrity(&mut connection)
+            .await
+            .expect_err("foreign-key drift must fail");
         assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
     }
 

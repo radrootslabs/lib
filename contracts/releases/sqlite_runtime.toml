@@ -38,6 +38,5 @@ owner = "rcld-rshr-045"
 status = "in_progress"
 temporary_direct_dependencies = [
   "radroots_geonames:rusqlite",
-  "radroots_service_sqlite:rusqlite",
   "workspace:rusqlite",
 ]

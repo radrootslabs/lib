@@ -13,12 +13,12 @@ use {
     core::num::NonZeroU32,
     radroots_runtime_paths::{InstanceId, ServiceId},
     radroots_storage::event::SourceGeneration,
-    rusqlite::{Connection, OpenFlags, OptionalExtension, types::ValueRef},
     rustix::{
         fs::{Dir, FileType, Mode, OFlags, fstat, open, openat},
         process::geteuid,
     },
     sha2::{Digest, Sha256},
+    sqlx::{ConnectOptions, Connection as _, Row, SqliteConnection, sqlite::SqliteConnectOptions},
     std::{
         error::Error,
         fs::File,
@@ -181,15 +181,20 @@ fn verify_backup_bundle_native(
     )?;
     binding.validate()?;
 
-    let connection = open_sqlite_from_retained_state(&binding)?;
-    apply_connection_policy(&connection)?;
-    binding.validate()?;
-    verify_database_inventory(&connection)?;
-    let database_metadata = verify_database_metadata(&connection, &manifest, expected_identity)?;
-    verify_integrity(&connection)?;
-    connection
-        .close()
-        .map_err(|(_, source)| integrity_source(source))?;
+    let database_metadata = futures::executor::block_on(async {
+        let mut connection = open_sqlite_from_retained_state(&binding).await?;
+        apply_connection_policy(&mut connection).await?;
+        binding.validate()?;
+        verify_database_inventory(&mut connection).await?;
+        binding.validate()?;
+        let database_metadata =
+            verify_database_metadata(&mut connection, &manifest, expected_identity).await?;
+        binding.validate()?;
+        verify_integrity(&mut connection).await?;
+        binding.validate()?;
+        connection.close().await.map_err(integrity_source)?;
+        Ok::<_, ServiceSqliteError>(database_metadata)
+    })?;
 
     binding.validate_inventory()?;
     let final_digest = binding.hash_state(maximum_state_bytes)?;
@@ -474,42 +479,52 @@ fn file_identity(status: &rustix::fs::Stat) -> Result<FileIdentity, ServiceSqlit
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn open_sqlite_from_retained_state(
+async fn open_sqlite_from_retained_state(
     binding: &VerifiedBundleBinding,
-) -> Result<Connection, ServiceSqliteError> {
+) -> Result<SqliteConnection, ServiceSqliteError> {
     let descriptor = binding.state.as_raw_fd();
     #[cfg(target_os = "linux")]
     let descriptor_path = format!("/proc/self/fd/{descriptor}");
     #[cfg(target_os = "macos")]
     let descriptor_path = format!("/dev/fd/{descriptor}");
-    let uri = format!("file:{descriptor_path}?mode=ro&immutable=1");
-    Connection::open_with_flags(
-        uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY
-            | OpenFlags::SQLITE_OPEN_URI
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|source| verification_source(VerificationFailureKind::Inventory, source))
+    let options = SqliteConnectOptions::new()
+        .filename(descriptor_path)
+        .read_only(true)
+        .immutable(true)
+        .create_if_missing(false)
+        .foreign_keys(false)
+        .disable_statement_logging();
+    SqliteConnection::connect_with(&options)
+        .await
+        .map_err(|source| verification_source(VerificationFailureKind::Inventory, source))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn apply_connection_policy(connection: &Connection) -> Result<(), ServiceSqliteError> {
-    connection
-        .pragma_update(None, "query_only", true)
+async fn apply_connection_policy(
+    connection: &mut SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    sqlx::query("PRAGMA query_only = ON")
+        .execute(&mut *connection)
+        .await
         .map_err(integrity_source)?;
-    connection
-        .pragma_update(None, "trusted_schema", false)
+    sqlx::query("PRAGMA trusted_schema = OFF")
+        .execute(&mut *connection)
+        .await
         .map_err(integrity_source)?;
-    verify_connection_policy(connection)
+    verify_connection_policy(connection).await
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn verify_connection_policy(connection: &Connection) -> Result<(), ServiceSqliteError> {
-    let query_only: i64 = connection
-        .pragma_query_value(None, "query_only", |row| row.get(0))
+async fn verify_connection_policy(
+    connection: &mut SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    let query_only = sqlx::query_scalar::<_, i64>("PRAGMA query_only")
+        .fetch_one(&mut *connection)
+        .await
         .map_err(integrity_source)?;
-    let trusted_schema: i64 = connection
-        .pragma_query_value(None, "trusted_schema", |row| row.get(0))
+    let trusted_schema = sqlx::query_scalar::<_, i64>("PRAGMA trusted_schema")
+        .fetch_one(connection)
+        .await
         .map_err(integrity_source)?;
     require_verification_connection_policy(query_only, trusted_schema)
 }
@@ -525,25 +540,19 @@ fn require_verification_connection_policy(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn verify_database_inventory(connection: &Connection) -> Result<(), ServiceSqliteError> {
-    let mut statement = connection
-        .prepare("PRAGMA database_list")
+async fn verify_database_inventory(
+    connection: &mut SqliteConnection,
+) -> Result<(), ServiceSqliteError> {
+    let rows = sqlx::query("SELECT seq, name FROM pragma_database_list LIMIT 2")
+        .fetch_all(connection)
+        .await
         .map_err(integrity_source)?;
-    let mut rows = statement.query([]).map_err(integrity_source)?;
-    let first = rows
-        .next()
-        .map_err(integrity_source)?
-        .ok_or_else(|| integrity_error(IntegrityFailureKind::DatabaseInventory))?;
-    let sequence_matches = matches!(
-        first.get_ref(0).map_err(integrity_source)?,
-        ValueRef::Integer(0)
-    );
-    let name_matches = matches!(
-        first.get_ref(1).map_err(integrity_source)?,
-        ValueRef::Text(b"main")
-    );
-    let has_extra = rows.next().map_err(integrity_source)?.is_some();
-    require_verification_database_inventory(sequence_matches, name_matches, has_extra)
+    let Some(first) = rows.first() else {
+        return Err(integrity_error(IntegrityFailureKind::DatabaseInventory));
+    };
+    let sequence_matches = first.try_get::<i64, _>(0).ok() == Some(0);
+    let name_matches = first.try_get::<&str, _>(1).ok() == Some("main");
+    require_verification_database_inventory(sequence_matches, name_matches, rows.len() > 1)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -558,43 +567,37 @@ fn require_verification_database_inventory(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn verify_database_metadata(
-    connection: &Connection,
+async fn verify_database_metadata(
+    connection: &mut SqliteConnection,
     manifest: &ServiceBackupManifest,
     expected: &ServiceDatabaseIdentity,
 ) -> Result<ServiceDatabaseMetadata, ServiceSqliteError> {
-    let mut object_statement = connection
-        .prepare(
-            "SELECT type
+    let object_rows = sqlx::query(
+        "SELECT type
              FROM main.sqlite_schema
              WHERE name = 'radroots_service_metadata'
              LIMIT 2",
-        )
-        .map_err(metadata_source)?;
-    let mut object_rows = object_statement.query([]).map_err(metadata_source)?;
-    let object = object_rows
-        .next()
-        .map_err(metadata_source)?
-        .ok_or_else(metadata_error)?;
+    )
+    .fetch_all(&mut *connection)
+    .await
+    .map_err(metadata_source)?;
+    let object = object_rows.first().ok_or_else(metadata_error)?;
     crate::require_condition(
-        matches!(
-            object.get_ref(0).map_err(metadata_source)?,
-            ValueRef::Text(b"table")
-        ) && object_rows.next().map_err(metadata_source)?.is_none(),
+        object.try_get::<&str, _>(0).ok() == Some("table") && object_rows.len() == 1,
         ServiceSqliteErrorKind::Metadata,
     )?;
 
-    let application_id: i64 = connection
-        .pragma_query_value(None, "application_id", |row| row.get(0))
+    let application_id = sqlx::query_scalar::<_, i64>("PRAGMA application_id")
+        .fetch_one(&mut *connection)
+        .await
         .map_err(metadata_source)?;
     let application_id = u32::try_from(application_id)
         .ok()
         .and_then(|value| crate::ServiceSqliteApplicationId::new(value).ok())
         .ok_or_else(metadata_error)?;
 
-    let mut statement = connection
-        .prepare(
-            "SELECT
+    let rows = sqlx::query(
+        "SELECT
                 CASE WHEN typeof(singleton) = 'integer' THEN singleton END,
                 CASE WHEN typeof(service_id) = 'text'
                           AND length(CAST(service_id AS BLOB)) BETWEEN 1 AND ?1
@@ -611,25 +614,25 @@ fn verify_database_metadata(
                      THEN created_at_unix_ms END
              FROM radroots_service_metadata
              LIMIT 2",
-        )
+    )
+    .bind(MAX_ID_UTF8_BYTES)
+    .fetch_all(connection)
+    .await
+    .map_err(metadata_source)?;
+    let row = rows.first().ok_or_else(metadata_error)?;
+    let singleton = row.try_get::<Option<i64>, _>(0).map_err(metadata_source)?;
+    let service = row
+        .try_get::<Option<String>, _>(1)
         .map_err(metadata_source)?;
-    let mut rows = statement
-        .query([MAX_ID_UTF8_BYTES])
+    let instance = row
+        .try_get::<Option<String>, _>(2)
         .map_err(metadata_source)?;
-    let row = rows
-        .next()
-        .map_err(metadata_source)?
-        .ok_or_else(metadata_error)?;
-    let singleton: Option<i64> = row.get(0).map_err(metadata_source)?;
-    let service: Option<String> = row.get(1).map_err(metadata_source)?;
-    let instance: Option<String> = row.get(2).map_err(metadata_source)?;
-    let generation: Option<Vec<u8>> = row.get(3).map_err(metadata_source)?;
-    let schema: Option<i64> = row.get(4).map_err(metadata_source)?;
-    let created_at: Option<i64> = row.get(5).map_err(metadata_source)?;
-    crate::require_condition(
-        rows.next().map_err(metadata_source)?.is_none(),
-        ServiceSqliteErrorKind::Metadata,
-    )?;
+    let generation = row
+        .try_get::<Option<Vec<u8>>, _>(3)
+        .map_err(metadata_source)?;
+    let schema = row.try_get::<Option<i64>, _>(4).map_err(metadata_source)?;
+    let created_at = row.try_get::<Option<i64>, _>(5).map_err(metadata_source)?;
+    crate::require_condition(rows.len() == 1, ServiceSqliteErrorKind::Metadata)?;
     let (Some(1), Some(service), Some(instance), Some(generation), Some(schema), Some(created_at)) =
         (singleton, service, instance, generation, schema, created_at)
     else {
@@ -666,22 +669,24 @@ fn verify_database_metadata(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn verify_integrity(connection: &Connection) -> Result<(), ServiceSqliteError> {
-    let mut statement = connection
-        .prepare("PRAGMA integrity_check(1)")
+async fn verify_integrity(connection: &mut SqliteConnection) -> Result<(), ServiceSqliteError> {
+    let rows = sqlx::query("PRAGMA integrity_check(1)")
+        .fetch_all(&mut *connection)
+        .await
         .map_err(integrity_source)?;
-    let mut rows = statement.query([]).map_err(integrity_source)?;
     let row = rows
-        .next()
-        .map_err(integrity_source)?
+        .first()
         .ok_or_else(|| integrity_error(IntegrityFailureKind::Sqlite))?;
-    let projection =
-        verification_integrity_value_projection(row.get_ref(0).map_err(integrity_source)?);
-    let has_extra = rows.next().map_err(integrity_source)?.is_some();
-    require_verification_integrity_projection(projection, has_extra)?;
-    let violation = connection
-        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
-        .optional()
+    let value = row.try_get::<&str, _>(0).map_err(integrity_source)?;
+    let projection = verification_integrity_value_projection(
+        Some("text"),
+        i64::try_from(value.len()).ok(),
+        Some(value.as_bytes()),
+    );
+    require_verification_integrity_projection(projection, rows.len() > 1)?;
+    let violation = sqlx::query_scalar::<_, i64>("SELECT 1 FROM pragma_foreign_key_check LIMIT 1")
+        .fetch_optional(connection)
+        .await
         .map_err(integrity_source)?;
     require_integrity_condition(violation.is_none(), IntegrityFailureKind::ForeignKeys)?;
     Ok(())
@@ -696,12 +701,18 @@ fn require_verification_metadata_projection(matches: [bool; 9]) -> Result<(), Se
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn verification_integrity_value_projection(value: ValueRef<'_>) -> [bool; 4] {
+fn verification_integrity_value_projection(
+    value_type: Option<&str>,
+    byte_length: Option<i64>,
+    value: Option<&[u8]>,
+) -> [bool; 4] {
     [
-        matches!(value, ValueRef::Text(_)),
-        matches!(value, ValueRef::Text(bytes) if !bytes.is_empty()),
-        matches!(value, ValueRef::Text(bytes) if bytes.len() <= MAX_INTEGRITY_RESULT_UTF8_BYTES),
-        matches!(value, ValueRef::Text(b"ok")),
+        value_type == Some("text"),
+        byte_length.is_some_and(|length| length > 0),
+        byte_length.is_some_and(|length| {
+            usize::try_from(length).is_ok_and(|length| length <= MAX_INTEGRITY_RESULT_UTF8_BYTES)
+        }),
+        value == Some(b"ok"),
     ]
 }
 
@@ -858,7 +869,7 @@ fn require_integrity_condition(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn integrity_source(source: rusqlite::Error) -> ServiceSqliteError {
+fn integrity_source(source: sqlx::Error) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Integrity, source)
 }
 
@@ -868,7 +879,7 @@ fn metadata_error() -> ServiceSqliteError {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn metadata_source(source: rusqlite::Error) -> ServiceSqliteError {
+fn metadata_source(source: sqlx::Error) -> ServiceSqliteError {
     ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
 }
 
@@ -882,12 +893,23 @@ mod tests {
             RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver, RadrootsPlatform,
             RuntimeContext, RuntimeContextBootstrap, RuntimeContextSource,
         },
-        rusqlite::params,
         std::{
             collections::BTreeSet, fs, io::Write, os::unix::fs::PermissionsExt, path::Path,
             process::Command,
         },
     };
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn open_test_database(path: &Path) -> SqliteConnection {
+        futures::executor::block_on(SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .foreign_keys(false)
+                .disable_statement_logging(),
+        ))
+        .expect("database")
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
@@ -924,24 +946,27 @@ mod tests {
 
         assert!(
             require_verification_integrity_projection(
-                verification_integrity_value_projection(ValueRef::Text(b"ok")),
+                verification_integrity_value_projection(Some("text"), Some(2), Some(b"ok")),
                 false,
             )
             .is_ok()
         );
-        for (value, extra) in [
-            (ValueRef::Null, false),
-            (ValueRef::Text(b""), false),
+        let oversized = [b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1];
+        for (value_type, byte_length, value, extra) in [
+            (None, None, None, false),
+            (Some("text"), Some(0), Some(b"".as_slice()), false),
             (
-                ValueRef::Text(&[b'x'; MAX_INTEGRITY_RESULT_UTF8_BYTES + 1]),
+                Some("text"),
+                i64::try_from(oversized.len()).ok(),
+                Some(oversized.as_slice()),
                 false,
             ),
-            (ValueRef::Text(b"not ok"), false),
-            (ValueRef::Text(b"ok"), true),
+            (Some("text"), Some(6), Some(b"not ok".as_slice()), false),
+            (Some("text"), Some(2), Some(b"ok".as_slice()), true),
         ] {
             assert!(
                 require_verification_integrity_projection(
-                    verification_integrity_value_projection(value),
+                    verification_integrity_value_projection(value_type, byte_length, value),
                     extra,
                 )
                 .is_err()
@@ -1120,9 +1145,9 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn create_database(path: &Path, metadata: &ServiceDatabaseMetadata) {
-        let connection = Connection::open(path).expect("database");
-        connection
-            .execute_batch(
+        let mut connection = open_test_database(path);
+        futures::executor::block_on(async {
+            sqlx::raw_sql(
                 "CREATE TABLE radroots_service_metadata (
                     singleton INTEGER PRIMARY KEY,
                     service_id TEXT NOT NULL,
@@ -1134,26 +1159,33 @@ mod tests {
                  CREATE TABLE verify_probe (value INTEGER NOT NULL);
                  INSERT INTO verify_probe (value) VALUES (41), (42);",
             )
+            .execute(&mut connection)
+            .await
             .expect("schema");
-        connection
-            .execute(
+            sqlx::query(
                 "INSERT INTO radroots_service_metadata (
                     singleton, service_id, instance_id, source_generation,
                     state_schema_version, created_at_unix_ms
-                 ) VALUES (1, ?1, ?2, ?3, ?4, ?5)",
-                params![
-                    metadata.service().as_str(),
-                    metadata.instance().as_str(),
-                    metadata.source_generation().as_bytes().as_slice(),
-                    i64::from(metadata.state_schema_version().get()),
-                    i64::try_from(metadata.created_at_unix_ms()).expect("creation time"),
-                ],
+                 ) VALUES (1, ?, ?, ?, ?, ?)",
             )
+            .bind(metadata.service().as_str())
+            .bind(metadata.instance().as_str())
+            .bind(metadata.source_generation().as_bytes().as_slice())
+            .bind(i64::from(metadata.state_schema_version().get()))
+            .bind(i64::try_from(metadata.created_at_unix_ms()).expect("creation time"))
+            .execute(&mut connection)
+            .await
             .expect("metadata row");
-        connection
-            .pragma_update(None, "application_id", metadata.application_id().get())
-            .expect("application ID");
-        connection.close().expect("close fixture");
+            let application_id = format!(
+                "PRAGMA application_id = {}",
+                metadata.application_id().get()
+            );
+            sqlx::query(sqlx::AssertSqlSafe(application_id.as_str()))
+                .execute(&mut connection)
+                .await
+                .expect("application ID");
+            connection.close().await.expect("close fixture");
+        });
         fs::set_permissions(path, fs::Permissions::from_mode(0o600)).expect("state mode");
     }
 
@@ -1520,14 +1552,15 @@ mod tests {
         let state = metadata_fixture
             .bundle
             .join(crate::BACKUP_STATE_MEMBER_NAME);
-        let connection = Connection::open(&state).expect("database");
-        connection
-            .execute(
-                "UPDATE radroots_service_metadata SET service_id = ?1",
-                ["x".repeat(129)],
-            )
-            .expect("oversized metadata");
-        connection.close().expect("close");
+        let mut connection = open_test_database(&state);
+        futures::executor::block_on(async {
+            sqlx::query("UPDATE radroots_service_metadata SET service_id = ?")
+                .bind("x".repeat(129))
+                .execute(&mut connection)
+                .await
+                .expect("oversized metadata");
+            connection.close().await.expect("close");
+        });
         metadata_fixture.refresh_manifest();
         assert_eq!(
             metadata_fixture
@@ -1539,10 +1572,10 @@ mod tests {
 
         let mut view_fixture = Fixture::new("metadata-view");
         let state = view_fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME);
-        let connection = Connection::open(&state).expect("database");
+        let mut connection = open_test_database(&state);
         let generation = "09".repeat(32);
-        connection
-            .execute_batch(&format!(
+        futures::executor::block_on(async {
+            let statement = format!(
                 "DROP TABLE radroots_service_metadata;
                  CREATE VIEW radroots_service_metadata AS
                  SELECT
@@ -1552,9 +1585,13 @@ mod tests {
                      X'{generation}' AS source_generation,
                      1 AS state_schema_version,
                      1700000000000 AS created_at_unix_ms;"
-            ))
-            .expect("metadata view");
-        connection.close().expect("close");
+            );
+            sqlx::raw_sql(sqlx::AssertSqlSafe(statement.as_str()))
+                .execute(&mut connection)
+                .await
+                .expect("metadata view");
+            connection.close().await.expect("close");
+        });
         view_fixture.refresh_manifest();
         assert_eq!(
             view_fixture.verify().expect_err("metadata view").kind(),
@@ -1565,9 +1602,9 @@ mod tests {
         let state = foreign_key_fixture
             .bundle
             .join(crate::BACKUP_STATE_MEMBER_NAME);
-        let connection = Connection::open(&state).expect("database");
-        connection
-            .execute_batch(
+        let mut connection = open_test_database(&state);
+        futures::executor::block_on(async {
+            sqlx::raw_sql(
                 "PRAGMA foreign_keys = OFF;
                  CREATE TABLE parent (id INTEGER PRIMARY KEY);
                  CREATE TABLE child (
@@ -1576,8 +1613,11 @@ mod tests {
                  );
                  INSERT INTO child (id, parent_id) VALUES (1, 99);",
             )
+            .execute(&mut connection)
+            .await
             .expect("foreign-key violation");
-        connection.close().expect("close");
+            connection.close().await.expect("close");
+        });
         foreign_key_fixture.refresh_manifest();
         assert_eq!(
             foreign_key_fixture
@@ -1589,20 +1629,23 @@ mod tests {
 
         let mut corrupt_fixture = Fixture::new("corrupt-sqlite");
         let state = corrupt_fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME);
-        let connection = Connection::open(&state).expect("database");
-        let page_size: i64 = connection
-            .pragma_query_value(None, "page_size", |row| row.get(0))
-            .expect("page size");
-        let page_size = u64::try_from(page_size).expect("positive page size");
-        let root_page: i64 = connection
-            .query_row(
+        let mut connection = open_test_database(&state);
+        let (page_size, root_page) = futures::executor::block_on(async {
+            let page_size = sqlx::query_scalar::<_, i64>("PRAGMA page_size")
+                .fetch_one(&mut connection)
+                .await
+                .expect("page size");
+            let root_page = sqlx::query_scalar::<_, i64>(
                 "SELECT rootpage FROM sqlite_schema WHERE name = 'verify_probe'",
-                [],
-                |row| row.get(0),
             )
+            .fetch_one(&mut connection)
+            .await
             .expect("probe root page");
+            connection.close().await.expect("close");
+            (page_size, root_page)
+        });
+        let page_size = u64::try_from(page_size).expect("positive page size");
         let root_page = u64::try_from(root_page).expect("positive root page");
-        connection.close().expect("close");
         let corrupt_offset = root_page
             .checked_sub(1)
             .and_then(|page| page.checked_mul(page_size))
@@ -1630,47 +1673,66 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn sqlite_connection_policy_drift_fails_closed() {
-        let connection = Connection::open_in_memory().expect("memory database");
-        apply_connection_policy(&connection).expect("governed policy");
-        verify_connection_policy(&connection).expect("policy readback");
+        futures::executor::block_on(async {
+            let mut connection = SqliteConnection::connect("sqlite::memory:")
+                .await
+                .expect("memory database");
+            apply_connection_policy(&mut connection)
+                .await
+                .expect("governed policy");
+            verify_connection_policy(&mut connection)
+                .await
+                .expect("policy readback");
 
-        connection
-            .pragma_update(None, "trusted_schema", true)
-            .expect("drift trusted schema");
-        assert_eq!(
-            verify_connection_policy(&connection)
-                .expect_err("trusted-schema drift")
-                .kind(),
-            ServiceSqliteErrorKind::Integrity
-        );
+            sqlx::query("PRAGMA trusted_schema = ON")
+                .execute(&mut connection)
+                .await
+                .expect("drift trusted schema");
+            assert_eq!(
+                verify_connection_policy(&mut connection)
+                    .await
+                    .expect_err("trusted-schema drift")
+                    .kind(),
+                ServiceSqliteErrorKind::Integrity
+            );
 
-        connection
-            .pragma_update(None, "trusted_schema", false)
-            .expect("restore trusted schema");
-        connection
-            .pragma_update(None, "query_only", false)
-            .expect("drift query-only");
-        assert_eq!(
-            verify_connection_policy(&connection)
-                .expect_err("query-only drift")
-                .kind(),
-            ServiceSqliteErrorKind::Integrity
-        );
+            sqlx::query("PRAGMA trusted_schema = OFF")
+                .execute(&mut connection)
+                .await
+                .expect("restore trusted schema");
+            sqlx::query("PRAGMA query_only = OFF")
+                .execute(&mut connection)
+                .await
+                .expect("drift query-only");
+            assert_eq!(
+                verify_connection_policy(&mut connection)
+                    .await
+                    .expect_err("query-only drift")
+                    .kind(),
+                ServiceSqliteErrorKind::Integrity
+            );
+        });
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn attached_database_and_replaced_bindings_fail_closed() {
-        let connection = Connection::open_in_memory().expect("memory database");
-        connection
-            .execute("ATTACH DATABASE ':memory:' AS extra", [])
-            .expect("attach");
-        assert_eq!(
-            verify_database_inventory(&connection)
-                .expect_err("extra attachment")
-                .kind(),
-            ServiceSqliteErrorKind::Integrity
-        );
+        futures::executor::block_on(async {
+            let mut connection = SqliteConnection::connect("sqlite::memory:")
+                .await
+                .expect("memory database");
+            sqlx::query("ATTACH DATABASE ':memory:' AS extra")
+                .execute(&mut connection)
+                .await
+                .expect("attach");
+            assert_eq!(
+                verify_database_inventory(&mut connection)
+                    .await
+                    .expect_err("extra attachment")
+                    .kind(),
+                ServiceSqliteErrorKind::Integrity
+            );
+        });
 
         let fixture = Fixture::new("replace-directory");
         let binding = VerifiedBundleBinding::open(
@@ -1694,17 +1756,34 @@ mod tests {
         )
         .expect("replacement state mode");
 
-        let retained_connection =
-            open_sqlite_from_retained_state(&binding).expect("open retained member");
-        apply_connection_policy(&retained_connection).expect("retained connection policy");
-        verify_database_inventory(&retained_connection).expect("retained database inventory");
-        assert_eq!(
-            verify_database_metadata(&retained_connection, &fixture.manifest, &fixture.identity,)
+        futures::executor::block_on(async {
+            let mut retained_connection = open_sqlite_from_retained_state(&binding)
+                .await
+                .expect("open retained member");
+            apply_connection_policy(&mut retained_connection)
+                .await
+                .expect("retained connection policy");
+            verify_database_inventory(&mut retained_connection)
+                .await
+                .expect("retained database inventory");
+            assert_eq!(
+                verify_database_metadata(
+                    &mut retained_connection,
+                    &fixture.manifest,
+                    &fixture.identity,
+                )
+                .await
                 .expect("retained metadata"),
-            fixture.metadata
-        );
-        verify_integrity(&retained_connection).expect("retained integrity");
-        retained_connection.close().expect("close retained member");
+                fixture.metadata
+            );
+            verify_integrity(&mut retained_connection)
+                .await
+                .expect("retained integrity");
+            retained_connection
+                .close()
+                .await
+                .expect("close retained member");
+        });
 
         assert_eq!(
             binding

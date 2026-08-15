@@ -317,10 +317,6 @@ impl BackupSourceValidator {
             .validate_for(&self.paths)?;
         self.binding.validate(&self.paths)
     }
-
-    pub(crate) fn database_path(&self) -> &Path {
-        self.paths.state_database()
-    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]

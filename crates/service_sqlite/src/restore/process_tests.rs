@@ -80,14 +80,23 @@ impl Fixture {
             .release()
             .expect("release initialization authority");
         {
-            let connection = rusqlite::Connection::open(paths.state_database())
-                .expect("open live database for WAL posture");
-            connection
-                .pragma_update(None, "journal_mode", "WAL")
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &SqliteConnectOptions::new()
+                    .filename(paths.state_database())
+                    .create_if_missing(false)
+                    .disable_statement_logging(),
+            )
+            .await
+            .expect("open live database for WAL posture");
+            sqlx::query("PRAGMA journal_mode = WAL")
+                .execute(&mut connection)
+                .await
                 .expect("set WAL posture");
-            connection
-                .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                .execute(&mut connection)
+                .await
                 .expect("checkpoint WAL posture");
+            connection.close().await.expect("close live database");
         }
 
         let bundle = root.path().join(BUNDLE_DIRECTORY_NAME);
@@ -99,13 +108,24 @@ impl Fixture {
         fs::set_permissions(&member, fs::Permissions::from_mode(0o600))
             .expect("restrict process member");
         {
-            let connection = rusqlite::Connection::open(&member).expect("open process member");
-            connection
-                .pragma_update(None, "user_version", REPLACEMENT_USER_VERSION)
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &SqliteConnectOptions::new()
+                    .filename(&member)
+                    .create_if_missing(false)
+                    .disable_statement_logging(),
+            )
+            .await
+            .expect("open process member");
+            let user_version = format!("PRAGMA user_version = {REPLACEMENT_USER_VERSION}");
+            sqlx::query(sqlx::AssertSqlSafe(user_version.as_str()))
+                .execute(&mut connection)
+                .await
                 .expect("set replacement probe");
-            connection
-                .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                .execute(&mut connection)
+                .await
                 .expect("checkpoint replacement probe");
+            connection.close().await.expect("close process member");
         }
         let bytes = fs::read(&member).expect("read process member");
         let manifest = ServiceBackupManifest::from_capture(
@@ -264,7 +284,10 @@ async fn run_parent_scenario(scenario: Scenario) {
         assert_eq!(outcome.applied_count(), 0);
         host.close().await.expect("close recovered host");
         assert_no_recovery_evidence(&fixture.paths);
-        assert_eq!(database_user_version(&fixture.paths), expected_user_version);
+        assert_eq!(
+            database_user_version(&fixture.paths).await,
+            expected_user_version
+        );
         assert_live_permissions(&fixture.paths);
     } else {
         let staged = recovery_path(&fixture.paths, STAGED_FILE_NAME);
@@ -461,15 +484,22 @@ fn assert_no_recovery_evidence(paths: &ServiceSqlitePaths) {
     }
 }
 
-fn database_user_version(paths: &ServiceSqlitePaths) -> i64 {
-    let connection = rusqlite::Connection::open_with_flags(
-        paths.state_database(),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+async fn database_user_version(paths: &ServiceSqlitePaths) -> i64 {
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(paths.state_database())
+            .read_only(true)
+            .create_if_missing(false)
+            .disable_statement_logging(),
     )
+    .await
     .expect("open recovered database");
-    connection
-        .pragma_query_value(None, "user_version", |row| row.get(0))
-        .expect("read recovery probe")
+    let version = sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+        .fetch_one(&mut connection)
+        .await
+        .expect("read recovery probe");
+    connection.close().await.expect("close recovered database");
+    version
 }
 
 #[derive(Debug, PartialEq, Eq)]

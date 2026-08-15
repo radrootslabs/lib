@@ -1618,14 +1618,23 @@ mod tests {
                 .release()
                 .expect("release initialization authority");
             {
-                let connection = rusqlite::Connection::open(paths.state_database())
-                    .expect("open live database for WAL posture");
-                connection
-                    .pragma_update(None, "journal_mode", "WAL")
+                let mut connection = SqliteConnection::connect_with(
+                    &SqliteConnectOptions::new()
+                        .filename(paths.state_database())
+                        .create_if_missing(false)
+                        .disable_statement_logging(),
+                )
+                .await
+                .expect("open live database for WAL posture");
+                sqlx::query("PRAGMA journal_mode = WAL")
+                    .execute(&mut connection)
+                    .await
                     .expect("set WAL posture");
-                connection
-                    .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+                sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                    .execute(&mut connection)
+                    .await
                     .expect("checkpoint WAL posture");
+                connection.close().await.expect("close live database");
             }
 
             let bundle = root.path().join("verified-bundle");
@@ -2428,13 +2437,19 @@ mod tests {
     async fn schema_catalog_and_migration_ledger_drift_are_rejected() {
         let mut schema_drift = Fixture::new().await;
         {
-            let connection = rusqlite::Connection::open(
-                schema_drift.bundle.join(crate::BACKUP_STATE_MEMBER_NAME),
+            let mut connection = SqliteConnection::connect_with(
+                &SqliteConnectOptions::new()
+                    .filename(schema_drift.bundle.join(crate::BACKUP_STATE_MEMBER_NAME))
+                    .create_if_missing(false)
+                    .disable_statement_logging(),
             )
+            .await
             .expect("open bundle");
-            connection
-                .execute("CREATE TABLE unexpected (id INTEGER PRIMARY KEY)", [])
+            sqlx::query("CREATE TABLE unexpected (id INTEGER PRIMARY KEY)")
+                .execute(&mut connection)
+                .await
                 .expect("add unexpected table");
+            connection.close().await.expect("close bundle");
         }
         schema_drift.refresh_manifest();
         let error = stage_verified_restore(
@@ -2451,13 +2466,16 @@ mod tests {
 
         let mut ledger_drift = Fixture::new().await;
         {
-            let connection = rusqlite::Connection::open(
-                ledger_drift.bundle.join(crate::BACKUP_STATE_MEMBER_NAME),
+            let mut connection = SqliteConnection::connect_with(
+                &SqliteConnectOptions::new()
+                    .filename(ledger_drift.bundle.join(crate::BACKUP_STATE_MEMBER_NAME))
+                    .create_if_missing(false)
+                    .disable_statement_logging(),
             )
+            .await
             .expect("open bundle");
-            connection
-                .execute(
-                    "INSERT INTO schema_migrations (
+            sqlx::query(
+                "INSERT INTO schema_migrations (
                         version, name, checksum, applied_at_unix_s,
                         service_version, service_commit, lib_revision, rust_version,
                         target, feature_profile, config_contract_version,
@@ -2469,9 +2487,11 @@ mod tests {
                         '89abcdef0123456789abcdef0123456789abcdef', '1.97.1',
                         'x86_64-unknown-linux-gnu', 'test', 1, 1, 1, 1, 1
                      )",
-                    [],
-                )
-                .expect("insert ledger drift");
+            )
+            .execute(&mut connection)
+            .await
+            .expect("insert ledger drift");
+            connection.close().await.expect("close bundle");
         }
         ledger_drift.refresh_manifest();
         let error = stage_verified_restore(

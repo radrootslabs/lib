@@ -2064,19 +2064,19 @@ mod tests {
             vec![std::ffi::OsString::from("state.sqlite")]
         );
 
-        let backup = rusqlite::Connection::open_with_flags(
-            &state,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NOFOLLOW,
+        let mut backup = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new().filename(&state).read_only(true),
         )
+        .await
         .expect("open captured database");
         assert_eq!(
-            backup
-                .query_row("SELECT COUNT(*) FROM host_probe", [], |row| row
-                    .get::<_, i64>(0))
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_probe")
+                .fetch_one(&mut backup)
+                .await
                 .expect("captured row count"),
             2
         );
-        backup.close().expect("close captured database");
+        backup.close().await.expect("close captured database");
 
         assert_eq!(
             fs::read(paths.state_database()).expect("source bytes after capture"),
@@ -2352,30 +2352,30 @@ mod tests {
             .expect("capture remains consistent");
         crate::backup::test_capture_reset();
 
-        let backup = rusqlite::Connection::open_with_flags(
-            stage.join("state.sqlite"),
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NOFOLLOW,
+        let mut backup = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(stage.join("state.sqlite"))
+                .read_only(true),
         )
+        .await
         .expect("open backup");
-        let updated: i64 = backup
-            .query_row(
-                "SELECT COUNT(*) FROM host_probe WHERE value = 1",
-                [],
-                |row| row.get(0),
-            )
-            .expect("count transaction projection");
+        let updated =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_probe WHERE value = 1")
+                .fetch_one(&mut backup)
+                .await
+                .expect("count transaction projection");
         assert!(
             updated == 0 || updated == 2,
             "backup must not tear a transaction"
         );
         assert_eq!(
-            backup
-                .query_row("PRAGMA integrity_check(1)", [], |row| row
-                    .get::<_, String>(0))
+            sqlx::query_scalar::<_, String>("PRAGMA integrity_check(1)")
+                .fetch_one(&mut backup)
+                .await
                 .expect("backup integrity"),
             "ok"
         );
-        backup.close().expect("close backup");
+        backup.close().await.expect("close backup");
         host.close().await.expect("close writer host");
     }
 
