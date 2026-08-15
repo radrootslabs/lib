@@ -6,9 +6,9 @@ read-only database lifecycle, and deterministic forward, reverse, feature, and
 country queries through provider-owned types.
 
 The crate does not choose cache or runtime paths, download during construction,
-create an executor, spawn a worker, install a timer, expose SQLite or HTTP
-client types, or define a generic geocoder SPI. Publication remains disabled
-during the `0.1.0-alpha` refactor.
+create an async runtime, spawn a crate-owned task, install a timer, expose
+SQLite or HTTP client types, or define a generic geocoder SPI. Publication
+remains disabled during the `0.1.0-alpha` refactor.
 
 The authoritative package charter is the
 [`radroots_geonames` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
@@ -64,7 +64,10 @@ an interruption before it leaves the existing destination unchanged.
 [`Geocoder::open`] accepts only an explicit regular file matching its
 [`AssetSpec`]. It opens SQLite read-only and query-only, runs an integrity
 check, and validates the required `geonames` and `coordinates` table columns.
-Use [`Geocoder::close`] when an explicit terminal close result is required.
+Opening, querying, and closing are caller-driven async operations. The caller
+provides the async runtime; this crate does not create one or spawn crate-owned
+tasks. Use [`Geocoder::close`] when an explicit terminal close result is
+required.
 
 [`Geocoder::query`] supports:
 
@@ -82,7 +85,7 @@ read through accessors.
 ## Errors, serialization, and side effects
 
 [`Error`] exposes stable package-owned categories without paths, SQL, hashes,
-URLs, credentials, Rusqlite errors, or fetch-client errors. Host diagnostics
+URLs, credentials, SQLx errors, or fetch-client errors. Host diagnostics
 should add their own path and transport context only at an access-controlled
 application boundary.
 

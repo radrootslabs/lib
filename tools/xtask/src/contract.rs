@@ -4162,8 +4162,7 @@ fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String>
     const FORBIDDEN_HIGH_LEVEL_DEPENDENCIES: [&str; 6] = [
         "diesel", "refinery", "rusqlite", "sea-orm", "sqlite", "sqlite3",
     ];
-    const TEMPORARY_DIRECT_DEPENDENCIES: [&str; 2] =
-        ["radroots_geonames:rusqlite", "workspace:rusqlite"];
+    const TEMPORARY_DIRECT_DEPENDENCIES: [&str; 0] = [];
 
     let contract = parse_toml::<SqliteRuntimeContract>(
         &workspace_root.join(SQLITE_RUNTIME_CONTRACT_RELATIVE),

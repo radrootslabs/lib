@@ -76,6 +76,9 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "Geocoder::open",
         "Geocoder::query",
         "Geocoder::close",
+        "pub async fn radroots_geonames::database::Geocoder::close",
+        "pub async fn radroots_geonames::database::Geocoder::open",
+        "pub async fn radroots_geonames::database::Geocoder::query",
     ] {
         assert!(
             PUBLIC_API.contains(required),
@@ -111,8 +114,12 @@ fn provider_source_has_no_hidden_runtime_path_or_download_implementation() {
     for forbidden in [
         "radroots_runtime_paths",
         "reqwest::",
-        "tokio::",
-        "sqlx::",
+        "tokio::runtime",
+        "Runtime::new",
+        "Builder::new_",
+        "tokio::spawn",
+        "spawn_blocking",
+        "pub use sqlx",
         "std::env::",
         "directories::",
         "test-fixture-geonames-asset",
@@ -121,6 +128,25 @@ fn provider_source_has_no_hidden_runtime_path_or_download_implementation() {
             !source.contains(forbidden),
             "provider source contains `{forbidden}`"
         );
+    }
+    for required in [
+        "use sqlx::{",
+        "use tokio::sync::Mutex;",
+        "pub async fn open",
+        "pub async fn query",
+        "pub async fn close",
+    ] {
+        assert!(
+            source.contains(required),
+            "provider source is missing `{required}`"
+        );
+    }
+    for required in [
+        "caller-driven async operations",
+        "provides the async runtime",
+        "does not create one or spawn crate-owned",
+    ] {
+        assert!(README.contains(required), "README is missing `{required}`");
     }
 }
 

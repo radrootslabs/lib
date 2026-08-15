@@ -23,9 +23,11 @@ pub fn radroots_geonames::asset::official_asset_spec() -> radroots_geonames::ass
 pub mod radroots_geonames::database
 pub struct radroots_geonames::database::Geocoder
 impl radroots_geonames::database::Geocoder
-pub fn radroots_geonames::database::Geocoder::close(self) -> core::result::Result<(), radroots_geonames::Error>
-pub fn radroots_geonames::database::Geocoder::open(impl core::convert::AsRef<std::path::Path>, &radroots_geonames::asset::AssetSpec) -> core::result::Result<Self, radroots_geonames::Error>
-pub fn radroots_geonames::database::Geocoder::query(&self, &radroots_geonames::query::Query) -> core::result::Result<radroots_geonames::query::QueryResult, radroots_geonames::Error>
+pub async fn radroots_geonames::database::Geocoder::close(self) -> core::result::Result<(), radroots_geonames::Error>
+pub async fn radroots_geonames::database::Geocoder::open(impl core::convert::AsRef<std::path::Path>, &radroots_geonames::asset::AssetSpec) -> core::result::Result<Self, radroots_geonames::Error>
+pub async fn radroots_geonames::database::Geocoder::query(&self, &radroots_geonames::query::Query) -> core::result::Result<radroots_geonames::query::QueryResult, radroots_geonames::Error>
+impl core::fmt::Debug for radroots_geonames::database::Geocoder
+pub fn radroots_geonames::database::Geocoder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_geonames::download
 #[non_exhaustive] pub enum radroots_geonames::download::FetchFailurePhase
 pub radroots_geonames::download::FetchFailurePhase::Cancelled
@@ -136,9 +138,11 @@ pub fn radroots_geonames::model::Candidate::name(&self) -> &str
 pub const fn radroots_geonames::model::Candidate::point(&self) -> radroots_geonames::model::Point
 pub struct radroots_geonames::Geocoder
 impl radroots_geonames::database::Geocoder
-pub fn radroots_geonames::database::Geocoder::close(self) -> core::result::Result<(), radroots_geonames::Error>
-pub fn radroots_geonames::database::Geocoder::open(impl core::convert::AsRef<std::path::Path>, &radroots_geonames::asset::AssetSpec) -> core::result::Result<Self, radroots_geonames::Error>
-pub fn radroots_geonames::database::Geocoder::query(&self, &radroots_geonames::query::Query) -> core::result::Result<radroots_geonames::query::QueryResult, radroots_geonames::Error>
+pub async fn radroots_geonames::database::Geocoder::close(self) -> core::result::Result<(), radroots_geonames::Error>
+pub async fn radroots_geonames::database::Geocoder::open(impl core::convert::AsRef<std::path::Path>, &radroots_geonames::asset::AssetSpec) -> core::result::Result<Self, radroots_geonames::Error>
+pub async fn radroots_geonames::database::Geocoder::query(&self, &radroots_geonames::query::Query) -> core::result::Result<radroots_geonames::query::QueryResult, radroots_geonames::Error>
+impl core::fmt::Debug for radroots_geonames::database::Geocoder
+pub fn radroots_geonames::database::Geocoder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_geonames::Point
 impl radroots_geonames::model::Point
 pub const fn radroots_geonames::model::Point::latitude(self) -> f64

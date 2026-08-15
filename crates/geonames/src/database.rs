@@ -1,11 +1,16 @@
 //! Explicit GeoNames database lifecycle.
 
 use std::collections::BTreeSet;
+use std::fmt;
 use std::path::Path;
-use std::sync::Mutex;
 use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags, Row, params};
+use futures::TryStreamExt;
+use sqlx::{
+    ConnectOptions, Connection as _, Row, SqliteConnection,
+    sqlite::{SqliteConnectOptions, SqliteRow},
+};
+use tokio::sync::Mutex;
 
 use crate::asset::verify_file;
 use crate::model::Country;
@@ -27,15 +32,20 @@ const REQUIRED_COORDINATE_COLUMNS: &[&str] = &["feature_id", "latitude", "longit
 /// An opened, verified GeoNames database.
 ///
 /// The connection is read-only and serialized by this type. It owns no path
-/// policy, migration authority, runtime, download, or background worker.
-#[derive(Debug)]
+/// policy, migration authority, runtime, download, or background task.
 pub struct Geocoder {
-    connection: Mutex<Connection>,
+    connection: Mutex<SqliteConnection>,
+}
+
+impl fmt::Debug for Geocoder {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("Geocoder").finish_non_exhaustive()
+    }
 }
 
 impl Geocoder {
     /// Opens an explicitly selected asset after complete identity and schema checks.
-    pub fn open(path: impl AsRef<Path>, spec: &AssetSpec) -> Result<Self, Error> {
+    pub async fn open(path: impl AsRef<Path>, spec: &AssetSpec) -> Result<Self, Error> {
         let path = path.as_ref();
         let metadata = path
             .symlink_metadata()
@@ -45,87 +55,90 @@ impl Geocoder {
         }
         verify_file(path, spec)?;
 
-        let connection = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|_| Error::InvalidDatabase)?;
-        configure_connection(&connection)?;
-        validate_integrity(&connection)?;
-        validate_schema(&connection)?;
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .create_if_missing(false)
+            .immutable(true)
+            .busy_timeout(Duration::from_secs(5))
+            .disable_statement_logging();
+        let mut connection = SqliteConnection::connect_with(&options)
+            .await
+            .map_err(|_| Error::InvalidDatabase)?;
+        let validation = async {
+            configure_connection(&mut connection).await?;
+            validate_integrity(&mut connection).await?;
+            validate_schema(&mut connection).await
+        }
+        .await;
+        if let Err(error) = validation {
+            let _ = connection.close().await;
+            return Err(error);
+        }
         Ok(Self {
             connection: Mutex::new(connection),
         })
     }
 
     /// Closes the database and reports a terminal SQLite close failure.
-    pub fn close(self) -> Result<(), Error> {
-        let connection = self
-            .connection
-            .into_inner()
-            .map_err(|_| Error::DatabaseConnectionUnavailable)?;
+    pub async fn close(self) -> Result<(), Error> {
+        let connection = self.connection.into_inner();
         connection
             .close()
+            .await
             .map_err(|_| Error::DatabaseOperationFailed { operation: "close" })
     }
 
     /// Executes one validated query with deterministic provider ordering.
-    pub fn query(&self, query: &Query) -> Result<QueryResult, Error> {
-        self.with_connection("query", |connection| match &query.kind {
+    pub async fn query(&self, query: &Query) -> Result<QueryResult, Error> {
+        let mut connection = self.connection.lock().await;
+        match &query.kind {
             QueryKind::Locality {
                 locality,
                 region,
                 country,
-            } => query_locality(
-                connection,
-                locality,
-                region.as_deref(),
-                country.as_deref(),
-                query.limit(),
-            ),
+            } => {
+                query_locality(
+                    &mut connection,
+                    locality,
+                    region.as_deref(),
+                    country.as_deref(),
+                    query.limit(),
+                )
+                .await
+            }
             QueryKind::Freeform(query_text) => {
                 let parsed = parse_freeform_query(query_text);
                 query_locality(
-                    connection,
+                    &mut connection,
                     &parsed.locality,
                     parsed.region.as_deref(),
                     parsed.country.as_deref(),
                     query.limit(),
                 )
+                .await
             }
-            QueryKind::FeatureId(feature_id) => query_feature(connection, *feature_id),
+            QueryKind::FeatureId(feature_id) => query_feature(&mut connection, *feature_id).await,
             QueryKind::Reverse {
                 point,
                 radius_degrees,
-            } => query_reverse(connection, *point, *radius_degrees, query.limit()),
-            QueryKind::Countries => query_countries(connection, query.limit()),
-        })
-    }
-
-    fn with_connection<T>(
-        &self,
-        operation: &'static str,
-        use_connection: impl FnOnce(&Connection) -> rusqlite::Result<T>,
-    ) -> Result<T, Error> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| Error::DatabaseConnectionUnavailable)?;
-        use_connection(&connection).map_err(|_| Error::DatabaseOperationFailed { operation })
+            } => query_reverse(&mut connection, *point, *radius_degrees, query.limit()).await,
+            QueryKind::Countries => query_countries(&mut connection, query.limit()).await,
+        }
     }
 }
 
-fn query_locality(
-    connection: &Connection,
+async fn query_locality(
+    connection: &mut SqliteConnection,
     locality: &str,
     region: Option<&str>,
     country: Option<&str>,
     limit: usize,
-) -> rusqlite::Result<QueryResult> {
+) -> Result<QueryResult, Error> {
     let locality = normalize_name(locality);
     let country = country.map(normalize_name);
     let region = region.map(normalize_name);
-    let mut statement = connection.prepare(
+    let mut rows = sqlx::query(
         "
         SELECT id, name, CAST(admin1_id AS TEXT), admin1_name,
                country_id, country_name, latitude, longitude
@@ -146,26 +159,33 @@ fn query_locality(
                       THEN CAST(admin1_id AS TEXT) ELSE NULL END COLLATE BINARY,
                  id
         ",
-    )?;
-    let candidates = statement
-        .query_map([locality], map_candidate)?
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .filter(|candidate| {
-            country
+    )
+    .bind(locality)
+    .fetch(&mut *connection);
+    let mut candidates = Vec::with_capacity(limit);
+    while let Some(row) = rows.try_next().await.map_err(query_failed)? {
+        let candidate = map_candidate(&row)?;
+        if country
+            .as_deref()
+            .is_none_or(|value| country_matches(&candidate, value))
+            && region
                 .as_deref()
-                .is_none_or(|value| country_matches(candidate, value))
-                && region
-                    .as_deref()
-                    .is_none_or(|value| region_matches(candidate, value))
-        })
-        .take(limit)
-        .collect();
+                .is_none_or(|value| region_matches(&candidate, value))
+        {
+            candidates.push(candidate);
+            if candidates.len() == limit {
+                break;
+            }
+        }
+    }
     Ok(QueryResult::candidates(candidates))
 }
 
-fn query_feature(connection: &Connection, feature_id: i64) -> rusqlite::Result<QueryResult> {
-    let mut statement = connection.prepare(
+async fn query_feature(
+    connection: &mut SqliteConnection,
+    feature_id: i64,
+) -> Result<QueryResult, Error> {
+    let row = sqlx::query(
         "
         SELECT id, name, CAST(admin1_id AS TEXT), admin1_name,
                country_id, country_name, latitude, longitude
@@ -173,23 +193,30 @@ fn query_feature(connection: &Connection, feature_id: i64) -> rusqlite::Result<Q
         WHERE id = ?1
         LIMIT 1
         ",
-    )?;
-    let candidates = statement
-        .query_map([feature_id], map_candidate)?
-        .collect::<Result<Vec<_>, _>>()?;
+    )
+    .bind(feature_id)
+    .fetch_optional(connection)
+    .await
+    .map_err(query_failed)?;
+    let candidates = row
+        .as_ref()
+        .map(map_candidate)
+        .transpose()?
+        .into_iter()
+        .collect();
     Ok(QueryResult::candidates(candidates))
 }
 
-fn query_reverse(
-    connection: &Connection,
+async fn query_reverse(
+    connection: &mut SqliteConnection,
     point: Point,
     radius_degrees: f64,
     limit: usize,
-) -> rusqlite::Result<QueryResult> {
+) -> Result<QueryResult, Error> {
     let latitude = point.latitude();
     let longitude = point.longitude();
     let longitude_weight = latitude.to_radians().cos().powi(2);
-    let mut statement = connection.prepare(
+    let rows = sqlx::query(
         "
         SELECT g.id, g.name, CAST(g.admin1_id AS TEXT), g.admin1_name,
                g.country_id, g.country_name, g.latitude, g.longitude
@@ -218,19 +245,27 @@ fn query_reverse(
                  g.id
         LIMIT ?5
         ",
-    )?;
-    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    let candidates = statement
-        .query_map(
-            params![latitude, longitude, radius_degrees, longitude_weight, limit],
-            map_candidate,
-        )?
+    )
+    .bind(latitude)
+    .bind(longitude)
+    .bind(radius_degrees)
+    .bind(longitude_weight)
+    .bind(i64::try_from(limit).unwrap_or(i64::MAX))
+    .fetch_all(connection)
+    .await
+    .map_err(query_failed)?;
+    let candidates = rows
+        .iter()
+        .map(map_candidate)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(QueryResult::candidates(candidates))
 }
 
-fn query_countries(connection: &Connection, limit: usize) -> rusqlite::Result<QueryResult> {
-    let mut statement = connection.prepare(
+async fn query_countries(
+    connection: &mut SqliteConnection,
+    limit: usize,
+) -> Result<QueryResult, Error> {
+    let rows = sqlx::query(
         "
         SELECT country_id, country_name, AVG(latitude), AVG(longitude)
         FROM geonames
@@ -238,41 +273,48 @@ fn query_countries(connection: &Connection, limit: usize) -> rusqlite::Result<Qu
         ORDER BY lower(country_id), lower(coalesce(country_name, ''))
         LIMIT ?1
         ",
-    )?;
-    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    let countries = statement
-        .query_map([limit], map_country)?
+    )
+    .bind(i64::try_from(limit).unwrap_or(i64::MAX))
+    .fetch_all(connection)
+    .await
+    .map_err(query_failed)?;
+    let countries = rows
+        .iter()
+        .map(map_country)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(QueryResult::countries(countries))
 }
 
-fn map_candidate(row: &Row<'_>) -> rusqlite::Result<Candidate> {
-    let feature_id = row.get::<_, i64>(0)?;
-    let feature_id = u64::try_from(feature_id)
-        .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, feature_id))?;
-    let latitude = row.get::<_, f64>(6)?;
-    let longitude = row.get::<_, f64>(7)?;
-    let point = Point::new(latitude, longitude).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Real, Box::new(error))
-    })?;
+fn map_candidate(row: &SqliteRow) -> Result<Candidate, Error> {
+    let feature_id = row.try_get::<i64, _>(0).map_err(query_failed)?;
+    let feature_id = u64::try_from(feature_id).map_err(|_| query_failed(()))?;
+    let latitude = row.try_get::<f64, _>(6).map_err(query_failed)?;
+    let longitude = row.try_get::<f64, _>(7).map_err(query_failed)?;
+    let point = Point::new(latitude, longitude).map_err(|_| query_failed(()))?;
     Ok(Candidate::from_provider_row(
         feature_id,
-        row.get(1)?,
-        row.get(2)?,
-        row.get(3)?,
-        row.get(4)?,
-        row.get(5)?,
+        row.try_get(1).map_err(query_failed)?,
+        row.try_get(2).map_err(query_failed)?,
+        row.try_get(3).map_err(query_failed)?,
+        row.try_get(4).map_err(query_failed)?,
+        row.try_get(5).map_err(query_failed)?,
         point,
     ))
 }
 
-fn map_country(row: &Row<'_>) -> rusqlite::Result<Country> {
-    let latitude = row.get::<_, f64>(2)?;
-    let longitude = row.get::<_, f64>(3)?;
-    let point = Point::new(latitude, longitude).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Real, Box::new(error))
-    })?;
-    Ok(Country::from_provider_row(row.get(0)?, row.get(1)?, point))
+fn map_country(row: &SqliteRow) -> Result<Country, Error> {
+    let latitude = row.try_get::<f64, _>(2).map_err(query_failed)?;
+    let longitude = row.try_get::<f64, _>(3).map_err(query_failed)?;
+    let point = Point::new(latitude, longitude).map_err(|_| query_failed(()))?;
+    Ok(Country::from_provider_row(
+        row.try_get(0).map_err(query_failed)?,
+        row.try_get(1).map_err(query_failed)?,
+        point,
+    ))
+}
+
+fn query_failed<T>(_source: T) -> Error {
+    Error::DatabaseOperationFailed { operation: "query" }
 }
 
 struct ParsedQuery {
@@ -429,61 +471,67 @@ fn region_aliases(country_id: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
-fn configure_connection(connection: &Connection) -> Result<(), Error> {
-    connection
-        .busy_timeout(Duration::from_secs(5))
-        .and_then(|()| connection.pragma_update(None, "query_only", true))
-        .and_then(|()| connection.pragma_update(None, "trusted_schema", false))
-        .map_err(|_| Error::InvalidDatabase)
-}
-
-fn validate_integrity(connection: &Connection) -> Result<(), Error> {
-    let result = connection
-        .query_row("PRAGMA quick_check(1)", [], |row| row.get::<_, String>(0))
+async fn configure_connection(connection: &mut SqliteConnection) -> Result<(), Error> {
+    sqlx::query("PRAGMA query_only = ON")
+        .execute(&mut *connection)
+        .await
         .map_err(|_| Error::InvalidDatabase)?;
-    if result != "ok" {
+    sqlx::query("PRAGMA trusted_schema = OFF")
+        .execute(&mut *connection)
+        .await
+        .map_err(|_| Error::InvalidDatabase)?;
+    let query_only = sqlx::query_scalar::<_, i64>("PRAGMA query_only")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| Error::InvalidDatabase)?;
+    let trusted_schema = sqlx::query_scalar::<_, i64>("PRAGMA trusted_schema")
+        .fetch_one(connection)
+        .await
+        .map_err(|_| Error::InvalidDatabase)?;
+    if query_only != 1 || trusted_schema != 0 {
         return Err(Error::InvalidDatabase);
     }
     Ok(())
 }
 
-fn validate_schema(connection: &Connection) -> Result<(), Error> {
-    validate_table(
-        connection,
-        "geonames",
-        REQUIRED_GEONAMES_COLUMNS,
-        "PRAGMA table_info('geonames')",
-    )?;
-    validate_table(
-        connection,
-        "coordinates",
-        REQUIRED_COORDINATE_COLUMNS,
-        "PRAGMA table_info('coordinates')",
-    )
+async fn validate_integrity(connection: &mut SqliteConnection) -> Result<(), Error> {
+    let rows = sqlx::query_scalar::<_, String>("PRAGMA quick_check(1)")
+        .fetch_all(connection)
+        .await
+        .map_err(|_| Error::InvalidDatabase)?;
+    if rows.len() != 1 || rows[0] != "ok" {
+        return Err(Error::InvalidDatabase);
+    }
+    Ok(())
 }
 
-fn validate_table(
-    connection: &Connection,
+async fn validate_schema(connection: &mut SqliteConnection) -> Result<(), Error> {
+    validate_table(connection, "geonames", REQUIRED_GEONAMES_COLUMNS).await?;
+    validate_table(connection, "coordinates", REQUIRED_COORDINATE_COLUMNS).await
+}
+
+async fn validate_table(
+    connection: &mut SqliteConnection,
     table: &str,
     required_columns: &[&str],
-    column_pragma: &str,
 ) -> Result<(), Error> {
-    connection
-        .query_row(
-            "SELECT 1 FROM sqlite_schema WHERE name = ?1 AND type = 'table'",
-            [table],
-            |_| Ok(()),
-        )
-        .map_err(|_| Error::InvalidDatabaseSchema)?;
+    let table_exists = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM sqlite_schema WHERE name = ?1 AND type = 'table' LIMIT 1",
+    )
+    .bind(table)
+    .fetch_optional(&mut *connection)
+    .await
+    .map_err(|_| Error::InvalidDatabaseSchema)?;
+    if table_exists != Some(1) {
+        return Err(Error::InvalidDatabaseSchema);
+    }
 
-    let mut statement = connection
-        .prepare(column_pragma)
+    let columns = sqlx::query_scalar::<_, String>("SELECT name FROM pragma_table_info(?1)")
+        .bind(table)
+        .fetch_all(connection)
+        .await
         .map_err(|_| Error::InvalidDatabaseSchema)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|_| Error::InvalidDatabaseSchema)?
-        .collect::<Result<BTreeSet<_>, _>>()
-        .map_err(|_| Error::InvalidDatabaseSchema)?;
+    let columns = columns.into_iter().collect::<BTreeSet<_>>();
     if required_columns
         .iter()
         .any(|column| !columns.contains(*column))
@@ -497,8 +545,8 @@ fn validate_table(
 mod tests {
     use std::fs;
 
-    use rusqlite::Connection;
     use sha2::{Digest, Sha256};
+    use sqlx::{ConnectOptions, Connection as _, SqliteConnection, sqlite::SqliteConnectOptions};
     use tempfile::{TempDir, tempdir};
 
     use super::{
@@ -507,14 +555,21 @@ mod tests {
     };
     use crate::{AssetSpec, Candidate, Error, Point};
 
-    fn database_fixture(schema: &str) -> (TempDir, std::path::PathBuf, AssetSpec) {
+    async fn database_fixture(schema: &str) -> (TempDir, std::path::PathBuf, AssetSpec) {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join("geonames-test.db");
-        let connection = Connection::open(&path).expect("create fixture database");
-        connection
-            .execute_batch(schema)
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .disable_statement_logging();
+        let mut connection = SqliteConnection::connect_with(&options)
+            .await
+            .expect("create fixture database");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
+            .execute(&mut connection)
+            .await
             .expect("install fixture schema");
-        connection.close().expect("close fixture writer");
+        connection.close().await.expect("close fixture writer");
         let bytes = fs::read(&path).expect("read fixture");
         let spec = AssetSpec::new(
             "test-v1",
@@ -566,29 +621,41 @@ mod tests {
         "
     }
 
-    #[test]
-    fn verified_governed_database_opens_read_only_and_closes_explicitly() {
-        let (_directory, path, spec) = database_fixture(governed_schema());
-        let geocoder = Geocoder::open(path.clone(), &spec).expect("open verified database");
-        let connection = geocoder.connection.lock().expect("connection lock");
-        let count = connection
-            .query_row("SELECT COUNT(*) FROM geonames", [], |row| {
-                row.get::<_, i64>(0)
-            })
+    #[tokio::test(flavor = "current_thread")]
+    async fn verified_governed_database_opens_read_only_and_closes_explicitly() {
+        let (_directory, path, spec) = database_fixture(governed_schema()).await;
+        let geocoder = Geocoder::open(path.clone(), &spec)
+            .await
+            .expect("open verified database");
+        let mut connection = geocoder.connection.lock().await;
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM geonames")
+            .fetch_one(&mut *connection)
+            .await
             .expect("query fixture");
         assert_eq!(count, 8);
-        assert!(matches!(
-            connection.execute("DELETE FROM geonames", []),
-            Err(rusqlite::Error::SqliteFailure(_, _))
-        ));
+        let query_only = sqlx::query_scalar::<_, i64>("PRAGMA query_only")
+            .fetch_one(&mut *connection)
+            .await
+            .expect("read query-only policy");
+        let trusted_schema = sqlx::query_scalar::<_, i64>("PRAGMA trusted_schema")
+            .fetch_one(&mut *connection)
+            .await
+            .expect("read trusted-schema policy");
+        assert_eq!((query_only, trusted_schema), (1, 0));
+        assert!(
+            sqlx::query("DELETE FROM geonames")
+                .execute(&mut *connection)
+                .await
+                .is_err()
+        );
         drop(connection);
-        geocoder.close().expect("explicit close");
+        geocoder.close().await.expect("explicit close");
     }
 
-    #[test]
-    fn forward_and_feature_queries_preserve_text_ids_and_stable_order() {
-        let (_directory, path, spec) = database_fixture(governed_schema());
-        let geocoder = Geocoder::open(path, &spec).expect("geocoder");
+    #[tokio::test(flavor = "current_thread")]
+    async fn forward_and_feature_queries_preserve_text_ids_and_stable_order() {
+        let (_directory, path, spec) = database_fixture(governed_schema()).await;
+        let geocoder = Geocoder::open(path, &spec).await.expect("geocoder");
 
         let structured = crate::Query::locality("Victoria")
             .expect("locality")
@@ -596,7 +663,7 @@ mod tests {
             .expect("region")
             .with_country("Canada")
             .expect("country");
-        let result = geocoder.query(&structured).expect("structured query");
+        let result = geocoder.query(&structured).await.expect("structured query");
         let candidates = result.as_candidates().expect("candidate result");
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].feature_id(), 6_174_041);
@@ -610,6 +677,7 @@ mod tests {
         assert_eq!(
             geocoder
                 .query(&freeform)
+                .await
                 .expect("freeform query")
                 .as_candidates()
                 .expect("candidates")[0]
@@ -623,6 +691,7 @@ mod tests {
             .expect("limit");
         let candidates = geocoder
             .query(&ambiguous)
+            .await
             .expect("ambiguous query")
             .as_candidates()
             .expect("candidates")
@@ -639,6 +708,7 @@ mod tests {
         assert_eq!(
             geocoder
                 .query(&feature)
+                .await
                 .expect("feature result")
                 .as_candidates()
                 .expect("candidates")[0]
@@ -647,10 +717,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn reverse_and_country_queries_are_bounded_and_deterministic() {
-        let (_directory, path, spec) = database_fixture(governed_schema());
-        let geocoder = Geocoder::open(path, &spec).expect("geocoder");
+    #[tokio::test(flavor = "current_thread")]
+    async fn reverse_and_country_queries_are_bounded_and_deterministic() {
+        let (_directory, path, spec) = database_fixture(governed_schema()).await;
+        let geocoder = Geocoder::open(path, &spec).await.expect("geocoder");
         let reverse = crate::Query::reverse(crate::Point::new(49.0, -124.0).expect("point"))
             .with_radius_degrees(0.1)
             .expect("radius")
@@ -658,6 +728,7 @@ mod tests {
             .expect("limit");
         let candidates = geocoder
             .query(&reverse)
+            .await
             .expect("reverse result")
             .as_candidates()
             .expect("candidates")
@@ -672,6 +743,7 @@ mod tests {
 
         let countries = geocoder
             .query(&crate::Query::countries())
+            .await
             .expect("country result");
         let countries = countries.as_countries().expect("countries");
         assert_eq!(
@@ -692,6 +764,7 @@ mod tests {
         assert_eq!(
             geocoder
                 .query(&dateline)
+                .await
                 .expect("dateline result")
                 .as_candidates()
                 .expect("candidates")
@@ -709,6 +782,7 @@ mod tests {
         assert_eq!(
             geocoder
                 .query(&pole)
+                .await
                 .expect("pole result")
                 .as_candidates()
                 .expect("candidates")
@@ -719,8 +793,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn corrupt_bytes_and_incomplete_schema_fail_closed() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn corrupt_bytes_and_incomplete_schema_fail_closed() {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join("geonames-test.db");
         fs::write(&path, b"not sqlite").expect("write corrupt fixture");
@@ -734,27 +808,28 @@ mod tests {
         )
         .expect("corrupt spec");
         assert!(matches!(
-            Geocoder::open(&path, &corrupt_spec),
+            Geocoder::open(&path, &corrupt_spec).await,
             Err(Error::InvalidDatabase)
         ));
 
-        let (_directory, path, spec) = database_fixture("CREATE TABLE geonames (id INTEGER);");
+        let (_directory, path, spec) =
+            database_fixture("CREATE TABLE geonames (id INTEGER);").await;
         assert!(matches!(
-            Geocoder::open(path, &spec),
+            Geocoder::open(path, &spec).await,
             Err(Error::InvalidDatabaseSchema)
         ));
     }
 
     #[cfg(unix)]
-    #[test]
-    fn verified_database_open_rejects_symlink_assets() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn verified_database_open_rejects_symlink_assets() {
         use std::os::unix::fs::symlink;
 
-        let (directory, path, spec) = database_fixture(governed_schema());
+        let (directory, path, spec) = database_fixture(governed_schema()).await;
         let link = directory.path().join("linked.db");
         symlink(path, &link).expect("asset symlink");
         assert!(matches!(
-            Geocoder::open(link, &spec),
+            Geocoder::open(link, &spec).await,
             Err(Error::UnsafeAssetDestination)
         ));
     }
@@ -817,8 +892,8 @@ mod tests {
         assert_eq!(many.country.as_deref(), Some("CA"));
     }
 
-    #[test]
-    fn database_open_and_row_mapping_fail_closed_for_invalid_shapes() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn database_open_and_row_mapping_fail_closed_for_invalid_shapes() {
         let directory = tempdir().expect("tempdir");
         let placeholder = AssetSpec::new(
             "v1",
@@ -830,7 +905,7 @@ mod tests {
         )
         .expect("placeholder spec");
         assert!(matches!(
-            Geocoder::open(directory.path(), &placeholder),
+            Geocoder::open(directory.path(), &placeholder).await,
             Err(Error::UnsafeAssetDestination)
         ));
 
@@ -838,11 +913,13 @@ mod tests {
             "(6174041, 'Victoria', 2, 'British Columbia', 'CA', 'Canada', 48.4284, -123.3656)",
             "(-1, 'Victoria', 2, 'British Columbia', 'CA', 'Canada', 48.4284, -123.3656)",
         );
-        let (_directory, path, spec) = database_fixture(&invalid_row_schema);
-        let geocoder = Geocoder::open(path, &spec).expect("open negative-id fixture");
+        let (_directory, path, spec) = database_fixture(&invalid_row_schema).await;
+        let geocoder = Geocoder::open(path, &spec)
+            .await
+            .expect("open negative-id fixture");
         let query = crate::Query::locality("Victoria").expect("query");
         assert!(matches!(
-            geocoder.query(&query),
+            geocoder.query(&query).await,
             Err(Error::DatabaseOperationFailed { operation: "query" })
         ));
     }

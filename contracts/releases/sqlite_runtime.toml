@@ -36,7 +36,4 @@ status = "active"
 [migration]
 owner = "rcld-rshr-045"
 status = "in_progress"
-temporary_direct_dependencies = [
-  "radroots_geonames:rusqlite",
-  "workspace:rusqlite",
-]
+temporary_direct_dependencies = []
