@@ -265,7 +265,7 @@ fn has_exact_tag(tags: &[Vec<String>], name: &str, value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, RelayProfile, RelayUrlPolicy};
+    use crate::{Config, RelayUrlPolicy};
     use nostr_sdk::prelude::{
         EventBuilder, JsonUtil, Keys, RelayUrl as UpstreamRelayUrl, Timestamp,
     };
@@ -288,7 +288,14 @@ mod tests {
     fn transport() -> (NostrTransport, Arc<MockAuthClient>, RelayUrl) {
         let relay =
             RelayUrl::parse("wss://relay.example.com", RelayUrlPolicy::Public).expect("relay");
-        let config = Config::from_profile(RelayProfile::public([relay.as_str()]).expect("profile"));
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                [relay.as_str()],
+            )
+            .expect("profile"),
+        );
         let client = Arc::new(MockAuthClient(AtomicUsize::new(0)));
         let transport = NostrTransport::new(config).with_auth_client(client.clone());
         (transport, client, relay)

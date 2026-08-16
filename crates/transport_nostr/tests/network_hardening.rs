@@ -1,5 +1,7 @@
 use radroots_transport::{Target, TargetSet, source::FetchBounds};
-use radroots_transport_nostr::{RelayProfile, RelayUrl, RelayUrlPolicy};
+use radroots_transport_nostr::{
+    RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrl, RelayUrlPolicy,
+};
 
 const WORKSPACE_MANIFEST: &str = include_str!("../../../Cargo.toml");
 const RELAY_SOURCE: &str = include_str!("../src/relay.rs");
@@ -42,8 +44,17 @@ fn page_and_target_limits_reject_oversized_requests() {
         .collect::<Vec<_>>();
     assert!(TargetSet::new(targets).is_err());
 
-    let relays = (0..=64).map(|index| format!("wss://r{index}.example.com"));
-    assert!(RelayProfile::public(relays).is_err());
+    let relays = (0..=64)
+        .map(|index| {
+            RelayEndpoint::new(
+                format!("wss://r{index}.example.com"),
+                RelayUrlPolicy::Public,
+                RelayAccess::ReadWrite,
+            )
+            .expect("relay endpoint")
+        })
+        .collect::<Vec<_>>();
+    assert!(RelayProfile::explicit(RelayProfileKind::Public, relays).is_err());
 }
 
 #[test]

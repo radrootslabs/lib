@@ -695,10 +695,12 @@ mod tests {
         slot.configure(
             crate::transport::RelayProfile::explicit(
                 crate::transport::RelayProfileKind::Public,
-                [(
-                    radroots_transport_nostr::DEFAULT_PUBLIC_RELAY,
+                [crate::transport::RelayEndpoint::new(
+                    "wss://radroots.org",
+                    crate::transport::RelayUrlPolicy::Public,
                     crate::transport::RelayAccess::ReadOnly,
-                )],
+                )
+                .expect("read-only endpoint")],
             )
             .expect("read-only public profile"),
         )
@@ -722,8 +724,16 @@ mod tests {
 
         client
             .configure_nostr(
-                crate::transport::RelayProfile::public(["wss://write.example"])
-                    .expect("writable profile"),
+                crate::transport::RelayProfile::explicit(
+                    crate::transport::RelayProfileKind::Public,
+                    [crate::transport::RelayEndpoint::new(
+                        "wss://write.example",
+                        crate::transport::RelayUrlPolicy::Public,
+                        crate::transport::RelayAccess::ReadWrite,
+                    )
+                    .expect("writable endpoint")],
+                )
+                .expect("writable profile"),
             )
             .expect("reconfigure");
         let capabilities = client.capabilities();

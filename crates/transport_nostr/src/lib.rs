@@ -15,9 +15,7 @@ mod status;
 pub use client::{Config, NostrTransport, ReconnectBackoff};
 pub use cursor::RelayCursor;
 pub use error::Error;
-pub use profile::{
-    DEFAULT_PUBLIC_RELAY, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind,
-};
+pub use profile::{RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind};
 pub use relay::{RelayUrl, RelayUrlPolicy};
 pub use status::{
     RelayAggregateState, RelayCapabilityEvidence, RelayEvidenceState, RelayStatus,

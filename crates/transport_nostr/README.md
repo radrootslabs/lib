@@ -24,9 +24,17 @@ Configuration is explicit, validated, and inert. Constructing
 
 ```rust
 use radroots_transport::{EventSink, EventSource};
-use radroots_transport_nostr::{Config, NostrTransport, RelayProfile};
+use radroots_transport_nostr::{
+    Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile,
+    RelayProfileKind, RelayUrlPolicy,
+};
 
-let profile = RelayProfile::public(["wss://relay.example.com"])?;
+let endpoint = RelayEndpoint::new(
+    "wss://relay.example.com",
+    RelayUrlPolicy::Public,
+    RelayAccess::ReadWrite,
+)?;
+let profile = RelayProfile::explicit(RelayProfileKind::Public, [endpoint])?;
 let config = Config::from_profile(profile).with_timeouts(5_000, 20_000, 2_000)?;
 let transport = NostrTransport::new(config);
 
@@ -66,10 +74,12 @@ relay pool, Tokio handle, signer, storage handle, or retry worker.
 
 ## Relay and network security
 
-The public profile always includes `wss://radroots.org` as read-only and
-requires separately configured public TLS relays for publication. The
-simulator profile admits exact loopback WebSockets only. The device profile
-requires explicit TLS endpoints and never reuses simulator loopback.
+Profiles never inject a relay or infer destination policy. The caller supplies
+every endpoint together with its public-Internet, exact-loopback, or trusted
+private-network policy and independent read-only/read-write authority. Public
+profiles admit only public endpoints, simulator profiles admit only exact
+loopback endpoints, and physical-device profiles admit public or explicitly
+trusted private-network TLS endpoints.
 
 `RelayUrlPolicy::Public` accepts TLS WebSocket URLs with public hostnames or
 global addresses. `Local` accepts exact loopback destinations and permits

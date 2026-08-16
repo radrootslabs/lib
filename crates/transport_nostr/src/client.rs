@@ -295,19 +295,42 @@ mod tests {
 
     #[test]
     fn config_rejects_empty_duplicate_and_excessive_relay_sets() {
-        assert!(RelayProfile::simulator(Vec::<String>::new()).is_err());
         assert!(
-            RelayProfile::public(["wss://relay.example.com", "wss://RELAY.EXAMPLE.COM:443/",])
-                .is_err()
+            crate::profile::test_profile(
+                RelayProfileKind::Simulator,
+                crate::RelayUrlPolicy::Local,
+                Vec::<String>::new(),
+            )
+            .is_err()
         );
-        let relays = (0..MAX_RELAYS).map(|index| format!("wss://r{index}.example.com"));
-        assert!(RelayProfile::public(relays).is_err());
+        assert!(
+            crate::profile::test_profile(
+                RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                ["wss://relay.example.com", "wss://RELAY.EXAMPLE.COM:443/"],
+            )
+            .is_err()
+        );
+        let relays = (0..=MAX_RELAYS).map(|index| format!("wss://r{index}.example.com"));
+        assert!(
+            crate::profile::test_profile(
+                RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                relays,
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn config_rejects_unbounded_limits() {
         let config = Config::from_profile(
-            RelayProfile::public(["wss://relay.example.com"]).expect("profile"),
+            crate::profile::test_profile(
+                RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                ["wss://relay.example.com"],
+            )
+            .expect("profile"),
         );
         assert!(config.clone().with_timeouts(0, 1, 1).is_err());
         assert!(config.clone().with_timeouts(1, 120_001, 1).is_err());
@@ -317,15 +340,20 @@ mod tests {
     #[test]
     fn valid_configuration_accessors_and_transport_debug_are_complete() {
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         )
         .with_timeouts(1, 2, 3)
         .expect("timeouts")
         .with_max_connections(2)
         .expect("connections");
-        assert_eq!(config.relays().len(), 3);
-        assert_eq!(config.read_relays().count(), 3);
-        assert_eq!(config.write_relays().count(), 3);
+        assert_eq!(config.relays().len(), 2);
+        assert_eq!(config.read_relays().count(), 2);
+        assert_eq!(config.write_relays().count(), 2);
         assert_eq!(config.profile_kind(), RelayProfileKind::Public);
         assert_eq!(config.connect_timeout_ms(), 1);
         assert_eq!(config.request_timeout_ms(), 2);

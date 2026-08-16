@@ -222,7 +222,7 @@ fn unix_time_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, RelayProfile, RelayUrlPolicy};
+    use crate::{Config, RelayUrlPolicy};
     use radroots_transport::{
         Target, TargetSet,
         outcome::DeliveryOutcomeKind,
@@ -291,7 +291,12 @@ mod tests {
     #[test]
     fn sink_returns_normalized_per_relay_partial_success() {
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         );
         let two = RelayUrl::parse("wss://two.example", RelayUrlPolicy::Public).expect("two");
         let client = MockRelayClient {
@@ -350,7 +355,12 @@ mod tests {
 
         let calls = Arc::new(AtomicUsize::new(0));
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         );
         let transport =
             NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
@@ -380,7 +390,12 @@ mod tests {
 
         let calls = Arc::new(AtomicUsize::new(0));
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         );
         let transport =
             NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
@@ -413,7 +428,12 @@ mod tests {
 
     fn scripted(results: Vec<RelayPublishResult>) -> NostrTransport {
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         );
         NostrTransport::with_client(config, Arc::new(ScriptedRelayClient(results)))
     }

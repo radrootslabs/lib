@@ -30,6 +30,7 @@ pub radroots_transport_nostr::Error::InvalidTimeout::value_ms: u64
 pub radroots_transport_nostr::Error::RelayDestinationDenied
 pub radroots_transport_nostr::Error::RelayDestinationDenied::reason: &'static str
 pub radroots_transport_nostr::Error::RelayDestinationDenied::url: alloc::string::String
+pub radroots_transport_nostr::Error::RelayProfilePolicyMismatch
 pub radroots_transport_nostr::Error::RelaySchemeDenied
 pub radroots_transport_nostr::Error::RelaySchemeDenied::url: alloc::string::String
 pub radroots_transport_nostr::Error::ResolvedAddressDenied
@@ -129,15 +130,14 @@ pub fn radroots_transport_nostr::RelayCursor::precedes(&self, u64, &str) -> bool
 pub struct radroots_transport_nostr::RelayEndpoint
 impl radroots_transport_nostr::RelayEndpoint
 pub const fn radroots_transport_nostr::RelayEndpoint::access(&self) -> radroots_transport_nostr::RelayAccess
+pub fn radroots_transport_nostr::RelayEndpoint::new(impl core::convert::AsRef<str>, radroots_transport_nostr::RelayUrlPolicy, radroots_transport_nostr::RelayAccess) -> core::result::Result<Self, radroots_transport_nostr::Error>
 pub const fn radroots_transport_nostr::RelayEndpoint::policy(&self) -> radroots_transport_nostr::RelayUrlPolicy
 pub const fn radroots_transport_nostr::RelayEndpoint::url(&self) -> &radroots_transport_nostr::RelayUrl
 pub struct radroots_transport_nostr::RelayProfile
 impl radroots_transport_nostr::RelayProfile
-pub fn radroots_transport_nostr::RelayProfile::device<I, S>(I) -> core::result::Result<Self, radroots_transport_nostr::Error> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn radroots_transport_nostr::RelayProfile::endpoints(&self) -> &[radroots_transport_nostr::RelayEndpoint]
+pub fn radroots_transport_nostr::RelayProfile::explicit<I>(radroots_transport_nostr::RelayProfileKind, I) -> core::result::Result<Self, radroots_transport_nostr::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_transport_nostr::RelayEndpoint>
 pub const fn radroots_transport_nostr::RelayProfile::kind(&self) -> radroots_transport_nostr::RelayProfileKind
-pub fn radroots_transport_nostr::RelayProfile::public<I, S>(I) -> core::result::Result<Self, radroots_transport_nostr::Error> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
-pub fn radroots_transport_nostr::RelayProfile::simulator<I, S>(I) -> core::result::Result<Self, radroots_transport_nostr::Error> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub struct radroots_transport_nostr::RelayStatus
 impl radroots_transport_nostr::RelayStatus
 pub const fn radroots_transport_nostr::RelayStatus::endpoint(&self) -> &radroots_transport_nostr::RelayEndpoint
@@ -159,4 +159,3 @@ pub fn radroots_transport_nostr::RelayUrl::to_target(&self) -> core::result::Res
 pub fn radroots_transport_nostr::RelayUrl::validate_resolved_addresses(&self, radroots_transport_nostr::RelayUrlPolicy, impl core::iter::traits::collect::IntoIterator<Item = core::net::ip_addr::IpAddr>) -> core::result::Result<(), radroots_transport_nostr::Error>
 impl core::fmt::Display for radroots_transport_nostr::RelayUrl
 pub fn radroots_transport_nostr::RelayUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub const radroots_transport_nostr::DEFAULT_PUBLIC_RELAY: &str

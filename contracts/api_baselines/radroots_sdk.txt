@@ -47,8 +47,10 @@ pub const fn radroots_sdk::capability::CapabilityStatus::maturity(self) -> radro
 pub mod radroots_sdk::client
 pub struct radroots_sdk::client::Client
 impl radroots_sdk::client::Client
+pub fn radroots_sdk::client::Client::blossom(&self) -> radroots_sdk::error::Result<core::option::Option<&radroots_sdk::transport::BlossomSlot>>
 pub fn radroots_sdk::client::Client::capabilities(&self) -> radroots_sdk::capability::CapabilityReport
 pub async fn radroots_sdk::client::Client::close(&self) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::client::Client::configure_blossom(&self, radroots_sdk::transport::BlossomConfig) -> radroots_sdk::error::Result<()>
 pub fn radroots_sdk::client::Client::configure_nostr(&self, radroots_transport_nostr::profile::RelayProfile) -> radroots_sdk::error::Result<()>
 pub fn radroots_sdk::client::Client::farm(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::farm::Operations<'_>>>
 pub fn radroots_sdk::client::Client::is_closed(&self) -> bool
@@ -68,6 +70,7 @@ impl core::fmt::Debug for radroots_sdk::client::Client
 pub fn radroots_sdk::client::Client::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_sdk::client::ClientBuilder
 impl radroots_sdk::client::ClientBuilder
+pub fn radroots_sdk::client::ClientBuilder::blossom(self, radroots_sdk::transport::BlossomSlot) -> Self
 pub fn radroots_sdk::client::ClientBuilder::build(self) -> radroots_sdk::error::Result<radroots_sdk::client::Client>
 pub fn radroots_sdk::client::ClientBuilder::capability_availability(self, radroots_sdk::capability::CapabilityId, radroots_sdk::capability::Availability) -> Self
 pub fn radroots_sdk::client::ClientBuilder::host_sync(self, radroots_sdk::sync::HostPolicy) -> Self
@@ -413,7 +416,6 @@ pub const fn radroots_sdk::trade::PrepareRequest::new(radroots_signing::actor::A
 pub fn radroots_sdk::trade::prepare(radroots_sdk::trade::PrepareRequest) -> core::result::Result<radroots_sdk::trade::Plan, radroots_sdk::trade::PrepareError>
 pub fn radroots_sdk::trade::project(radroots_trade::trade_contract_v1::RadrootsTradeReductionInputV1) -> radroots_trade::trade_contract_v1::RadrootsTradeProjectionV1
 pub mod radroots_sdk::transport
-pub use radroots_sdk::transport::DEFAULT_PUBLIC_RELAY
 pub use radroots_sdk::transport::ReconnectBackoff
 pub use radroots_sdk::transport::RelayAccess
 pub use radroots_sdk::transport::RelayAggregateState
@@ -427,6 +429,64 @@ pub use radroots_sdk::transport::RelayStatus
 pub use radroots_sdk::transport::RelayStatusReport
 pub use radroots_sdk::transport::RelayUrl
 pub use radroots_sdk::transport::RelayUrlPolicy
+#[non_exhaustive] pub enum radroots_sdk::transport::BlossomEndpointAuthority
+pub radroots_sdk::transport::BlossomEndpointAuthority::LoopbackDevelopment
+pub radroots_sdk::transport::BlossomEndpointAuthority::PrivateNetworkDevelopment
+pub radroots_sdk::transport::BlossomEndpointAuthority::PublicWebPki
+#[non_exhaustive] pub enum radroots_sdk::transport::BlossomErrorKind
+pub radroots_sdk::transport::BlossomErrorKind::Authorization
+pub radroots_sdk::transport::BlossomErrorKind::Cancelled
+pub radroots_sdk::transport::BlossomErrorKind::ConfigurationChanged
+pub radroots_sdk::transport::BlossomErrorKind::ContentEncodingDenied
+pub radroots_sdk::transport::BlossomErrorKind::DescriptorMismatch
+pub radroots_sdk::transport::BlossomErrorKind::DimensionMismatch
+pub radroots_sdk::transport::BlossomErrorKind::DuplicateEndpoint
+pub radroots_sdk::transport::BlossomErrorKind::EndpointNotConfigured
+pub radroots_sdk::transport::BlossomErrorKind::EndpointSchemeDenied
+pub radroots_sdk::transport::BlossomErrorKind::HttpStatus
+pub radroots_sdk::transport::BlossomErrorKind::InvalidDescriptor
+pub radroots_sdk::transport::BlossomErrorKind::InvalidDimensions
+pub radroots_sdk::transport::BlossomErrorKind::InvalidEndpoint
+pub radroots_sdk::transport::BlossomErrorKind::InvalidEndpointCount
+pub radroots_sdk::transport::BlossomErrorKind::InvalidImageBytes
+pub radroots_sdk::transport::BlossomErrorKind::InvalidLimits
+pub radroots_sdk::transport::BlossomErrorKind::InvalidRequest
+pub radroots_sdk::transport::BlossomErrorKind::MediaTypeMismatch
+pub radroots_sdk::transport::BlossomErrorKind::RedirectLimit
+pub radroots_sdk::transport::BlossomErrorKind::ResolutionFailed
+pub radroots_sdk::transport::BlossomErrorKind::ResolvedAddressDenied
+pub radroots_sdk::transport::BlossomErrorKind::ResponseHashMismatch
+pub radroots_sdk::transport::BlossomErrorKind::ResponseSizeMismatch
+pub radroots_sdk::transport::BlossomErrorKind::ResponseTooLarge
+pub radroots_sdk::transport::BlossomErrorKind::RetrievedBytesMismatch
+pub radroots_sdk::transport::BlossomErrorKind::Timeout
+pub radroots_sdk::transport::BlossomErrorKind::Transport
+pub radroots_sdk::transport::BlossomErrorKind::UnsafeRedirect
+pub radroots_sdk::transport::BlossomErrorKind::UnsupportedMediaType
+#[non_exhaustive] pub enum radroots_sdk::transport::BlossomEvidenceState
+pub radroots_sdk::transport::BlossomEvidenceState::ConfiguredUnobserved
+pub radroots_sdk::transport::BlossomEvidenceState::DnsPolicyValidated
+pub radroots_sdk::transport::BlossomEvidenceState::RetrievalVerified
+pub radroots_sdk::transport::BlossomEvidenceState::RetryableFailure
+pub radroots_sdk::transport::BlossomEvidenceState::TerminalFailure
+pub radroots_sdk::transport::BlossomEvidenceState::TlsHttpObserved
+pub radroots_sdk::transport::BlossomEvidenceState::UploadVerified
+#[non_exhaustive] pub enum radroots_sdk::transport::BlossomHostKind
+pub radroots_sdk::transport::BlossomHostKind::Native
+pub radroots_sdk::transport::BlossomHostKind::PhysicalDevice
+pub radroots_sdk::transport::BlossomHostKind::Simulator
+#[non_exhaustive] pub enum radroots_sdk::transport::BlossomPhase
+pub radroots_sdk::transport::BlossomPhase::Authorization
+pub radroots_sdk::transport::BlossomPhase::Configuration
+pub radroots_sdk::transport::BlossomPhase::Descriptor
+pub radroots_sdk::transport::BlossomPhase::Probe
+pub radroots_sdk::transport::BlossomPhase::Retrieval
+pub radroots_sdk::transport::BlossomPhase::Upload
+pub radroots_sdk::transport::BlossomPhase::Verification
+#[non_exhaustive] pub enum radroots_sdk::transport::BlossomTransportSecurity
+pub radroots_sdk::transport::BlossomTransportSecurity::DevelopmentCleartext
+pub radroots_sdk::transport::BlossomTransportSecurity::DevelopmentTls
+pub radroots_sdk::transport::BlossomTransportSecurity::PublicWebPki
 #[non_exhaustive] pub enum radroots_sdk::transport::DaemonAuth
 pub radroots_sdk::transport::DaemonAuth::BearerToken(alloc::string::String)
 pub radroots_sdk::transport::DaemonAuth::None
@@ -438,6 +498,132 @@ pub radroots_sdk::transport::DaemonErrorKind::InvalidRequest
 pub radroots_sdk::transport::DaemonErrorKind::InvalidResponse
 pub radroots_sdk::transport::DaemonErrorKind::Rpc
 pub radroots_sdk::transport::DaemonErrorKind::Transport
+pub struct radroots_sdk::transport::BlossomCancellation
+impl radroots_sdk::transport::BlossomCancellation
+pub fn radroots_sdk::transport::BlossomCancellation::cancel(&self)
+pub fn radroots_sdk::transport::BlossomCancellation::is_cancelled(&self) -> bool
+pub struct radroots_sdk::transport::BlossomConfig
+impl radroots_sdk::transport::BlossomConfig
+pub fn radroots_sdk::transport::BlossomConfig::fingerprint(&self) -> radroots_sdk::transport::BlossomConfigFingerprint
+pub fn radroots_sdk::transport::BlossomConfig::from_profile(radroots_sdk::transport::BlossomProfile) -> Self
+pub const fn radroots_sdk::transport::BlossomConfig::profile(&self) -> &radroots_sdk::transport::BlossomProfile
+pub fn radroots_sdk::transport::BlossomConfig::with_limits(self, u64, usize, u8) -> core::result::Result<Self, radroots_sdk::transport::BlossomError>
+pub fn radroots_sdk::transport::BlossomConfig::with_network_policy(self, core::time::Duration, core::time::Duration, u8, core::time::Duration) -> core::result::Result<Self, radroots_sdk::transport::BlossomError>
+pub struct radroots_sdk::transport::BlossomConfigFingerprint(_)
+impl radroots_sdk::transport::BlossomConfigFingerprint
+pub const fn radroots_sdk::transport::BlossomConfigFingerprint::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_sdk::transport::BlossomConfigFingerprint::to_hex(self) -> alloc::string::String
+impl core::fmt::Display for radroots_sdk::transport::BlossomConfigFingerprint
+pub fn radroots_sdk::transport::BlossomConfigFingerprint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::transport::BlossomEndpoint
+impl radroots_sdk::transport::BlossomEndpoint
+pub const fn radroots_sdk::transport::BlossomEndpoint::authority(&self) -> radroots_sdk::transport::BlossomEndpointAuthority
+pub fn radroots_sdk::transport::BlossomEndpoint::host(&self) -> &str
+pub fn radroots_sdk::transport::BlossomEndpoint::origin(&self) -> &str
+pub const fn radroots_sdk::transport::BlossomEndpoint::port(&self) -> u16
+pub struct radroots_sdk::transport::BlossomEndpointEvidence
+impl radroots_sdk::transport::BlossomEndpointEvidence
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::attempts(&self) -> u8
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::config_fingerprint(&self) -> radroots_sdk::transport::BlossomConfigFingerprint
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::error_code(&self) -> core::option::Option<&'static str>
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::error_phase(&self) -> core::option::Option<radroots_sdk::transport::BlossomPhase>
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::http_status(&self) -> core::option::Option<u16>
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::last_successful_state(&self) -> radroots_sdk::transport::BlossomEvidenceState
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::observed_at_unix_ms(&self) -> core::option::Option<u64>
+pub fn radroots_sdk::transport::BlossomEndpointEvidence::origin(&self) -> &str
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::possible_orphan(&self) -> bool
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::retryable(&self) -> bool
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::schema_version(&self) -> u16
+pub fn radroots_sdk::transport::BlossomEndpointEvidence::server_error_code(&self) -> core::option::Option<&str>
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::state(&self) -> radroots_sdk::transport::BlossomEvidenceState
+pub const fn radroots_sdk::transport::BlossomEndpointEvidence::transport_security(&self) -> radroots_sdk::transport::BlossomTransportSecurity
+pub struct radroots_sdk::transport::BlossomError
+impl radroots_sdk::transport::BlossomError
+pub const fn radroots_sdk::transport::BlossomError::attempts(&self) -> u8
+pub const fn radroots_sdk::transport::BlossomError::code(&self) -> &'static str
+pub const fn radroots_sdk::transport::BlossomError::http_status(&self) -> core::option::Option<u16>
+pub const fn radroots_sdk::transport::BlossomError::kind(&self) -> radroots_sdk::transport::BlossomErrorKind
+pub const fn radroots_sdk::transport::BlossomError::phase(&self) -> radroots_sdk::transport::BlossomPhase
+pub const fn radroots_sdk::transport::BlossomError::possible_orphan(&self) -> bool
+pub const fn radroots_sdk::transport::BlossomError::retryable(&self) -> bool
+pub fn radroots_sdk::transport::BlossomError::server_error_code(&self) -> core::option::Option<&str>
+impl core::error::Error for radroots_sdk::transport::BlossomError
+impl core::fmt::Debug for radroots_sdk::transport::BlossomError
+pub fn radroots_sdk::transport::BlossomError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_sdk::transport::BlossomError
+pub fn radroots_sdk::transport::BlossomError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::transport::BlossomImageDimensions
+impl radroots_sdk::transport::BlossomImageDimensions
+pub const fn radroots_sdk::transport::BlossomImageDimensions::height(self) -> u32
+pub const fn radroots_sdk::transport::BlossomImageDimensions::new(u32, u32) -> core::result::Result<Self, radroots_sdk::transport::BlossomError>
+pub const fn radroots_sdk::transport::BlossomImageDimensions::width(self) -> u32
+pub struct radroots_sdk::transport::BlossomInboundReceipt
+impl radroots_sdk::transport::BlossomInboundReceipt
+pub const fn radroots_sdk::transport::BlossomInboundReceipt::attempts(&self) -> u8
+pub fn radroots_sdk::transport::BlossomInboundReceipt::bytes(&self) -> &[u8]
+pub const fn radroots_sdk::transport::BlossomInboundReceipt::commitment(&self) -> &radroots_blossom::descriptor::ByteCommitment
+pub const fn radroots_sdk::transport::BlossomInboundReceipt::config_fingerprint(&self) -> radroots_sdk::transport::BlossomConfigFingerprint
+pub const fn radroots_sdk::transport::BlossomInboundReceipt::dimensions(&self) -> radroots_sdk::transport::BlossomImageDimensions
+pub const fn radroots_sdk::transport::BlossomInboundReceipt::final_url(&self) -> &radroots_blossom::url::BlobUrl
+pub const fn radroots_sdk::transport::BlossomInboundReceipt::verified_at_unix_ms(&self) -> u64
+impl core::fmt::Debug for radroots_sdk::transport::BlossomInboundReceipt
+pub fn radroots_sdk::transport::BlossomInboundReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::transport::BlossomInboundRequest
+impl radroots_sdk::transport::BlossomInboundRequest
+pub const fn radroots_sdk::transport::BlossomInboundRequest::expected_byte_size(&self) -> core::option::Option<u64>
+pub const fn radroots_sdk::transport::BlossomInboundRequest::expected_dimensions(&self) -> core::option::Option<radroots_sdk::transport::BlossomImageDimensions>
+pub const fn radroots_sdk::transport::BlossomInboundRequest::expected_media_type(&self) -> core::option::Option<&radroots_blossom::media_type::MediaType>
+pub fn radroots_sdk::transport::BlossomInboundRequest::new(radroots_blossom::url::BlobUrl, core::option::Option<radroots_blossom::media_type::MediaType>, core::option::Option<u64>, core::option::Option<radroots_sdk::transport::BlossomImageDimensions>) -> core::result::Result<Self, radroots_sdk::transport::BlossomError>
+pub const fn radroots_sdk::transport::BlossomInboundRequest::url(&self) -> &radroots_blossom::url::BlobUrl
+pub struct radroots_sdk::transport::BlossomProfile
+impl radroots_sdk::transport::BlossomProfile
+pub const fn radroots_sdk::transport::BlossomProfile::authority(&self) -> radroots_sdk::transport::BlossomEndpointAuthority
+pub fn radroots_sdk::transport::BlossomProfile::fallbacks(&self) -> &[radroots_sdk::transport::BlossomEndpoint]
+pub const fn radroots_sdk::transport::BlossomProfile::host_kind(&self) -> radroots_sdk::transport::BlossomHostKind
+pub fn radroots_sdk::transport::BlossomProfile::new<I, S>(radroots_sdk::transport::BlossomHostKind, radroots_sdk::transport::BlossomEndpointAuthority, impl core::convert::AsRef<str>, I) -> core::result::Result<Self, radroots_sdk::transport::BlossomError> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub const fn radroots_sdk::transport::BlossomProfile::primary(&self) -> &radroots_sdk::transport::BlossomEndpoint
+pub struct radroots_sdk::transport::BlossomSlot
+impl radroots_sdk::transport::BlossomSlot
+pub fn radroots_sdk::transport::BlossomSlot::authored_upload_claim(&self, &radroots_sdk::transport::BlossomUploadTransaction, radroots_blossom::authorization::AuthorizationContent, u64, u64) -> core::result::Result<radroots_blossom::authorization::AuthoredUploadClaim, radroots_sdk::transport::BlossomError>
+pub fn radroots_sdk::transport::BlossomSlot::clear(&self)
+pub async fn radroots_sdk::transport::BlossomSlot::complete_native_upload(&self, radroots_sdk::transport::BlossomUploadTransaction, u16, core::option::Option<&str>, core::option::Option<&str>, &[u8], radroots_sdk::transport::BlossomCancellation) -> core::result::Result<radroots_sdk::transport::BlossomUploadReceipt, radroots_sdk::transport::BlossomError>
+pub fn radroots_sdk::transport::BlossomSlot::config_fingerprint(&self) -> core::option::Option<radroots_sdk::transport::BlossomConfigFingerprint>
+pub fn radroots_sdk::transport::BlossomSlot::configuration(&self) -> core::option::Option<(radroots_sdk::transport::BlossomProfile, radroots_sdk::transport::BlossomConfigFingerprint)>
+pub fn radroots_sdk::transport::BlossomSlot::configure(&self, radroots_sdk::transport::BlossomConfig) -> core::result::Result<(), radroots_sdk::transport::BlossomError>
+pub fn radroots_sdk::transport::BlossomSlot::endpoint_authority(&self) -> core::option::Option<radroots_sdk::transport::BlossomEndpointAuthority>
+pub fn radroots_sdk::transport::BlossomSlot::evidence(&self) -> core::option::Option<radroots_sdk::transport::BlossomEndpointEvidence>
+pub fn radroots_sdk::transport::BlossomSlot::host_kind(&self) -> core::option::Option<radroots_sdk::transport::BlossomHostKind>
+pub fn radroots_sdk::transport::BlossomSlot::new() -> Self
+pub fn radroots_sdk::transport::BlossomSlot::prepare_upload(&self, radroots_sdk::transport::BlossomUploadRequest) -> core::result::Result<radroots_sdk::transport::BlossomUploadTransaction, radroots_sdk::transport::BlossomError>
+pub async fn radroots_sdk::transport::BlossomSlot::probe(&self, radroots_sdk::transport::BlossomCancellation) -> core::result::Result<radroots_sdk::transport::BlossomEndpointEvidence, radroots_sdk::transport::BlossomError>
+pub fn radroots_sdk::transport::BlossomSlot::profile(&self) -> core::option::Option<radroots_sdk::transport::BlossomProfile>
+pub async fn radroots_sdk::transport::BlossomSlot::retrieve(&self, radroots_sdk::transport::BlossomInboundRequest, radroots_sdk::transport::BlossomCancellation) -> core::result::Result<radroots_sdk::transport::BlossomInboundReceipt, radroots_sdk::transport::BlossomError>
+pub async fn radroots_sdk::transport::BlossomSlot::upload(&self, radroots_sdk::transport::BlossomUploadTransaction, radroots_nostr::blossom::AuthorizationHeader, radroots_sdk::transport::BlossomCancellation) -> core::result::Result<radroots_sdk::transport::BlossomUploadReceipt, radroots_sdk::transport::BlossomError>
+impl core::fmt::Debug for radroots_sdk::transport::BlossomSlot
+pub fn radroots_sdk::transport::BlossomSlot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::transport::BlossomUploadReceipt
+impl radroots_sdk::transport::BlossomUploadReceipt
+pub const fn radroots_sdk::transport::BlossomUploadReceipt::attempts(&self) -> u8
+pub const fn radroots_sdk::transport::BlossomUploadReceipt::descriptor(&self) -> &radroots_blossom::descriptor::ByteVerifiedDescriptor
+pub const fn radroots_sdk::transport::BlossomUploadReceipt::dimensions(&self) -> radroots_sdk::transport::BlossomImageDimensions
+pub fn radroots_sdk::transport::BlossomUploadReceipt::into_descriptor(self) -> radroots_blossom::descriptor::ByteVerifiedDescriptor
+pub const fn radroots_sdk::transport::BlossomUploadReceipt::verified_at_unix_ms(&self) -> u64
+pub struct radroots_sdk::transport::BlossomUploadRequest
+impl radroots_sdk::transport::BlossomUploadRequest
+pub fn radroots_sdk::transport::BlossomUploadRequest::byte_size(&self) -> u64
+pub const fn radroots_sdk::transport::BlossomUploadRequest::dimensions(&self) -> radroots_sdk::transport::BlossomImageDimensions
+pub fn radroots_sdk::transport::BlossomUploadRequest::media_type(&self) -> &radroots_blossom::media_type::MediaType
+pub fn radroots_sdk::transport::BlossomUploadRequest::new(alloc::sync::Arc<[u8]>, radroots_blossom::media_type::MediaType, radroots_sdk::transport::BlossomImageDimensions, u64) -> core::result::Result<Self, radroots_sdk::transport::BlossomError>
+pub const fn radroots_sdk::transport::BlossomUploadRequest::sha256(&self) -> radroots_blossom::hash::Sha256
+impl core::fmt::Debug for radroots_sdk::transport::BlossomUploadRequest
+pub fn radroots_sdk::transport::BlossomUploadRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sdk::transport::BlossomUploadTransaction
+impl radroots_sdk::transport::BlossomUploadTransaction
+pub const fn radroots_sdk::transport::BlossomUploadTransaction::config_fingerprint(&self) -> radroots_sdk::transport::BlossomConfigFingerprint
+pub const fn radroots_sdk::transport::BlossomUploadTransaction::expected_url(&self) -> &radroots_blossom::url::BlobUrl
+pub const fn radroots_sdk::transport::BlossomUploadTransaction::request(&self) -> &radroots_sdk::transport::BlossomUploadRequest
+impl core::fmt::Debug for radroots_sdk::transport::BlossomUploadTransaction
+pub fn radroots_sdk::transport::BlossomUploadTransaction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_sdk::transport::DaemonConfig
 impl radroots_sdk::transport::DaemonConfig
 pub fn radroots_sdk::transport::DaemonConfig::new(impl core::convert::Into<alloc::string::String>) -> Self
@@ -488,8 +674,10 @@ impl core::default::Default for radroots_sdk::transport::Profile
 pub fn radroots_sdk::transport::Profile::default() -> Self
 pub struct radroots_sdk::Client
 impl radroots_sdk::client::Client
+pub fn radroots_sdk::client::Client::blossom(&self) -> radroots_sdk::error::Result<core::option::Option<&radroots_sdk::transport::BlossomSlot>>
 pub fn radroots_sdk::client::Client::capabilities(&self) -> radroots_sdk::capability::CapabilityReport
 pub async fn radroots_sdk::client::Client::close(&self) -> radroots_sdk::error::Result<()>
+pub fn radroots_sdk::client::Client::configure_blossom(&self, radroots_sdk::transport::BlossomConfig) -> radroots_sdk::error::Result<()>
 pub fn radroots_sdk::client::Client::configure_nostr(&self, radroots_transport_nostr::profile::RelayProfile) -> radroots_sdk::error::Result<()>
 pub fn radroots_sdk::client::Client::farm(&self) -> radroots_sdk::error::Result<core::option::Option<radroots_sdk::farm::Operations<'_>>>
 pub fn radroots_sdk::client::Client::is_closed(&self) -> bool
@@ -509,6 +697,7 @@ impl core::fmt::Debug for radroots_sdk::client::Client
 pub fn radroots_sdk::client::Client::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_sdk::ClientBuilder
 impl radroots_sdk::client::ClientBuilder
+pub fn radroots_sdk::client::ClientBuilder::blossom(self, radroots_sdk::transport::BlossomSlot) -> Self
 pub fn radroots_sdk::client::ClientBuilder::build(self) -> radroots_sdk::error::Result<radroots_sdk::client::Client>
 pub fn radroots_sdk::client::ClientBuilder::capability_availability(self, radroots_sdk::capability::CapabilityId, radroots_sdk::capability::Availability) -> Self
 pub fn radroots_sdk::client::ClientBuilder::host_sync(self, radroots_sdk::sync::HostPolicy) -> Self

@@ -423,7 +423,7 @@ fn unix_time_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, RelayProfile, RelayUrlPolicy};
+    use crate::{Config, RelayUrlPolicy};
     use radroots_transport::{
         FetchRequest, Target, TargetSet,
         source::{FetchBounds, FetchSelector, NextPage},
@@ -456,7 +456,12 @@ mod tests {
 
     fn transport() -> NostrTransport {
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         );
         NostrTransport::with_source_client(config, Arc::new(MockSourceClient))
     }
@@ -547,8 +552,14 @@ mod tests {
         }
 
         let calls = Arc::new(AtomicUsize::new(0));
-        let config =
-            Config::from_profile(RelayProfile::public(["wss://one.example"]).expect("profile"));
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example"],
+            )
+            .expect("profile"),
+        );
         let transport = NostrTransport::with_source_client(
             config,
             Arc::new(CountingSourceClient(Arc::clone(&calls))),
@@ -590,7 +601,12 @@ mod tests {
 
     fn scripted(batches: Vec<RelayFetchBatch>) -> NostrTransport {
         let config = Config::from_profile(
-            RelayProfile::public(["wss://one.example", "wss://two.example"]).expect("profile"),
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .expect("profile"),
         );
         NostrTransport::with_source_client(config, Arc::new(ScriptedSourceClient(batches)))
     }

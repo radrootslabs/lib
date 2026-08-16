@@ -22,6 +22,8 @@ pub enum Error {
     EmptyResolution { url: String },
     /// A resolved address violates the selected policy.
     ResolvedAddressDenied { url: String, address: String },
+    /// An endpoint policy is incompatible with its host profile kind.
+    RelayProfilePolicyMismatch,
     /// A connection or request timeout is outside its governed bounds.
     InvalidTimeout { field: &'static str, value_ms: u64 },
     /// The per-operation connection limit is outside its governed bounds.
@@ -86,6 +88,9 @@ impl fmt::Display for Error {
                 formatter,
                 "relay URL `{url}` resolved to denied address `{address}`"
             ),
+            Self::RelayProfilePolicyMismatch => {
+                formatter.write_str("relay endpoint policy does not match its profile kind")
+            }
             Self::InvalidTimeout { field, value_ms } => {
                 write!(formatter, "invalid {field} timeout: {value_ms}ms")
             }
@@ -163,6 +168,7 @@ mod tests {
                 url: "wss://relay.example".into(),
                 address: "127.0.0.1".into(),
             },
+            Error::RelayProfilePolicyMismatch,
             Error::InvalidTimeout {
                 field: "request",
                 value_ms: 0,

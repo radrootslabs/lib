@@ -3,9 +3,6 @@
 use crate::{Error, RelayUrl, RelayUrlPolicy};
 use std::collections::BTreeSet;
 
-/// Bundled canonical Radroots relay used for reads and publication.
-pub const DEFAULT_PUBLIC_RELAY: &str = "wss://radroots.org";
-
 /// Directional access authorized for one configured relay.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
@@ -34,7 +31,7 @@ impl RelayAccess {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum RelayProfileKind {
-    /// Public-Internet profile with the bundled canonical relay.
+    /// Public-Internet profile.
     Public,
     /// Development-only profile restricted to exact loopback destinations.
     Simulator,
@@ -51,7 +48,8 @@ pub struct RelayEndpoint {
 }
 
 impl RelayEndpoint {
-    fn new(
+    /// Parses one endpoint with explicit destination and access policy.
+    pub fn new(
         value: impl AsRef<str>,
         policy: RelayUrlPolicy,
         access: RelayAccess,
@@ -94,84 +92,15 @@ impl RelayProfile {
     ///
     /// This constructor does not inject a bundled endpoint. Callers provide the
     /// complete validated set they intend to use.
-    pub fn explicit<I, S>(kind: RelayProfileKind, endpoints: I) -> Result<Self, Error>
+    pub fn explicit<I>(kind: RelayProfileKind, endpoints: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = (S, RelayAccess)>,
-        S: AsRef<str>,
+        I: IntoIterator<Item = RelayEndpoint>,
     {
-        let policy = match kind {
-            RelayProfileKind::Public => RelayUrlPolicy::Public,
-            RelayProfileKind::Simulator => RelayUrlPolicy::Local,
-            RelayProfileKind::Device => RelayUrlPolicy::PrivateNetwork,
-        };
         let endpoints = endpoints
             .into_iter()
-            .map(|(url, access)| RelayEndpoint::new(url, policy, access))
-            .collect::<Result<Vec<_>, _>>()?;
+            .take(crate::client::MAX_RELAYS + 1)
+            .collect::<Vec<_>>();
         Self::validated(kind, endpoints)
-    }
-
-    /// Builds the ordinary public profile.
-    ///
-    /// `wss://radroots.org/` is always present as read-write. Every additional
-    /// writable relay must be a TLS public-Internet destination. Supplying the
-    /// bundled relay again is rejected as a duplicate.
-    pub fn public<I, S>(writable_relays: I) -> Result<Self, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let mut endpoints = vec![RelayEndpoint::new(
-            DEFAULT_PUBLIC_RELAY,
-            RelayUrlPolicy::Public,
-            RelayAccess::ReadWrite,
-        )?];
-        endpoints.extend(parse_endpoints(
-            writable_relays,
-            RelayUrlPolicy::Public,
-            RelayAccess::ReadWrite,
-        )?);
-        Self::validated(RelayProfileKind::Public, endpoints)
-    }
-
-    /// Builds a development-only profile from exact loopback relays.
-    ///
-    /// Plaintext `ws://` is accepted only by this profile. At least one relay
-    /// is required and every endpoint is writable.
-    pub fn simulator<I, S>(loopback_relays: I) -> Result<Self, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let endpoints = parse_endpoints(
-            loopback_relays,
-            RelayUrlPolicy::Local,
-            RelayAccess::ReadWrite,
-        )?;
-        Self::validated(RelayProfileKind::Simulator, endpoints)
-    }
-
-    /// Builds a physical-device profile from explicit writable TLS endpoints.
-    ///
-    /// The bundled canonical relay remains read-write. Additional endpoints may
-    /// resolve to public or private addresses, but loopback, unspecified, and
-    /// multicast destinations remain forbidden before and after resolution.
-    pub fn device<I, S>(writable_relays: I) -> Result<Self, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let mut endpoints = vec![RelayEndpoint::new(
-            DEFAULT_PUBLIC_RELAY,
-            RelayUrlPolicy::Public,
-            RelayAccess::ReadWrite,
-        )?];
-        endpoints.extend(parse_endpoints(
-            writable_relays,
-            RelayUrlPolicy::PrivateNetwork,
-            RelayAccess::ReadWrite,
-        )?);
-        Self::validated(RelayProfileKind::Device, endpoints)
     }
 
     fn validated(kind: RelayProfileKind, endpoints: Vec<RelayEndpoint>) -> Result<Self, Error> {
@@ -186,6 +115,17 @@ impl RelayProfile {
         }
         let mut seen = BTreeSet::new();
         for endpoint in &endpoints {
+            let policy_allowed = match kind {
+                RelayProfileKind::Public => endpoint.policy == RelayUrlPolicy::Public,
+                RelayProfileKind::Simulator => endpoint.policy == RelayUrlPolicy::Local,
+                RelayProfileKind::Device => matches!(
+                    endpoint.policy,
+                    RelayUrlPolicy::Public | RelayUrlPolicy::PrivateNetwork
+                ),
+            };
+            if !policy_allowed {
+                return Err(Error::RelayProfilePolicyMismatch);
+            }
             if !seen.insert(endpoint.url.clone()) {
                 return Err(Error::DuplicateRelayUrl {
                     url: endpoint.url.to_string(),
@@ -208,19 +148,21 @@ impl RelayProfile {
     }
 }
 
-fn parse_endpoints<I, S>(
-    values: I,
+#[cfg(test)]
+pub(crate) fn test_profile<I, S>(
+    kind: RelayProfileKind,
     policy: RelayUrlPolicy,
-    access: RelayAccess,
-) -> Result<Vec<RelayEndpoint>, Error>
+    values: I,
+) -> Result<RelayProfile, Error>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    values
+    let endpoints = values
         .into_iter()
-        .map(|value| RelayEndpoint::new(value, policy, access))
-        .collect()
+        .map(|value| RelayEndpoint::new(value, policy, RelayAccess::ReadWrite))
+        .collect::<Result<Vec<_>, _>>()?;
+    RelayProfile::explicit(kind, endpoints)
 }
 
 #[cfg(test)]
@@ -228,15 +170,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn public_profile_authorizes_the_canonical_relay_for_publication() {
-        let profile = RelayProfile::public(["wss://write.example"]).expect("public profile");
+    fn explicit_profile_requires_every_public_destination_and_authority() {
+        let profile = RelayProfile::explicit(
+            RelayProfileKind::Public,
+            [RelayEndpoint::new(
+                "wss://write.example",
+                RelayUrlPolicy::Public,
+                RelayAccess::ReadWrite,
+            )
+            .expect("endpoint")],
+        )
+        .expect("public profile");
         assert_eq!(profile.kind(), RelayProfileKind::Public);
-        assert_eq!(profile.endpoints().len(), 2);
-        assert_eq!(profile.endpoints()[0].url().as_str(), DEFAULT_PUBLIC_RELAY);
+        assert_eq!(profile.endpoints().len(), 1);
+        assert_eq!(profile.endpoints()[0].url().as_str(), "wss://write.example");
         assert_eq!(profile.endpoints()[0].access(), RelayAccess::ReadWrite);
-        assert_eq!(profile.endpoints()[1].access(), RelayAccess::ReadWrite);
-        assert!(RelayProfile::public([DEFAULT_PUBLIC_RELAY]).is_err());
-        assert!(RelayProfile::public(["ws://public.example"]).is_err());
     }
 
     #[test]
@@ -244,8 +192,18 @@ mod tests {
         let profile = RelayProfile::explicit(
             RelayProfileKind::Public,
             [
-                ("wss://read.example", RelayAccess::ReadOnly),
-                ("wss://write.example", RelayAccess::ReadWrite),
+                RelayEndpoint::new(
+                    "wss://read.example",
+                    RelayUrlPolicy::Public,
+                    RelayAccess::ReadOnly,
+                )
+                .expect("read endpoint"),
+                RelayEndpoint::new(
+                    "wss://write.example",
+                    RelayUrlPolicy::Public,
+                    RelayAccess::ReadWrite,
+                )
+                .expect("write endpoint"),
             ],
         )
         .expect("explicit profile");
@@ -258,24 +216,67 @@ mod tests {
     }
 
     #[test]
-    fn loopback_is_confined_to_the_simulator_profile() {
-        assert!(RelayProfile::simulator(["ws://127.0.0.1:7447"]).is_ok());
-        assert!(RelayProfile::simulator(["wss://localhost:7447"]).is_ok());
-        assert!(RelayProfile::simulator(Vec::<String>::new()).is_err());
-        assert!(RelayProfile::public(["ws://127.0.0.1:7447"]).is_err());
-        assert!(RelayProfile::device(["wss://127.0.0.1:7447"]).is_err());
+    fn profile_kind_rejects_mismatched_explicit_destination_policy() {
+        let public = RelayEndpoint::new(
+            "wss://relay.example",
+            RelayUrlPolicy::Public,
+            RelayAccess::ReadOnly,
+        )
+        .expect("public endpoint");
+        let local = RelayEndpoint::new(
+            "ws://127.0.0.1:7447",
+            RelayUrlPolicy::Local,
+            RelayAccess::ReadWrite,
+        )
+        .expect("local endpoint");
+        let private = RelayEndpoint::new(
+            "wss://10.0.0.5:7447",
+            RelayUrlPolicy::PrivateNetwork,
+            RelayAccess::ReadWrite,
+        )
+        .expect("private endpoint");
+
+        assert!(RelayProfile::explicit(RelayProfileKind::Public, [public.clone()]).is_ok());
+        assert!(RelayProfile::explicit(RelayProfileKind::Simulator, [local.clone()]).is_ok());
+        assert!(RelayProfile::explicit(RelayProfileKind::Device, [public]).is_ok());
+        assert!(RelayProfile::explicit(RelayProfileKind::Device, [private]).is_ok());
+        assert_eq!(
+            RelayProfile::explicit(RelayProfileKind::Public, [local]).unwrap_err(),
+            Error::RelayProfilePolicyMismatch
+        );
     }
 
     #[test]
-    fn device_profile_requires_tls_and_rejects_duplicate_authority() {
-        let profile = RelayProfile::device(["wss://10.0.0.5:7447"]).expect("device profile");
-        assert_eq!(profile.kind(), RelayProfileKind::Device);
-        assert_eq!(profile.endpoints()[0].access(), RelayAccess::ReadWrite);
-        assert_eq!(
-            profile.endpoints()[1].policy(),
-            RelayUrlPolicy::PrivateNetwork
+    fn empty_and_duplicate_profiles_remain_rejected() {
+        assert!(
+            RelayProfile::explicit(RelayProfileKind::Public, Vec::<RelayEndpoint>::new()).is_err()
         );
-        assert!(RelayProfile::device(["ws://10.0.0.5:7447"]).is_err());
-        assert!(RelayProfile::device([DEFAULT_PUBLIC_RELAY]).is_err());
+        let endpoint = RelayEndpoint::new(
+            "wss://relay.example",
+            RelayUrlPolicy::Public,
+            RelayAccess::ReadOnly,
+        )
+        .expect("endpoint");
+        assert!(
+            RelayProfile::explicit(RelayProfileKind::Public, [endpoint.clone(), endpoint]).is_err()
+        );
+    }
+
+    #[test]
+    fn excessive_and_infinite_endpoint_iterators_terminate_at_the_public_bound() {
+        let endpoint = RelayEndpoint::new(
+            "wss://relay.example",
+            RelayUrlPolicy::Public,
+            RelayAccess::ReadOnly,
+        )
+        .expect("endpoint");
+        assert_eq!(
+            RelayProfile::explicit(RelayProfileKind::Public, std::iter::repeat(endpoint),)
+                .unwrap_err(),
+            Error::TooManyRelays {
+                max: crate::client::MAX_RELAYS,
+                actual: crate::client::MAX_RELAYS + 1,
+            }
+        );
     }
 }

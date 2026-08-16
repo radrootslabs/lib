@@ -4,7 +4,8 @@ use radroots_transport::{
     source::FetchBounds,
 };
 use radroots_transport_nostr::{
-    Config, NostrTransport, RelayAggregateState, RelayEvidenceState, RelayProfile,
+    Config, NostrTransport, RelayAccess, RelayAggregateState, RelayEndpoint, RelayEvidenceState,
+    RelayProfile, RelayProfileKind, RelayUrlPolicy,
 };
 use serde_json::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -44,7 +45,14 @@ async fn simulator_profile_proves_read_capability_against_a_real_loopback_socket
         }
     });
 
-    let profile = RelayProfile::simulator([relay_url.as_str()]).expect("simulator profile");
+    let endpoint = RelayEndpoint::new(
+        relay_url.as_str(),
+        RelayUrlPolicy::Local,
+        RelayAccess::ReadWrite,
+    )
+    .expect("loopback endpoint");
+    let profile =
+        RelayProfile::explicit(RelayProfileKind::Simulator, [endpoint]).expect("simulator profile");
     let config = Config::from_profile(profile)
         .with_timeouts(1_000, 2_000, 500)
         .expect("timeouts");

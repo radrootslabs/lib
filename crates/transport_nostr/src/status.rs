@@ -638,15 +638,21 @@ pub(crate) fn delivery_succeeded(outcome: &DeliveryOutcome) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ReconnectBackoff, RelayProfile};
+    use crate::ReconnectBackoff;
 
     fn tracker() -> (StatusTracker, RelayUrl, RelayUrl) {
-        let config =
-            Config::from_profile(RelayProfile::public(["wss://write.example"]).expect("profile"))
-                .with_reconnect_backoff(ReconnectBackoff::new(10, 40).expect("backoff"));
-        let canonical = config.relays()[0].clone();
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                ["wss://read.example", "wss://write.example"],
+            )
+            .expect("profile"),
+        )
+        .with_reconnect_backoff(ReconnectBackoff::new(10, 40).expect("backoff"));
+        let readable = config.relays()[0].clone();
         let writable = config.relays()[1].clone();
-        (StatusTracker::new(&config), canonical, writable)
+        (StatusTracker::new(&config), readable, writable)
     }
 
     #[test]
@@ -780,8 +786,14 @@ mod tests {
 
     #[test]
     fn canonical_relay_read_and_write_success_is_available() {
-        let config =
-            Config::from_profile(RelayProfile::public(Vec::<String>::new()).expect("profile"));
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                ["wss://relay.example"],
+            )
+            .expect("profile"),
+        );
         let tracker = StatusTracker::new(&config);
         let relay = config.relays()[0].clone();
         tracker.record_read(&relay, true, false, 1);

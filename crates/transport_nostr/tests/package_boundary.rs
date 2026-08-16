@@ -8,6 +8,7 @@ const EXAMPLE: &str = include_str!("../examples/configure_transport.rs");
 const PUBLIC_API: &str =
     include_str!("../../../contracts/api_baselines/radroots_transport_nostr.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
+const PROFILE: &str = include_str!("../src/profile.rs");
 
 #[test]
 fn manifest_and_root_match_the_governed_transport_boundary() {
@@ -68,7 +69,8 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
     }
     for required in [
         "Config::from_profile(",
-        "RelayProfile::public(",
+        "RelayEndpoint::new(",
+        "RelayProfile::explicit(",
         "NostrTransport::new(config)",
         "let source: &dyn EventSource",
         "let sink: &dyn EventSink",
@@ -85,6 +87,8 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "pub struct radroots_transport_nostr::NostrTransport",
         "pub enum radroots_transport_nostr::RelayAggregateState",
         "pub struct radroots_transport_nostr::RelayProfile",
+        "pub fn radroots_transport_nostr::RelayEndpoint::new(",
+        "pub fn radroots_transport_nostr::RelayProfile::explicit<I>(",
         "pub struct radroots_transport_nostr::RelayStatusReport",
         "pub struct radroots_transport_nostr::RelayUrl(_)",
         "pub enum radroots_transport_nostr::RelayUrlPolicy",
@@ -111,6 +115,33 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         assert!(
             !PUBLIC_API.contains(forbidden),
             "reviewed public API baseline exposes `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn relay_profiles_have_no_implicit_destination_or_policy_constructor() {
+    for forbidden in [
+        "DEFAULT_PUBLIC_RELAY",
+        "pub fn public",
+        "pub fn simulator",
+        "pub fn device",
+    ] {
+        assert!(!ROOT.contains(forbidden));
+        assert!(!PROFILE.contains(forbidden));
+        assert!(!PUBLIC_API.contains(forbidden));
+    }
+    for required in [
+        "pub fn new(",
+        "policy: RelayUrlPolicy",
+        "access: RelayAccess",
+        "IntoIterator<Item = RelayEndpoint>",
+        ".take(crate::client::MAX_RELAYS + 1)",
+        "Error::RelayProfilePolicyMismatch",
+    ] {
+        assert!(
+            PROFILE.contains(required),
+            "profile is missing `{required}`"
         );
     }
 }

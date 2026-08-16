@@ -408,7 +408,12 @@ mod tests {
             RelayUrl::from_target(&local, RelayUrlPolicy::Public),
             Err(Error::UnexpectedTransport { .. })
         ));
-        let profile = crate::RelayProfile::public(["wss://relay.example.com"]).expect("profile");
+        let profile = crate::profile::test_profile(
+            crate::RelayProfileKind::Public,
+            RelayUrlPolicy::Public,
+            ["wss://relay.example.com"],
+        )
+        .expect("profile");
         assert!(HardenedWebsocketTransport::new(profile.endpoints()).support_ping());
         assert!(!policy_error("denied").to_string().is_empty());
     }

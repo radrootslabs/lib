@@ -28,9 +28,9 @@ use radroots_blossom::{
 
 #[cfg(feature = "nostr")]
 pub use radroots_transport_nostr::{
-    DEFAULT_PUBLIC_RELAY, ReconnectBackoff, RelayAccess, RelayAggregateState,
-    RelayCapabilityEvidence, RelayCursor, RelayEndpoint, RelayEvidenceState, RelayProfile,
-    RelayProfileKind, RelayStatus, RelayStatusReport, RelayUrl, RelayUrlPolicy,
+    ReconnectBackoff, RelayAccess, RelayAggregateState, RelayCapabilityEvidence, RelayCursor,
+    RelayEndpoint, RelayEvidenceState, RelayProfile, RelayProfileKind, RelayStatus,
+    RelayStatusReport, RelayUrl, RelayUrlPolicy,
 };
 
 const PREVIEW_UNAVAILABLE_MESSAGE: &str = "preview transport is unavailable in this SDK release";
@@ -3223,8 +3223,19 @@ mod tests {
         assert!(slot.read_targets().is_none());
         assert!(slot.relay_status().is_none());
         assert!(
-            slot.configure(RelayProfile::simulator(["ws://127.0.0.1:7447"]).expect("profile"))
-                .is_ok()
+            slot.configure(
+                RelayProfile::explicit(
+                    RelayProfileKind::Simulator,
+                    [RelayEndpoint::new(
+                        "ws://127.0.0.1:7447",
+                        RelayUrlPolicy::Local,
+                        RelayAccess::ReadWrite,
+                    )
+                    .expect("endpoint")],
+                )
+                .expect("profile"),
+            )
+            .is_ok()
         );
         let original = slot.read_targets().expect("configured targets");
         assert_eq!(slot.write_targets(), Some(original.clone()));
@@ -3251,8 +3262,19 @@ mod tests {
         slot.clear();
         assert!(slot.read_targets().is_none());
         assert!(
-            slot.configure(RelayProfile::simulator(["ws://127.0.0.1:7447"]).expect("profile"))
-                .is_err()
+            slot.configure(
+                RelayProfile::explicit(
+                    RelayProfileKind::Simulator,
+                    [RelayEndpoint::new(
+                        "ws://127.0.0.1:7447",
+                        RelayUrlPolicy::Local,
+                        RelayAccess::ReadWrite,
+                    )
+                    .expect("endpoint")],
+                )
+                .expect("profile"),
+            )
+            .is_err()
         );
     }
 

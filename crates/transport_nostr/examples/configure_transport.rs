@@ -1,9 +1,17 @@
 use radroots_transport::{EventSink, EventSource};
-use radroots_transport_nostr::{Config, NostrTransport, RelayProfile};
+use radroots_transport_nostr::{
+    Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind,
+    RelayUrlPolicy,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_profile(RelayProfile::public(["wss://relay.example.com"])?)
-        .with_timeouts(5_000, 20_000, 2_000)?;
+    let endpoint = RelayEndpoint::new(
+        "wss://relay.example.com",
+        RelayUrlPolicy::Public,
+        RelayAccess::ReadWrite,
+    )?;
+    let profile = RelayProfile::explicit(RelayProfileKind::Public, [endpoint])?;
+    let config = Config::from_profile(profile).with_timeouts(5_000, 20_000, 2_000)?;
     let transport = NostrTransport::new(config);
 
     let source: &dyn EventSource = &transport;
