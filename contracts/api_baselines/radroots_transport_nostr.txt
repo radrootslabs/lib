@@ -106,6 +106,8 @@ pub fn radroots_transport_nostr::NostrTransport::status(&self) -> radroots_trans
 impl radroots_transport::source::EventSource for radroots_transport_nostr::NostrTransport
 pub fn radroots_transport_nostr::NostrTransport::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
 pub fn radroots_transport_nostr::NostrTransport::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SourceStatus, radroots_transport::error::Error>>
+impl radroots_transport::source::EventSubscriber for radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::subscribe(&self, radroots_transport::source::SubscriptionRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::BoxSubscription, radroots_transport::error::Error>>
 pub struct radroots_transport_nostr::ReconnectBackoff
 impl radroots_transport_nostr::ReconnectBackoff
 pub const fn radroots_transport_nostr::ReconnectBackoff::initial_delay_ms(self) -> u64

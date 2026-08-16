@@ -1,4 +1,4 @@
-use radroots_transport::{EventSink, EventSource};
+use radroots_transport::{EventSink, EventSource, EventSubscriber};
 use radroots_transport_nostr::{
     Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind,
     RelayUrlPolicy,
@@ -15,10 +15,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transport = NostrTransport::new(config);
 
     let source: &dyn EventSource = &transport;
+    let subscriber: &dyn EventSubscriber = &transport;
     let sink: &dyn EventSink = &transport;
     drop(source.status());
+    let _ = subscriber;
     drop(sink.status());
 
-    println!("configured a Nostr source and sink without opening a relay connection");
+    println!("configured a Nostr source, subscriber, and sink without opening a relay connection");
     Ok(())
 }

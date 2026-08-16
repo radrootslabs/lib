@@ -145,6 +145,10 @@ fn every_transport_error_has_stable_operator_facing_text() {
             "transport subscription result does not match its request",
         ),
         (
+            Error::SubscriptionUnavailable,
+            "transport subscription is unavailable",
+        ),
+        (
             Error::InvalidSatisfactionPolicy,
             "transport satisfaction policy is invalid",
         ),

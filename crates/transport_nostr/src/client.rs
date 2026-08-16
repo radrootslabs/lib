@@ -2,7 +2,10 @@
 
 use crate::{Error, RelayEndpoint, RelayProfile, RelayProfileKind, RelayStatusReport, RelayUrl};
 use core::fmt;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 /// Maximum relay targets accepted by one transport instance.
 pub(crate) const MAX_RELAYS: usize = 64;
@@ -216,8 +219,10 @@ pub struct NostrTransport {
     config: Config,
     pub(crate) client: Arc<dyn crate::sink::RelayClient>,
     pub(crate) source_client: Arc<dyn crate::source::RelaySourceClient>,
+    pub(crate) subscription_client: Arc<dyn crate::subscription::RelaySubscriptionClient>,
     pub(crate) auth: Arc<crate::auth::AuthFlow>,
     pub(crate) status: Arc<crate::status::StatusTracker>,
+    subscription_sequence: Arc<AtomicU64>,
 }
 
 impl NostrTransport {
@@ -234,10 +239,14 @@ impl NostrTransport {
             config,
             client: Arc::new(crate::sink::LiveRelayClient::new(client.clone())),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::new(client.clone())),
+            subscription_client: Arc::new(crate::subscription::LiveRelaySubscriptionClient::new(
+                client.clone(),
+            )),
             auth: Arc::new(crate::auth::AuthFlow::new(Arc::new(
                 crate::auth::LiveAuthClient::new(client),
             ))),
             status,
+            subscription_sequence: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -259,8 +268,12 @@ impl NostrTransport {
             config,
             client,
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
+            subscription_client: Arc::new(
+                crate::subscription::LiveRelaySubscriptionClient::isolated(),
+            ),
             auth: Arc::new(crate::auth::AuthFlow::isolated()),
             status,
+            subscription_sequence: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -274,9 +287,39 @@ impl NostrTransport {
             config,
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client,
+            subscription_client: Arc::new(
+                crate::subscription::LiveRelaySubscriptionClient::isolated(),
+            ),
             auth: Arc::new(crate::auth::AuthFlow::isolated()),
             status,
+            subscription_sequence: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_subscription_client(
+        config: Config,
+        subscription_client: Arc<dyn crate::subscription::RelaySubscriptionClient>,
+    ) -> Self {
+        let status = Arc::new(crate::status::StatusTracker::new(&config));
+        Self {
+            config,
+            client: Arc::new(crate::sink::LiveRelayClient::isolated()),
+            source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
+            subscription_client,
+            auth: Arc::new(crate::auth::AuthFlow::isolated()),
+            status,
+            subscription_sequence: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    pub(crate) fn next_subscription_sequence(&self) -> Result<u64, radroots_transport::Error> {
+        self.subscription_sequence
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                current.checked_add(1)
+            })
+            .map(|previous| previous + 1)
+            .map_err(|_| radroots_transport::Error::SubscriptionUnavailable)
     }
 }
 
@@ -383,5 +426,27 @@ mod tests {
         let debug = format!("{transport:?}");
         assert!(debug.contains("NostrTransport"));
         assert!(!debug.contains("client"));
+    }
+
+    #[test]
+    fn subscription_sequence_is_monotonic_and_fails_closed_at_overflow() {
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                RelayProfileKind::Public,
+                crate::RelayUrlPolicy::Public,
+                ["wss://relay.example.com"],
+            )
+            .expect("profile"),
+        );
+        let transport = NostrTransport::new(config);
+        assert_eq!(transport.next_subscription_sequence(), Ok(1));
+        assert_eq!(transport.next_subscription_sequence(), Ok(2));
+        transport
+            .subscription_sequence
+            .store(u64::MAX, Ordering::SeqCst);
+        assert_eq!(
+            transport.next_subscription_sequence(),
+            Err(radroots_transport::Error::SubscriptionUnavailable)
+        );
     }
 }

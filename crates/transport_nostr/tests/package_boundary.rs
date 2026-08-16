@@ -9,6 +9,7 @@ const PUBLIC_API: &str =
     include_str!("../../../contracts/api_baselines/radroots_transport_nostr.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
 const PROFILE: &str = include_str!("../src/profile.rs");
+const SUBSCRIPTION: &str = include_str!("../src/subscription.rs");
 
 #[test]
 fn manifest_and_root_match_the_governed_transport_boundary() {
@@ -36,7 +37,16 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
     assert_eq!(
         private_modules(ROOT),
         BTreeSet::from([
-            "auth", "client", "cursor", "error", "profile", "relay", "sink", "source", "status"
+            "auth",
+            "client",
+            "cursor",
+            "error",
+            "profile",
+            "relay",
+            "sink",
+            "source",
+            "status",
+            "subscription"
         ])
     );
     for export in [
@@ -56,7 +66,7 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "## Configure without connecting",
         "## Public surface",
         "## Relay and network security",
-        "## Fetch, delivery, and outcome behavior",
+        "## Fetch, live subscription, delivery, and outcome behavior",
         "## Deadlines, cancellation, and commit points",
         "## Serialization and diagnostics",
         "## Features and runtime requirements",
@@ -64,6 +74,11 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "radroots_crates_release_v1.toml",
         "examples/configure_transport.rs",
         "contracts/api_baselines/radroots_transport_nostr.txt",
+        "Live subscriptions use the same explicit readable targets",
+        "inclusive `since` timestamp",
+        "event-ID tie breaker",
+        "upstream auto-close deadline",
+        "adapter-owned worker",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -73,8 +88,10 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "RelayProfile::explicit(",
         "NostrTransport::new(config)",
         "let source: &dyn EventSource",
+        "let subscriber: &dyn EventSubscriber",
         "let sink: &dyn EventSink",
         "drop(source.status())",
+        "let _ = subscriber",
         "drop(sink.status())",
     ] {
         assert!(
@@ -95,6 +112,7 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "pub enum radroots_transport_nostr::Error",
         "impl radroots_transport::sink::EventSink for radroots_transport_nostr::NostrTransport",
         "impl radroots_transport::source::EventSource for radroots_transport_nostr::NostrTransport",
+        "impl radroots_transport::source::EventSubscriber for radroots_transport_nostr::NostrTransport",
         "NostrTransport::begin_authentication",
         "NostrTransport::complete_authentication",
         "NostrTransport::reject_authentication",
@@ -212,6 +230,32 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
             "sink.rs".to_owned(),
             "source.rs".to_owned(),
             "status.rs".to_owned(),
+            "subscription.rs".to_owned(),
         ])
     );
+
+    for required in [
+        "impl EventSubscriber for NostrTransport",
+        "SubscribeAutoCloseOptions::default()",
+        "ReqExitPolicy::WaitDurationAfterEOSE(query.timeout)",
+        "cursor.precedes(event.created_at(), event.id_str())",
+        "self.terminate(SubscriptionEndReason::Cancelled)",
+    ] {
+        assert!(
+            SUBSCRIPTION.contains(required),
+            "subscription adapter is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "tokio::spawn",
+        "spawn_blocking",
+        "std::thread",
+        "process::",
+        "global_default",
+    ] {
+        assert!(
+            !SUBSCRIPTION.contains(forbidden),
+            "subscription adapter contains forbidden authority `{forbidden}`"
+        );
+    }
 }

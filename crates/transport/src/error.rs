@@ -47,6 +47,7 @@ pub enum Error {
     SubscriptionEndLimitExceeded,
     InvalidSubscriptionEnd,
     SubscriptionEndRequestMismatch,
+    SubscriptionUnavailable,
     InvalidSatisfactionPolicy,
     EmptyRequiredTargetSet,
     DuplicateRequiredTargetFingerprint,
@@ -167,6 +168,7 @@ impl fmt::Display for Error {
             Self::SubscriptionEndRequestMismatch => {
                 f.write_str("transport subscription result does not match its request")
             }
+            Self::SubscriptionUnavailable => f.write_str("transport subscription is unavailable"),
             Self::InvalidSatisfactionPolicy => {
                 f.write_str("transport satisfaction policy is invalid")
             }

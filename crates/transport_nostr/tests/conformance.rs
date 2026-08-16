@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use radroots_transport::{EventSink, EventSource};
+use radroots_transport::{EventSink, EventSource, EventSubscriber};
 use radroots_transport_nostr::{Config, Error, NostrTransport, RelayUrl, RelayUrlPolicy};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
@@ -9,10 +9,11 @@ const RELAY: &str = include_str!("../src/relay.rs");
 const SINK: &str = include_str!("../src/sink.rs");
 const SOURCE: &str = include_str!("../src/source.rs");
 const STATUS: &str = include_str!("../src/status.rs");
+const SUBSCRIPTION: &str = include_str!("../src/subscription.rs");
 
 fn assert_adapter_contract<T>()
 where
-    T: EventSource + EventSink + Clone + Debug + Send + Sync,
+    T: EventSource + EventSubscriber + EventSink + Clone + Debug + Send + Sync,
 {
 }
 
@@ -73,6 +74,18 @@ fn complete_mocked_conformance_matrix_remains_reachable() {
             "source_deduplicates_relays_reports_malformed_and_paginates",
         ),
         (SOURCE, "dropping_an_unpolled_fetch_performs_no_relay_work"),
+        (
+            SUBSCRIPTION,
+            "reconnect_checkpoint_is_equal_timestamp_safe_and_request_bound",
+        ),
+        (
+            SUBSCRIPTION,
+            "dropping_pending_next_requests_cancellation_on_the_next_call",
+        ),
+        (
+            SUBSCRIPTION,
+            "dropping_an_unpolled_subscription_start_performs_no_backend_work",
+        ),
         (
             STATUS,
             "every_upstream_class_maps_to_stable_secret_safe_output",

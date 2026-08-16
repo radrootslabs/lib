@@ -148,6 +148,7 @@ pub radroots_transport::error::Error::SubscriptionCheckpointSetTooLarge
 pub radroots_transport::error::Error::SubscriptionEndLimitExceeded
 pub radroots_transport::error::Error::SubscriptionEndRequestMismatch
 pub radroots_transport::error::Error::SubscriptionEventCheckpointMismatch
+pub radroots_transport::error::Error::SubscriptionUnavailable
 pub radroots_transport::error::Error::TargetSetTooLarge
 pub radroots_transport::error::Error::TransportOutcomeStatusMismatch
 pub radroots_transport::error::Error::UnexpectedDeliveryTargetReceipt
@@ -626,6 +627,7 @@ pub radroots_transport::Error::SubscriptionCheckpointSetTooLarge
 pub radroots_transport::Error::SubscriptionEndLimitExceeded
 pub radroots_transport::Error::SubscriptionEndRequestMismatch
 pub radroots_transport::Error::SubscriptionEventCheckpointMismatch
+pub radroots_transport::Error::SubscriptionUnavailable
 pub radroots_transport::Error::TargetSetTooLarge
 pub radroots_transport::Error::TransportOutcomeStatusMismatch
 pub radroots_transport::Error::UnexpectedDeliveryTargetReceipt

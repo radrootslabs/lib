@@ -11,6 +11,7 @@ mod relay;
 mod sink;
 mod source;
 mod status;
+mod subscription;
 
 pub use client::{Config, NostrTransport, ReconnectBackoff};
 pub use cursor::RelayCursor;

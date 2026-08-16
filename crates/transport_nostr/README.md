@@ -1,11 +1,12 @@
 # radroots_transport_nostr
 
 `radroots_transport_nostr` is the concrete, signer-free Nostr implementation
-of the generic [`radroots_transport::EventSource`] and
-[`radroots_transport::EventSink`] interfaces. It validates relay configuration
-and network policy, performs bounded fetch and delivery attempts, exposes
-explicit host-mediated NIP-42 authentication, and normalizes relay outcomes
-and passive status.
+of the generic [`radroots_transport::EventSource`],
+[`radroots_transport::EventSubscriber`], and [`radroots_transport::EventSink`]
+interfaces. It validates relay configuration and network policy, performs
+bounded fetch, live-subscription, and delivery attempts, exposes explicit
+host-mediated NIP-42 authentication, and normalizes relay outcomes and passive
+status.
 
 The crate does not own event ingestion, persistence, outbox claiming,
 projection refresh, durable retry scheduling, or a process runtime. Those
@@ -23,7 +24,7 @@ Configuration is explicit, validated, and inert. Constructing
 [`NostrTransport`] creates no socket and performs no DNS lookup:
 
 ```rust
-use radroots_transport::{EventSink, EventSource};
+use radroots_transport::{EventSink, EventSource, EventSubscriber};
 use radroots_transport_nostr::{
     Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile,
     RelayProfileKind, RelayUrlPolicy,
@@ -39,17 +40,20 @@ let config = Config::from_profile(profile).with_timeouts(5_000, 20_000, 2_000)?;
 let transport = NostrTransport::new(config);
 
 let source: &dyn EventSource = &transport;
+let subscriber: &dyn EventSubscriber = &transport;
 let sink: &dyn EventSink = &transport;
 drop(source.status());
+let _ = subscriber;
 drop(sink.status());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 A runnable version is available at
 [`examples/configure_transport.rs`](examples/configure_transport.rs).
-The composing host constructs bounded `FetchRequest` and `DeliveryRequest`
-values from `radroots_transport`, polls the returned futures on its executor,
-and applies any retry or scheduling policy outside this crate.
+The composing host constructs bounded `FetchRequest`, `SubscriptionRequest`,
+and `DeliveryRequest` values from `radroots_transport`, polls the returned
+futures on its executor, and applies any retry or scheduling policy outside
+this crate.
 
 ## Public surface
 
@@ -63,7 +67,7 @@ and applies any retry or scheduling policy outside this crate.
   trusted private-network destination rules.
 - [`RelayCursor`] provides the equal-timestamp-safe event ordering primitive
   used by scoped fetch continuation cursors.
-- [`NostrTransport`] implements both transport SPIs, exposes passive typed
+- [`NostrTransport`] implements all three transport SPIs, exposes passive typed
   per-relay evidence, and provides explicit NIP-42 challenge lifecycle methods.
 - [`Error`] contains only package-owned validation and authentication errors;
   upstream failures are normalized before crossing the public boundary.
@@ -96,16 +100,25 @@ Callers that resolve addresses outside the adapter may use
 [`RelayUrl::validate_resolved_addresses`] to apply the same destination-class
 check before handing control to another network boundary.
 
-## Fetch, delivery, and outcome behavior
+## Fetch, live subscription, delivery, and outcome behavior
 
-Fetch accepts only configured readable Nostr targets, translates transport-neutral kind,
-author, and event-time selectors into Nostr filters, reapplies those selectors
-defensively, applies the request page bound, deduplicates events by event ID,
-preserves per-relay provenance, and emits an opaque versioned cursor bound to
-the exact target set and selector when more results remain. Equal timestamps
-are ordered by event ID so overlap-safe reconnect pagination cannot skip peers.
-Malformed relay events are ignored and reported as a partial target outcome
-rather than admitted.
+Fetch accepts only configured readable Nostr targets, translates
+transport-neutral kind, author, and event-time selectors into Nostr filters,
+reapplies those selectors defensively, applies the request page bound,
+deduplicates events by event ID, preserves per-relay provenance, and emits an
+opaque versioned cursor bound to the exact target set and selector when more
+results remain. Equal timestamps are ordered by event ID so overlap-safe
+reconnect pagination cannot skip peers. Malformed relay events are ignored and
+reported as a partial target outcome rather than admitted.
+
+Live subscriptions use the same explicit readable targets and selector
+translation. A caller checkpoint is scoped to one exact target and selector;
+the adapter reconnects with Nostr's inclusive `since` timestamp and suppresses
+only events at or before that checkpoint's event-ID tie breaker. This preserves
+every later event sharing the same second-granular timestamp. Each emitted
+event carries exact relay provenance and a new canonical target checkpoint.
+Event limits, absolute deadlines, explicit cancellation, source closure, and
+stable repeated terminal results follow the generic subscription contract.
 
 Delivery converts an already validated signed Radroots event to Nostr, attempts
 each configured writable target once, and returns one normalized receipt entry per
@@ -128,12 +141,21 @@ The absolute deadline in each generic request bounds the complete operation.
 The configured connection and request timeouts are upper bounds within that
 remaining budget. An already-expired request performs no relay work.
 
-Dropping an unpolled fetch or delivery future performs no I/O. Once polled,
-cancellation is best effort at the socket boundary. For delivery, submission
-to a relay is the remote commit point: after a relay accepts the event, dropping
-the future cannot retract it. A missing final response is therefore reported
-as unavailable or unknown evidence, never as proof that no publication
-occurred. Fetch is observational and has no local durable commit point.
+Dropping an unpolled fetch, subscription-start, or delivery future performs no
+I/O. Once polled, cancellation is best effort at the socket boundary. For
+delivery, submission to a relay is the remote commit point: after a relay
+accepts the event, dropping the future cannot retract it. A missing final
+response is therefore reported as unavailable or unknown evidence, never as
+proof that no publication occurred. Fetch and live observation have no local
+durable commit point.
+
+Dropping a pending subscription `next` or `cancel` future records a
+cancellation request in the retained capability; its next operation awaits
+relay unsubscription and returns the stable cancelled terminal result.
+Dropping the capability itself cannot await network cleanup. Every published
+relay subscription therefore also carries an upstream auto-close deadline
+bounded by the request's absolute deadline, so remote work cannot continue
+indefinitely.
 
 NIP-42 authentication is explicit. [`NostrTransport::begin_authentication`]
 records one bounded relay challenge and returns the exact host signing input.
@@ -160,15 +182,17 @@ event JSON.
 
 The package has no Cargo features. It is a standard-library native adapter;
 Tokio and the upstream Nostr relay client are private implementation choices.
-The crate never creates an executor, installs a runtime, spawns a background
-worker, installs a tracing subscriber, or owns process lifecycle. The host must
-poll operations from a compatible executor and provide clock/deadline policy
-through the generic requests.
+The crate never creates an executor, installs a runtime, launches an
+adapter-owned worker, installs a tracing subscriber, or owns process lifecycle.
+The host must poll operations from a compatible executor and provide
+clock/deadline policy through the generic requests. After an explicit operation
+begins, the private upstream relay client owns its ordinary socket tasks and
+the bounded auto-close timer for live relay subscriptions.
 
 ## Intended consumers
 
-- `radroots_sync` composes this source and sink with verification, storage,
-  projection, outbox, and explicit retry decisions.
+- `radroots_sync` composes this source, subscriber, and sink with verification,
+  storage, projection, outbox, and explicit retry decisions.
 - `radroots_sdk` selects and configures the adapter for advanced applications.
 - Native services may compose it directly behind the generic transport SPIs.
 
