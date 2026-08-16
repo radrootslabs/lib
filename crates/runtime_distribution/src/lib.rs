@@ -172,21 +172,21 @@ default_channel = "stable"
 human_installable = true
 
 [[runtime]]
-id = "community-app-desktop"
+id = "fixture-desktop-bundle"
 distribution_state = "defined"
-release_unit = "community-app-desktop"
-package_name = "radroots_studio_app"
-binary_name = "radroots_studio_app"
+release_unit = "fixture-desktop-bundle"
+package_name = "fixture_desktop_bundle"
+binary_name = "fixture_desktop_bundle"
 artifact_adapter = "desktop_bundle"
 target_set = "desktop_default"
 default_channel = "stable"
 human_installable = true
 
 [[runtime]]
-id = "community-app-ios"
+id = "fixture-mobile-package"
 distribution_state = "external_platform_managed"
-release_unit = "community-app-ios"
-package_name = "radroots_studio_app_ios"
+release_unit = "fixture-mobile-package"
+package_name = "fixture_mobile_package"
 artifact_adapter = "mobile_store_package"
 default_channel = "stable"
 human_installable = false
@@ -355,7 +355,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
         let artifact = resolver
             .resolve_artifact(&RuntimeArtifactRequest {
-                runtime_id: "community-app-desktop",
+                runtime_id: "fixture-desktop-bundle",
                 os: "macos",
                 arch: "arm64",
                 version: "1.0.0-alpha.1",
@@ -364,7 +364,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
             .expect("resolve desktop artifact");
 
         assert_eq!(artifact.target_id, "aarch64-apple-darwin");
-        assert_eq!(artifact.package_name, "radroots_studio_app");
+        assert_eq!(artifact.package_name, "fixture_desktop_bundle");
     }
 
     #[test]
@@ -374,7 +374,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
         let err = resolver
             .resolve_artifact(&RuntimeArtifactRequest {
-                runtime_id: "community-app-ios",
+                runtime_id: "fixture-mobile-package",
                 os: "macos",
                 arch: "arm64",
                 version: "1.0.0-alpha.1",
@@ -484,7 +484,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
             .as_array_mut()
             .expect("runtime array")
             .iter_mut()
-            .find(|runtime| runtime["id"].as_str() == Some("community-app-ios"))
+            .find(|runtime| runtime["id"].as_str() == Some("fixture-mobile-package"))
             .expect("ios runtime");
         runtime["human_installable"] = Value::Boolean(true);
 
@@ -492,7 +492,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         let err = resolve_error(
             &resolver,
             RuntimeArtifactRequest {
-                runtime_id: "community-app-ios",
+                runtime_id: "fixture-mobile-package",
                 os: "ios",
                 arch: "arm64",
                 version: "1.0.0-alpha.1",
@@ -637,7 +637,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         let err = resolve_error(
             &resolver,
             RuntimeArtifactRequest {
-                runtime_id: "community-app-desktop",
+                runtime_id: "fixture-desktop-bundle",
                 os: "macos",
                 arch: "arm64",
                 version: "1.0.0-alpha.1",
