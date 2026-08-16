@@ -204,4 +204,31 @@ mod tests {
             assert!(!contains_forbidden_statement_control(allowed));
         }
     }
+
+    #[test]
+    fn lexical_edges_remain_bounded_and_do_not_invent_statement_control() {
+        for allowed in [
+            "",
+            "-",
+            "-- unterminated comment",
+            "/",
+            "/* unterminated comment",
+            "/* interior * is not a terminator */ SELECT 1",
+            "''",
+            "'unterminated value",
+            "'escaped''quote'",
+            "[]",
+            "[unterminated identifier",
+            "SELECT 1;",
+            "CREATE TABLE items (value TEXT)",
+            "CREATE TEMP TABLE items (value TEXT)",
+            "CREATE TEMPORARY TRIGGER audit AFTER INSERT ON items BEGIN SELECT 1; END;",
+            "CREATE TRIGGER incomplete; SELECT 1",
+        ] {
+            assert!(
+                !contains_forbidden_statement_control(allowed),
+                "lexical edge was misclassified: {allowed:?}"
+            );
+        }
+    }
 }

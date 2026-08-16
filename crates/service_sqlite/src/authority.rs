@@ -460,6 +460,13 @@ mod tests {
 
         first.release().expect("release");
         assert!(!first.is_held());
+        assert_eq!(
+            first
+                .validate_for(&paths)
+                .expect_err("released authority cannot validate")
+                .kind(),
+            ServiceSqliteErrorKind::Authority
+        );
         first.release().expect("idempotent release");
         let next = WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting)
             .expect("reacquire")

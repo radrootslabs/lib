@@ -2776,6 +2776,94 @@ mod tests {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn callback_binding_validation_rejects_each_independent_identity_drift() {
+        let callback = MigrationDescriptor::callback(
+            2,
+            "rebuild_projection",
+            CALLBACK_THREE,
+            CALLBACK_THREE_CHECKSUM,
+        )
+        .expect("callback descriptor");
+        let callback_catalog = MigrationCatalog::new([callback.clone()]).expect("catalog");
+
+        for binding in [
+            MigrationCallbackBinding::new(
+                2,
+                MigrationName::new("wrong_projection").expect("name"),
+                callback.checksum(),
+                insert_projection_callback,
+            ),
+            MigrationCallbackBinding::new(
+                2,
+                callback.name(),
+                MigrationChecksum::from_bytes([0x55; 32]),
+                insert_projection_callback,
+            ),
+        ] {
+            assert_eq!(
+                validate_callback_bindings(&callback_catalog, &[binding])
+                    .expect_err("binding drift must fail")
+                    .kind(),
+                ServiceSqliteErrorKind::Migration
+            );
+        }
+
+        let sql = MigrationDescriptor::sql(2, "create_alpha", SQL_TWO, SQL_TWO_CHECKSUM)
+            .expect("SQL descriptor");
+        let callback_three = MigrationDescriptor::callback(
+            3,
+            "rebuild_projection",
+            CALLBACK_THREE,
+            CALLBACK_THREE_CHECKSUM,
+        )
+        .expect("callback descriptor");
+        let mixed_catalog = MigrationCatalog::new([sql.clone(), callback_three]).expect("catalog");
+        let wrong_kind = MigrationCallbackBinding::new(
+            2,
+            sql.name(),
+            sql.checksum(),
+            insert_projection_callback,
+        );
+        assert_eq!(
+            validate_callback_bindings(&mixed_catalog, &[wrong_kind])
+                .expect_err("SQL descriptor cannot bind a callback")
+                .kind(),
+            ServiceSqliteErrorKind::Migration
+        );
+
+        const CALLBACK_FOUR: &[u8] = b"callback:rebuild_secondary_projection:v1";
+        let callback_two = MigrationDescriptor::callback(
+            2,
+            "rebuild_projection",
+            CALLBACK_THREE,
+            CALLBACK_THREE_CHECKSUM,
+        )
+        .expect("callback descriptor");
+        let callback_four = MigrationDescriptor::callback(
+            3,
+            "rebuild_secondary_projection",
+            CALLBACK_FOUR,
+            MigrationChecksum::for_callback(CALLBACK_FOUR),
+        )
+        .expect("callback descriptor");
+        let duplicate_target_catalog =
+            MigrationCatalog::new([callback_two.clone(), callback_four]).expect("catalog");
+        let duplicate = MigrationCallbackBinding::new(
+            2,
+            callback_two.name(),
+            callback_two.checksum(),
+            insert_projection_callback,
+        );
+        assert_eq!(
+            validate_callback_bindings(&duplicate_target_catalog, &[duplicate, duplicate])
+                .expect_err("duplicate callback target must fail")
+                .kind(),
+            ServiceSqliteErrorKind::Migration
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test(flavor = "current_thread")]
     async fn callback_bindings_and_history_mismatches_fail_before_replay() {
         let callback_descriptor = MigrationDescriptor::callback(

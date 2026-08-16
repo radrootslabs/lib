@@ -165,4 +165,37 @@ mod tests {
             NativeBackupFailureKind::Step
         );
     }
+
+    #[test]
+    fn empty_and_misused_native_handles_fail_or_finish_deterministically() {
+        let mut backup = NativeBackup {
+            handle: None,
+            _locked_handles: PhantomData,
+        };
+        for pages in [i32::MIN, -1, 0, 1] {
+            let error = backup.step(pages).expect_err("invalid native handle");
+            assert_eq!(error.kind, NativeBackupFailureKind::Step);
+            assert_eq!(error.code, ffi::SQLITE_MISUSE);
+        }
+        backup.finish().expect("empty handle is already finalized");
+
+        for (kind, expected) in [
+            (
+                NativeBackupFailureKind::Initialize,
+                "native SQLite backup initialization failed",
+            ),
+            (
+                NativeBackupFailureKind::Step,
+                "native SQLite backup step failed",
+            ),
+            (
+                NativeBackupFailureKind::Finish,
+                "native SQLite backup finalization failed",
+            ),
+        ] {
+            let error = NativeBackupError { kind, code: 1 };
+            assert_eq!(error.to_string(), expected);
+            assert!(format!("{error:?}").contains("code: 1"));
+        }
+    }
 }

@@ -107,3 +107,86 @@ impl Drop for TransactionRollbackPermit {
         self.allow_runner_rollback.store(false, Ordering::Release);
     }
 }
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod tests {
+    use sqlx::{Connection, SqliteConnection};
+
+    use super::TransactionControlGate;
+
+    async fn memory_connection() -> SqliteConnection {
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("memory SQLite connection");
+        sqlx::query("CREATE TABLE gate_probe (value INTEGER NOT NULL)")
+            .execute(&mut connection)
+            .await
+            .expect("gate probe table");
+        connection
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn denied_commit_and_unpermitted_rollback_are_observed_exactly() {
+        let mut connection = memory_connection().await;
+        let gate = TransactionControlGate::install(&mut connection)
+            .await
+            .expect("transaction gate");
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::query("INSERT INTO gate_probe (value) VALUES (1)")
+            .execute(&mut *transaction)
+            .await
+            .expect("mutate denied transaction");
+        transaction
+            .commit()
+            .await
+            .expect_err("commit must be denied");
+        assert!(gate.control_violation_observed());
+        assert!(gate.rejected_commit_rolled_back());
+        gate.remove(&mut connection).await.expect("remove gate");
+
+        let mut connection = memory_connection().await;
+        let gate = TransactionControlGate::install(&mut connection)
+            .await
+            .expect("transaction gate");
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::query("INSERT INTO gate_probe (value) VALUES (2)")
+            .execute(&mut *transaction)
+            .await
+            .expect("mutate rolled back transaction");
+        transaction.rollback().await.expect("SQLite rollback");
+        assert!(gate.control_violation_observed());
+        assert!(!gate.rejected_commit_rolled_back());
+        gate.remove(&mut connection).await.expect("remove gate");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn runner_permits_are_scoped_and_do_not_record_violations() {
+        let mut connection = memory_connection().await;
+        let gate = TransactionControlGate::install(&mut connection)
+            .await
+            .expect("transaction gate");
+
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::query("INSERT INTO gate_probe (value) VALUES (3)")
+            .execute(&mut *transaction)
+            .await
+            .expect("mutate committed transaction");
+        let permit = gate.permit_outer_commit();
+        transaction.commit().await.expect("permitted commit");
+        drop(permit);
+        assert!(!gate.control_violation_observed());
+        assert!(!gate.rejected_commit_rolled_back());
+
+        let mut transaction = connection.begin().await.expect("transaction");
+        sqlx::query("INSERT INTO gate_probe (value) VALUES (4)")
+            .execute(&mut *transaction)
+            .await
+            .expect("mutate runner rollback transaction");
+        let permit = gate.permit_runner_rollback();
+        transaction.rollback().await.expect("permitted rollback");
+        drop(permit);
+        assert!(!gate.control_violation_observed());
+        assert!(!gate.rejected_commit_rolled_back());
+        gate.remove(&mut connection).await.expect("remove gate");
+    }
+}
