@@ -251,5 +251,18 @@ mod tests {
         let second = monotonic.now_monotonic();
         assert!(second >= first);
         assert!(monotonic.deadline_after(Duration::from_secs(1)).is_ok());
+
+        let default_monotonic = SystemMonotonicClock::default();
+        assert!(
+            default_monotonic.now_monotonic().duration_since_origin() <= Duration::from_secs(1)
+        );
+        assert_eq!(
+            WallClockError::BeforeUnixEpoch.to_string(),
+            "wall clock is before the Unix epoch"
+        );
+        assert_eq!(
+            MonotonicClockError::DeadlineOverflow.to_string(),
+            "monotonic deadline overflows"
+        );
     }
 }

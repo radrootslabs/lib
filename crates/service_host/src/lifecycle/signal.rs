@@ -206,6 +206,10 @@ mod tests {
         let mut before_first = ProcessSignalAdapter::new(InjectedSignals::new([]));
         let error = before_first.next_action().await.unwrap_err();
         assert_eq!(error.stage(), ProcessSignalStage::FirstCancellation);
+        assert_eq!(
+            error.to_string(),
+            "process signal source closed before the expected event"
+        );
         assert_eq!(before_first.stage(), ProcessSignalStage::FirstCancellation);
 
         let mut before_force =
@@ -225,8 +229,12 @@ mod tests {
     #[test]
     fn normalized_names_are_stable_and_platform_bounded() {
         assert_eq!(ProcessSignal::Interrupt.as_str(), "interrupt");
+        assert_eq!(ProcessSignal::Interrupt.to_string(), "interrupt");
         #[cfg(unix)]
-        assert_eq!(ProcessSignal::Terminate.as_str(), "terminate");
+        {
+            assert_eq!(ProcessSignal::Terminate.as_str(), "terminate");
+            assert_eq!(ProcessSignal::Terminate.to_string(), "terminate");
+        }
 
         let adapter = ProcessSignalAdapter::new(InjectedSignals::new([ProcessSignal::Interrupt]));
         assert_eq!(adapter.into_inner().events.len(), 1);

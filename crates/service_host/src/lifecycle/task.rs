@@ -165,7 +165,9 @@ mod tests {
     #[test]
     fn task_names_are_bounded_stable_and_secret_safe() {
         for valid in ["a", "admin_listener", "outbox_worker_01"] {
-            assert_eq!(TaskName::new(valid).unwrap().as_str(), valid);
+            let name = TaskName::new(valid).unwrap();
+            assert_eq!(name.as_str(), valid);
+            assert_eq!(name.to_string(), valid);
         }
         assert!(TaskName::new("a".repeat(TASK_NAME_MAX_BYTES)).is_ok());
         for invalid in [
@@ -187,6 +189,14 @@ mod tests {
         assert_eq!(
             TaskName::new("a".repeat(4 * 1024 * 1024)),
             Err(TaskMetadataError::InvalidTaskName)
+        );
+        assert_eq!(
+            TaskMetadataError::InvalidTaskName.to_string(),
+            "supervised task name is invalid"
+        );
+        assert_eq!(
+            TaskMetadataError::InvalidShutdownPhaseAssignment.to_string(),
+            "supervised task shutdown phase does not match its classification"
         );
     }
 

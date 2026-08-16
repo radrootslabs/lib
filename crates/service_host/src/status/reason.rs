@@ -276,6 +276,25 @@ mod tests {
     }
 
     #[test]
+    fn owned_text_traits_empty_state_and_deserializer_expectations_are_bound() {
+        let owned = ReasonCode::from_string("owned_reason".to_owned()).expect("owned reason");
+        assert_eq!(owned.to_string(), "owned_reason");
+        assert_eq!(
+            "parsed_reason".parse::<ReasonCode>().unwrap().as_str(),
+            "parsed_reason"
+        );
+        assert_eq!(
+            ReasonCode::from_string("Invalid".to_owned()),
+            Err(StatusContractError::InvalidReasonCode)
+        );
+
+        assert!(ReasonCodes::empty().is_empty());
+        assert!(!ReasonCodes::new([owned]).unwrap().is_empty());
+        assert!(serde_json::from_str::<ReasonCode>("42").is_err());
+        assert!(serde_json::from_str::<ReasonCodes>(r#"{"reason":"owned_reason"}"#).is_err());
+    }
+
+    #[test]
     fn collections_sort_deduplicate_bound_and_serialize_canonically() {
         let reasons = ReasonCodes::new([
             ReasonCode::new("z_reason").unwrap(),

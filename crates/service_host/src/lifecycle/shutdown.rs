@@ -409,6 +409,7 @@ mod tests {
             .unwrap();
         let (mut handler, phases) = handler(None);
         let mut shutdown = GracefulShutdown::new(Duration::from_secs(30)).unwrap();
+        assert_eq!(shutdown.grace(), Duration::from_secs(30));
 
         let first = shutdown
             .run(&clock(), &mut supervisor, &mut handler, pending())
@@ -520,6 +521,7 @@ mod tests {
         );
         assert!(!failure.to_string().contains("sensitive"));
         assert!(!format!("{failure:?}").contains("sensitive shutdown detail"));
+        assert!(failure.source().is_some());
     }
 
     #[tokio::test]
@@ -553,9 +555,11 @@ mod tests {
 
     #[test]
     fn zero_grace_fails_closed() {
+        let error = GracefulShutdown::new(Duration::ZERO).err().unwrap();
+        assert_eq!(error, ShutdownConfigError::ZeroGrace);
         assert_eq!(
-            GracefulShutdown::new(Duration::ZERO).err(),
-            Some(ShutdownConfigError::ZeroGrace)
+            error.to_string(),
+            "shutdown grace must be greater than zero"
         );
     }
 
@@ -569,14 +573,19 @@ mod tests {
         let (mut handler, phases) = handler(None);
         let mut shutdown = GracefulShutdown::new(Duration::from_nanos(1)).unwrap();
 
+        let error = shutdown
+            .run(&overflow_clock, &mut supervisor, &mut handler, pending())
+            .await
+            .unwrap_err();
         assert_eq!(
-            shutdown
-                .run(&overflow_clock, &mut supervisor, &mut handler, pending())
-                .await,
-            Err(ShutdownStartError::Deadline(
-                MonotonicClockError::DeadlineOverflow
-            ))
+            error,
+            ShutdownStartError::Deadline(MonotonicClockError::DeadlineOverflow)
         );
+        assert_eq!(
+            error.to_string(),
+            "shutdown grace deadline could not be represented"
+        );
+        assert!(error.source().is_some());
         assert!(phases.lock().unwrap().is_empty());
         assert!(!cancellation.is_cancelled());
         assert!(shutdown.phase_failure().is_none());
