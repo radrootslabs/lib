@@ -1,8 +1,19 @@
 const MANAGEMENT_FIXTURE: &str = include_str!("fixtures/hardened_service_management.v1.toml");
 const MANAGER_ROOT_SOURCE: &str = include_str!("../src/lib.rs");
+const MANAGER_SOURCE: &str = include_str!("../src/managed.rs");
+const MODEL_SOURCE: &str = include_str!("../src/model.rs");
+const MANIFEST: &str = include_str!("../Cargo.toml");
+const README: &str = include_str!("../README");
+
+fn production_source(source: &str) -> &str {
+    source
+        .split("\n#[cfg(test)]")
+        .next()
+        .expect("production source")
+}
 
 #[test]
-fn hardened_services_remain_metadata_only_in_management_contract() {
+fn hardened_services_remain_exact_metadata_only_targets() {
     for forbidden in [
         "active = [\"myc",
         "active = [\"rhi",
@@ -40,4 +51,57 @@ fn management_contract_is_bounded_before_toml_admission() {
         bound < parser,
         "contract size must be checked before parsing"
     );
+}
+
+#[test]
+fn public_package_contains_only_metadata_resolution_authority() {
+    let production = [
+        production_source(MANAGER_ROOT_SOURCE),
+        production_source(MANAGER_SOURCE),
+        production_source(MODEL_SOURCE),
+    ]
+    .join("\n");
+    for forbidden in [
+        "std::fs",
+        "std::process",
+        "std::path",
+        "radroots_runtime_paths::RuntimeContext",
+        "ManagedRuntimeArtifactName",
+        "ManagedRuntimeInstancePaths",
+        "ManagedRuntimeSharedPaths",
+        "ManagedRuntimeInstanceRegistry",
+        "ManagedRuntimeInstanceRecord",
+        "load_registry",
+        "save_registry",
+        "register_instance",
+        "remove_instance",
+        "start_process",
+        "stop_process",
+        "process_running",
+        "install_binary",
+        "extract_binary_archive",
+        "remove_instance_artifacts",
+        "write_instance_config",
+        "inspect_runtime_",
+    ] {
+        assert!(
+            !production.contains(forbidden),
+            "production surface retained `{forbidden}`"
+        );
+    }
+
+    for forbidden_dependency in ["flate2", "tar =", "tempfile"] {
+        assert!(
+            !MANIFEST.contains(forbidden_dependency),
+            "manifest retained `{forbidden_dependency}`"
+        );
+    }
+
+    for required in [
+        "performs no filesystem, registry, process, archive, artifact",
+        "runtime paths or raw persistence helpers",
+        "Steps 219 and 220",
+    ] {
+        assert!(README.contains(required), "README omitted `{required}`");
+    }
 }

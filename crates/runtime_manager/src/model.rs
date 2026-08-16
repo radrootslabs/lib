@@ -1,7 +1,8 @@
-use radroots_runtime_distribution::HardenedServiceTargets;
-use radroots_runtime_paths::{InstanceId, RuntimeContext, ServiceId};
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+use radroots_runtime_distribution::HardenedServiceTargets;
+use radroots_runtime_paths::{InstanceId, ServiceId};
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -120,137 +121,5 @@ impl BootstrapRuntimeContract {
     #[must_use]
     pub const fn preferred_cli_binding(&self) -> bool {
         self.preferred_cli_binding
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ManagedRuntimeInstallState {
-    NotInstalled,
-    Installed,
-    Configured,
-    Failed,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ManagedRuntimeHealthState {
-    NotInstalled,
-    Stopped,
-    Starting,
-    Running,
-    Degraded,
-    Failed,
-}
-
-/// Sealed registry state for one typed service instance.
-///
-/// ```compile_fail
-/// use radroots_runtime_manager::ManagedRuntimeInstanceRecord;
-///
-/// let _ = ManagedRuntimeInstanceRecord {
-///     service_id: todo!(),
-///     instance_id: todo!(),
-///     install_state: todo!(),
-/// };
-/// ```
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct ManagedRuntimeInstanceRecord {
-    service_id: ServiceId,
-    instance_id: InstanceId,
-    install_state: ManagedRuntimeInstallState,
-}
-
-impl ManagedRuntimeInstanceRecord {
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn new(context: &RuntimeContext, install_state: ManagedRuntimeInstallState) -> Self {
-        Self {
-            service_id: context.service().clone(),
-            instance_id: context.instance().clone(),
-            install_state,
-        }
-    }
-
-    #[must_use]
-    pub fn service_id(&self) -> &ServiceId {
-        &self.service_id
-    }
-
-    #[must_use]
-    pub fn instance_id(&self) -> &InstanceId {
-        &self.instance_id
-    }
-
-    #[must_use]
-    pub fn install_state(&self) -> ManagedRuntimeInstallState {
-        self.install_state
-    }
-
-    #[must_use]
-    pub fn matches_context(&self, context: &RuntimeContext) -> bool {
-        self.service_id == *context.service() && self.instance_id == *context.instance()
-    }
-}
-
-impl core::fmt::Debug for ManagedRuntimeInstanceRecord {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("ManagedRuntimeInstanceRecord")
-            .field("service_id", &self.service_id)
-            .field("instance_id", &self.instance_id)
-            .field("install_state", &self.install_state)
-            .finish()
-    }
-}
-
-pub const RUNTIME_INSTANCE_REGISTRY_SCHEMA: &str = "radroots.service-instance-registry";
-pub const RUNTIME_INSTANCE_REGISTRY_VERSION: u32 = 1;
-
-/// A sealed, schema-fixed, normalized instance registry.
-///
-/// ```compile_fail
-/// use radroots_runtime_manager::ManagedRuntimeInstanceRegistry;
-///
-/// let _ = ManagedRuntimeInstanceRegistry {
-///     schema: "wrong".to_owned(),
-///     schema_version: 99,
-///     instances: Vec::new(),
-/// };
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct ManagedRuntimeInstanceRegistry {
-    pub(crate) schema: String,
-    pub(crate) schema_version: u32,
-    #[serde(default)]
-    pub(crate) instances: Vec<ManagedRuntimeInstanceRecord>,
-}
-
-impl ManagedRuntimeInstanceRegistry {
-    #[must_use]
-    pub fn schema(&self) -> &str {
-        &self.schema
-    }
-
-    #[must_use]
-    pub fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-
-    #[must_use]
-    pub fn instances(&self) -> &[ManagedRuntimeInstanceRecord] {
-        &self.instances
-    }
-}
-
-impl Default for ManagedRuntimeInstanceRegistry {
-    fn default() -> Self {
-        Self {
-            schema: RUNTIME_INSTANCE_REGISTRY_SCHEMA.to_string(),
-            schema_version: RUNTIME_INSTANCE_REGISTRY_VERSION,
-            instances: Vec::new(),
-        }
     }
 }

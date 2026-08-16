@@ -1,34 +1,16 @@
 #![forbid(unsafe_code)]
 
-pub mod error;
-pub mod lifecycle;
-pub mod managed;
-pub mod model;
-pub mod paths;
-pub mod registry;
+mod error;
+mod managed;
+mod model;
 
 pub use error::RadrootsRuntimeManagerError;
-pub use lifecycle::{
-    ManagedRuntimeArtifactName, ensure_instance_layout, extract_binary_archive, install_binary,
-    process_running, remove_instance_artifacts, start_process, stop_process, write_instance_config,
-};
-pub use managed::{
-    ManagedRuntimeActionInspection, ManagedRuntimeConfigInspection, ManagedRuntimeContext,
-    ManagedRuntimeGroup, ManagedRuntimeInspection, ManagedRuntimeInspectionAvailability,
-    ManagedRuntimeLifecycleAction, ManagedRuntimeLogsInspection, ManagedRuntimeStatusInspection,
-    ManagedRuntimeTarget, active_management_mode_for_profile, inspect_runtime_action,
-    inspect_runtime_config, inspect_runtime_logs, inspect_runtime_status, load_management_context,
-    resolve_runtime_target, runtime_group,
-};
+pub use managed::{ManagedRuntimeContext, ManagedRuntimeTarget, resolve_runtime_target};
 pub use model::{
-    BootstrapRuntimeContract, LifecycleContract, ManagedRuntimeHealthState,
-    ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord, ManagedRuntimeInstanceRegistry,
-    ManagementDefaults, ManagementModeContract, ManagementPathContract,
-    RUNTIME_INSTANCE_REGISTRY_SCHEMA, RUNTIME_INSTANCE_REGISTRY_VERSION,
-    RadrootsRuntimeManagementContract, RuntimeGroups,
+    BootstrapRuntimeContract, InstanceMetadataContract, LifecycleContract, ManagementDefaults,
+    ManagementModeContract, ManagementPathContract, RadrootsRuntimeManagementContract,
+    RuntimeGroups,
 };
-pub use paths::{ManagedRuntimeInstancePaths, ManagedRuntimeSharedPaths, bootstrap_runtime};
-pub use registry::{instance, load_registry, save_registry};
 
 pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots-runtime-management";
 pub const RUNTIME_MANAGEMENT_SCHEMA_VERSION: u32 = 1;
@@ -79,15 +61,23 @@ mod tests {
     const CONTRACT: &str = HARDENED_MANAGEMENT_CONTRACT;
 
     #[test]
-    fn contract_parser_accepts_only_the_expected_schema() {
+    fn contract_parser_accepts_only_the_exact_static_inventory() {
         let contract = parse_contract_str(CONTRACT).expect("contract");
         assert_eq!(contract.schema, RUNTIME_MANAGEMENT_SCHEMA);
+        assert_eq!(contract.service_targets.len(), 2);
+        assert!(contract.bootstrap.is_empty());
 
-        let wrong = CONTRACT.replace(
-            "schema = \"radroots-runtime-management\"",
-            "schema = \"wrong\"",
-        );
-        assert!(parse_contract_str(&wrong).is_err());
+        for raw in [
+            CONTRACT.replace("schema_version = 1", "schema_version = 2"),
+            CONTRACT.replace(
+                "defined = [\"myc\", \"rhi\"]",
+                "active = [\"myc\"]\ndefined = [\"rhi\"]",
+            ),
+            CONTRACT.replace("actions = []", "actions = [\"start\"]"),
+            format!("{CONTRACT}\nunknown = true\n"),
+        ] {
+            assert!(parse_contract_str(&raw).is_err());
+        }
         assert!(parse_contract_str("schema = [").is_err());
     }
 
@@ -116,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn contract_errors_redact_raw_schema_values_and_parser_causes() {
+    fn contract_errors_are_value_free_and_source_free() {
         for (raw, secret) in [
             (
                 CONTRACT.replace(
@@ -130,43 +120,39 @@ mod tests {
                 "secret-value",
             ),
         ] {
-            let err = parse_contract_str(&raw).expect_err("invalid contract");
-            let rendered = format!("{err} {err:?}");
+            let error = parse_contract_str(&raw).expect_err("invalid contract");
+            let rendered = format!("{error} {error:?}");
             assert!(!rendered.contains(secret));
-            assert!(err.source().is_none());
+            assert!(error.source().is_none());
         }
     }
 
     #[test]
-    fn manager_source_no_longer_consumes_legacy_path_selection_or_raw_identity_joins() {
-        let sources = [
-            include_str!("error.rs"),
-            include_str!("lifecycle.rs"),
-            include_str!("managed.rs"),
-            include_str!("model.rs"),
-            include_str!("paths.rs"),
-            include_str!("registry.rs"),
-        ];
+    fn root_surface_exposes_no_legacy_runtime_authority() {
+        let source = include_str!("lib.rs")
+            .split("\n#[cfg(test)]")
+            .next()
+            .expect("production source");
         for forbidden in [
-            "RadrootsRuntimePathSelection",
-            "load_management_context_with_selection",
-            "PathBuf::from(runtime_id).join(instance_id)",
-            "record.config_path",
-            "record.logs_path",
-            "record.run_path",
-            "workers/rhi",
-            "pub fn read_secret_file",
-            "pub fn write_secret_file",
-            "pub fn write_managed_file",
-            "pub fn registry_mut",
-            "pub fn upsert_instance",
-            "pub fn resolve_shared_paths",
-            "pub fn resolve_instance_paths",
+            "mod lifecycle",
+            "mod paths",
+            "mod registry",
+            "ManagedRuntimeArtifactName",
+            "ManagedRuntimeInstancePaths",
+            "ManagedRuntimeSharedPaths",
+            "ManagedRuntimeInstanceRegistry",
+            "ManagedRuntimeInstanceRecord",
+            "ManagedRuntimeLifecycleAction",
+            "load_registry",
+            "save_registry",
+            "start_process",
+            "stop_process",
+            "install_binary",
+            "extract_binary_archive",
+            "remove_instance_artifacts",
+            "write_instance_config",
         ] {
-            assert!(
-                sources.iter().all(|source| !source.contains(forbidden)),
-                "runtime manager retained forbidden source `{forbidden}`"
-            );
+            assert!(!source.contains(forbidden), "root retained `{forbidden}`");
         }
     }
 }

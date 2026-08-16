@@ -3403,12 +3403,9 @@ dependencies = [
 name = "radroots_runtime_manager"
 version = "0.1.0-alpha"
 dependencies = [
- "flate2",
  "radroots_runtime_distribution",
  "radroots_runtime_paths",
  "serde",
- "tar",
- "tempfile",
  "thiserror 1.0.69",
  "toml 0.8.23",
 ]

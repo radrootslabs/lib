@@ -1,30 +1,19 @@
 # radroots_runtime_manager
 
-This is the README for `radroots_runtime_manager`, which provides managed
-runtime lifecycle and inspection helpers for the `radroots` core libraries.
+`radroots_runtime_manager` validates the frozen runtime-management contract and
+resolves explicitly selected Myc and RHI service-instance identities to sealed,
+metadata-only targets.
 
-## Overview
-
- * schema-checked management contract parsing and shared management constants;
- * manager-owned shared and per-instance tracking paths kept separate from
-   canonical service-instance paths supplied by a sealed `RuntimeContext`;
- * typed, deterministic registry load, save, and lookup helpers that
-   persist service/instance identities without duplicating service paths or
-   secrets;
- * lifecycle helpers for contained archive install, process start and stop,
-   and context-bound non-secret configuration writes; the manager has no
-   credential read/write authority;
- * sealed Myc/RHI target metadata and context resolution without service
-   registration, lifecycle admission, or PID/config/log probing; and
- * cleanup behavior limited to manager-owned install and tracking artifacts,
-preserving canonical service state and secrets.
+The crate performs no filesystem, registry, process, archive, artifact,
+configuration, log, PID, install, removal, or lifecycle work. It exposes no
+runtime paths or raw persistence helpers. Final service lifecycle and artifact
+behavior remains unavailable until the separately governed Steps 219 and 220.
 
 Complete management TOML documents are rejected before parsing when they
 exceed exactly 1,048,576 UTF-8 bytes. Bounded documents still require the exact
-schema, version, closed field set, and complete hardened-service inventory.
-
-Myc and RHI remain metadata-only management targets until their public CLI,
-Unix-admin, status, and artifact integrations are separately implemented.
+schema, version, closed field set, empty lifecycle inventory, and complete
+Myc/RHI metadata inventory. Directly constructed contracts are revalidated
+before a management context can be created.
 
 ## Copyright
 
