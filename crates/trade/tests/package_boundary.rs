@@ -5,6 +5,7 @@ use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, w
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const EVIDENCE: &str = include_str!("../src/evidence.rs");
+const EVIDENCE_MANIFEST: &str = include_str!("../src/evidence_manifest.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const OPERATIONS: &str = include_str!("../../../contracts/operations.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -291,6 +292,79 @@ fn approved_evidence_coverage_and_outcome_are_portable_and_bounded() {
 }
 
 #[test]
+fn immutable_evidence_manifest_is_sealed_bounded_and_side_effect_free() {
+    use radroots_trade::evidence::{
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_ID,
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_VERSION,
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_BYTES,
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_OBSERVATIONS,
+        RADROOTS_TRADE_EVIDENCE_SOURCE_ID_MAXIMUM_BYTES, RadrootsTradeEvidenceManifestDigestV1,
+        RadrootsTradeEvidenceManifestError, RadrootsTradeEvidenceManifestObservationV1,
+        RadrootsTradeEvidenceManifestSourceResultV1, RadrootsTradeEvidenceManifestV1,
+        RadrootsTradeEvidencePolicyDigestV1, RadrootsTradeEvidenceProvenanceDigestV1,
+        RadrootsTradeEvidenceSourceIdV1, RadrootsTradeEvidenceSourceResultDigestV1,
+        RadrootsTradeSignedEventDigestV1,
+    };
+
+    fn assert_portable<T: Clone + core::fmt::Debug + Eq + Send + Sync>() {}
+    assert_portable::<RadrootsTradeEvidenceManifestDigestV1>();
+    assert_portable::<RadrootsTradeEvidenceManifestError>();
+    assert_portable::<RadrootsTradeEvidenceManifestObservationV1>();
+    assert_portable::<RadrootsTradeEvidenceManifestSourceResultV1>();
+    assert_portable::<RadrootsTradeEvidenceManifestV1>();
+    assert_portable::<RadrootsTradeEvidencePolicyDigestV1>();
+    assert_portable::<RadrootsTradeEvidenceProvenanceDigestV1>();
+    assert_portable::<RadrootsTradeEvidenceSourceIdV1>();
+    assert_portable::<RadrootsTradeEvidenceSourceResultDigestV1>();
+    assert_portable::<RadrootsTradeSignedEventDigestV1>();
+
+    assert_eq!(
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_ID,
+        "radroots.trade.evidence-manifest.v1"
+    );
+    assert_eq!(RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_VERSION, 1);
+    assert_eq!(RADROOTS_TRADE_EVIDENCE_SOURCE_ID_MAXIMUM_BYTES, 64);
+    assert_eq!(
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_OBSERVATIONS,
+        65_536
+    );
+    assert_eq!(
+        RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_BYTES,
+        16 * 1024 * 1024
+    );
+
+    for forbidden in [
+        "std::fs",
+        "std::net",
+        "sqlx",
+        "tokio",
+        "reqwest",
+        "radroots_transport",
+        "spawn",
+        "SystemTime",
+    ] {
+        assert!(
+            !EVIDENCE_MANIFEST.contains(forbidden),
+            "manifest acquired forbidden side effect or upward dependency: {forbidden}"
+        );
+    }
+    for field in [
+        "pub trade_id:",
+        "pub sources:",
+        "pub observations:",
+        "pub canonical_bytes:",
+        "pub digest:",
+    ] {
+        assert!(
+            !EVIDENCE_MANIFEST.contains(field),
+            "manifest field escaped: {field}"
+        );
+    }
+    assert!(ROOT.contains("mod evidence_manifest;"));
+    assert!(!ROOT.contains("pub mod evidence_manifest;"));
+}
+
+#[test]
 fn workflow_plan_is_root_exported_and_side_effect_free() {
     let _: Option<radroots_trade::WorkflowPlan> = None;
     let _: Option<radroots_trade::Error> = None;
@@ -348,6 +422,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "## Canonical surface",
         "## Deterministic reduction",
         "## Evidence coverage and outcome",
+        "## Immutable evidence manifests",
         "## Workflow planning",
         "## Features",
         "## Serialization and versioning",
@@ -368,6 +443,12 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub mod radroots_trade::evidence",
         "pub enum radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1",
         "pub enum radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeEvidenceManifestV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeEvidenceManifestDigestV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeEvidencePolicyDigestV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeEvidenceProvenanceDigestV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeEvidenceSourceResultDigestV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeSignedEventDigestV1",
         "pub mod radroots_trade::model",
         "pub mod radroots_trade::reducer",
         "pub mod radroots_trade::validation",

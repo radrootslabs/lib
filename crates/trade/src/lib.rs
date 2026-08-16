@@ -3,11 +3,13 @@
 #![forbid(unsafe_code)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![doc = include_str!("../README.md")]
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 #[cfg(test)]
 mod test_fixtures;
+
+#[cfg(feature = "json")]
+mod evidence_manifest;
 
 pub mod evidence;
 pub mod model;

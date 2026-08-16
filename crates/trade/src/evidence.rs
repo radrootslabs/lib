@@ -200,6 +200,20 @@ pub use crate::trade_contract_v1::{
     RadrootsTradePrivateTermsEvidenceV1,
 };
 
+#[cfg(feature = "json")]
+pub use crate::evidence_manifest::{
+    RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_ID,
+    RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_VERSION,
+    RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_BYTES,
+    RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_OBSERVATIONS,
+    RADROOTS_TRADE_EVIDENCE_SOURCE_ID_MAXIMUM_BYTES, RadrootsTradeEvidenceManifestDigestV1,
+    RadrootsTradeEvidenceManifestError, RadrootsTradeEvidenceManifestObservationV1,
+    RadrootsTradeEvidenceManifestSourceResultV1, RadrootsTradeEvidenceManifestV1,
+    RadrootsTradeEvidencePolicyDigestV1, RadrootsTradeEvidenceProvenanceDigestV1,
+    RadrootsTradeEvidenceSourceIdV1, RadrootsTradeEvidenceSourceResultDigestV1,
+    RadrootsTradeSignedEventDigestV1,
+};
+
 #[cfg(test)]
 mod tests {
     #[cfg(not(feature = "std"))]

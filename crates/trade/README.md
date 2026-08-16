@@ -15,7 +15,7 @@ New code should enter through these modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `evidence` | Immutable mutation, private-term, and attestation observations consumed by reduction. |
+| `evidence` | Immutable mutation, private-term, and attestation observations plus bounded evidence-manifest models. |
 | `model` | Trade projection state and validated business identifiers. |
 | `reducer` | Deterministic reduction, evidence precedence, and conflict reporting. |
 | `validation` | Validation-error ownership for canonical trade inputs. |
@@ -74,6 +74,27 @@ permit only `Indeterminate`. These portable values classify caller-supplied
 facts and perform no source query, policy lookup, clock read, persistence,
 signing, or publication.
 
+## Immutable evidence manifests
+
+`evidence::RadrootsTradeEvidenceManifestV1` freezes one nonzero trade
+generation, policy digest, explicit observation time, scope prerequisites,
+bounded source results, and the exact accepted mutation/event/provenance
+inventory. Canonical ordering is independent of caller order. Mutation IDs
+bind canonical mutation content, while semantically distinct SHA-256 types
+bind the exact caller-supplied canonical policy, signed-event, provenance, and
+complete source-result record bytes without allowing those authorities to be
+interchanged. The manifest commits to those separately retained records; it
+does not contain or independently validate them.
+
+The manifest uses a versioned, domain-separated, length-framed binary encoding
+and exposes its canonical bytes plus a distinct manifest digest. Parsing caps
+the input at 16 MiB before allocation and accepts only the byte-exact canonical
+form. Source and observation iterators are bounded before normalization;
+source IDs are lowercase stable identifiers, observations must name a retained
+source, exact duplicates reject, and per-source admitted counts must match the
+frozen inventory. Building or parsing a manifest performs no I/O, source
+query, reduction, signing, persistence, or publication.
+
 ## Workflow planning
 
 `WorkflowPlan::prepare` validates a canonical proposal, decision, revision,
@@ -93,7 +114,7 @@ or proof that referenced private material exists.
 | --- | --- | --- |
 | `std` | yes | Standard-library integration for the portable model and errors. |
 | `serde` | yes | Serialization support for native and versioned trade values. |
-| `json` | yes | Executable JSON conformance vectors and deterministic projection digests; enables `serde`. |
+| `json` | yes | Executable JSON conformance vectors, deterministic projection digests, and immutable evidence manifests; enables `serde`. |
 
 `--no-default-features` keeps the allocation-backed trade model, reducer, and
 workflow planner available in `no_std` environments. Features are additive;
