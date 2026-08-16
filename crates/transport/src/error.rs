@@ -35,6 +35,18 @@ pub enum Error {
     DuplicateFetchTargetOutcome,
     FetchPageLimitExceeded,
     FetchPageRequestMismatch,
+    EmptySubscriptionRequestId,
+    InvalidSubscriptionRequestId,
+    InvalidSubscriptionLimit,
+    InvalidSubscriptionDeadline,
+    SubscriptionCheckpointSetTooLarge,
+    UnexpectedSubscriptionCheckpoint,
+    DuplicateSubscriptionCheckpoint,
+    UnexpectedSubscriptionEvent,
+    SubscriptionEventCheckpointMismatch,
+    SubscriptionEndLimitExceeded,
+    InvalidSubscriptionEnd,
+    SubscriptionEndRequestMismatch,
     InvalidSatisfactionPolicy,
     EmptyRequiredTargetSet,
     DuplicateRequiredTargetFingerprint,
@@ -118,6 +130,42 @@ impl fmt::Display for Error {
             }
             Self::FetchPageRequestMismatch => {
                 f.write_str("transport fetch page does not match its request")
+            }
+            Self::EmptySubscriptionRequestId => {
+                f.write_str("transport subscription request id is empty")
+            }
+            Self::InvalidSubscriptionRequestId => {
+                f.write_str("transport subscription request id is invalid")
+            }
+            Self::InvalidSubscriptionLimit => {
+                f.write_str("transport subscription event limit is invalid")
+            }
+            Self::InvalidSubscriptionDeadline => {
+                f.write_str("transport subscription deadline is invalid")
+            }
+            Self::SubscriptionCheckpointSetTooLarge => {
+                f.write_str("transport subscription checkpoint set exceeds its target limit")
+            }
+            Self::UnexpectedSubscriptionCheckpoint => {
+                f.write_str("transport subscription contains an unexpected checkpoint")
+            }
+            Self::DuplicateSubscriptionCheckpoint => {
+                f.write_str("transport subscription contains a duplicate checkpoint")
+            }
+            Self::UnexpectedSubscriptionEvent => {
+                f.write_str("transport subscription contains an unexpected event")
+            }
+            Self::SubscriptionEventCheckpointMismatch => {
+                f.write_str("transport subscription event checkpoint does not match provenance")
+            }
+            Self::SubscriptionEndLimitExceeded => {
+                f.write_str("transport subscription exceeded its requested event limit")
+            }
+            Self::InvalidSubscriptionEnd => {
+                f.write_str("transport subscription terminal result is invalid")
+            }
+            Self::SubscriptionEndRequestMismatch => {
+                f.write_str("transport subscription result does not match its request")
             }
             Self::InvalidSatisfactionPolicy => {
                 f.write_str("transport satisfaction policy is invalid")

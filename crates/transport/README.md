@@ -3,7 +3,8 @@
 `radroots_transport` is the transport-neutral host SPI for moving verified
 Radroots events between explicit targets. It owns extensible transport and
 target identities, separate source and sink capabilities, bounded fetch and
-delivery requests, provenance, partial outcomes, and normalized errors.
+delivery requests, bounded live subscriptions, provenance, partial outcomes,
+and normalized errors.
 
 The crate is `no_std` with `alloc`. It does not own network clients, storage,
 outbox claiming, retry loops, schedulers, timers, or fallback policy. Concrete
@@ -18,11 +19,12 @@ The authoritative package charter is the
 1. A host selects a validated [`TransportId`] and constructs one or more
    canonical [`Target`] values.
 2. [`TargetSet`] rejects an empty, oversized, or duplicate-fingerprint set.
-3. The caller creates a bounded [`FetchRequest`] or [`DeliveryRequest`] with a
-   request identity and absolute deadline. A fetch may carry a validated
-   [`FetchSelector`] for exact kinds, authors, and inclusive event-time bounds.
-4. A dyn-compatible [`EventSource`] or [`EventSink`] implementation performs
-   only the requested operation.
+3. The caller creates a bounded [`FetchRequest`], [`SubscriptionRequest`], or
+   [`DeliveryRequest`] with a request identity and absolute deadline. Inbound
+   operations may carry a validated [`FetchSelector`] for exact kinds,
+   authors, and inclusive event-time bounds.
+4. A dyn-compatible [`EventSource`], [`EventSubscriber`], or [`EventSink`]
+   implementation performs only the requested operation.
 5. The caller validates [`FetchPage`] or [`DeliveryReceipt`] against the
    originating request and decides whether normalized retryable outcomes merit
    another explicit operation.
@@ -31,9 +33,11 @@ The authoritative package charter is the
 [`Target`]: crate::Target
 [`TargetSet`]: crate::TargetSet
 [`FetchRequest`]: crate::FetchRequest
+[`SubscriptionRequest`]: crate::SubscriptionRequest
 [`FetchSelector`]: crate::source::FetchSelector
 [`DeliveryRequest`]: crate::DeliveryRequest
 [`EventSource`]: crate::EventSource
+[`EventSubscriber`]: crate::EventSubscriber
 [`EventSink`]: crate::EventSink
 [`FetchPage`]: crate::FetchPage
 [`DeliveryReceipt`]: crate::DeliveryReceipt
@@ -54,15 +58,18 @@ The complete externally implementable SPI example is
 
 ## Host SPI contract
 
-`EventSource` and `EventSink` are independent, externally implementable,
-dyn-compatible `Send + Sync` traits. An adapter may implement either or both.
-Their methods return boxed `Future + Send` values so this package does not
-select an async runtime or require an async-trait macro.
+`EventSource`, `EventSubscriber`, and `EventSink` are independent, externally
+implementable, dyn-compatible `Send + Sync` traits. An adapter may implement
+any subset. Their methods return boxed `Future + Send` values so this package
+does not select an async runtime or require an async-trait macro.
 
 - `status` is observational and must not begin fetch or delivery work.
 - `fetch` returns one bounded page plus per-target outcomes and explicit
   continuation state. Returned events must satisfy the request selector;
   request-bound page validation rejects adapter drift.
+- `subscribe` returns a sealed live-operation capability. Its `next` method
+  returns request-bound events with target checkpoints or one stable terminal
+  result; its `cancel` method returns that same terminal result once ended.
 - `deliver` returns one receipt for the exact request and every requested
   target; it never performs an implicit retry.
 - Implementations must not install an executor or spawn hidden workers. The
@@ -89,16 +96,22 @@ private-network exceptions.
 
 ## Bounds, deadlines, cancellation, and commit points
 
-Request IDs, endpoint values, cursors, target sets, outcome details, and page
-sizes are bounded by public constants. Fetch and delivery requests carry an
-absolute Unix-millisecond deadline; constructors validate the deadline but do
-not read a clock.
+Request IDs, endpoint values, cursors, target sets, outcome details, page
+sizes, and live event counts are bounded by public constants. Fetch,
+subscription, and delivery requests carry an absolute Unix-millisecond
+deadline; constructors validate the deadline but do not read a clock.
 
 Dropping a returned future requests cancellation. Before an adapter publishes
 or commits a remote operation, cancellation must leave no durable effect.
 After that boundary, cancellation does not imply rollback: the adapter must
 preserve and report the final remote state when it can be observed. Each
 concrete adapter documents its exact publication or commit point.
+
+Live subscriptions additionally retain canonical per-target checkpoints in
+request target order. Reconnect callers pass only an explicit checkpoint
+subset; adapters must not invent hidden replay state. Once a subscription
+returns its terminal result, subsequent `next` and `cancel` calls return the
+same result.
 
 ## Outcomes, partial success, and retry
 
@@ -111,14 +124,16 @@ state must not be rewritten as success or silent fallback.
 
 ## Serialization and provenance
 
-With `serde`, passive identities, requests, pages, receipts, status values, and
-outcomes use validated representations. Deserialization rechecks canonical
-identity, bounds, request/receipt cardinality, and provenance rather than
-trusting serialized fingerprints or counts.
+With `serde`, passive identities, requests, subscriptions, pages, receipts,
+status values, and outcomes use validated representations. Deserialization
+rechecks canonical identity, bounds, request/result cardinality, and provenance
+rather than trusting serialized fingerprints or counts.
 
 Inbound events carry the transport ID, exact target fingerprint, observation
 time, and optional continuation cursor that produced them. A page cannot claim
-events or outcomes for targets outside its request.
+events or outcomes for targets outside its request. A live event additionally
+binds its exact originating request and requires its resulting target
+checkpoint to match the event's provenance cursor.
 
 ## Security and side effects
 
@@ -126,8 +141,8 @@ events or outcomes for targets outside its request.
   adapters remain responsible for scheme, DNS/IP, TLS, and private-network
   policy before connection.
 - Delivery accepts a validated signed event, not arbitrary bytes.
-- Receipt and page constructors reject missing, duplicate, unexpected, or
-  forged target evidence.
+- Receipt, page, and subscription constructors reject missing, duplicate,
+  unexpected, or forged target evidence.
 - This crate forbids unsafe code and contains no socket, filesystem, database,
   global state, timer, executor, or retry implementation.
 - No transport may silently route through another transport.
@@ -137,7 +152,7 @@ events or outcomes for targets outside its request.
 | Feature | Default | Contract |
 | --- | --- | --- |
 | `std` | yes | Enables standard-library support in canonical dependency values; it adds no I/O, runtime, or global initialization. |
-| `serde` | yes | Adds validated serialization for passive identities, requests, status, provenance, pages, receipts, policies, and outcomes. |
+| `serde` | yes | Adds validated serialization for passive identities, requests, subscriptions, status, provenance, pages, receipts, policies, and outcomes. |
 
 Features are additive. `--no-default-features` provides the `no_std + alloc`
 core, and `serde` is supported independently of `std`.
@@ -148,7 +163,7 @@ core, and `serde` is supported independently of `std`.
 - `radroots_storage` persists transport-neutral outbox and evidence values.
 - `radroots_sync` plans bounded operations and applies explicit retry policy.
 - `radroots_sdk` composes storage, signing, source, and sink implementations.
-- Service and future adapter hosts implement one or both SPIs and own runtime,
+- Service and future adapter hosts implement any of the SPIs and own runtime,
   network, cancellation, and lifecycle behavior.
 
 Applications that only need ordinary Radroots operations should normally use

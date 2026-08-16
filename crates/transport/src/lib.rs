@@ -19,7 +19,11 @@ pub mod target;
 pub use error::Error;
 pub use id::{TRANSPORT_ID_MAX_BYTES, TransportId};
 pub use sink::{DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure, SinkStatus};
-pub use source::{BoxFuture, EventSource, FetchPage, FetchRequest, SourceStatus};
+pub use source::{
+    BoxFuture, BoxSubscription, EventSource, EventSubscriber, EventSubscription, FetchPage,
+    FetchRequest, SourceStatus, SubscriptionEnd, SubscriptionEndReason, SubscriptionEvent,
+    SubscriptionNext, SubscriptionRequest,
+};
 pub use target::{TARGET_SET_MAX_ITEMS, Target, TargetSet};
 
 #[cfg(test)]

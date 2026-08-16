@@ -3,9 +3,10 @@ use std::{collections::BTreeSet, fs, path::Path};
 #[allow(unused_imports)]
 use radroots_transport::{
     DeliveryReceipt as _, DeliveryRequest as _, Error as _, EventSink as _, EventSource as _,
-    FetchPage as _, FetchRequest as _, Target as _, TargetSet as _, TransportId as _,
-    capability as _, endpoint as _, error as _, outcome as _, policy as _, sink as _, source as _,
-    target as _,
+    EventSubscriber as _, EventSubscription as _, FetchPage as _, FetchRequest as _,
+    SubscriptionEnd as _, SubscriptionEvent as _, SubscriptionRequest as _, Target as _,
+    TargetSet as _, TransportId as _, capability as _, endpoint as _, error as _, outcome as _,
+    policy as _, sink as _, source as _, target as _,
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
@@ -88,10 +89,13 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
     }
     for required in [
         "impl EventSource for HostTransport",
+        "impl EventSubscriber for HostTransport",
         "impl EventSink for HostTransport",
         "fn fetch(&self, _request: FetchRequest) -> BoxFuture",
+        "_request: SubscriptionRequest",
         "_request: DeliveryRequest",
         "let source: &dyn EventSource",
+        "let subscriber: &dyn EventSubscriber",
         "let sink: &dyn EventSink",
         "drop(future)",
     ] {
@@ -107,7 +111,14 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub mod radroots_transport::source",
         "pub mod radroots_transport::target",
         "pub trait radroots_transport::EventSource",
+        "pub trait radroots_transport::EventSubscriber",
+        "pub trait radroots_transport::EventSubscription",
         "pub trait radroots_transport::EventSink",
+        "pub struct radroots_transport::source::SubscriptionBounds",
+        "pub struct radroots_transport::source::SubscriptionCheckpoint",
+        "pub struct radroots_transport::SubscriptionRequest",
+        "pub enum radroots_transport::SubscriptionEndReason",
+        "pub const radroots_transport::source::SUBSCRIPTION_MAX_EVENTS: u16",
         "pub fn radroots_transport::target::Target::new(radroots_transport::TransportId",
         "pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::TransportId",
     ] {
@@ -154,7 +165,7 @@ fn every_public_module_has_crate_level_documentation() {
 }
 
 #[test]
-fn source_and_sink_are_independent_dyn_compatible_host_spis() {
+fn source_subscription_and_sink_are_independent_dyn_compatible_host_spis() {
     for required in [
         "pub trait EventSource: Send + Sync",
         "fn status(&self)",
@@ -168,6 +179,21 @@ fn source_and_sink_are_independent_dyn_compatible_host_spis() {
         );
     }
     assert!(!SOURCE.contains("fn deliver("));
+
+    for required in [
+        "pub trait EventSubscriber: Send + Sync",
+        "pub trait EventSubscription: Send",
+        "fn subscribe(",
+        "fn next(&mut self)",
+        "fn cancel(&mut self)",
+        "Once [`SubscriptionNext::End`] has been",
+        "exact same",
+    ] {
+        assert!(
+            SOURCE.contains(required),
+            "subscription SPI is missing {required}"
+        );
+    }
 
     for required in [
         "pub trait EventSink: Send + Sync",

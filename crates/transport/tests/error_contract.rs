@@ -97,6 +97,54 @@ fn every_transport_error_has_stable_operator_facing_text() {
             "transport fetch page does not match its request",
         ),
         (
+            Error::EmptySubscriptionRequestId,
+            "transport subscription request id is empty",
+        ),
+        (
+            Error::InvalidSubscriptionRequestId,
+            "transport subscription request id is invalid",
+        ),
+        (
+            Error::InvalidSubscriptionLimit,
+            "transport subscription event limit is invalid",
+        ),
+        (
+            Error::InvalidSubscriptionDeadline,
+            "transport subscription deadline is invalid",
+        ),
+        (
+            Error::SubscriptionCheckpointSetTooLarge,
+            "transport subscription checkpoint set exceeds its target limit",
+        ),
+        (
+            Error::UnexpectedSubscriptionCheckpoint,
+            "transport subscription contains an unexpected checkpoint",
+        ),
+        (
+            Error::DuplicateSubscriptionCheckpoint,
+            "transport subscription contains a duplicate checkpoint",
+        ),
+        (
+            Error::UnexpectedSubscriptionEvent,
+            "transport subscription contains an unexpected event",
+        ),
+        (
+            Error::SubscriptionEventCheckpointMismatch,
+            "transport subscription event checkpoint does not match provenance",
+        ),
+        (
+            Error::SubscriptionEndLimitExceeded,
+            "transport subscription exceeded its requested event limit",
+        ),
+        (
+            Error::InvalidSubscriptionEnd,
+            "transport subscription terminal result is invalid",
+        ),
+        (
+            Error::SubscriptionEndRequestMismatch,
+            "transport subscription result does not match its request",
+        ),
+        (
             Error::InvalidSatisfactionPolicy,
             "transport satisfaction policy is invalid",
         ),

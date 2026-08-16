@@ -99,6 +99,7 @@ pub radroots_transport::error::Error::DuplicateFetchAuthor
 pub radroots_transport::error::Error::DuplicateFetchKind
 pub radroots_transport::error::Error::DuplicateFetchTargetOutcome
 pub radroots_transport::error::Error::DuplicateRequiredTargetFingerprint
+pub radroots_transport::error::Error::DuplicateSubscriptionCheckpoint
 pub radroots_transport::error::Error::DuplicateTargetFingerprint
 pub radroots_transport::error::Error::EmptyDeliveryRequestId
 pub radroots_transport::error::Error::EmptyFetchCursor
@@ -107,6 +108,7 @@ pub radroots_transport::error::Error::EmptyPayloadBytes
 pub radroots_transport::error::Error::EmptyPayloadId
 pub radroots_transport::error::Error::EmptyPayloadLabel
 pub radroots_transport::error::Error::EmptyRequiredTargetSet
+pub radroots_transport::error::Error::EmptySubscriptionRequestId
 pub radroots_transport::error::Error::EmptyTargetLabel
 pub radroots_transport::error::Error::EmptyTargetScope
 pub radroots_transport::error::Error::EmptyTargetSet
@@ -130,6 +132,10 @@ pub radroots_transport::error::Error::InvalidPayloadDigest
 pub radroots_transport::error::Error::InvalidPayloadId
 pub radroots_transport::error::Error::InvalidPayloadLabel
 pub radroots_transport::error::Error::InvalidSatisfactionPolicy
+pub radroots_transport::error::Error::InvalidSubscriptionDeadline
+pub radroots_transport::error::Error::InvalidSubscriptionEnd
+pub radroots_transport::error::Error::InvalidSubscriptionLimit
+pub radroots_transport::error::Error::InvalidSubscriptionRequestId
 pub radroots_transport::error::Error::InvalidTargetFingerprint
 pub radroots_transport::error::Error::InvalidTargetLabel
 pub radroots_transport::error::Error::InvalidTargetScope
@@ -138,12 +144,18 @@ pub radroots_transport::error::Error::InvalidTransportKind
 pub radroots_transport::error::Error::MissingDeliveryTargetReceipt
 pub radroots_transport::error::Error::PayloadDigestMismatch
 pub radroots_transport::error::Error::RequiredTargetNotRequested
+pub radroots_transport::error::Error::SubscriptionCheckpointSetTooLarge
+pub radroots_transport::error::Error::SubscriptionEndLimitExceeded
+pub radroots_transport::error::Error::SubscriptionEndRequestMismatch
+pub radroots_transport::error::Error::SubscriptionEventCheckpointMismatch
 pub radroots_transport::error::Error::TargetSetTooLarge
 pub radroots_transport::error::Error::TransportOutcomeStatusMismatch
 pub radroots_transport::error::Error::UnexpectedDeliveryTargetReceipt
 pub radroots_transport::error::Error::UnexpectedFetchEvent
 pub radroots_transport::error::Error::UnexpectedFetchProvenance
 pub radroots_transport::error::Error::UnexpectedFetchTargetOutcome
+pub radroots_transport::error::Error::UnexpectedSubscriptionCheckpoint
+pub radroots_transport::error::Error::UnexpectedSubscriptionEvent
 pub radroots_transport::error::Error::UnsupportedOperation
 impl core::fmt::Display for radroots_transport::error::Error
 pub fn radroots_transport::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -295,6 +307,14 @@ pub radroots_transport::source::NextPage::Cancelled
 pub radroots_transport::source::NextPage::Cancelled::resume_from: core::option::Option<radroots_transport::source::FetchCursor>
 pub radroots_transport::source::NextPage::Complete
 pub radroots_transport::source::NextPage::Cursor(radroots_transport::source::FetchCursor)
+pub enum radroots_transport::source::SubscriptionEndReason
+pub radroots_transport::source::SubscriptionEndReason::Cancelled
+pub radroots_transport::source::SubscriptionEndReason::Deadline
+pub radroots_transport::source::SubscriptionEndReason::EventLimit
+pub radroots_transport::source::SubscriptionEndReason::SourceClosed
+pub enum radroots_transport::source::SubscriptionNext
+pub radroots_transport::source::SubscriptionNext::End(radroots_transport::source::SubscriptionEnd)
+pub radroots_transport::source::SubscriptionNext::Event(alloc::boxed::Box<radroots_transport::source::SubscriptionEvent>)
 pub struct radroots_transport::source::EventProvenance
 impl radroots_transport::source::EventProvenance
 pub const fn radroots_transport::source::EventProvenance::cursor(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
@@ -384,15 +404,78 @@ pub const fn radroots_transport::SourceStatus::maturity(&self) -> radroots_trans
 pub fn radroots_transport::SourceStatus::message(&self) -> &str
 pub fn radroots_transport::SourceStatus::new(radroots_transport::TransportId, bool, radroots_transport::capability::Maturity, radroots_transport::capability::Availability, radroots_transport::capability::SourceCapabilities, impl core::convert::Into<alloc::string::String>) -> Self
 pub const fn radroots_transport::SourceStatus::transport_id(&self) -> radroots_transport::TransportId
+pub struct radroots_transport::source::SubscriptionBounds
+impl radroots_transport::source::SubscriptionBounds
+pub const fn radroots_transport::source::SubscriptionBounds::deadline_unix_ms(self) -> u64
+pub const fn radroots_transport::source::SubscriptionBounds::event_limit(self) -> u16
+pub const fn radroots_transport::source::SubscriptionBounds::new(u16, u64) -> core::result::Result<Self, radroots_transport::error::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionBounds
+pub fn radroots_transport::source::SubscriptionBounds::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::source::SubscriptionCheckpoint
+impl radroots_transport::source::SubscriptionCheckpoint
+pub const fn radroots_transport::source::SubscriptionCheckpoint::cursor(&self) -> &radroots_transport::source::FetchCursor
+pub const fn radroots_transport::source::SubscriptionCheckpoint::new(radroots_transport::target::TargetFingerprint, radroots_transport::source::FetchCursor) -> Self
+pub const fn radroots_transport::source::SubscriptionCheckpoint::target(&self) -> &radroots_transport::target::TargetFingerprint
+pub struct radroots_transport::source::SubscriptionEnd
+impl radroots_transport::source::SubscriptionEnd
+pub fn radroots_transport::source::SubscriptionEnd::checkpoints(&self) -> &[radroots_transport::source::SubscriptionCheckpoint]
+pub const fn radroots_transport::source::SubscriptionEnd::event_count(&self) -> u16
+pub fn radroots_transport::source::SubscriptionEnd::for_request<I>(&radroots_transport::source::SubscriptionRequest, u16, I, radroots_transport::source::SubscriptionEndReason) -> core::result::Result<Self, radroots_transport::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_transport::source::SubscriptionCheckpoint>
+pub const fn radroots_transport::source::SubscriptionEnd::reason(&self) -> radroots_transport::source::SubscriptionEndReason
+pub const fn radroots_transport::source::SubscriptionEnd::request(&self) -> &radroots_transport::source::SubscriptionRequest
+pub fn radroots_transport::source::SubscriptionEnd::validate_for_request(&self, &radroots_transport::source::SubscriptionRequest) -> core::result::Result<(), radroots_transport::error::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionEnd
+pub fn radroots_transport::source::SubscriptionEnd::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::source::SubscriptionEvent
+impl radroots_transport::source::SubscriptionEvent
+pub const fn radroots_transport::source::SubscriptionEvent::checkpoint(&self) -> &radroots_transport::source::SubscriptionCheckpoint
+pub fn radroots_transport::source::SubscriptionEvent::for_request(&radroots_transport::source::SubscriptionRequest, radroots_transport::source::ObservedEvent, radroots_transport::source::SubscriptionCheckpoint) -> core::result::Result<Self, radroots_transport::error::Error>
+pub const fn radroots_transport::source::SubscriptionEvent::observed(&self) -> &radroots_transport::source::ObservedEvent
+pub const fn radroots_transport::source::SubscriptionEvent::request(&self) -> &radroots_transport::source::SubscriptionRequest
+pub const fn radroots_transport::source::SubscriptionEvent::request_id(&self) -> &radroots_transport::source::SubscriptionRequestId
+pub fn radroots_transport::source::SubscriptionEvent::validate_for_request(&self, &radroots_transport::source::SubscriptionRequest) -> core::result::Result<(), radroots_transport::error::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionEvent
+pub fn radroots_transport::source::SubscriptionEvent::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::source::SubscriptionRequest
+impl radroots_transport::source::SubscriptionRequest
+pub const fn radroots_transport::source::SubscriptionRequest::bounds(&self) -> radroots_transport::source::SubscriptionBounds
+pub fn radroots_transport::source::SubscriptionRequest::checkpoints(&self) -> &[radroots_transport::source::SubscriptionCheckpoint]
+pub fn radroots_transport::source::SubscriptionRequest::new(impl core::convert::AsRef<str>, radroots_transport::target::TargetSet, radroots_transport::source::SubscriptionBounds) -> core::result::Result<Self, radroots_transport::error::Error>
+pub const fn radroots_transport::source::SubscriptionRequest::request_id(&self) -> &radroots_transport::source::SubscriptionRequestId
+pub const fn radroots_transport::source::SubscriptionRequest::selector(&self) -> &radroots_transport::source::FetchSelector
+pub const fn radroots_transport::source::SubscriptionRequest::target_set(&self) -> &radroots_transport::target::TargetSet
+pub fn radroots_transport::source::SubscriptionRequest::with_checkpoints<I>(self, I) -> core::result::Result<Self, radroots_transport::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_transport::source::SubscriptionCheckpoint>
+pub fn radroots_transport::source::SubscriptionRequest::with_selector(self, radroots_transport::source::FetchSelector) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionRequest
+pub fn radroots_transport::source::SubscriptionRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::source::SubscriptionRequestId(_)
+impl radroots_transport::source::SubscriptionRequestId
+pub fn radroots_transport::source::SubscriptionRequestId::as_str(&self) -> &str
+pub fn radroots_transport::source::SubscriptionRequestId::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
+impl core::fmt::Display for radroots_transport::source::SubscriptionRequestId
+pub fn radroots_transport::source::SubscriptionRequestId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_transport::source::SubscriptionRequestId
+pub fn radroots_transport::source::SubscriptionRequestId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionRequestId
+pub fn radroots_transport::source::SubscriptionRequestId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_transport::source::FETCH_CURSOR_MAX_BYTES: usize
 pub const radroots_transport::source::FETCH_PAGE_MAX_EVENTS: u16
 pub const radroots_transport::source::FETCH_REQUEST_ID_MAX_BYTES: usize
 pub const radroots_transport::source::FETCH_SELECTOR_MAX_AUTHORS: usize
 pub const radroots_transport::source::FETCH_SELECTOR_MAX_KINDS: usize
+pub const radroots_transport::source::SUBSCRIPTION_MAX_EVENTS: u16
+pub const radroots_transport::source::SUBSCRIPTION_REQUEST_ID_MAX_BYTES: usize
 pub trait radroots_transport::source::EventSource: core::marker::Send + core::marker::Sync
 pub fn radroots_transport::source::EventSource::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
 pub fn radroots_transport::source::EventSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SourceStatus, radroots_transport::error::Error>>
+pub trait radroots_transport::source::EventSubscriber: core::marker::Send + core::marker::Sync
+pub fn radroots_transport::source::EventSubscriber::subscribe(&self, radroots_transport::source::SubscriptionRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::BoxSubscription, radroots_transport::error::Error>>
+pub trait radroots_transport::source::EventSubscription: core::marker::Send
+pub fn radroots_transport::source::EventSubscription::cancel(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionEnd, radroots_transport::error::Error>>
+pub fn radroots_transport::source::EventSubscription::next(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionNext, radroots_transport::error::Error>>
+pub fn radroots_transport::source::EventSubscription::request(&self) -> &radroots_transport::source::SubscriptionRequest
 pub type radroots_transport::source::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
+pub type radroots_transport::source::BoxSubscription = alloc::boxed::Box<dyn radroots_transport::source::EventSubscription>
 pub mod radroots_transport::target
 pub struct radroots_transport::target::EndpointUri(_)
 impl radroots_transport::target::EndpointUri
@@ -494,6 +577,7 @@ pub radroots_transport::Error::DuplicateFetchAuthor
 pub radroots_transport::Error::DuplicateFetchKind
 pub radroots_transport::Error::DuplicateFetchTargetOutcome
 pub radroots_transport::Error::DuplicateRequiredTargetFingerprint
+pub radroots_transport::Error::DuplicateSubscriptionCheckpoint
 pub radroots_transport::Error::DuplicateTargetFingerprint
 pub radroots_transport::Error::EmptyDeliveryRequestId
 pub radroots_transport::Error::EmptyFetchCursor
@@ -502,6 +586,7 @@ pub radroots_transport::Error::EmptyPayloadBytes
 pub radroots_transport::Error::EmptyPayloadId
 pub radroots_transport::Error::EmptyPayloadLabel
 pub radroots_transport::Error::EmptyRequiredTargetSet
+pub radroots_transport::Error::EmptySubscriptionRequestId
 pub radroots_transport::Error::EmptyTargetLabel
 pub radroots_transport::Error::EmptyTargetScope
 pub radroots_transport::Error::EmptyTargetSet
@@ -525,6 +610,10 @@ pub radroots_transport::Error::InvalidPayloadDigest
 pub radroots_transport::Error::InvalidPayloadId
 pub radroots_transport::Error::InvalidPayloadLabel
 pub radroots_transport::Error::InvalidSatisfactionPolicy
+pub radroots_transport::Error::InvalidSubscriptionDeadline
+pub radroots_transport::Error::InvalidSubscriptionEnd
+pub radroots_transport::Error::InvalidSubscriptionLimit
+pub radroots_transport::Error::InvalidSubscriptionRequestId
 pub radroots_transport::Error::InvalidTargetFingerprint
 pub radroots_transport::Error::InvalidTargetLabel
 pub radroots_transport::Error::InvalidTargetScope
@@ -533,15 +622,29 @@ pub radroots_transport::Error::InvalidTransportKind
 pub radroots_transport::Error::MissingDeliveryTargetReceipt
 pub radroots_transport::Error::PayloadDigestMismatch
 pub radroots_transport::Error::RequiredTargetNotRequested
+pub radroots_transport::Error::SubscriptionCheckpointSetTooLarge
+pub radroots_transport::Error::SubscriptionEndLimitExceeded
+pub radroots_transport::Error::SubscriptionEndRequestMismatch
+pub radroots_transport::Error::SubscriptionEventCheckpointMismatch
 pub radroots_transport::Error::TargetSetTooLarge
 pub radroots_transport::Error::TransportOutcomeStatusMismatch
 pub radroots_transport::Error::UnexpectedDeliveryTargetReceipt
 pub radroots_transport::Error::UnexpectedFetchEvent
 pub radroots_transport::Error::UnexpectedFetchProvenance
 pub radroots_transport::Error::UnexpectedFetchTargetOutcome
+pub radroots_transport::Error::UnexpectedSubscriptionCheckpoint
+pub radroots_transport::Error::UnexpectedSubscriptionEvent
 pub radroots_transport::Error::UnsupportedOperation
 impl core::fmt::Display for radroots_transport::error::Error
 pub fn radroots_transport::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_transport::SubscriptionEndReason
+pub radroots_transport::SubscriptionEndReason::Cancelled
+pub radroots_transport::SubscriptionEndReason::Deadline
+pub radroots_transport::SubscriptionEndReason::EventLimit
+pub radroots_transport::SubscriptionEndReason::SourceClosed
+pub enum radroots_transport::SubscriptionNext
+pub radroots_transport::SubscriptionNext::End(radroots_transport::source::SubscriptionEnd)
+pub radroots_transport::SubscriptionNext::Event(alloc::boxed::Box<radroots_transport::source::SubscriptionEvent>)
 pub struct radroots_transport::DeliveryReceipt
 impl radroots_transport::sink::DeliveryReceipt
 pub fn radroots_transport::sink::DeliveryReceipt::for_request(&radroots_transport::sink::DeliveryRequest, alloc::vec::Vec<radroots_transport::sink::DeliveryTargetReceipt>) -> core::result::Result<Self, radroots_transport::error::Error>
@@ -617,6 +720,38 @@ pub const fn radroots_transport::SourceStatus::maturity(&self) -> radroots_trans
 pub fn radroots_transport::SourceStatus::message(&self) -> &str
 pub fn radroots_transport::SourceStatus::new(radroots_transport::TransportId, bool, radroots_transport::capability::Maturity, radroots_transport::capability::Availability, radroots_transport::capability::SourceCapabilities, impl core::convert::Into<alloc::string::String>) -> Self
 pub const fn radroots_transport::SourceStatus::transport_id(&self) -> radroots_transport::TransportId
+pub struct radroots_transport::SubscriptionEnd
+impl radroots_transport::source::SubscriptionEnd
+pub fn radroots_transport::source::SubscriptionEnd::checkpoints(&self) -> &[radroots_transport::source::SubscriptionCheckpoint]
+pub const fn radroots_transport::source::SubscriptionEnd::event_count(&self) -> u16
+pub fn radroots_transport::source::SubscriptionEnd::for_request<I>(&radroots_transport::source::SubscriptionRequest, u16, I, radroots_transport::source::SubscriptionEndReason) -> core::result::Result<Self, radroots_transport::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_transport::source::SubscriptionCheckpoint>
+pub const fn radroots_transport::source::SubscriptionEnd::reason(&self) -> radroots_transport::source::SubscriptionEndReason
+pub const fn radroots_transport::source::SubscriptionEnd::request(&self) -> &radroots_transport::source::SubscriptionRequest
+pub fn radroots_transport::source::SubscriptionEnd::validate_for_request(&self, &radroots_transport::source::SubscriptionRequest) -> core::result::Result<(), radroots_transport::error::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionEnd
+pub fn radroots_transport::source::SubscriptionEnd::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::SubscriptionEvent
+impl radroots_transport::source::SubscriptionEvent
+pub const fn radroots_transport::source::SubscriptionEvent::checkpoint(&self) -> &radroots_transport::source::SubscriptionCheckpoint
+pub fn radroots_transport::source::SubscriptionEvent::for_request(&radroots_transport::source::SubscriptionRequest, radroots_transport::source::ObservedEvent, radroots_transport::source::SubscriptionCheckpoint) -> core::result::Result<Self, radroots_transport::error::Error>
+pub const fn radroots_transport::source::SubscriptionEvent::observed(&self) -> &radroots_transport::source::ObservedEvent
+pub const fn radroots_transport::source::SubscriptionEvent::request(&self) -> &radroots_transport::source::SubscriptionRequest
+pub const fn radroots_transport::source::SubscriptionEvent::request_id(&self) -> &radroots_transport::source::SubscriptionRequestId
+pub fn radroots_transport::source::SubscriptionEvent::validate_for_request(&self, &radroots_transport::source::SubscriptionRequest) -> core::result::Result<(), radroots_transport::error::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionEvent
+pub fn radroots_transport::source::SubscriptionEvent::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_transport::SubscriptionRequest
+impl radroots_transport::source::SubscriptionRequest
+pub const fn radroots_transport::source::SubscriptionRequest::bounds(&self) -> radroots_transport::source::SubscriptionBounds
+pub fn radroots_transport::source::SubscriptionRequest::checkpoints(&self) -> &[radroots_transport::source::SubscriptionCheckpoint]
+pub fn radroots_transport::source::SubscriptionRequest::new(impl core::convert::AsRef<str>, radroots_transport::target::TargetSet, radroots_transport::source::SubscriptionBounds) -> core::result::Result<Self, radroots_transport::error::Error>
+pub const fn radroots_transport::source::SubscriptionRequest::request_id(&self) -> &radroots_transport::source::SubscriptionRequestId
+pub const fn radroots_transport::source::SubscriptionRequest::selector(&self) -> &radroots_transport::source::FetchSelector
+pub const fn radroots_transport::source::SubscriptionRequest::target_set(&self) -> &radroots_transport::target::TargetSet
+pub fn radroots_transport::source::SubscriptionRequest::with_checkpoints<I>(self, I) -> core::result::Result<Self, radroots_transport::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_transport::source::SubscriptionCheckpoint>
+pub fn radroots_transport::source::SubscriptionRequest::with_selector(self, radroots_transport::source::FetchSelector) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::source::SubscriptionRequest
+pub fn radroots_transport::source::SubscriptionRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::Target
 impl radroots_transport::target::Target
 pub fn radroots_transport::target::Target::fingerprint(&self) -> &radroots_transport::target::TargetFingerprint
@@ -680,4 +815,11 @@ pub fn radroots_transport::EventSink::status(&self) -> radroots_transport::sourc
 pub trait radroots_transport::EventSource: core::marker::Send + core::marker::Sync
 pub fn radroots_transport::EventSource::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
 pub fn radroots_transport::EventSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SourceStatus, radroots_transport::error::Error>>
+pub trait radroots_transport::EventSubscriber: core::marker::Send + core::marker::Sync
+pub fn radroots_transport::EventSubscriber::subscribe(&self, radroots_transport::source::SubscriptionRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::BoxSubscription, radroots_transport::error::Error>>
+pub trait radroots_transport::EventSubscription: core::marker::Send
+pub fn radroots_transport::EventSubscription::cancel(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionEnd, radroots_transport::error::Error>>
+pub fn radroots_transport::EventSubscription::next(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionNext, radroots_transport::error::Error>>
+pub fn radroots_transport::EventSubscription::request(&self) -> &radroots_transport::source::SubscriptionRequest
 pub type radroots_transport::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
+pub type radroots_transport::BoxSubscription = alloc::boxed::Box<dyn radroots_transport::source::EventSubscription>

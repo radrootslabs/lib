@@ -1,6 +1,6 @@
 use radroots_transport::{
-    DeliveryReceipt, DeliveryRequest, Error, EventSink, EventSource, FetchPage, FetchRequest,
-    TransportId,
+    BoxSubscription, DeliveryReceipt, DeliveryRequest, Error, EventSink, EventSource,
+    EventSubscriber, FetchPage, FetchRequest, SubscriptionRequest, TransportId,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
     sink::SinkStatus,
     source::{BoxFuture, SourceStatus},
@@ -23,6 +23,15 @@ impl EventSource for HostTransport {
     }
 
     fn fetch(&self, _request: FetchRequest) -> BoxFuture<'_, Result<FetchPage, Error>> {
+        Box::pin(async { Err(Error::UnsupportedOperation) })
+    }
+}
+
+impl EventSubscriber for HostTransport {
+    fn subscribe(
+        &self,
+        _request: SubscriptionRequest,
+    ) -> BoxFuture<'_, Result<BoxSubscription, Error>> {
         Box::pin(async { Err(Error::UnsupportedOperation) })
     }
 }
@@ -52,10 +61,12 @@ impl EventSink for HostTransport {
 fn main() {
     let transport = HostTransport;
     let source: &dyn EventSource = &transport;
+    let subscriber: &dyn EventSubscriber = &transport;
     let sink: &dyn EventSink = &transport;
 
     let future = source.status();
     drop(future); // The composing host chooses and drives its async executor.
+    let _ = subscriber;
     let future = sink.status();
     drop(future);
 }
