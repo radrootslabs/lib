@@ -123,3 +123,27 @@ impl BootstrapRuntimeContract {
         self.preferred_cli_binding
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::BootstrapRuntimeContract;
+
+    #[test]
+    fn bootstrap_accessors_project_parsed_fields_without_selecting_a_default() {
+        let contract = toml::from_str::<BootstrapRuntimeContract>(
+            r#"
+service_id = "myc"
+default_instance_id = "explicit-test-instance"
+preferred_cli_binding = false
+"#,
+        )
+        .expect("bootstrap contract");
+
+        assert_eq!(contract.service_id().as_str(), "myc");
+        assert_eq!(
+            contract.default_instance_id().as_str(),
+            "explicit-test-instance"
+        );
+        assert!(!contract.preferred_cli_binding());
+    }
+}
