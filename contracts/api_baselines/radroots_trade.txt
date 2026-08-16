@@ -3,6 +3,34 @@ pub mod radroots_trade::evidence
 pub enum radroots_trade::evidence::RadrootsTradeAttestationResultV1
 pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Invalid
 pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Valid
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceCoverageError
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageError::AdmittedEventCountOutOfRange
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageError::NoRequiredSource
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageError::SourceCountOutOfRange
+impl core::error::Error for radroots_trade::evidence::RadrootsTradeEvidenceCoverageError
+impl core::fmt::Display for radroots_trade::evidence::RadrootsTradeEvidenceCoverageError
+pub fn radroots_trade::evidence::RadrootsTradeEvidenceCoverageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1::Missing
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1::Partial
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1::ScopeSatisfied
+pub radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1::Unsupported
+impl radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1::permits(self, radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1) -> bool
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1
+pub radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1::Indeterminate
+pub radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1::Invalid
+pub radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1::Valid
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceScopePrerequisitesV1
+pub radroots_trade::evidence::RadrootsTradeEvidenceScopePrerequisitesV1::Satisfied
+pub radroots_trade::evidence::RadrootsTradeEvidenceScopePrerequisitesV1::Unsatisfied
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceSourceCompletionV1
+pub radroots_trade::evidence::RadrootsTradeEvidenceSourceCompletionV1::Complete
+pub radroots_trade::evidence::RadrootsTradeEvidenceSourceCompletionV1::Incomplete
+pub radroots_trade::evidence::RadrootsTradeEvidenceSourceCompletionV1::Unsupported
+pub enum radroots_trade::evidence::RadrootsTradeEvidenceSourceRequirementV1
+pub radroots_trade::evidence::RadrootsTradeEvidenceSourceRequirementV1::Optional
+pub radroots_trade::evidence::RadrootsTradeEvidenceSourceRequirementV1::Required
 pub enum radroots_trade::evidence::RadrootsTradeEvidenceStateV1
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Complete
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Missing
@@ -14,6 +42,12 @@ pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::claim_m
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::event_id(&self) -> &radroots_event::id::EventId
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::new(radroots_event::id::EventId, radroots_event::id::MutationId, radroots_trade::evidence::RadrootsTradeAttestationResultV1) -> Self
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::result(&self) -> radroots_trade::evidence::RadrootsTradeAttestationResultV1
+pub struct radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1
+impl radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1::admitted_event_count(&self) -> u32
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1::completion(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceSourceCompletionV1
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1::new(radroots_trade::evidence::RadrootsTradeEvidenceSourceRequirementV1, radroots_trade::evidence::RadrootsTradeEvidenceSourceCompletionV1, u32) -> core::result::Result<Self, radroots_trade::evidence::RadrootsTradeEvidenceCoverageError>
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1::requirement(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceSourceRequirementV1
 pub struct radroots_trade::evidence::RadrootsTradeMutationRecordV1
 impl radroots_trade::evidence::RadrootsTradeMutationRecordV1
 pub const fn radroots_trade::evidence::RadrootsTradeMutationRecordV1::mutation(&self) -> &radroots_event::trade::TradeMutationEnvelopeV1
@@ -24,6 +58,9 @@ impl radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1
 pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::candidate_id(&self) -> &radroots_event::id::CandidateId
 pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::new(radroots_event::id::CandidateId, radroots_trade::model::RadrootsTradePrivateTermsStateV1) -> Self
 pub const fn radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1::state(&self) -> radroots_trade::model::RadrootsTradePrivateTermsStateV1
+pub const radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MAXIMUM_EVENTS_PER_SOURCE: u32
+pub const radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MAXIMUM_SOURCE_COUNT: usize
+pub fn radroots_trade::evidence::classify_trade_evidence_coverage_v1(impl core::iter::traits::collect::IntoIterator<Item = radroots_trade::evidence::RadrootsTradeEvidenceSourceResultV1>, radroots_trade::evidence::RadrootsTradeEvidenceScopePrerequisitesV1) -> core::result::Result<radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1, radroots_trade::evidence::RadrootsTradeEvidenceCoverageError>
 pub mod radroots_trade::model
 pub enum radroots_trade::model::OrderIdError
 pub radroots_trade::model::OrderIdError::Empty

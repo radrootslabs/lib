@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, workflow as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const EVIDENCE: &str = include_str!("../src/evidence.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const OPERATIONS: &str = include_str!("../../../contracts/operations.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -220,6 +221,76 @@ fn trade_model_reducer_and_evidence_have_final_public_owners() {
 }
 
 #[test]
+fn approved_evidence_coverage_and_outcome_are_portable_and_bounded() {
+    use radroots_trade::evidence::{
+        RADROOTS_TRADE_EVIDENCE_MAXIMUM_EVENTS_PER_SOURCE,
+        RADROOTS_TRADE_EVIDENCE_MAXIMUM_SOURCE_COUNT, RadrootsTradeEvidenceCoverageError,
+        RadrootsTradeEvidenceCoverageV1, RadrootsTradeEvidenceOutcomeV1,
+        RadrootsTradeEvidenceScopePrerequisitesV1, RadrootsTradeEvidenceSourceCompletionV1,
+        RadrootsTradeEvidenceSourceRequirementV1, RadrootsTradeEvidenceSourceResultV1,
+        classify_trade_evidence_coverage_v1,
+    };
+
+    let source = RadrootsTradeEvidenceSourceResultV1::new(
+        RadrootsTradeEvidenceSourceRequirementV1::Required,
+        RadrootsTradeEvidenceSourceCompletionV1::Complete,
+        RADROOTS_TRADE_EVIDENCE_MAXIMUM_EVENTS_PER_SOURCE,
+    )
+    .expect("maximum source result");
+    assert_eq!(RADROOTS_TRADE_EVIDENCE_MAXIMUM_SOURCE_COUNT, 16);
+    assert_eq!(
+        classify_trade_evidence_coverage_v1(
+            [source],
+            RadrootsTradeEvidenceScopePrerequisitesV1::Satisfied,
+        ),
+        Ok(RadrootsTradeEvidenceCoverageV1::ScopeSatisfied)
+    );
+    assert!(
+        RadrootsTradeEvidenceCoverageV1::ScopeSatisfied
+            .permits(RadrootsTradeEvidenceOutcomeV1::Valid)
+    );
+    assert!(
+        !RadrootsTradeEvidenceCoverageV1::Partial.permits(RadrootsTradeEvidenceOutcomeV1::Invalid)
+    );
+
+    fn assert_portable<T: Clone + core::fmt::Debug + Eq + Send + Sync>() {}
+    assert_portable::<RadrootsTradeEvidenceCoverageV1>();
+    assert_portable::<RadrootsTradeEvidenceOutcomeV1>();
+    assert_portable::<RadrootsTradeEvidenceSourceCompletionV1>();
+    assert_portable::<RadrootsTradeEvidenceSourceRequirementV1>();
+    assert_portable::<RadrootsTradeEvidenceScopePrerequisitesV1>();
+    assert_portable::<RadrootsTradeEvidenceSourceResultV1>();
+    assert_portable::<RadrootsTradeEvidenceCoverageError>();
+
+    for required in [
+        "pub enum RadrootsTradeEvidenceCoverageV1",
+        "Missing,",
+        "Partial,",
+        "ScopeSatisfied,",
+        "Unsupported,",
+        "pub enum RadrootsTradeEvidenceOutcomeV1",
+        "pub enum RadrootsTradeEvidenceSourceRequirementV1",
+        "pub enum RadrootsTradeEvidenceScopePrerequisitesV1",
+        "Valid,",
+        "Invalid,",
+        "Indeterminate,",
+        "RADROOTS_TRADE_EVIDENCE_MAXIMUM_SOURCE_COUNT: usize = 16",
+        "RADROOTS_TRADE_EVIDENCE_MAXIMUM_EVENTS_PER_SOURCE: u32 = 4_096",
+    ] {
+        assert!(
+            EVIDENCE.contains(required),
+            "coverage contract is missing {required}"
+        );
+    }
+    for forbidden in ["std::fs", "std::net", "sqlx", "tokio", "reqwest"] {
+        assert!(
+            !EVIDENCE.contains(forbidden),
+            "evidence coverage acquired side-effect dependency {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn workflow_plan_is_root_exported_and_side_effect_free() {
     let _: Option<radroots_trade::WorkflowPlan> = None;
     let _: Option<radroots_trade::Error> = None;
@@ -276,6 +347,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
     for section in [
         "## Canonical surface",
         "## Deterministic reduction",
+        "## Evidence coverage and outcome",
         "## Workflow planning",
         "## Features",
         "## Serialization and versioning",
@@ -294,6 +366,8 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
     assert!(PUBLIC_API.starts_with("pub mod radroots_trade\n"));
     for item in [
         "pub mod radroots_trade::evidence",
+        "pub enum radroots_trade::evidence::RadrootsTradeEvidenceCoverageV1",
+        "pub enum radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1",
         "pub mod radroots_trade::model",
         "pub mod radroots_trade::reducer",
         "pub mod radroots_trade::validation",

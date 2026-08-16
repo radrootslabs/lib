@@ -58,6 +58,22 @@ Reduction does not retrieve missing records or attestations. A projection's
 evidence state and issues describe only the supplied input, not the existence
 of additional records elsewhere.
 
+## Evidence coverage and outcome
+
+`evidence::classify_trade_evidence_coverage_v1` evaluates at most sixteen
+explicit source results using the fixed `Unsupported`, `ScopeSatisfied`,
+`Partial`, then `Missing` precedence. A required unsupported source is
+`Unsupported`; every required source plus the required scope prerequisites is
+`ScopeSatisfied`; any other completed source or admitted evidence is `Partial`;
+otherwise the result is `Missing`. At least one required source is mandatory,
+and one source can represent at most 4,096 admitted events.
+
+Coverage never defaults to completeness. `Valid` and `Invalid` outcomes are
+permitted only for `ScopeSatisfied`; `Missing`, `Partial`, and `Unsupported`
+permit only `Indeterminate`. These portable values classify caller-supplied
+facts and perform no source query, policy lookup, clock read, persistence,
+signing, or publication.
+
 ## Workflow planning
 
 `WorkflowPlan::prepare` validates a canonical proposal, decision, revision,
