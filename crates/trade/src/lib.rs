@@ -11,6 +11,9 @@ mod test_fixtures;
 #[cfg(feature = "json")]
 mod evidence_manifest;
 
+#[cfg(feature = "json")]
+mod evidence_report;
+
 pub mod evidence;
 pub mod model;
 pub mod reducer;

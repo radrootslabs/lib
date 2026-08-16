@@ -1,5 +1,25 @@
 pub mod radroots_trade
 pub mod radroots_trade::evidence
+pub enum radroots_trade::evidence::RadrootsRhiEvidenceReportError
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::DuplicateReasonCode
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::FixedFieldMismatch
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::IncompleteSupersession
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::InvalidDigest
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::InvalidIdentifier
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::InvalidOutcome
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::InvalidReasonCode
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::InvalidTradeGeneration
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::Malformed
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::ManifestMismatch
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::NonCanonical
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::OutcomeNotPermitted
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::ReasonCodeCountOutOfRange
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::ReportTooLarge
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::StatementDigestMismatch
+pub radroots_trade::evidence::RadrootsRhiEvidenceReportError::UnsupportedVersion
+impl core::error::Error for radroots_trade::evidence::RadrootsRhiEvidenceReportError
+impl core::fmt::Display for radroots_trade::evidence::RadrootsRhiEvidenceReportError
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_trade::evidence::RadrootsTradeAttestationResultV1
 pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Invalid
 pub radroots_trade::evidence::RadrootsTradeAttestationResultV1::Valid
@@ -53,6 +73,52 @@ pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Complete
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::Missing
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::QueryPartial
 pub radroots_trade::evidence::RadrootsTradeEvidenceStateV1::UnsupportedVersion
+pub struct radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1(_)
+impl radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1::as_str(&self) -> &str
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_trade::evidence::RadrootsRhiEvidenceReportError>
+impl core::fmt::Debug for radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::evidence::RadrootsRhiEvidenceReportV1
+impl radroots_trade::evidence::RadrootsRhiEvidenceReportV1
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::attestation_method(&self) -> &'static str
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::canonical_content(&self) -> &str
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::canonical_statement_payload(&self) -> &str
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::claim_mutation_id(&self) -> radroots_event::id::MutationId
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::contract_id(&self) -> &'static str
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::contract_version(&self) -> u16
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::evidence_manifest_digest(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceManifestDigestV1
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::evidence_policy_digest(&self) -> radroots_trade::evidence::RadrootsTradeEvidencePolicyDigestV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::from_canonical_content(&[u8]) -> core::result::Result<Self, radroots_trade::evidence::RadrootsRhiEvidenceReportError>
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::issuer_public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::new<R>(radroots_identity::key::PublicKey, radroots_event::id::MutationId, radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1, R, radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1, &radroots_trade::evidence::RadrootsTradeEvidenceManifestV1, core::option::Option<radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1>) -> core::result::Result<Self, radroots_trade::evidence::RadrootsRhiEvidenceReportError> where R: core::iter::traits::collect::IntoIterator<Item = radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1>
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::observed_at_unix_s(&self) -> u64
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::outcome(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceOutcomeV1
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::projection_digest(&self) -> radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::reason_codes(&self) -> &[radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1]
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::reducer_contract_id(&self) -> &'static str
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::reducer_contract_version(&self) -> u16
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::statement_digest(&self) -> radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::supersession(&self) -> core::option::Option<radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1>
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::trade_generation(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::trade_id(&self) -> &radroots_event::id::TradeId
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::validate_against_manifest(&self, &radroots_trade::evidence::RadrootsTradeEvidenceManifestV1) -> core::result::Result<(), radroots_trade::evidence::RadrootsRhiEvidenceReportError>
+impl core::fmt::Debug for radroots_trade::evidence::RadrootsRhiEvidenceReportV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceReportV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1(_)
+impl radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1::from_bytes([u8; 32]) -> Self
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1::to_hex(&self) -> alloc::string::String
+impl core::fmt::Debug for radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1
+impl radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1::event_id(&self) -> radroots_event::id::EventId
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1::new(radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1, radroots_event::id::EventId) -> Self
+pub const fn radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1::report_id(&self) -> radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1
+impl core::fmt::Debug for radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1
+pub fn radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_trade::evidence::RadrootsTradeAttestationRecordV1
 impl radroots_trade::evidence::RadrootsTradeAttestationRecordV1
 pub const fn radroots_trade::evidence::RadrootsTradeAttestationRecordV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
@@ -110,6 +176,14 @@ pub fn radroots_trade::evidence::RadrootsTradeEvidencePolicyDigestV1::sha256(&[u
 pub fn radroots_trade::evidence::RadrootsTradeEvidencePolicyDigestV1::to_hex(&self) -> alloc::string::String
 impl core::fmt::Debug for radroots_trade::evidence::RadrootsTradeEvidencePolicyDigestV1
 pub fn radroots_trade::evidence::RadrootsTradeEvidencePolicyDigestV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1(_)
+impl radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1::from_bytes([u8; 32]) -> Self
+pub fn radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1::sha256(&[u8]) -> Self
+pub fn radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1::to_hex(&self) -> alloc::string::String
+impl core::fmt::Debug for radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1
+pub fn radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_trade::evidence::RadrootsTradeEvidenceProvenanceDigestV1(_)
 impl radroots_trade::evidence::RadrootsTradeEvidenceProvenanceDigestV1
 pub const fn radroots_trade::evidence::RadrootsTradeEvidenceProvenanceDigestV1::as_bytes(&self) -> &[u8; 32]
@@ -156,6 +230,12 @@ pub fn radroots_trade::evidence::RadrootsTradeSignedEventDigestV1::sha256(&[u8])
 pub fn radroots_trade::evidence::RadrootsTradeSignedEventDigestV1::to_hex(&self) -> alloc::string::String
 impl core::fmt::Debug for radroots_trade::evidence::RadrootsTradeSignedEventDigestV1
 pub fn radroots_trade::evidence::RadrootsTradeSignedEventDigestV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_trade::evidence::RADROOTS_RHI_EVIDENCE_ATTESTATION_METHOD: &str
+pub const radroots_trade::evidence::RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_ID: &str
+pub const radroots_trade::evidence::RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_VERSION: u16
+pub const radroots_trade::evidence::RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_CANONICAL_BYTES: usize
+pub const radroots_trade::evidence::RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_REASON_CODES: usize
+pub const radroots_trade::evidence::RADROOTS_RHI_EVIDENCE_REPORT_REASON_CODE_MAXIMUM_BYTES: usize
 pub const radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_ID: &str
 pub const radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MANIFEST_CONTRACT_VERSION: u16
 pub const radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_BYTES: usize

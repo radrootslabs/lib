@@ -6,6 +6,7 @@ use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, w
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const EVIDENCE: &str = include_str!("../src/evidence.rs");
 const EVIDENCE_MANIFEST: &str = include_str!("../src/evidence_manifest.rs");
+const EVIDENCE_REPORT: &str = include_str!("../src/evidence_report.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const OPERATIONS: &str = include_str!("../../../contracts/operations.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -15,6 +16,11 @@ const CANONICAL_REDUCER_VECTORS: &str =
 const PACKAGED_REDUCER_VECTORS: &str = include_str!("fixtures/reduce_records.v1.json");
 const CANONICAL_WORKFLOW_VECTORS: &str =
     include_str!("../../../contracts/conformance/vectors/trade/prepare_workflow.v1.json");
+const CANONICAL_RHI_REPORT_VECTORS: &str = include_str!(
+    "../../../contracts/conformance/vectors/rhi/evidence_attestation_decision.v1.json"
+);
+const SERVICE_EVENT_DECISION: &str =
+    include_str!("../../../contracts/architecture/decisions/services_hardening_events.v1.json");
 const PACKAGED_WORKFLOW_VECTORS: &str = include_str!("fixtures/prepare_workflow.v1.json");
 const WORKFLOW: &str = include_str!("../src/workflow.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
@@ -365,6 +371,117 @@ fn immutable_evidence_manifest_is_sealed_bounded_and_side_effect_free() {
 }
 
 #[test]
+fn immutable_evidence_report_is_sealed_bounded_and_vector_bound() {
+    use radroots_trade::evidence::{
+        RADROOTS_RHI_EVIDENCE_ATTESTATION_METHOD, RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_ID,
+        RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_VERSION,
+        RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_CANONICAL_BYTES,
+        RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_REASON_CODES,
+        RADROOTS_RHI_EVIDENCE_REPORT_REASON_CODE_MAXIMUM_BYTES, RadrootsRhiEvidenceReasonCodeV1,
+        RadrootsRhiEvidenceReportError, RadrootsRhiEvidenceReportV1,
+        RadrootsRhiEvidenceStatementDigestV1, RadrootsRhiEvidenceSupersessionV1,
+        RadrootsTradeEvidenceProjectionDigestV1,
+    };
+
+    fn assert_portable<T: Clone + core::fmt::Debug + Eq + Send + Sync>() {}
+    assert_portable::<RadrootsRhiEvidenceReasonCodeV1>();
+    assert_portable::<RadrootsRhiEvidenceReportError>();
+    assert_portable::<RadrootsRhiEvidenceReportV1>();
+    assert_portable::<RadrootsRhiEvidenceStatementDigestV1>();
+    assert_portable::<RadrootsRhiEvidenceSupersessionV1>();
+    assert_portable::<RadrootsTradeEvidenceProjectionDigestV1>();
+
+    assert_eq!(
+        RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_ID,
+        "radroots.rhi.evidence_attestation.v1"
+    );
+    assert_eq!(RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_VERSION, 1);
+    assert_eq!(
+        RADROOTS_RHI_EVIDENCE_ATTESTATION_METHOD,
+        "signed_evidence_snapshot"
+    );
+    assert_eq!(RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_REASON_CODES, 16);
+    assert_eq!(RADROOTS_RHI_EVIDENCE_REPORT_REASON_CODE_MAXIMUM_BYTES, 64);
+    assert_eq!(
+        RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_CANONICAL_BYTES,
+        16 * 1024
+    );
+
+    for required in [
+        "requires_both_references_or_neither",
+        "report_id_equals_statement_digest",
+        "reason_codes_sorted_unique",
+    ] {
+        assert!(
+            SERVICE_EVENT_DECISION.contains(required),
+            "service-event decision is missing {required}"
+        );
+    }
+    assert!(EVIDENCE_REPORT.contains("radroots:rhi-evidence-attestation-statement:v1\\0"));
+
+    let vectors: serde_json::Value =
+        serde_json::from_str(CANONICAL_RHI_REPORT_VECTORS).expect("RHI report vectors");
+    for vector in vectors["vectors"]
+        .as_array()
+        .expect("RHI report vector array")
+        .iter()
+        .filter(|vector| vector["kind"] == "rhi.evidence_attestation.valid")
+    {
+        let expected = &vector["expected"];
+        let content = expected["canonical_event_content_utf8"]
+            .as_str()
+            .expect("canonical report content");
+        let report = RadrootsRhiEvidenceReportV1::from_canonical_content(content.as_bytes())
+            .expect("canonical report parses");
+        assert_eq!(
+            report.canonical_statement_payload(),
+            expected["canonical_statement_payload_utf8"]
+                .as_str()
+                .expect("canonical statement payload")
+        );
+        assert_eq!(
+            report.statement_digest().to_hex(),
+            expected["statement_digest"]
+                .as_str()
+                .expect("statement digest")
+        );
+        assert_eq!(
+            report.statement_digest().to_hex(),
+            expected["report_id"].as_str().expect("report identity")
+        );
+    }
+    for forbidden in [
+        "std::fs",
+        "std::net",
+        "sqlx",
+        "tokio",
+        "reqwest",
+        "radroots_transport",
+        ".sign(",
+        ".publish(",
+    ] {
+        assert!(
+            !EVIDENCE_REPORT.contains(forbidden),
+            "report acquired forbidden side effect or upward dependency: {forbidden}"
+        );
+    }
+    for field in [
+        "pub issuer_public_key:",
+        "pub reason_codes:",
+        "pub canonical_statement_payload:",
+        "pub canonical_content:",
+    ] {
+        assert!(
+            !EVIDENCE_REPORT.contains(field),
+            "report field escaped: {field}"
+        );
+    }
+    assert!(ROOT.contains("mod evidence_report;"));
+    assert!(!ROOT.contains("pub mod evidence_report;"));
+    assert!(!PUBLIC_API.contains("RadrootsRhiEvidenceStatementDigestV1::sha256"));
+}
+
+#[test]
 fn workflow_plan_is_root_exported_and_side_effect_free() {
     let _: Option<radroots_trade::WorkflowPlan> = None;
     let _: Option<radroots_trade::Error> = None;
@@ -423,6 +540,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "## Deterministic reduction",
         "## Evidence coverage and outcome",
         "## Immutable evidence manifests",
+        "## Immutable evidence reports",
         "## Workflow planning",
         "## Features",
         "## Serialization and versioning",
@@ -449,6 +567,11 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub struct radroots_trade::evidence::RadrootsTradeEvidenceProvenanceDigestV1",
         "pub struct radroots_trade::evidence::RadrootsTradeEvidenceSourceResultDigestV1",
         "pub struct radroots_trade::evidence::RadrootsTradeSignedEventDigestV1",
+        "pub struct radroots_trade::evidence::RadrootsRhiEvidenceReasonCodeV1",
+        "pub struct radroots_trade::evidence::RadrootsRhiEvidenceReportV1",
+        "pub struct radroots_trade::evidence::RadrootsRhiEvidenceStatementDigestV1",
+        "pub struct radroots_trade::evidence::RadrootsRhiEvidenceSupersessionV1",
+        "pub struct radroots_trade::evidence::RadrootsTradeEvidenceProjectionDigestV1",
         "pub mod radroots_trade::model",
         "pub mod radroots_trade::reducer",
         "pub mod radroots_trade::validation",

@@ -214,6 +214,18 @@ pub use crate::evidence_manifest::{
     RadrootsTradeSignedEventDigestV1,
 };
 
+#[cfg(feature = "json")]
+pub use crate::evidence_report::{
+    RADROOTS_RHI_EVIDENCE_ATTESTATION_METHOD, RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_ID,
+    RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_VERSION,
+    RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_CANONICAL_BYTES,
+    RADROOTS_RHI_EVIDENCE_REPORT_MAXIMUM_REASON_CODES,
+    RADROOTS_RHI_EVIDENCE_REPORT_REASON_CODE_MAXIMUM_BYTES, RadrootsRhiEvidenceReasonCodeV1,
+    RadrootsRhiEvidenceReportError, RadrootsRhiEvidenceReportV1,
+    RadrootsRhiEvidenceStatementDigestV1, RadrootsRhiEvidenceSupersessionV1,
+    RadrootsTradeEvidenceProjectionDigestV1,
+};
+
 #[cfg(test)]
 mod tests {
     #[cfg(not(feature = "std"))]

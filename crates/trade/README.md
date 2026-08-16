@@ -15,7 +15,7 @@ New code should enter through these modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `evidence` | Immutable mutation, private-term, and attestation observations plus bounded evidence-manifest models. |
+| `evidence` | Immutable mutation, private-term, and attestation observations plus bounded evidence-manifest and RHI report models. |
 | `model` | Trade projection state and validated business identifiers. |
 | `reducer` | Deterministic reduction, evidence precedence, and conflict reporting. |
 | `validation` | Validation-error ownership for canonical trade inputs. |
@@ -95,6 +95,31 @@ source, exact duplicates reject, and per-source admitted counts must match the
 frozen inventory. Building or parsing a manifest performs no I/O, source
 query, reduction, signing, persistence, or publication.
 
+## Immutable evidence reports
+
+`evidence::RadrootsRhiEvidenceReportV1` binds one immutable report to an
+issuer, claim mutation, outcome and sorted stable reason codes, the exact
+reducer contract, a typed projection digest, and the policy, manifest,
+observation time, trade, and nonzero generation frozen by an accepted evidence
+manifest. Definitive Valid or Invalid reports require `ScopeSatisfied`
+coverage; all other coverage states permit only Indeterminate.
+
+The report freezes the exact RFC 8785 JSON statement payload reserved by the
+service-event contract. Its statement digest is SHA-256 over the fixed
+`radroots:rhi-evidence-attestation-statement:v1` NUL-terminated domain followed
+by those canonical bytes. The final canonical content adds equal `report_id`
+and `statement_digest` fields without making the digest self-referential.
+Supersession is a sealed both-or-neither report/event pair. Strict parsing caps
+input at 16 KiB, rejects unknown, duplicate, missing, null, noncanonical, and
+fixed-field drift, and reproduces the two governed current and superseding
+vectors exactly.
+
+The report commits to a separately retained projection and evidence manifest;
+it does not independently prove either record, the claim's existence, issuer
+authority, a signature, or a Nostr event. Event construction, structural tags,
+signature validation, storage, and publication remain outside this model-only
+boundary.
+
 ## Workflow planning
 
 `WorkflowPlan::prepare` validates a canonical proposal, decision, revision,
@@ -114,7 +139,7 @@ or proof that referenced private material exists.
 | --- | --- | --- |
 | `std` | yes | Standard-library integration for the portable model and errors. |
 | `serde` | yes | Serialization support for native and versioned trade values. |
-| `json` | yes | Executable JSON conformance vectors, deterministic projection digests, and immutable evidence manifests; enables `serde`. |
+| `json` | yes | Executable JSON conformance vectors, deterministic projection and statement digests, and immutable evidence manifests/reports; enables `serde`. |
 
 `--no-default-features` keeps the allocation-backed trade model, reducer, and
 workflow planner available in `no_std` environments. Features are additive;
@@ -126,8 +151,8 @@ of the Release V1 capability vocabulary.
 
 Serde represents validated values; deserialization does not perform actor
 authorization, signature verification, record lookup, or delivery. Canonical
-JSON stability applies only to the explicitly governed reducer and workflow
-conformance vectors. Rust data layout,
+JSON stability applies only to the explicitly governed reducer, workflow, and
+RHI evidence-report contracts. Rust data layout,
 debug formatting, and the pre-release public API are not wire contracts.
 
 Versioned `V1` names identify serialized or algorithm-contract generations.
