@@ -37,6 +37,101 @@ let
     serviceName = "fixture_service";
     inherit nativeInputs toolchain;
   };
+  fixtureBuildInfo = {
+    serviceVersion = "0.1.0-alpha";
+    serviceCommit = "1111111111111111111111111111111111111111";
+    libRevision = "2222222222222222222222222222222222222222";
+    rustVersion = "1.97.1";
+    target = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+    featureProfile = "service-host";
+    contractVersions = {
+      config = 1;
+      state = 2;
+      admin = 3;
+      status = 4;
+      provider = 5;
+    };
+  };
+  ociImage =
+    if pkgs.stdenv.isLinux then
+      service.mkServiceOciImage {
+        serviceName = "fixture_service";
+        inherit package;
+        binaryName = "fixture-service";
+        buildInfo = fixtureBuildInfo;
+      }
+    else
+      null;
+  ociImageCheck =
+    if pkgs.stdenv.isLinux then
+      pkgs.runCommand "fixture-service-oci-image"
+        {
+          nativeBuildInputs = [
+            pkgs.coreutils
+            pkgs.gnutar
+            pkgs.gzip
+            pkgs.jq
+          ];
+        }
+        ''
+          mkdir image
+          tar -xzf ${ociImage} -C image
+          config_file="$(jq -er '.[0].Config' image/manifest.json)"
+          test -f "image/$config_file"
+
+          jq -e '
+            .architecture == "${if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "amd64"}" and
+            .os == "linux" and
+            .created == "1970-01-01T00:00:01+00:00" and
+            .config.User == "65532:65532" and
+            .config.Entrypoint == ["${package}/bin/fixture-service"] and
+            .config.WorkingDir == "/" and
+            .config.Env == ["SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"] and
+            .config.StopSignal == "SIGTERM" and
+            (.config | has("Volumes") | not) and
+            .config.Labels == {
+              "dev.radroots.build.feature-profile": "service-host",
+              "dev.radroots.build.lib-revision": "2222222222222222222222222222222222222222",
+              "dev.radroots.build.rust-version": "1.97.1",
+              "dev.radroots.build.target": "${pkgs.stdenv.hostPlatform.rust.rustcTarget}",
+              "dev.radroots.contract.admin-version": "3",
+              "dev.radroots.contract.config-version": "1",
+              "dev.radroots.contract.provider-version": "5",
+              "dev.radroots.contract.state-version": "2",
+              "dev.radroots.contract.status-version": "4",
+              "dev.radroots.mount.config": "/etc/radroots/services/fixture_service",
+              "dev.radroots.mount.config.mode": "read-only",
+              "dev.radroots.mount.credentials": "/etc/radroots/secrets/services/fixture_service",
+              "dev.radroots.mount.credentials.mode": "read-only",
+              "dev.radroots.mount.runtime": "/run/radroots/services/fixture_service",
+              "dev.radroots.mount.runtime.mode": "read-write",
+              "dev.radroots.mount.state": "/var/lib/radroots/services/fixture_service",
+              "dev.radroots.mount.state.mode": "read-write",
+              "dev.radroots.rootfs": "read-only-compatible",
+              "org.opencontainers.image.description": "Hardened fixture_service service image",
+              "org.opencontainers.image.licenses": "MIT OR Apache-2.0",
+              "org.opencontainers.image.revision": "1111111111111111111111111111111111111111",
+              "org.opencontainers.image.title": "fixture_service",
+              "org.opencontainers.image.version": "0.1.0-alpha"
+            }
+          ' "image/$config_file"
+
+          jq -e '.[0].RepoTags == ["fixture-service:0.1.0-alpha"]' image/manifest.json
+          jq -e '([.[0].Layers | length] | .[0] >= 1 and .[0] <= 2)' image/manifest.json
+          jq -er '.[0].Layers[]' image/manifest.json | while IFS= read -r layer; do
+            tar -tf "image/$layer"
+          done | sort -u > image-entries
+
+          grep -E '/bin/fixture-service$' image-entries
+          if grep -E '(^|/)(bin/(ba)?sh|bin/nix|bin/cargo|bin/rustc|Cargo.toml|src/)' image-entries; then
+            echo "fixture OCI image contains a development or shell payload" >&2
+            exit 1
+          fi
+
+          touch "$out"
+        ''
+    else
+      null;
   appSmoke = pkgs.runCommand "fixture-service-app-smoke" { } ''
     test "$(${apps.default.program} --help)" = "fixture-service"
     test "$(${apps.release-acceptance.program})" = "fixture-service release acceptance"
@@ -102,6 +197,9 @@ let
     extraChecks = {
       app-smoke = appSmoke;
       inherit smoke;
+    }
+    // lib.optionalAttrs pkgs.stdenv.isLinux {
+      oci-image = ociImageCheck;
     };
   };
   outputs = service.mkServiceOutputs {
@@ -109,6 +207,9 @@ let
     inherit nativeInputs package;
     inherit apps checks;
     devShells.default = devShell;
+    extraPackages = lib.optionalAttrs pkgs.stdenv.isLinux {
+      oci = ociImage;
+    };
   };
   invalidName = builtins.tryEval (
     (service.mkServiceOutputs {
@@ -353,6 +454,173 @@ let
       )).drvPath
     ))
   ];
+  ociArgs = {
+    serviceName = "fixture_service";
+    inherit package;
+    binaryName = "fixture-service";
+    buildInfo = fixtureBuildInfo;
+  };
+  maximumOciResult =
+    if pkgs.stdenv.isLinux then
+      builtins.tryEval (
+        (service.mkServiceOciImage (
+          ociArgs
+          // {
+            serviceName = lib.concatStrings (lib.replicate 128 "a");
+            binaryName = lib.concatStrings (lib.replicate 128 "b");
+            buildInfo = fixtureBuildInfo // {
+              serviceVersion = lib.concatStrings (lib.replicate 128 "1");
+              contractVersions = lib.mapAttrs (_: _: 4294967295) fixtureBuildInfo.contractVersions;
+            };
+          }
+        )).outPath
+      )
+    else
+      {
+        success = true;
+        value = null;
+      };
+  invalidOciResults = lib.optionals pkgs.stdenv.isLinux [
+    (builtins.tryEval (
+      (service.mkServiceOciImage (ociArgs // { serviceName = "../fixture"; })).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (ociArgs // { package = "not-a-derivation"; })).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (ociArgs // { binaryName = "fixture service"; })).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          serviceName = lib.concatStrings (lib.replicate 129 "a");
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          binaryName = lib.concatStrings (lib.replicate 129 "b");
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            serviceVersion = "bad value";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            serviceVersion = lib.concatStrings (lib.replicate 129 "1");
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            serviceCommit = "ABCDEF";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            libRevision = "bad";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            rustVersion = "stable";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            target = "x86_64-unknown-linux-musl";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            featureProfile = "development";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            extra = "unexpected";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            contractVersions = fixtureBuildInfo.contractVersions // {
+              config = 0;
+            };
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            contractVersions = fixtureBuildInfo.contractVersions // {
+              config = 4294967296;
+            };
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            contractVersions = builtins.removeAttrs fixtureBuildInfo.contractVersions [ "provider" ];
+          };
+        }
+      )).outPath
+    ))
+  ];
 in
 assert
   service.supportedSystems == [
@@ -366,6 +634,16 @@ assert nativeInputs.buildInputs == [ ];
 assert nativeInputs.environment.RADROOTS_SERVICE_FIXTURE == "1";
 assert outputs.serviceName == "fixture_service";
 assert outputs.packages.default == package;
+assert (pkgs.stdenv.isLinux -> outputs.packages.oci == ociImage);
+assert (
+  pkgs.stdenv.isLinux
+  ->
+    ociImage.meta.platforms == [
+      "aarch64-linux"
+      "x86_64-linux"
+    ]
+);
+assert (!pkgs.stdenv.isLinux -> !(builtins.hasAttr "oci" outputs.packages));
 assert outputs.checks == checks;
 assert
   builtins.attrNames checks == [
@@ -376,6 +654,11 @@ assert
     "docs"
     "fmt"
     "integration"
+  ]
+  ++ lib.optionals pkgs.stdenv.isLinux [
+    "oci-image"
+  ]
+  ++ [
     "package"
     "smoke"
     "source-lock"
@@ -415,6 +698,12 @@ assert invalidExtraCheck.success == false;
 assert standardOverride.success == false;
 assert lib.all (result: result.success == false) invalidAppResults;
 assert lib.all (result: result.success == false) invalidDevShellResults;
+assert maximumOciResult.success;
+assert lib.all (result: result.success == false) invalidOciResults;
+assert (
+  !pkgs.stdenv.isLinux
+  -> (builtins.tryEval ((service.mkServiceOciImage ociArgs).outPath)).success == false
+);
 {
   inherit outputs;
 }
