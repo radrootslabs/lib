@@ -2,7 +2,16 @@
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+
+use radroots_event::{
+    id::{MutationId, TradeId},
+    trade::{TradeMutationEnvelopeV1, trade_mutation_from_canonical_content},
+};
+use radroots_event_codec::{
+    decode::trade::{RadrootsTradeMutationError, validate_trade_mutation_tags},
+    encode::trade::{trade_mutation_event_build, trade_mutation_event_build_with_extra_tags},
+};
 
 const DECISION: &str =
     include_str!("../../../contracts/architecture/decisions/services_hardening_events.v1.json");
@@ -14,6 +23,8 @@ const TRADE_VECTORS: &str = include_str!(
 const RHI_VECTORS: &str = include_str!(
     "../../../contracts/conformance/vectors/rhi/evidence_attestation_decision.v1.json"
 );
+const AUTHORED_CORPUS: &str =
+    include_str!("../../../contracts/conformance/vectors/event/authored_operations.v1.json");
 
 fn json(source: &str) -> Value {
     serde_json::from_str(source).expect("services-hardening machine contract must be valid JSON")
@@ -177,6 +188,325 @@ fn services_hardening_trade_tag_cardinality_and_query_contract_is_exact() {
             "unexpected_parent_tag".to_owned(),
             "unexpected_root_tag".to_owned(),
         ])
+    );
+}
+
+#[test]
+fn every_trade_mutation_vector_executes_the_public_boundary() {
+    let vectors = json(TRADE_VECTORS);
+    let mut bases = BTreeMap::new();
+    let mut positive_count = 0;
+    for vector in vectors["vectors"]
+        .as_array()
+        .expect("trade vectors")
+        .iter()
+        .filter(|vector| vector["kind"] == "trade.mutation_index_tags.valid")
+    {
+        let id = vector["id"].as_str().expect("vector id");
+        let envelope = trade_vector_envelope(vector);
+        let expected_kind = vector["expected"]["kind"].as_u64().expect("kind") as u32;
+        assert_eq!(envelope.mutation_kind().nostr_kind(), expected_kind, "{id}");
+        let built = trade_mutation_event_build(envelope).expect("typed trade builder");
+        assert_eq!(built.kind, expected_kind, "{id}");
+        let parsed = trade_mutation_from_canonical_content(&built.content)
+            .expect("builder emits canonical trade content");
+        if let Some(tags) = vector["expected"].get("tags") {
+            assert_eq!(built.tags, json_tags(tags), "{id}");
+        } else {
+            assert_eq!(
+                tag_semantics(&built.tags),
+                vector["expected"]["tag_names_and_semantics"]
+                    .as_array()
+                    .expect("tag semantics")
+                    .iter()
+                    .map(|value| value.as_str().expect("semantic").to_owned())
+                    .collect::<Vec<_>>(),
+                "{id}"
+            );
+            assert_lineage_tags_match_vector(&built.tags, &vector["input"]);
+        }
+        validate_trade_mutation_tags(&parsed, &built.tags).expect("positive vector");
+        assert!(bases.insert(id.to_owned(), (parsed, built.tags)).is_none());
+        positive_count += 1;
+    }
+    assert_eq!(positive_count, 5);
+
+    let proposal = bases
+        .get("trade_mutation_index_proposal_002")
+        .expect("proposal base")
+        .0
+        .clone();
+    for vector in vectors["vectors"]
+        .as_array()
+        .expect("trade vectors")
+        .iter()
+        .filter(|vector| vector["kind"] == "trade.mutation_index_tags.invalid")
+    {
+        let id = vector["id"].as_str().expect("vector id");
+        let expected = vector["expected"]["error_code"]
+            .as_str()
+            .expect("error code");
+        let input = &vector["input"];
+        let actual = if let Some(extra_tags) = input.get("builder_extra_tags") {
+            assert_eq!(vector["expected"]["layer"], "builder", "{id}");
+            trade_mutation_event_build_with_extra_tags(proposal.clone(), &json_tags(extra_tags))
+                .expect_err("builder negative must fail")
+        } else {
+            assert_eq!(vector["expected"]["layer"], "wire", "{id}");
+            let base = input["base"].as_str().expect("wire negative base");
+            let (envelope, mut tags) = bases.get(base).expect("known positive base").clone();
+            if let Some(pattern) = input.get("remove_tag") {
+                let before = tags.len();
+                tags.retain(|tag| !tag_matches_pattern(tag, pattern));
+                assert_eq!(tags.len() + 1, before, "{id}");
+            }
+            if let Some(patterns) = input.get("remove_tags") {
+                for pattern in patterns.as_array().expect("remove tag patterns") {
+                    let before = tags.len();
+                    tags.retain(|tag| !tag_matches_pattern(tag, pattern));
+                    assert!(tags.len() < before, "{id}");
+                }
+            }
+            if let Some(tag) = input.get("append_tag") {
+                tags.push(json_tag(tag));
+            }
+            if let Some(indexes) = input.get("swap_tag_indexes") {
+                let indexes = indexes.as_array().expect("swap indexes");
+                tags.swap(
+                    indexes[0].as_u64().expect("left index") as usize,
+                    indexes[1].as_u64().expect("right index") as usize,
+                );
+            }
+            if let Some(replacement) = input.get("replace_tag") {
+                let index = replacement["index"].as_u64().expect("replace index") as usize;
+                tags[index] = json_tag(&replacement["tag"]);
+            }
+            validate_trade_mutation_tags(&envelope, &tags).expect_err("negative vector must fail")
+        };
+        assert_eq!(actual.code(), expected, "{id}");
+    }
+}
+
+fn json_tag(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .expect("tag array")
+        .iter()
+        .map(|value| value.as_str().expect("tag value").to_owned())
+        .collect()
+}
+
+fn json_tags(value: &Value) -> Vec<Vec<String>> {
+    value
+        .as_array()
+        .expect("tag list")
+        .iter()
+        .map(json_tag)
+        .collect()
+}
+
+fn tag_matches_pattern(tag: &[String], pattern: &Value) -> bool {
+    let pattern = json_tag(pattern);
+    if pattern.first().map(String::as_str) == Some("x") && pattern.len() == 2 {
+        tag.first() == pattern.first() && tag.get(2) == pattern.get(1)
+    } else {
+        tag == pattern
+    }
+}
+
+fn tag_semantics(tags: &[Vec<String>]) -> Vec<String> {
+    let mut party = 0;
+    tags.iter()
+        .map(|tag| match tag.first().map(String::as_str) {
+            Some("contract") => "contract".to_owned(),
+            Some("d") => "d:trade".to_owned(),
+            Some("x") => format!("x:{}", tag.get(2).expect("x marker")),
+            Some("p") => {
+                party += 1;
+                format!(
+                    "p:{}",
+                    if party == 1 {
+                        "buyer-first"
+                    } else {
+                        "seller-second"
+                    }
+                )
+            }
+            _ => panic!("unexpected structural tag"),
+        })
+        .collect()
+}
+
+fn trade_from_corpus(contract_id: &str) -> TradeMutationEnvelopeV1 {
+    let corpus = json(AUTHORED_CORPUS);
+    let content = corpus["vectors"]
+        .as_array()
+        .expect("authored vectors")
+        .iter()
+        .find(|vector| vector["input"]["contract_id"] == contract_id)
+        .and_then(|vector| vector["expected"]["content"].as_str())
+        .expect("typed trade content");
+    trade_mutation_from_canonical_content(content).expect("canonical trade mutation")
+}
+
+fn trade_vector_envelope(vector: &Value) -> TradeMutationEnvelopeV1 {
+    let input = &vector["input"];
+    let contract_id = input["contract_id"].as_str().expect("contract id");
+    let mut envelope = trade_from_corpus(contract_id);
+    envelope.mutation_id = None;
+    envelope.root_mutation_id = input
+        .get("root_mutation_id")
+        .and_then(Value::as_str)
+        .map(|value| MutationId::parse(value).expect("root mutation id"));
+    envelope.parent_mutation_ids = input
+        .get("parent_mutation_ids")
+        .and_then(Value::as_array)
+        .map(|parents| {
+            parents
+                .iter()
+                .map(|value| {
+                    MutationId::parse(value.as_str().expect("parent mutation id"))
+                        .expect("parent mutation id")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(trade_id) = input.get("trade_id").and_then(Value::as_str) {
+        envelope.trade_id = TradeId::parse(trade_id).expect("trade id");
+    }
+    if let Some(buyer) = input.get("buyer_pubkey").and_then(Value::as_str) {
+        envelope.buyer_pubkey = radroots_identity::PublicKey::from_hex(buyer).expect("buyer key");
+        envelope.author_pubkey = envelope.buyer_pubkey;
+    }
+    if let Some(seller) = input.get("seller_pubkey").and_then(Value::as_str) {
+        envelope.seller_pubkey =
+            radroots_identity::PublicKey::from_hex(seller).expect("seller key");
+        envelope.counterparty_pubkey = envelope.seller_pubkey;
+    }
+    envelope
+}
+
+fn assert_lineage_tags_match_vector(tags: &[Vec<String>], input: &Value) {
+    let root = tags
+        .iter()
+        .find(|tag| tag.get(2).map(String::as_str) == Some("root"))
+        .map(|tag| tag[1].as_str());
+    assert_eq!(root, input.get("root_mutation_id").and_then(Value::as_str));
+    let parents = tags
+        .iter()
+        .filter(|tag| tag.get(2).map(String::as_str) == Some("parent"))
+        .map(|tag| tag[1].as_str())
+        .collect::<Vec<_>>();
+    let expected: Vec<&str> = input
+        .get("parent_mutation_ids")
+        .and_then(Value::as_array)
+        .map(|values| values.iter().map(|value| value.as_str().unwrap()).collect())
+        .unwrap_or_default();
+    assert_eq!(parents, expected);
+}
+
+fn synthetic_all_fields_envelope() -> TradeMutationEnvelopeV1 {
+    trade_vector_envelope(&json(TRADE_VECTORS)["vectors"][0])
+}
+
+#[test]
+fn additional_trade_mutation_shape_permutations_and_bounds_fail_closed() {
+    let built = trade_mutation_event_build(synthetic_all_fields_envelope()).expect("trade builder");
+    let envelope = trade_mutation_from_canonical_content(&built.content).expect("trade content");
+    let tags = built.tags;
+
+    let mut malformed_x = tags.clone();
+    malformed_x[2].pop();
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &malformed_x).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    let mut unknown_marker = tags.clone();
+    unknown_marker[2][2] = "unknown".to_owned();
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &unknown_marker).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    let mut duplicate_mutation = tags.clone();
+    duplicate_mutation.insert(3, duplicate_mutation[2].clone());
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &duplicate_mutation).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    let mut duplicate_root = tags.clone();
+    duplicate_root.insert(4, duplicate_root[3].clone());
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &duplicate_root).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    let mut five_parents = tags.clone();
+    for value in ["6", "7", "8"] {
+        five_parents.insert(
+            five_parents.len() - 2,
+            vec!["x".to_owned(), value.repeat(64), "parent".to_owned()],
+        );
+    }
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &five_parents).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    let mut duplicate_parent = tags.clone();
+    duplicate_parent.insert(6, duplicate_parent[5].clone());
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &duplicate_parent).unwrap_err(),
+        RadrootsTradeMutationError::NoncanonicalParentOrder
+    );
+
+    let mut uppercase_identifier = tags.clone();
+    uppercase_identifier[2][1] = "A".repeat(64);
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &uppercase_identifier).unwrap_err(),
+        RadrootsTradeMutationError::InvalidIdentifier
+    );
+
+    let mut unknown_tag = tags.clone();
+    unknown_tag.push(vec!["t".to_owned(), "trade".to_owned()]);
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &unknown_tag).unwrap_err(),
+        RadrootsTradeMutationError::UnexpectedTag
+    );
+
+    let mut missing_party = tags;
+    missing_party.pop();
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &missing_party).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    let oversized = vec![vec!["t".to_owned(), "trade".to_owned()]; 10_000];
+    assert_eq!(
+        validate_trade_mutation_tags(&envelope, &oversized).unwrap_err(),
+        RadrootsTradeMutationError::InvalidTagShape
+    );
+
+    assert_eq!(
+        trade_mutation_event_build_with_extra_tags(
+            trade_from_corpus("radroots.trade.proposal.v1"),
+            &[vec!["t".to_owned(), "trade".to_owned()]],
+        )
+        .unwrap_err(),
+        RadrootsTradeMutationError::UnexpectedTag
+    );
+    assert_eq!(
+        trade_mutation_event_build_with_extra_tags(
+            trade_from_corpus("radroots.trade.proposal.v1"),
+            &[
+                vec!["t".to_owned(), "trade".to_owned()],
+                vec!["p".to_owned(), "0".repeat(64)],
+            ],
+        )
+        .unwrap_err(),
+        RadrootsTradeMutationError::CallerStructuralTagForbidden
     );
 }
 

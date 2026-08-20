@@ -544,16 +544,33 @@ fn calendar_time_contract_requires_exact_derived_bounded_day_coverage() {
 
 #[test]
 fn trade_mutation_contract_requires_exact_contract_tag() {
-    let contract = event_contract("radroots.trade.proposal.v1").expect("trade proposal");
-    let tag = contract
-        .tags
-        .iter()
-        .find(|tag| tag.name == "contract")
-        .expect("contract tag");
-
-    assert_eq!(tag.semantic, TagSemantic::Contract);
-    assert_eq!(tag.value_type, TagValueType::ContractId);
-    assert!(!tag.relay_indexed);
+    for contract_id in [
+        "radroots.trade.proposal.v1",
+        "radroots.trade.decision.v1",
+        "radroots.trade.revision_proposal.v1",
+        "radroots.trade.revision_decision.v1",
+        "radroots.trade.cancellation.v1",
+    ] {
+        let contract = event_contract(contract_id).expect("trade mutation contract");
+        assert_eq!(contract.authoring_policy(), EventAuthoringPolicy::TypedOnly);
+        assert_eq!(
+            contract.tags.iter().map(|tag| tag.name).collect::<Vec<_>>(),
+            ["contract", "d", "x", "p"]
+        );
+        let contract_tag = &contract.tags[0];
+        assert_eq!(contract_tag.semantic, TagSemantic::Contract);
+        assert_eq!(contract_tag.value_type, TagValueType::ContractId);
+        assert!(!contract_tag.relay_indexed);
+        let mutation = &contract.tags[2];
+        assert_eq!(mutation.cardinality, TagCardinality::RequiredMany);
+        assert_eq!(mutation.semantic, TagSemantic::TradeMutation);
+        assert_eq!(mutation.value_type, TagValueType::MutationId);
+        assert!(mutation.relay_indexed);
+        let parties = &contract.tags[3];
+        assert_eq!(parties.cardinality, TagCardinality::RequiredMany);
+        assert_eq!(parties.semantic, TagSemantic::Participant);
+        assert_eq!(parties.value_type, TagValueType::PublicKey);
+    }
 }
 
 #[test]

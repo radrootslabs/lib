@@ -10,8 +10,6 @@ use std::string::String;
 use std::vec::Vec;
 
 use core::fmt;
-#[cfg(feature = "json")]
-use radroots_event::profile::AuthoredProfile;
 use radroots_event::{
     calendar::{AuthoredCalendarDateEvent, AuthoredCalendarTimeEvent},
     contract::{ContractIdentityError, ContractKey, EventAuthoringPolicy},
@@ -26,6 +24,8 @@ use radroots_event::{
         v1::DEFAULT_CONTENT_MAX_BYTES,
     },
 };
+#[cfg(feature = "json")]
+use radroots_event::{profile::AuthoredProfile, trade::TradeMutationEnvelopeV1};
 use radroots_identity::{Error as PublicKeyError, PublicKey};
 
 #[cfg(feature = "json")]
@@ -54,11 +54,14 @@ use crate::{
     },
     post::inbound::registry_v7::{RadrootsPostClassification, project_inbound_post_parts},
     reply::inbound::registry_v7::{RadrootsNip10ReplyStyle, project_nip10_reply_parts},
+    trade::{
+        RadrootsTradeMutationError, trade_mutation_event_build, validate_trade_mutation_parts,
+    },
 };
 
 use super::{AuthoredEventBody, AuthoredEventPlan};
 
-pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 10] = [
+pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15] = [
     "radroots.profile.metadata.v1",
     "radroots.social.update.v1",
     "radroots.social.photo_update.v1",
@@ -69,6 +72,11 @@ pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 10] = [
     "radroots.calendar.date_event.v1",
     "radroots.calendar.time_event.v1",
     "radroots.food.availability.v1",
+    "radroots.trade.proposal.v1",
+    "radroots.trade.decision.v1",
+    "radroots.trade.revision_proposal.v1",
+    "radroots.trade.revision_decision.v1",
+    "radroots.trade.cancellation.v1",
 ];
 
 #[non_exhaustive]
@@ -91,6 +99,8 @@ pub enum AuthoredPlanError {
     CanonicalEventId(CanonicalEventIdError),
     #[cfg(feature = "json")]
     Profile(RadrootsAuthoredProfileEncodeError),
+    #[cfg(feature = "json")]
+    Trade(RadrootsTradeMutationError),
     FoodAvailability(RadrootsFoodAvailabilityEncodeError),
     Calendar(crate::encode::EventEncodeError),
 }
@@ -108,6 +118,8 @@ impl AuthoredPlanError {
             Self::CanonicalEventId(_) => "canonical_event_id",
             #[cfg(feature = "json")]
             Self::Profile(error) => error.code(),
+            #[cfg(feature = "json")]
+            Self::Trade(error) => error.code(),
             Self::FoodAvailability(error) => error.code(),
             Self::Calendar(error) => error.code(),
         }
@@ -139,6 +151,8 @@ impl fmt::Display for AuthoredPlanError {
             Self::CanonicalEventId(error) => write!(formatter, "{error}"),
             #[cfg(feature = "json")]
             Self::Profile(error) => write!(formatter, "{error}"),
+            #[cfg(feature = "json")]
+            Self::Trade(error) => write!(formatter, "{error}"),
             Self::FoodAvailability(error) => write!(formatter, "{error}"),
             Self::Calendar(error) => write!(formatter, "{error}"),
         }
@@ -217,6 +231,15 @@ impl AuthoredEventBody {
     ) -> Result<Self, AuthoredPlanError> {
         let wire = time_to_wire_parts(event).map_err(AuthoredPlanError::Calendar)?;
         build_typed_body("radroots.calendar.time_event.v1", wire)
+    }
+
+    #[cfg(feature = "json")]
+    pub fn from_trade_mutation(
+        envelope: TradeMutationEnvelopeV1,
+    ) -> Result<Self, AuthoredPlanError> {
+        let contract_id = envelope.contract_id.clone();
+        let wire = trade_mutation_event_build(envelope).map_err(AuthoredPlanError::Trade)?;
+        build_typed_body(&contract_id, wire)
     }
 }
 
@@ -364,6 +387,19 @@ impl AuthoredEventPlan {
             expected_author,
         )
     }
+
+    #[cfg(feature = "json")]
+    pub fn from_trade_mutation(
+        envelope: TradeMutationEnvelopeV1,
+    ) -> Result<Self, AuthoredPlanError> {
+        let created_at = envelope.authored_at_unix_s;
+        let expected_author = envelope.author_pubkey.to_hex();
+        Self::bind(
+            AuthoredEventBody::from_trade_mutation(envelope)?,
+            created_at,
+            expected_author,
+        )
+    }
 }
 
 fn build_typed_body(
@@ -403,6 +439,7 @@ fn build_typed_body(
 pub(super) fn validate_historical_typed_profile(
     contract_id: &str,
     created_at: u64,
+    expected_author: &str,
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
@@ -423,6 +460,15 @@ pub(super) fn validate_historical_typed_profile(
         "radroots.food.availability.v1" => validate_food(created_at, kind, tags, content),
         "radroots.calendar.date_event.v1" => validate_calendar_date(kind, tags, content),
         "radroots.calendar.time_event.v1" => validate_calendar_time(kind, tags, content),
+        "radroots.trade.proposal.v1"
+        | "radroots.trade.decision.v1"
+        | "radroots.trade.revision_proposal.v1"
+        | "radroots.trade.revision_decision.v1"
+        | "radroots.trade.cancellation.v1" => {
+            validate_trade_mutation_parts(kind, created_at, expected_author, tags, content)
+                .map(|_| ())
+                .map_err(|error| error.code().to_string())
+        }
         _ => Err("historical_typed_profile_unavailable".to_string()),
     }
 }

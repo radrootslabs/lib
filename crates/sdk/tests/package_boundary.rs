@@ -352,7 +352,7 @@ fn sync_operations_only_delegate_to_the_canonical_engine() {
 fn authored_submission_is_one_protocol_neutral_boundary_for_all_typed_contracts() {
     use radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS;
 
-    assert_eq!(REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS.len(), 10);
+    assert_eq!(REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS.len(), 15);
     assert!(SYNC.contains("pub async fn submit_push"));
     assert!(SYNC.contains("request: PushRequest"));
     assert!(SYNC.contains("Result<PushStatus, Error>"));
@@ -360,6 +360,17 @@ fn authored_submission_is_one_protocol_neutral_boundary_for_all_typed_contracts(
         assert!(
             !SYNC.contains(contract_id),
             "SDK submission must not branch on typed contract `{contract_id}`"
+        );
+    }
+}
+
+#[test]
+fn trade_planning_uses_only_the_typed_mutation_authoring_boundary() {
+    assert!(TRADE.contains("AuthoredEventPlan::from_trade_mutation"));
+    for forbidden in ["GenericEventDraft", "trade_mutation_event_build("] {
+        assert!(
+            !TRADE.contains(forbidden),
+            "trade planning retains generic authoring path {forbidden}"
         );
     }
 }

@@ -15,6 +15,7 @@ use radroots_event::{
         FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityStatus, FoodContent,
         FoodCurrency, FoodIdentifier, FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
     },
+    id::{ClassifiedListingAddress, DTag, EventId, InventoryBinId, TradeId},
     media::AuthoredImage,
     post::{
         AuthoredAsk, AuthoredPhotoUpdate, AuthoredPostImage, AuthoredUpdate, PostImageDimensions,
@@ -25,10 +26,19 @@ use radroots_event::{
         reply::{AuthoredNip10Reply, Nip10ReplyReference},
     },
     profile::AuthoredProfile,
+    trade::{
+        FulfillmentProfileV1, RADROOTS_TRADE_CANCELLATION_CONTRACT_ID,
+        RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
+        RADROOTS_TRADE_REVISION_DECISION_CONTRACT_ID, RADROOTS_TRADE_REVISION_PROPOSAL_CONTRACT_ID,
+        RADROOTS_TRADE_SCHEMA_VERSION, TradeCancellationProfileV1, TradeCandidateLineV1,
+        TradeCandidateTermsV1, TradeDecisionV1, TradeEconomicAdjustmentV1, TradeEconomicsProfileV1,
+        TradeMutationBodyV1, TradeMutationEnvelopeV1, canonical_trade_mutation_content,
+    },
 };
 use radroots_event_codec::authoring::{
     AuthoredEventPlan, PlanDecodeError, PlanWireV1, REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS,
 };
+use radroots_identity::PublicKey;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -172,6 +182,36 @@ fn calendar_plan_history_rejects_tolerated_or_noncanonical_inbound_shapes() {
     ));
 }
 
+#[test]
+fn trade_plan_history_rejects_author_time_content_and_tag_drift() {
+    let plans = typed_plans();
+    let plan = plans
+        .get("radroots.trade.revision_proposal.v1")
+        .expect("trade plan");
+    for drifted in [
+        mutate_plan_wire(plan, |value| {
+            value["expected_author"] = Value::String(OTHER_AUTHOR.to_owned());
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["created_at"] = Value::from(CREATED_AT + 1);
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["content"] = Value::String("{}".to_owned());
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["tags"][2][2] = Value::String("unknown".to_owned());
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["tags"].as_array_mut().expect("tags").swap(0, 1);
+        }),
+    ] {
+        assert!(matches!(
+            PlanWireV1::from_json(&drifted),
+            Err(PlanDecodeError::HistoricalShape(_))
+        ));
+    }
+}
+
 fn mutate_plan_wire(plan: &AuthoredEventPlan, mutator: impl FnOnce(&mut Value)) -> Vec<u8> {
     let mut value =
         serde_json::from_slice::<Value>(&PlanWireV1::from_plan(plan).to_json().expect("plan wire"))
@@ -297,7 +337,166 @@ fn typed_plans() -> BTreeMap<&'static str, AuthoredEventPlan> {
         AuthoredEventPlan::from_food_availability(&food_details(), CREATED_AT, AUTHOR)
             .expect("food plan"),
     );
+    for mutation in trade_mutations() {
+        let contract_id = mutation.mutation_kind().contract_id();
+        plans.insert(
+            contract_id,
+            AuthoredEventPlan::from_trade_mutation(mutation).expect("trade plan"),
+        );
+    }
     plans
+}
+
+fn trade_mutations() -> Vec<TradeMutationEnvelopeV1> {
+    let proposal = canonical_trade_mutation_content(trade_proposal())
+        .expect("canonical proposal")
+        .envelope;
+    let proposal_id = proposal.mutation_id.expect("proposal mutation id");
+    let candidate = match &proposal.body {
+        TradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
+        _ => unreachable!(),
+    };
+    let candidate_id = candidate.candidate_id.expect("candidate id");
+    let trade_id = proposal.trade_id;
+    let buyer = proposal.buyer_pubkey;
+    let seller = proposal.seller_pubkey;
+    let farm = proposal.farm_id.clone();
+    let author = proposal.author_pubkey;
+    let counterparty = proposal.counterparty_pubkey;
+    let child = |contract_id: &str, body| TradeMutationEnvelopeV1 {
+        mutation_id: None,
+        contract_id: contract_id.to_owned(),
+        schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+        trade_id,
+        root_mutation_id: Some(proposal_id),
+        buyer_pubkey: buyer,
+        seller_pubkey: seller,
+        farm_id: farm.clone(),
+        parent_mutation_ids: vec![proposal_id],
+        author_pubkey: author,
+        counterparty_pubkey: counterparty,
+        authored_at_unix_s: CREATED_AT,
+        body,
+    };
+    let decision = child(
+        RADROOTS_TRADE_DECISION_CONTRACT_ID,
+        TradeMutationBodyV1::Decision {
+            proposal_mutation_id: proposal_id,
+            candidate_id,
+            decision: TradeDecisionV1::Declined {
+                reason: "inventory unavailable".to_owned(),
+            },
+        },
+    );
+    let revision_proposal = child(
+        RADROOTS_TRADE_REVISION_PROPOSAL_CONTRACT_ID,
+        TradeMutationBodyV1::RevisionProposal { candidate },
+    );
+    let revision_decision = child(
+        RADROOTS_TRADE_REVISION_DECISION_CONTRACT_ID,
+        TradeMutationBodyV1::RevisionDecision {
+            proposal_mutation_id: proposal_id,
+            candidate_id,
+            decision: TradeDecisionV1::Declined {
+                reason: "inventory unavailable".to_owned(),
+            },
+        },
+    );
+    let cancellation = child(
+        RADROOTS_TRADE_CANCELLATION_CONTRACT_ID,
+        TradeMutationBodyV1::Cancellation {
+            target_candidate_id: Some(candidate_id),
+            target_claim_mutation_id: None,
+            reason: "cancelled".to_owned(),
+        },
+    );
+    vec![
+        proposal,
+        decision,
+        revision_proposal,
+        revision_decision,
+        cancellation,
+    ]
+}
+
+fn trade_proposal() -> TradeMutationEnvelopeV1 {
+    let buyer = PublicKey::from_hex(AUTHOR).expect("buyer key");
+    let seller = PublicKey::from_hex(OTHER_AUTHOR).expect("seller key");
+    TradeMutationEnvelopeV1 {
+        mutation_id: None,
+        contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_owned(),
+        schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+        trade_id: TradeId::parse("11111111111111111111111111111111").expect("trade id"),
+        root_mutation_id: None,
+        buyer_pubkey: buyer,
+        seller_pubkey: seller,
+        farm_id: DTag::parse("farm-1").expect("farm id"),
+        parent_mutation_ids: Vec::new(),
+        author_pubkey: buyer,
+        counterparty_pubkey: seller,
+        authored_at_unix_s: CREATED_AT,
+        body: TradeMutationBodyV1::Proposal {
+            candidate: TradeCandidateTermsV1 {
+                candidate_id: None,
+                schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+                base_candidate_id: None,
+                supersession_intent: None,
+                buyer_pubkey: buyer,
+                seller_pubkey: seller,
+                farm_id: DTag::parse("farm-1").expect("farm id"),
+                lines: vec![TradeCandidateLineV1 {
+                    line_id: DTag::parse("line-1").expect("line id"),
+                    listing_addr: ClassifiedListingAddress::parse(format!(
+                        "30402:{OTHER_AUTHOR}:listing-1"
+                    ))
+                    .expect("listing address"),
+                    listing_event_id: EventId::parse("c".repeat(64)).expect("listing event"),
+                    listing_snapshot_sha256: "d".repeat(64),
+                    product_id: "carrots".to_owned(),
+                    option_id: None,
+                    bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
+                    quantity_mantissa: "2".to_owned(),
+                    quantity_scale: 0,
+                    unit_code: "count".to_owned(),
+                    unit_profile: "mvp-count".to_owned(),
+                    unit_price_mantissa: "500".to_owned(),
+                    currency_code: "USD".to_owned(),
+                    line_subtotal_mantissa: "1000".to_owned(),
+                    replaces_line_id: None,
+                }],
+                line_tombstones: Vec::new(),
+                economics: TradeEconomicsProfileV1 {
+                    profile_id: "mvp-fixed".to_owned(),
+                    currency_code: "USD".to_owned(),
+                    currency_exponent: 2,
+                    rounding_profile: "half-even".to_owned(),
+                    subtotal_mantissa: "1000".to_owned(),
+                    discount_total_mantissa: "0".to_owned(),
+                    adjustment_total_mantissa: "0".to_owned(),
+                    total_mantissa: "1000".to_owned(),
+                    adjustments: Vec::<TradeEconomicAdjustmentV1>::new(),
+                },
+                fulfillment: FulfillmentProfileV1 {
+                    profile_id: "market-pickup".to_owned(),
+                    method: "pickup".to_owned(),
+                    starts_at_unix_s: 1_800_000_000,
+                    ends_at_unix_s: 1_800_003_600,
+                    timezone: "America/New_York".to_owned(),
+                    utc_offset_seconds: -18_000,
+                    fold: 0,
+                    location_class: "farmstand".to_owned(),
+                    requires_private_terms: false,
+                },
+                cancellation: TradeCancellationProfileV1 {
+                    profile_id: "buyer-pre-agreement".to_owned(),
+                    buyer_pre_agreement: true,
+                    post_agreement_cutoff_unix_s: None,
+                },
+                private_terms: None,
+                proposal_expires_at_unix_s: 1_799_999_000,
+            },
+        },
+    }
 }
 
 fn authored_post_image() -> AuthoredPostImage {

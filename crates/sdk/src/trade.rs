@@ -3,14 +3,10 @@
 use std::{error, fmt};
 
 use radroots_event::{
-    GenericEventDraft,
     contract::AuthorRole,
     trade::{TradeMutationEnvelopeV1, TradeProtocolError, canonical_trade_mutation_content},
 };
-use radroots_event_codec::{
-    authoring::AuthoredEventPlan, encode::EventEncodeError,
-    encode::trade::trade_mutation_event_build,
-};
+use radroots_event_codec::authoring::{AuthoredEventPlan, AuthoredPlanError};
 use radroots_signing::Actor;
 use radroots_trade::{Projection, ReductionInput, WorkflowPlan, reducer::reduce_trade_records};
 
@@ -101,12 +97,8 @@ impl PrepareError {
         Self::with_source(PrepareErrorKind::Workflow, source)
     }
 
-    fn encode(source: EventEncodeError) -> Self {
+    fn encode(source: AuthoredPlanError) -> Self {
         Self::with_source(PrepareErrorKind::Encode, source)
-    }
-
-    fn draft(source: radroots_event::draft::DraftError) -> Self {
-        Self::with_source(PrepareErrorKind::Draft, source)
     }
 
     fn with_source(
@@ -174,19 +166,8 @@ pub fn prepare(request: PrepareRequest) -> Result<Plan, PrepareError> {
         return Err(PrepareError::unauthorized_actor());
     }
     let workflow = WorkflowPlan::prepare(canonical.clone()).map_err(PrepareError::workflow)?;
-    let parts = trade_mutation_event_build(canonical.clone()).map_err(PrepareError::encode)?;
-    let authored_event = AuthoredEventPlan::from_generic(
-        GenericEventDraft::new(
-            canonical.contract_id.clone(),
-            parts.kind,
-            canonical.authored_at_unix_s,
-            parts.tags,
-            parts.content,
-            canonical.author_pubkey.to_hex(),
-        )
-        .map_err(PrepareError::draft)?,
-    )
-    .map_err(PrepareError::draft)?;
+    let authored_event =
+        AuthoredEventPlan::from_trade_mutation(canonical.clone()).map_err(PrepareError::encode)?;
     Ok(Plan {
         actor: request.actor,
         workflow,

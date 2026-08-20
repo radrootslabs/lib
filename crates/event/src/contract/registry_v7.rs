@@ -14,7 +14,8 @@ use crate::{
     envelope::EventEnvelope,
     envelope::kind::*,
     id::{
-        AddressableCoordinate, DTag, EventId, Nip01Coordinate, parse_public_key, relay_url_is_valid,
+        AddressableCoordinate, DTag, EventId, MutationId, Nip01Coordinate, parse_public_key,
+        relay_url_is_valid,
     },
     listing::classified::{
         ClassifiedListingPartition, TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY,
@@ -197,6 +198,7 @@ pub enum TagSemantic {
     Title,
     Topic,
     TimeZone,
+    TradeMutation,
     Url,
     UtcDayCoverage,
 }
@@ -216,6 +218,7 @@ pub enum TagValueType {
     Geohash,
     IanaTimeZoneId,
     Kind,
+    MutationId,
     Nip01Coordinate,
     PublicKey,
     RelayUrl,
@@ -549,6 +552,20 @@ const TAG_P_MANY: TagContract = tag(
     TagCardinality::OptionalMany,
     TagSemantic::Counterparty,
     TagValueType::PublicKey,
+    true,
+);
+const TAG_P_TRADE_PARTIES: TagContract = tag(
+    "p",
+    TagCardinality::RequiredMany,
+    TagSemantic::Participant,
+    TagValueType::PublicKey,
+    true,
+);
+const TAG_X_TRADE_MUTATIONS: TagContract = tag(
+    "x",
+    TagCardinality::RequiredMany,
+    TagSemantic::TradeMutation,
+    TagValueType::MutationId,
     true,
 );
 const TAG_CALENDAR_PARTICIPANT: TagContract = tag(
@@ -1312,8 +1329,12 @@ const OPERATIONAL_LISTING_TAGS: &[TagContract] = &[
     TAG_OPERATIONAL_LISTING_EXPIRES_AT,
     TAG_OPERATIONAL_LISTING_DELIVERY,
 ];
-const TRADE_MUTATION_TAGS: &[TagContract] =
-    &[TAG_CONTRACT_REQUIRED, TAG_D, TAG_P_REQUIRED, TAG_E_MANY];
+const TRADE_MUTATION_TAGS: &[TagContract] = &[
+    TAG_CONTRACT_REQUIRED,
+    TAG_D,
+    TAG_X_TRADE_MUTATIONS,
+    TAG_P_TRADE_PARTIES,
+];
 const TRADE_VALIDATION_RECEIPT_TAGS: &[TagContract] =
     &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
 const KNOWLEDGE_SOURCE_TAGS: &[TagContract] = &[
@@ -3597,7 +3618,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         GROUP_STATE_TAGS,
         GROUP_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.trade.proposal.v1",
         KIND_TRADE_PROPOSAL,
         "Trade Proposal",
@@ -3606,6 +3627,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         EventPrivacy::Public,
         AuthorRole::Buyer,
         ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.proposal.v1",
@@ -3613,7 +3635,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         TRADE_MUTATION_TAGS,
         TRADE_MUTATION_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.trade.decision.v1",
         KIND_TRADE_DECISION,
         "Trade Decision",
@@ -3622,6 +3644,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         EventPrivacy::Public,
         AuthorRole::Seller,
         ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.decision.v1",
@@ -3629,7 +3652,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         TRADE_MUTATION_TAGS,
         TRADE_MUTATION_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.trade.revision_proposal.v1",
         KIND_TRADE_REVISION_PROPOSAL,
         "Trade Revision Proposal",
@@ -3638,6 +3661,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         EventPrivacy::Public,
         AuthorRole::Any,
         ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.revision_proposal.v1",
@@ -3645,7 +3669,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         TRADE_MUTATION_TAGS,
         TRADE_MUTATION_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.trade.revision_decision.v1",
         KIND_TRADE_REVISION_DECISION,
         "Trade Revision Decision",
@@ -3654,6 +3678,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         EventPrivacy::Public,
         AuthorRole::Any,
         ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.revision_decision.v1",
@@ -3661,7 +3686,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         TRADE_MUTATION_TAGS,
         TRADE_MUTATION_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.trade.cancellation.v1",
         KIND_TRADE_CANCELLATION,
         "Trade Cancellation",
@@ -3670,6 +3695,7 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         EventPrivacy::Public,
         AuthorRole::Buyer,
         ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
         EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.cancellation.v1",
@@ -4277,6 +4303,9 @@ fn tag_value_is_valid_in_registry(
         TagValueType::Geohash => geohash_is_valid(value),
         TagValueType::IanaTimeZoneId => IanaTimeZoneId::parse(value).is_ok(),
         TagValueType::Kind => value.parse::<u32>().is_ok(),
+        TagValueType::MutationId => {
+            MutationId::parse(value).is_ok_and(|identifier| identifier.to_hex() == value)
+        }
         TagValueType::Nip01Coordinate => Nip01Coordinate::parse(value).is_ok(),
         TagValueType::PublicKey => parse_public_key(value).is_ok(),
         TagValueType::RelayUrl => relay_url_is_valid(value),
@@ -4362,6 +4391,7 @@ fn tag_value_type_expectation(value_type: TagValueType) -> &'static str {
         TagValueType::Geohash => "geohash",
         TagValueType::IanaTimeZoneId => "canonical_iana_time_zone_id",
         TagValueType::Kind => "kind",
+        TagValueType::MutationId => "lowercase_64_hex_mutation_id",
         TagValueType::Nip01Coordinate => "nip01_coordinate",
         TagValueType::PublicKey => "public_key",
         TagValueType::RelayUrl => "relay_url",

@@ -130,7 +130,10 @@ pub mod reply {
 
 #[cfg(feature = "json")]
 pub mod trade {
-    pub use crate::trade::{RadrootsTradeMutationParseError, trade_mutation_from_event};
+    pub use crate::trade::{
+        RadrootsTradeMutationError, trade_mutation_from_event, trade_mutation_from_verified_event,
+        validate_trade_mutation_tags,
+    };
 }
 
 #[cfg(feature = "json")]

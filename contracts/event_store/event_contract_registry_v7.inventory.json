@@ -5661,7 +5661,7 @@
       "privacy": "public",
       "author_role": "buyer",
       "content_schema": "json_object",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "content_json_field_equals",
         "field": "contract_id",
@@ -5683,17 +5683,17 @@
           "relay_indexed": true
         },
         {
-          "name": "p",
-          "cardinality": "required_one",
-          "semantic": "counterparty",
-          "value_type": "public_key",
+          "name": "x",
+          "cardinality": "required_many",
+          "semantic": "trade_mutation",
+          "value_type": "mutation_id",
           "relay_indexed": true
         },
         {
-          "name": "e",
-          "cardinality": "optional_many",
-          "semantic": "event_pointer",
-          "value_type": "event_id",
+          "name": "p",
+          "cardinality": "required_many",
+          "semantic": "participant",
+          "value_type": "public_key",
           "relay_indexed": true
         }
       ],
@@ -5713,7 +5713,7 @@
       "privacy": "public",
       "author_role": "seller",
       "content_schema": "json_object",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "content_json_field_equals",
         "field": "contract_id",
@@ -5735,17 +5735,17 @@
           "relay_indexed": true
         },
         {
-          "name": "p",
-          "cardinality": "required_one",
-          "semantic": "counterparty",
-          "value_type": "public_key",
+          "name": "x",
+          "cardinality": "required_many",
+          "semantic": "trade_mutation",
+          "value_type": "mutation_id",
           "relay_indexed": true
         },
         {
-          "name": "e",
-          "cardinality": "optional_many",
-          "semantic": "event_pointer",
-          "value_type": "event_id",
+          "name": "p",
+          "cardinality": "required_many",
+          "semantic": "participant",
+          "value_type": "public_key",
           "relay_indexed": true
         }
       ],
@@ -5765,7 +5765,7 @@
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "content_json_field_equals",
         "field": "contract_id",
@@ -5787,17 +5787,17 @@
           "relay_indexed": true
         },
         {
-          "name": "p",
-          "cardinality": "required_one",
-          "semantic": "counterparty",
-          "value_type": "public_key",
+          "name": "x",
+          "cardinality": "required_many",
+          "semantic": "trade_mutation",
+          "value_type": "mutation_id",
           "relay_indexed": true
         },
         {
-          "name": "e",
-          "cardinality": "optional_many",
-          "semantic": "event_pointer",
-          "value_type": "event_id",
+          "name": "p",
+          "cardinality": "required_many",
+          "semantic": "participant",
+          "value_type": "public_key",
           "relay_indexed": true
         }
       ],
@@ -5817,7 +5817,7 @@
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "content_json_field_equals",
         "field": "contract_id",
@@ -5839,17 +5839,17 @@
           "relay_indexed": true
         },
         {
-          "name": "p",
-          "cardinality": "required_one",
-          "semantic": "counterparty",
-          "value_type": "public_key",
+          "name": "x",
+          "cardinality": "required_many",
+          "semantic": "trade_mutation",
+          "value_type": "mutation_id",
           "relay_indexed": true
         },
         {
-          "name": "e",
-          "cardinality": "optional_many",
-          "semantic": "event_pointer",
-          "value_type": "event_id",
+          "name": "p",
+          "cardinality": "required_many",
+          "semantic": "participant",
+          "value_type": "public_key",
           "relay_indexed": true
         }
       ],
@@ -5869,7 +5869,7 @@
       "privacy": "public",
       "author_role": "buyer",
       "content_schema": "json_object",
-      "authoring_policy": "generic_draft",
+      "authoring_policy": "typed_only",
       "discriminator": {
         "type": "content_json_field_equals",
         "field": "contract_id",
@@ -5891,17 +5891,17 @@
           "relay_indexed": true
         },
         {
-          "name": "p",
-          "cardinality": "required_one",
-          "semantic": "counterparty",
-          "value_type": "public_key",
+          "name": "x",
+          "cardinality": "required_many",
+          "semantic": "trade_mutation",
+          "value_type": "mutation_id",
           "relay_indexed": true
         },
         {
-          "name": "e",
-          "cardinality": "optional_many",
-          "semantic": "event_pointer",
-          "value_type": "event_id",
+          "name": "p",
+          "cardinality": "required_many",
+          "semantic": "participant",
+          "value_type": "public_key",
           "relay_indexed": true
         }
       ],

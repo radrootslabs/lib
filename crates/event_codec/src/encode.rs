@@ -123,7 +123,10 @@ pub mod reply {
 
 #[cfg(feature = "json")]
 pub mod trade {
-    pub use crate::trade::{trade_mutation_event_build, trade_mutation_tags};
+    pub use crate::trade::{
+        RadrootsTradeMutationError, trade_mutation_event_build,
+        trade_mutation_event_build_with_extra_tags, trade_mutation_tags,
+    };
 }
 
 /// A failure while encoding an event.

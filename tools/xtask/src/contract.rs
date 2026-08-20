@@ -2484,6 +2484,8 @@ const TRADE_PROPOSAL_WITNESSES: [EventBoundarySourceWitness; 3] = [
         required_fragments: &[
             "pub fn trade_mutation_event_build",
             "pub fn trade_mutation_from_event",
+            "pub fn trade_mutation_from_verified_event",
+            "pub fn validate_trade_mutation_tags",
         ],
     },
 ];
@@ -2505,6 +2507,8 @@ const TRADE_DECISION_WITNESSES: [EventBoundarySourceWitness; 3] = [
         required_fragments: &[
             "pub fn trade_mutation_event_build",
             "pub fn trade_mutation_from_event",
+            "pub fn trade_mutation_from_verified_event",
+            "pub fn validate_trade_mutation_tags",
         ],
     },
 ];
@@ -2526,6 +2530,8 @@ const TRADE_REVISION_PROPOSAL_WITNESSES: [EventBoundarySourceWitness; 3] = [
         required_fragments: &[
             "pub fn trade_mutation_event_build",
             "pub fn trade_mutation_from_event",
+            "pub fn trade_mutation_from_verified_event",
+            "pub fn validate_trade_mutation_tags",
         ],
     },
 ];
@@ -2547,6 +2553,8 @@ const TRADE_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 3] = [
         required_fragments: &[
             "pub fn trade_mutation_event_build",
             "pub fn trade_mutation_from_event",
+            "pub fn trade_mutation_from_verified_event",
+            "pub fn validate_trade_mutation_tags",
         ],
     },
 ];
@@ -2568,6 +2576,8 @@ const TRADE_CANCELLATION_WITNESSES: [EventBoundarySourceWitness; 3] = [
         required_fragments: &[
             "pub fn trade_mutation_event_build",
             "pub fn trade_mutation_from_event",
+            "pub fn trade_mutation_from_verified_event",
+            "pub fn validate_trade_mutation_tags",
         ],
     },
 ];

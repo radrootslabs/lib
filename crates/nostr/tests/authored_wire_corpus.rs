@@ -11,6 +11,7 @@ use radroots_event::{
     GenericEventDraft,
     calendar::{AuthoredCalendarDateEvent, AuthoredCalendarTimeEvent, CalendarDate},
     envelope::kind::KIND_CLASSIFIED_LISTING,
+    envelope::{EventEnvelope, EventEnvelopeParts},
     food::availability::{
         FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityStatus, FoodContent,
         FoodCurrency, FoodIdentifier, FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
@@ -28,14 +29,19 @@ use radroots_event::{
     },
     profile::AuthoredProfile,
     trade::{
-        FulfillmentProfileV1, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
-        TradeCancellationProfileV1, TradeCandidateLineV1, TradeCandidateTermsV1,
-        TradeEconomicAdjustmentV1, TradeEconomicsProfileV1, TradeMutationBodyV1,
-        TradeMutationEnvelopeV1,
+        FulfillmentProfileV1, RADROOTS_TRADE_CANCELLATION_CONTRACT_ID,
+        RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
+        RADROOTS_TRADE_REVISION_DECISION_CONTRACT_ID, RADROOTS_TRADE_REVISION_PROPOSAL_CONTRACT_ID,
+        RADROOTS_TRADE_SCHEMA_VERSION, TradeCancellationProfileV1, TradeCandidateLineV1,
+        TradeCandidateTermsV1, TradeDecisionV1, TradeEconomicAdjustmentV1, TradeEconomicsProfileV1,
+        TradeMutationBodyV1, TradeMutationEnvelopeV1, canonical_trade_mutation_content,
     },
     wire::canonical_nip01_event_id_preimage,
 };
-use radroots_event_codec::encode::trade::trade_mutation_event_build;
+use radroots_event_codec::{
+    authoring::AuthoredEventPlan, decode::trade::trade_mutation_from_verified_event,
+    verify::verify_nip01_event,
+};
 use radroots_identity::PublicKey;
 use radroots_nostr::{
     event::{
@@ -49,7 +55,7 @@ use serde::{Deserialize, Serialize};
 
 use support::{
     APPROVED_FIXTURE_NAMESPACE, FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX,
-    FIXTURE_BOB_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS,
+    FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_BOB_SECRET_KEY_HEX, RELAY_PRIMARY_WSS,
 };
 
 const CREATED_AT: u64 = 1_784_347_200;
@@ -115,7 +121,7 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
         );
     }
     assert_eq!(actual, expected);
-    assert_eq!(actual.vectors.len(), 12);
+    assert_eq!(actual.vectors.len(), 16);
     assert_eq!(APPROVED_FIXTURE_NAMESPACE, "radroots-approved-fixture-v1");
     assert_eq!(
         actual
@@ -123,7 +129,7 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
             .iter()
             .filter(|vector| vector.input.authoring == "typed")
             .count(),
-        10
+        15
     );
     assert!(actual.vectors.iter().all(|vector| {
         !vector
@@ -144,10 +150,58 @@ fn authored_post_content_boundary_is_exact_without_bloating_the_corpus() {
     assert!(AuthoredUpdate::new("x".repeat(RADROOTS_POST_CONTENT_MAX_BYTES + 1)).is_err());
 }
 
+#[test]
+fn signature_verified_trade_boundary_rejects_a_different_valid_signer() {
+    let mutation = trade_mutations().remove(0);
+    let plan = AuthoredEventPlan::from_trade_mutation(mutation).expect("typed trade plan");
+    let signer = Keys::new(SecretKey::from_hex(FIXTURE_BOB_SECRET_KEY_HEX).expect("fixture key"));
+    let event = UnsignedEvent {
+        id: None,
+        pubkey: signer.public_key(),
+        created_at: Timestamp::from_secs(plan.created_at()),
+        kind: Kind::Custom(u16::try_from(plan.body().kind()).expect("trade kind")),
+        tags: nostr::Tags::from_list(
+            plan.body()
+                .tags()
+                .iter()
+                .cloned()
+                .map(Tag::parse)
+                .collect::<Result<Vec<_>, _>>()
+                .expect("trade tags"),
+        ),
+        content: plan.body().content().to_owned(),
+    }
+    .sign_with_ctx(nostr::SECP256K1, &mut CorpusAuxRng, &signer)
+    .expect("validly signed trade event");
+    let verified = verify_nip01_event(
+        EventEnvelope::new(EventEnvelopeParts {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            created_at: event.created_at.as_secs(),
+            kind: u32::from(event.kind.as_u16()),
+            tags: event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect(),
+            content: event.content,
+            sig: event.sig.to_string(),
+        })
+        .expect("trade event envelope"),
+    )
+    .expect("valid signature");
+    assert_eq!(
+        trade_mutation_from_verified_event(&verified)
+            .expect_err("different valid signer must fail")
+            .code(),
+        "author_mismatch"
+    );
+}
+
 fn authored_wire_vectors() -> Vec<WireVector> {
     let keys = fixture_keys();
     let created_at = Timestamp::from_secs(CREATED_AT);
-    let mut vectors = Vec::with_capacity(12);
+    let mut vectors = Vec::with_capacity(16);
 
     let profile = AuthoredProfile::new("Alice \"Sprout\"")
         .expect("profile name")
@@ -333,18 +387,82 @@ fn authored_wire_vectors() -> Vec<WireVector> {
         &keys,
     ));
 
-    let trade = trade_mutation_event_build(trade_proposal()).expect("trade wire parts");
-    vectors.push(generic_vector(
-        "generic_trade_proposal_010",
-        RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
-        CREATED_AT,
-        trade.kind,
-        trade.tags,
-        trade.content,
-        &keys,
-    ));
+    for (id, mutation) in [
+        "typed_trade_proposal_010",
+        "typed_trade_decision_013",
+        "typed_trade_revision_proposal_014",
+        "typed_trade_revision_decision_015",
+        "typed_trade_cancellation_016",
+    ]
+    .into_iter()
+    .zip(trade_mutations())
+    {
+        vectors.push(typed_trade_vector(id, mutation, &keys));
+    }
 
     vectors
+}
+
+fn typed_trade_vector(id: &str, mutation: TradeMutationEnvelopeV1, keys: &Keys) -> WireVector {
+    let plan = AuthoredEventPlan::from_trade_mutation(mutation).expect("typed trade plan");
+    let tags = plan
+        .body()
+        .tags()
+        .iter()
+        .cloned()
+        .map(Tag::parse)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("trade tags");
+    let event = UnsignedEvent {
+        id: Some(
+            nostr::EventId::from_hex(&plan.expected_event_id().to_hex()).expect("planned event id"),
+        ),
+        pubkey: keys.public_key(),
+        created_at: Timestamp::from_secs(plan.created_at()),
+        kind: Kind::Custom(u16::try_from(plan.body().kind()).expect("trade kind")),
+        tags: nostr::Tags::from_list(tags),
+        content: plan.body().content().to_owned(),
+    }
+    .sign_with_ctx(nostr::SECP256K1, &mut CorpusAuxRng, keys)
+    .expect("trade event");
+    assert_eq!(event.pubkey.to_hex(), plan.author().to_hex());
+    assert_eq!(
+        event
+            .tags
+            .iter()
+            .map(|tag| tag.as_slice().to_vec())
+            .collect::<Vec<_>>(),
+        plan.body().tags()
+    );
+    assert_eq!(event.id.to_hex(), plan.expected_event_id().to_hex());
+    let verified = verify_nip01_event(
+        EventEnvelope::new(EventEnvelopeParts {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            created_at: event.created_at.as_secs(),
+            kind: u32::from(event.kind.as_u16()),
+            tags: event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect(),
+            content: event.content.clone(),
+            sig: event.sig.to_string(),
+        })
+        .expect("trade event envelope"),
+    )
+    .expect("verified trade event");
+    let parsed = trade_mutation_from_verified_event(&verified).expect("validated trade event");
+    assert_eq!(
+        parsed.contract_id,
+        plan.body().contract().contract_id().as_str()
+    );
+    vector(
+        id,
+        plan.body().contract().contract_id().as_str(),
+        "typed",
+        event,
+    )
 }
 
 fn generic_vector(
@@ -661,6 +779,78 @@ fn trade_proposal() -> TradeMutationEnvelopeV1 {
             },
         },
     }
+}
+
+fn trade_mutations() -> Vec<TradeMutationEnvelopeV1> {
+    let proposal = canonical_trade_mutation_content(trade_proposal())
+        .expect("canonical proposal")
+        .envelope;
+    let proposal_id = proposal.mutation_id.expect("proposal mutation id");
+    let candidate = match &proposal.body {
+        TradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
+        _ => unreachable!(),
+    };
+    let candidate_id = candidate.candidate_id.expect("candidate id");
+    let trade_id = proposal.trade_id;
+    let buyer = proposal.buyer_pubkey;
+    let seller = proposal.seller_pubkey;
+    let farm = proposal.farm_id.clone();
+    let author = proposal.author_pubkey;
+    let counterparty = proposal.counterparty_pubkey;
+    let child = |contract_id: &str, body| TradeMutationEnvelopeV1 {
+        mutation_id: None,
+        contract_id: contract_id.to_owned(),
+        schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+        trade_id,
+        root_mutation_id: Some(proposal_id),
+        buyer_pubkey: buyer,
+        seller_pubkey: seller,
+        farm_id: farm.clone(),
+        parent_mutation_ids: vec![proposal_id],
+        author_pubkey: author,
+        counterparty_pubkey: counterparty,
+        authored_at_unix_s: CREATED_AT,
+        body,
+    };
+    let decision = child(
+        RADROOTS_TRADE_DECISION_CONTRACT_ID,
+        TradeMutationBodyV1::Decision {
+            proposal_mutation_id: proposal_id,
+            candidate_id,
+            decision: TradeDecisionV1::Declined {
+                reason: "inventory unavailable".to_owned(),
+            },
+        },
+    );
+    let revision_proposal = child(
+        RADROOTS_TRADE_REVISION_PROPOSAL_CONTRACT_ID,
+        TradeMutationBodyV1::RevisionProposal { candidate },
+    );
+    let revision_decision = child(
+        RADROOTS_TRADE_REVISION_DECISION_CONTRACT_ID,
+        TradeMutationBodyV1::RevisionDecision {
+            proposal_mutation_id: proposal_id,
+            candidate_id,
+            decision: TradeDecisionV1::Declined {
+                reason: "inventory unavailable".to_owned(),
+            },
+        },
+    );
+    let cancellation = child(
+        RADROOTS_TRADE_CANCELLATION_CONTRACT_ID,
+        TradeMutationBodyV1::Cancellation {
+            target_candidate_id: Some(candidate_id),
+            target_claim_mutation_id: None,
+            reason: "cancelled".to_owned(),
+        },
+    );
+    vec![
+        proposal,
+        decision,
+        revision_proposal,
+        revision_decision,
+        cancellation,
+    ]
 }
 
 fn conformance_vectors() -> Cow<'static, str> {

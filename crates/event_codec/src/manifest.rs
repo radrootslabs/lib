@@ -432,6 +432,7 @@ fn tag_semantic_label(value: TagSemantic) -> &'static str {
         TagSemantic::Title => "title",
         TagSemantic::Topic => "topic",
         TagSemantic::TimeZone => "time_zone",
+        TagSemantic::TradeMutation => "trade_mutation",
         TagSemantic::Url => "url",
         TagSemantic::UtcDayCoverage => "utc_day_coverage",
     }
@@ -452,6 +453,7 @@ fn tag_value_type_label(value: TagValueType) -> &'static str {
         TagValueType::Geohash => "geohash",
         TagValueType::IanaTimeZoneId => "iana_time_zone_id",
         TagValueType::Kind => "kind",
+        TagValueType::MutationId => "mutation_id",
         TagValueType::Nip01Coordinate => "nip01_coordinate",
         TagValueType::PublicKey => "public_key",
         TagValueType::RelayUrl => "relay_url",

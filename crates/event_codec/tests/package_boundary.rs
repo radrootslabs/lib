@@ -204,6 +204,11 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub mod radroots_event_codec::verify",
         "pub use radroots_event_codec::VerificationError",
         "pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan",
+        "pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15]",
+        "pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_trade_mutation",
+        "pub fn radroots_event_codec::decode::trade::trade_mutation_from_verified_event",
+        "pub fn radroots_event_codec::encode::trade::trade_mutation_event_build_with_extra_tags",
+        "pub enum radroots_event_codec::decode::trade::RadrootsTradeMutationError",
     ] {
         assert!(PUBLIC_API.contains(item), "API baseline is missing {item}");
     }
@@ -213,6 +218,11 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
             "API baseline exposes forbidden host path {forbidden}"
         );
     }
+    let retired = "RadrootsTradeMutationParseError";
+    assert!(
+        !PUBLIC_API.contains(retired),
+        "API baseline retains unsafe trade authoring surface {retired}"
+    );
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

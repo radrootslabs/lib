@@ -6,69 +6,144 @@ use alloc::{
 };
 
 #[cfg(feature = "json")]
+use crate::verification::RadrootsSignatureVerifiedEvent;
+#[cfg(feature = "json")]
 use radroots_event::{
     envelope::EventEnvelope,
     envelope::kind::is_trade_mutation_event_kind,
-    id::MutationId,
-    tag::name::{TAG_D, TAG_E},
+    id::{MutationId, TradeId},
     trade::{
-        TradeMutationEnvelopeV1, TradeProtocolError, canonical_trade_mutation_content,
+        TradeMutationEnvelopeV1, TradeMutationKindV1, canonical_trade_mutation_content,
         trade_mutation_from_canonical_content,
     },
     wire::Nip01EventWireParts,
 };
+#[cfg(feature = "json")]
+use radroots_identity::PublicKey;
 
 #[cfg(feature = "json")]
-use crate::error::EventEncodeError;
+const MAX_TRADE_MUTATION_TAGS: usize = 10;
 
 #[cfg(feature = "json")]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTradeMutationParseError {
-    InvalidKind(u32),
-    MissingTag(&'static str),
-    InvalidTag(&'static str),
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeMutationError {
+    CallerStructuralTagForbidden,
+    DuplicateTradeTag,
+    LegacyParentEventTag,
+    MissingParentTag,
+    MissingMutationTag,
+    MissingRootTag,
+    NoncanonicalParentOrder,
+    PartyTagOrderMismatch,
+    UnexpectedParentTag,
+    UnexpectedRootTag,
+    InvalidKind,
+    AuthorMismatch,
+    AuthoredAtMismatch,
+    CanonicalContentMismatch,
+    InvalidIdentifier,
+    InvalidTagShape,
+    UnexpectedTag,
     ContractTagMismatch,
-    TradeIdTagMismatch,
-    CounterpartyTagMismatch,
-    ParentTagsMismatch,
-    KindContractMismatch,
-    Canonical(TradeProtocolError),
+    TradeTagMismatch,
+    MutationTagMismatch,
+    RootTagMismatch,
+    ParentTagMismatch,
 }
 
 #[cfg(feature = "json")]
-impl core::fmt::Display for RadrootsTradeMutationParseError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl RadrootsTradeMutationError {
+    #[must_use]
+    pub const fn code(self) -> &'static str {
         match self {
-            Self::InvalidKind(kind) => write!(f, "invalid trade mutation kind: {kind}"),
-            Self::MissingTag(tag) => write!(f, "missing trade mutation tag: {tag}"),
-            Self::InvalidTag(tag) => write!(f, "invalid trade mutation tag: {tag}"),
-            Self::ContractTagMismatch => write!(f, "trade mutation contract tag mismatch"),
-            Self::TradeIdTagMismatch => write!(f, "trade mutation trade id tag mismatch"),
-            Self::CounterpartyTagMismatch => write!(f, "trade mutation counterparty tag mismatch"),
-            Self::ParentTagsMismatch => write!(f, "trade mutation parent tags mismatch"),
-            Self::KindContractMismatch => write!(f, "trade mutation kind contract mismatch"),
-            Self::Canonical(error) => write!(f, "{error}"),
+            Self::CallerStructuralTagForbidden => "caller_structural_tag_forbidden",
+            Self::DuplicateTradeTag => "duplicate_trade_tag",
+            Self::LegacyParentEventTag => "legacy_parent_event_tag",
+            Self::MissingParentTag => "missing_parent_tag",
+            Self::MissingMutationTag => "missing_mutation_tag",
+            Self::MissingRootTag => "missing_root_tag",
+            Self::NoncanonicalParentOrder => "noncanonical_parent_order",
+            Self::PartyTagOrderMismatch => "party_tag_order_mismatch",
+            Self::UnexpectedParentTag => "unexpected_parent_tag",
+            Self::UnexpectedRootTag => "unexpected_root_tag",
+            Self::InvalidKind => "invalid_kind",
+            Self::AuthorMismatch => "author_mismatch",
+            Self::AuthoredAtMismatch => "authored_at_mismatch",
+            Self::CanonicalContentMismatch => "canonical_content_mismatch",
+            Self::InvalidIdentifier => "invalid_identifier",
+            Self::InvalidTagShape => "invalid_tag_shape",
+            Self::UnexpectedTag => "unexpected_tag",
+            Self::ContractTagMismatch => "contract_tag_mismatch",
+            Self::TradeTagMismatch => "trade_tag_mismatch",
+            Self::MutationTagMismatch => "mutation_tag_mismatch",
+            Self::RootTagMismatch => "root_tag_mismatch",
+            Self::ParentTagMismatch => "parent_tag_mismatch",
         }
     }
 }
 
-#[cfg(all(feature = "std", feature = "json"))]
-impl std::error::Error for RadrootsTradeMutationParseError {}
-
 #[cfg(feature = "json")]
-impl From<TradeProtocolError> for RadrootsTradeMutationParseError {
-    fn from(value: TradeProtocolError) -> Self {
-        Self::Canonical(value)
+impl core::fmt::Display for RadrootsTradeMutationError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::CallerStructuralTagForbidden => "caller supplied a governed trade tag",
+            Self::DuplicateTradeTag => "trade tag is duplicated",
+            Self::LegacyParentEventTag => "legacy trade parent tag is forbidden",
+            Self::MissingParentTag => "trade parent tag is missing",
+            Self::MissingMutationTag => "trade mutation tag is missing",
+            Self::MissingRootTag => "trade root tag is missing",
+            Self::NoncanonicalParentOrder => "trade parent tags are not canonical",
+            Self::PartyTagOrderMismatch => "trade party tags are not canonical",
+            Self::UnexpectedParentTag => "trade parent tag is unexpected",
+            Self::UnexpectedRootTag => "trade root tag is unexpected",
+            Self::InvalidKind => "trade mutation kind is invalid",
+            Self::AuthorMismatch => "trade mutation author does not match content",
+            Self::AuthoredAtMismatch => "trade mutation timestamp does not match content",
+            Self::CanonicalContentMismatch => "trade mutation content is not canonical",
+            Self::InvalidIdentifier => "trade mutation identifier is invalid",
+            Self::InvalidTagShape => "trade mutation tag shape is invalid",
+            Self::UnexpectedTag => "trade mutation tag is not permitted",
+            Self::ContractTagMismatch => "trade contract tag does not match content",
+            Self::TradeTagMismatch => "trade identifier tag does not match content",
+            Self::MutationTagMismatch => "trade mutation tag does not match content",
+            Self::RootTagMismatch => "trade root tag does not match content",
+            Self::ParentTagMismatch => "trade parent tag does not match content",
+        })
     }
 }
+
+#[cfg(all(feature = "std", feature = "json"))]
+impl std::error::Error for RadrootsTradeMutationError {}
 
 #[cfg(feature = "json")]
 pub fn trade_mutation_event_build(
     envelope: TradeMutationEnvelopeV1,
-) -> Result<Nip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, RadrootsTradeMutationError> {
+    trade_mutation_event_build_with_extra_tags(envelope, &[])
+}
+
+#[cfg(feature = "json")]
+pub fn trade_mutation_event_build_with_extra_tags(
+    envelope: TradeMutationEnvelopeV1,
+    extra_tags: &[Vec<String>],
+) -> Result<Nip01EventWireParts, RadrootsTradeMutationError> {
+    if extra_tags.iter().any(|tag| {
+        matches!(
+            tag.first().map(String::as_str),
+            Some("contract" | "d" | "x" | "p" | "e")
+        )
+    }) {
+        return Err(RadrootsTradeMutationError::CallerStructuralTagForbidden);
+    }
+    if let Some(tag) = extra_tags.first() {
+        if tag.is_empty() {
+            return Err(RadrootsTradeMutationError::InvalidTagShape);
+        }
+        return Err(RadrootsTradeMutationError::UnexpectedTag);
+    }
     let canonical = canonical_trade_mutation_content(envelope)
-        .map_err(map_trade_protocol_error_to_encode_error)?;
-    let tags = trade_mutation_tags(&canonical.envelope)?;
+        .map_err(|_| RadrootsTradeMutationError::CanonicalContentMismatch)?;
+    let tags = canonical_trade_mutation_tags(&canonical.envelope)?;
     Ok(Nip01EventWireParts {
         kind: canonical.envelope.mutation_kind().nostr_kind(),
         content: canonical.content,
@@ -77,134 +152,314 @@ pub fn trade_mutation_event_build(
 }
 
 #[cfg(feature = "json")]
+/// Structurally parses and validates a trade-mutation event.
+///
+/// This boundary binds the event kind, declared author, timestamp, canonical
+/// content, and ordered tags. It does not verify the event signature; callers
+/// that require cryptographic verification must use
+/// [`trade_mutation_from_verified_event`].
 pub fn trade_mutation_from_event(
     event: &EventEnvelope,
-) -> Result<TradeMutationEnvelopeV1, RadrootsTradeMutationParseError> {
-    if !is_trade_mutation_event_kind(event.kind_u32()) {
-        return Err(RadrootsTradeMutationParseError::InvalidKind(
-            event.kind_u32(),
-        ));
+) -> Result<TradeMutationEnvelopeV1, RadrootsTradeMutationError> {
+    validate_trade_mutation_parts(
+        event.kind_u32(),
+        event.created_at_u64(),
+        &event.author().to_hex(),
+        &event.tags_as_vec(),
+        event.content(),
+    )
+}
+
+#[cfg(feature = "json")]
+pub(crate) fn validate_trade_mutation_parts(
+    kind: u32,
+    authored_at: u64,
+    author: &str,
+    tags: &[Vec<String>],
+    content: &str,
+) -> Result<TradeMutationEnvelopeV1, RadrootsTradeMutationError> {
+    if !is_trade_mutation_event_kind(kind) {
+        return Err(RadrootsTradeMutationError::InvalidKind);
     }
-    let envelope = trade_mutation_from_canonical_content(event.content())?;
-    if envelope.mutation_kind().nostr_kind() != event.kind_u32() {
-        return Err(RadrootsTradeMutationParseError::KindContractMismatch);
+    let envelope = trade_mutation_from_canonical_content(content)
+        .map_err(|_| RadrootsTradeMutationError::CanonicalContentMismatch)?;
+    if envelope.mutation_id.is_none() {
+        return Err(RadrootsTradeMutationError::CanonicalContentMismatch);
     }
-    validate_trade_mutation_tags(&envelope, &event.tags_as_vec())?;
+    if envelope.mutation_kind().nostr_kind() != kind {
+        return Err(RadrootsTradeMutationError::InvalidKind);
+    }
+    if canonical_public_key(author)? != envelope.author_pubkey.to_hex() {
+        return Err(RadrootsTradeMutationError::AuthorMismatch);
+    }
+    if envelope.authored_at_unix_s != authored_at {
+        return Err(RadrootsTradeMutationError::AuthoredAtMismatch);
+    }
+    validate_trade_mutation_tags(&envelope, tags)?;
     Ok(envelope)
+}
+
+#[cfg(feature = "json")]
+/// Validates a trade mutation whose NIP-01 signature has already been verified.
+pub fn trade_mutation_from_verified_event(
+    event: &RadrootsSignatureVerifiedEvent,
+) -> Result<TradeMutationEnvelopeV1, RadrootsTradeMutationError> {
+    trade_mutation_from_event(event.event())
 }
 
 #[cfg(feature = "json")]
 pub fn trade_mutation_tags(
     envelope: &TradeMutationEnvelopeV1,
-) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    let mut tags = Vec::with_capacity(3 + envelope.parent_mutation_ids.len());
-    push_tag(&mut tags, "contract", envelope.contract_id.clone())?;
-    push_tag(&mut tags, TAG_D, envelope.trade_id.to_string())?;
-    push_tag(&mut tags, "p", envelope.counterparty_pubkey.to_string())?;
-    for parent in &envelope.parent_mutation_ids {
-        push_tag(&mut tags, TAG_E, parent.to_string())?;
+) -> Result<Vec<Vec<String>>, RadrootsTradeMutationError> {
+    let canonical = canonical_trade_mutation_content(envelope.clone())
+        .map_err(|_| RadrootsTradeMutationError::CanonicalContentMismatch)?;
+    canonical_trade_mutation_tags(&canonical.envelope)
+}
+
+#[cfg(feature = "json")]
+pub fn validate_trade_mutation_tags(
+    envelope: &TradeMutationEnvelopeV1,
+    tags: &[Vec<String>],
+) -> Result<(), RadrootsTradeMutationError> {
+    if tags.len() > MAX_TRADE_MUTATION_TAGS {
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
     }
+    let proposal = envelope.mutation_kind() == TradeMutationKindV1::Proposal;
+    if tags
+        .iter()
+        .any(|tag| tag.first().map(String::as_str) == Some("e"))
+    {
+        return Err(RadrootsTradeMutationError::LegacyParentEventTag);
+    }
+    let trade_count = count_named(tags, "d");
+    if trade_count > 1 {
+        return Err(RadrootsTradeMutationError::DuplicateTradeTag);
+    }
+    let mutation_count = count_marked(tags, "mutation");
+    let root_count = count_marked(tags, "root");
+    let parent_count = count_marked(tags, "parent");
+    if count_named(tags, "x") != mutation_count + root_count + parent_count {
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
+    }
+    if mutation_count == 0 {
+        return Err(RadrootsTradeMutationError::MissingMutationTag);
+    }
+    if mutation_count != 1 {
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
+    }
+    if proposal {
+        if root_count != 0 {
+            return Err(RadrootsTradeMutationError::UnexpectedRootTag);
+        }
+        if parent_count != 0 {
+            return Err(RadrootsTradeMutationError::UnexpectedParentTag);
+        }
+    } else {
+        if root_count == 0 {
+            return Err(RadrootsTradeMutationError::MissingRootTag);
+        }
+        if root_count != 1 {
+            return Err(RadrootsTradeMutationError::InvalidTagShape);
+        }
+        if parent_count == 0 {
+            return Err(RadrootsTradeMutationError::MissingParentTag);
+        }
+        if parent_count > 4 {
+            return Err(RadrootsTradeMutationError::InvalidTagShape);
+        }
+    }
+    if trade_count == 0 || count_named(tags, "contract") != 1 || count_named(tags, "p") != 2 {
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
+    }
+    if tags.iter().any(|tag| {
+        !matches!(
+            tag.first().map(String::as_str),
+            Some("contract" | "d" | "x" | "p")
+        )
+    }) {
+        return Err(RadrootsTradeMutationError::UnexpectedTag);
+    }
+
+    let contract = exact_unmarked(tags.first(), "contract")?;
+    if contract != envelope.contract_id {
+        return Err(RadrootsTradeMutationError::ContractTagMismatch);
+    }
+    let trade = exact_unmarked(tags.get(1), "d")?;
+    if canonical_trade_id(trade)? != envelope.trade_id.to_hex() {
+        return Err(RadrootsTradeMutationError::TradeTagMismatch);
+    }
+    let mutation = exact_marked(tags.get(2), "mutation")?;
+    if canonical_mutation_id(mutation)?
+        != envelope
+            .mutation_id
+            .as_ref()
+            .ok_or(RadrootsTradeMutationError::CanonicalContentMismatch)?
+            .to_hex()
+    {
+        return Err(RadrootsTradeMutationError::MutationTagMismatch);
+    }
+
+    let mut cursor = 3;
+    if !proposal {
+        let root = exact_marked(tags.get(cursor), "root")?;
+        if canonical_mutation_id(root)?
+            != envelope
+                .root_mutation_id
+                .as_ref()
+                .ok_or(RadrootsTradeMutationError::MissingRootTag)?
+                .to_hex()
+        {
+            return Err(RadrootsTradeMutationError::RootTagMismatch);
+        }
+        cursor += 1;
+    }
+    let mut parsed_parents = Vec::with_capacity(parent_count);
+    for tag in tags.iter().skip(cursor).take(parent_count) {
+        let parent = canonical_mutation_id(exact_marked(Some(tag), "parent")?)?;
+        parsed_parents.push(
+            MutationId::parse(parent).map_err(|_| RadrootsTradeMutationError::InvalidIdentifier)?,
+        );
+    }
+    if parsed_parents.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RadrootsTradeMutationError::NoncanonicalParentOrder);
+    }
+    if parsed_parents != envelope.parent_mutation_ids {
+        return Err(RadrootsTradeMutationError::ParentTagMismatch);
+    }
+    cursor += parent_count;
+    let buyer = exact_unmarked(tags.get(cursor), "p")?;
+    let seller = exact_unmarked(tags.get(cursor + 1), "p")?;
+    if canonical_public_key(buyer)? != envelope.buyer_pubkey.to_hex()
+        || canonical_public_key(seller)? != envelope.seller_pubkey.to_hex()
+    {
+        return Err(RadrootsTradeMutationError::PartyTagOrderMismatch);
+    }
+    if cursor + 2 != tags.len() {
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
+    }
+    validate_party_binding(envelope)
+}
+
+#[cfg(feature = "json")]
+fn canonical_trade_mutation_tags(
+    envelope: &TradeMutationEnvelopeV1,
+) -> Result<Vec<Vec<String>>, RadrootsTradeMutationError> {
+    validate_party_binding(envelope)?;
+    let mutation = envelope
+        .mutation_id
+        .as_ref()
+        .ok_or(RadrootsTradeMutationError::CanonicalContentMismatch)?;
+    let mut tags = Vec::with_capacity(5 + envelope.parent_mutation_ids.len());
+    tags.push(vec!["contract".to_string(), envelope.contract_id.clone()]);
+    tags.push(vec!["d".to_string(), envelope.trade_id.to_hex()]);
+    tags.push(vec![
+        "x".to_string(),
+        mutation.to_hex(),
+        "mutation".to_string(),
+    ]);
+    if let Some(root) = &envelope.root_mutation_id {
+        tags.push(vec!["x".to_string(), root.to_hex(), "root".to_string()]);
+    }
+    for parent in &envelope.parent_mutation_ids {
+        tags.push(vec!["x".to_string(), parent.to_hex(), "parent".to_string()]);
+    }
+    tags.push(vec!["p".to_string(), envelope.buyer_pubkey.to_hex()]);
+    tags.push(vec!["p".to_string(), envelope.seller_pubkey.to_hex()]);
     Ok(tags)
 }
 
 #[cfg(feature = "json")]
-fn validate_trade_mutation_tags(
+fn validate_party_binding(
     envelope: &TradeMutationEnvelopeV1,
-    tags: &[Vec<String>],
-) -> Result<(), RadrootsTradeMutationParseError> {
-    let contract = required_tag_value(tags, "contract")?;
-    if contract != envelope.contract_id {
-        return Err(RadrootsTradeMutationParseError::ContractTagMismatch);
+) -> Result<(), RadrootsTradeMutationError> {
+    let expected_counterparty = if envelope.author_pubkey == envelope.buyer_pubkey {
+        &envelope.seller_pubkey
+    } else if envelope.author_pubkey == envelope.seller_pubkey {
+        &envelope.buyer_pubkey
+    } else {
+        return Err(RadrootsTradeMutationError::AuthorMismatch);
+    };
+    if &envelope.counterparty_pubkey != expected_counterparty {
+        return Err(RadrootsTradeMutationError::AuthorMismatch);
     }
-    let trade_id = required_tag_value(tags, TAG_D)?;
-    if trade_id != envelope.trade_id.to_hex() {
-        return Err(RadrootsTradeMutationParseError::TradeIdTagMismatch);
+    Ok(())
+}
+
+#[cfg(feature = "json")]
+fn count_named(tags: &[Vec<String>], name: &str) -> usize {
+    tags.iter()
+        .filter(|tag| tag.first().map(String::as_str) == Some(name))
+        .count()
+}
+
+#[cfg(feature = "json")]
+fn count_marked(tags: &[Vec<String>], marker: &str) -> usize {
+    tags.iter()
+        .filter(|tag| {
+            tag.first().map(String::as_str) == Some("x")
+                && tag.get(2).map(String::as_str) == Some(marker)
+        })
+        .count()
+}
+
+#[cfg(feature = "json")]
+fn exact_unmarked<'a>(
+    tag: Option<&'a Vec<String>>,
+    name: &str,
+) -> Result<&'a str, RadrootsTradeMutationError> {
+    let tag = tag.ok_or(RadrootsTradeMutationError::InvalidTagShape)?;
+    if tag.len() != 2 || tag.first().map(String::as_str) != Some(name) {
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
     }
-    let counterparty = required_tag_value(tags, "p")?;
-    if counterparty != envelope.counterparty_pubkey.to_hex() {
-        return Err(RadrootsTradeMutationParseError::CounterpartyTagMismatch);
-    }
-    let mut parents = Vec::new();
-    for tag in tags
-        .iter()
-        .filter(|tag| tag.first().map(String::as_str) == Some(TAG_E))
+    Ok(&tag[1])
+}
+
+#[cfg(feature = "json")]
+fn exact_marked<'a>(
+    tag: Option<&'a Vec<String>>,
+    marker: &str,
+) -> Result<&'a str, RadrootsTradeMutationError> {
+    let tag = tag.ok_or(RadrootsTradeMutationError::InvalidTagShape)?;
+    if tag.len() != 3
+        || tag.first().map(String::as_str) != Some("x")
+        || tag.get(2).map(String::as_str) != Some(marker)
     {
-        let value = tag
-            .get(1)
-            .map(String::as_str)
-            .ok_or(RadrootsTradeMutationParseError::InvalidTag(TAG_E))?;
-        let parent = MutationId::parse(value)
-            .map_err(|_| RadrootsTradeMutationParseError::InvalidTag(TAG_E))?;
-        parents.push(parent);
+        return Err(RadrootsTradeMutationError::InvalidTagShape);
     }
-    if parents != envelope.parent_mutation_ids {
-        return Err(RadrootsTradeMutationParseError::ParentTagsMismatch);
-    }
-    Ok(())
+    Ok(&tag[1])
 }
 
 #[cfg(feature = "json")]
-fn required_tag_value<'a>(
-    tags: &'a [Vec<String>],
-    name: &'static str,
-) -> Result<&'a str, RadrootsTradeMutationParseError> {
-    let tag = tags
-        .iter()
-        .find(|tag| tag.first().map(String::as_str) == Some(name))
-        .ok_or(RadrootsTradeMutationParseError::MissingTag(name))?;
-    let value = tag
-        .get(1)
-        .map(String::as_str)
-        .ok_or(RadrootsTradeMutationParseError::InvalidTag(name))?;
-    if value.trim().is_empty() {
-        return Err(RadrootsTradeMutationParseError::InvalidTag(name));
+fn canonical_trade_id(value: &str) -> Result<String, RadrootsTradeMutationError> {
+    let parsed =
+        TradeId::parse(value).map_err(|_| RadrootsTradeMutationError::InvalidIdentifier)?;
+    let canonical = parsed.to_hex();
+    if canonical != value {
+        return Err(RadrootsTradeMutationError::InvalidIdentifier);
     }
-    Ok(value)
+    Ok(canonical)
 }
 
 #[cfg(feature = "json")]
-fn push_tag(
-    tags: &mut Vec<Vec<String>>,
-    name: &'static str,
-    value: String,
-) -> Result<(), EventEncodeError> {
-    if value.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField(name));
+fn canonical_mutation_id(value: &str) -> Result<String, RadrootsTradeMutationError> {
+    let parsed =
+        MutationId::parse(value).map_err(|_| RadrootsTradeMutationError::InvalidIdentifier)?;
+    let canonical = parsed.to_hex();
+    if canonical != value {
+        return Err(RadrootsTradeMutationError::InvalidIdentifier);
     }
-    tags.push(vec![name.to_string(), value]);
-    Ok(())
+    Ok(canonical)
 }
 
 #[cfg(feature = "json")]
-fn map_trade_protocol_error_to_encode_error(error: TradeProtocolError) -> EventEncodeError {
-    match error {
-        TradeProtocolError::EmptyField(field) => EventEncodeError::EmptyRequiredField(field),
-        TradeProtocolError::ContractMismatch { .. }
-        | TradeProtocolError::InvalidField(_)
-        | TradeProtocolError::InvalidIdentifier { .. }
-        | TradeProtocolError::InvalidInitialParents
-        | TradeProtocolError::MissingParentMutation
-        | TradeProtocolError::TooManyParents { .. }
-        | TradeProtocolError::UnsortedParents
-        | TradeProtocolError::DuplicateParent
-        | TradeProtocolError::SelfParent
-        | TradeProtocolError::MissingLines
-        | TradeProtocolError::TooManyLines { .. }
-        | TradeProtocolError::TooManyAdjustments { .. }
-        | TradeProtocolError::UnsupportedNumber
-        | TradeProtocolError::ContentTooLarge { .. }
-        | TradeProtocolError::InvalidTimeRange
-        | TradeProtocolError::MissingReservationCommitments
-        | TradeProtocolError::MissingCancellationTarget
-        | TradeProtocolError::CandidateIdMismatch { .. }
-        | TradeProtocolError::MutationIdMismatch { .. }
-        | TradeProtocolError::InvalidSchemaVersion { .. } => {
-            EventEncodeError::InvalidField("trade_mutation")
-        }
-        TradeProtocolError::DuplicateKey(_)
-        | TradeProtocolError::InvalidJson(_)
-        | TradeProtocolError::NonCanonicalJson => EventEncodeError::Json,
+fn canonical_public_key(value: &str) -> Result<String, RadrootsTradeMutationError> {
+    let parsed =
+        PublicKey::from_hex(value).map_err(|_| RadrootsTradeMutationError::InvalidIdentifier)?;
+    let canonical = parsed.to_hex();
+    if canonical != value {
+        return Err(RadrootsTradeMutationError::InvalidIdentifier);
     }
+    Ok(canonical)
 }
 
 #[cfg(all(test, feature = "json"))]
@@ -355,194 +610,175 @@ mod tests {
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn trade_mutation_codec_rejects_all_invalid_wire_shapes() {
-        let parse_errors = [
-            RadrootsTradeMutationParseError::InvalidKind(1),
-            RadrootsTradeMutationParseError::MissingTag("contract"),
-            RadrootsTradeMutationParseError::InvalidTag("contract"),
-            RadrootsTradeMutationParseError::ContractTagMismatch,
-            RadrootsTradeMutationParseError::TradeIdTagMismatch,
-            RadrootsTradeMutationParseError::CounterpartyTagMismatch,
-            RadrootsTradeMutationParseError::ParentTagsMismatch,
-            RadrootsTradeMutationParseError::KindContractMismatch,
-            RadrootsTradeMutationParseError::Canonical(TradeProtocolError::MissingLines),
-        ];
-        for error in parse_errors {
-            assert!(!error.to_string().is_empty());
-        }
-        let canonical_error =
-            RadrootsTradeMutationParseError::from(TradeProtocolError::MissingLines);
-        assert!(matches!(
-            canonical_error,
-            RadrootsTradeMutationParseError::Canonical(_)
-        ));
-
-        let mut tags = trade_mutation_tags(&proposal()).unwrap();
+        let canonical = canonical_trade_mutation_content(proposal())
+            .unwrap()
+            .envelope;
+        let mut tags = trade_mutation_tags(&canonical).unwrap();
         *tags
             .iter_mut()
             .find(|tag| tag.first().map(String::as_str) == Some("contract"))
             .unwrap() = vec!["contract".into(), "wrong-contract".into()];
         assert_eq!(
-            validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
-            RadrootsTradeMutationParseError::ContractTagMismatch
+            validate_trade_mutation_tags(&canonical, &tags).unwrap_err(),
+            RadrootsTradeMutationError::ContractTagMismatch
         );
 
-        let mut tags = trade_mutation_tags(&proposal()).unwrap();
+        let mut tags = trade_mutation_tags(&canonical).unwrap();
         *tags
             .iter_mut()
-            .find(|tag| tag.first().map(String::as_str) == Some(TAG_D))
-            .unwrap() = vec![TAG_D.into(), "other-trade".into()];
+            .find(|tag| tag.first().map(String::as_str) == Some("d"))
+            .unwrap() = vec!["d".into(), hex_32('9')];
         assert_eq!(
-            validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
-            RadrootsTradeMutationParseError::TradeIdTagMismatch
+            validate_trade_mutation_tags(&canonical, &tags).unwrap_err(),
+            RadrootsTradeMutationError::TradeTagMismatch
         );
 
-        let mut tags = trade_mutation_tags(&proposal()).unwrap();
-        *tags
-            .iter_mut()
-            .find(|tag| tag.first().map(String::as_str) == Some("p"))
-            .unwrap() = vec!["p".into(), pubkey('c').to_hex()];
+        let mut tags = trade_mutation_tags(&canonical).unwrap();
+        let party = tags.len() - 2;
+        tags.swap(party, party + 1);
         assert_eq!(
-            validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
-            RadrootsTradeMutationParseError::CounterpartyTagMismatch
+            validate_trade_mutation_tags(&canonical, &tags).unwrap_err(),
+            RadrootsTradeMutationError::PartyTagOrderMismatch
         );
 
-        let mut missing_parent_value = trade_mutation_tags(&proposal()).unwrap();
-        missing_parent_value.push(vec![TAG_E.into()]);
+        let mut legacy = trade_mutation_tags(&canonical).unwrap();
+        legacy.push(vec!["e".into(), hex_64('9')]);
         assert_eq!(
-            validate_trade_mutation_tags(&proposal(), &missing_parent_value).unwrap_err(),
-            RadrootsTradeMutationParseError::InvalidTag(TAG_E)
+            validate_trade_mutation_tags(&canonical, &legacy).unwrap_err(),
+            RadrootsTradeMutationError::LegacyParentEventTag
         );
 
-        let mut invalid_parent = trade_mutation_tags(&proposal()).unwrap();
-        invalid_parent.push(vec![TAG_E.into(), "not-an-event-id".into()]);
+        let mut missing_mutation = trade_mutation_tags(&canonical).unwrap();
+        missing_mutation.remove(2);
         assert_eq!(
-            validate_trade_mutation_tags(&proposal(), &invalid_parent).unwrap_err(),
-            RadrootsTradeMutationParseError::InvalidTag(TAG_E)
+            validate_trade_mutation_tags(&canonical, &missing_mutation).unwrap_err(),
+            RadrootsTradeMutationError::MissingMutationTag
         );
 
-        let parent = MutationId::parse(hex_64('9')).unwrap();
-        let mut parent_envelope = proposal();
-        parent_envelope.parent_mutation_ids.push(parent);
-        let parent_tags = trade_mutation_tags(&parent_envelope).unwrap();
-        validate_trade_mutation_tags(&parent_envelope, &parent_tags).unwrap();
-
-        let mut mismatched_parent = trade_mutation_tags(&proposal()).unwrap();
-        mismatched_parent.push(vec![TAG_E.into(), parent.to_string()]);
+        let mut duplicate_trade = trade_mutation_tags(&canonical).unwrap();
+        duplicate_trade.push(vec!["d".into(), hex_32('9')]);
         assert_eq!(
-            validate_trade_mutation_tags(&proposal(), &mismatched_parent).unwrap_err(),
-            RadrootsTradeMutationParseError::ParentTagsMismatch
+            validate_trade_mutation_tags(&canonical, &duplicate_trade).unwrap_err(),
+            RadrootsTradeMutationError::DuplicateTradeTag
         );
 
         assert_eq!(
-            required_tag_value(&[], "contract").unwrap_err(),
-            RadrootsTradeMutationParseError::MissingTag("contract")
+            trade_mutation_event_build_with_extra_tags(
+                proposal(),
+                &[vec!["d".into(), hex_32('9')]],
+            )
+            .unwrap_err(),
+            RadrootsTradeMutationError::CallerStructuralTagForbidden
         );
-        assert_eq!(
-            required_tag_value(&[vec!["contract".into()]], "contract").unwrap_err(),
-            RadrootsTradeMutationParseError::InvalidTag("contract")
-        );
-        assert_eq!(
-            required_tag_value(&[vec!["contract".into(), " ".into()]], "contract",).unwrap_err(),
-            RadrootsTradeMutationParseError::InvalidTag("contract")
-        );
-        assert!(matches!(
-            push_tag(&mut Vec::new(), "contract", " ".into()).unwrap_err(),
-            EventEncodeError::EmptyRequiredField("contract")
-        ));
+    }
 
-        let built = trade_mutation_event_build(proposal()).unwrap();
-        let invalid_kind = EventEnvelope::new(EventEnvelopeParts {
-            id: hex_64('e'),
-            author: pubkey('a').to_hex(),
-            created_at: 1_799_000_000,
-            kind: 1,
-            tags: built.tags.clone(),
-            content: built.content.clone(),
-            sig: core::iter::repeat_n('f', 128).collect(),
-        })
-        .unwrap();
+    #[test]
+    fn trade_event_parser_binds_kind_author_time_content_and_markers() {
+        let built = trade_mutation_event_build(proposal()).expect("trade event");
+        let event = |author: String, created_at, kind, tags: Vec<Vec<String>>, content: String| {
+            EventEnvelope::new(EventEnvelopeParts {
+                id: hex_64('e'),
+                author,
+                created_at,
+                kind,
+                tags,
+                content,
+                sig: core::iter::repeat_n('f', 128).collect(),
+            })
+            .expect("structural envelope")
+        };
         assert_eq!(
-            trade_mutation_from_event(&invalid_kind).unwrap_err(),
-            RadrootsTradeMutationParseError::InvalidKind(1)
+            trade_mutation_from_event(&event(
+                pubkey('a').to_hex(),
+                1_799_000_000,
+                1,
+                built.tags.clone(),
+                built.content.clone(),
+            ))
+            .unwrap_err(),
+            RadrootsTradeMutationError::InvalidKind
         );
-
-        let kind_contract_mismatch = EventEnvelope::new(EventEnvelopeParts {
-            id: hex_64('e'),
-            author: pubkey('a').to_hex(),
-            created_at: 1_799_000_000,
-            kind: radroots_event::envelope::kind::KIND_TRADE_DECISION,
-            tags: built.tags,
-            content: built.content,
-            sig: core::iter::repeat_n('f', 128).collect(),
-        })
-        .unwrap();
         assert_eq!(
-            trade_mutation_from_event(&kind_contract_mismatch).unwrap_err(),
-            RadrootsTradeMutationParseError::KindContractMismatch
+            trade_mutation_from_event(&event(
+                pubkey('c').to_hex(),
+                1_799_000_000,
+                built.kind,
+                built.tags.clone(),
+                built.content.clone(),
+            ))
+            .unwrap_err(),
+            RadrootsTradeMutationError::AuthorMismatch
+        );
+        assert_eq!(
+            trade_mutation_from_event(&event(
+                pubkey('a').to_hex(),
+                1_799_000_001,
+                built.kind,
+                built.tags.clone(),
+                built.content.clone(),
+            ))
+            .unwrap_err(),
+            RadrootsTradeMutationError::AuthoredAtMismatch
+        );
+        assert_eq!(
+            trade_mutation_from_event(&event(
+                pubkey('a').to_hex(),
+                1_799_000_000,
+                built.kind,
+                built.tags.clone(),
+                "{}".to_owned(),
+            ))
+            .unwrap_err(),
+            RadrootsTradeMutationError::CanonicalContentMismatch
+        );
+        let mut unknown_marker = built.tags.clone();
+        unknown_marker[2][2] = "unknown".to_owned();
+        assert_eq!(
+            trade_mutation_from_event(&event(
+                pubkey('a').to_hex(),
+                1_799_000_000,
+                built.kind,
+                unknown_marker,
+                built.content,
+            ))
+            .unwrap_err(),
+            RadrootsTradeMutationError::InvalidTagShape
         );
     }
 
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn trade_protocol_errors_map_to_stable_encode_categories() {
-        let id_error = MutationId::parse("invalid").unwrap_err();
-        let invalid_field_errors = [
-            TradeProtocolError::ContractMismatch {
-                expected: "expected",
-                actual: "actual".into(),
-            },
-            TradeProtocolError::InvalidField("field"),
-            TradeProtocolError::InvalidIdentifier {
-                field: "id",
-                error: id_error,
-            },
-            TradeProtocolError::InvalidInitialParents,
-            TradeProtocolError::MissingParentMutation,
-            TradeProtocolError::TooManyParents { max: 1, actual: 2 },
-            TradeProtocolError::UnsortedParents,
-            TradeProtocolError::DuplicateParent,
-            TradeProtocolError::SelfParent,
-            TradeProtocolError::MissingLines,
-            TradeProtocolError::TooManyLines { max: 1, actual: 2 },
-            TradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
-            TradeProtocolError::UnsupportedNumber,
-            TradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
-            TradeProtocolError::InvalidTimeRange,
-            TradeProtocolError::MissingReservationCommitments,
-            TradeProtocolError::MissingCancellationTarget,
-            TradeProtocolError::CandidateIdMismatch {
-                declared: "declared".into(),
-                computed: "computed".into(),
-            },
-            TradeProtocolError::MutationIdMismatch {
-                declared: "declared".into(),
-                computed: "computed".into(),
-            },
-            TradeProtocolError::InvalidSchemaVersion {
-                expected: 1,
-                actual: 2,
-            },
+    fn trade_errors_have_fixed_redacted_diagnostics() {
+        let errors = [
+            RadrootsTradeMutationError::CallerStructuralTagForbidden,
+            RadrootsTradeMutationError::DuplicateTradeTag,
+            RadrootsTradeMutationError::LegacyParentEventTag,
+            RadrootsTradeMutationError::MissingParentTag,
+            RadrootsTradeMutationError::MissingMutationTag,
+            RadrootsTradeMutationError::MissingRootTag,
+            RadrootsTradeMutationError::NoncanonicalParentOrder,
+            RadrootsTradeMutationError::PartyTagOrderMismatch,
+            RadrootsTradeMutationError::UnexpectedParentTag,
+            RadrootsTradeMutationError::UnexpectedRootTag,
+            RadrootsTradeMutationError::InvalidKind,
+            RadrootsTradeMutationError::AuthorMismatch,
+            RadrootsTradeMutationError::AuthoredAtMismatch,
+            RadrootsTradeMutationError::CanonicalContentMismatch,
+            RadrootsTradeMutationError::InvalidIdentifier,
+            RadrootsTradeMutationError::InvalidTagShape,
+            RadrootsTradeMutationError::UnexpectedTag,
+            RadrootsTradeMutationError::ContractTagMismatch,
+            RadrootsTradeMutationError::TradeTagMismatch,
+            RadrootsTradeMutationError::MutationTagMismatch,
+            RadrootsTradeMutationError::RootTagMismatch,
+            RadrootsTradeMutationError::ParentTagMismatch,
         ];
-        for error in invalid_field_errors {
-            assert!(matches!(
-                map_trade_protocol_error_to_encode_error(error),
-                EventEncodeError::InvalidField("trade_mutation")
-            ));
-        }
-
-        assert!(matches!(
-            map_trade_protocol_error_to_encode_error(TradeProtocolError::EmptyField("field")),
-            EventEncodeError::EmptyRequiredField("field")
-        ));
-        for error in [
-            TradeProtocolError::DuplicateKey("key".into()),
-            TradeProtocolError::InvalidJson("json".into()),
-            TradeProtocolError::NonCanonicalJson,
-        ] {
-            assert!(matches!(
-                map_trade_protocol_error_to_encode_error(error),
-                EventEncodeError::Json
-            ));
+        for error in errors {
+            let display = error.to_string();
+            let debug = format!("{error:?}");
+            assert!(!display.is_empty());
+            assert!(!debug.contains(&hex_64('a')));
+            assert!(std::error::Error::source(&error).is_none());
         }
     }
 }

@@ -182,6 +182,7 @@ pub radroots_event_codec::authoring::AuthoredPlanError::Envelope(radroots_event:
 pub radroots_event_codec::authoring::AuthoredPlanError::FoodAvailability(radroots_event_codec::encode::food_availability::RadrootsFoodAvailabilityEncodeError)
 pub radroots_event_codec::authoring::AuthoredPlanError::InvalidAuthor(radroots_identity::error::Error)
 pub radroots_event_codec::authoring::AuthoredPlanError::Profile(radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError)
+pub radroots_event_codec::authoring::AuthoredPlanError::Trade(radroots_event_codec::decode::trade::RadrootsTradeMutationError)
 impl radroots_event_codec::authoring::AuthoredPlanError
 pub const fn radroots_event_codec::authoring::AuthoredPlanError::code(&self) -> &'static str
 impl core::error::Error for radroots_event_codec::authoring::AuthoredPlanError
@@ -234,6 +235,7 @@ pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip10_reply(&rad
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip22_comment(&radroots_event::post::comment::AuthoredNip22Comment) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_photo_update(&radroots_event::post::AuthoredPhotoUpdate) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_profile(&radroots_event::profile::AuthoredProfile) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_trade_mutation(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_update(&radroots_event::post::AuthoredUpdate) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub struct radroots_event_codec::authoring::AuthoredEventPlan
 impl radroots_event_codec::authoring::AuthoredEventPlan
@@ -254,6 +256,7 @@ pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip10_reply(&rad
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip22_comment(&radroots_event::post::comment::AuthoredNip22Comment, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_photo_update(&radroots_event::post::AuthoredPhotoUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_profile(&radroots_event::profile::AuthoredProfile, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_trade_mutation(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_update(&radroots_event::post::AuthoredUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan
 impl radroots_event_codec::authoring::BlossomAuthorizationPlan
@@ -299,7 +302,7 @@ impl serde_core::ser::Serialize for radroots_event_codec::authoring::PlanWireV1
 pub fn radroots_event_codec::authoring::PlanWireV1::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 pub const radroots_event_codec::authoring::PLAN_WIRE_MAX_BYTES: usize
 pub const radroots_event_codec::authoring::PLAN_WIRE_VERSION_V1: u32
-pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 10]
+pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15]
 pub mod radroots_event_codec::canonical
 pub fn radroots_event_codec::canonical::id(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event::id::EventId, radroots_event_codec::canonical::CanonicalError>
 pub fn radroots_event_codec::canonical::id_preimage(&radroots_event::envelope::EventEnvelope) -> core::result::Result<alloc::string::String, radroots_event_codec::canonical::CanonicalError>
@@ -617,22 +620,37 @@ pub fn radroots_event_codec::decode::seal::data_from_event(alloc::string::String
 pub fn radroots_event_codec::decode::seal::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event::social::seal::Seal>, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::seal::seal_from_parts(u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event::social::seal::Seal, radroots_event_codec::decode::EventParseError>
 pub mod radroots_event_codec::decode::trade
-pub enum radroots_event_codec::decode::trade::RadrootsTradeMutationParseError
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::Canonical(radroots_event::trade::TradeProtocolError)
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::ContractTagMismatch
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::CounterpartyTagMismatch
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::InvalidKind(u32)
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::InvalidTag(&'static str)
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::KindContractMismatch
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::MissingTag(&'static str)
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::ParentTagsMismatch
-pub radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::TradeIdTagMismatch
-impl core::convert::From<radroots_event::trade::TradeProtocolError> for radroots_event_codec::decode::trade::RadrootsTradeMutationParseError
-pub fn radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::from(radroots_event::trade::TradeProtocolError) -> Self
-impl core::error::Error for radroots_event_codec::decode::trade::RadrootsTradeMutationParseError
-impl core::fmt::Display for radroots_event_codec::decode::trade::RadrootsTradeMutationParseError
-pub fn radroots_event_codec::decode::trade::RadrootsTradeMutationParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn radroots_event_codec::decode::trade::trade_mutation_from_event(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event::trade::TradeMutationEnvelopeV1, radroots_event_codec::decode::trade::RadrootsTradeMutationParseError>
+pub enum radroots_event_codec::decode::trade::RadrootsTradeMutationError
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::AuthorMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::AuthoredAtMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::CallerStructuralTagForbidden
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::CanonicalContentMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::ContractTagMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::DuplicateTradeTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::InvalidIdentifier
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::InvalidKind
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::InvalidTagShape
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::LegacyParentEventTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::MissingMutationTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::MissingParentTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::MissingRootTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::MutationTagMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::NoncanonicalParentOrder
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::ParentTagMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::PartyTagOrderMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::RootTagMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::TradeTagMismatch
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::UnexpectedParentTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::UnexpectedRootTag
+pub radroots_event_codec::decode::trade::RadrootsTradeMutationError::UnexpectedTag
+impl radroots_event_codec::decode::trade::RadrootsTradeMutationError
+pub const fn radroots_event_codec::decode::trade::RadrootsTradeMutationError::code(self) -> &'static str
+impl core::error::Error for radroots_event_codec::decode::trade::RadrootsTradeMutationError
+impl core::fmt::Display for radroots_event_codec::decode::trade::RadrootsTradeMutationError
+pub fn radroots_event_codec::decode::trade::RadrootsTradeMutationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_event_codec::decode::trade::trade_mutation_from_event(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event::trade::TradeMutationEnvelopeV1, radroots_event_codec::decode::trade::RadrootsTradeMutationError>
+pub fn radroots_event_codec::decode::trade::trade_mutation_from_verified_event(&crate::verification::RadrootsSignatureVerifiedEvent) -> core::result::Result<radroots_event::trade::TradeMutationEnvelopeV1, radroots_event_codec::decode::trade::RadrootsTradeMutationError>
+pub fn radroots_event_codec::decode::trade::validate_trade_mutation_tags(&radroots_event::trade::TradeMutationEnvelopeV1, &[alloc::vec::Vec<alloc::string::String>]) -> core::result::Result<(), radroots_event_codec::decode::trade::RadrootsTradeMutationError>
 pub mod radroots_event_codec::decode::wire
 pub fn radroots_event_codec::decode::wire::canonicalize_tags(&mut alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>)
 pub fn radroots_event_codec::decode::wire::empty_content() -> alloc::string::String
@@ -1082,8 +1100,37 @@ impl radroots_event_codec::encode::tag_builders::RadrootsEventTagBuilder for rad
 pub type radroots_event::social::seal::Seal::Error = radroots_event_codec::encode::EventEncodeError
 pub fn radroots_event::social::seal::Seal::build_tags(&self) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, Self::Error>
 pub mod radroots_event_codec::encode::trade
-pub fn radroots_event_codec::encode::trade::trade_mutation_event_build(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::encode::EventEncodeError>
-pub fn radroots_event_codec::encode::trade::trade_mutation_tags(&radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, radroots_event_codec::encode::EventEncodeError>
+pub enum radroots_event_codec::encode::trade::RadrootsTradeMutationError
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::AuthorMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::AuthoredAtMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::CallerStructuralTagForbidden
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::CanonicalContentMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::ContractTagMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::DuplicateTradeTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::InvalidIdentifier
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::InvalidKind
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::InvalidTagShape
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::LegacyParentEventTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::MissingMutationTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::MissingParentTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::MissingRootTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::MutationTagMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::NoncanonicalParentOrder
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::ParentTagMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::PartyTagOrderMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::RootTagMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::TradeTagMismatch
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::UnexpectedParentTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::UnexpectedRootTag
+pub radroots_event_codec::encode::trade::RadrootsTradeMutationError::UnexpectedTag
+impl radroots_event_codec::decode::trade::RadrootsTradeMutationError
+pub const fn radroots_event_codec::decode::trade::RadrootsTradeMutationError::code(self) -> &'static str
+impl core::error::Error for radroots_event_codec::decode::trade::RadrootsTradeMutationError
+impl core::fmt::Display for radroots_event_codec::decode::trade::RadrootsTradeMutationError
+pub fn radroots_event_codec::decode::trade::RadrootsTradeMutationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_event_codec::encode::trade::trade_mutation_event_build(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::decode::trade::RadrootsTradeMutationError>
+pub fn radroots_event_codec::encode::trade::trade_mutation_event_build_with_extra_tags(radroots_event::trade::TradeMutationEnvelopeV1, &[alloc::vec::Vec<alloc::string::String>]) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::decode::trade::RadrootsTradeMutationError>
+pub fn radroots_event_codec::encode::trade::trade_mutation_tags(&radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, radroots_event_codec::decode::trade::RadrootsTradeMutationError>
 #[non_exhaustive] pub enum radroots_event_codec::encode::EncodeError
 pub radroots_event_codec::encode::EncodeError::Json
 impl radroots_event_codec::encode::EncodeError
@@ -1251,6 +1298,7 @@ pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagSemantic::TimeZone
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagSemantic::Title
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagSemantic::Topic
+pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagSemantic::TradeMutation
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagSemantic::Url
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagSemantic::UtcDayCoverage
 pub enum radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType
@@ -1267,6 +1315,7 @@ pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::Geohash
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::IanaTimeZoneId
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::Kind
+pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::MutationId
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::Nip01Coordinate
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::PublicKey
 pub radroots_event_codec::manifest::registry_v7::RadrootsEventContractRegistryV7TagValueType::RelayUrl

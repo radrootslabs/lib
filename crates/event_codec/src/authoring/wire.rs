@@ -154,6 +154,7 @@ impl PlanWireV1 {
             EventAuthoringPolicy::TypedOnly => validate_historical_typed_profile(
                 definition.id,
                 wire.created_at,
+                &wire.expected_author,
                 wire.kind,
                 &wire.tags,
                 &wire.content,

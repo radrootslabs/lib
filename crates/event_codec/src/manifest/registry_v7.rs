@@ -266,6 +266,7 @@ pub enum RadrootsEventContractRegistryV7TagSemantic {
     Title,
     Topic,
     TimeZone,
+    TradeMutation,
     Url,
     UtcDayCoverage,
 }
@@ -286,6 +287,7 @@ pub enum RadrootsEventContractRegistryV7TagValueType {
     Geohash,
     IanaTimeZoneId,
     Kind,
+    MutationId,
     Nip01Coordinate,
     PublicKey,
     RelayUrl,
@@ -752,6 +754,7 @@ fn tag_semantic_inventory(value: TagSemantic) -> RadrootsEventContractRegistryV7
         TagSemantic::Title => RadrootsEventContractRegistryV7TagSemantic::Title,
         TagSemantic::Topic => RadrootsEventContractRegistryV7TagSemantic::Topic,
         TagSemantic::TimeZone => RadrootsEventContractRegistryV7TagSemantic::TimeZone,
+        TagSemantic::TradeMutation => RadrootsEventContractRegistryV7TagSemantic::TradeMutation,
         TagSemantic::Url => RadrootsEventContractRegistryV7TagSemantic::Url,
         TagSemantic::UtcDayCoverage => RadrootsEventContractRegistryV7TagSemantic::UtcDayCoverage,
     }
@@ -780,6 +783,7 @@ fn tag_value_type_inventory(value: TagValueType) -> RadrootsEventContractRegistr
         TagValueType::Geohash => RadrootsEventContractRegistryV7TagValueType::Geohash,
         TagValueType::IanaTimeZoneId => RadrootsEventContractRegistryV7TagValueType::IanaTimeZoneId,
         TagValueType::Kind => RadrootsEventContractRegistryV7TagValueType::Kind,
+        TagValueType::MutationId => RadrootsEventContractRegistryV7TagValueType::MutationId,
         TagValueType::Nip01Coordinate => {
             RadrootsEventContractRegistryV7TagValueType::Nip01Coordinate
         }

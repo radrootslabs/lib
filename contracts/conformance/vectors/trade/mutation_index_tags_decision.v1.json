@@ -8,26 +8,26 @@
       "input": {
         "contract_id": "radroots.trade.revision_proposal.v1",
         "trade_id": "11111111111111111111111111111111",
-        "mutation_id": "2222222222222222222222222222222222222222222222222222222222222222",
+        "mutation_id": "65b018424d93792a061eb2bce370604b1e3590c5f84617f8cec45dfc67b3eb49",
         "root_mutation_id": "3333333333333333333333333333333333333333333333333333333333333333",
         "parent_mutation_ids": [
           "4444444444444444444444444444444444444444444444444444444444444444",
           "5555555555555555555555555555555555555555555555555555555555555555"
         ],
-        "buyer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "seller_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "buyer_pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "seller_pubkey": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af"
       },
       "expected": {
         "kind": 3472,
         "tags": [
           ["contract", "radroots.trade.revision_proposal.v1"],
           ["d", "11111111111111111111111111111111"],
-          ["x", "2222222222222222222222222222222222222222222222222222222222222222", "mutation"],
+          ["x", "65b018424d93792a061eb2bce370604b1e3590c5f84617f8cec45dfc67b3eb49", "mutation"],
           ["x", "3333333333333333333333333333333333333333333333333333333333333333", "root"],
           ["x", "4444444444444444444444444444444444444444444444444444444444444444", "parent"],
           ["x", "5555555555555555555555555555555555555555555555555555555555555555", "parent"],
-          ["p", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+          ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"],
+          ["p", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af"]
         ]
       }
     },
