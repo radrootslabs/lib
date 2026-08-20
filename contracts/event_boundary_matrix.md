@@ -315,7 +315,6 @@ not weaken or add effect fields to the request corpus.
 | trade:revision_proposal | 3472 | TradeMutationEnvelopeV1 | trade.get_trade, trade.list_trades, trade.propose_revision | buyer- or seller-authored complete replacement candidate referencing bounded parent heads |
 | trade:revision_decision | 3473 | TradeMutationEnvelopeV1 | trade.decide_candidate, trade.get_trade, trade.list_trades | exact accept or decline mutation for a referenced revision candidate and proposal mutation |
 | trade:cancellation | 3474 | TradeMutationEnvelopeV1 | trade.cancel_trade, trade.get_trade, trade.list_trades | policy-authorized cancellation mutation referencing the relevant candidate or current claim |
-| trade:validation_receipt | 3440 | RadrootsTradeValidationReceipt | domains.trade.validation_receipt.get, domains.trade.validation_receipt.list, domains.trade.validation_receipt.verify | proof and inspection artifact around canonical signed trade events and deterministic reducer output; not buyer receipt state, payment state, order mutation, or trade authority |
 | relay_doc | N/A | RelayDocument | system.relay_doc.get | HTTP NIP-11 info via relay fetch helper |
 
 ## Membership list sets and claims

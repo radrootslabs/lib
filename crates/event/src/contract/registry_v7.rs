@@ -624,13 +624,6 @@ const TAG_CALENDAR_INCLUSION_REQUEST: TagContract = tag(
     TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_E_ROOT: TagContract = tag(
-    "e",
-    TagCardinality::RequiredOne,
-    TagSemantic::RootEvent,
-    TagValueType::EventId,
-    true,
-);
 const TAG_E_SOURCE_VERSION: TagContract = tag(
     "e",
     TagCardinality::RequiredOne,
@@ -1128,13 +1121,6 @@ const TAG_CALENDAR_IMAGE: TagContract = tag(
     TagValueType::Url,
     false,
 );
-const TAG_SERVICE_OUTPUT: TagContract = tag(
-    "output",
-    TagCardinality::RequiredOne,
-    TagSemantic::ServiceOutput,
-    TagValueType::Text,
-    false,
-);
 const TAG_URL: TagContract = tag(
     "url",
     TagCardinality::OptionalOne,
@@ -1363,8 +1349,6 @@ const RHI_EVIDENCE_ATTESTATION_TAGS: &[TagContract] = &[
     TAG_T_RHI_ATTESTATION_OUTCOME,
     TAG_E_RHI_SUPERSEDES_EVENT,
 ];
-const TRADE_VALIDATION_RECEIPT_TAGS: &[TagContract] =
-    &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
 const KNOWLEDGE_SOURCE_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_CONTRACT_REQUIRED,
@@ -2336,14 +2320,6 @@ static KIND_CONTRACTS_REGISTRY_V7: &[KindContract] = &[
         EventClass::Regular,
         NostrStandard::Radroots,
         ["radroots.trade.cancellation.v1"]
-    ),
-    kind_contract!(
-        KIND_TRADE_VALIDATION_RECEIPT,
-        "KIND_TRADE_VALIDATION_RECEIPT",
-        "Trade Validation Receipt",
-        EventClass::Regular,
-        NostrStandard::Radroots,
-        ["radroots.trade.validation_receipt.v1"]
     ),
     kind_contract!(
         KIND_RHI_EVIDENCE_ATTESTATION,
@@ -3753,19 +3729,6 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         RHI_EVIDENCE_ATTESTATION_TAGS,
         TRADE_VALIDATION_REDUCERS
     ),
-    event_contract!(
-        "radroots.trade.validation_receipt.v1",
-        KIND_TRADE_VALIDATION_RECEIPT,
-        "Trade Validation Receipt",
-        "RadrootsTradeValidationReceipt",
-        EventClass::Regular,
-        EventPrivacy::Public,
-        AuthorRole::Service,
-        ContentSchema::JsonObject,
-        EventDiscriminator::KindOnly,
-        TRADE_VALIDATION_RECEIPT_TAGS,
-        TRADE_VALIDATION_REDUCERS
-    ),
 ];
 
 pub fn all_kind_contracts() -> &'static [KindContract] {
@@ -3864,8 +3827,7 @@ pub fn kind_contract_family(contract: &KindContract) -> Option<ContractFamily> {
         | KIND_FARM_WORKSPACE_MANIFEST
         | KIND_FARM_CRDT_CHANGE => ContractFamily::Farm,
         KIND_CLASSIFIED_LISTING => ContractFamily::Market,
-        KIND_TRADE_VALIDATION_RECEIPT
-        | KIND_RHI_EVIDENCE_ATTESTATION
+        KIND_RHI_EVIDENCE_ATTESTATION
         | KIND_TRADE_PROPOSAL
         | KIND_TRADE_DECISION
         | KIND_TRADE_REVISION_PROPOSAL

@@ -85,7 +85,7 @@
     {
       "module": "event::v1",
       "path": "crates/protocol/src/event/v1.rs",
-      "sha256": "cc5b36e7e5cef0c7e375c2ce473267f5721994416d5154296a135890dface2e4",
+      "sha256": "9522617516b011e966cb7ee3c8f073b89fbd485e6c1776ad9ab65e563944daf3",
       "types": [
         {
           "rust_path": "radroots_protocol::event::v1::EventClass",

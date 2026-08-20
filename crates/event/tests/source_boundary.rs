@@ -43,6 +43,50 @@ const FORBIDDEN_EVENT_NAMES: &[ForbiddenEventName] = &[
         pattern: "RadrootsSignedNostrEventParts",
         reason: "signed-event parts must use protocol-neutral domain names",
     },
+    ForbiddenEventName {
+        pattern: "KIND_TRADE_VALIDATION_RECEIPT",
+        reason: "the prototype receipt kind is retired in favor of typed RHI attestations",
+    },
+    ForbiddenEventName {
+        pattern: "TRADE_VALIDATION_EVENT_KINDS",
+        reason: "the prototype receipt family is retired",
+    },
+    ForbiddenEventName {
+        pattern: concat!("is_trade_validation_", "receipt_kind"),
+        reason: "the prototype receipt classifier is retired",
+    },
+    ForbiddenEventName {
+        pattern: "is_trade_validation_event_kind",
+        reason: "the prototype validation-event classifier is retired",
+    },
+    ForbiddenEventName {
+        pattern: "is_trade_validation_service_event_kind",
+        reason: "the unused prototype service-event classifier is retired",
+    },
+    ForbiddenEventName {
+        pattern: "is_trade_validation_service_request_kind",
+        reason: "the unused prototype service-request classifier is retired",
+    },
+    ForbiddenEventName {
+        pattern: "is_trade_validation_service_result_kind",
+        reason: "the unused prototype service-result classifier is retired",
+    },
+    ForbiddenEventName {
+        pattern: "trade_validation_service_result_kind_for_request",
+        reason: "the unused prototype service-kind mapper is retired",
+    },
+    ForbiddenEventName {
+        pattern: "trade_validation_service_request_kind_for_result",
+        reason: "the unused prototype service-kind mapper is retired",
+    },
+    ForbiddenEventName {
+        pattern: "RadrootsTradeValidationReceipt",
+        reason: "the prototype receipt DTO is retired in favor of the final evidence report",
+    },
+    ForbiddenEventName {
+        pattern: "radroots.trade.validation_receipt.v1",
+        reason: "the prototype receipt contract is retired",
+    },
 ];
 
 const RETIRED_EVENT_MODULE_PATHS: &[&str] = &[

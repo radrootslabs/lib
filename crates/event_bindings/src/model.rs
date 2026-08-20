@@ -133,10 +133,6 @@ const EVENT_KIND_EXPORTS: &[(&str, u32)] = &[
         kinds::KIND_TRADE_SELLER_RESERVATION_ASSERTION,
     ),
     (
-        "KIND_TRADE_VALIDATION_RECEIPT",
-        kinds::KIND_TRADE_VALIDATION_RECEIPT,
-    ),
-    (
         "KIND_RHI_EVIDENCE_ATTESTATION",
         kinds::KIND_RHI_EVIDENCE_ATTESTATION,
     ),

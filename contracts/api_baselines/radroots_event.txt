@@ -574,7 +574,7 @@ pub mod radroots_event::envelope
 pub mod radroots_event::envelope::event_head
 pub mod radroots_event::envelope::kind
 pub const radroots_event::envelope::kind::CLASSIFIED_LISTING_EVENT_KINDS: [u32; 1]
-pub const radroots_event::envelope::kind::COMMERCIAL_EVENT_KINDS: [u32; 7]
+pub const radroots_event::envelope::kind::COMMERCIAL_EVENT_KINDS: [u32; 6]
 pub const radroots_event::envelope::kind::EVENTS_CANDIDATE_KINDS: [u32; 4]
 pub const radroots_event::envelope::kind::HOME_FEED_CANDIDATE_KINDS: [u32; 9]
 pub const radroots_event::envelope::kind::KIND_ACCOUNT_CLAIM: u32
@@ -682,7 +682,6 @@ pub const radroots_event::envelope::kind::KIND_TRADE_PROPOSAL: u32
 pub const radroots_event::envelope::kind::KIND_TRADE_REVISION_DECISION: u32
 pub const radroots_event::envelope::kind::KIND_TRADE_REVISION_PROPOSAL: u32
 pub const radroots_event::envelope::kind::KIND_TRADE_SELLER_RESERVATION_ASSERTION: u32
-pub const radroots_event::envelope::kind::KIND_TRADE_VALIDATION_RECEIPT: u32
 pub const radroots_event::envelope::kind::KIND_VALIDATOR_SET: u32
 pub const radroots_event::envelope::kind::KIND_WIKI_ARTICLE: u32
 pub const radroots_event::envelope::kind::KIND_WIKI_MERGE_REQUEST: u32
@@ -703,7 +702,6 @@ pub const radroots_event::envelope::kind::PRODUCTION_SOCIAL_KINDS: [u32; 4]
 pub const radroots_event::envelope::kind::PROFILE_PUBLIC_CONTENT_KINDS: [u32; 8]
 pub const radroots_event::envelope::kind::PUBLIC_SOCIAL_KINDS: [u32; 12]
 pub const radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS: [u32; 5]
-pub const radroots_event::envelope::kind::TRADE_VALIDATION_EVENT_KINDS: [u32; 1]
 pub const radroots_event::envelope::kind::UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 11]
 pub const radroots_event::envelope::kind::WIKI_EVENT_KINDS: [u32; 3]
 pub const fn radroots_event::envelope::kind::is_ambiguous_public_social_kind(u32) -> bool
@@ -732,17 +730,10 @@ pub const fn radroots_event::envelope::kind::is_public_social_kind(u32) -> bool
 pub const fn radroots_event::envelope::kind::is_request_kind(u32) -> bool
 pub const fn radroots_event::envelope::kind::is_result_kind(u32) -> bool
 pub const fn radroots_event::envelope::kind::is_trade_mutation_event_kind(u32) -> bool
-pub const fn radroots_event::envelope::kind::is_trade_validation_event_kind(u32) -> bool
-pub const fn radroots_event::envelope::kind::is_trade_validation_receipt_kind(u32) -> bool
-pub const fn radroots_event::envelope::kind::is_trade_validation_service_event_kind(u32) -> bool
-pub const fn radroots_event::envelope::kind::is_trade_validation_service_request_kind(u32) -> bool
-pub const fn radroots_event::envelope::kind::is_trade_validation_service_result_kind(u32) -> bool
 pub const fn radroots_event::envelope::kind::is_unambiguous_public_social_kind(u32) -> bool
 pub const fn radroots_event::envelope::kind::is_wiki_event_kind(u32) -> bool
 pub const fn radroots_event::envelope::kind::request_kind_for_result_kind(u32) -> core::option::Option<u32>
 pub const fn radroots_event::envelope::kind::result_kind_for_request_kind(u32) -> core::option::Option<u32>
-pub const fn radroots_event::envelope::kind::trade_validation_service_request_kind_for_result(u32) -> core::option::Option<u32>
-pub const fn radroots_event::envelope::kind::trade_validation_service_result_kind_for_request(u32) -> core::option::Option<u32>
 pub enum radroots_event::envelope::EventEnvelopeError
 pub radroots_event::envelope::EventEnvelopeError::ContentTooLarge
 pub radroots_event::envelope::EventEnvelopeError::ContentTooLarge::actual: usize

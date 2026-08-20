@@ -2582,18 +2582,12 @@ const TRADE_CANCELLATION_WITNESSES: [EventBoundarySourceWitness; 3] = [
     },
 ];
 
-const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 1] =
-    [EventBoundarySourceWitness {
-        relative_path: "crates/event/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;"],
-    }];
-
 const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 1] = [EventBoundarySourceWitness {
     relative_path: "crates/event/src/relay_document.rs",
     required_fragments: &["pub struct RelayDocument"],
 }];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 43] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -3029,17 +3023,6 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
         radroots_type: "TradeMutationEnvelopeV1",
         rpc_methods: &["trade.cancel_trade", "trade.get_trade", "trade.list_trades"],
         witnesses: &TRADE_CANCELLATION_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:validation_receipt",
-        kind: "3440",
-        radroots_type: "RadrootsTradeValidationReceipt",
-        rpc_methods: &[
-            "domains.trade.validation_receipt.get",
-            "domains.trade.validation_receipt.list",
-            "domains.trade.validation_receipt.verify",
-        ],
-        witnesses: &TRADE_VALIDATION_RECEIPT_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "relay_doc",

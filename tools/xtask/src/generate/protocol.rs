@@ -40,6 +40,7 @@ struct Config {
     source_hash_algorithm: String,
     inventory_path: String,
     inventory_sha256_path: String,
+    packaged_inventory_path: String,
     source: Vec<SourceConfig>,
     #[serde(default)]
     macro_generated_type: Vec<MacroGeneratedTypeConfig>,
@@ -136,6 +137,8 @@ fn validate_config(config: &Config) -> Result<(), String> {
     }
     if config.inventory_path != "contracts/codegen/protocol_v1.inventory.json"
         || config.inventory_sha256_path != "contracts/codegen/protocol_v1.inventory.sha256"
+        || config.packaged_inventory_path
+            != "crates/protocol/tests/fixtures/protocol_v1.inventory.json"
     {
         return Err("protocol codegen output paths are fixed by contract".to_owned());
     }
@@ -262,6 +265,7 @@ fn render_outputs(
         .map_err(|error| format!("failed to serialize protocol DTO inventory: {error}"))?;
     inventory_bytes.push(b'\n');
     let digest_bytes = format!("{}\n", sha256_hex(&inventory_bytes)).into_bytes();
+    let packaged_inventory_bytes = inventory_bytes.clone();
 
     Ok(vec![
         GeneratedFile {
@@ -283,6 +287,16 @@ fn render_outputs(
             )?,
             display_path: config.inventory_sha256_path.clone(),
             bytes: digest_bytes,
+        },
+        GeneratedFile {
+            path: safe_workspace_file(
+                workspace_root,
+                &config.packaged_inventory_path,
+                true,
+                "packaged protocol DTO inventory output",
+            )?,
+            display_path: config.packaged_inventory_path.clone(),
+            bytes: packaged_inventory_bytes,
         },
     ])
 }
@@ -569,6 +583,7 @@ struct PrivateWire;
         let root = workspace.path();
         fs::create_dir_all(root.join("src")).expect("source directory");
         fs::create_dir_all(root.join("out")).expect("output directory");
+        fs::create_dir_all(root.join("packaged")).expect("packaged output directory");
         fs::write(
             root.join("src/types.rs"),
             "#[derive(serde::Serialize)] pub struct Demo { pub value: String }\n",
@@ -580,6 +595,7 @@ struct PrivateWire;
             source_hash_algorithm: HASH_ALGORITHM.to_owned(),
             inventory_path: "out/inventory.json".to_owned(),
             inventory_sha256_path: "out/inventory.sha256".to_owned(),
+            packaged_inventory_path: "packaged/inventory.json".to_owned(),
             source: vec![SourceConfig {
                 module: "demo::v1".to_owned(),
                 path: "src/types.rs".to_owned(),
@@ -595,11 +611,17 @@ struct PrivateWire;
         let second = render_outputs(root, &config, schemas).expect("second render");
         assert_eq!(first[0].bytes, second[0].bytes);
         assert_eq!(first[1].bytes, second[1].bytes);
+        assert_eq!(first[2].bytes, second[2].bytes);
+        assert_eq!(first[0].bytes, first[2].bytes);
         write_outputs(&first).expect("write");
         check_outputs(&second).expect("fresh");
         fs::write(root.join("out/inventory.json"), "stale\n").expect("drift");
         let error = check_outputs(&second).expect_err("reject drift");
         assert!(error.contains("stale `out/inventory.json`"));
+        write_outputs(&second).expect("restore outputs");
+        fs::write(root.join("packaged/inventory.json"), "stale\n").expect("packaged drift");
+        let error = check_outputs(&second).expect_err("reject packaged drift");
+        assert!(error.contains("stale `packaged/inventory.json`"));
     }
 
     #[test]

@@ -80,12 +80,6 @@ pub const CATALOG: &[EventDescriptor] = &[
         purpose: "authorized predecision cancellation",
     },
     EventDescriptor {
-        name: "trade_validation_receipt",
-        kind: 3440,
-        event_class: EventClass::Regular,
-        purpose: "RHI validation result bound to root/target/listing/validator set",
-    },
-    EventDescriptor {
         name: "dm_relay_list",
         kind: 10050,
         event_class: EventClass::Replaceable,
@@ -119,7 +113,7 @@ pub const CATALOG: &[EventDescriptor] = &[
 
 /// Event kinds rejected as retired V1 identities.
 pub const RETIRED_KINDS: &[u32] = &[
-    3424, 3425, 3426, 3427, 3428, 3429, 3430, 3433, 3434, 5321, 5322, 6321, 6322, 30403,
+    3424, 3425, 3426, 3427, 3428, 3429, 3430, 3433, 3434, 3440, 5321, 5322, 6321, 6322, 30403,
 ];
 
 // Private byte guards preserve fail-closed predecessor behavior without
@@ -165,6 +159,10 @@ const RETIRED_NAME_BYTES: &[&[u8]] = &[
         116, 114, 97, 100, 101, 95, 113, 117, 101, 115, 116, 105, 111, 110,
     ],
     &[116, 114, 97, 100, 101, 95, 114, 101, 99, 101, 105, 112, 116],
+    &[
+        116, 114, 97, 100, 101, 95, 118, 97, 108, 105, 100, 97, 116, 105, 111, 110, 95, 114, 101,
+        99, 101, 105, 112, 116,
+    ],
     &[
         116, 114, 97, 100, 101, 95, 116, 114, 97, 110, 115, 105, 116, 105, 111, 110, 95, 112, 114,
         111, 111, 102, 95, 114, 101, 113, 117, 101, 115, 116,
@@ -393,7 +391,7 @@ mod tests {
 
     #[test]
     fn event_catalog_retains_exact_v1_identifiers() {
-        assert_eq!(CATALOG.len(), 13);
+        assert_eq!(CATALOG.len(), 12);
         let listing = CATALOG
             .iter()
             .find(|event| event.kind == 30402)
@@ -465,6 +463,16 @@ mod tests {
                 kind: RETIRED_KINDS[0],
             })
         );
+        let retired_prototype = EventDescriptor {
+            name: "synthetic_prototype_name",
+            kind: 3440,
+            event_class: EventClass::Regular,
+            purpose: "retired",
+        };
+        assert_eq!(
+            validate_catalog(&[retired_prototype]),
+            Err(Error::RetiredEventKind { kind: 3440 })
+        );
 
         const RETIRED_NAME: &str = concat!("listing", "_draft");
         let retired_name = EventDescriptor {
@@ -477,6 +485,19 @@ mod tests {
             validate_catalog(&[retired_name]),
             Err(Error::RetiredEventName {
                 name: RETIRED_NAME.into()
+            })
+        );
+        const RETIRED_PROTOTYPE_NAME: &str = concat!("trade_", "validation_receipt");
+        let retired_prototype_name = EventDescriptor {
+            name: RETIRED_PROTOTYPE_NAME,
+            kind: u32::MAX,
+            event_class: EventClass::Regular,
+            purpose: "retired",
+        };
+        assert_eq!(
+            validate_catalog(&[retired_prototype_name]),
+            Err(Error::RetiredEventName {
+                name: RETIRED_PROTOTYPE_NAME.into(),
             })
         );
         let duplicate_kind = EventDescriptor {

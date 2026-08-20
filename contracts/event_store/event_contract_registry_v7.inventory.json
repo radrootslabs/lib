@@ -1026,17 +1026,6 @@
     },
     {
       "ordinal": 92,
-      "kind": 3440,
-      "canonical_constant": "KIND_TRADE_VALIDATION_RECEIPT",
-      "name": "Trade Validation Receipt",
-      "class": "regular",
-      "standard": "radroots",
-      "accepted_event_contracts": [
-        "radroots.trade.validation_receipt.v1"
-      ]
-    },
-    {
-      "ordinal": 93,
       "kind": 3441,
       "canonical_constant": "KIND_RHI_EVIDENCE_ATTESTATION",
       "name": "RHI Evidence Attestation",
@@ -5971,48 +5960,6 @@
           "semantic": "previous_event",
           "value_type": "event_id",
           "relay_indexed": true
-        }
-      ],
-      "reducers": [
-        "trade_validation"
-      ]
-    },
-    {
-      "ordinal": 103,
-      "contract_id": "radroots.trade.validation_receipt.v1",
-      "kind": 3440,
-      "name": "Trade Validation Receipt",
-      "payload_type": "RadrootsTradeValidationReceipt",
-      "class": "regular",
-      "stability": "stable",
-      "privacy": "public",
-      "author_role": "service",
-      "content_schema": "json_object",
-      "authoring_policy": "generic_draft",
-      "discriminator": {
-        "type": "kind_only"
-      },
-      "tags": [
-        {
-          "name": "e",
-          "cardinality": "required_one",
-          "semantic": "root_event",
-          "value_type": "event_id",
-          "relay_indexed": true
-        },
-        {
-          "name": "a",
-          "cardinality": "optional_one",
-          "semantic": "addressable_coordinate",
-          "value_type": "addressable_coordinate",
-          "relay_indexed": true
-        },
-        {
-          "name": "output",
-          "cardinality": "required_one",
-          "semantic": "service_output",
-          "value_type": "text",
-          "relay_indexed": false
         }
       ],
       "reducers": [

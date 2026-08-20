@@ -3,6 +3,7 @@ package = "radroots_protocol"
 source_hash_algorithm = "sha256_bytes_v1"
 inventory_path = "contracts/codegen/protocol_v1.inventory.json"
 inventory_sha256_path = "contracts/codegen/protocol_v1.inventory.sha256"
+packaged_inventory_path = "crates/protocol/tests/fixtures/protocol_v1.inventory.json"
 
 [[source]]
 module = "capability::v1"
