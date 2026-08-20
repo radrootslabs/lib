@@ -786,14 +786,16 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
     #[test]
     fn hardened_service_contract_rejects_schema_drift_unknown_fields_and_inventory_drift() {
+        let mut target_drift: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        target_drift["service_targets"]["myc"]["tier_1_targets"][1] =
+            Value::String("aarch64-apple-darwin".to_owned());
+
         for raw in [
             HARDENED_SERVICE_CONTRACT.replace("schema_version = 1", "schema_version = 2"),
             format!("{HARDENED_SERVICE_CONTRACT}\nunknown = true\n"),
             HARDENED_SERVICE_CONTRACT.replace("service_id = \"rhi\"", "service_id = \"other\""),
-            HARDENED_SERVICE_CONTRACT.replace(
-                "  \"aarch64-unknown-linux-gnu\",\n]",
-                "  \"aarch64-apple-darwin\",\n]",
-            ),
+            toml::to_string(&target_drift).expect("target-drift contract"),
         ] {
             assert!(RadrootsRuntimeDistributionResolver::parse_str(&raw).is_err());
         }
