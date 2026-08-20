@@ -19,12 +19,7 @@
     inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.treefmt-nix.flakeModule ];
-      systems = [
-        "aarch64-darwin"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "x86_64-linux"
-      ];
+      systems = import ./build/nix/service/systems.nix;
 
       perSystem =
         {
@@ -38,10 +33,23 @@
             inherit system;
             overlays = [ inputs.rust-overlay.overlays.default ];
           };
-          toolchains = import ./build/nix/toolchains.nix { inherit pkgs; };
+          service = import ./build/nix/service {
+            inherit lib pkgs;
+          };
+          toolchains = {
+            stable = service.mkToolchain {
+              rustToolchainFile = ./rust-toolchain.toml;
+            };
+            coverage = service.mkToolchain {
+              rustToolchainFile = ./rust-toolchain-coverage.toml;
+            };
+          };
           common = import ./build/nix/common.nix {
             crane = inputs.crane;
             inherit lib pkgs toolchains;
+          };
+          serviceFixture = import ./build/nix/service/fixture.nix {
+            inherit lib pkgs service;
           };
         in
         {
@@ -58,8 +66,11 @@
           };
 
           checks = lib.filterAttrs (_: value: value != null) (
-            import ./build/nix/checks.nix {
+            (import ./build/nix/checks.nix {
               inherit common pkgs;
+            })
+            // {
+              service-helper-fixture = serviceFixture.check;
             }
           );
 
