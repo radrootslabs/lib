@@ -14,6 +14,9 @@ tasks for the `radroots` core libraries.
    strict enforcement mode;
  * deterministic `dto-roots --write|--check` generation for every
    source-manifest package in the workspace DTO authority;
+ * strict `service-source-lock --mode write|check` generation and verification
+   for standalone hardened services, including Cargo, Nix, source-archive,
+   toolchain, cleanliness, and public-revision agreement;
  * command-dispatch code used for contract, coverage, hygiene, and release
    paths inside the workspace;
  * a non-published binary crate used as tooling rather than as a library

@@ -39,6 +39,7 @@ mod safety_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod sdk_generation;
 mod service_source_lock;
+mod service_source_lock_command;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -116,6 +117,14 @@ enum XtaskCommand {
         #[arg(long)]
         consumer_root: PathBuf,
     },
+    ServiceSourceLock {
+        #[arg(long, value_enum)]
+        mode: ServiceSourceLockMode,
+        #[arg(long)]
+        service_root: PathBuf,
+        #[arg(long)]
+        source_archive: PathBuf,
+    },
     Source {
         #[command(subcommand)]
         command: SourceCommand,
@@ -167,6 +176,12 @@ enum ArtifactMode {
 enum SourceMode {
     Prefetch,
     Offline,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ServiceSourceLockMode {
+    Check,
+    Write,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -302,6 +317,9 @@ fn usage() {
         "  cargo xtask hygiene prototype-contracts [--config <repo-relative-path>] [--strict|--report-only]"
     );
     eprintln!("  cargo xtask source-lock --consumer-root <absolute-directory>");
+    eprintln!(
+        "  cargo xtask service-source-lock --mode <check|write> --service-root <absolute-directory> --source-archive <absolute-bundle>"
+    );
     eprintln!(
         "  cargo xtask source materialize --consumer-root <absolute-directory> --cache-root <absolute-directory> --mode <prefetch|offline>"
     );
@@ -470,6 +488,18 @@ fn run(args: &[String]) -> Result<(), String> {
         XtaskCommand::SourceLock { consumer_root } => {
             build_control::validate_consumer(&consumer_root).map(|_| ())
         }
+        XtaskCommand::ServiceSourceLock {
+            mode,
+            service_root,
+            source_archive,
+        } => service_source_lock_command::run(
+            match mode {
+                ServiceSourceLockMode::Check => service_source_lock_command::CommandMode::Check,
+                ServiceSourceLockMode::Write => service_source_lock_command::CommandMode::Write,
+            },
+            &service_root,
+            &source_archive,
+        ),
         XtaskCommand::Source { command } => match command {
             SourceCommand::Materialize {
                 consumer_root,
@@ -619,6 +649,31 @@ mod tests {
         ];
         assert!(Cli::try_parse_from(source_args).is_err());
         assert!(Cli::try_parse_from(source_args.into_iter().chain(["--mode", "prefetch"])).is_ok());
+
+        assert!(
+            Cli::try_parse_from([
+                "xtask",
+                "service-source-lock",
+                "--mode",
+                "check",
+                "--service-root",
+                "/tmp/service",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "xtask",
+                "service-source-lock",
+                "--mode",
+                "write",
+                "--service-root",
+                "/tmp/service",
+                "--source-archive",
+                "/tmp/lib.bundle",
+            ])
+            .is_ok()
+        );
 
         assert!(
             Cli::try_parse_from([

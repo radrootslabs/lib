@@ -60,12 +60,41 @@
     "toml": "schema = \"radroots.service.source-lock.v1\"\ncontract_version = 1\nservice = \"fixture_service\"\nrepository = \"https://github.com/radrootslabs/lib\"\nrevision = \"1111111111111111111111111111111111111111\"\narchitecture = \"radroots.crates.release.v2\"\nworkspace_catalog_sha256 = \"2222222222222222222222222222222222222222222222222222222222222222\"\nversion = \"0.1.0-alpha\"\nsource_archive_sha256 = \"3333333333333333333333333333333333333333333333333333333333333333\"\ncargo_lock_sha256 = \"4444444444444444444444444444444444444444444444444444444444444444\"\nflake_lock_sha256 = \"5555555555555555555555555555555555555555555555555555555555555555\"\nrust_version = \"1.97.1\"\nhost_feature_profile = \"service-host\"\n\n[contract_versions]\nconfig = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5\n",
     "sha256": "2257efc8fb3ff4ee8e429e326effdfe622c5e898b429ee1a8ea3aac38f9810cc"
   },
+  "operations": {
+    "command": "cargo xtask service-source-lock",
+    "modes": [
+      "check",
+      "write"
+    ],
+    "required_arguments": [
+      "mode",
+      "service_root",
+      "source_archive"
+    ],
+    "service_metadata_path": "Cargo.toml.workspace.metadata.radroots.service_source_lock",
+    "service_metadata_fields": [
+      "service",
+      "host_feature_profile",
+      "config_contract_version",
+      "state_contract_version",
+      "admin_contract_version",
+      "status_contract_version",
+      "provider_contract_version"
+    ],
+    "lib_dependency_inventory": "verified_source_archive_workspace_catalog",
+    "source_cleanliness": "all_changes_forbidden_except_exact_generated_lock_path",
+    "service_revision_stability": "same_head_before_and_after_evidence_and_output",
+    "revision_agreement": [
+      "cargo_manifests",
+      "cargo_lock",
+      "direct_exact_nix_input",
+      "source_archive",
+      "canonical_public_remote"
+    ],
+    "maximum_source_archive_bytes": 1073741824
+  },
   "deferred_operations": [
-    "filesystem_digest_verification",
-    "git_cleanliness",
-    "manifest_and_cargo_metadata_agreement",
-    "remote_revision_reachability",
-    "source_archive_verification",
-    "update_and_verify_commands"
+    "embedded_build_information_agreement",
+    "service_fixture_release_graph"
   ]
 }

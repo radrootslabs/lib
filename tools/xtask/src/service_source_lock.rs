@@ -6,8 +6,8 @@ use sha2::{Digest, Sha256};
 const CONTRACT_RELATIVE: &str =
     "contracts/architecture/decisions/services_hardening_source_lock.v1.json";
 const LOCK_SCHEMA: &str = "radroots.service.source-lock.v1";
-const LOCK_FILENAME: &str = "radroots.service.source-lock.v1.toml";
-const LIB_REPOSITORY: &str = "https://github.com/radrootslabs/lib";
+pub(crate) const LOCK_FILENAME: &str = "radroots.service.source-lock.v1.toml";
+pub(crate) const LIB_REPOSITORY: &str = "https://github.com/radrootslabs/lib";
 const ARCHITECTURE: &str = "radroots.crates.release.v2";
 const LIB_VERSION: &str = "0.1.0-alpha";
 const RUST_VERSION: &str = "1.97.1";
@@ -102,7 +102,7 @@ impl std::error::Error for ServiceSourceLockError {}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct ContractVersions {
+pub(crate) struct ContractVersions {
     config: u32,
     state: u32,
     admin: u32,
@@ -111,7 +111,13 @@ struct ContractVersions {
 }
 
 impl ContractVersions {
-    const fn new(config: u32, state: u32, admin: u32, status: u32, provider: u32) -> Self {
+    pub(crate) const fn new(
+        config: u32,
+        state: u32,
+        admin: u32,
+        status: u32,
+        provider: u32,
+    ) -> Self {
         Self {
             config,
             state,
@@ -149,18 +155,18 @@ struct RawServiceSourceLock {
     contract_versions: ContractVersions,
 }
 
-struct ServiceSourceLockParts<'a> {
-    service: &'a str,
-    revision: &'a str,
-    workspace_catalog_sha256: &'a str,
-    source_archive_sha256: &'a str,
-    cargo_lock_sha256: &'a str,
-    flake_lock_sha256: &'a str,
-    contract_versions: ContractVersions,
+pub(crate) struct ServiceSourceLockParts<'a> {
+    pub(crate) service: &'a str,
+    pub(crate) revision: &'a str,
+    pub(crate) workspace_catalog_sha256: &'a str,
+    pub(crate) source_archive_sha256: &'a str,
+    pub(crate) cargo_lock_sha256: &'a str,
+    pub(crate) flake_lock_sha256: &'a str,
+    pub(crate) contract_versions: ContractVersions,
 }
 
 #[derive(Clone, Eq, PartialEq)]
-struct ServiceSourceLockV1 {
+pub(crate) struct ServiceSourceLockV1 {
     raw: RawServiceSourceLock,
     canonical: Box<[u8]>,
 }
@@ -174,7 +180,7 @@ impl fmt::Debug for ServiceSourceLockV1 {
 }
 
 impl ServiceSourceLockV1 {
-    fn new(parts: ServiceSourceLockParts<'_>) -> Result<Self, ServiceSourceLockError> {
+    pub(crate) fn new(parts: ServiceSourceLockParts<'_>) -> Result<Self, ServiceSourceLockError> {
         validate_parts(&parts)?;
         let raw = RawServiceSourceLock {
             schema: LOCK_SCHEMA.to_owned(),
@@ -195,7 +201,7 @@ impl ServiceSourceLockV1 {
         Ok(Self::from_validated_raw(raw))
     }
 
-    fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, ServiceSourceLockError> {
+    pub(crate) fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, ServiceSourceLockError> {
         if bytes.len() > MAX_LOCK_BYTES {
             return Err(ServiceSourceLockError::TooLarge);
         }
@@ -216,7 +222,7 @@ impl ServiceSourceLockV1 {
         Self { raw, canonical }
     }
 
-    fn canonical_bytes(&self) -> &[u8] {
+    pub(crate) fn canonical_bytes(&self) -> &[u8] {
         debug_assert_eq!(self.raw.schema, LOCK_SCHEMA);
         &self.canonical
     }
@@ -242,7 +248,23 @@ struct SourceLockDecision {
     contract_version_rule: String,
     negative_error_codes: Vec<String>,
     canonical_vector: CanonicalVector,
+    operations: OperationsDecision,
     deferred_operations: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperationsDecision {
+    command: String,
+    modes: Vec<String>,
+    required_arguments: Vec<String>,
+    service_metadata_path: String,
+    service_metadata_fields: Vec<String>,
+    lib_dependency_inventory: String,
+    source_cleanliness: String,
+    service_revision_stability: String,
+    revision_agreement: Vec<String>,
+    maximum_source_archive_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -345,14 +367,40 @@ fn validate_decision(decision: &SourceLockDecision) -> Result<(), ServiceSourceL
         && decision.contract_version_rule == "u32_nonzero"
         && error_codes == ERROR_CODES
         && decision.negative_error_codes == error_codes
+        && decision.operations.command == "cargo xtask service-source-lock"
+        && decision.operations.modes == ["check", "write"]
+        && decision.operations.required_arguments == ["mode", "service_root", "source_archive"]
+        && decision.operations.service_metadata_path
+            == "Cargo.toml.workspace.metadata.radroots.service_source_lock"
+        && decision.operations.service_metadata_fields
+            == [
+                "service",
+                "host_feature_profile",
+                "config_contract_version",
+                "state_contract_version",
+                "admin_contract_version",
+                "status_contract_version",
+                "provider_contract_version",
+            ]
+        && decision.operations.lib_dependency_inventory
+            == "verified_source_archive_workspace_catalog"
+        && decision.operations.source_cleanliness
+            == "all_changes_forbidden_except_exact_generated_lock_path"
+        && decision.operations.service_revision_stability
+            == "same_head_before_and_after_evidence_and_output"
+        && decision.operations.revision_agreement
+            == [
+                "cargo_manifests",
+                "cargo_lock",
+                "direct_exact_nix_input",
+                "source_archive",
+                "canonical_public_remote",
+            ]
+        && decision.operations.maximum_source_archive_bytes == 1_073_741_824
         && decision.deferred_operations
             == [
-                "filesystem_digest_verification",
-                "git_cleanliness",
-                "manifest_and_cargo_metadata_agreement",
-                "remote_revision_reachability",
-                "source_archive_verification",
-                "update_and_verify_commands",
+                "embedded_build_information_agreement",
+                "service_fixture_release_graph",
             ];
     if exact {
         Ok(())

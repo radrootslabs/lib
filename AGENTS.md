@@ -45,6 +45,13 @@ This file exists for compatibility with tools that look for AGENTS.md.
   private to repo tooling, reject noncanonical or extra fields, and never put
   credentials, local paths, floating refs, or private repository identity in
   it.
+- Generate or verify that lock with `cargo xtask service-source-lock --mode
+  write|check --service-root <absolute-directory> --source-archive
+  <absolute-bundle>`. The service root supplies the exact
+  `workspace.metadata.radroots.service_source_lock` Cargo metadata, and every
+  Lib dependency, the Cargo lock, the direct revision-pinned Nix input, the
+  source archive, and the canonical public remote must agree. The command
+  rejects every source-tree change except the exact generated lock path.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
