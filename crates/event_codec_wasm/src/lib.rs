@@ -91,6 +91,18 @@ use radroots_event_codec::encode::report::report_build_tags;
 use radroots_event_codec::encode::repost::{generic_repost_build_tags, repost_build_tags};
 use radroots_event_codec::encode::seal::seal_build_tags;
 use radroots_event_codec::verify::{RadrootsDecodeError, RadrootsDecodedEvent};
+use radroots_event_codec::{
+    authoring::AuthoredEventPlan,
+    decode::rhi::{
+        RadrootsRhiEvidenceAttestationOutcomeV1, RadrootsRhiEvidenceAttestationV1,
+        rhi_evidence_attestation_from_verified_event,
+    },
+    verify::{Nip01SignatureVerifier, id as verify_event_id, signature as verify_event_signature},
+};
+use radroots_trade::evidence::{
+    RadrootsRhiEvidenceReportV1, RadrootsTradeEvidenceCoverageV1, RadrootsTradeEvidenceManifestV1,
+    RadrootsTradeEvidenceOutcomeV1,
+};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
@@ -164,6 +176,134 @@ fn tags_to_json(tags: Vec<Vec<String>>) -> Result<String, RadrootsJsValue> {
     serde_json::to_string(&tags).map_err(err_js)
 }
 
+#[derive(Serialize)]
+struct EvidenceManifestJson {
+    contract_id: &'static str,
+    contract_version: u16,
+    trade_id: String,
+    trade_generation: String,
+    observed_at_unix_s: String,
+    coverage: &'static str,
+    evidence_policy_digest: String,
+    manifest_digest: String,
+    canonical_bytes_hex: String,
+}
+
+#[derive(Serialize)]
+struct EvidenceSupersessionJson {
+    report_id: String,
+    event_id: String,
+}
+
+#[derive(Serialize)]
+struct EvidenceReportJson {
+    contract_id: &'static str,
+    contract_version: u16,
+    issuer_pubkey: String,
+    trade_id: String,
+    claim_mutation_id: String,
+    outcome: &'static str,
+    reason_codes: Vec<String>,
+    projection_digest: String,
+    evidence_manifest_digest: String,
+    evidence_policy_digest: String,
+    observed_at_unix_s: String,
+    trade_generation: String,
+    statement_digest: String,
+    supersession: Option<EvidenceSupersessionJson>,
+    canonical_content: String,
+}
+
+#[derive(Serialize)]
+struct TypedEvidenceEventPlanJson {
+    contract_id: String,
+    kind: u32,
+    author_pubkey: String,
+    created_at_unix_s: String,
+    expected_event_id: String,
+    tags: Vec<Vec<String>>,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct EvidenceAttestationJson {
+    issuer_pubkey: String,
+    trade_id: String,
+    claim_mutation_id: String,
+    outcome: &'static str,
+    observed_at_unix_s: String,
+    trade_generation: String,
+    statement_digest: String,
+    supersession: Option<EvidenceSupersessionJson>,
+    canonical_content: String,
+}
+
+fn coverage_name(value: RadrootsTradeEvidenceCoverageV1) -> &'static str {
+    match value {
+        RadrootsTradeEvidenceCoverageV1::Missing => "missing",
+        RadrootsTradeEvidenceCoverageV1::Partial => "partial",
+        RadrootsTradeEvidenceCoverageV1::ScopeSatisfied => "scope_satisfied",
+        RadrootsTradeEvidenceCoverageV1::Unsupported => "unsupported",
+    }
+}
+
+fn outcome_name(value: RadrootsTradeEvidenceOutcomeV1) -> &'static str {
+    match value {
+        RadrootsTradeEvidenceOutcomeV1::Valid => "valid",
+        RadrootsTradeEvidenceOutcomeV1::Invalid => "invalid",
+        RadrootsTradeEvidenceOutcomeV1::Indeterminate => "indeterminate",
+    }
+}
+
+fn attestation_outcome_name(value: RadrootsRhiEvidenceAttestationOutcomeV1) -> &'static str {
+    match value {
+        RadrootsRhiEvidenceAttestationOutcomeV1::Valid => "valid",
+        RadrootsRhiEvidenceAttestationOutcomeV1::Invalid => "invalid",
+        RadrootsRhiEvidenceAttestationOutcomeV1::Indeterminate => "indeterminate",
+    }
+}
+
+fn evidence_report_json(value: &RadrootsRhiEvidenceReportV1) -> EvidenceReportJson {
+    EvidenceReportJson {
+        contract_id: value.contract_id(),
+        contract_version: value.contract_version(),
+        issuer_pubkey: value.issuer_public_key().to_hex(),
+        trade_id: value.trade_id().to_string(),
+        claim_mutation_id: value.claim_mutation_id().to_string(),
+        outcome: outcome_name(value.outcome()),
+        reason_codes: value
+            .reason_codes()
+            .iter()
+            .map(|code| code.as_str().to_owned())
+            .collect(),
+        projection_digest: value.projection_digest().to_hex(),
+        evidence_manifest_digest: value.evidence_manifest_digest().to_hex(),
+        evidence_policy_digest: value.evidence_policy_digest().to_hex(),
+        observed_at_unix_s: value.observed_at_unix_s().to_string(),
+        trade_generation: value.trade_generation().get().to_string(),
+        statement_digest: value.statement_digest().to_hex(),
+        supersession: value
+            .supersession()
+            .map(|supersession| EvidenceSupersessionJson {
+                report_id: supersession.report_id().to_hex(),
+                event_id: supersession.event_id().to_hex(),
+            }),
+        canonical_content: value.canonical_content().to_owned(),
+    }
+}
+
+fn typed_plan_json(value: &AuthoredEventPlan) -> TypedEvidenceEventPlanJson {
+    TypedEvidenceEventPlanJson {
+        contract_id: value.body().contract().contract_id().as_str().to_owned(),
+        kind: value.body().kind(),
+        author_pubkey: value.author().to_hex(),
+        created_at_unix_s: value.created_at().to_string(),
+        expected_event_id: value.expected_event_id().to_hex(),
+        tags: value.body().tags().to_vec(),
+        content: value.body().content().to_owned(),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EventEnvelopeInput {
@@ -208,6 +348,13 @@ fn parse_event_json(input: &str) -> Result<EventEnvelope, RadrootsJsValue> {
         sig: envelope.sig,
     })
     .map_err(|error| error_json("invalid_event", Some(envelope_error_code(&error))))
+}
+
+fn parse_bounded_event_json(input: &str) -> Result<EventEnvelope, RadrootsJsValue> {
+    if input.len() > radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES {
+        return Err(error_json("invalid_event", Some("event_too_large")));
+    }
+    parse_event_json(input)
 }
 
 fn build_tags_json<T, E, F>(input: &str, build: F) -> Result<String, RadrootsJsValue>
@@ -608,6 +755,107 @@ pub fn verify_and_decode_event_json(event_json: &str) -> Result<String, Radroots
     let decoded = radroots_event_codec::verify::verify_and_decode_radroots_event(event)
         .map_err(decode_error_json)?;
     decoded_event_to_json(decoded)
+}
+
+/// Parses one bounded canonical evidence manifest supplied as lowercase hex.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = trade_evidence_manifest_parse_json)
+)]
+pub fn trade_evidence_manifest_parse_json(
+    canonical_bytes_hex: &str,
+) -> Result<String, RadrootsJsValue> {
+    if canonical_bytes_hex.len()
+        > radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_BYTES * 2
+        || !canonical_bytes_hex.len().is_multiple_of(2)
+        || !canonical_bytes_hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(error_json("invalid_evidence_manifest", None));
+    }
+    let canonical_bytes = hex::decode(canonical_bytes_hex)
+        .map_err(|_| error_json("invalid_evidence_manifest", None))?;
+    let manifest = RadrootsTradeEvidenceManifestV1::from_canonical_bytes(&canonical_bytes)
+        .map_err(|_| error_json("invalid_evidence_manifest", None))?;
+    serde_json::to_string(&EvidenceManifestJson {
+        contract_id: manifest.contract_id(),
+        contract_version: manifest.contract_version(),
+        trade_id: manifest.trade_id().to_string(),
+        trade_generation: manifest.trade_generation().get().to_string(),
+        observed_at_unix_s: manifest.observed_at_unix_s().to_string(),
+        coverage: coverage_name(manifest.coverage()),
+        evidence_policy_digest: manifest.evidence_policy_digest().to_hex(),
+        manifest_digest: manifest.digest().to_hex(),
+        canonical_bytes_hex: hex::encode(manifest.canonical_bytes()),
+    })
+    .map_err(|_| error_json("internal_error", Some("evidence_manifest_serialization")))
+}
+
+/// Parses one bounded canonical RHI evidence report.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = rhi_evidence_report_parse_json)
+)]
+pub fn rhi_evidence_report_parse_json(canonical_content: &str) -> Result<String, RadrootsJsValue> {
+    let report = RadrootsRhiEvidenceReportV1::from_canonical_content(canonical_content.as_bytes())
+        .map_err(|_| error_json("invalid_evidence_report", None))?;
+    serde_json::to_string(&evidence_report_json(&report))
+        .map_err(|_| error_json("internal_error", Some("evidence_report_serialization")))
+}
+
+/// Builds one unsigned typed RHI evidence-attestation plan.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = rhi_evidence_attestation_build_draft)
+)]
+pub fn rhi_evidence_attestation_build_draft(
+    canonical_content: &str,
+    created_at_unix_s: u64,
+) -> Result<String, RadrootsJsValue> {
+    let report = RadrootsRhiEvidenceReportV1::from_canonical_content(canonical_content.as_bytes())
+        .map_err(|_| error_json("invalid_evidence_report", None))?;
+    let attestation =
+        RadrootsRhiEvidenceAttestationV1::from_canonical_content(report.canonical_content())
+            .map_err(|_| error_json("invalid_evidence_attestation", None))?;
+    let plan = AuthoredEventPlan::from_rhi_evidence_attestation(&attestation, created_at_unix_s)
+        .map_err(|_| error_json("invalid_evidence_attestation_plan", None))?;
+    serde_json::to_string(&typed_plan_json(&plan))
+        .map_err(|_| error_json("internal_error", Some("evidence_plan_serialization")))
+}
+
+/// Verifies NIP-01 identity/signature before validating the RHI contract.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = rhi_evidence_attestation_validate_signed_json)
+)]
+pub fn rhi_evidence_attestation_validate_signed_json(
+    event_json: &str,
+) -> Result<String, RadrootsJsValue> {
+    let event = parse_bounded_event_json(event_json)?;
+    let verified = verify_event_id(radroots_event::admission::RawEvent::new(event))
+        .and_then(|event| verify_event_signature(event, &Nip01SignatureVerifier))
+        .map_err(|_| error_json("invalid_event_signature", None))?;
+    let attestation = rhi_evidence_attestation_from_verified_event(&verified)
+        .map_err(|error| error_json("invalid_evidence_attestation", Some(error.code())))?;
+    let supersession = attestation
+        .supersession()
+        .map(|supersession| EvidenceSupersessionJson {
+            report_id: hex::encode(supersession.report_id()),
+            event_id: supersession.event_id().to_hex(),
+        });
+    serde_json::to_string(&EvidenceAttestationJson {
+        issuer_pubkey: attestation.issuer().to_hex(),
+        trade_id: attestation.trade_id().to_string(),
+        claim_mutation_id: attestation.claim_mutation_id().to_string(),
+        outcome: attestation_outcome_name(attestation.outcome()),
+        observed_at_unix_s: attestation.observed_at_unix_s().to_string(),
+        trade_generation: attestation.trade_generation().get().to_string(),
+        statement_digest: hex::encode(attestation.statement_digest()),
+        supersession,
+        canonical_content: attestation.canonical_content().to_owned(),
+    })
+    .map_err(|_| error_json("internal_error", Some("evidence_attestation_serialization")))
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = contract_manifest_json))]
@@ -2178,5 +2426,69 @@ mod tests {
 
         assert!(operational_listing_tags(&listing_json).is_err());
         assert!(operational_listing_tags_full(&listing_json).is_err());
+    }
+
+    #[test]
+    fn evidence_report_plan_and_signed_validation_use_final_contracts() {
+        assert!(trade_evidence_manifest_parse_json("AA").is_err());
+        assert!(
+            rhi_evidence_attestation_validate_signed_json(
+                &"x".repeat(radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES + 1)
+            )
+            .is_err()
+        );
+
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/event/authored_operations.v1.json"
+        ))
+        .expect("authored corpus");
+        let expected = fixture["vectors"]
+            .as_array()
+            .expect("operations")
+            .iter()
+            .find(|entry| entry["id"] == "typed_rhi_evidence_attestation_017")
+            .expect("RHI operation")
+            .get("expected")
+            .expect("expected");
+        let content = expected["content"].as_str().expect("content");
+
+        let report: serde_json::Value = serde_json::from_str(
+            &rhi_evidence_report_parse_json(content).expect("report projection"),
+        )
+        .expect("report JSON");
+        assert_eq!(report["outcome"], "indeterminate");
+        assert_eq!(report["trade_generation"], "7");
+
+        let plan: serde_json::Value = serde_json::from_str(
+            &rhi_evidence_attestation_build_draft(content, 1_784_347_200).expect("typed plan"),
+        )
+        .expect("plan JSON");
+        assert_eq!(plan["kind"], 3_441);
+        assert_eq!(plan["created_at_unix_s"], "1784347200");
+        assert_eq!(plan["expected_event_id"], expected["event_id"]);
+
+        let raw: serde_json::Value =
+            serde_json::from_str(expected["raw_json"].as_str().expect("signed event"))
+                .expect("raw event JSON");
+        let boundary_event = serde_json::json!({
+            "id": raw["id"],
+            "author": raw["pubkey"],
+            "created_at": raw["created_at"],
+            "kind": raw["kind"],
+            "tags": raw["tags"],
+            "content": raw["content"],
+            "sig": raw["sig"],
+        });
+        let attestation: serde_json::Value = serde_json::from_str(
+            &rhi_evidence_attestation_validate_signed_json(&boundary_event.to_string())
+                .expect("verified attestation"),
+        )
+        .expect("attestation JSON");
+        assert_eq!(attestation["outcome"], "indeterminate");
+        assert_eq!(attestation["trade_generation"], "7");
+
+        let secret = "private-report-content";
+        let error = rhi_evidence_report_parse_json(secret).expect_err("malformed report");
+        assert!(!format!("{error:?}").contains(secret));
     }
 }

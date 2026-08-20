@@ -19,11 +19,15 @@ name = "radroots-sdk-bindgen"
 path = "src/bin/bindgen.rs"
 
 [dependencies]
+hex = { workspace = true }
+radroots_event = { workspace = true, features = ["std"] }
+radroots_event_codec = { workspace = true, features = ["json", "std"] }
 radroots_sdk = { workspace = true, features = ["memory"] }
 thiserror = { workspace = true }
 uniffi = { workspace = true, features = ["cli"] }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]

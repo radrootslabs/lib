@@ -23,6 +23,7 @@ pub struct TradeTypeInventoryEntry {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TradeLargeIntegerPolicy {
     JsonNumberSafeCount,
+    DecimalStringU64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,6 +47,13 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     source_root("RadrootsTradeAttestationStateV1"),
     source_root("RadrootsTradeConflictStateV1"),
     source_root("RadrootsTradeEvidenceStateV1"),
+    source_root("RadrootsTradeEvidenceCoverageV1"),
+    source_root("RadrootsTradeEvidenceOutcomeV1"),
+    source_root("RadrootsTradeEvidenceManifestV1"),
+    source_root("RadrootsRhiEvidenceSupersessionV1"),
+    source_root("RadrootsRhiEvidenceReportV1"),
+    source_root("RadrootsRhiEvidenceAttestationV1"),
+    local_shape("RadrootsTypedEvidenceEventPlanV1"),
     source_root("RadrootsTradeFulfillmentStateV1"),
     source_root("RadrootsOperationalListingTradeProjection"),
     local_shape("RadrootsTradeListingBackofficeOverlay"),
@@ -75,6 +83,13 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
 ];
 
 pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
+    decimal_string_u64("RadrootsTradeEvidenceManifestV1", "trade_generation"),
+    decimal_string_u64("RadrootsTradeEvidenceManifestV1", "observed_at_unix_s"),
+    decimal_string_u64("RadrootsRhiEvidenceReportV1", "trade_generation"),
+    decimal_string_u64("RadrootsRhiEvidenceReportV1", "observed_at_unix_s"),
+    decimal_string_u64("RadrootsRhiEvidenceAttestationV1", "trade_generation"),
+    decimal_string_u64("RadrootsRhiEvidenceAttestationV1", "observed_at_unix_s"),
+    decimal_string_u64("RadrootsTypedEvidenceEventPlanV1", "created_at_unix_s"),
     json_number_safe_count("RadrootsTradeFacetCount", "count"),
     json_number_safe_count(
         "RadrootsTradeListingBackofficeView",
@@ -124,6 +139,18 @@ const fn json_number_safe_count(
         type_name,
         field_name,
         policy: TradeLargeIntegerPolicy::JsonNumberSafeCount,
+    }
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+const fn decimal_string_u64(
+    type_name: &'static str,
+    field_name: &'static str,
+) -> TradeLargeIntegerPolicyEntry {
+    TradeLargeIntegerPolicyEntry {
+        type_name,
+        field_name,
+        policy: TradeLargeIntegerPolicy::DecimalStringU64,
     }
 }
 
@@ -213,6 +240,13 @@ mod tests {
                 "RadrootsTradeAttestationStateV1",
                 "RadrootsTradeConflictStateV1",
                 "RadrootsTradeEvidenceStateV1",
+                "RadrootsTradeEvidenceCoverageV1",
+                "RadrootsTradeEvidenceOutcomeV1",
+                "RadrootsTradeEvidenceManifestV1",
+                "RadrootsRhiEvidenceSupersessionV1",
+                "RadrootsRhiEvidenceReportV1",
+                "RadrootsRhiEvidenceAttestationV1",
+                "RadrootsTypedEvidenceEventPlanV1",
                 "RadrootsTradeFulfillmentStateV1",
                 "RadrootsOperationalListingTradeProjection",
                 "RadrootsTradeListingBackofficeOverlay",
@@ -277,6 +311,12 @@ mod tests {
                 "RadrootsTradeAttestationStateV1",
                 "RadrootsTradeConflictStateV1",
                 "RadrootsTradeEvidenceStateV1",
+                "RadrootsTradeEvidenceCoverageV1",
+                "RadrootsTradeEvidenceOutcomeV1",
+                "RadrootsTradeEvidenceManifestV1",
+                "RadrootsRhiEvidenceSupersessionV1",
+                "RadrootsRhiEvidenceReportV1",
+                "RadrootsRhiEvidenceAttestationV1",
                 "RadrootsTradeFulfillmentStateV1",
                 "RadrootsOperationalListingTradeProjection",
                 "RadrootsOperationalListingSubtotal",
@@ -308,6 +348,41 @@ mod tests {
         assert_eq!(
             actual,
             [
+                (
+                    "RadrootsTradeEvidenceManifestV1",
+                    "trade_generation",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
+                (
+                    "RadrootsTradeEvidenceManifestV1",
+                    "observed_at_unix_s",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
+                (
+                    "RadrootsRhiEvidenceReportV1",
+                    "trade_generation",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
+                (
+                    "RadrootsRhiEvidenceReportV1",
+                    "observed_at_unix_s",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
+                (
+                    "RadrootsRhiEvidenceAttestationV1",
+                    "trade_generation",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
+                (
+                    "RadrootsRhiEvidenceAttestationV1",
+                    "observed_at_unix_s",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
+                (
+                    "RadrootsTypedEvidenceEventPlanV1",
+                    "created_at_unix_s",
+                    super::TradeLargeIntegerPolicy::DecimalStringU64
+                ),
                 (
                     "RadrootsTradeFacetCount",
                     "count",

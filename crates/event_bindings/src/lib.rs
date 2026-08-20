@@ -23,6 +23,8 @@ mod tests {
         assert!(kinds_ts.contains(&kinds::KIND_CLASSIFIED_LISTING.to_string()));
         assert!(kinds_ts.contains("KIND_TRADE_PROPOSAL"));
         assert!(kinds_ts.contains(&kinds::KIND_TRADE_PROPOSAL.to_string()));
+        assert!(kinds_ts.contains("KIND_RHI_EVIDENCE_ATTESTATION"));
+        assert!(kinds_ts.contains(&kinds::KIND_RHI_EVIDENCE_ATTESTATION.to_string()));
         assert!(!kinds_ts.contains("KIND_ORDER_REQUEST"));
     }
 }

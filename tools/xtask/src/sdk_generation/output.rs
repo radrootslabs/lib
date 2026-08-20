@@ -67,7 +67,7 @@ const EVENT_BINDINGS_TYPES_SHA256: &str =
 const TRADE_BINDINGS_TYPES_TS: &str =
     include_str!("../../../../crates/trade_bindings/tests/fixtures/generated_types.ts");
 const TRADE_BINDINGS_TYPES_SHA256: &str =
-    "49560c572206095bd7de5cfd377c234a7f136e4affc13d53516ae2c4b8998e87";
+    "66e6a378231e5341a59cf331b23b3164b27a43fa00411e889d634e4d9d19b53d";
 const EVENT_NATIVE_SOURCES: &[&str] = &["radroots_event", "radroots_core"];
 const TRADE_NATIVE_SOURCES: &[&str] = &["radroots_trade", "radroots_event", "radroots_core"];
 

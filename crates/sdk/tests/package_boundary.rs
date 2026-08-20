@@ -376,6 +376,34 @@ fn trade_planning_uses_only_the_typed_mutation_authoring_boundary() {
 }
 
 #[test]
+fn trade_evidence_surface_is_curated_and_signature_verified() {
+    let production = TRADE
+        .split_once("#[cfg(test)]")
+        .expect("trade tests remain separated")
+        .0;
+    for required in [
+        "pub use radroots_trade::evidence::{",
+        "pub fn parse_evidence_manifest(",
+        "pub fn parse_rhi_evidence_report(",
+        "pub fn prepare_rhi_evidence_attestation(",
+        "pub fn validate_rhi_evidence_attestation(",
+        "Nip01SignatureVerifier",
+        "rhi_evidence_attestation_from_verified_event",
+    ] {
+        assert!(
+            production.contains(required),
+            "missing trade evidence boundary `{required}`"
+        );
+    }
+    for forbidden in ["SecretKey", "sign_event", "tokio::spawn", "publish_event("] {
+        assert!(
+            !production.contains(forbidden),
+            "trade evidence surface gained forbidden authority `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn farm_operations_preserve_pure_planning_commit_and_privacy_boundaries() {
     for required in [
         "encode::farm::to_wire_parts",

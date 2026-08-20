@@ -26,6 +26,7 @@ struct WasmDeclarationInventory {
 struct WasmPublicFunction {
     name: &'static str,
     parameter: Option<&'static str>,
+    bigint_parameter: Option<&'static str>,
     return_kind: WasmReturnKind,
     low_level: LowLevelSignature,
 }
@@ -39,7 +40,8 @@ enum WasmReturnKind {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct LowLevelSignature {
-    parameters: usize,
+    number_parameters: usize,
+    bigint_parameters: usize,
     returns: usize,
 }
 
@@ -62,9 +64,27 @@ macro_rules! public_function {
         WasmPublicFunction {
             name: $name,
             parameter: $parameter,
+            bigint_parameter: None,
             return_kind: WasmReturnKind::$return_kind,
             low_level: LowLevelSignature {
-                parameters: $low_parameters,
+                number_parameters: $low_parameters,
+                bigint_parameters: 0,
+                returns: $low_returns,
+            },
+        }
+    };
+}
+
+macro_rules! public_function_with_bigint {
+    ($name:literal, $parameter:literal, $bigint_parameter:literal, $return_kind:ident, $low_number_parameters:literal, $low_bigint_parameters:literal, $low_returns:literal) => {
+        WasmPublicFunction {
+            name: $name,
+            parameter: Some($parameter),
+            bigint_parameter: Some($bigint_parameter),
+            return_kind: WasmReturnKind::$return_kind,
+            low_level: LowLevelSignature {
+                number_parameters: $low_number_parameters,
+                bigint_parameters: $low_bigint_parameters,
                 returns: $low_returns,
             },
         }
@@ -94,7 +114,8 @@ macro_rules! void_function_export {
         WasmSupportExport {
             name: $name,
             export_type: WasmSupportExportType::Function(LowLevelSignature {
-                parameters: $parameters,
+                number_parameters: $parameters,
+                bigint_parameters: 0,
                 returns: 0,
             }),
         }
@@ -161,7 +182,7 @@ fn primary_module(spec: WasmPackageSpec, inventory: WasmDeclarationInventory) ->
     for function in inventory.public_functions {
         module.push_declaration(TypeScriptDeclaration::function(
             function.name,
-            public_parameters(function.parameter),
+            public_parameters(function.parameter, function.bigint_parameter),
             public_return_type(function.return_kind),
         ));
     }
@@ -243,10 +264,20 @@ fn render_declaration_module(module: TypeScriptModule) -> String {
     rendered
 }
 
-fn public_parameters(parameter: Option<&'static str>) -> Vec<TypeScriptParameter> {
-    parameter
+fn public_parameters(
+    parameter: Option<&'static str>,
+    bigint_parameter: Option<&'static str>,
+) -> Vec<TypeScriptParameter> {
+    let mut parameters = parameter
         .map(|name| vec![TypeScriptParameter::new(name, TypeScriptType::String)])
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if let Some(name) = bigint_parameter {
+        parameters.push(TypeScriptParameter::new(
+            name,
+            TypeScriptType::named("bigint"),
+        ));
+    }
+    parameters
 }
 
 fn public_return_type(kind: WasmReturnKind) -> TypeScriptType {
@@ -320,10 +351,11 @@ fn low_level_number_function_type(parameters: usize) -> TypeScriptType {
 }
 
 fn low_level_function_type(signature: LowLevelSignature) -> TypeScriptType {
-    TypeScriptType::function(
-        number_parameters(signature.parameters),
-        low_level_return_type(signature.returns),
-    )
+    let mut parameters = number_parameters(signature.number_parameters);
+    parameters.extend((0..signature.bigint_parameters).map(|index| {
+        TypeScriptParameter::new(format!("i64_arg{index}"), TypeScriptType::named("bigint"))
+    }));
+    TypeScriptType::function(parameters, low_level_return_type(signature.returns))
 }
 
 fn number_parameters(count: usize) -> Vec<TypeScriptParameter> {
@@ -432,6 +464,36 @@ const EVENT_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("report_tags", Some("report_json"), String, 2, 4),
     public_function!("repost_tags", Some("repost_json"), String, 2, 4),
     public_function!("seal_tags", Some("seal_json"), String, 2, 4),
+    public_function!(
+        "trade_evidence_manifest_parse_json",
+        Some("canonical_bytes_hex"),
+        String,
+        2,
+        4
+    ),
+    public_function!(
+        "rhi_evidence_report_parse_json",
+        Some("canonical_content"),
+        String,
+        2,
+        4
+    ),
+    public_function_with_bigint!(
+        "rhi_evidence_attestation_build_draft",
+        "canonical_content",
+        "created_at_unix_s",
+        String,
+        2,
+        1,
+        4
+    ),
+    public_function!(
+        "rhi_evidence_attestation_validate_signed_json",
+        Some("event_json"),
+        String,
+        2,
+        4
+    ),
     public_function!(
         "social_ask_build_authored_draft",
         Some("input_json"),
@@ -1081,6 +1143,25 @@ mod tests {
                     .contains(&format!("export declare const {authored}"))
             );
         }
+        for evidence in [
+            "trade_evidence_manifest_parse_json",
+            "rhi_evidence_report_parse_json",
+            "rhi_evidence_attestation_build_draft",
+            "rhi_evidence_attestation_validate_signed_json",
+        ] {
+            assert!(
+                events[0]
+                    .contents
+                    .contains(&format!("export function {evidence}"))
+            );
+            assert!(
+                events[1]
+                    .contents
+                    .contains(&format!("export declare const {evidence}"))
+            );
+        }
+        assert!(events[0].contents.contains("created_at_unix_s: bigint"));
+        assert!(events[1].contents.contains("i64_arg0: bigint"));
         for retired in [
             "calendar_date_event_tags",
             "calendar_event_rsvp_tags",

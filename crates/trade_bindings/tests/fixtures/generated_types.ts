@@ -23,6 +23,20 @@ export type RadrootsTradeConflictStateV1 = "none" | "concurrent_candidates" | "d
 
 export type RadrootsTradeEvidenceStateV1 = "complete" | "missing" | "query_partial" | "unsupported_version";
 
+export type RadrootsTradeEvidenceCoverageV1 = "missing" | "partial" | "scope_satisfied" | "unsupported";
+
+export type RadrootsTradeEvidenceOutcomeV1 = "valid" | "invalid" | "indeterminate";
+
+export type RadrootsTradeEvidenceManifestV1 = { contract_id: "radroots.trade.evidence-manifest.v1", contract_version: 1, trade_id: string, trade_generation: string, observed_at_unix_s: string, coverage: RadrootsTradeEvidenceCoverageV1, evidence_policy_digest: string, manifest_digest: string, canonical_bytes_hex: string, };
+
+export type RadrootsRhiEvidenceSupersessionV1 = { report_id: string, event_id: string, };
+
+export type RadrootsRhiEvidenceReportV1 = { contract_id: "radroots.rhi.evidence_attestation.v1", contract_version: 1, issuer_pubkey: string, trade_id: string, claim_mutation_id: string, outcome: RadrootsTradeEvidenceOutcomeV1, reason_codes: Array<string>, projection_digest: string, evidence_manifest_digest: string, evidence_policy_digest: string, observed_at_unix_s: string, trade_generation: string, statement_digest: string, supersession?: RadrootsRhiEvidenceSupersessionV1 | null, canonical_content: string, };
+
+export type RadrootsRhiEvidenceAttestationV1 = { issuer_pubkey: string, trade_id: string, claim_mutation_id: string, outcome: RadrootsTradeEvidenceOutcomeV1, observed_at_unix_s: string, trade_generation: string, statement_digest: string, supersession?: RadrootsRhiEvidenceSupersessionV1 | null, canonical_content: string, };
+
+export type RadrootsTypedEvidenceEventPlanV1 = { contract_id: string, kind: number, author_pubkey: string, created_at_unix_s: string, expected_event_id: string, tags: Array<Array<string>>, content: string, };
+
 export type RadrootsTradeFacetCount = { key: string, count: number, };
 
 export type RadrootsTradeFulfillmentStateV1 = "not_started";

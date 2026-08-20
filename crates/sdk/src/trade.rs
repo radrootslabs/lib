@@ -10,6 +10,88 @@ use radroots_event_codec::authoring::{AuthoredEventPlan, AuthoredPlanError};
 use radroots_signing::Actor;
 use radroots_trade::{Projection, ReductionInput, WorkflowPlan, reducer::reduce_trade_records};
 
+pub use radroots_event_codec::decode::rhi::{
+    RadrootsRhiEvidenceAttestationError, RadrootsRhiEvidenceAttestationOutcomeV1,
+    RadrootsRhiEvidenceAttestationSupersessionV1, RadrootsRhiEvidenceAttestationV1,
+};
+pub use radroots_trade::evidence::{
+    RadrootsRhiEvidenceReasonCodeV1, RadrootsRhiEvidenceReportError, RadrootsRhiEvidenceReportV1,
+    RadrootsRhiEvidenceStatementDigestV1, RadrootsRhiEvidenceSupersessionV1,
+    RadrootsTradeEvidenceCoverageError, RadrootsTradeEvidenceCoverageV1,
+    RadrootsTradeEvidenceManifestDigestV1, RadrootsTradeEvidenceManifestError,
+    RadrootsTradeEvidenceManifestObservationV1, RadrootsTradeEvidenceManifestSourceResultV1,
+    RadrootsTradeEvidenceManifestV1, RadrootsTradeEvidenceOutcomeV1,
+    RadrootsTradeEvidencePolicyDigestV1, RadrootsTradeEvidenceProjectionDigestV1,
+    RadrootsTradeEvidenceProvenanceDigestV1, RadrootsTradeEvidenceScopePrerequisitesV1,
+    RadrootsTradeEvidenceSourceCompletionV1, RadrootsTradeEvidenceSourceIdV1,
+    RadrootsTradeEvidenceSourceRequirementV1, RadrootsTradeEvidenceSourceResultDigestV1,
+    RadrootsTradeEvidenceSourceResultV1, RadrootsTradeSignedEventDigestV1,
+    classify_trade_evidence_coverage_v1,
+};
+
+/// Parses one bounded canonical trade-evidence manifest.
+pub fn parse_evidence_manifest(
+    canonical_bytes: &[u8],
+) -> Result<RadrootsTradeEvidenceManifestV1, RadrootsTradeEvidenceManifestError> {
+    RadrootsTradeEvidenceManifestV1::from_canonical_bytes(canonical_bytes)
+}
+
+/// Parses one bounded canonical RHI evidence report.
+pub fn parse_rhi_evidence_report(
+    canonical_content: &[u8],
+) -> Result<RadrootsRhiEvidenceReportV1, RadrootsRhiEvidenceReportError> {
+    RadrootsRhiEvidenceReportV1::from_canonical_content(canonical_content)
+}
+
+/// Builds one immutable typed RHI attestation plan without signing or I/O.
+pub fn prepare_rhi_evidence_attestation(
+    report: &RadrootsRhiEvidenceReportV1,
+    created_at: u64,
+) -> Result<AuthoredEventPlan, AuthoredPlanError> {
+    let attestation = RadrootsRhiEvidenceAttestationV1::from_canonical_content(
+        report.canonical_content().as_bytes(),
+    )
+    .map_err(AuthoredPlanError::Rhi)?;
+    AuthoredEventPlan::from_rhi_evidence_attestation(&attestation, created_at)
+}
+
+/// Verifies NIP-01 identity/signature and then validates the exact RHI event.
+pub fn validate_rhi_evidence_attestation(
+    event: radroots_event::envelope::EventEnvelope,
+) -> Result<RadrootsRhiEvidenceAttestationV1, EvidenceAttestationValidationError> {
+    let verified =
+        radroots_event_codec::verify::id(radroots_event::admission::RawEvent::new(event))
+            .and_then(|event| {
+                radroots_event_codec::verify::signature(
+                    event,
+                    &radroots_event_codec::verify::Nip01SignatureVerifier,
+                )
+            })
+            .map_err(|_| EvidenceAttestationValidationError::Signature)?;
+    radroots_event_codec::decode::rhi::rhi_evidence_attestation_from_verified_event(&verified)
+        .map_err(|_| EvidenceAttestationValidationError::Contract)
+}
+
+/// Stable, value-free failure for SDK signed-attestation validation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EvidenceAttestationValidationError {
+    /// NIP-01 event identity or signature verification failed.
+    Signature,
+    /// The verified event does not satisfy the RHI attestation contract.
+    Contract,
+}
+
+impl fmt::Display for EvidenceAttestationValidationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Signature => "evidence attestation signature validation failed",
+            Self::Contract => "evidence attestation contract validation failed",
+        })
+    }
+}
+
+impl error::Error for EvidenceAttestationValidationError {}
+
 /// Pure inputs for one frozen trade command.
 #[derive(Clone, Debug)]
 pub struct PrepareRequest {
@@ -391,6 +473,22 @@ mod tests {
             .expect("actor")
     }
 
+    fn rhi_attestation_fixture() -> serde_json::Value {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/event/authored_operations.v1.json"
+        ))
+        .expect("authored corpus");
+        fixture["vectors"]
+            .as_array()
+            .expect("operations")
+            .iter()
+            .find(|entry| entry["id"] == "typed_rhi_evidence_attestation_017")
+            .expect("RHI operation")
+            .get("expected")
+            .expect("expected")
+            .clone()
+    }
+
     fn mutation_id(marker: char) -> MutationId {
         MutationId::parse(std::iter::repeat_n(marker, 64).collect::<String>()).expect("mutation id")
     }
@@ -664,6 +762,67 @@ mod tests {
         assert_eq!(projection.trade_id(), &trade_id);
         assert!(projection.candidate_heads().is_empty());
         assert!(!projection.projection_digest().is_empty());
+    }
+
+    #[test]
+    fn evidence_adapters_parse_plan_and_verify_the_authored_corpus_event() {
+        let expected = rhi_attestation_fixture();
+        let content = expected["content"].as_str().expect("content");
+        let report = parse_rhi_evidence_report(content.as_bytes()).expect("report");
+        assert_eq!(
+            report.outcome(),
+            RadrootsTradeEvidenceOutcomeV1::Indeterminate
+        );
+
+        let plan = prepare_rhi_evidence_attestation(&report, 1_784_347_200).expect("plan");
+        assert_eq!(plan.body().kind(), 3_441);
+        assert_eq!(
+            plan.expected_event_id().to_hex(),
+            expected["event_id"].as_str().expect("event id")
+        );
+
+        let raw: serde_json::Value =
+            serde_json::from_str(expected["raw_json"].as_str().expect("raw event"))
+                .expect("raw event JSON");
+        let event = radroots_event::envelope::EventEnvelope::new(
+            radroots_event::envelope::EventEnvelopeParts {
+                id: raw["id"].as_str().expect("id").to_owned(),
+                author: raw["pubkey"].as_str().expect("pubkey").to_owned(),
+                created_at: raw["created_at"].as_u64().expect("created_at"),
+                kind: u32::try_from(raw["kind"].as_u64().expect("kind")).expect("u32 kind"),
+                tags: serde_json::from_value(raw["tags"].clone()).expect("tags"),
+                content: raw["content"].as_str().expect("content").to_owned(),
+                sig: raw["sig"].as_str().expect("signature").to_owned(),
+            },
+        )
+        .expect("event");
+        let attestation = validate_rhi_evidence_attestation(event).expect("attestation");
+        assert_eq!(attestation.trade_generation().get(), 7);
+    }
+
+    #[test]
+    fn evidence_validation_error_is_stable_and_value_free() {
+        let expected = rhi_attestation_fixture();
+        let raw: serde_json::Value =
+            serde_json::from_str(expected["raw_json"].as_str().expect("raw event"))
+                .expect("raw event JSON");
+        let event = radroots_event::envelope::EventEnvelope::new(
+            radroots_event::envelope::EventEnvelopeParts {
+                id: raw["id"].as_str().expect("id").to_owned(),
+                author: raw["pubkey"].as_str().expect("pubkey").to_owned(),
+                created_at: raw["created_at"].as_u64().expect("created_at"),
+                kind: u32::try_from(raw["kind"].as_u64().expect("kind")).expect("u32 kind"),
+                tags: serde_json::from_value(raw["tags"].clone()).expect("tags"),
+                content: "private-tamper".to_owned(),
+                sig: raw["sig"].as_str().expect("signature").to_owned(),
+            },
+        )
+        .expect("event");
+        let error = validate_rhi_evidence_attestation(event).expect_err("signature mismatch");
+        assert_eq!(error, EvidenceAttestationValidationError::Signature);
+        assert!(std::error::Error::source(&error).is_none());
+        assert!(!error.to_string().contains("private-tamper"));
+        assert!(!format!("{error:?}").contains("private-tamper"));
     }
 
     #[cfg(all(feature = "sync", feature = "memory", feature = "local-signing"))]

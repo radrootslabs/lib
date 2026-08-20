@@ -3107,12 +3107,14 @@ dependencies = [
 name = "radroots_event_codec_wasm"
 version = "0.1.0-alpha"
 dependencies = [
+ "hex",
  "nostr 0.44.7",
  "radroots_blossom",
  "radroots_core",
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",
+ "radroots_trade",
  "serde",
  "serde_json",
  "wasm-bindgen",
@@ -3453,7 +3455,11 @@ dependencies = [
 name = "radroots_sdk_ffi"
 version = "0.1.0-alpha"
 dependencies = [
+ "hex",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_sdk",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "uniffi",

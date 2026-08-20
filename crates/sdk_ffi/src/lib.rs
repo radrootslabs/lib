@@ -62,6 +62,313 @@ pub mod v1 {
         }
     }
 
+    impl Error {
+        fn contract(code: &'static str, message: &'static str) -> Self {
+            Self::Sdk {
+                code: code.to_owned(),
+                message: message.to_owned(),
+                retryable: false,
+            }
+        }
+    }
+
+    /// Final evidence coverage vocabulary.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+    pub enum TradeEvidenceCoverage {
+        Missing,
+        Partial,
+        ScopeSatisfied,
+        Unsupported,
+    }
+
+    /// Final evidence outcome vocabulary.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+    pub enum TradeEvidenceOutcome {
+        Valid,
+        Invalid,
+        Indeterminate,
+    }
+
+    /// Bounded projection of one canonical evidence manifest.
+    #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+    pub struct TradeEvidenceManifest {
+        pub contract_id: String,
+        pub contract_version: u16,
+        pub trade_id: String,
+        pub trade_generation: String,
+        pub observed_at_unix_s: String,
+        pub coverage: TradeEvidenceCoverage,
+        pub evidence_policy_digest: String,
+        pub manifest_digest: String,
+        pub canonical_bytes_hex: String,
+    }
+
+    /// Exact immutable RHI supersession reference.
+    #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+    pub struct RhiEvidenceSupersession {
+        pub report_id: String,
+        pub event_id: String,
+    }
+
+    /// Bounded projection of one canonical RHI evidence report.
+    #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+    pub struct RhiEvidenceReport {
+        pub contract_id: String,
+        pub contract_version: u16,
+        pub issuer_pubkey: String,
+        pub trade_id: String,
+        pub claim_mutation_id: String,
+        pub outcome: TradeEvidenceOutcome,
+        pub reason_codes: Vec<String>,
+        pub projection_digest: String,
+        pub evidence_manifest_digest: String,
+        pub evidence_policy_digest: String,
+        pub observed_at_unix_s: String,
+        pub trade_generation: String,
+        pub statement_digest: String,
+        pub supersession: Option<RhiEvidenceSupersession>,
+        pub canonical_content: String,
+    }
+
+    /// One unsigned typed event plan ready for host-owned signing.
+    #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+    pub struct TypedEvidenceEventPlan {
+        pub contract_id: String,
+        pub kind: u32,
+        pub author_pubkey: String,
+        pub created_at_unix_s: String,
+        pub expected_event_id: String,
+        pub tags: Vec<Vec<String>>,
+        pub content: String,
+    }
+
+    /// Signed NIP-01 event input for verified attestation admission.
+    #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+    pub struct SignedEvent {
+        pub id: String,
+        pub author_pubkey: String,
+        pub created_at_unix_s: u64,
+        pub kind: u32,
+        pub tags: Vec<Vec<String>>,
+        pub content: String,
+        pub signature: String,
+    }
+
+    /// Verified final RHI attestation projection.
+    #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+    pub struct RhiEvidenceAttestation {
+        pub issuer_pubkey: String,
+        pub trade_id: String,
+        pub claim_mutation_id: String,
+        pub outcome: TradeEvidenceOutcome,
+        pub observed_at_unix_s: String,
+        pub trade_generation: String,
+        pub statement_digest: String,
+        pub supersession: Option<RhiEvidenceSupersession>,
+        pub canonical_content: String,
+    }
+
+    #[uniffi::export]
+    pub fn parse_trade_evidence_manifest(
+        canonical_bytes: Vec<u8>,
+    ) -> Result<TradeEvidenceManifest, Error> {
+        let manifest =
+            radroots_sdk::trade::parse_evidence_manifest(&canonical_bytes).map_err(|_| {
+                Error::contract("invalid_evidence_manifest", "evidence manifest is invalid")
+            })?;
+        Ok(TradeEvidenceManifest::from(&manifest))
+    }
+
+    #[uniffi::export]
+    pub fn parse_rhi_evidence_report(
+        canonical_content: String,
+    ) -> Result<RhiEvidenceReport, Error> {
+        let report = radroots_sdk::trade::parse_rhi_evidence_report(canonical_content.as_bytes())
+            .map_err(|_| {
+            Error::contract("invalid_evidence_report", "evidence report is invalid")
+        })?;
+        Ok(RhiEvidenceReport::from(&report))
+    }
+
+    #[uniffi::export]
+    pub fn prepare_rhi_evidence_attestation(
+        canonical_content: String,
+        created_at_unix_s: u64,
+    ) -> Result<TypedEvidenceEventPlan, Error> {
+        let report = radroots_sdk::trade::parse_rhi_evidence_report(canonical_content.as_bytes())
+            .map_err(|_| {
+            Error::contract("invalid_evidence_report", "evidence report is invalid")
+        })?;
+        let plan =
+            radroots_sdk::trade::prepare_rhi_evidence_attestation(&report, created_at_unix_s)
+                .map_err(|_| {
+                    Error::contract(
+                        "invalid_evidence_attestation_plan",
+                        "evidence attestation plan is invalid",
+                    )
+                })?;
+        Ok(TypedEvidenceEventPlan::from(&plan))
+    }
+
+    #[uniffi::export]
+    pub fn validate_rhi_evidence_attestation(
+        event: SignedEvent,
+    ) -> Result<RhiEvidenceAttestation, Error> {
+        let event = radroots_event::envelope::EventEnvelope::new(
+            radroots_event::envelope::EventEnvelopeParts {
+                id: event.id,
+                author: event.author_pubkey,
+                created_at: event.created_at_unix_s,
+                kind: event.kind,
+                tags: event.tags,
+                content: event.content,
+                sig: event.signature,
+            },
+        )
+        .map_err(|_| Error::contract("invalid_signed_event", "signed event is invalid"))?;
+        let attestation =
+            radroots_sdk::trade::validate_rhi_evidence_attestation(event).map_err(|error| {
+                match error {
+                    radroots_sdk::trade::EvidenceAttestationValidationError::Signature => {
+                        Error::contract(
+                            "invalid_event_signature",
+                            "event signature validation failed",
+                        )
+                    }
+                    radroots_sdk::trade::EvidenceAttestationValidationError::Contract => {
+                        Error::contract(
+                            "invalid_evidence_attestation",
+                            "evidence attestation is invalid",
+                        )
+                    }
+                }
+            })?;
+        Ok(RhiEvidenceAttestation::from(&attestation))
+    }
+
+    impl From<&radroots_sdk::trade::RadrootsTradeEvidenceManifestV1> for TradeEvidenceManifest {
+        fn from(value: &radroots_sdk::trade::RadrootsTradeEvidenceManifestV1) -> Self {
+            Self {
+                contract_id: value.contract_id().to_owned(),
+                contract_version: value.contract_version(),
+                trade_id: value.trade_id().to_string(),
+                trade_generation: value.trade_generation().get().to_string(),
+                observed_at_unix_s: value.observed_at_unix_s().to_string(),
+                coverage: value.coverage().into(),
+                evidence_policy_digest: value.evidence_policy_digest().to_hex(),
+                manifest_digest: value.digest().to_hex(),
+                canonical_bytes_hex: hex::encode(value.canonical_bytes()),
+            }
+        }
+    }
+
+    impl From<radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1> for TradeEvidenceCoverage {
+        fn from(value: radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1) -> Self {
+            match value {
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::Missing => Self::Missing,
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::Partial => Self::Partial,
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::ScopeSatisfied => {
+                    Self::ScopeSatisfied
+                }
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::Unsupported => {
+                    Self::Unsupported
+                }
+            }
+        }
+    }
+
+    impl From<radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1> for TradeEvidenceOutcome {
+        fn from(value: radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1) -> Self {
+            match value {
+                radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1::Valid => Self::Valid,
+                radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1::Invalid => Self::Invalid,
+                radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1::Indeterminate => {
+                    Self::Indeterminate
+                }
+            }
+        }
+    }
+
+    impl From<&radroots_sdk::trade::RadrootsRhiEvidenceReportV1> for RhiEvidenceReport {
+        fn from(value: &radroots_sdk::trade::RadrootsRhiEvidenceReportV1) -> Self {
+            Self {
+                contract_id: value.contract_id().to_owned(),
+                contract_version: value.contract_version(),
+                issuer_pubkey: value.issuer_public_key().to_hex(),
+                trade_id: value.trade_id().to_string(),
+                claim_mutation_id: value.claim_mutation_id().to_string(),
+                outcome: value.outcome().into(),
+                reason_codes: value
+                    .reason_codes()
+                    .iter()
+                    .map(|code| code.as_str().to_owned())
+                    .collect(),
+                projection_digest: value.projection_digest().to_hex(),
+                evidence_manifest_digest: value.evidence_manifest_digest().to_hex(),
+                evidence_policy_digest: value.evidence_policy_digest().to_hex(),
+                observed_at_unix_s: value.observed_at_unix_s().to_string(),
+                trade_generation: value.trade_generation().get().to_string(),
+                statement_digest: value.statement_digest().to_hex(),
+                supersession: value.supersession().map(RhiEvidenceSupersession::from),
+                canonical_content: value.canonical_content().to_owned(),
+            }
+        }
+    }
+
+    impl From<radroots_sdk::trade::RadrootsRhiEvidenceSupersessionV1> for RhiEvidenceSupersession {
+        fn from(value: radroots_sdk::trade::RadrootsRhiEvidenceSupersessionV1) -> Self {
+            Self {
+                report_id: value.report_id().to_hex(),
+                event_id: value.event_id().to_hex(),
+            }
+        }
+    }
+
+    impl From<&radroots_event_codec::authoring::AuthoredEventPlan> for TypedEvidenceEventPlan {
+        fn from(value: &radroots_event_codec::authoring::AuthoredEventPlan) -> Self {
+            Self {
+                contract_id: value.body().contract().contract_id().as_str().to_owned(),
+                kind: value.body().kind(),
+                author_pubkey: value.author().to_hex(),
+                created_at_unix_s: value.created_at().to_string(),
+                expected_event_id: value.expected_event_id().to_hex(),
+                tags: value.body().tags().to_vec(),
+                content: value.body().content().to_owned(),
+            }
+        }
+    }
+
+    impl From<&radroots_sdk::trade::RadrootsRhiEvidenceAttestationV1> for RhiEvidenceAttestation {
+        fn from(value: &radroots_sdk::trade::RadrootsRhiEvidenceAttestationV1) -> Self {
+            Self {
+                issuer_pubkey: value.issuer().to_hex(),
+                trade_id: value.trade_id().to_string(),
+                claim_mutation_id: value.claim_mutation_id().to_string(),
+                outcome: match value.outcome() {
+                    radroots_sdk::trade::RadrootsRhiEvidenceAttestationOutcomeV1::Valid => {
+                        TradeEvidenceOutcome::Valid
+                    }
+                    radroots_sdk::trade::RadrootsRhiEvidenceAttestationOutcomeV1::Invalid => {
+                        TradeEvidenceOutcome::Invalid
+                    }
+                    radroots_sdk::trade::RadrootsRhiEvidenceAttestationOutcomeV1::Indeterminate => {
+                        TradeEvidenceOutcome::Indeterminate
+                    }
+                },
+                observed_at_unix_s: value.observed_at_unix_s().to_string(),
+                trade_generation: value.trade_generation().get().to_string(),
+                statement_digest: hex::encode(value.statement_digest()),
+                supersession: value
+                    .supersession()
+                    .map(|supersession| RhiEvidenceSupersession {
+                        report_id: hex::encode(supersession.report_id()),
+                        event_id: supersession.event_id().to_hex(),
+                    }),
+                canonical_content: value.canonical_content().to_owned(),
+            }
+        }
+    }
+
     /// Thread-safe mobile handle delegating lifecycle to [`radroots_sdk::Client`].
     #[derive(uniffi::Object)]
     pub struct MobileClient {
@@ -132,7 +439,11 @@ pub mod v1 {
 
 #[cfg(test)]
 mod tests {
-    use super::v1::{CapabilityAvailability, Error, MobileClient};
+    use super::v1::{
+        CapabilityAvailability, Error, MobileClient, SignedEvent, TradeEvidenceOutcome,
+        parse_rhi_evidence_report, prepare_rhi_evidence_attestation,
+        validate_rhi_evidence_attestation,
+    };
 
     fn assert_send_sync<T: Send + Sync>() {}
 
@@ -169,5 +480,63 @@ mod tests {
         assert_eq!(code, "missing_storage");
         assert_eq!(message, "SDK storage capability is not configured");
         assert!(!retryable);
+    }
+
+    #[test]
+    fn final_report_plan_and_signed_event_cross_the_ffi_without_numeric_narrowing() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/event/authored_operations.v1.json"
+        ))
+        .expect("authored corpus");
+        let expected = fixture["vectors"]
+            .as_array()
+            .expect("operations")
+            .iter()
+            .find(|entry| entry["id"] == "typed_rhi_evidence_attestation_017")
+            .expect("RHI operation")
+            .get("expected")
+            .expect("expected");
+        let content = expected["content"].as_str().expect("content").to_owned();
+
+        let report = parse_rhi_evidence_report(content.clone()).expect("report");
+        assert_eq!(report.outcome, TradeEvidenceOutcome::Indeterminate);
+        assert_eq!(report.trade_generation, "7");
+        assert_eq!(report.observed_at_unix_s, "1800000000");
+        assert_eq!(report.canonical_content, content);
+
+        let plan = prepare_rhi_evidence_attestation(content, 1_784_347_200).expect("plan");
+        assert_eq!(plan.kind, 3_441);
+        assert_eq!(plan.created_at_unix_s, "1784347200");
+        assert_eq!(
+            plan.expected_event_id,
+            expected["event_id"].as_str().expect("expected event id")
+        );
+
+        let raw: serde_json::Value =
+            serde_json::from_str(expected["raw_json"].as_str().expect("raw event"))
+                .expect("raw event JSON");
+        let signed = SignedEvent {
+            id: raw["id"].as_str().expect("id").to_owned(),
+            author_pubkey: raw["pubkey"].as_str().expect("pubkey").to_owned(),
+            created_at_unix_s: raw["created_at"].as_u64().expect("created_at"),
+            kind: u32::try_from(raw["kind"].as_u64().expect("kind")).expect("u32 kind"),
+            tags: serde_json::from_value(raw["tags"].clone()).expect("tags"),
+            content: raw["content"].as_str().expect("content").to_owned(),
+            signature: raw["sig"].as_str().expect("signature").to_owned(),
+        };
+        let attestation = validate_rhi_evidence_attestation(signed).expect("signed attestation");
+        assert_eq!(attestation.outcome, TradeEvidenceOutcome::Indeterminate);
+        assert_eq!(attestation.trade_generation, "7");
+    }
+
+    #[test]
+    fn ffi_contract_errors_are_bounded_and_secret_safe() {
+        let secret = "private-report-content";
+        let error = parse_rhi_evidence_report(secret.to_owned()).expect_err("malformed report");
+        let display = error.to_string();
+        let debug = format!("{error:?}");
+        assert!(!display.contains(secret));
+        assert!(!debug.contains(secret));
+        assert!(display.contains("invalid_evidence_report"));
     }
 }

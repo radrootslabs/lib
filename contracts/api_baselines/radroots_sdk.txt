@@ -375,6 +375,40 @@ pub async fn radroots_sdk::sync::Operations<'a>::submit_push(&self, radroots_syn
 impl core::fmt::Debug for radroots_sdk::sync::Operations<'_>
 pub fn radroots_sdk::sync::Operations<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_sdk::trade
+pub use radroots_sdk::trade::RadrootsRhiEvidenceAttestationError
+pub use radroots_sdk::trade::RadrootsRhiEvidenceAttestationOutcomeV1
+pub use radroots_sdk::trade::RadrootsRhiEvidenceAttestationSupersessionV1
+pub use radroots_sdk::trade::RadrootsRhiEvidenceAttestationV1
+pub use radroots_sdk::trade::RadrootsRhiEvidenceReasonCodeV1
+pub use radroots_sdk::trade::RadrootsRhiEvidenceReportError
+pub use radroots_sdk::trade::RadrootsRhiEvidenceReportV1
+pub use radroots_sdk::trade::RadrootsRhiEvidenceStatementDigestV1
+pub use radroots_sdk::trade::RadrootsRhiEvidenceSupersessionV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceCoverageError
+pub use radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceManifestDigestV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceManifestError
+pub use radroots_sdk::trade::RadrootsTradeEvidenceManifestObservationV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceManifestSourceResultV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceManifestV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1
+pub use radroots_sdk::trade::RadrootsTradeEvidencePolicyDigestV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceProjectionDigestV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceProvenanceDigestV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceScopePrerequisitesV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceSourceCompletionV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceSourceIdV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceSourceRequirementV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceSourceResultDigestV1
+pub use radroots_sdk::trade::RadrootsTradeEvidenceSourceResultV1
+pub use radroots_sdk::trade::RadrootsTradeSignedEventDigestV1
+pub use radroots_sdk::trade::classify_trade_evidence_coverage_v1
+pub enum radroots_sdk::trade::EvidenceAttestationValidationError
+pub radroots_sdk::trade::EvidenceAttestationValidationError::Contract
+pub radroots_sdk::trade::EvidenceAttestationValidationError::Signature
+impl core::error::Error for radroots_sdk::trade::EvidenceAttestationValidationError
+impl core::fmt::Display for radroots_sdk::trade::EvidenceAttestationValidationError
+pub fn radroots_sdk::trade::EvidenceAttestationValidationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_sdk::trade::PrepareErrorKind
 pub radroots_sdk::trade::PrepareErrorKind::CanonicalMutation
 pub radroots_sdk::trade::PrepareErrorKind::Draft
@@ -413,8 +447,12 @@ pub fn radroots_sdk::trade::PrepareError::fmt(&self, &mut core::fmt::Formatter<'
 pub struct radroots_sdk::trade::PrepareRequest
 impl radroots_sdk::trade::PrepareRequest
 pub const fn radroots_sdk::trade::PrepareRequest::new(radroots_signing::actor::Actor, radroots_event::trade::TradeMutationEnvelopeV1) -> Self
+pub fn radroots_sdk::trade::parse_evidence_manifest(&[u8]) -> core::result::Result<radroots_trade::evidence_manifest::RadrootsTradeEvidenceManifestV1, radroots_trade::evidence_manifest::RadrootsTradeEvidenceManifestError>
+pub fn radroots_sdk::trade::parse_rhi_evidence_report(&[u8]) -> core::result::Result<radroots_trade::evidence_report::RadrootsRhiEvidenceReportV1, radroots_trade::evidence_report::RadrootsRhiEvidenceReportError>
 pub fn radroots_sdk::trade::prepare(radroots_sdk::trade::PrepareRequest) -> core::result::Result<radroots_sdk::trade::Plan, radroots_sdk::trade::PrepareError>
+pub fn radroots_sdk::trade::prepare_rhi_evidence_attestation(&radroots_trade::evidence_report::RadrootsRhiEvidenceReportV1, u64) -> core::result::Result<radroots_event_codec::authoring::AuthoredEventPlan, radroots_event_codec::authoring::typed::AuthoredPlanError>
 pub fn radroots_sdk::trade::project(radroots_trade::trade_contract_v1::RadrootsTradeReductionInputV1) -> radroots_trade::trade_contract_v1::RadrootsTradeProjectionV1
+pub fn radroots_sdk::trade::validate_rhi_evidence_attestation(radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event_codec::rhi::RadrootsRhiEvidenceAttestationV1, radroots_sdk::trade::EvidenceAttestationValidationError>
 pub mod radroots_sdk::transport
 pub use radroots_sdk::transport::ReconnectBackoff
 pub use radroots_sdk::transport::RelayAccess
