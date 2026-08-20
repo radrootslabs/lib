@@ -20,6 +20,28 @@ let
     binaryName = "fixture-service";
     releaseProfile = "release";
   };
+  apps = service.mkServiceApps {
+    serviceName = "fixture_service";
+    inherit nativeInputs package toolchain;
+    binaryName = "fixture-service";
+    releaseAcceptanceCommand = ''
+      output="$(fixture-service --help)"
+      if [ "$output" != "fixture-service" ]; then
+        echo "fixture release acceptance observed unexpected output" >&2
+        exit 1
+      fi
+      printf '%s\n' "fixture-service release acceptance"
+    '';
+  };
+  devShell = service.mkServiceDevShell {
+    serviceName = "fixture_service";
+    inherit nativeInputs toolchain;
+  };
+  appSmoke = pkgs.runCommand "fixture-service-app-smoke" { } ''
+    test "$(${apps.default.program} --help)" = "fixture-service"
+    test "$(${apps.release-acceptance.program})" = "fixture-service release acceptance"
+    touch "$out"
+  '';
   hooks = {
     sqlx = pkgs.runCommand "fixture-service-sqlx" { } ''
       if grep -F "sqlx" ${fixtureSource}/Cargo.toml; then
@@ -77,22 +99,16 @@ let
       ;
     source = fixtureSource;
     cargoLock = fixtureSource + "/Cargo.lock";
-    extraChecks.smoke = smoke;
+    extraChecks = {
+      app-smoke = appSmoke;
+      inherit smoke;
+    };
   };
   outputs = service.mkServiceOutputs {
     serviceName = "fixture_service";
     inherit nativeInputs package;
-    inherit checks;
-    apps.default = {
-      type = "app";
-      program = "${package}/bin/fixture-service";
-    };
-    devShells.default = pkgs.mkShell {
-      packages = nativeInputs.nativeBuildInputs;
-      shellHook = ''
-        export RADROOTS_SERVICE_FIXTURE=${lib.escapeShellArg nativeInputs.environment.RADROOTS_SERVICE_FIXTURE}
-      '';
-    };
+    inherit apps checks;
+    devShells.default = devShell;
   };
   invalidName = builtins.tryEval (
     (service.mkServiceOutputs {
@@ -236,6 +252,107 @@ let
       }
     )).check.outPath
   );
+  appArgs = {
+    serviceName = "fixture_service";
+    inherit nativeInputs package toolchain;
+    binaryName = "fixture-service";
+    releaseAcceptanceCommand = "fixture-service --help";
+  };
+  invalidAppResults = [
+    (builtins.tryEval (
+      (service.mkServiceApps (appArgs // { serviceName = "../fixture"; })).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (appArgs // { package = "not-a-derivation"; })).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (appArgs // { binaryName = "fixture service"; })).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (appArgs // { toolchain = "not-a-derivation"; })).default.program
+    ))
+    (builtins.tryEval ((service.mkServiceApps (appArgs // { nativeInputs = { }; })).default.program))
+    (builtins.tryEval (
+      (service.mkServiceApps (
+        appArgs
+        // {
+          nativeInputs = service.mkNativeInputs { nativeBuildInputs = [ "not-a-derivation" ]; };
+        }
+      )).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (
+        appArgs
+        // {
+          nativeInputs = service.mkNativeInputs { environment.VALUE = 1; };
+        }
+      )).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (
+        appArgs
+        // {
+          nativeInputs = service.mkNativeInputs { environment."INVALID-NAME" = "value"; };
+        }
+      )).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (
+        appArgs
+        // {
+          nativeInputs = service.mkNativeInputs { environment.PATH = "/tmp"; };
+        }
+      )).default.program
+    ))
+    (builtins.tryEval (
+      (service.mkServiceApps (appArgs // { releaseAcceptanceCommand = ""; })).default.program
+    ))
+  ];
+  devShellArgs = {
+    serviceName = "fixture_service";
+    inherit nativeInputs toolchain;
+  };
+  invalidDevShellResults = [
+    (builtins.tryEval (
+      (service.mkServiceDevShell (devShellArgs // { serviceName = "../fixture"; })).drvPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceDevShell (devShellArgs // { toolchain = "not-a-derivation"; })).drvPath
+    ))
+    (builtins.tryEval ((service.mkServiceDevShell (devShellArgs // { nativeInputs = { }; })).drvPath))
+    (builtins.tryEval (
+      (service.mkServiceDevShell (
+        devShellArgs
+        // {
+          nativeInputs = service.mkNativeInputs { buildInputs = [ "not-a-derivation" ]; };
+        }
+      )).drvPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceDevShell (
+        devShellArgs
+        // {
+          nativeInputs = service.mkNativeInputs { environment.VALUE = 1; };
+        }
+      )).drvPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceDevShell (
+        devShellArgs
+        // {
+          nativeInputs = service.mkNativeInputs { environment."INVALID-NAME" = "value"; };
+        }
+      )).drvPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceDevShell (
+        devShellArgs
+        // {
+          nativeInputs = service.mkNativeInputs { environment.RUSTC = "/tmp/rustc"; };
+        }
+      )).drvPath
+    ))
+  ];
 in
 assert
   service.supportedSystems == [
@@ -252,6 +369,7 @@ assert outputs.packages.default == package;
 assert outputs.checks == checks;
 assert
   builtins.attrNames checks == [
+    "app-smoke"
     "check"
     "clippy"
     "config"
@@ -269,9 +387,18 @@ assert checks.sqlx == hooks.sqlx;
 assert checks.config == hooks.config;
 assert checks.source-lock == hooks.source-lock;
 assert checks.integration == hooks.integration;
+assert checks.app-smoke == appSmoke;
 assert checks.smoke == smoke;
-assert outputs.apps.default.program == "${package}/bin/fixture-service";
-assert outputs.devShells.default != null;
+assert outputs.apps == apps;
+assert
+  builtins.attrNames apps == [
+    "default"
+    "release-acceptance"
+  ];
+assert apps.default.program == "${package}/bin/fixture-service";
+assert lib.hasSuffix "/bin/fixture_service-release-acceptance" apps.release-acceptance.program;
+assert outputs.devShells.default == devShell;
+assert devShell.name == "fixture_service-dev-shell";
 assert invalidName.success == false;
 assert defaultOverride.success == false;
 assert invalidPackage.success == false;
@@ -286,6 +413,8 @@ assert unexpectedHook.success == false;
 assert lib.all (result: result.success == false) weakenedPolicyResults;
 assert invalidExtraCheck.success == false;
 assert standardOverride.success == false;
+assert lib.all (result: result.success == false) invalidAppResults;
+assert lib.all (result: result.success == false) invalidDevShellResults;
 {
   inherit outputs;
 }

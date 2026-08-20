@@ -57,15 +57,17 @@
         {
           treefmt = import ./treefmt.nix;
 
-          apps = import ./build/nix/apps.nix {
-            inherit
-              common
-              config
-              lib
-              pkgs
-              toolchains
-              ;
-          };
+          apps =
+            (import ./build/nix/apps.nix {
+              inherit
+                common
+                config
+                lib
+                pkgs
+                toolchains
+                ;
+            })
+            // serviceFixture.outputs.apps;
 
           checks = lib.filterAttrs (_: value: value != null) (
             (import ./build/nix/checks.nix {
@@ -74,9 +76,13 @@
             // serviceFixture.outputs.checks
           );
 
-          devShells = import ./build/nix/devshells.nix {
-            inherit common pkgs toolchains;
-          };
+          devShells =
+            (import ./build/nix/devshells.nix {
+              inherit common pkgs toolchains;
+            })
+            // {
+              service-fixture = serviceFixture.outputs.devShells.default;
+            };
 
           packages = serviceFixture.outputs.packages // {
             xtask = common.xtaskPackage;

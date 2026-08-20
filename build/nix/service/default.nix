@@ -9,5 +9,7 @@
   mkNativeInputs = import ./native-inputs.nix { inherit lib; };
   mkServicePackage = import ./package.nix { inherit crane lib pkgs; };
   mkServiceChecks = import ./checks.nix { inherit crane lib pkgs; };
+  mkServiceApps = import ./apps.nix { inherit lib pkgs; };
+  mkServiceDevShell = import ./devshell.nix { inherit lib pkgs; };
   mkServiceOutputs = import ./compose.nix { inherit lib; };
 }
