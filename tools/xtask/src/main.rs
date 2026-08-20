@@ -38,6 +38,7 @@ mod release_qualification;
 mod safety_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod sdk_generation;
+mod service_source_lock;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -347,6 +348,7 @@ fn validate_protocol_contracts() -> Result<(), String> {
 fn validate_contract() -> Result<(), String> {
     validate_protocol_contracts()?;
     let root = workspace_root();
+    service_source_lock::validate_contract(&root)?;
     dto_roots::check(&root)?;
     generate::protocol::check(&root)?;
     contract::load_contract_bundle(&root)
@@ -363,6 +365,7 @@ fn release_preflight() -> Result<(), String> {
 
 fn release_preflight_at(root: &Path) -> Result<(), String> {
     catalog::check(root)?;
+    service_source_lock::validate_contract(root)?;
     for group in ["public_native", "preview", "tools"] {
         build_control::group_plan(root, group, build_control::Operation::Check, false)?;
     }

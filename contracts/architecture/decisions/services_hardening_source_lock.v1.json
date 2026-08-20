@@ -1,0 +1,71 @@
+{
+  "schema": "radroots.services-hardening.source-lock-decisions.v1",
+  "contract_version": 1,
+  "decision_state": "active",
+  "lock_filename": "radroots.service.source-lock.v1.toml",
+  "lock_schema": "radroots.service.source-lock.v1",
+  "canonical_encoding": "compact_canonical_toml_with_final_newline",
+  "maximum_lock_utf8_bytes": 4096,
+  "maximum_service_utf8_bytes": 128,
+  "canonical_field_order": [
+    "schema",
+    "contract_version",
+    "service",
+    "repository",
+    "revision",
+    "architecture",
+    "workspace_catalog_sha256",
+    "version",
+    "source_archive_sha256",
+    "cargo_lock_sha256",
+    "flake_lock_sha256",
+    "rust_version",
+    "host_feature_profile",
+    "contract_versions.config",
+    "contract_versions.state",
+    "contract_versions.admin",
+    "contract_versions.status",
+    "contract_versions.provider"
+  ],
+  "fixed": {
+    "repository": "https://github.com/radrootslabs/lib",
+    "architecture": "radroots.crates.release.v2",
+    "version": "0.1.0-alpha",
+    "rust_version": "1.97.1",
+    "host_feature_profile": "service-host"
+  },
+  "revision_encoding": "git_oid_lowercase_hex_40",
+  "digest_encoding": "sha256_lowercase_hex_64",
+  "digest_subjects": {
+    "workspace_catalog_sha256": "lib/contracts/crates/catalog.v2.toml",
+    "source_archive_sha256": "canonical_lib_revision_source_archive",
+    "cargo_lock_sha256": "service/Cargo.lock",
+    "flake_lock_sha256": "service/flake.lock"
+  },
+  "service_identifier": "ascii_lower_snake_case_starting_with_letter_ending_with_letter_or_digit_no_empty_segments_1_to_128_bytes",
+  "contract_version_rule": "u32_nonzero",
+  "negative_error_codes": [
+    "invalid_contract_version",
+    "invalid_digest",
+    "invalid_feature_profile",
+    "invalid_fixed_identity",
+    "invalid_revision",
+    "invalid_service",
+    "invalid_toolchain",
+    "malformed",
+    "noncanonical",
+    "too_large"
+  ],
+  "canonical_vector": {
+    "toml": "schema = \"radroots.service.source-lock.v1\"\ncontract_version = 1\nservice = \"fixture_service\"\nrepository = \"https://github.com/radrootslabs/lib\"\nrevision = \"1111111111111111111111111111111111111111\"\narchitecture = \"radroots.crates.release.v2\"\nworkspace_catalog_sha256 = \"2222222222222222222222222222222222222222222222222222222222222222\"\nversion = \"0.1.0-alpha\"\nsource_archive_sha256 = \"3333333333333333333333333333333333333333333333333333333333333333\"\ncargo_lock_sha256 = \"4444444444444444444444444444444444444444444444444444444444444444\"\nflake_lock_sha256 = \"5555555555555555555555555555555555555555555555555555555555555555\"\nrust_version = \"1.97.1\"\nhost_feature_profile = \"service-host\"\n\n[contract_versions]\nconfig = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5\n",
+    "sha256": "2257efc8fb3ff4ee8e429e326effdfe622c5e898b429ee1a8ea3aac38f9810cc"
+  },
+  "deferred_operations": [
+    "filesystem_digest_verification",
+    "git_cleanliness",
+    "manifest_and_cargo_metadata_agreement",
+    "remote_revision_reachability",
+    "source_archive_verification",
+    "update_and_verify_commands"
+  ]
+}

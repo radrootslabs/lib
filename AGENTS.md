@@ -36,6 +36,15 @@ This file exists for compatibility with tools that look for AGENTS.md.
 - Source-lock consumer identities include `sdk`, `mobile`, `myc`, and `rhi`.
   Only the first two are generated-artifact product identities;
   accepting a service consumer marker must not expose an artifact route.
+- The canonical service source lock is the bounded, canonical
+  `radroots.service.source-lock.v1.toml` model. It binds the exact public Lib
+  repository and full revision, Lib source-archive and workspace-catalog
+  digests, the service `Cargo.lock` and `flake.lock` digests, Rust `1.97.1`,
+  the `service-host` feature profile, and positive config, state, admin,
+  status, and provider contract versions. Keep its model and diagnostics
+  private to repo tooling, reject noncanonical or extra fields, and never put
+  credentials, local paths, floating refs, or private repository identity in
+  it.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
