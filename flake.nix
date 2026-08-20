@@ -16,10 +16,23 @@
   };
 
   outputs =
-    inputs@{ flake-parts, ... }:
+    inputs@{
+      self,
+      flake-parts,
+      ...
+    }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.treefmt-nix.flakeModule ];
       systems = import ./build/nix/service/systems.nix;
+
+      flake.nixosModules.default =
+        (import ./build/nix/service/nixos-module.nix { lib = inputs.nixpkgs.lib; })
+          {
+            serviceName = "fixture_service";
+            binaryName = "fixture-service";
+            packageFor = pkgs: self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+            commandForInstance = _: [ "--help" ];
+          };
 
       perSystem =
         {
@@ -51,6 +64,7 @@
           };
           serviceFixture = import ./build/nix/service/fixture.nix {
             inherit lib pkgs service;
+            nixosSystem = inputs.nixpkgs.lib.nixosSystem;
             toolchain = toolchains.stable;
           };
         in

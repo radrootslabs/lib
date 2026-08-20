@@ -1,5 +1,6 @@
 {
   lib,
+  nixosSystem,
   pkgs,
   service,
   toolchain,
@@ -132,6 +133,117 @@ let
         ''
     else
       null;
+  nixosModule = service.mkServiceNixosModule {
+    serviceName = "fixture_service";
+    binaryName = "fixture-service";
+    packageFor = _: package;
+    commandForInstance = instanceName: [
+      "--instance"
+      instanceName
+      "--config"
+      "/etc/radroots/services/fixture_service/${instanceName}/config.toml"
+    ];
+  };
+  nixosConfiguration =
+    if pkgs.stdenv.isLinux then
+      nixosSystem {
+        system = pkgs.stdenv.hostPlatform.system;
+        modules = [
+          nixosModule
+          {
+            system.stateVersion = "25.11";
+            users.groups.fixture-admin = { };
+            services.radroots.fixture_service = {
+              enable = true;
+              adminGroup = "fixture-admin";
+              instances.primary = {
+                configurationFile = pkgs.writeText "fixture-service-config.toml" ''
+                  contract_version = 1
+                '';
+                credentials.api-token = "/run/operator/fixture-api-token";
+              };
+            };
+          }
+        ];
+      }
+    else
+      null;
+  nixosUnitName = "radroots-fixture_service-primary";
+  nixosService =
+    if pkgs.stdenv.isLinux then nixosConfiguration.config.systemd.services.${nixosUnitName} else null;
+  nixosUnitText =
+    if pkgs.stdenv.isLinux then
+      nixosConfiguration.config.system.build.units."${nixosUnitName}.service".text
+    else
+      null;
+  nixosModuleCheck =
+    if pkgs.stdenv.isLinux then
+      pkgs.runCommand "fixture-service-nixos-module"
+        {
+          nativeBuildInputs = [
+            pkgs.gnugrep
+          ];
+          unit = pkgs.writeText "${nixosUnitName}.service" nixosUnitText;
+        }
+        ''
+          grep -Fx 'Type=simple' "$unit"
+          grep -Fx 'DynamicUser=true' "$unit"
+          grep -Fx 'User=radroots-fixture_service' "$unit"
+          grep -Fx 'Group=fixture-admin' "$unit"
+          grep -Fx 'UMask=0077' "$unit"
+          grep -Fx 'ConfigurationDirectory=radroots/services/fixture_service/primary' "$unit"
+          grep -Fx 'ConfigurationDirectoryMode=0500' "$unit"
+          grep -Fx 'StateDirectory=radroots/services/fixture_service/primary' "$unit"
+          grep -Fx 'StateDirectoryMode=0700' "$unit"
+          grep -Fx 'CacheDirectory=radroots/services/fixture_service/primary' "$unit"
+          grep -Fx 'CacheDirectoryMode=0700' "$unit"
+          grep -Fx 'RuntimeDirectory=radroots/services/fixture_service/primary' "$unit"
+          grep -Fx 'RuntimeDirectoryMode=0750' "$unit"
+          grep -Fx 'LoadCredential=api-token:/run/operator/fixture-api-token' "$unit"
+          grep -Fx 'NoNewPrivileges=true' "$unit"
+          grep -Fx 'PrivateTmp=true' "$unit"
+          grep -Fx 'PrivateDevices=true' "$unit"
+          grep -Fx 'ProtectSystem=strict' "$unit"
+          grep -Fx 'ProtectHome=true' "$unit"
+          grep -Fx 'ProtectKernelTunables=true' "$unit"
+          grep -Fx 'ProtectKernelModules=true' "$unit"
+          grep -Fx 'ProtectKernelLogs=true' "$unit"
+          grep -Fx 'ProtectControlGroups=true' "$unit"
+          grep -Fx 'ProtectHostname=true' "$unit"
+          grep -Fx 'ProtectClock=true' "$unit"
+          grep -Fx 'RestrictSUIDSGID=true' "$unit"
+          grep -Fx 'LockPersonality=true' "$unit"
+          grep -Fx 'CapabilityBoundingSet=' "$unit"
+          grep -Fx 'AmbientCapabilities=' "$unit"
+          test "$(grep -c '^RestrictAddressFamilies=' "$unit")" = 3
+          grep -Fx 'RestrictAddressFamilies=AF_UNIX' "$unit"
+          grep -Fx 'RestrictAddressFamilies=AF_INET' "$unit"
+          grep -Fx 'RestrictAddressFamilies=AF_INET6' "$unit"
+          grep -Fx 'RestrictNamespaces=true' "$unit"
+          grep -Fx 'RestrictRealtime=true' "$unit"
+          grep -Fx 'RemoveIPC=true' "$unit"
+          grep -Fx 'DevicePolicy=closed' "$unit"
+          grep -Fx 'KeyringMode=private' "$unit"
+          grep -Fx 'ProcSubset=pid' "$unit"
+          grep -Fx 'ProtectProc=invisible' "$unit"
+          grep -Fx 'SystemCallArchitectures=native' "$unit"
+          grep -Fx 'TimeoutStopSec=30s' "$unit"
+          grep -Fx 'KillSignal=SIGTERM' "$unit"
+          grep -Fx 'KillMode=control-group' "$unit"
+          grep -Fx 'Restart=on-failure' "$unit"
+          grep -Fx 'RestartSec=5s' "$unit"
+          if grep -E '^(MemoryDenyWriteExecute|SystemCallFilter)=' "$unit"; then
+            echo "fixture unit enabled an unqualified hardening control" >&2
+            exit 1
+          fi
+          if grep -E '^Environment=.*(api-token|fixture-api-token)' "$unit"; then
+            echo "fixture unit exposed credential material through its environment" >&2
+            exit 1
+          fi
+          touch "$out"
+        ''
+    else
+      null;
   appSmoke = pkgs.runCommand "fixture-service-app-smoke" { } ''
     test "$(${apps.default.program} --help)" = "fixture-service"
     test "$(${apps.release-acceptance.program})" = "fixture-service release acceptance"
@@ -199,6 +311,7 @@ let
       inherit smoke;
     }
     // lib.optionalAttrs pkgs.stdenv.isLinux {
+      nixos-module = nixosModuleCheck;
       oci-image = ociImageCheck;
     };
   };
@@ -621,6 +734,219 @@ let
       )).outPath
     ))
   ];
+  nixosServiceConfig = if pkgs.stdenv.isLinux then nixosService.serviceConfig else null;
+  nixosModuleArguments = {
+    serviceName = "fixture_service";
+    binaryName = "fixture-service";
+    packageFor = _: package;
+    commandForInstance = _: [ "--help" ];
+  };
+  invalidNixosModuleConstructors = [
+    (nixosModuleArguments // { serviceName = "../fixture"; })
+    (nixosModuleArguments // { serviceName = "fixture-service"; })
+    (nixosModuleArguments // { serviceName = lib.concatStrings (lib.replicate 129 "a"); })
+    (nixosModuleArguments // { binaryName = "fixture service"; })
+    (nixosModuleArguments // { binaryName = lib.concatStrings (lib.replicate 129 "b"); })
+    (nixosModuleArguments // { packageFor = "not-a-function"; })
+    (nixosModuleArguments // { commandForInstance = "not-a-function"; })
+    (nixosModuleArguments // { stopTimeoutSeconds = 0; })
+    (nixosModuleArguments // { stopTimeoutSeconds = 86401; })
+    (nixosModuleArguments // { addressFamilies = [ ]; })
+    (
+      nixosModuleArguments
+      // {
+        addressFamilies = [
+          "AF_UNIX"
+          "AF_UNIX"
+        ];
+      }
+    )
+    (nixosModuleArguments // { addressFamilies = [ "AF_PACKET" ]; })
+  ];
+  invalidNixosModuleConstructorResults = map (
+    arguments: builtins.tryEval ((service.mkServiceNixosModule arguments) { })
+  ) invalidNixosModuleConstructors;
+  baseNixosModuleConfiguration = {
+    enable = true;
+    inherit package;
+    adminGroup = null;
+    instances.primary = {
+      configurationFile = pkgs.writeText "fixture-service-assertion-config.toml" "";
+      credentials = { };
+    };
+  };
+  nixosModuleAssertionsPass =
+    module: moduleServiceName: moduleConfiguration:
+    let
+      evaluated = module {
+        config = lib.setAttrByPath [
+          "services"
+          "radroots"
+          moduleServiceName
+        ] moduleConfiguration;
+        inherit pkgs;
+      };
+    in
+    lib.all (entry: entry.assertion) evaluated.config.assertions;
+  invalidNixosModuleConfigurations = [
+    (baseNixosModuleConfiguration // { enable = false; })
+    (baseNixosModuleConfiguration // { instances = { }; })
+    (baseNixosModuleConfiguration // { adminGroup = "INVALID GROUP"; })
+    (
+      baseNixosModuleConfiguration
+      // {
+        adminGroup = lib.concatStrings (lib.replicate 129 "a");
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances = {
+          "../primary" = baseNixosModuleConfiguration.instances.primary;
+        };
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances = {
+          ${lib.concatStrings (lib.replicate 129 "a")} = baseNixosModuleConfiguration.instances.primary;
+        };
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials."bad:name" = "/run/operator/token";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "relative/token";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/nix/store";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/nix/store/secret";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/run/operator/token:alias";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/run/operator/token\nvalue";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/${lib.concatStrings (lib.replicate 4096 "a")}";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials = lib.genAttrs (lib.genList (
+          index: "credential-${toString index}"
+        ) 33) (_: "/run/operator/token");
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances = lib.genAttrs (lib.genList (index: "instance-${toString index}") 65) (
+          _: baseNixosModuleConfiguration.instances.primary
+        );
+      }
+    )
+  ];
+  invalidNixosModuleConfigurationResults = map (
+    moduleConfiguration:
+    builtins.tryEval (nixosModuleAssertionsPass nixosModule "fixture_service" moduleConfiguration)
+  ) invalidNixosModuleConfigurations;
+  commandNixosModule =
+    command:
+    service.mkServiceNixosModule (
+      nixosModuleArguments
+      // {
+        commandForInstance = _: command;
+      }
+    );
+  invalidNixosCommandResults =
+    map
+      (
+        command:
+        builtins.tryEval (
+          nixosModuleAssertionsPass (commandNixosModule command) "fixture_service"
+            baseNixosModuleConfiguration
+        )
+      )
+      [
+        (lib.replicate 65 "argument")
+        [ (lib.concatStrings (lib.replicate 4097 "a")) ]
+        [ "argument\nvalue" ]
+      ];
+  maximumNixosModule = service.mkServiceNixosModule (
+    nixosModuleArguments
+    // {
+      serviceName = lib.concatStrings (lib.replicate 128 "a");
+      binaryName = lib.concatStrings (lib.replicate 128 "b");
+      stopTimeoutSeconds = 86400;
+      addressFamilies = [ "AF_UNIX" ];
+    }
+  );
+  maximumNixosModuleConfiguration = {
+    enable = true;
+    inherit package;
+    adminGroup = lib.concatStrings (lib.replicate 128 "a");
+    instances.${lib.concatStrings (lib.replicate 109 "b")} = {
+      configurationFile = pkgs.writeText "fixture-service-maximum-config.toml" "";
+      credentials = lib.genAttrs (lib.genList (index: "credential-${toString index}") 32) (
+        _: "/${lib.concatStrings (lib.replicate 4095 "c")}"
+      );
+    };
+  };
+  overlongNixosUnitConfiguration = maximumNixosModuleConfiguration // {
+    instances = {
+      ${lib.concatStrings (lib.replicate 110 "b")} = baseNixosModuleConfiguration.instances.primary;
+    };
+  };
+  overlongNixosUnitResult = builtins.tryEval (
+    nixosModuleAssertionsPass maximumNixosModule (lib.concatStrings (
+      lib.replicate 128 "a"
+    )) overlongNixosUnitConfiguration
+  );
+  maximumNixosInstanceCountConfiguration = baseNixosModuleConfiguration // {
+    instances = lib.genAttrs (lib.genList (index: "instance-${toString index}") 64) (
+      _: baseNixosModuleConfiguration.instances.primary
+    );
+  };
+  maximumNixosCommandModule = commandNixosModule (
+    lib.replicate 64 (lib.concatStrings (lib.replicate 4096 "a"))
+  );
+  noAdminNixosEvaluation = nixosModule {
+    config = lib.setAttrByPath [
+      "services"
+      "radroots"
+      "fixture_service"
+    ] baseNixosModuleConfiguration;
+    inherit pkgs;
+  };
+  noAdminNixosServiceConfig =
+    noAdminNixosEvaluation.config.systemd.services.content.${nixosUnitName}.serviceConfig;
 in
 assert
   service.supportedSystems == [
@@ -656,6 +982,7 @@ assert
     "integration"
   ]
   ++ lib.optionals pkgs.stdenv.isLinux [
+    "nixos-module"
     "oci-image"
   ]
   ++ [
@@ -700,6 +1027,55 @@ assert lib.all (result: result.success == false) invalidAppResults;
 assert lib.all (result: result.success == false) invalidDevShellResults;
 assert maximumOciResult.success;
 assert lib.all (result: result.success == false) invalidOciResults;
+assert (
+  pkgs.stdenv.isLinux
+  ->
+    builtins.attrNames (
+      lib.filterAttrs (name: _: lib.hasPrefix "radroots-" name) nixosConfiguration.config.systemd.services
+    ) == [ nixosUnitName ]
+);
+assert (pkgs.stdenv.isLinux -> nixosService.wantedBy == [ "multi-user.target" ]);
+assert (pkgs.stdenv.isLinux -> nixosService.wants == [ "network-online.target" ]);
+assert (pkgs.stdenv.isLinux -> nixosService.after == [ "network-online.target" ]);
+assert (pkgs.stdenv.isLinux -> nixosServiceConfig.Type == "simple");
+assert (pkgs.stdenv.isLinux -> nixosServiceConfig.DynamicUser);
+assert (pkgs.stdenv.isLinux -> nixosServiceConfig.RuntimeDirectoryMode == "0750");
+assert (
+  pkgs.stdenv.isLinux
+  ->
+    nixosServiceConfig.BindReadOnlyPaths == [
+      "${nixosConfiguration.config.services.radroots.fixture_service.instances.primary.configurationFile}:/etc/radroots/services/fixture_service/primary/config.toml"
+    ]
+);
+assert (
+  pkgs.stdenv.isLinux
+  ->
+    nixosServiceConfig.LoadCredential == [
+      "api-token:/run/operator/fixture-api-token"
+    ]
+);
+assert (pkgs.stdenv.isLinux -> !(nixosServiceConfig ? MemoryDenyWriteExecute));
+assert (pkgs.stdenv.isLinux -> !(nixosServiceConfig ? SystemCallFilter));
+assert lib.all (result: result.success == false) invalidNixosModuleConstructorResults;
+assert lib.all (
+  result: result.success && result.value == false
+) invalidNixosModuleConfigurationResults;
+assert lib.all (result: result.success && result.value == false) invalidNixosCommandResults;
+assert (
+  nixosModuleAssertionsPass maximumNixosModule (lib.concatStrings (
+    lib.replicate 128 "a"
+  )) maximumNixosModuleConfiguration
+);
+assert (overlongNixosUnitResult.success && overlongNixosUnitResult.value == false);
+assert (
+  nixosModuleAssertionsPass nixosModule "fixture_service" maximumNixosInstanceCountConfiguration
+);
+assert (
+  nixosModuleAssertionsPass maximumNixosCommandModule "fixture_service" baseNixosModuleConfiguration
+);
+assert noAdminNixosServiceConfig.Group == "radroots-fixture_service";
+assert noAdminNixosServiceConfig.RuntimeDirectoryMode == "0700";
+assert !(noAdminNixosServiceConfig ? SupplementaryGroups);
 assert (
   !pkgs.stdenv.isLinux
   -> (builtins.tryEval ((service.mkServiceOciImage ociArgs).outPath)).success == false
