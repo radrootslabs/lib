@@ -2,6 +2,7 @@
   lib,
   pkgs,
   service,
+  toolchain,
 }:
 let
   nativeInputs = service.mkNativeInputs {
@@ -10,32 +11,39 @@ let
       RADROOTS_SERVICE_FIXTURE = "1";
     };
   };
-  package = pkgs.writeShellApplication {
-    name = "fixture-service";
-    runtimeInputs = nativeInputs.nativeBuildInputs;
-    text = ''
-      case "''${1:-}" in
-        --help)
-          echo "fixture-service"
-          ;;
-        *)
-          echo "usage: fixture-service --help" >&2
-          exit 2
-          ;;
-      esac
-    '';
+  fixtureSource = ./fixture-service;
+  package = service.mkServicePackage {
+    inherit nativeInputs toolchain;
+    source = fixtureSource;
+    cargoLock = fixtureSource + "/Cargo.lock";
+    servicePackage = "fixture-service";
+    binaryName = "fixture-service";
+    releaseProfile = "release";
   };
   smoke =
     pkgs.runCommand "radroots-service-helper-fixture-smoke"
       {
         nativeBuildInputs = [
           package
+          pkgs.file
           pkgs.gnugrep
+          pkgs.nix
         ];
       }
       ''
         fixture-service --help > output
         grep -Fx "fixture-service" output
+        file ${package}/bin/fixture-service > file-type
+        if grep -Fi "script" file-type; then
+          echo "fixture package installed a source wrapper" >&2
+          exit 1
+        fi
+        test ! -e ${package}/Cargo.toml
+        test ! -e ${package}/src
+        if nix-store --query --requisites ${package} | grep -Fx ${toolchain}; then
+          echo "fixture runtime closure retains the Rust toolchain" >&2
+          exit 1
+        fi
         touch "$out"
       '';
   outputs = service.mkServiceOutputs {
@@ -82,6 +90,43 @@ let
       nativeInputs = { };
     }).nativeInputs
   );
+  invalidServicePackage = builtins.tryEval (
+    (service.mkServicePackage {
+      inherit nativeInputs toolchain;
+      source = fixtureSource;
+      cargoLock = fixtureSource + "/Cargo.lock";
+      servicePackage = "../fixture";
+    }).outPath
+  );
+  invalidBinaryName = builtins.tryEval (
+    (service.mkServicePackage {
+      inherit nativeInputs toolchain;
+      source = fixtureSource;
+      cargoLock = fixtureSource + "/Cargo.lock";
+      servicePackage = "fixture-service";
+      binaryName = "fixture service";
+    }).outPath
+  );
+  invalidReleaseProfile = builtins.tryEval (
+    (service.mkServicePackage {
+      inherit nativeInputs toolchain;
+      source = fixtureSource;
+      cargoLock = fixtureSource + "/Cargo.lock";
+      servicePackage = "fixture-service";
+      releaseProfile = "dev";
+    }).outPath
+  );
+  profileOverride = builtins.tryEval (
+    (service.mkServicePackage {
+      inherit toolchain;
+      source = fixtureSource;
+      cargoLock = fixtureSource + "/Cargo.lock";
+      servicePackage = "fixture-service";
+      nativeInputs = service.mkNativeInputs {
+        environment.CARGO_PROFILE = "dev";
+      };
+    }).outPath
+  );
 in
 assert
   service.supportedSystems == [
@@ -102,6 +147,10 @@ assert invalidName.success == false;
 assert defaultOverride.success == false;
 assert invalidPackage.success == false;
 assert invalidNativeInputs.success == false;
+assert invalidServicePackage.success == false;
+assert invalidBinaryName.success == false;
+assert invalidReleaseProfile.success == false;
+assert profileOverride.success == false;
 {
   inherit outputs;
   check = smoke;

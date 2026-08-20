@@ -34,6 +34,7 @@
             overlays = [ inputs.rust-overlay.overlays.default ];
           };
           service = import ./build/nix/service {
+            crane = inputs.crane;
             inherit lib pkgs;
           };
           toolchains = {
@@ -50,6 +51,7 @@
           };
           serviceFixture = import ./build/nix/service/fixture.nix {
             inherit lib pkgs service;
+            toolchain = toolchains.stable;
           };
         in
         {
@@ -78,7 +80,7 @@
             inherit common pkgs toolchains;
           };
 
-          packages = {
+          packages = serviceFixture.outputs.packages // {
             xtask = common.xtaskPackage;
           };
         };
