@@ -45,6 +45,7 @@ impl radroots_event::VerifiedEvent
 pub const fn radroots_event::VerifiedEvent::event(&self) -> &radroots_event::envelope::EventEnvelope
 pub fn radroots_event::VerifiedEvent::into_event(self) -> radroots_event::envelope::EventEnvelope
 pub fn radroots_event::VerifiedEvent::validate_contract(self) -> core::result::Result<radroots_event::admission::ContractValidatedEvent, radroots_event::Error>
+pub fn radroots_event::VerifiedEvent::validate_contract_for_admission(self, &str) -> core::result::Result<radroots_event::admission::ContractValidatedEvent, radroots_event::Error>
 pub struct radroots_event::admission::VisibleEvent
 impl radroots_event::admission::VisibleEvent
 pub const fn radroots_event::admission::VisibleEvent::admitted_event(&self) -> &radroots_event::admission::AdmittedEvent
@@ -672,6 +673,7 @@ pub const radroots_event::envelope::kind::KIND_REPORT: u32
 pub const radroots_event::envelope::kind::KIND_REPOST: u32
 pub const radroots_event::envelope::kind::KIND_RESOURCE_AREA: u32
 pub const radroots_event::envelope::kind::KIND_RESOURCE_HARVEST_CAP: u32
+pub const radroots_event::envelope::kind::KIND_RHI_EVIDENCE_ATTESTATION: u32
 pub const radroots_event::envelope::kind::KIND_SEAL: u32
 pub const radroots_event::envelope::kind::KIND_TRADE_CANCELLATION: u32
 pub const radroots_event::envelope::kind::KIND_TRADE_DECISION: u32
@@ -3592,3 +3594,4 @@ impl radroots_event::VerifiedEvent
 pub const fn radroots_event::VerifiedEvent::event(&self) -> &radroots_event::envelope::EventEnvelope
 pub fn radroots_event::VerifiedEvent::into_event(self) -> radroots_event::envelope::EventEnvelope
 pub fn radroots_event::VerifiedEvent::validate_contract(self) -> core::result::Result<radroots_event::admission::ContractValidatedEvent, radroots_event::Error>
+pub fn radroots_event::VerifiedEvent::validate_contract_for_admission(self, &str) -> core::result::Result<radroots_event::admission::ContractValidatedEvent, radroots_event::Error>

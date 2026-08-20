@@ -352,7 +352,7 @@ fn sync_operations_only_delegate_to_the_canonical_engine() {
 fn authored_submission_is_one_protocol_neutral_boundary_for_all_typed_contracts() {
     use radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS;
 
-    assert_eq!(REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS.len(), 15);
+    assert_eq!(REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS.len(), 16);
     assert!(SYNC.contains("pub async fn submit_push"));
     assert!(SYNC.contains("request: PushRequest"));
     assert!(SYNC.contains("Result<PushStatus, Error>"));

@@ -112,9 +112,13 @@ fn services_hardening_event_decision_reserves_unique_exact_kinds() {
         .as_u64()
         .expect("attestation kind");
     assert_eq!(attestation_kind, 3441);
-    assert!(
-        !registered.contains(&attestation_kind),
-        "reserved attestation kind must not collide with a registered kind"
+    assert_eq!(
+        registered
+            .iter()
+            .filter(|kind| **kind == attestation_kind)
+            .count(),
+        1,
+        "implemented attestation kind must be uniquely registered"
     );
 }
 

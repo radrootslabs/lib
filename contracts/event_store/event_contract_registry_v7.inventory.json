@@ -1034,6 +1034,17 @@
       "accepted_event_contracts": [
         "radroots.trade.validation_receipt.v1"
       ]
+    },
+    {
+      "ordinal": 93,
+      "kind": 3441,
+      "canonical_constant": "KIND_RHI_EVIDENCE_ATTESTATION",
+      "name": "RHI Evidence Attestation",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.rhi.evidence_attestation.v1"
+      ]
     }
   ],
   "event_contracts": [
@@ -5912,6 +5923,62 @@
     },
     {
       "ordinal": 102,
+      "contract_id": "radroots.rhi.evidence_attestation.v1",
+      "kind": 3441,
+      "name": "RHI Evidence Attestation",
+      "payload_type": "RadrootsRhiEvidenceAttestationV1",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "service",
+      "content_schema": "json_object",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "x",
+          "cardinality": "required_many",
+          "semantic": "reference",
+          "value_type": "sha256",
+          "relay_indexed": true
+        },
+        {
+          "name": "t",
+          "cardinality": "required_one",
+          "semantic": "status",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_one",
+          "semantic": "previous_event",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "trade_validation"
+      ]
+    },
+    {
+      "ordinal": 103,
       "contract_id": "radroots.trade.validation_receipt.v1",
       "kind": 3440,
       "name": "Trade Validation Receipt",

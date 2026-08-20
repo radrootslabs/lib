@@ -1,6 +1,6 @@
 use radroots_event::GenericEventDraft;
 use radroots_event::draft::DraftError;
-use radroots_event::envelope::kind::{KIND_GEOCHAT, KIND_PROFILE};
+use radroots_event::envelope::kind::{KIND_GEOCHAT, KIND_PROFILE, KIND_RHI_EVIDENCE_ATTESTATION};
 use radroots_event::wire::Nip01EventWireParts;
 use radroots_event_codec::decode::wire::{canonicalize_tags, empty_content};
 
@@ -80,6 +80,23 @@ fn generic_draft_rejects_typed_only_contracts() {
         "a".repeat(64),
     )
     .expect_err("typed-only contract");
+    assert!(matches!(
+        error,
+        DraftError::ContractNotDraftAuthorable { .. }
+    ));
+}
+
+#[test]
+fn generic_draft_rejects_the_typed_only_rhi_attestation_contract() {
+    let error = GenericEventDraft::new(
+        "radroots.rhi.evidence_attestation.v1",
+        KIND_RHI_EVIDENCE_ATTESTATION,
+        99,
+        Vec::new(),
+        "{}",
+        "a".repeat(64),
+    )
+    .expect_err("RHI attestation requires the typed authoring path");
     assert!(matches!(
         error,
         DraftError::ContractNotDraftAuthorable { .. }

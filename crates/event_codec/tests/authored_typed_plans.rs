@@ -38,6 +38,7 @@ use radroots_event::{
 use radroots_event_codec::authoring::{
     AuthoredEventPlan, PlanDecodeError, PlanWireV1, REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS,
 };
+use radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1;
 use radroots_identity::PublicKey;
 use serde::Deserialize;
 use serde_json::Value;
@@ -48,6 +49,7 @@ const CREATED_AT: u64 = 1_784_347_200;
 const ROOT_EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TARGET_EVENT_ID: &str = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 const RELAY: &str = "wss://relay.example.com";
+const RHI_REPORT: &str = "{\"attestation_method\":\"signed_evidence_snapshot\",\"claim_mutation_id\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"contract_id\":\"radroots.rhi.evidence_attestation.v1\",\"contract_version\":1,\"evidence_manifest_digest\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"evidence_policy_digest\":\"5555555555555555555555555555555555555555555555555555555555555555\",\"issuer_pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"observed_at_unix_s\":1800000000,\"outcome\":\"indeterminate\",\"projection_digest\":\"6666666666666666666666666666666666666666666666666666666666666666\",\"reason_codes\":[\"required_source_incomplete\"],\"reducer_contract_id\":\"radroots.trade.reducer.v1\",\"reducer_contract_version\":1,\"report_id\":\"254686397c19fa4235eee820543e8166c0bb758af106ee998684cd9b0f548b30\",\"statement_digest\":\"254686397c19fa4235eee820543e8166c0bb758af106ee998684cd9b0f548b30\",\"supersedes_event_id\":null,\"supersedes_report_id\":null,\"trade_generation\":7,\"trade_id\":\"11111111111111111111111111111111\"}";
 const WORKSPACE_CORPUS_PATH: &str =
     "../../contracts/conformance/vectors/event/authored_operations.v1.json";
 
@@ -212,6 +214,33 @@ fn trade_plan_history_rejects_author_time_content_and_tag_drift() {
     }
 }
 
+#[test]
+fn rhi_plan_history_rejects_author_time_content_and_tag_drift() {
+    let plans = typed_plans();
+    let plan = plans
+        .get("radroots.rhi.evidence_attestation.v1")
+        .expect("RHI plan");
+    for drifted in [
+        mutate_plan_wire(plan, |value| {
+            value["expected_author"] = Value::String(OTHER_AUTHOR.to_owned());
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["content"] = Value::String(format!("{} ", RHI_REPORT));
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["tags"][2][2] = Value::String("unknown".to_owned());
+        }),
+        mutate_plan_wire(plan, |value| {
+            value["tags"].as_array_mut().expect("tags").swap(0, 1);
+        }),
+    ] {
+        assert!(matches!(
+            PlanWireV1::from_json(&drifted),
+            Err(PlanDecodeError::HistoricalShape(_))
+        ));
+    }
+}
+
 fn mutate_plan_wire(plan: &AuthoredEventPlan, mutator: impl FnOnce(&mut Value)) -> Vec<u8> {
     let mut value =
         serde_json::from_slice::<Value>(&PlanWireV1::from_plan(plan).to_json().expect("plan wire"))
@@ -344,6 +373,12 @@ fn typed_plans() -> BTreeMap<&'static str, AuthoredEventPlan> {
             AuthoredEventPlan::from_trade_mutation(mutation).expect("trade plan"),
         );
     }
+    let report =
+        RadrootsRhiEvidenceAttestationV1::from_canonical_content(RHI_REPORT).expect("RHI report");
+    plans.insert(
+        "radroots.rhi.evidence_attestation.v1",
+        AuthoredEventPlan::from_rhi_evidence_attestation(&report, CREATED_AT).expect("RHI plan"),
+    );
     plans
 }
 

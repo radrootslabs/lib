@@ -6,6 +6,7 @@ use radroots_event_codec::{authoring as _, canonical as _, decode as _, encode a
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
+const RHI: &str = include_str!("../src/rhi.rs");
 const VERIFICATION: &str = include_str!("../src/verification/v1.rs");
 const EXAMPLE: &str = include_str!("../examples/verify_profile.rs");
 const FUZZ_LOCK: &str = include_str!("../../../fuzz/event_codec/Cargo.lock");
@@ -125,6 +126,27 @@ fn compatibility_surface_is_removed() {
 }
 
 #[test]
+fn rhi_contract_is_private_curated_and_host_free() {
+    assert!(ROOT.contains("#[cfg(feature = \"json\")]\nmod rhi;"));
+    assert!(!ROOT.contains("pub mod rhi;"));
+
+    for forbidden in [
+        "nostr_sdk::",
+        "reqwest::",
+        "sqlx::",
+        "tokio::",
+        "std::fs",
+        "std::net",
+        "std::process",
+    ] {
+        assert!(
+            !RHI.contains(forbidden),
+            "RHI codec must not acquire host authority through {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn codec_runtime_is_protocol_neutral_and_host_free() {
     let features = table_keys(MANIFEST, "[features]");
     let dependencies = table_keys(MANIFEST, "[dependencies]");
@@ -204,8 +226,12 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub mod radroots_event_codec::verify",
         "pub use radroots_event_codec::VerificationError",
         "pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan",
-        "pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15]",
+        "pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 16]",
         "pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_trade_mutation",
+        "pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_rhi_evidence_attestation",
+        "pub fn radroots_event_codec::decode::rhi::rhi_evidence_attestation_from_verified_event",
+        "pub fn radroots_event_codec::decode::rhi::validate_rhi_evidence_attestation_supersession",
+        "pub fn radroots_event_codec::encode::rhi::rhi_evidence_attestation_event_build_with_extra_tags",
         "pub fn radroots_event_codec::decode::trade::trade_mutation_from_verified_event",
         "pub fn radroots_event_codec::encode::trade::trade_mutation_event_build_with_extra_tags",
         "pub enum radroots_event_codec::decode::trade::RadrootsTradeMutationError",

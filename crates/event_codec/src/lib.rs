@@ -57,6 +57,8 @@ mod report;
 mod repost;
 mod resource_area;
 mod resource_cap;
+#[cfg(feature = "json")]
+mod rhi;
 mod seal;
 mod tag_builders;
 mod trade;

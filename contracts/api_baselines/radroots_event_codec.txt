@@ -182,6 +182,7 @@ pub radroots_event_codec::authoring::AuthoredPlanError::Envelope(radroots_event:
 pub radroots_event_codec::authoring::AuthoredPlanError::FoodAvailability(radroots_event_codec::encode::food_availability::RadrootsFoodAvailabilityEncodeError)
 pub radroots_event_codec::authoring::AuthoredPlanError::InvalidAuthor(radroots_identity::error::Error)
 pub radroots_event_codec::authoring::AuthoredPlanError::Profile(radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError)
+pub radroots_event_codec::authoring::AuthoredPlanError::Rhi(radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError)
 pub radroots_event_codec::authoring::AuthoredPlanError::Trade(radroots_event_codec::decode::trade::RadrootsTradeMutationError)
 impl radroots_event_codec::authoring::AuthoredPlanError
 pub const fn radroots_event_codec::authoring::AuthoredPlanError::code(&self) -> &'static str
@@ -235,6 +236,7 @@ pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip10_reply(&rad
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_nip22_comment(&radroots_event::post::comment::AuthoredNip22Comment) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_photo_update(&radroots_event::post::AuthoredPhotoUpdate) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_profile(&radroots_event::profile::AuthoredProfile) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventBody::from_rhi_evidence_attestation(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_trade_mutation(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventBody::from_update(&radroots_event::post::AuthoredUpdate) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub struct radroots_event_codec::authoring::AuthoredEventPlan
@@ -256,6 +258,7 @@ pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip10_reply(&rad
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_nip22_comment(&radroots_event::post::comment::AuthoredNip22Comment, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_photo_update(&radroots_event::post::AuthoredPhotoUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_profile(&radroots_event::profile::AuthoredProfile, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_rhi_evidence_attestation(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, u64) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_trade_mutation(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_update(&radroots_event::post::AuthoredUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan
@@ -302,7 +305,7 @@ impl serde_core::ser::Serialize for radroots_event_codec::authoring::PlanWireV1
 pub fn radroots_event_codec::authoring::PlanWireV1::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 pub const radroots_event_codec::authoring::PLAN_WIRE_MAX_BYTES: usize
 pub const radroots_event_codec::authoring::PLAN_WIRE_VERSION_V1: u32
-pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15]
+pub const radroots_event_codec::authoring::REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 16]
 pub mod radroots_event_codec::canonical
 pub fn radroots_event_codec::canonical::id(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event::id::EventId, radroots_event_codec::canonical::CanonicalError>
 pub fn radroots_event_codec::canonical::id_preimage(&radroots_event::envelope::EventEnvelope) -> core::result::Result<alloc::string::String, radroots_event_codec::canonical::CanonicalError>
@@ -615,6 +618,64 @@ pub mod radroots_event_codec::decode::resource_cap
 pub fn radroots_event_codec::decode::resource_cap::data_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedData<radroots_event::farm::resource_cap::ResourceHarvestCap>, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::resource_cap::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event::farm::resource_cap::ResourceHarvestCap>, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::resource_cap::resource_harvest_cap_from_event(u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event::farm::resource_cap::ResourceHarvestCap, radroots_event_codec::decode::EventParseError>
+pub mod radroots_event_codec::decode::rhi
+pub enum radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::CallerStructuralTagForbidden
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::ClaimTagMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::ContractTagMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::DuplicateStatementTag
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::DuplicateTradeTag
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::IncompleteSupersessionReference
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::InvalidAttestationKind
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::InvalidIdentifier
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::InvalidOutcome
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::InvalidReport
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::InvalidTagShape
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::IssuerAuthorMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::MissingClaimTag
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::NoncanonicalReportContent
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::OutcomeTagMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::StaleTradeGeneration
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::StatementDigestMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::StatementTagMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::SupersessionTagMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::TradeTagMismatch
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::UnexpectedTag
+impl radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::code(self) -> &'static str
+impl core::error::Error for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+impl core::fmt::Display for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1::Indeterminate
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1::Invalid
+pub radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1::Valid
+impl radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1::as_str(self) -> &'static str
+pub struct radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1
+impl radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1::event_id(&self) -> &radroots_event::id::EventId
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1::report_id(&self) -> &[u8; 32]
+impl core::fmt::Debug for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1
+impl radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::canonical_content(&self) -> &str
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::from_canonical_content(impl core::convert::AsRef<[u8]>) -> core::result::Result<Self, radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::issuer(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::observed_at_unix_s(&self) -> u64
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::outcome(&self) -> radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::statement_digest(&self) -> &[u8; 32]
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::supersession(&self) -> core::option::Option<radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1>
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::trade_generation(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::trade_id(&self) -> &radroots_event::id::TradeId
+impl core::fmt::Debug for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_event_codec::decode::rhi::rhi_evidence_attestation_from_event(&radroots_event::envelope::EventEnvelope) -> core::result::Result<radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
+pub fn radroots_event_codec::decode::rhi::rhi_evidence_attestation_from_verified_event(&radroots_event::verification::SignatureVerifiedEvent) -> core::result::Result<radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
+pub fn radroots_event_codec::decode::rhi::validate_rhi_evidence_attestation_supersession(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, &radroots_event::id::EventId, &radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1) -> core::result::Result<(), radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
+pub fn radroots_event_codec::decode::rhi::validate_rhi_evidence_attestation_tags(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, &[alloc::vec::Vec<alloc::string::String>]) -> core::result::Result<(), radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
 pub mod radroots_event_codec::decode::seal
 pub fn radroots_event_codec::decode::seal::data_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedData<radroots_event::social::seal::Seal>, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::seal::parsed_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, alloc::string::String) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedEvent<radroots_event::social::seal::Seal>, radroots_event_codec::decode::EventParseError>
@@ -998,6 +1059,52 @@ pub mod radroots_event_codec::encode::resource_cap
 pub fn radroots_event_codec::encode::resource_cap::resource_harvest_cap_build_tags(&radroots_event::farm::resource_cap::ResourceHarvestCap) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, radroots_event_codec::encode::EventEncodeError>
 pub fn radroots_event_codec::encode::resource_cap::to_wire_parts(&radroots_event::farm::resource_cap::ResourceHarvestCap) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::encode::EventEncodeError>
 pub fn radroots_event_codec::encode::resource_cap::to_wire_parts_with_kind(&radroots_event::farm::resource_cap::ResourceHarvestCap, u32) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::encode::EventEncodeError>
+pub mod radroots_event_codec::encode::rhi
+pub enum radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::CallerStructuralTagForbidden
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::ClaimTagMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::ContractTagMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::DuplicateStatementTag
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::DuplicateTradeTag
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::IncompleteSupersessionReference
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::InvalidAttestationKind
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::InvalidIdentifier
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::InvalidOutcome
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::InvalidReport
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::InvalidTagShape
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::IssuerAuthorMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::MissingClaimTag
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::NoncanonicalReportContent
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::OutcomeTagMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::StaleTradeGeneration
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::StatementDigestMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::StatementTagMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::SupersessionTagMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::TradeTagMismatch
+pub radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationError::UnexpectedTag
+impl radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::code(self) -> &'static str
+impl core::error::Error for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+impl core::fmt::Display for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_event_codec::encode::rhi::RadrootsRhiEvidenceAttestationV1
+impl radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::canonical_content(&self) -> &str
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::claim_mutation_id(&self) -> &radroots_event::id::MutationId
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::from_canonical_content(impl core::convert::AsRef<[u8]>) -> core::result::Result<Self, radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::issuer(&self) -> &radroots_identity::key::PublicKey
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::observed_at_unix_s(&self) -> u64
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::outcome(&self) -> radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationOutcomeV1
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::statement_digest(&self) -> &[u8; 32]
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::supersession(&self) -> core::option::Option<radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationSupersessionV1>
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::trade_generation(&self) -> core::num::nonzero::NonZeroU64
+pub const fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::trade_id(&self) -> &radroots_event::id::TradeId
+impl core::fmt::Debug for radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1
+pub fn radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_event_codec::encode::rhi::RADROOTS_RHI_EVIDENCE_ATTESTATION_CONTRACT_ID: &str
+pub const radroots_event_codec::encode::rhi::RADROOTS_RHI_EVIDENCE_ATTESTATION_MAXIMUM_BYTES: usize
+pub fn radroots_event_codec::encode::rhi::rhi_evidence_attestation_event_build(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1) -> radroots_event::wire::v1::Nip01EventWireParts
+pub fn radroots_event_codec::encode::rhi::rhi_evidence_attestation_event_build_with_extra_tags(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, &[alloc::vec::Vec<alloc::string::String>]) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationError>
 pub mod radroots_event_codec::encode::seal
 pub fn radroots_event_codec::encode::seal::seal_build_tags(&radroots_event::social::seal::Seal) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, radroots_event_codec::encode::EventEncodeError>
 pub fn radroots_event_codec::encode::seal::to_wire_parts(&radroots_event::social::seal::Seal) -> core::result::Result<radroots_event::wire::v1::Nip01EventWireParts, radroots_event_codec::encode::EventEncodeError>

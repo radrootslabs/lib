@@ -122,6 +122,16 @@ pub mod reply {
 }
 
 #[cfg(feature = "json")]
+pub mod rhi {
+    pub use crate::rhi::{
+        RADROOTS_RHI_EVIDENCE_ATTESTATION_CONTRACT_ID,
+        RADROOTS_RHI_EVIDENCE_ATTESTATION_MAXIMUM_BYTES, RadrootsRhiEvidenceAttestationError,
+        RadrootsRhiEvidenceAttestationV1, rhi_evidence_attestation_event_build,
+        rhi_evidence_attestation_event_build_with_extra_tags,
+    };
+}
+
+#[cfg(feature = "json")]
 pub mod trade {
     pub use crate::trade::{
         RadrootsTradeMutationError, trade_mutation_event_build,

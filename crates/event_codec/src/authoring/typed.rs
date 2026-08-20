@@ -54,6 +54,10 @@ use crate::{
     },
     post::inbound::registry_v7::{RadrootsPostClassification, project_inbound_post_parts},
     reply::inbound::registry_v7::{RadrootsNip10ReplyStyle, project_nip10_reply_parts},
+    rhi::{
+        RadrootsRhiEvidenceAttestationError, RadrootsRhiEvidenceAttestationV1,
+        rhi_evidence_attestation_event_build, validate_parts as validate_rhi_attestation_parts,
+    },
     trade::{
         RadrootsTradeMutationError, trade_mutation_event_build, validate_trade_mutation_parts,
     },
@@ -61,7 +65,7 @@ use crate::{
 
 use super::{AuthoredEventBody, AuthoredEventPlan};
 
-pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15] = [
+pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 16] = [
     "radroots.profile.metadata.v1",
     "radroots.social.update.v1",
     "radroots.social.photo_update.v1",
@@ -77,6 +81,7 @@ pub const REGISTRY_V7_TYPED_AUTHORING_CONTRACT_IDS: [&str; 15] = [
     "radroots.trade.revision_proposal.v1",
     "radroots.trade.revision_decision.v1",
     "radroots.trade.cancellation.v1",
+    "radroots.rhi.evidence_attestation.v1",
 ];
 
 #[non_exhaustive]
@@ -101,6 +106,8 @@ pub enum AuthoredPlanError {
     Profile(RadrootsAuthoredProfileEncodeError),
     #[cfg(feature = "json")]
     Trade(RadrootsTradeMutationError),
+    #[cfg(feature = "json")]
+    Rhi(RadrootsRhiEvidenceAttestationError),
     FoodAvailability(RadrootsFoodAvailabilityEncodeError),
     Calendar(crate::encode::EventEncodeError),
 }
@@ -120,6 +127,8 @@ impl AuthoredPlanError {
             Self::Profile(error) => error.code(),
             #[cfg(feature = "json")]
             Self::Trade(error) => error.code(),
+            #[cfg(feature = "json")]
+            Self::Rhi(error) => error.code(),
             Self::FoodAvailability(error) => error.code(),
             Self::Calendar(error) => error.code(),
         }
@@ -153,6 +162,8 @@ impl fmt::Display for AuthoredPlanError {
             Self::Profile(error) => write!(formatter, "{error}"),
             #[cfg(feature = "json")]
             Self::Trade(error) => write!(formatter, "{error}"),
+            #[cfg(feature = "json")]
+            Self::Rhi(error) => write!(formatter, "{error}"),
             Self::FoodAvailability(error) => write!(formatter, "{error}"),
             Self::Calendar(error) => write!(formatter, "{error}"),
         }
@@ -240,6 +251,16 @@ impl AuthoredEventBody {
         let contract_id = envelope.contract_id.clone();
         let wire = trade_mutation_event_build(envelope).map_err(AuthoredPlanError::Trade)?;
         build_typed_body(&contract_id, wire)
+    }
+
+    #[cfg(feature = "json")]
+    pub fn from_rhi_evidence_attestation(
+        attestation: &RadrootsRhiEvidenceAttestationV1,
+    ) -> Result<Self, AuthoredPlanError> {
+        build_typed_body(
+            "radroots.rhi.evidence_attestation.v1",
+            rhi_evidence_attestation_event_build(attestation),
+        )
     }
 }
 
@@ -400,6 +421,18 @@ impl AuthoredEventPlan {
             expected_author,
         )
     }
+
+    #[cfg(feature = "json")]
+    pub fn from_rhi_evidence_attestation(
+        attestation: &RadrootsRhiEvidenceAttestationV1,
+        created_at: u64,
+    ) -> Result<Self, AuthoredPlanError> {
+        Self::bind(
+            AuthoredEventBody::from_rhi_evidence_attestation(attestation)?,
+            created_at,
+            attestation.issuer().to_hex(),
+        )
+    }
 }
 
 fn build_typed_body(
@@ -466,6 +499,11 @@ pub(super) fn validate_historical_typed_profile(
         | "radroots.trade.revision_decision.v1"
         | "radroots.trade.cancellation.v1" => {
             validate_trade_mutation_parts(kind, created_at, expected_author, tags, content)
+                .map(|_| ())
+                .map_err(|error| error.code().to_string())
+        }
+        "radroots.rhi.evidence_attestation.v1" => {
+            validate_rhi_attestation_parts(kind, expected_author, tags, content)
                 .map(|_| ())
                 .map_err(|error| error.code().to_string())
         }

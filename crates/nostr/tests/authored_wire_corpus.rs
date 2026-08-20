@@ -39,7 +39,11 @@ use radroots_event::{
     wire::canonical_nip01_event_id_preimage,
 };
 use radroots_event_codec::{
-    authoring::AuthoredEventPlan, decode::trade::trade_mutation_from_verified_event,
+    authoring::AuthoredEventPlan,
+    decode::{
+        rhi::{RadrootsRhiEvidenceAttestationV1, rhi_evidence_attestation_from_verified_event},
+        trade::trade_mutation_from_verified_event,
+    },
     verify::verify_nip01_event,
 };
 use radroots_identity::PublicKey;
@@ -61,6 +65,7 @@ use support::{
 const CREATED_AT: u64 = 1_784_347_200;
 const ROOT_EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TARGET_EVENT_ID: &str = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+const RHI_REPORT: &str = "{\"attestation_method\":\"signed_evidence_snapshot\",\"claim_mutation_id\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"contract_id\":\"radroots.rhi.evidence_attestation.v1\",\"contract_version\":1,\"evidence_manifest_digest\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"evidence_policy_digest\":\"5555555555555555555555555555555555555555555555555555555555555555\",\"issuer_pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"observed_at_unix_s\":1800000000,\"outcome\":\"indeterminate\",\"projection_digest\":\"6666666666666666666666666666666666666666666666666666666666666666\",\"reason_codes\":[\"required_source_incomplete\"],\"reducer_contract_id\":\"radroots.trade.reducer.v1\",\"reducer_contract_version\":1,\"report_id\":\"254686397c19fa4235eee820543e8166c0bb758af106ee998684cd9b0f548b30\",\"statement_digest\":\"254686397c19fa4235eee820543e8166c0bb758af106ee998684cd9b0f548b30\",\"supersedes_event_id\":null,\"supersedes_report_id\":null,\"trade_generation\":7,\"trade_id\":\"11111111111111111111111111111111\"}";
 const WORKSPACE_CONTRACT_MARKER_PATH: &str = "../../contracts/manifest.toml";
 const PACKAGED_CORPUS: &str = include_str!("fixtures/authored_operations.v1.json");
 const WORKSPACE_CORPUS_PATH: &str =
@@ -113,7 +118,6 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
         contract_version: "1.0.0".to_owned(),
         vectors: authored_wire_vectors(),
     };
-
     if expected.vectors.is_empty() {
         panic!(
             "authored corpus requires generated vectors:\n{}",
@@ -121,7 +125,7 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
         );
     }
     assert_eq!(actual, expected);
-    assert_eq!(actual.vectors.len(), 16);
+    assert_eq!(actual.vectors.len(), 17);
     assert_eq!(APPROVED_FIXTURE_NAMESPACE, "radroots-approved-fixture-v1");
     assert_eq!(
         actual
@@ -129,7 +133,7 @@ fn checked_in_authored_wire_corpus_is_exact_and_executable() {
             .iter()
             .filter(|vector| vector.input.authoring == "typed")
             .count(),
-        15
+        16
     );
     assert!(actual.vectors.iter().all(|vector| {
         !vector
@@ -400,7 +404,68 @@ fn authored_wire_vectors() -> Vec<WireVector> {
         vectors.push(typed_trade_vector(id, mutation, &keys));
     }
 
+    vectors.push(typed_rhi_vector(
+        "typed_rhi_evidence_attestation_017",
+        &keys,
+    ));
+
     vectors
+}
+
+fn typed_rhi_vector(id: &str, keys: &Keys) -> WireVector {
+    let report = RadrootsRhiEvidenceAttestationV1::from_canonical_content(RHI_REPORT)
+        .expect("typed RHI report");
+    let plan = AuthoredEventPlan::from_rhi_evidence_attestation(&report, CREATED_AT)
+        .expect("typed RHI plan");
+    let tags = plan
+        .body()
+        .tags()
+        .iter()
+        .cloned()
+        .map(Tag::parse)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("RHI tags");
+    let event = UnsignedEvent {
+        id: Some(
+            nostr::EventId::from_hex(&plan.expected_event_id().to_hex())
+                .expect("planned RHI event id"),
+        ),
+        pubkey: keys.public_key(),
+        created_at: Timestamp::from_secs(plan.created_at()),
+        kind: Kind::Custom(u16::try_from(plan.body().kind()).expect("RHI kind")),
+        tags: nostr::Tags::from_list(tags),
+        content: plan.body().content().to_owned(),
+    }
+    .sign_with_ctx(nostr::SECP256K1, &mut CorpusAuxRng, keys)
+    .expect("RHI event");
+    let verified = verify_nip01_event(
+        EventEnvelope::new(EventEnvelopeParts {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            created_at: event.created_at.as_secs(),
+            kind: u32::from(event.kind.as_u16()),
+            tags: event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect(),
+            content: event.content.clone(),
+            sig: event.sig.to_string(),
+        })
+        .expect("RHI event envelope"),
+    )
+    .expect("verified RHI event");
+    let signature_verified = radroots_event::admission::RawEvent::new(verified.into_event())
+        .verify_id()
+        .expect("RHI identifier typestate")
+        .verify_signature(&radroots_event_codec::verify::Nip01SignatureVerifier)
+        .expect("RHI signature typestate");
+    assert_eq!(
+        rhi_evidence_attestation_from_verified_event(&signature_verified)
+            .expect("validated RHI event"),
+        report
+    );
+    vector(id, "radroots.rhi.evidence_attestation.v1", "typed", event)
 }
 
 fn typed_trade_vector(id: &str, mutation: TradeMutationEnvelopeV1, keys: &Keys) -> WireVector {

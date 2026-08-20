@@ -568,6 +568,27 @@ const TAG_X_TRADE_MUTATIONS: TagContract = tag(
     TagValueType::MutationId,
     true,
 );
+const TAG_X_RHI_ATTESTATION_REFERENCES: TagContract = tag(
+    "x",
+    TagCardinality::RequiredMany,
+    TagSemantic::Reference,
+    TagValueType::Sha256,
+    true,
+);
+const TAG_T_RHI_ATTESTATION_OUTCOME: TagContract = tag(
+    "t",
+    TagCardinality::RequiredOne,
+    TagSemantic::Status,
+    TagValueType::Text,
+    true,
+);
+const TAG_E_RHI_SUPERSEDES_EVENT: TagContract = tag(
+    "e",
+    TagCardinality::OptionalOne,
+    TagSemantic::PreviousEvent,
+    TagValueType::EventId,
+    true,
+);
 const TAG_CALENDAR_PARTICIPANT: TagContract = tag(
     "p",
     TagCardinality::OptionalMany,
@@ -1334,6 +1355,13 @@ const TRADE_MUTATION_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_X_TRADE_MUTATIONS,
     TAG_P_TRADE_PARTIES,
+];
+const RHI_EVIDENCE_ATTESTATION_TAGS: &[TagContract] = &[
+    TAG_CONTRACT_REQUIRED,
+    TAG_D,
+    TAG_X_RHI_ATTESTATION_REFERENCES,
+    TAG_T_RHI_ATTESTATION_OUTCOME,
+    TAG_E_RHI_SUPERSEDES_EVENT,
 ];
 const TRADE_VALIDATION_RECEIPT_TAGS: &[TagContract] =
     &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
@@ -2316,6 +2344,14 @@ static KIND_CONTRACTS_REGISTRY_V7: &[KindContract] = &[
         EventClass::Regular,
         NostrStandard::Radroots,
         ["radroots.trade.validation_receipt.v1"]
+    ),
+    kind_contract!(
+        KIND_RHI_EVIDENCE_ATTESTATION,
+        "KIND_RHI_EVIDENCE_ATTESTATION",
+        "RHI Evidence Attestation",
+        EventClass::Regular,
+        NostrStandard::Radroots,
+        ["radroots.rhi.evidence_attestation.v1"]
     ),
 ];
 
@@ -3703,6 +3739,20 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
         TRADE_MUTATION_TAGS,
         TRADE_MUTATION_REDUCERS
     ),
+    event_contract_with_authoring_policy!(
+        "radroots.rhi.evidence_attestation.v1",
+        KIND_RHI_EVIDENCE_ATTESTATION,
+        "RHI Evidence Attestation",
+        "RadrootsRhiEvidenceAttestationV1",
+        EventClass::Regular,
+        EventPrivacy::Public,
+        AuthorRole::Service,
+        ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::KindOnly,
+        RHI_EVIDENCE_ATTESTATION_TAGS,
+        TRADE_VALIDATION_REDUCERS
+    ),
     event_contract!(
         "radroots.trade.validation_receipt.v1",
         KIND_TRADE_VALIDATION_RECEIPT,
@@ -3815,6 +3865,7 @@ pub fn kind_contract_family(contract: &KindContract) -> Option<ContractFamily> {
         | KIND_FARM_CRDT_CHANGE => ContractFamily::Farm,
         KIND_CLASSIFIED_LISTING => ContractFamily::Market,
         KIND_TRADE_VALIDATION_RECEIPT
+        | KIND_RHI_EVIDENCE_ATTESTATION
         | KIND_TRADE_PROPOSAL
         | KIND_TRADE_DECISION
         | KIND_TRADE_REVISION_PROPOSAL
