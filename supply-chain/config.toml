@@ -74,9 +74,9 @@ criteria = "secret-handling-reviewed"
 [[exemptions.allocator-api2]]
 version = "0.2.21"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.android_system_properties]]
@@ -106,9 +106,9 @@ criteria = "safe-to-deploy"
 [[exemptions.anyhow]]
 version = "1.0.102"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.apple-native-keyring-store]]
@@ -286,17 +286,17 @@ criteria = "safe-to-deploy"
 [[exemptions.bitflags]]
 version = "2.11.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.block-buffer]]
 version = "0.10.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.block-buffer]]
@@ -306,9 +306,9 @@ criteria = "safe-to-deploy"
 [[exemptions.block-padding]]
 version = "0.3.3"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.blocking]]
@@ -322,9 +322,9 @@ criteria = "safe-to-deploy"
 [[exemptions.bumpalo]]
 version = "3.20.2"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.bytecount]]
@@ -370,9 +370,9 @@ criteria = ["network-parser-reviewed", "secret-handling-reviewed"]
 [[exemptions.cc]]
 version = "1.2.57"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.cexpr]]
@@ -382,9 +382,9 @@ criteria = "safe-to-deploy"
 [[exemptions.cfg-if]]
 version = "1.0.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.cfg_aliases]]
@@ -410,9 +410,9 @@ criteria = "safe-to-deploy"
 [[exemptions.cipher]]
 version = "0.4.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.clang-sys]]
@@ -478,9 +478,9 @@ criteria = "safe-to-deploy"
 [[exemptions.cpufeatures]]
 version = "0.2.17"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.cpufeatures]]
@@ -522,9 +522,9 @@ criteria = "safe-to-deploy"
 [[exemptions.crypto-common]]
 version = "0.1.7"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.crypto-common]]
@@ -582,9 +582,9 @@ criteria = "safe-to-deploy"
 [[exemptions.digest]]
 version = "0.10.7"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.digest]]
@@ -670,9 +670,9 @@ criteria = "secret-handling-reviewed"
 [[exemptions.equivalent]]
 version = "1.0.2"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.errno]]
@@ -722,9 +722,9 @@ criteria = "safe-to-deploy"
 [[exemptions.find-msvc-tools]]
 version = "0.1.9"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.flatbuffers]]
@@ -746,17 +746,17 @@ criteria = "safe-to-deploy"
 [[exemptions.foldhash]]
 version = "0.1.5"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.foldhash]]
 version = "0.2.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.foreign-types]]
@@ -834,25 +834,25 @@ criteria = ["network-parser-reviewed", "secret-handling-reviewed"]
 [[exemptions.generic-array]]
 version = "0.14.7"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.getrandom]]
 version = "0.2.17"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.getrandom]]
 version = "0.3.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.getrandom]]
@@ -894,17 +894,17 @@ criteria = "safe-to-deploy"
 [[exemptions.hashbrown]]
 version = "0.15.5"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.hashbrown]]
 version = "0.16.1"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.hashbrown]]
@@ -918,9 +918,9 @@ criteria = "safe-to-deploy"
 [[exemptions.heck]]
 version = "0.5.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.hermit-abi]]
@@ -942,9 +942,9 @@ criteria = "secret-handling-reviewed"
 [[exemptions.hmac]]
 version = "0.12.1"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.home]]
@@ -1026,9 +1026,9 @@ criteria = "network-parser-reviewed"
 [[exemptions.id-arena]]
 version = "2.3.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.idna]]
@@ -1046,17 +1046,17 @@ criteria = "network-parser-reviewed"
 [[exemptions.indexmap]]
 version = "2.13.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.inout]]
 version = "0.1.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.instant]]
@@ -1082,9 +1082,9 @@ criteria = "safe-to-deploy"
 [[exemptions.itoa]]
 version = "1.0.18"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.jiff-tzdb]]
@@ -1094,17 +1094,17 @@ criteria = "safe-to-deploy"
 [[exemptions.jobserver]]
 version = "0.1.34"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.js-sys]]
 version = "0.3.91"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.jsonschema]]
@@ -1150,17 +1150,17 @@ criteria = "safe-to-deploy"
 [[exemptions.leb128fmt]]
 version = "0.1.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.libc]]
 version = "0.2.183"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.libdbus-sys]]
@@ -1218,9 +1218,9 @@ criteria = "safe-to-deploy"
 [[exemptions.log]]
 version = "0.4.29"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.lru]]
@@ -1238,9 +1238,9 @@ criteria = "safe-to-deploy"
 [[exemptions.memchr]]
 version = "2.8.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.memoffset]]
@@ -1370,9 +1370,9 @@ criteria = "safe-to-deploy"
 [[exemptions.once_cell]]
 version = "1.21.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.once_cell_polyfill]]
@@ -1494,9 +1494,9 @@ criteria = "network-parser-reviewed"
 [[exemptions.prettyplease]]
 version = "0.2.37"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.proc-macro-crate]]
@@ -1506,10 +1506,10 @@ criteria = "secret-handling-reviewed"
 [[exemptions.proc-macro2]]
 version = "1.0.106"
 criteria = [
-    "build-execution-reviewed",
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "build-execution-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.quinn]]
@@ -1527,18 +1527,18 @@ criteria = "safe-to-deploy"
 [[exemptions.quote]]
 version = "1.0.45"
 criteria = [
-    "build-execution-reviewed",
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "build-execution-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.r-efi]]
 version = "5.3.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.r-efi]]
@@ -1572,9 +1572,9 @@ criteria = "safe-to-deploy"
 [[exemptions.rand_core]]
 version = "0.6.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.rand_core]]
@@ -1704,9 +1704,9 @@ criteria = "network-parser-reviewed"
 [[exemptions.rustversion]]
 version = "1.0.22"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.ryu]]
@@ -1776,17 +1776,17 @@ criteria = "secret-handling-reviewed"
 [[exemptions.semver]]
 version = "1.0.27"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.serde]]
 version = "1.0.228"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.serde-wasm-bindgen]]
@@ -1796,25 +1796,25 @@ criteria = "safe-to-deploy"
 [[exemptions.serde_core]]
 version = "1.0.228"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.serde_derive]]
 version = "1.0.228"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.serde_json]]
 version = "1.0.149"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.serde_repr]]
@@ -1840,17 +1840,17 @@ criteria = "network-parser-reviewed"
 [[exemptions.sha2]]
 version = "0.10.9"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.sha2-asm]]
 version = "0.6.4"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.sha3]]
@@ -1868,9 +1868,9 @@ criteria = "safe-to-deploy"
 [[exemptions.shlex]]
 version = "1.3.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.signal-hook-registry]]
@@ -1968,9 +1968,9 @@ criteria = "safe-to-deploy"
 [[exemptions.subtle]]
 version = "2.6.1"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.symlink]]
@@ -1980,10 +1980,10 @@ criteria = "safe-to-deploy"
 [[exemptions.syn]]
 version = "2.0.117"
 criteria = [
-    "build-execution-reviewed",
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "build-execution-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.syn]]
@@ -2177,9 +2177,9 @@ criteria = "safe-to-deploy"
 [[exemptions.typenum]]
 version = "1.20.1"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.uds_windows]]
@@ -2197,10 +2197,10 @@ criteria = "safe-to-deploy"
 [[exemptions.unicode-ident]]
 version = "1.0.24"
 criteria = [
-    "build-execution-reviewed",
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "build-execution-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.unicode-normalization]]
@@ -2210,9 +2210,9 @@ criteria = "network-parser-reviewed"
 [[exemptions.unicode-xid]]
 version = "0.2.6"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.uniffi]]
@@ -2334,9 +2334,9 @@ criteria = "secret-handling-reviewed"
 [[exemptions.version_check]]
 version = "0.9.5"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.vsimd]]
@@ -2354,17 +2354,17 @@ criteria = "safe-to-deploy"
 [[exemptions.wasi]]
 version = "0.11.1+wasi-snapshot-preview1"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasip2]]
 version = "1.0.2+wasi-0.2.9"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasip3]]
@@ -2374,9 +2374,9 @@ criteria = "secret-handling-reviewed"
 [[exemptions.wasm-bindgen]]
 version = "0.2.114"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasm-bindgen-futures]]
@@ -2386,25 +2386,25 @@ criteria = "network-parser-reviewed"
 [[exemptions.wasm-bindgen-macro]]
 version = "0.2.114"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasm-bindgen-macro-support]]
 version = "0.2.114"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasm-bindgen-shared]]
 version = "0.2.114"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasm-bindgen-test]]
@@ -2422,17 +2422,17 @@ criteria = "safe-to-run"
 [[exemptions.wasm-encoder]]
 version = "0.244.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasm-metadata]]
 version = "0.244.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wasm-streams]]
@@ -2442,9 +2442,9 @@ criteria = "safe-to-deploy"
 [[exemptions.wasmparser]]
 version = "0.244.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.web-sys]]
@@ -2614,49 +2614,49 @@ criteria = "secret-handling-reviewed"
 [[exemptions.wit-bindgen]]
 version = "0.51.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wit-bindgen-core]]
 version = "0.51.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wit-bindgen-rust]]
 version = "0.51.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wit-bindgen-rust-macro]]
 version = "0.51.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wit-component]]
 version = "0.244.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.wit-parser]]
 version = "0.244.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.writeable]]
@@ -2730,17 +2730,17 @@ criteria = "network-parser-reviewed"
 [[exemptions.zeroize]]
 version = "1.9.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.zeroize_derive]]
 version = "1.5.0"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.zerotrie]]
@@ -2766,9 +2766,9 @@ criteria = "safe-to-deploy"
 [[exemptions.zmij]]
 version = "1.0.21"
 criteria = [
-    "crypto-reviewed",
-    "network-parser-reviewed",
-    "secret-handling-reviewed",
+  "crypto-reviewed",
+  "network-parser-reviewed",
+  "secret-handling-reviewed",
 ]
 
 [[exemptions.zopfli]]
