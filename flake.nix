@@ -71,9 +71,7 @@
             (import ./build/nix/checks.nix {
               inherit common pkgs;
             })
-            // {
-              service-helper-fixture = serviceFixture.check;
-            }
+            // serviceFixture.outputs.checks
           );
 
           devShells = import ./build/nix/devshells.nix {
