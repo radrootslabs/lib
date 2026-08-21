@@ -1,0 +1,20 @@
+schema = "radroots.service.source-lock.v1"
+contract_version = 1
+service = "fixture_service"
+repository = "https://github.com/radrootslabs/lib"
+revision = "2222222222222222222222222222222222222222"
+architecture = "radroots.crates.release.v2"
+workspace_catalog_sha256 = "2222222222222222222222222222222222222222222222222222222222222222"
+version = "0.1.0-alpha"
+source_archive_sha256 = "3333333333333333333333333333333333333333333333333333333333333333"
+cargo_lock_sha256 = "3f32f227550b26ffccf6ee73ceab7471b3d8ce40b3e7c345d2ed65af7e9affa0"
+flake_lock_sha256 = "13638c254efcc7ccc5798242d2c095934e84fbc406a9af244fc754b18a6f9353"
+rust_version = "1.97.1"
+host_feature_profile = "service-host"
+
+[contract_versions]
+config = 1
+state = 2
+admin = 3
+status = 4
+provider = 5

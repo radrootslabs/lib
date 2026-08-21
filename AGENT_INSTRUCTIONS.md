@@ -32,7 +32,10 @@ Stay disciplined:
 - do not leave dead paths, temporary adapters, or silent fallback behavior behind
 
 This repo is a library workspace, not an app monolith. The right default is small, durable changes that preserve clean crate boundaries.
-Release automation should stay forge-agnostic. Keep release truth in repo-owned xtask commands, Nix apps, tags, and contract metadata rather than committed provider-specific workflow files.
+Release automation should stay forge-agnostic. Keep release truth in repo-owned
+xtask commands, native Cargo lanes, tags, and contract metadata rather than
+committed provider-specific workflow files. Checked-in Nix surfaces are
+deferred compatibility inputs and are not current qualification authority.
 
 ## 3. Preflight workflow
 
@@ -41,14 +44,17 @@ Before editing code:
 - Read `AGENTS.md`.
 - Read this file.
 - Read `README` when the change touches workflow or public surfaces.
-- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under `build/nix/`.
+- When preserving deferred Nix behavior, read `flake.nix` and the relevant
+  implementation files under `build/nix/`, but do not install, invoke, or
+  require Nix as part of current qualification.
 - Read the relevant crate manifest, implementation files, and nearby tests before proposing a new structure.
 - Check `git status --short`.
 
-Before running cargo commands:
+Before running governed build, test, check, generation, package, artifact, or
+release-preflight commands:
 
-- Prefer `nix develop` or `direnv allow`.
-- Treat Nix as the canonical environment contract.
+- Run `cargo extbuild doctor` once for the working session.
+- Route the command through `cargo extbuild run --`.
 - Prefer the documented repo-owned command surface over improvised local commands.
 
 Fail early when:
@@ -75,7 +81,8 @@ Use this mental model:
 - `contracts/conformance/`
   - cross-language and cross-surface vector expectations
 - `build/nix/`, `flake.nix`, `treefmt.nix`
-  - canonical environment and CI contract
+  - deferred compatibility surfaces whose evaluation and outputs are not
+    current qualification evidence
 - `tools/xtask/`
   - typed repo-owned automation used by canonical lanes
 
@@ -194,20 +201,21 @@ authority to expand it.
 
 Use the smallest authoritative lane that proves the change green.
 
-Repo-wide canonical lanes:
+Repo-wide canonical lanes, all routed through `cargo extbuild run --`:
 
-- `nix flake check`
-- `nix run .#contract`
-- `nix run .#release-preflight`
+- `cargo check --workspace --all-targets --locked`
+- `cargo test --workspace --all-targets --locked`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo doc --workspace --no-deps`
+- `cargo xtask contract validate`
+- `cargo xtask release preflight`
 
-Targeted iteration inside the Nix shell:
+Targeted iteration, also routed through `cargo extbuild run --`:
 
 - `cargo check -p <crate>`
 - `cargo test -p <crate>`
-- `cargo xtask contract validate`
 - `cargo xtask dto-roots --check`
 - `cargo xtask dto-roots --write` after changing configured DTO exports
-- `cargo xtask release preflight`
 - `cargo xtask hygiene forbidden-identifiers`
 - `cargo xtask hygiene prototype-contracts` for the deterministic report-only
   service-prototype census; strict mode is enabled only after the owning
@@ -216,7 +224,10 @@ Targeted iteration inside the Nix shell:
 Validation rules:
 
 - crate-local changes may iterate with targeted cargo commands
-- contract, export, conformance, flake, release, or multi-crate changes should close on a canonical Nix lane
+- contract, export, conformance, release, or multi-crate changes should close
+  on the applicable extbuild-routed repository-wide lanes
+- Nix evaluation and Nix-derived package, app, check, development-shell,
+  NixOS-module, and OCI outputs remain explicitly deferred and unclaimed
 - deterministic tests are required for new behavior and edge cases
 - do not rely on wall-clock time, random order, external network access, or ambient machine state in unit tests
 

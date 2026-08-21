@@ -445,11 +445,7 @@ fn validate_decision(decision: &SourceLockDecision) -> Result<(), ServiceSourceL
                 "canonical_public_remote",
             ]
         && decision.operations.maximum_source_archive_bytes == 1_073_741_824
-        && decision.deferred_operations
-            == [
-                "embedded_build_information_agreement",
-                "service_fixture_release_graph",
-            ];
+        && decision.deferred_operations == ["embedded_build_information_agreement"];
     if exact {
         Ok(())
     } else {
@@ -460,11 +456,11 @@ fn validate_decision(decision: &SourceLockDecision) -> Result<(), ServiceSourceL
 fn canonical_vector() -> ServiceSourceLockV1 {
     ServiceSourceLockV1::new(ServiceSourceLockParts {
         service: "fixture_service",
-        revision: "1111111111111111111111111111111111111111",
+        revision: "2222222222222222222222222222222222222222",
         workspace_catalog_sha256: "2222222222222222222222222222222222222222222222222222222222222222",
         source_archive_sha256: "3333333333333333333333333333333333333333333333333333333333333333",
-        cargo_lock_sha256: "4444444444444444444444444444444444444444444444444444444444444444",
-        flake_lock_sha256: "5555555555555555555555555555555555555555555555555555555555555555",
+        cargo_lock_sha256: "3f32f227550b26ffccf6ee73ceab7471b3d8ce40b3e7c345d2ed65af7e9affa0",
+        flake_lock_sha256: "13638c254efcc7ccc5798242d2c095934e84fbc406a9af244fc754b18a6f9353",
         contract_versions: ContractVersions::new(1, 2, 3, 4, 5),
     })
     .expect("the governed source-lock vector is valid")
@@ -584,6 +580,8 @@ fn render(raw: &RawServiceSourceLock) -> String {
 mod tests {
     use std::error::Error as _;
 
+    use crate::workspace_root;
+
     use super::*;
 
     #[test]
@@ -591,12 +589,88 @@ mod tests {
         let lock = canonical_vector();
         assert_eq!(
             hex::encode(Sha256::digest(lock.canonical_bytes())),
-            "2257efc8fb3ff4ee8e429e326effdfe622c5e898b429ee1a8ea3aac38f9810cc"
+            "7251222df95da414d8cb073b8907f4a53c9ac4c89354bb2d895ac78fab79d81a"
         );
         assert_eq!(
             ServiceSourceLockV1::from_canonical_bytes(lock.canonical_bytes()),
             Ok(lock)
         );
+    }
+
+    #[test]
+    fn decision_rejects_every_independent_governed_field_drift() {
+        let bytes = fs::read(workspace_root().join(CONTRACT_RELATIVE)).expect("decision");
+        let canonical = serde_json::from_slice::<serde_json::Value>(&bytes).expect("decision json");
+        for (pointer, replacement) in [
+            ("/schema", serde_json::json!("other")),
+            ("/contract_version", serde_json::json!(2)),
+            ("/decision_state", serde_json::json!("draft")),
+            ("/lock_filename", serde_json::json!("other")),
+            ("/lock_schema", serde_json::json!("other")),
+            ("/canonical_encoding", serde_json::json!("other")),
+            ("/maximum_lock_utf8_bytes", serde_json::json!(1)),
+            ("/maximum_service_utf8_bytes", serde_json::json!(1)),
+            ("/canonical_field_order", serde_json::json!([])),
+            ("/fixed/repository", serde_json::json!("other")),
+            ("/fixed/architecture", serde_json::json!("other")),
+            ("/fixed/version", serde_json::json!("other")),
+            ("/fixed/rust_version", serde_json::json!("other")),
+            ("/fixed/host_feature_profile", serde_json::json!("other")),
+            ("/revision_encoding", serde_json::json!("other")),
+            ("/digest_encoding", serde_json::json!("other")),
+            (
+                "/digest_subjects/workspace_catalog_sha256",
+                serde_json::json!("other"),
+            ),
+            (
+                "/digest_subjects/source_archive_sha256",
+                serde_json::json!("other"),
+            ),
+            (
+                "/digest_subjects/cargo_lock_sha256",
+                serde_json::json!("other"),
+            ),
+            (
+                "/digest_subjects/flake_lock_sha256",
+                serde_json::json!("other"),
+            ),
+            ("/service_identifier", serde_json::json!("other")),
+            ("/contract_version_rule", serde_json::json!("other")),
+            ("/negative_error_codes", serde_json::json!([])),
+            ("/operations/command", serde_json::json!("other")),
+            ("/operations/modes", serde_json::json!([])),
+            ("/operations/required_arguments", serde_json::json!([])),
+            (
+                "/operations/service_metadata_path",
+                serde_json::json!("other"),
+            ),
+            ("/operations/service_metadata_fields", serde_json::json!([])),
+            (
+                "/operations/lib_dependency_inventory",
+                serde_json::json!("other"),
+            ),
+            ("/operations/source_cleanliness", serde_json::json!("other")),
+            (
+                "/operations/service_revision_stability",
+                serde_json::json!("other"),
+            ),
+            ("/operations/revision_agreement", serde_json::json!([])),
+            (
+                "/operations/maximum_source_archive_bytes",
+                serde_json::json!(1),
+            ),
+            ("/deferred_operations", serde_json::json!(["future"])),
+        ] {
+            let mut drifted = canonical.clone();
+            *drifted.pointer_mut(pointer).expect("governed field") = replacement;
+            let decision = serde_json::from_value::<SourceLockDecision>(drifted)
+                .expect("structurally valid drift");
+            assert_eq!(
+                validate_decision(&decision),
+                Err(ServiceSourceLockError::InvalidFixedIdentity),
+                "accepted drift at {pointer}"
+            );
+        }
     }
 
     #[test]
@@ -671,13 +745,13 @@ mod tests {
                 ServiceSourceLockError::InvalidService,
             ),
             (
-                "1111111111111111111111111111111111111111",
+                "2222222222222222222222222222222222222222",
                 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 ServiceSourceLockError::InvalidRevision,
             ),
             (
-                "1111111111111111111111111111111111111111",
-                "111111111111111111111111111111111111111",
+                "2222222222222222222222222222222222222222",
+                "222222222222222222222222222222222222222",
                 ServiceSourceLockError::InvalidRevision,
             ),
             (
@@ -691,12 +765,12 @@ mod tests {
                 ServiceSourceLockError::InvalidDigest,
             ),
             (
-                "4444444444444444444444444444444444444444444444444444444444444444",
+                "3f32f227550b26ffccf6ee73ceab7471b3d8ce40b3e7c345d2ed65af7e9affa0",
                 "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
                 ServiceSourceLockError::InvalidDigest,
             ),
             (
-                "5555555555555555555555555555555555555555555555555555555555555555",
+                "13638c254efcc7ccc5798242d2c095934e84fbc406a9af244fc754b18a6f9353",
                 "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
                 ServiceSourceLockError::InvalidDigest,
             ),

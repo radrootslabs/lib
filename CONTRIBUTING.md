@@ -26,10 +26,12 @@ repository owns its first 17 public packages, from `radroots_core` through
 5. Review the staged diff for API leakage, private dependencies, generated
    drift, secrets, hidden side effects, and unrelated changes.
 
-Canonical repository-wide lanes are `nix flake check`,
-`nix run .#contract`, and `nix run .#release-preflight`. Targeted Rust work is
-performed in the repository's Nix environment with the applicable format,
-check, test, Clippy, contract, coverage, and generated-freshness commands.
+Run `cargo extbuild doctor` before governed verification. Canonical
+repository-wide lanes are the extbuild-routed workspace format, check, test,
+Clippy, Rustdoc, contract, release-preflight, coverage, and
+generated-freshness commands. Nix evaluation and Nix-derived outputs are
+currently deferred and unclaimed; they are not prerequisites for native
+qualification.
 
 ## Commits and deviations
 

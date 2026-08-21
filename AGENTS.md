@@ -61,6 +61,13 @@ This file exists for compatibility with tools that look for AGENTS.md.
   archive, OCI/source metadata, CycloneDX SBOM, notices, manifest, unsigned
   provenance signing input, and checksums. Signing credentials and signatures
   remain external; generated artifacts must contain no protected material.
+- The native shared-build qualification contract is
+  `contracts/architecture/decisions/services_hardening_build_qualification.v1.json`.
+  It freezes the supported Rust targets, standalone Cargo and xtask commands,
+  native release evidence, and the fixture agreement among Cargo metadata,
+  the source lock, and release metadata. Nix package/app/check, development
+  shell, NixOS-module, and Nix-produced OCI outputs are explicitly deferred
+  and are not qualified by that contract.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
@@ -74,7 +81,11 @@ This file exists for compatibility with tools that look for AGENTS.md.
 ## 3. Repository operating model
 
 - This is a public open-source library workspace; optimize for durable library design, portability, determinism, and explicit contracts.
-- Keep release and validation automation forge-agnostic; repo-owned xtask commands, Nix apps, tags, and contract metadata are canonical, while committed provider-specific workflow automation is not.
+- Keep release and validation automation forge-agnostic; repo-owned xtask
+  commands, native Cargo lanes, tags, and contract metadata are canonical,
+  while committed provider-specific workflow automation is not. Checked-in
+  Nix surfaces are deferred compatibility inputs, not current qualification
+  authority.
 - Do not add or retain tracked `docs/**`, `.github/**`, or `.act/**` content.
   Keep validation forge-agnostic. Any required monorepo orchestration belongs
   exclusively to the parent repository's root `.act/**` authority and must not
@@ -92,8 +103,12 @@ This file exists for compatibility with tools that look for AGENTS.md.
 Before editing code:
 
 - Read this file, `AGENT_INSTRUCTIONS.md`, and `README`.
-- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under `build/nix/`.
-- Enter the canonical environment with `nix develop` or `direnv allow` before targeted cargo work.
+- When preserving deferred Nix behavior, read `flake.nix` and the relevant
+  implementation files under `build/nix/`, but do not install, invoke, or
+  require Nix as part of current qualification.
+- Run `cargo extbuild doctor` before the first governed build, test, check,
+  generation, package, artifact, or release-preflight command, then route the
+  command through `cargo extbuild run --`.
 - Discover commands from checked-in repo surfaces; do not invent ad hoc workflows.
 - Read the current implementation and nearby tests before designing a change.
 - Inspect `git status --short` before broad edits or refactors.
@@ -101,15 +116,17 @@ Before editing code:
 
 ## 5. Canonical command surface
 
-- `nix flake check`
-- `nix run .#contract`
-- `nix run .#release-preflight`
-- `cargo xtask architecture` for controlled deviation records and local spec
+- `cargo extbuild run -- cargo check --workspace --all-targets --locked`
+- `cargo extbuild run -- cargo test --workspace --all-targets --locked`
+- `cargo extbuild run -- cargo xtask contract validate`
+- `cargo extbuild run -- cargo xtask release preflight`
+- `cargo extbuild run -- cargo xtask architecture` for controlled deviation records and local spec
   anchors
 - Public API baselines live in `contracts/api_baselines/**`. Regenerate one
   with `cargo-public-api` `0.52.0` and rustdoc JSON from
   `nightly-2026-07-16`, writing the reviewed output back to that directory.
-- targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
+- targeted `cargo check -p <crate>` and `cargo test -p <crate>` through
+  `cargo extbuild run --`
 - `cargo xtask dto-roots --write` after changing configured DTO exports and
   `cargo xtask dto-roots --check` for exact generated-root freshness
 - targeted `cargo xtask contract ...`, `cargo xtask coverage ...`, `cargo xtask release ...`, or `cargo xtask hygiene ...` only when narrowing a repo-owned workflow
@@ -149,7 +166,9 @@ Before editing code:
   adding commit from repository history and verifies its immutable tree. Do
   not rewrite that digest for later source changes.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
-- Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
+- Preserve deferred flake expressions as unqualified compatibility inputs;
+  do not use their evaluation or outputs as evidence until an accepted
+  contract explicitly reactivates them.
 - This repository owns packages 1-17 in `radroots.crates.release.v1`, from
   `radroots_core` through `radroots_geonames`. `radroots_sdk` and `radroots`
   remain owned by the standalone SDK repository.

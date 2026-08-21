@@ -1,0 +1,27 @@
+[package]
+name = "fixture-service"
+version = "0.1.0-alpha"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "fixture-service"
+path = "src/main.rs"
+
+[workspace]
+resolver = "3"
+
+[workspace.metadata.radroots.service_source_lock]
+service = "fixture_service"
+host_feature_profile = "service-host"
+config_contract_version = 1
+state_contract_version = 2
+admin_contract_version = 3
+status_contract_version = 4
+provider_contract_version = 5
+
+[workspace.metadata.radroots.service_release]
+service = "fixture_service"
+service_package = "fixture-service"
+binary_name = "fixture-service"
+version = "0.1.0-alpha"

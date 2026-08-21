@@ -1,0 +1,54 @@
+{
+  "schema": "radroots.services-hardening.build-qualification-decisions.v1",
+  "contract_version": 1,
+  "decision_state": "active",
+  "qualification_scope": "native_release_foundation",
+  "fixture_root": "tools/xtask/fixtures/service-build-qualification",
+  "supported_rust_targets": [
+    "aarch64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "required_native_commands": [
+    "cargo build --locked --release",
+    "cargo fmt --all --check",
+    "cargo check --workspace --all-targets --locked",
+    "cargo test --workspace --all-targets --locked",
+    "cargo clippy --workspace --all-targets --locked -- -D warnings",
+    "RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps --locked"
+  ],
+  "required_xtask_commands": [
+    "cargo test --locked -p xtask service_source_lock::tests",
+    "cargo test --locked -p xtask service_release_artifacts::tests",
+    "cargo test --locked -p xtask service_build_qualification::tests",
+    "cargo run --locked -q -p xtask -- contract validate",
+    "cargo run --locked -q -p xtask -- release preflight"
+  ],
+  "required_evidence": [
+    "cargo_lock",
+    "source_lock",
+    "package_metadata",
+    "release_metadata",
+    "binary_archive",
+    "oci_source_artifact",
+    "cyclonedx_sbom",
+    "notices",
+    "artifact_manifest",
+    "unsigned_provenance_input",
+    "checksums"
+  ],
+  "fixture_source_lock": "tools/xtask/fixtures/service-build-qualification/radroots.service.source-lock.v1.toml",
+  "fixture_contract": "source_lock_package_and_release_metadata_exact_agreement",
+  "release_artifact_command": "cargo xtask service-release-artifacts",
+  "source_lock_command": "cargo xtask service-source-lock",
+  "signing_authority": "external_only",
+  "deferred_outputs": [
+    "nix_packages",
+    "nix_apps",
+    "nix_checks",
+    "nix_development_shells",
+    "nixos_modules",
+    "nix_produced_oci"
+  ]
+}

@@ -57,8 +57,8 @@
     "too_large"
   ],
   "canonical_vector": {
-    "toml": "schema = \"radroots.service.source-lock.v1\"\ncontract_version = 1\nservice = \"fixture_service\"\nrepository = \"https://github.com/radrootslabs/lib\"\nrevision = \"1111111111111111111111111111111111111111\"\narchitecture = \"radroots.crates.release.v2\"\nworkspace_catalog_sha256 = \"2222222222222222222222222222222222222222222222222222222222222222\"\nversion = \"0.1.0-alpha\"\nsource_archive_sha256 = \"3333333333333333333333333333333333333333333333333333333333333333\"\ncargo_lock_sha256 = \"4444444444444444444444444444444444444444444444444444444444444444\"\nflake_lock_sha256 = \"5555555555555555555555555555555555555555555555555555555555555555\"\nrust_version = \"1.97.1\"\nhost_feature_profile = \"service-host\"\n\n[contract_versions]\nconfig = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5\n",
-    "sha256": "2257efc8fb3ff4ee8e429e326effdfe622c5e898b429ee1a8ea3aac38f9810cc"
+    "toml": "schema = \"radroots.service.source-lock.v1\"\ncontract_version = 1\nservice = \"fixture_service\"\nrepository = \"https://github.com/radrootslabs/lib\"\nrevision = \"2222222222222222222222222222222222222222\"\narchitecture = \"radroots.crates.release.v2\"\nworkspace_catalog_sha256 = \"2222222222222222222222222222222222222222222222222222222222222222\"\nversion = \"0.1.0-alpha\"\nsource_archive_sha256 = \"3333333333333333333333333333333333333333333333333333333333333333\"\ncargo_lock_sha256 = \"3f32f227550b26ffccf6ee73ceab7471b3d8ce40b3e7c345d2ed65af7e9affa0\"\nflake_lock_sha256 = \"13638c254efcc7ccc5798242d2c095934e84fbc406a9af244fc754b18a6f9353\"\nrust_version = \"1.97.1\"\nhost_feature_profile = \"service-host\"\n\n[contract_versions]\nconfig = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5\n",
+    "sha256": "7251222df95da414d8cb073b8907f4a53c9ac4c89354bb2d895ac78fab79d81a"
   },
   "operations": {
     "command": "cargo xtask service-source-lock",
@@ -94,7 +94,6 @@
     "maximum_source_archive_bytes": 1073741824
   },
   "deferred_operations": [
-    "embedded_build_information_agreement",
-    "service_fixture_release_graph"
+    "embedded_build_information_agreement"
   ]
 }

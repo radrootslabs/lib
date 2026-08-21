@@ -53,18 +53,24 @@ println!("Published: {}", receipt.address());
 > **Status:** Alpha (`0.1.0-alpha`)
 > Still a `draft`. Not recommended for use before `0.1.0` is published.
 
-The Radroots libraries are a Rust workspace with a small set of native build dependencies. Nix is recommended; the manual setup below covers the minimum requirements on macOS and Linux. See [`BUILD.md`](BUILD.md) for the complete build guide.
+The Radroots libraries are a Rust workspace with a small set of native build
+dependencies. Governed repository commands use `cargo extbuild`; see
+[`BUILD.md`](BUILD.md) for the complete native setup guide.
 
-#### Nix (*recommended*)
+#### Governed development
 
-The Nix development shell provides a configured environment on macOS and Linux:
+After installing the native dependencies below and configuring extbuild:
 
 ```sh
 git clone https://radroots.dev/git/lib.git && cd lib
 
-nix develop
-cargo check --workspace --locked
+cargo extbuild doctor
+cargo extbuild run -- cargo check --workspace --locked
 ```
+
+Checked-in Nix expressions are deferred compatibility surfaces. Nix
+evaluation and Nix-derived packages, apps, checks, development shells, NixOS
+modules, and OCI outputs are not current qualification prerequisites.
 
 #### macOS and Linux
 
