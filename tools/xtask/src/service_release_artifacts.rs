@@ -1660,7 +1660,7 @@ fn validate_contract_inner(workspace_root: &Path) -> Result<(), ReleaseArtifactE
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Read as _, process::Command};
+    use std::process::Command;
 
     use crate::service_source_lock::{
         ContractVersions, ServiceSourceLockParts, ServiceSourceLockV1,
