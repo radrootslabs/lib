@@ -1647,6 +1647,122 @@ name = "radroots_service_host"
     }
 
     #[test]
+    fn low_level_source_lock_admission_branches_are_qualified() {
+        let root = TempDir::new().expect("low-level source-lock fixture");
+        let regular = root.path().join("regular");
+        fs::write(&regular, b"same").expect("regular file");
+        assert_eq!(
+            read_bounded_regular(&regular, 4, CommandError::InvalidSourceLock)
+                .expect("bounded regular file"),
+            b"same"
+        );
+        assert_eq!(
+            validate_service_root(Path::new("relative")),
+            Err(CommandError::InvalidServiceRoot)
+        );
+        assert_eq!(
+            validate_service_root(&regular),
+            Err(CommandError::InvalidServiceRoot)
+        );
+
+        let directory = root.path().join("directory");
+        fs::create_dir(&directory).expect("directory fixture");
+        assert_eq!(
+            read_bounded_regular(&directory, 4, CommandError::InvalidSourceLock),
+            Err(CommandError::InvalidSourceLock)
+        );
+        let oversized = root.path().join("oversized");
+        fs::write(&oversized, b"12345").expect("oversized file");
+        assert_eq!(
+            read_bounded_regular(&oversized, 4, CommandError::InvalidSourceLock),
+            Err(CommandError::InvalidSourceLock)
+        );
+
+        #[cfg(unix)]
+        {
+            let symlink = root.path().join("regular-link");
+            std::os::unix::fs::symlink(&regular, &symlink).expect("regular symlink");
+            assert_eq!(
+                validate_service_root(&symlink),
+                Err(CommandError::InvalidServiceRoot)
+            );
+            assert_eq!(
+                read_bounded_regular(&symlink, 4, CommandError::InvalidSourceLock),
+                Err(CommandError::InvalidSourceLock)
+            );
+        }
+
+        let repository = root.path().join("repository");
+        fs::create_dir(&repository).expect("repository");
+        git(&repository, &["init", "--quiet"]);
+        let child = repository.join("child");
+        fs::create_dir(&child).expect("nested directory");
+        assert_eq!(
+            validate_service_root(&child),
+            Err(CommandError::InvalidServiceRoot)
+        );
+
+        let empty_catalog = br#"schema = "radroots.workspace.catalog.v2"
+architecture = "radroots.crates.release.v2"
+version = "0.1.0-alpha"
+package_count = 0
+package = []
+"#;
+        assert_eq!(
+            catalog_package_names(empty_catalog),
+            Err(CommandError::InvalidSourceArchive)
+        );
+
+        let dependency = toml::Value::String("=0.1.0-alpha".into());
+        let packages = BTreeSet::from([HOST_PACKAGE.to_owned()]);
+        assert_eq!(
+            validate_manifest_node(
+                &dependency,
+                Some(HOST_PACKAGE),
+                false,
+                true,
+                Some(&packages),
+                &mut ManifestState::default(),
+            ),
+            Err(CommandError::InvalidCargoManifest)
+        );
+
+        assert_eq!(
+            validate_flake_lock(
+                br#"{"nodes":{"root":{"inputs":{}}},"root":"root","version":7}"#,
+                &"a".repeat(40),
+            ),
+            Err(CommandError::InvalidFlakeLock)
+        );
+        assert_eq!(
+            validate_flake_lock(
+                br#"{"nodes":{"root":{"inputs":{"lib":"lib"}},"lib":{"original":{"owner":"radrootslabs","repo":"lib"}}},"root":"root","version":7}"#,
+                &"a".repeat(40),
+            ),
+            Err(CommandError::InvalidFlakeLock)
+        );
+
+        assert!(!valid_nix_sha256("not-a-digest"));
+        assert!(!valid_nix_sha256(
+            "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        ));
+        assert!(!valid_nix_sha256(
+            "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA?="
+        ));
+
+        let mut oversized_stdout = Command::new("sh");
+        oversized_stdout.args(["-c", "printf 12345"]);
+        assert_eq!(command_stdout(&mut oversized_stdout, 4), Err(()));
+        let mut failed_stdout = Command::new("sh");
+        failed_stdout.args(["-c", "exit 7"]);
+        assert_eq!(command_stdout(&mut failed_stdout, 4), Err(()));
+        assert_eq!(
+            git_status(root.path(), ["rev-parse", "--verify", "refs/heads/missing"]),
+            Err(())
+        );
+    }
+
+    #[test]
     fn operational_diagnostics_are_fixed_and_source_free() {
         let errors = [
             CommandError::InvalidServiceRoot,

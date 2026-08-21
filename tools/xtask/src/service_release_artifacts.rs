@@ -2585,6 +2585,189 @@ version = "0.1.0-alpha"
     }
 
     #[test]
+    fn low_level_release_admission_and_comparison_branches_are_qualified() {
+        let root = TempDir::new().expect("low-level release fixture");
+        let regular = root.path().join("regular");
+        write_file(&regular, b"same");
+        assert_eq!(
+            read_bounded_regular(&regular, 4, ReleaseArtifactError::InvalidInputArtifact)
+                .expect("bounded regular file"),
+            b"same"
+        );
+        assert!(!contains_bytes(b"bytes", b""));
+
+        let directory = root.path().join("directory");
+        fs::create_dir(&directory).expect("directory fixture");
+        assert_eq!(
+            read_bounded_regular(&directory, 4, ReleaseArtifactError::InvalidInputArtifact),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        );
+        let oversized = root.path().join("oversized");
+        write_file(&oversized, b"12345");
+        assert_eq!(
+            read_bounded_regular(&oversized, 4, ReleaseArtifactError::InvalidInputArtifact),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+            let symlink = root.path().join("regular-link");
+            std::os::unix::fs::symlink(&regular, &symlink).expect("regular symlink");
+            assert_eq!(
+                read_bounded_regular(&symlink, 4, ReleaseArtifactError::InvalidInputArtifact),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+
+            let expected = fs::symlink_metadata(&regular).expect("regular metadata");
+            assert_eq!(
+                validate_unchanged_input(&symlink, &expected),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+            assert_eq!(
+                validate_unchanged_input(&directory, &expected),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+
+            let other = root.path().join("other");
+            write_file(&other, b"same");
+            assert_eq!(
+                validate_unchanged_input(&other, &expected),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+
+            let device_metadata = fs::symlink_metadata("/dev/null").expect("device metadata");
+            assert_ne!(device_metadata.dev(), expected.dev());
+            assert_eq!(
+                validate_unchanged_input(&regular, &device_metadata),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+
+            let same_inode = fs::symlink_metadata(&regular).expect("same-inode metadata");
+            write_file(&regular, b"changed length");
+            assert_eq!(
+                validate_unchanged_input(&regular, &same_inode),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+
+            let inventory = root.path().join("symlink-inventory");
+            fs::create_dir(&inventory).expect("symlink inventory");
+            std::os::unix::fs::symlink(&other, inventory.join("entry")).expect("inventory symlink");
+            assert_eq!(
+                directory_inventory(&inventory, ReleaseArtifactError::InvalidInputRoot),
+                Err(ReleaseArtifactError::InvalidInputRoot)
+            );
+
+            let mode_file = root.path().join("mode-file");
+            write_file(&mode_file, b"mode");
+            fs::set_permissions(&mode_file, fs::Permissions::from_mode(0o600))
+                .expect("set invalid file mode");
+            assert_eq!(
+                validate_file_mode(&mode_file),
+                Err(ReleaseArtifactError::StaleOutput)
+            );
+            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
+                .expect("set invalid directory mode");
+            assert_eq!(
+                validate_directory_mode(&directory),
+                Err(ReleaseArtifactError::StaleOutput)
+            );
+        }
+
+        let incomplete = root.path().join("incomplete-output");
+        fs::create_dir(&incomplete).expect("incomplete output");
+        write_file(&incomplete.join("LICENSE-MIT"), b"x");
+        assert_eq!(
+            validate_exact_output_inventory(&incomplete),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+
+        let expected = root.path().join("expected-output");
+        let actual = root.path().join("actual-output");
+        fs::create_dir(&expected).expect("expected output");
+        fs::create_dir(&actual).expect("actual output");
+        set_directory_mode(&expected).expect("expected directory mode");
+        set_directory_mode(&actual).expect("actual directory mode");
+        for name in OUTPUT_NAMES {
+            write_file(&expected.join(name), b"a");
+            write_file(&actual.join(name), b"a");
+            set_file_mode(&expected.join(name)).expect("expected file mode");
+            set_file_mode(&actual.join(name)).expect("actual file mode");
+        }
+        compare_output(&expected, &actual).expect("matching output");
+        let records = inventory_records(&actual).expect("actual records");
+        validate_output_records(&actual, &records).expect("matching records");
+        write_file(&actual.join("LICENSE-MIT"), b"b");
+        set_file_mode(&actual.join("LICENSE-MIT")).expect("restored file mode");
+        assert_eq!(
+            compare_output(&expected, &actual),
+            Err(ReleaseArtifactError::StaleOutput)
+        );
+
+        let mut oversized_stdout = Command::new("sh");
+        oversized_stdout.args(["-c", "printf 12345"]);
+        assert_eq!(command_stdout(&mut oversized_stdout, 4), Err(()));
+        let mut failed_stdout = Command::new("sh");
+        failed_stdout.args(["-c", "exit 7"]);
+        assert_eq!(command_stdout(&mut failed_stdout, 4), Err(()));
+        assert_eq!(
+            git_status(root.path(), ["rev-parse", "--verify", "refs/heads/missing"]),
+            Err(())
+        );
+    }
+
+    #[test]
+    fn release_service_and_workspace_binding_fail_closed() {
+        let fixture = ReleaseFixture::new();
+        let current = ServiceSourceLockV1::from_canonical_bytes(
+            &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
+        )
+        .expect("source lock");
+        let versions = current.contract_versions();
+        let mismatched = ServiceSourceLockV1::new(ServiceSourceLockParts {
+            service: "other_service",
+            revision: current.revision(),
+            workspace_catalog_sha256: current.workspace_catalog_sha256(),
+            source_archive_sha256: current.source_archive_sha256(),
+            cargo_lock_sha256: current.cargo_lock_sha256(),
+            flake_lock_sha256: current.flake_lock_sha256(),
+            contract_versions: ContractVersions::new(
+                versions.config(),
+                versions.state(),
+                versions.admin(),
+                versions.status(),
+                versions.provider(),
+            ),
+        })
+        .expect("mismatched source lock");
+        write_file(
+            &fixture.service.join(LOCK_FILENAME),
+            mismatched.canonical_bytes(),
+        );
+        git(&fixture.service, &["add", LOCK_FILENAME]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "mismatched service lock"],
+        );
+        assert_eq!(
+            fixture.check(&fixture.output_a),
+            Err(ReleaseArtifactError::InvalidSourceLock)
+        );
+
+        let mut cargo = sample_cargo_metadata();
+        let dependency_id = cargo.packages[1].id.clone();
+        cargo.packages[0].source =
+            Some("registry+https://github.com/rust-lang/crates.io-index".into());
+        cargo.packages[0].checksum = Some("a".repeat(64));
+        cargo.workspace_members = vec![dependency_id];
+        assert!(matches!(
+            build_supply_chain_documents(&sample_metadata(), cargo),
+            Err(ReleaseArtifactError::InvalidPackageInventory)
+        ));
+    }
+
+    #[test]
     fn identifier_predicates_reject_each_independent_boundary() {
         for value in ["", "1service", "service_", "service__name", "service-name"] {
             assert!(!valid_snake_identifier(value), "{value}");
