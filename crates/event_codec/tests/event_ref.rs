@@ -65,6 +65,16 @@ fn parse_event_ref_tag_rejects_noncanonical_event_pointer_shapes() {
     let tag = vec![
         "e".to_string(),
         hex_64('5'),
+        common::AUTHOR.to_string(),
+        KIND_POST.to_string(),
+        RELAY_PRIMARY_WSS.to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
         hex_64('6'),
         KIND_POST.to_string(),
     ];

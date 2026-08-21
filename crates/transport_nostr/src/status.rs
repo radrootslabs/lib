@@ -858,4 +858,57 @@ mod tests {
             FetchTargetState::FailedRetryable
         );
     }
+
+    #[test]
+    fn capability_evidence_rejects_unsupported_and_stale_observations() {
+        let backoff = ReconnectBackoff::new(10, 40).expect("backoff");
+
+        let mut unsupported = MutableEvidence::unsupported();
+        unsupported.begin(10);
+        unsupported.record(true, false, 10, backoff);
+        assert_eq!(unsupported.public.state(), RelayEvidenceState::Unsupported);
+        assert!(!unsupported.may_attempt(u64::MAX));
+
+        let mut evidence = MutableEvidence::unobserved();
+        evidence.begin(10);
+        evidence.begin(9);
+        assert_eq!(evidence.public.last_attempt_unix_ms(), Some(10));
+
+        evidence.record(false, true, 10, backoff);
+        evidence.record(true, false, 9, backoff);
+        assert_eq!(evidence.public.state(), RelayEvidenceState::Unavailable);
+        assert!(!evidence.may_attempt(19));
+        assert!(evidence.may_attempt(20));
+
+        let (read_only, canonical, writable) = tracker();
+        read_only.record_read(&canonical, true, false, 1);
+        read_only.record_read(&writable, true, false, 1);
+        let report = read_only.report();
+        assert_eq!(report.state(), RelayAggregateState::ReadOnly);
+        assert_eq!(report.read_availability(), Availability::Available);
+        assert_eq!(report.write_availability(), Availability::Unavailable);
+
+        let read_only_profile = crate::RelayProfile::explicit(
+            crate::RelayProfileKind::Public,
+            [crate::RelayEndpoint::new(
+                "wss://read-only.example",
+                crate::RelayUrlPolicy::Public,
+                crate::RelayAccess::ReadOnly,
+            )
+            .expect("read-only endpoint")],
+        )
+        .expect("read-only profile");
+        let read_only_config = Config::from_profile(read_only_profile);
+        let read_only_relay = read_only_config.relays()[0].clone();
+        let read_only_tracker = StatusTracker::new(&read_only_config);
+        read_only_tracker.record_read(&read_only_relay, true, false, 1);
+        let report = read_only_tracker.report();
+        assert_eq!(report.state(), RelayAggregateState::ReadOnly);
+        assert_eq!(report.read_availability(), Availability::Available);
+        assert_eq!(report.write_availability(), Availability::Unavailable);
+        assert_eq!(
+            report.relays()[0].write().state(),
+            RelayEvidenceState::Unsupported
+        );
+    }
 }

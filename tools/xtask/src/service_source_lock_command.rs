@@ -1344,6 +1344,288 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
     }
 
     #[test]
+    fn flake_lock_rejects_each_independent_fixed_field_drift() {
+        let fixture = Fixture::new();
+        let bytes = fs::read(fixture.service.join(FLAKE_LOCK)).expect("flake lock");
+        let canonical = serde_json::from_slice::<serde_json::Value>(&bytes).expect("flake json");
+        for (pointer, replacement) in [
+            ("/version", serde_json::json!(6)),
+            ("/nodes/root/inputs/lib", serde_json::json!("other")),
+            ("/nodes/lib/locked/type", serde_json::json!("git")),
+            ("/nodes/lib/locked/owner", serde_json::json!("other")),
+            ("/nodes/lib/locked/repo", serde_json::json!("other")),
+            ("/nodes/lib/locked/rev", serde_json::json!("other")),
+            (
+                "/nodes/lib/locked/narHash",
+                serde_json::json!("sha256-invalid"),
+            ),
+            ("/nodes/lib/original/type", serde_json::json!("git")),
+            ("/nodes/lib/original/owner", serde_json::json!("other")),
+            ("/nodes/lib/original/repo", serde_json::json!("other")),
+            ("/nodes/lib/original/rev", serde_json::json!("other")),
+        ] {
+            let mut drifted = canonical.clone();
+            *drifted.pointer_mut(pointer).expect("governed field") = replacement;
+            assert_eq!(
+                validate_flake_lock(
+                    &serde_json::to_vec(&drifted).expect("flake json"),
+                    &fixture.revision
+                ),
+                Err(CommandError::InvalidFlakeLock),
+                "accepted drift at {pointer}"
+            );
+        }
+
+        for (section, field) in [
+            ("locked", "extra"),
+            ("original", "extra"),
+            ("original", "ref"),
+        ] {
+            let mut drifted = canonical.clone();
+            drifted["nodes"]["lib"][section]
+                .as_object_mut()
+                .expect("flake section")
+                .insert(field.into(), serde_json::json!("unexpected"));
+            assert_eq!(
+                validate_flake_lock(
+                    &serde_json::to_vec(&drifted).expect("flake json"),
+                    &fixture.revision
+                ),
+                Err(CommandError::InvalidFlakeLock),
+                "accepted {section}.{field}"
+            );
+        }
+
+        let mut duplicate = canonical.clone();
+        duplicate["nodes"]["lib2"] = duplicate["nodes"]["lib"].clone();
+        assert_eq!(
+            validate_flake_lock(
+                &serde_json::to_vec(&duplicate).expect("flake json"),
+                &fixture.revision
+            ),
+            Err(CommandError::InvalidFlakeLock)
+        );
+    }
+
+    #[test]
+    fn service_metadata_and_catalog_reject_independent_field_drift() {
+        let fixture = Fixture::new();
+        let bytes = fs::read(fixture.service.join(CARGO_MANIFEST)).expect("manifest");
+        let canonical = parse_toml(&bytes, CommandError::InvalidCargoManifest).expect("manifest");
+        for (field, replacement) in [
+            ("service", toml::Value::Integer(1)),
+            ("host_feature_profile", toml::Value::String("other".into())),
+            ("config_contract_version", toml::Value::Integer(0)),
+            ("state_contract_version", toml::Value::Integer(0)),
+            ("admin_contract_version", toml::Value::Integer(0)),
+            ("status_contract_version", toml::Value::Integer(0)),
+            ("provider_contract_version", toml::Value::Integer(0)),
+        ] {
+            let mut drifted = canonical.clone();
+            drifted["workspace"]["metadata"]["radroots"]["service_source_lock"][field] =
+                replacement;
+            assert_eq!(
+                parse_service_metadata(&drifted),
+                Err(CommandError::InvalidServiceMetadata),
+                "accepted metadata drift at {field}"
+            );
+        }
+        let mut extra = canonical;
+        extra["workspace"]["metadata"]["radroots"]["service_source_lock"]
+            .as_table_mut()
+            .expect("metadata table")
+            .insert("extra".into(), toml::Value::Integer(1));
+        assert_eq!(
+            parse_service_metadata(&extra),
+            Err(CommandError::InvalidServiceMetadata)
+        );
+
+        let catalog = br#"schema = "radroots.workspace.catalog.v2"
+architecture = "radroots.crates.release.v2"
+version = "0.1.0-alpha"
+package_count = 2
+
+[[package]]
+name = "radroots_core"
+
+[[package]]
+name = "radroots_service_host"
+"#;
+        let canonical = parse_toml(catalog, CommandError::InvalidSourceArchive).expect("catalog");
+        for (field, replacement) in [
+            ("schema", toml::Value::String("other".into())),
+            ("architecture", toml::Value::String("other".into())),
+            ("version", toml::Value::String("other".into())),
+            ("package_count", toml::Value::Integer(1)),
+        ] {
+            let mut drifted = canonical.clone();
+            drifted[field] = replacement;
+            assert_eq!(
+                catalog_package_names(toml::to_string(&drifted).expect("catalog").as_bytes()),
+                Err(CommandError::InvalidSourceArchive),
+                "accepted catalog drift at {field}"
+            );
+        }
+        let mut duplicate = canonical.clone();
+        duplicate["package"][1]["name"] = toml::Value::String("radroots_core".into());
+        assert_eq!(
+            catalog_package_names(toml::to_string(&duplicate).expect("catalog").as_bytes()),
+            Err(CommandError::InvalidSourceArchive)
+        );
+        let mut missing_host = canonical;
+        missing_host["package"][1]["name"] = toml::Value::String("radroots_other".into());
+        assert_eq!(
+            catalog_package_names(toml::to_string(&missing_host).expect("catalog").as_bytes()),
+            Err(CommandError::InvalidSourceArchive)
+        );
+    }
+
+    #[test]
+    fn manifest_and_cargo_lock_reject_each_independent_dependency_drift() {
+        let revision = "a".repeat(40);
+        let canonical = format!(
+            "[dependencies]\nradroots_service_host = {{ git = \"{LIB_REPOSITORY}\", rev = \"{revision}\", version = \"{LIB_VERSION_REQUIREMENT}\" }}\n"
+        );
+        for (from, to) in [
+            (LIB_REPOSITORY, "https://example.invalid/lib"),
+            (LIB_VERSION_REQUIREMENT, "=0.2.0"),
+            (revision.as_str(), "invalid"),
+        ] {
+            let value =
+                toml::from_str::<toml::Value>(&canonical.replacen(from, to, 1)).expect("manifest");
+            assert_eq!(
+                validate_manifest_node(
+                    &value,
+                    None,
+                    false,
+                    false,
+                    None,
+                    &mut ManifestState::default()
+                ),
+                Err(CommandError::InvalidCargoManifest)
+            );
+        }
+        for forbidden in ["branch", "tag", "path"] {
+            let mutated = canonical.replacen(
+                "version = \"=0.1.0-alpha\"",
+                &format!("version = \"=0.1.0-alpha\", {forbidden} = \"forbidden\""),
+                1,
+            );
+            let value = toml::from_str::<toml::Value>(&mutated).expect("manifest");
+            assert_eq!(
+                validate_manifest_node(
+                    &value,
+                    None,
+                    false,
+                    false,
+                    None,
+                    &mut ManifestState::default()
+                ),
+                Err(CommandError::InvalidCargoManifest),
+                "accepted {forbidden}"
+            );
+        }
+        let value = toml::from_str::<toml::Value>(&canonical).expect("manifest");
+        assert_eq!(
+            validate_manifest_node(
+                &value,
+                None,
+                true,
+                false,
+                None,
+                &mut ManifestState::default()
+            ),
+            Err(CommandError::InvalidCargoManifest)
+        );
+        let mut state = ManifestState {
+            revision: Some("b".repeat(40)),
+            ..ManifestState::default()
+        };
+        assert_eq!(
+            validate_manifest_node(&value, None, false, false, None, &mut state),
+            Err(CommandError::InvalidCargoManifest)
+        );
+
+        let packages = BTreeSet::from([HOST_PACKAGE.to_owned(), "radroots_core".to_owned()]);
+        let expected = format!("git+{LIB_REPOSITORY}?rev={revision}#{revision}");
+        for document in [
+            format!(
+                "version = 4\n\n[[package]]\nname = \"{HOST_PACKAGE}\"\nversion = \"0.1.0-alpha\"\n"
+            ),
+            format!(
+                "version = 4\n\n[[package]]\nname = \"{HOST_PACKAGE}\"\nversion = \"0.1.0-alpha\"\nsource = \"other\"\n"
+            ),
+            format!(
+                "version = 4\n\n[[package]]\nname = \"{HOST_PACKAGE}\"\nversion = \"0.2.0\"\nsource = \"{expected}\"\n"
+            ),
+            format!(
+                "version = 4\n\n[[package]]\nname = \"radroots_core\"\nversion = \"0.1.0-alpha\"\nsource = \"{expected}\"\n"
+            ),
+            "version = 4\n".to_owned(),
+        ] {
+            assert_eq!(
+                validate_cargo_lock(document.as_bytes(), &revision, &packages),
+                Err(CommandError::InvalidCargoLock)
+            );
+        }
+    }
+
+    #[test]
+    fn archive_and_manifest_filesystem_admission_is_fail_closed() {
+        let root = TempDir::new().expect("filesystem fixture");
+        let empty = root.path().join("empty");
+        fs::write(&empty, b"").expect("empty file");
+        assert!(matches!(
+            validate_archive(Path::new("relative"), &"a".repeat(40)),
+            Err(CommandError::InvalidSourceArchive)
+        ));
+        assert!(matches!(
+            validate_archive(root.path(), &"a".repeat(40)),
+            Err(CommandError::InvalidSourceArchive)
+        ));
+        assert!(matches!(
+            validate_archive(&empty, &"a".repeat(40)),
+            Err(CommandError::InvalidSourceArchive)
+        ));
+
+        let no_manifest = root.path().join("no-manifest");
+        fs::create_dir(&no_manifest).expect("empty tree");
+        assert_eq!(
+            validate_cargo_manifests(&no_manifest, None),
+            Err(CommandError::InvalidCargoManifest)
+        );
+        let no_dependency = root.path().join("no-dependency");
+        fs::create_dir(&no_dependency).expect("manifest tree");
+        fs::write(
+            no_dependency.join(CARGO_MANIFEST),
+            "[workspace]\nresolver = \"3\"\n",
+        )
+        .expect("manifest");
+        assert_eq!(
+            validate_cargo_manifests(&no_dependency, None),
+            Err(CommandError::InvalidCargoManifest)
+        );
+
+        #[cfg(unix)]
+        {
+            let archive_link = root.path().join("archive-link");
+            std::os::unix::fs::symlink(&empty, &archive_link).expect("archive symlink");
+            assert!(matches!(
+                validate_archive(&archive_link, &"a".repeat(40)),
+                Err(CommandError::InvalidSourceArchive)
+            ));
+            let manifest_link_root = root.path().join("manifest-link");
+            fs::create_dir(&manifest_link_root).expect("manifest symlink tree");
+            std::os::unix::fs::symlink(&empty, manifest_link_root.join(CARGO_MANIFEST))
+                .expect("manifest symlink");
+            assert_eq!(
+                validate_cargo_manifests(&manifest_link_root, None),
+                Err(CommandError::InvalidCargoManifest)
+            );
+        }
+    }
+
+    #[test]
     fn source_lock_output_rejects_symlink_replacement() {
         let fixture = Fixture::new();
         let target = fixture.root.path().join("foreign");

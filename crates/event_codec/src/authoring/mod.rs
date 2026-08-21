@@ -428,6 +428,11 @@ mod tests {
     }
 
     #[test]
+    fn plan_digest_parser_rejects_a_wrong_length_before_hex_decoding() {
+        assert_eq!(PlanDigest::parse_hex("a"), Err(PlanDigestError));
+    }
+
+    #[test]
     fn every_bound_authoring_field_changes_the_plan_digest() {
         let base = plan(ALICE, 1_700_000_000, Vec::new(), "hello");
         let variants = [

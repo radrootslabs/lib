@@ -1057,6 +1057,7 @@ pub fn group_roles_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::num::NonZeroU64;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::envelope::kind::{
         KIND_FARM_FILE_METADATA, KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE,
@@ -1073,6 +1074,7 @@ mod tests {
         FarmWorkspaceRelayMode, RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION,
         RADROOTS_FARM_WORKSPACE_SCHEMA,
     };
+    use radroots_event::id::TradeId;
     use radroots_event::knowledge::{
         AddressableRef, KnowledgeCitationSpan, KnowledgeFieldContext, KnowledgeLocation,
         KnowledgeLocationPrecision, KnowledgeNodeRef, KnowledgeObservation,
@@ -1096,6 +1098,12 @@ mod tests {
     use radroots_event::social::{
         ReportFileTarget, ReportType, SocialFarmAnchor, SocialLocation, SocialMediaDimensions,
         SocialTarget,
+    };
+    use radroots_trade::evidence::{
+        RadrootsTradeEvidenceManifestSourceResultV1, RadrootsTradeEvidencePolicyDigestV1,
+        RadrootsTradeEvidenceScopePrerequisitesV1, RadrootsTradeEvidenceSourceCompletionV1,
+        RadrootsTradeEvidenceSourceIdV1, RadrootsTradeEvidenceSourceRequirementV1,
+        RadrootsTradeEvidenceSourceResultDigestV1, RadrootsTradeEvidenceSourceResultV1,
     };
 
     fn sample_listing() -> OperationalListing {
@@ -2490,5 +2498,110 @@ mod tests {
         let secret = "private-report-content";
         let error = rhi_evidence_report_parse_json(secret).expect_err("malformed report");
         assert!(!format!("{error:?}").contains(secret));
+
+        let decision_vectors: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/rhi/evidence_attestation_decision.v1.json"
+        ))
+        .expect("RHI decision corpus");
+        let superseding = decision_vectors["vectors"]
+            .as_array()
+            .expect("RHI decision vectors")
+            .iter()
+            .find(|entry| entry["id"] == "rhi_evidence_attestation_superseding_002")
+            .expect("superseding vector");
+        let superseding_content = superseding["expected"]["canonical_event_content_utf8"]
+            .as_str()
+            .expect("superseding canonical content");
+        let superseding_report: serde_json::Value = serde_json::from_str(
+            &rhi_evidence_report_parse_json(superseding_content)
+                .expect("superseding report projection"),
+        )
+        .expect("superseding report JSON");
+        assert_eq!(superseding_report["outcome"], "valid");
+        assert_eq!(
+            superseding_report["supersession"]["report_id"],
+            "7777777777777777777777777777777777777777777777777777777777777777"
+        );
+        assert_eq!(
+            superseding_report["supersession"]["event_id"],
+            "8888888888888888888888888888888888888888888888888888888888888888"
+        );
+    }
+
+    #[test]
+    fn evidence_manifest_projection_covers_every_admitted_vocabulary() {
+        assert_eq!(
+            coverage_name(RadrootsTradeEvidenceCoverageV1::Missing),
+            "missing"
+        );
+        assert_eq!(
+            coverage_name(RadrootsTradeEvidenceCoverageV1::Partial),
+            "partial"
+        );
+        assert_eq!(
+            coverage_name(RadrootsTradeEvidenceCoverageV1::ScopeSatisfied),
+            "scope_satisfied"
+        );
+        assert_eq!(
+            coverage_name(RadrootsTradeEvidenceCoverageV1::Unsupported),
+            "unsupported"
+        );
+        assert_eq!(outcome_name(RadrootsTradeEvidenceOutcomeV1::Valid), "valid");
+        assert_eq!(
+            outcome_name(RadrootsTradeEvidenceOutcomeV1::Invalid),
+            "invalid"
+        );
+        assert_eq!(
+            outcome_name(RadrootsTradeEvidenceOutcomeV1::Indeterminate),
+            "indeterminate"
+        );
+        assert_eq!(
+            attestation_outcome_name(RadrootsRhiEvidenceAttestationOutcomeV1::Valid),
+            "valid"
+        );
+        assert_eq!(
+            attestation_outcome_name(RadrootsRhiEvidenceAttestationOutcomeV1::Invalid),
+            "invalid"
+        );
+        assert_eq!(
+            attestation_outcome_name(RadrootsRhiEvidenceAttestationOutcomeV1::Indeterminate),
+            "indeterminate"
+        );
+
+        let source = RadrootsTradeEvidenceManifestSourceResultV1::new(
+            RadrootsTradeEvidenceSourceIdV1::parse("typed_source").expect("source id"),
+            RadrootsTradeEvidenceSourceResultV1::new(
+                RadrootsTradeEvidenceSourceRequirementV1::Required,
+                RadrootsTradeEvidenceSourceCompletionV1::Complete,
+                0,
+            )
+            .expect("source result"),
+            RadrootsTradeEvidenceSourceResultDigestV1::from_bytes([0x33; 32]),
+        );
+        let manifest = RadrootsTradeEvidenceManifestV1::new(
+            TradeId::from_bytes([0x11; 16]),
+            NonZeroU64::new(1).expect("nonzero generation"),
+            RadrootsTradeEvidencePolicyDigestV1::from_bytes([0x22; 32]),
+            1_800_000_000,
+            RadrootsTradeEvidenceScopePrerequisitesV1::Satisfied,
+            [source],
+            [],
+        )
+        .expect("manifest");
+        let canonical_hex = hex::encode(manifest.canonical_bytes());
+        let projected: serde_json::Value = serde_json::from_str(
+            &trade_evidence_manifest_parse_json(&canonical_hex).expect("manifest projection"),
+        )
+        .expect("manifest projection JSON");
+        assert_eq!(projected["coverage"], "scope_satisfied");
+        assert_eq!(projected["canonical_bytes_hex"], canonical_hex);
+
+        assert!(trade_evidence_manifest_parse_json("0").is_err());
+        assert!(
+            trade_evidence_manifest_parse_json(&"0".repeat(
+                radroots_trade::evidence::RADROOTS_TRADE_EVIDENCE_MANIFEST_MAXIMUM_BYTES * 2 + 2
+            ))
+            .is_err()
+        );
     }
 }

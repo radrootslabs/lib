@@ -439,10 +439,14 @@ pub mod v1 {
 
 #[cfg(test)]
 mod tests {
+    use core::num::NonZeroU64;
+
+    use radroots_event::id::TradeId;
+
     use super::v1::{
-        CapabilityAvailability, Error, MobileClient, SignedEvent, TradeEvidenceOutcome,
-        parse_rhi_evidence_report, prepare_rhi_evidence_attestation,
-        validate_rhi_evidence_attestation,
+        CapabilityAvailability, Error, MobileClient, SignedEvent, TradeEvidenceCoverage,
+        TradeEvidenceOutcome, parse_rhi_evidence_report, parse_trade_evidence_manifest,
+        prepare_rhi_evidence_attestation, validate_rhi_evidence_attestation,
     };
 
     fn assert_send_sync<T: Send + Sync>() {}
@@ -527,6 +531,128 @@ mod tests {
         let attestation = validate_rhi_evidence_attestation(signed).expect("signed attestation");
         assert_eq!(attestation.outcome, TradeEvidenceOutcome::Indeterminate);
         assert_eq!(attestation.trade_generation, "7");
+    }
+
+    #[test]
+    fn manifest_supersession_and_closed_evidence_vocabularies_cross_the_ffi() {
+        use radroots_sdk::trade::{
+            RadrootsTradeEvidenceManifestSourceResultV1, RadrootsTradeEvidenceManifestV1,
+            RadrootsTradeEvidencePolicyDigestV1, RadrootsTradeEvidenceScopePrerequisitesV1,
+            RadrootsTradeEvidenceSourceCompletionV1, RadrootsTradeEvidenceSourceIdV1,
+            RadrootsTradeEvidenceSourceRequirementV1, RadrootsTradeEvidenceSourceResultDigestV1,
+            RadrootsTradeEvidenceSourceResultV1,
+        };
+
+        for (source, expected) in [
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::Missing,
+                TradeEvidenceCoverage::Missing,
+            ),
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::Partial,
+                TradeEvidenceCoverage::Partial,
+            ),
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::ScopeSatisfied,
+                TradeEvidenceCoverage::ScopeSatisfied,
+            ),
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceCoverageV1::Unsupported,
+                TradeEvidenceCoverage::Unsupported,
+            ),
+        ] {
+            assert_eq!(TradeEvidenceCoverage::from(source), expected);
+        }
+        for (source, expected) in [
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1::Valid,
+                TradeEvidenceOutcome::Valid,
+            ),
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1::Invalid,
+                TradeEvidenceOutcome::Invalid,
+            ),
+            (
+                radroots_sdk::trade::RadrootsTradeEvidenceOutcomeV1::Indeterminate,
+                TradeEvidenceOutcome::Indeterminate,
+            ),
+        ] {
+            assert_eq!(TradeEvidenceOutcome::from(source), expected);
+        }
+
+        let source = RadrootsTradeEvidenceManifestSourceResultV1::new(
+            RadrootsTradeEvidenceSourceIdV1::parse("typed_source").expect("source id"),
+            RadrootsTradeEvidenceSourceResultV1::new(
+                RadrootsTradeEvidenceSourceRequirementV1::Required,
+                RadrootsTradeEvidenceSourceCompletionV1::Complete,
+                0,
+            )
+            .expect("source result"),
+            RadrootsTradeEvidenceSourceResultDigestV1::from_bytes([0x33; 32]),
+        );
+        let manifest = RadrootsTradeEvidenceManifestV1::new(
+            TradeId::from_bytes([0x11; 16]),
+            NonZeroU64::new(1).expect("nonzero generation"),
+            RadrootsTradeEvidencePolicyDigestV1::from_bytes([0x22; 32]),
+            1_800_000_000,
+            RadrootsTradeEvidenceScopePrerequisitesV1::Satisfied,
+            [source],
+            [],
+        )
+        .expect("manifest");
+        let projected = parse_trade_evidence_manifest(manifest.canonical_bytes().to_vec())
+            .expect("manifest projection");
+        assert_eq!(projected.coverage, TradeEvidenceCoverage::ScopeSatisfied);
+        assert_eq!(
+            projected.canonical_bytes_hex,
+            hex::encode(manifest.canonical_bytes())
+        );
+        assert!(parse_trade_evidence_manifest(Vec::new()).is_err());
+
+        let decisions: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/rhi/evidence_attestation_decision.v1.json"
+        ))
+        .expect("RHI decision corpus");
+        let superseding = decisions["vectors"]
+            .as_array()
+            .expect("RHI decision vectors")
+            .iter()
+            .find(|entry| entry["id"] == "rhi_evidence_attestation_superseding_002")
+            .expect("superseding vector");
+        let report = parse_rhi_evidence_report(
+            superseding["expected"]["canonical_event_content_utf8"]
+                .as_str()
+                .expect("canonical event content")
+                .to_owned(),
+        )
+        .expect("superseding report");
+        assert_eq!(report.outcome, TradeEvidenceOutcome::Valid);
+        let supersession = report.supersession.expect("supersession");
+        assert_eq!(
+            supersession.report_id,
+            "7777777777777777777777777777777777777777777777777777777777777777"
+        );
+        assert_eq!(
+            supersession.event_id,
+            "8888888888888888888888888888888888888888888888888888888888888888"
+        );
+    }
+
+    #[test]
+    fn evidence_entry_points_classify_pre_plan_and_signed_event_failures() {
+        assert!(prepare_rhi_evidence_attestation("invalid".to_owned(), 0).is_err());
+        assert!(
+            validate_rhi_evidence_attestation(SignedEvent {
+                id: String::new(),
+                author_pubkey: String::new(),
+                created_at_unix_s: 0,
+                kind: 0,
+                tags: Vec::new(),
+                content: String::new(),
+                signature: String::new(),
+            })
+            .is_err()
+        );
     }
 
     #[test]

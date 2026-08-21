@@ -754,6 +754,66 @@ mod tests {
     }
 
     #[test]
+    fn report_accessors_preserve_the_exact_attestation_projection() {
+        let current =
+            RadrootsRhiEvidenceReportV1::from_canonical_content(CURRENT_REPORT.as_bytes())
+                .expect("current report vector");
+
+        assert_eq!(
+            current.contract_id(),
+            RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_ID
+        );
+        assert_eq!(
+            current.contract_version(),
+            RADROOTS_RHI_EVIDENCE_REPORT_CONTRACT_VERSION
+        );
+        assert_eq!(current.issuer_public_key().to_hex(), "aa".repeat(32));
+        assert_eq!(current.trade_id().to_hex(), "11".repeat(16));
+        assert_eq!(current.claim_mutation_id().to_hex(), "22".repeat(32));
+        assert_eq!(
+            current.outcome(),
+            RadrootsTradeEvidenceOutcomeV1::Indeterminate
+        );
+        assert_eq!(
+            current.reason_codes()[0].as_str(),
+            "required_source_incomplete"
+        );
+        assert_eq!(current.projection_digest().as_bytes(), &[0x66; 32]);
+        assert_eq!(current.evidence_manifest_digest().as_bytes(), &[0x44; 32]);
+        assert_eq!(current.evidence_policy_digest().as_bytes(), &[0x55; 32]);
+        assert_eq!(current.observed_at_unix_s(), 1_800_000_000);
+        assert_eq!(current.trade_generation(), NonZeroU64::new(7).unwrap());
+        assert_eq!(
+            current.reducer_contract_id(),
+            RADROOTS_TRADE_REDUCER_CONTRACT_ID
+        );
+        assert_eq!(
+            current.reducer_contract_version(),
+            RADROOTS_TRADE_REDUCER_VERSION
+        );
+        assert_eq!(
+            current.attestation_method(),
+            RADROOTS_RHI_EVIDENCE_ATTESTATION_METHOD
+        );
+        assert_eq!(current.statement_digest().as_bytes().len(), 32);
+
+        let superseding =
+            RadrootsRhiEvidenceReportV1::from_canonical_content(SUPERSEDING_REPORT.as_bytes())
+                .expect("superseding report vector");
+        let supersession = superseding.supersession().expect("supersession");
+        assert_eq!(supersession.report_id().as_bytes(), &[0x77; 32]);
+        assert_eq!(supersession.event_id().as_bytes(), &[0x88; 32]);
+
+        assert_eq!(
+            RadrootsTradeEvidenceProjectionDigestV1::sha256(b"projection").as_bytes(),
+            RadrootsTradeEvidenceProjectionDigestV1::from_bytes(
+                Sha256::digest(b"projection").into()
+            )
+            .as_bytes()
+        );
+    }
+
+    #[test]
     fn construction_is_canonical_manifest_bound_and_permutation_invariant() {
         let manifest = manifest(RadrootsTradeEvidenceCoverageV1::ScopeSatisfied);
         let a = RadrootsRhiEvidenceReportV1::new(

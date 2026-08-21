@@ -874,6 +874,55 @@ mod tests {
     }
 
     #[test]
+    fn manifest_components_expose_exact_typed_evidence() {
+        let manifest = manifest();
+        let source = &manifest.sources()[0];
+        let observation = &manifest.observations()[0];
+
+        assert_eq!(source.source_id().as_str(), "source-a");
+        assert_eq!(
+            source.result().requirement(),
+            RadrootsTradeEvidenceSourceRequirementV1::Required
+        );
+        assert_eq!(
+            source.result().completion(),
+            RadrootsTradeEvidenceSourceCompletionV1::Complete
+        );
+        assert_eq!(source.result().admitted_event_count(), 1);
+        assert_eq!(source.result_digest().as_bytes(), &[0x41; 32]);
+
+        assert_eq!(observation.source_id().as_str(), "source-a");
+        assert_eq!(observation.mutation_id().as_bytes(), &[0x31; 32]);
+        assert_eq!(observation.event_id().as_bytes(), &[0x51; 32]);
+        assert_eq!(observation.signed_event_digest().as_bytes(), &[0x61; 32]);
+        assert_eq!(observation.provenance_digest().as_bytes(), &[0x71; 32]);
+        assert_eq!(manifest.digest().as_bytes().len(), 32);
+
+        assert_eq!(
+            RadrootsTradeEvidencePolicyDigestV1::sha256(b"policy").as_bytes(),
+            RadrootsTradeEvidencePolicyDigestV1::from_bytes(Sha256::digest(b"policy").into())
+                .as_bytes()
+        );
+        assert_eq!(
+            RadrootsTradeEvidenceSourceResultDigestV1::sha256(b"result").as_bytes(),
+            RadrootsTradeEvidenceSourceResultDigestV1::from_bytes(Sha256::digest(b"result").into())
+                .as_bytes()
+        );
+        assert_eq!(
+            RadrootsTradeSignedEventDigestV1::sha256(b"event").as_bytes(),
+            RadrootsTradeSignedEventDigestV1::from_bytes(Sha256::digest(b"event").into())
+                .as_bytes()
+        );
+        assert_eq!(
+            RadrootsTradeEvidenceProvenanceDigestV1::sha256(b"provenance").as_bytes(),
+            RadrootsTradeEvidenceProvenanceDigestV1::from_bytes(
+                Sha256::digest(b"provenance").into()
+            )
+            .as_bytes()
+        );
+    }
+
+    #[test]
     fn construction_is_permutation_invariant_and_parser_is_strict() {
         let first = manifest();
         let second = RadrootsTradeEvidenceManifestV1::new(

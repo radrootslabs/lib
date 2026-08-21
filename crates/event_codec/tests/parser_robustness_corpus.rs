@@ -46,6 +46,21 @@ fn corpus_rejects_oversized_input_before_json_allocation() {
 }
 
 #[test]
+fn signed_event_decoder_accepts_valid_input_and_rejects_oversize_before_parsing() {
+    let encoded = encode(&valid_event());
+    decode::signed_event(encoded.as_str()).expect("ID-valid signed event");
+
+    let raw = " ".repeat(DEFAULT_RAW_JSON_MAX_BYTES + 1);
+    assert_eq!(
+        decode::signed_event(raw.as_str()).expect_err("oversized signed event"),
+        DecodeError::InputTooLarge {
+            max: DEFAULT_RAW_JSON_MAX_BYTES,
+            actual: DEFAULT_RAW_JSON_MAX_BYTES + 1,
+        }
+    );
+}
+
+#[test]
 fn corpus_rejects_tag_count_overflow_before_id_verification() {
     let mut value = valid_event();
     object(&mut value).insert(

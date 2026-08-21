@@ -1593,6 +1593,10 @@ fn validate_contract_inner(workspace_root: &Path) -> Result<(), ReleaseArtifactE
     )?;
     let decision = serde_json::from_slice::<ReleaseDecision>(&bytes)
         .map_err(|_| ReleaseArtifactError::InvalidContract)?;
+    validate_decision(&decision)
+}
+
+fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactError> {
     let errors = [
         ReleaseArtifactError::InvalidContract,
         ReleaseArtifactError::InvalidServiceRoot,
@@ -1890,6 +1894,37 @@ version = "0.1.0-alpha"
         }
     }
 
+    fn sample_cargo_metadata() -> CargoMetadata {
+        let root_id = "path+file:///fixture#fixture-service@0.1.0-alpha";
+        let dependency_id = "registry+https://example.invalid#index@0.1.0-alpha";
+        CargoMetadata {
+            packages: vec![
+                package(root_id, "fixture-service", None, None, Some("MIT"), true),
+                package(
+                    dependency_id,
+                    "dependency",
+                    Some("registry+https://github.com/rust-lang/crates.io-index"),
+                    Some(&"a".repeat(64)),
+                    Some("Apache-2.0"),
+                    false,
+                ),
+            ],
+            workspace_members: vec![root_id.to_owned()],
+            resolve: Some(CargoResolve {
+                nodes: vec![
+                    CargoNode {
+                        id: dependency_id.to_owned(),
+                        dependencies: Vec::new(),
+                    },
+                    CargoNode {
+                        id: root_id.to_owned(),
+                        dependencies: vec![dependency_id.to_owned()],
+                    },
+                ],
+            }),
+        }
+    }
+
     #[test]
     fn contract_matches_the_checked_in_decision() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1897,6 +1932,60 @@ version = "0.1.0-alpha"
             .and_then(Path::parent)
             .expect("workspace root");
         validate_contract_inner(root).expect("release decision");
+    }
+
+    #[test]
+    fn contract_rejects_every_independent_governed_field_drift() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root");
+        let bytes = fs::read(root.join(CONTRACT_RELATIVE)).expect("decision");
+        let canonical = serde_json::from_slice::<serde_json::Value>(&bytes).expect("decision json");
+        for (pointer, replacement) in [
+            ("/schema", serde_json::json!("other")),
+            ("/contract_version", serde_json::json!(2)),
+            ("/decision_state", serde_json::json!("draft")),
+            ("/command", serde_json::json!("other")),
+            ("/modes", serde_json::json!([])),
+            ("/required_arguments", serde_json::json!([])),
+            ("/service_metadata_path", serde_json::json!("other")),
+            ("/service_metadata_fields", serde_json::json!([])),
+            ("/supported_targets", serde_json::json!([])),
+            ("/input_inventory", serde_json::json!([])),
+            ("/excluded_parent_owned_inputs", serde_json::json!([])),
+            ("/service_root_inventory", serde_json::json!([])),
+            ("/output_inventory", serde_json::json!([])),
+            ("/canonical_json", serde_json::json!("other")),
+            ("/checksum_format", serde_json::json!("other")),
+            ("/sbom_format", serde_json::json!("other")),
+            ("/provenance_posture", serde_json::json!("other")),
+            ("/protected_material_scan_scope", serde_json::json!("other")),
+            ("/source_cleanliness", serde_json::json!("other")),
+            ("/revision_stability", serde_json::json!("other")),
+            ("/no_protected_material", serde_json::json!(false)),
+            ("/maximums/text_input_bytes", serde_json::json!(1)),
+            ("/maximums/generated_document_bytes", serde_json::json!(1)),
+            ("/maximums/service_cargo_lock_bytes", serde_json::json!(1)),
+            ("/maximums/service_flake_lock_bytes", serde_json::json!(1)),
+            ("/maximums/binary_bytes", serde_json::json!(1)),
+            ("/maximums/source_bundle_bytes", serde_json::json!(1)),
+            ("/maximums/oci_bytes", serde_json::json!(1)),
+            ("/maximums/cargo_metadata_bytes", serde_json::json!(1)),
+            ("/maximums/packages", serde_json::json!(1)),
+            ("/maximums/workspace_packages", serde_json::json!(1)),
+            ("/negative_error_codes", serde_json::json!([])),
+        ] {
+            let mut drifted = canonical.clone();
+            *drifted.pointer_mut(pointer).expect("governed field") = replacement;
+            let decision = serde_json::from_value::<ReleaseDecision>(drifted)
+                .expect("structurally valid drift");
+            assert_eq!(
+                validate_decision(&decision),
+                Err(ReleaseArtifactError::InvalidContract),
+                "accepted drift at {pointer}"
+            );
+        }
     }
 
     #[test]
@@ -2004,6 +2093,517 @@ version = "0.1.0-alpha"
                 Err(ReleaseArtifactError::InvalidPackageInventory)
             ));
         }
+    }
+
+    #[test]
+    fn package_metadata_rejects_each_independent_field_drift() {
+        let invalid = |package: CargoPackage, workspace_member| {
+            assert_eq!(
+                validate_metadata_package(&package, workspace_member),
+                Err(ReleaseArtifactError::InvalidPackageInventory)
+            );
+        };
+        for field in ["name", "version", "id"] {
+            for value in [
+                String::new(),
+                "x".repeat(MAX_TEXT_FIELD_BYTES + 1),
+                "x\ny".into(),
+            ] {
+                let mut candidate =
+                    package("root", "fixture-service", None, None, Some("MIT"), true);
+                match field {
+                    "name" => candidate.name = value,
+                    "version" => candidate.version = value,
+                    "id" => candidate.id = value,
+                    _ => unreachable!(),
+                }
+                invalid(candidate, true);
+            }
+        }
+
+        for license in [
+            Some(""),
+            Some("bad\nlicense"),
+            Some("-----BEGIN PRIVATE KEY-----"),
+        ] {
+            invalid(
+                package("root", "fixture-service", None, None, license, true),
+                true,
+            );
+        }
+        for source in [
+            Some(""),
+            Some("path+file:///private"),
+            Some("git+ssh://git@github.com/private/repo"),
+        ] {
+            invalid(
+                package(
+                    "dep",
+                    "dep",
+                    source,
+                    Some(&"a".repeat(64)),
+                    Some("MIT"),
+                    false,
+                ),
+                false,
+            );
+        }
+        invalid(
+            package(
+                "dep",
+                "dep",
+                None,
+                Some(&"a".repeat(64)),
+                Some("MIT"),
+                false,
+            ),
+            false,
+        );
+        invalid(
+            package(
+                "dep",
+                "dep",
+                Some("registry+https://github.com/rust-lang/crates.io-index"),
+                Some(&"a".repeat(64)),
+                None,
+                false,
+            ),
+            false,
+        );
+        for checksum in ["a".repeat(63), "g".repeat(64)] {
+            invalid(
+                package(
+                    "root",
+                    "fixture-service",
+                    None,
+                    Some(&checksum),
+                    Some("MIT"),
+                    true,
+                ),
+                true,
+            );
+        }
+    }
+
+    #[test]
+    fn supply_chain_graph_rejects_each_independent_structural_drift() {
+        let invalid = |cargo| {
+            assert!(matches!(
+                build_supply_chain_documents(&sample_metadata(), cargo),
+                Err(ReleaseArtifactError::InvalidPackageInventory)
+            ));
+        };
+
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages.clear();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.workspace_members.clear();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages[0].version = "0.2.0".into();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages[0].targets.clear();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages[0].name = "other".into();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages.push(package(
+            "second-root",
+            "fixture-service",
+            None,
+            None,
+            Some("MIT"),
+            true,
+        ));
+        cargo.workspace_members.push("second-root".into());
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages[1].id = cargo.packages[0].id.clone();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.workspace_members.push("missing".into());
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.resolve = None;
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.resolve.as_mut().expect("resolve").nodes.clear();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        let duplicate = cargo.resolve.as_ref().expect("resolve").nodes[0].id.clone();
+        cargo.resolve.as_mut().expect("resolve").nodes[1].id = duplicate;
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.resolve.as_mut().expect("resolve").nodes[0].id = "missing".into();
+        invalid(cargo);
+        let mut cargo = sample_cargo_metadata();
+        cargo.resolve.as_mut().expect("resolve").nodes[1]
+            .dependencies
+            .push("missing".into());
+        invalid(cargo);
+
+        let root_id = "path+file:///fixture#fixture-service@0.1.0-alpha";
+        let root_only = CargoMetadata {
+            packages: vec![package(
+                root_id,
+                "fixture-service",
+                None,
+                None,
+                Some("MIT"),
+                true,
+            )],
+            workspace_members: vec![root_id.into()],
+            resolve: Some(CargoResolve {
+                nodes: vec![CargoNode {
+                    id: root_id.into(),
+                    dependencies: Vec::new(),
+                }],
+            }),
+        };
+        let (_, notices) =
+            build_supply_chain_documents(&sample_metadata(), root_only).expect("root-only graph");
+        assert!(notices.contains("No third-party Cargo packages are present."));
+    }
+
+    #[test]
+    fn file_admission_predicates_reject_each_independent_drift() {
+        let root = TempDir::new().expect("file fixture");
+        let regular = root.path().join("regular");
+        write_file(&regular, b"bytes");
+        let empty = root.path().join("empty");
+        write_file(&empty, b"");
+        let oversized = root.path().join("oversized");
+        fs::File::create(&oversized)
+            .and_then(|file| file.set_len(6))
+            .expect("sparse file");
+        assert!(matches!(
+            hash_regular(root.path(), 5),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        ));
+        assert!(matches!(
+            hash_regular(&oversized, 5),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        ));
+        assert!(matches!(
+            validate_regular_input(&empty, 5),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        ));
+        assert!(matches!(
+            validate_regular_input(root.path(), 5),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        ));
+        assert!(matches!(
+            validate_regular_input(&oversized, 5),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        ));
+        assert_eq!(
+            validate_absolute_directory(&regular, ReleaseArtifactError::InvalidInputRoot),
+            Err(ReleaseArtifactError::InvalidInputRoot)
+        );
+        assert_eq!(
+            validate_absolute_directory(
+                Path::new("relative"),
+                ReleaseArtifactError::InvalidInputRoot
+            ),
+            Err(ReleaseArtifactError::InvalidInputRoot)
+        );
+        assert_eq!(
+            output_maximum("unknown"),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+
+        #[cfg(unix)]
+        {
+            let symlink = root.path().join("symlink");
+            std::os::unix::fs::symlink(&regular, &symlink).expect("symlink");
+            assert!(matches!(
+                hash_regular(&symlink, 5),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            ));
+            assert!(matches!(
+                validate_regular_input(&symlink, 5),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            ));
+            assert_eq!(
+                validate_absolute_directory(&symlink, ReleaseArtifactError::InvalidInputRoot),
+                Err(ReleaseArtifactError::InvalidInputRoot)
+            );
+        }
+    }
+
+    #[test]
+    fn release_metadata_and_text_admission_reject_each_field_drift() {
+        let root = TempDir::new().expect("metadata fixture");
+        let canonical = r#"[workspace.metadata.radroots.service_release]
+service = "fixture_service"
+service_package = "fixture-service"
+binary_name = "fixture-service"
+version = "0.1.0-alpha"
+"#;
+        for (from, to) in [
+            ("fixture_service", "Fixture"),
+            (
+                "service_package = \"fixture-service\"",
+                "service_package = \"fixture--service\"",
+            ),
+            (
+                "binary_name = \"fixture-service\"",
+                "binary_name = \"fixture--service\"",
+            ),
+            ("version = \"0.1.0-alpha\"", "version = \"invalid\""),
+        ] {
+            write_file(
+                &root.path().join("Cargo.toml"),
+                canonical.replacen(from, to, 1).as_bytes(),
+            );
+            assert!(matches!(
+                read_release_metadata(root.path()),
+                Err(ReleaseArtifactError::InvalidServiceMetadata)
+            ));
+        }
+        write_file(
+            &root.path().join("Cargo.toml"),
+            canonical
+                .replacen("0.1.0-alpha", &"a".repeat(129), 1)
+                .as_bytes(),
+        );
+        assert!(matches!(
+            read_release_metadata(root.path()),
+            Err(ReleaseArtifactError::InvalidServiceMetadata)
+        ));
+
+        for (name, bytes) in [
+            ("plain.txt", b"contains\0nul".as_slice()),
+            ("config.schema.json", b"not json".as_slice()),
+            ("config.example.toml", b"not = [toml".as_slice()),
+        ] {
+            let path = root.path().join(name);
+            write_file(&path, bytes);
+            assert_eq!(
+                validate_text_artifact(&path, name),
+                Err(ReleaseArtifactError::InvalidInputArtifact)
+            );
+        }
+        assert_eq!(
+            write_generated(&root.path().join("empty-generated"), b""),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+    }
+
+    #[test]
+    fn output_scope_remote_and_inventory_reject_each_drift() {
+        let root = TempDir::new().expect("output fixture");
+        let service = root.path().join("service");
+        let input = root.path().join("input");
+        let output_parent = root.path().join("output");
+        fs::create_dir(&service).expect("service");
+        fs::create_dir(&input).expect("input");
+        fs::create_dir(&output_parent).expect("output");
+        assert_eq!(
+            validate_output_parent(Path::new("relative"), &service, &input),
+            Err(ReleaseArtifactError::InvalidOutputRoot)
+        );
+        assert_eq!(
+            validate_output_parent(root.path(), &service, &input),
+            Err(ReleaseArtifactError::InvalidOutputRoot)
+        );
+        let file_output = output_parent.join("file");
+        write_file(&file_output, b"file");
+        assert_eq!(
+            validate_output_parent(&file_output, &service, &input),
+            Err(ReleaseArtifactError::InvalidOutputRoot)
+        );
+
+        let inventory = root.path().join("inventory");
+        fs::create_dir(&inventory).expect("inventory");
+        fs::create_dir(inventory.join("directory-entry")).expect("directory entry");
+        assert_eq!(
+            directory_inventory(&inventory, ReleaseArtifactError::InvalidInputRoot),
+            Err(ReleaseArtifactError::InvalidInputRoot)
+        );
+        fs::remove_dir(inventory.join("directory-entry")).expect("remove entry");
+        for index in 0..=OUTPUT_NAMES.len() {
+            write_file(&inventory.join(format!("file-{index}")), b"x");
+        }
+        assert_eq!(
+            directory_inventory(&inventory, ReleaseArtifactError::InvalidInputRoot),
+            Err(ReleaseArtifactError::InvalidInputRoot)
+        );
+
+        write_file(&service.join("fixture"), b"fixture");
+        initialize_git(&service, "https://example.invalid/service");
+        assert_eq!(
+            git_remote(&service),
+            Err(ReleaseArtifactError::InvalidServiceRoot)
+        );
+        git(
+            &service,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "ssh://git@github.com/user/repo\nbad",
+            ],
+        );
+        assert_eq!(
+            git_remote(&service),
+            Err(ReleaseArtifactError::InvalidServiceRoot)
+        );
+        git(
+            &service,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                &format!("https://github.com/{}", "a".repeat(MAX_TEXT_FIELD_BYTES)),
+            ],
+        );
+        assert_eq!(
+            git_remote(&service),
+            Err(ReleaseArtifactError::InvalidServiceRoot)
+        );
+    }
+
+    #[test]
+    fn remaining_release_boundaries_fail_closed() {
+        let fixture = ReleaseFixture::new();
+        assert_eq!(
+            fixture.check(&fixture.output_a),
+            Err(ReleaseArtifactError::StaleOutput)
+        );
+
+        let source_lock = ServiceSourceLockV1::from_canonical_bytes(
+            &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
+        )
+        .expect("source lock");
+        fs::write(fixture.service.join("flake.lock"), b"different").expect("flake drift");
+        assert_eq!(
+            validate_source_lock_files(&fixture.service, &source_lock),
+            Err(ReleaseArtifactError::InvalidSourceLock)
+        );
+
+        let mut packages = sample_cargo_metadata();
+        packages.packages = (0..=MAX_PACKAGES)
+            .map(|index| {
+                package(
+                    &format!("id-{index}"),
+                    "dep",
+                    None,
+                    None,
+                    Some("MIT"),
+                    false,
+                )
+            })
+            .collect();
+        assert!(matches!(
+            build_supply_chain_documents(&sample_metadata(), packages),
+            Err(ReleaseArtifactError::InvalidPackageInventory)
+        ));
+        let mut workspace = sample_cargo_metadata();
+        workspace.workspace_members = (0..=MAX_WORKSPACE_PACKAGES)
+            .map(|index| format!("member-{index}"))
+            .collect();
+        assert!(matches!(
+            build_supply_chain_documents(&sample_metadata(), workspace),
+            Err(ReleaseArtifactError::InvalidPackageInventory)
+        ));
+        for (target_name, kind) in [("other", "bin"), ("fixture-service", "lib")] {
+            let mut cargo = sample_cargo_metadata();
+            cargo.packages[0].targets = vec![CargoTarget {
+                name: target_name.into(),
+                kind: vec![kind.into()],
+            }];
+            assert!(matches!(
+                build_supply_chain_documents(&sample_metadata(), cargo),
+                Err(ReleaseArtifactError::InvalidPackageInventory)
+            ));
+        }
+        let mut outside_workspace = sample_cargo_metadata();
+        outside_workspace.workspace_members = vec!["other".into()];
+        assert!(matches!(
+            build_supply_chain_documents(&sample_metadata(), outside_workspace),
+            Err(ReleaseArtifactError::InvalidPackageInventory)
+        ));
+
+        let scope = TempDir::new().expect("scope fixture");
+        let service = scope.path().join("service");
+        let input_parent = TempDir::new().expect("input scope");
+        let input = input_parent.path().join("input");
+        fs::create_dir(&service).expect("service");
+        fs::create_dir(&input).expect("input");
+        assert_eq!(
+            validate_output_parent(&scope.path().join("bad\\name"), &service, &input),
+            Err(ReleaseArtifactError::InvalidOutputRoot)
+        );
+        assert_eq!(
+            validate_output_parent(input_parent.path(), &service, &input),
+            Err(ReleaseArtifactError::InvalidOutputRoot)
+        );
+        #[cfg(unix)]
+        {
+            let foreign = scope.path().join("foreign");
+            fs::create_dir(&foreign).expect("foreign");
+            let output = scope.path().join("output-link");
+            std::os::unix::fs::symlink(&foreign, &output).expect("output symlink");
+            assert_eq!(
+                validate_output_parent(&output, &service, &input),
+                Err(ReleaseArtifactError::InvalidOutputRoot)
+            );
+        }
+
+        write_file(&service.join("tracked"), b"tracked");
+        initialize_git(&service, "https://github.com/radrootslabs/service");
+        let child = service.join("child");
+        fs::create_dir(&child).expect("child");
+        assert_eq!(
+            validate_git_root(&child),
+            Err(ReleaseArtifactError::InvalidServiceRoot)
+        );
+        write_file(&service.join("untracked"), b"dirty");
+        assert_eq!(
+            validate_clean_git(&service),
+            Err(ReleaseArtifactError::DirtyServiceSource)
+        );
+
+        assert_eq!(
+            verify_bundle(
+                &fixture.input.join("service-source.bundle"),
+                &"a".repeat(40)
+            ),
+            Err(ReleaseArtifactError::InvalidSourceBundle)
+        );
+        assert_eq!(
+            write_generated(
+                &scope.path().join("oversized-generated"),
+                &vec![b'x'; MAX_GENERATED_DOCUMENT_BYTES as usize + 1]
+            ),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+    }
+
+    #[test]
+    fn identifier_predicates_reject_each_independent_boundary() {
+        for value in ["", "1service", "service_", "service__name", "service-name"] {
+            assert!(!valid_snake_identifier(value), "{value}");
+        }
+        assert!(!valid_snake_identifier(&"a".repeat(129)));
+        for value in ["", "1service", "service-", "service--name", "service_name"] {
+            assert!(!valid_kebab_identifier(value), "{value}");
+        }
+        assert!(!valid_kebab_identifier(&"a".repeat(129)));
+        assert!(!valid_metadata_text(""));
+        assert!(!valid_metadata_text(&"a".repeat(MAX_TEXT_FIELD_BYTES + 1)));
+        assert!(!valid_metadata_text("bad\rvalue"));
+        assert!(!valid_metadata_text("-----BEGIN PRIVATE KEY-----"));
+        assert!(!valid_public_source("registry+http://example.invalid"));
+        assert!(!valid_public_source(
+            "registry+https://user@github.com/private"
+        ));
+        assert!(!valid_lower_hex("a", 2));
+        assert!(!valid_lower_hex("ag", 2));
     }
 
     #[test]
