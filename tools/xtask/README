@@ -17,6 +17,11 @@ tasks for the `radroots` core libraries.
  * strict `service-source-lock --mode write|check` generation and verification
    for standalone hardened services, including Cargo, Nix, source-archive,
    toolchain, cleanliness, and public-revision agreement;
+ * deterministic `service-release-artifacts --mode write|check` assembly for
+   the fixed hardened-service binary, OCI, configuration, module, license,
+   source-bundle, SBOM, notice, manifest, provenance-input, and checksum
+   inventory, with signing credentials kept external and operator runbooks
+   deliberately excluded from this standalone build input set;
  * command-dispatch code used for contract, coverage, hygiene, and release
    paths inside the workspace;
  * a non-published binary crate used as tooling rather than as a library

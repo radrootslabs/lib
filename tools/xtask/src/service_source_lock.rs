@@ -134,6 +134,26 @@ impl ContractVersions {
             && self.status != 0
             && self.provider != 0
     }
+
+    pub(crate) const fn config(self) -> u32 {
+        self.config
+    }
+
+    pub(crate) const fn state(self) -> u32 {
+        self.state
+    }
+
+    pub(crate) const fn admin(self) -> u32 {
+        self.admin
+    }
+
+    pub(crate) const fn status(self) -> u32 {
+        self.status
+    }
+
+    pub(crate) const fn provider(self) -> u32 {
+        self.provider
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -225,6 +245,34 @@ impl ServiceSourceLockV1 {
     pub(crate) fn canonical_bytes(&self) -> &[u8] {
         debug_assert_eq!(self.raw.schema, LOCK_SCHEMA);
         &self.canonical
+    }
+
+    pub(crate) fn service(&self) -> &str {
+        &self.raw.service
+    }
+
+    pub(crate) fn revision(&self) -> &str {
+        &self.raw.revision
+    }
+
+    pub(crate) fn workspace_catalog_sha256(&self) -> &str {
+        &self.raw.workspace_catalog_sha256
+    }
+
+    pub(crate) fn source_archive_sha256(&self) -> &str {
+        &self.raw.source_archive_sha256
+    }
+
+    pub(crate) fn cargo_lock_sha256(&self) -> &str {
+        &self.raw.cargo_lock_sha256
+    }
+
+    pub(crate) fn flake_lock_sha256(&self) -> &str {
+        &self.raw.flake_lock_sha256
+    }
+
+    pub(crate) const fn contract_versions(&self) -> ContractVersions {
+        self.raw.contract_versions
     }
 }
 

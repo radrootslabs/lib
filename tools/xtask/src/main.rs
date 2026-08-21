@@ -38,6 +38,7 @@ mod release_qualification;
 mod safety_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod sdk_generation;
+mod service_release_artifacts;
 mod service_source_lock;
 mod service_source_lock_command;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -125,6 +126,20 @@ enum XtaskCommand {
         #[arg(long)]
         source_archive: PathBuf,
     },
+    ServiceReleaseArtifacts {
+        #[arg(long, value_enum)]
+        mode: ServiceReleaseArtifactMode,
+        #[arg(long)]
+        service_root: PathBuf,
+        #[arg(long)]
+        input_root: PathBuf,
+        #[arg(long)]
+        output_root: PathBuf,
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        source_date_epoch: u32,
+    },
     Source {
         #[command(subcommand)]
         command: SourceCommand,
@@ -180,6 +195,12 @@ enum SourceMode {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum ServiceSourceLockMode {
+    Check,
+    Write,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ServiceReleaseArtifactMode {
     Check,
     Write,
 }
@@ -321,6 +342,9 @@ fn usage() {
         "  cargo xtask service-source-lock --mode <check|write> --service-root <absolute-directory> --source-archive <absolute-bundle>"
     );
     eprintln!(
+        "  cargo xtask service-release-artifacts --mode <check|write> --service-root <absolute-directory> --input-root <absolute-directory> --output-root <absolute-directory> --target <rust-target> --source-date-epoch <seconds>"
+    );
+    eprintln!(
         "  cargo xtask source materialize --consumer-root <absolute-directory> --cache-root <absolute-directory> --mode <prefetch|offline>"
     );
     eprintln!("  cargo xtask source archive-verify --archive <bundle> --sha256 <digest>");
@@ -367,6 +391,7 @@ fn validate_contract() -> Result<(), String> {
     validate_protocol_contracts()?;
     let root = workspace_root();
     service_source_lock::validate_contract(&root)?;
+    service_release_artifacts::validate_contract(&root)?;
     dto_roots::check(&root)?;
     generate::protocol::check(&root)?;
     contract::load_contract_bundle(&root)
@@ -384,6 +409,7 @@ fn release_preflight() -> Result<(), String> {
 fn release_preflight_at(root: &Path) -> Result<(), String> {
     catalog::check(root)?;
     service_source_lock::validate_contract(root)?;
+    service_release_artifacts::validate_contract(root)?;
     for group in ["public_native", "preview", "tools"] {
         build_control::group_plan(root, group, build_control::Operation::Check, false)?;
     }
@@ -499,6 +525,24 @@ fn run(args: &[String]) -> Result<(), String> {
             },
             &service_root,
             &source_archive,
+        ),
+        XtaskCommand::ServiceReleaseArtifacts {
+            mode,
+            service_root,
+            input_root,
+            output_root,
+            target,
+            source_date_epoch,
+        } => service_release_artifacts::run(
+            match mode {
+                ServiceReleaseArtifactMode::Check => service_release_artifacts::CommandMode::Check,
+                ServiceReleaseArtifactMode::Write => service_release_artifacts::CommandMode::Write,
+            },
+            &service_root,
+            &input_root,
+            &output_root,
+            &target,
+            source_date_epoch,
         ),
         XtaskCommand::Source { command } => match command {
             SourceCommand::Materialize {
@@ -671,6 +715,42 @@ mod tests {
                 "/tmp/service",
                 "--source-archive",
                 "/tmp/lib.bundle",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "xtask",
+                "service-release-artifacts",
+                "--mode",
+                "write",
+                "--service-root",
+                "/tmp/service",
+                "--input-root",
+                "/tmp/input",
+                "--output-root",
+                "/tmp/output",
+                "--target",
+                "x86_64-unknown-linux-gnu",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "xtask",
+                "service-release-artifacts",
+                "--mode",
+                "check",
+                "--service-root",
+                "/tmp/service",
+                "--input-root",
+                "/tmp/input",
+                "--output-root",
+                "/tmp/output",
+                "--target",
+                "x86_64-unknown-linux-gnu",
+                "--source-date-epoch",
+                "1",
             ])
             .is_ok()
         );

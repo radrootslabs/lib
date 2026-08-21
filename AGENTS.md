@@ -52,6 +52,15 @@ This file exists for compatibility with tools that look for AGENTS.md.
   Lib dependency, the Cargo lock, the direct revision-pinned Nix input, the
   source archive, and the canonical public remote must agree. The command
   rejects every source-tree change except the exact generated lock path.
+- Generate or verify one immutable service release artifact set with `cargo
+  xtask service-release-artifacts --mode write|check --service-root
+  <absolute-directory> --input-root <absolute-directory> --output-root
+  <absolute-directory> --target <rust-target> --source-date-epoch <seconds>`.
+  The command consumes the exact fixed input inventory, validates clean and
+  stable service and Lib source bundles, and emits the canonical binary
+  archive, OCI/source metadata, CycloneDX SBOM, notices, manifest, unsigned
+  provenance signing input, and checksums. Signing credentials and signatures
+  remain external; generated artifacts must contain no protected material.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
