@@ -3,10 +3,12 @@ use std::{fmt, fs, io::Read as _, path::Path};
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 
-use crate::service_source_lock::{LOCK_FILENAME, ServiceSourceLockV1};
+use crate::service_source_lock::{
+    LOCK_FILENAME, NixMaterialState, PREDECESSOR_LOCK_FILENAME, ServiceSourceLockV2,
+};
 
 const CONTRACT_RELATIVE: &str =
-    "contracts/architecture/decisions/services_hardening_build_qualification.v1.json";
+    "contracts/architecture/decisions/services_hardening_build_qualification.v2.json";
 const FIXTURE_RELATIVE: &str = "tools/xtask/fixtures/service-build-qualification";
 const MAX_CONTRACT_BYTES: usize = 32_768;
 const MAX_FIXTURE_FILE_BYTES: usize = 1_048_576;
@@ -77,6 +79,7 @@ struct BuildQualificationDecision {
     schema: String,
     contract_version: u32,
     decision_state: String,
+    predecessor: PredecessorDecision,
     qualification_scope: String,
     fixture_root: String,
     supported_rust_targets: Vec<String>,
@@ -89,6 +92,14 @@ struct BuildQualificationDecision {
     source_lock_command: String,
     signing_authority: String,
     deferred_outputs: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PredecessorDecision {
+    schema: String,
+    filename: String,
+    transition: String,
 }
 
 pub(crate) fn validate_contract(workspace_root: &Path) -> Result<(), String> {
@@ -108,9 +119,13 @@ fn validate_contract_inner(workspace_root: &Path) -> Result<(), BuildQualificati
 }
 
 fn validate_decision(decision: &BuildQualificationDecision) -> Result<(), BuildQualificationError> {
-    let exact = decision.schema == "radroots.services-hardening.build-qualification-decisions.v1"
-        && decision.contract_version == 1
+    let exact = decision.schema == "radroots.services-hardening.build-qualification-decisions.v2"
+        && decision.contract_version == 2
         && decision.decision_state == "active"
+        && decision.predecessor.schema
+            == "radroots.services-hardening.build-qualification-decisions.v1"
+        && decision.predecessor.filename == "services_hardening_build_qualification.v1.json"
+        && decision.predecessor.transition == "forward_only_replace"
         && decision.qualification_scope == "native_release_foundation"
         && decision.fixture_root == FIXTURE_RELATIVE
         && decision.supported_rust_targets == SUPPORTED_RUST_TARGETS
@@ -118,7 +133,7 @@ fn validate_decision(decision: &BuildQualificationDecision) -> Result<(), BuildQ
         && decision.required_xtask_commands == REQUIRED_XTASK_COMMANDS
         && decision.required_evidence == REQUIRED_EVIDENCE
         && decision.fixture_source_lock
-            == "tools/xtask/fixtures/service-build-qualification/radroots.service.source-lock.v1.toml"
+            == "tools/xtask/fixtures/service-build-qualification/radroots.service.source-lock.v2.toml"
         && decision.fixture_contract == "source_lock_package_and_release_metadata_exact_agreement"
         && decision.release_artifact_command == "cargo xtask service-release-artifacts"
         && decision.source_lock_command == "cargo xtask service-source-lock"
@@ -138,15 +153,10 @@ fn validate_fixture(workspace_root: &Path) -> Result<(), BuildQualificationError
         4_096,
         BuildQualificationError::InvalidFixture,
     )?;
-    let lock = ServiceSourceLockV1::from_canonical_bytes(&lock_bytes)
+    let lock = ServiceSourceLockV2::from_canonical_bytes(&lock_bytes)
         .map_err(|_| BuildQualificationError::InvalidFixture)?;
     let cargo_lock = read_bounded(
         &fixture.join("Cargo.lock"),
-        MAX_FIXTURE_FILE_BYTES,
-        BuildQualificationError::InvalidFixture,
-    )?;
-    let flake_lock = read_bounded(
-        &fixture.join("flake.lock"),
         MAX_FIXTURE_FILE_BYTES,
         BuildQualificationError::InvalidFixture,
     )?;
@@ -177,7 +187,15 @@ fn validate_fixture(workspace_root: &Path) -> Result<(), BuildQualificationError
     let exact = lock.service() == "fixture_service"
         && lock.revision() == "2222222222222222222222222222222222222222"
         && lock.cargo_lock_sha256() == digest(&cargo_lock)
-        && lock.flake_lock_sha256() == digest(&flake_lock)
+        && lock.nix_material_state() == NixMaterialState::Absent
+        && lock.nix_lib_revision().is_none()
+        && lock.flake_lock_sha256().is_none()
+        && ["flake.nix", "flake.lock", PREDECESSOR_LOCK_FILENAME]
+            .into_iter()
+            .all(|name| {
+                fs::symlink_metadata(fixture.join(name))
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            })
         && versions.config() == 1
         && versions.state() == 2
         && versions.admin() == 3
@@ -188,12 +206,16 @@ fn validate_fixture(workspace_root: &Path) -> Result<(), BuildQualificationError
             .and_then(|value| value.get("version"))
             .and_then(toml::Value::as_str)
             == Some("0.1.0-alpha")
-        && source_metadata.len() == 7
+        && source_metadata.len() == 8
         && source_metadata.get("service").and_then(toml::Value::as_str) == Some("fixture_service")
         && source_metadata
             .get("host_feature_profile")
             .and_then(toml::Value::as_str)
             == Some("service-host")
+        && source_metadata
+            .get("nix_material")
+            .and_then(toml::Value::as_str)
+            == Some("absent")
         && source_metadata
             .get("config_contract_version")
             .and_then(toml::Value::as_integer)
@@ -284,8 +306,11 @@ mod tests {
         let canonical = serde_json::from_slice::<serde_json::Value>(&bytes).expect("decision json");
         for (pointer, replacement) in [
             ("/schema", serde_json::json!("other")),
-            ("/contract_version", serde_json::json!(2)),
+            ("/contract_version", serde_json::json!(1)),
             ("/decision_state", serde_json::json!("draft")),
+            ("/predecessor/schema", serde_json::json!("other")),
+            ("/predecessor/filename", serde_json::json!("other")),
+            ("/predecessor/transition", serde_json::json!("other")),
             ("/qualification_scope", serde_json::json!("other")),
             ("/fixture_root", serde_json::json!("other")),
             ("/supported_rust_targets", serde_json::json!([])),
@@ -330,12 +355,11 @@ mod tests {
                 "service_package = \"other-service\"",
             ),
             (
-                "radroots.service.source-lock.v1.toml",
+                "radroots.service.source-lock.v2.toml",
                 "revision = \"2222222222222222222222222222222222222222\"",
                 "revision = \"3333333333333333333333333333333333333333\"",
             ),
             ("Cargo.lock", "version = 4", "version = 3"),
-            ("flake.lock", "\"version\":7", "\"version\":8"),
         ] {
             let root = copied_fixture();
             let path = root.path().join(FIXTURE_RELATIVE).join(name);
@@ -357,6 +381,17 @@ mod tests {
             validate_fixture(root.path()),
             Err(BuildQualificationError::InvalidFixture)
         );
+
+        for name in ["flake.nix", "flake.lock", PREDECESSOR_LOCK_FILENAME] {
+            let root = copied_fixture();
+            fs::write(root.path().join(FIXTURE_RELATIVE).join(name), b"unexpected")
+                .expect("unexpected Nix material");
+            assert_eq!(
+                validate_fixture(root.path()),
+                Err(BuildQualificationError::InvalidFixture),
+                "accepted absent-state fixture with {name}"
+            );
+        }
     }
 
     #[test]
@@ -495,7 +530,7 @@ mod tests {
         let destination = root.path().join(FIXTURE_RELATIVE);
         fs::create_dir_all(&destination).expect("fixture directory");
         let source = workspace_root().join(FIXTURE_RELATIVE);
-        for name in ["Cargo.toml", "Cargo.lock", "flake.lock", LOCK_FILENAME] {
+        for name in ["Cargo.toml", "Cargo.lock", LOCK_FILENAME] {
             fs::copy(source.join(name), destination.join(name)).expect("fixture file");
         }
         root

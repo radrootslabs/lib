@@ -13,10 +13,13 @@ use sha2::{Digest as _, Sha256};
 use tar::{Builder as TarBuilder, Header as TarHeader};
 use tempfile::TempDir;
 
-use crate::service_source_lock::{LIB_REPOSITORY, LOCK_FILENAME, ServiceSourceLockV1};
+use crate::service_source_lock::{
+    LIB_REPOSITORY, LOCK_FILENAME, NixMaterialState, PREDECESSOR_LOCK_FILENAME,
+    ServiceSourceLockV2, validate_deferred_nix_material,
+};
 
 const CONTRACT_RELATIVE: &str =
-    "contracts/architecture/decisions/services_hardening_release_artifacts.v1.json";
+    "contracts/architecture/decisions/services_hardening_release_artifacts.v2.json";
 const INPUT_NAMES: [&str; 8] = [
     "config.example.toml",
     "config.schema.json",
@@ -41,10 +44,10 @@ const OUTPUT_NAMES: [&str; 18] = [
     "oci-image.tar.gz",
     "oci-image.v1.json",
     "provenance-input.v1.json",
-    "radroots.service.source-lock.v1.toml",
+    "radroots.service.source-lock.v2.toml",
     "sbom.cdx.json",
     "service-source.bundle",
-    "source-bundles.v1.json",
+    "source-bundles.v2.json",
     "systemd.service",
 ];
 const SUPPORTED_TARGETS: [&str; 2] = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"];
@@ -262,7 +265,11 @@ struct SourceBundleDocument {
     source_lock_sha256: String,
     workspace_catalog_sha256: String,
     cargo_lock_sha256: String,
-    flake_lock_sha256: String,
+    nix_material: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nix_lib_revision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flake_lock_sha256: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -325,6 +332,7 @@ struct ReleaseDecision {
     schema: String,
     contract_version: u32,
     decision_state: String,
+    predecessor: ReleasePredecessor,
     command: String,
     modes: Vec<String>,
     required_arguments: Vec<String>,
@@ -345,6 +353,14 @@ struct ReleaseDecision {
     no_protected_material: bool,
     maximums: ReleaseMaximums,
     negative_error_codes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReleasePredecessor {
+    schema: String,
+    filename: String,
+    transition: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -405,7 +421,7 @@ fn run_inner(
         MAX_SOURCE_LOCK_BYTES,
         ReleaseArtifactError::InvalidSourceLock,
     )?;
-    let source_lock = ServiceSourceLockV1::from_canonical_bytes(&source_lock_bytes)
+    let source_lock = ServiceSourceLockV2::from_canonical_bytes(&source_lock_bytes)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     if source_lock.service() != metadata.service {
         return Err(ReleaseArtifactError::InvalidSourceLock);
@@ -488,8 +504,8 @@ fn run_inner(
     write_json(&staging.path().join("oci-image.v1.json"), &oci_document)?;
     let source_lock_sha256 = sha256_bytes(&source_lock_bytes);
     let source_document = SourceBundleDocument {
-        schema: "radroots.service.source-bundles.v1",
-        contract_version: 1,
+        schema: "radroots.service.source-bundles.v2",
+        contract_version: 2,
         service: metadata.service.clone(),
         service_revision: initial_head.clone(),
         lib_repository: LIB_REPOSITORY,
@@ -499,10 +515,15 @@ fn run_inner(
         source_lock_sha256: source_lock_sha256.clone(),
         workspace_catalog_sha256: source_lock.workspace_catalog_sha256().to_owned(),
         cargo_lock_sha256: source_lock.cargo_lock_sha256().to_owned(),
-        flake_lock_sha256: source_lock.flake_lock_sha256().to_owned(),
+        nix_material: match source_lock.nix_material_state() {
+            NixMaterialState::Absent => "absent",
+            NixMaterialState::Deferred => "deferred",
+        },
+        nix_lib_revision: source_lock.nix_lib_revision().map(str::to_owned),
+        flake_lock_sha256: source_lock.flake_lock_sha256().map(str::to_owned),
     };
     write_json(
-        &staging.path().join("source-bundles.v1.json"),
+        &staging.path().join("source-bundles.v2.json"),
         &source_document,
     )?;
     write_json(&staging.path().join("sbom.cdx.json"), &sbom)?;
@@ -622,18 +643,48 @@ fn read_release_metadata(root: &Path) -> Result<ReleaseMetadata, ReleaseArtifact
 
 fn validate_source_lock_files(
     root: &Path,
-    source_lock: &ServiceSourceLockV1,
+    source_lock: &ServiceSourceLockV2,
 ) -> Result<(), ReleaseArtifactError> {
+    match fs::symlink_metadata(root.join(PREDECESSOR_LOCK_FILENAME)) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        _ => return Err(ReleaseArtifactError::InvalidSourceLock),
+    }
     let cargo_lock = hash_regular(&root.join("Cargo.lock"), MAX_SERVICE_CARGO_LOCK_BYTES)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
-    let flake_lock = hash_regular(&root.join("flake.lock"), MAX_SERVICE_FLAKE_LOCK_BYTES)
-        .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
-    if cargo_lock.sha256 == source_lock.cargo_lock_sha256()
-        && flake_lock.sha256 == source_lock.flake_lock_sha256()
-    {
-        Ok(())
-    } else {
-        Err(ReleaseArtifactError::InvalidSourceLock)
+    if cargo_lock.sha256 != source_lock.cargo_lock_sha256() {
+        return Err(ReleaseArtifactError::InvalidSourceLock);
+    }
+    match source_lock.nix_material_state() {
+        NixMaterialState::Absent => {
+            for name in ["flake.nix", "flake.lock"] {
+                match fs::symlink_metadata(root.join(name)) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    _ => return Err(ReleaseArtifactError::InvalidSourceLock),
+                }
+            }
+            Ok(())
+        }
+        NixMaterialState::Deferred => {
+            let flake_nix = read_bounded_regular(
+                &root.join("flake.nix"),
+                MAX_TEXT_INPUT_BYTES,
+                ReleaseArtifactError::InvalidSourceLock,
+            )?;
+            let flake_lock = read_bounded_regular(
+                &root.join("flake.lock"),
+                MAX_SERVICE_FLAKE_LOCK_BYTES,
+                ReleaseArtifactError::InvalidSourceLock,
+            )?;
+            let evidence = validate_deferred_nix_material(&flake_nix, &flake_lock)
+                .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
+            if Some(evidence.lib_revision()) == source_lock.nix_lib_revision()
+                && Some(evidence.flake_lock_sha256()) == source_lock.flake_lock_sha256()
+            {
+                Ok(())
+            } else {
+                Err(ReleaseArtifactError::InvalidSourceLock)
+            }
+        }
     }
 }
 
@@ -1218,7 +1269,7 @@ fn output_maximum(name: &str) -> Result<u64, ReleaseArtifactError> {
         | "config.example.toml"
         | "config.schema.json"
         | "nixos-module.nix"
-        | "radroots.service.source-lock.v1.toml"
+        | "radroots.service.source-lock.v2.toml"
         | "systemd.service" => Ok(MAX_TEXT_INPUT_BYTES),
         "SHA256SUMS"
         | "THIRD-PARTY-NOTICES.txt"
@@ -1226,7 +1277,7 @@ fn output_maximum(name: &str) -> Result<u64, ReleaseArtifactError> {
         | "oci-image.v1.json"
         | "provenance-input.v1.json"
         | "sbom.cdx.json"
-        | "source-bundles.v1.json" => Ok(MAX_GENERATED_DOCUMENT_BYTES),
+        | "source-bundles.v2.json" => Ok(MAX_GENERATED_DOCUMENT_BYTES),
         _ => Err(ReleaseArtifactError::GenerationFailure),
     }
 }
@@ -1612,9 +1663,13 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         ReleaseArtifactError::StaleOutput,
         ReleaseArtifactError::GenerationFailure,
     ];
-    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v1"
-        || decision.contract_version != 1
+    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v2"
+        || decision.contract_version != 2
         || decision.decision_state != "active"
+        || decision.predecessor.schema
+            != "radroots.services-hardening.release-artifacts-decisions.v1"
+        || decision.predecessor.filename != "services_hardening_release_artifacts.v1.json"
+        || decision.predecessor.transition != "forward_only_replace"
         || decision.command != "cargo xtask service-release-artifacts"
         || decision.modes != ["check", "write"]
         || decision.required_arguments
@@ -1667,7 +1722,7 @@ mod tests {
     use std::process::Command;
 
     use crate::service_source_lock::{
-        ContractVersions, ServiceSourceLockParts, ServiceSourceLockV1,
+        ContractVersions, NixMaterialParts, ServiceSourceLockParts, ServiceSourceLockV2,
     };
 
     use super::*;
@@ -1736,8 +1791,18 @@ version = "0.1.0-alpha"
 "#,
             );
             write_file(
+                &service.join("flake.nix"),
+                format!(
+                    "{{\n  inputs.lib = {{\n    url = \"github:radrootslabs/lib/{lib_revision}\";\n    flake = false;\n  }};\n  outputs = {{ ... }}: {{ }};\n}}\n"
+                )
+                .as_bytes(),
+            );
+            write_file(
                 &service.join("flake.lock"),
-                b"{\"nodes\":{},\"root\":\"root\",\"version\":7}\n",
+                format!(
+                    "{{\"nodes\":{{\"root\":{{\"inputs\":{{\"lib\":\"lib\"}}}},\"lib\":{{\"locked\":{{\"lastModified\":1,\"narHash\":\"sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\",\"owner\":\"radrootslabs\",\"repo\":\"lib\",\"rev\":\"{lib_revision}\",\"type\":\"github\"}},\"original\":{{\"owner\":\"radrootslabs\",\"repo\":\"lib\",\"rev\":\"{lib_revision}\",\"type\":\"github\"}}}}}},\"root\":\"root\",\"version\":7}}\n"
+                )
+                .as_bytes(),
             );
             write_file(
                 &service.join("LICENSE-APACHE"),
@@ -1746,13 +1811,16 @@ version = "0.1.0-alpha"
             write_file(&service.join("LICENSE-MIT"), b"MIT fixture license\n");
             let cargo_lock = fs::read(service.join("Cargo.lock")).expect("Cargo lock");
             let flake_lock = fs::read(service.join("flake.lock")).expect("flake lock");
-            let source_lock = ServiceSourceLockV1::new(ServiceSourceLockParts {
+            let source_lock = ServiceSourceLockV2::new(ServiceSourceLockParts {
                 service: "fixture_service",
                 revision: &lib_revision,
                 workspace_catalog_sha256: &sha256_bytes(&catalog),
                 source_archive_sha256: &sha256_bytes(&lib_bundle),
                 cargo_lock_sha256: &sha256_bytes(&cargo_lock),
-                flake_lock_sha256: &sha256_bytes(&flake_lock),
+                nix: NixMaterialParts::Deferred {
+                    lib_revision: &lib_revision,
+                    flake_lock_sha256: &sha256_bytes(&flake_lock),
+                },
                 contract_versions: ContractVersions::new(1, 1, 1, 1, 1),
             })
             .expect("source lock");
@@ -1809,6 +1877,35 @@ version = "0.1.0-alpha"
                 "x86_64-unknown-linux-gnu",
                 1_700_000_000,
             )
+        }
+
+        fn make_nix_material_absent(&self) {
+            let current = ServiceSourceLockV2::from_canonical_bytes(
+                &fs::read(self.service.join(LOCK_FILENAME)).expect("source lock"),
+            )
+            .expect("valid source lock");
+            for name in ["flake.nix", "flake.lock"] {
+                fs::remove_file(self.service.join(name)).expect("remove deferred Nix file");
+            }
+            let absent = ServiceSourceLockV2::new(ServiceSourceLockParts {
+                service: current.service(),
+                revision: current.revision(),
+                workspace_catalog_sha256: current.workspace_catalog_sha256(),
+                source_archive_sha256: current.source_archive_sha256(),
+                cargo_lock_sha256: current.cargo_lock_sha256(),
+                nix: NixMaterialParts::Absent,
+                contract_versions: current.contract_versions(),
+            })
+            .expect("absent-Nix source lock");
+            write_file(&self.service.join(LOCK_FILENAME), absent.canonical_bytes());
+            git(&self.service, &["add", "-A"]);
+            git(
+                &self.service,
+                &["commit", "--quiet", "-m", "remove deferred Nix material"],
+            );
+            fs::remove_file(self.input.join("service-source.bundle"))
+                .expect("remove prior service bundle");
+            create_bundle(&self.service, &self.input.join("service-source.bundle"));
         }
     }
 
@@ -1944,8 +2041,11 @@ version = "0.1.0-alpha"
         let canonical = serde_json::from_slice::<serde_json::Value>(&bytes).expect("decision json");
         for (pointer, replacement) in [
             ("/schema", serde_json::json!("other")),
-            ("/contract_version", serde_json::json!(2)),
+            ("/contract_version", serde_json::json!(1)),
             ("/decision_state", serde_json::json!("draft")),
+            ("/predecessor/schema", serde_json::json!("other")),
+            ("/predecessor/filename", serde_json::json!("other")),
+            ("/predecessor/transition", serde_json::json!("other")),
             ("/command", serde_json::json!("other")),
             ("/modes", serde_json::json!([])),
             ("/required_arguments", serde_json::json!([])),
@@ -2475,7 +2575,7 @@ version = "0.1.0-alpha"
             Err(ReleaseArtifactError::StaleOutput)
         );
 
-        let source_lock = ServiceSourceLockV1::from_canonical_bytes(
+        let source_lock = ServiceSourceLockV2::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("source lock");
@@ -2720,18 +2820,23 @@ version = "0.1.0-alpha"
     #[test]
     fn release_service_and_workspace_binding_fail_closed() {
         let fixture = ReleaseFixture::new();
-        let current = ServiceSourceLockV1::from_canonical_bytes(
+        let current = ServiceSourceLockV2::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("source lock");
         let versions = current.contract_versions();
-        let mismatched = ServiceSourceLockV1::new(ServiceSourceLockParts {
+        let mismatched = ServiceSourceLockV2::new(ServiceSourceLockParts {
             service: "other_service",
             revision: current.revision(),
             workspace_catalog_sha256: current.workspace_catalog_sha256(),
             source_archive_sha256: current.source_archive_sha256(),
             cargo_lock_sha256: current.cargo_lock_sha256(),
-            flake_lock_sha256: current.flake_lock_sha256(),
+            nix: NixMaterialParts::Deferred {
+                lib_revision: current.nix_lib_revision().expect("deferred Nix revision"),
+                flake_lock_sha256: current
+                    .flake_lock_sha256()
+                    .expect("deferred flake-lock digest"),
+            },
             contract_versions: ContractVersions::new(
                 versions.config(),
                 versions.state(),
@@ -2867,7 +2972,7 @@ version = "0.1.0-alpha"
             "oci-image.v1.json",
             "provenance-input.v1.json",
             "sbom.cdx.json",
-            "source-bundles.v1.json",
+            "source-bundles.v2.json",
         ] {
             let bytes = fs::read(fixture.output_a.join(name)).expect("JSON output");
             assert_eq!(bytes.last(), Some(&b'\n'));
@@ -2892,6 +2997,42 @@ version = "0.1.0-alpha"
             fixture.write(&fixture.output_a),
             Err(ReleaseArtifactError::StaleOutput)
         );
+    }
+
+    #[test]
+    fn absent_nix_material_is_preserved_without_invented_digest_evidence() {
+        let fixture = ReleaseFixture::new();
+        fixture.make_nix_material_absent();
+        fixture
+            .write(&fixture.output_a)
+            .expect("absent-Nix release");
+
+        let document: serde_json::Value = serde_json::from_slice(
+            &fs::read(fixture.output_a.join("source-bundles.v2.json"))
+                .expect("source bundle document"),
+        )
+        .expect("source bundle JSON");
+        assert_eq!(document["schema"], "radroots.service.source-bundles.v2");
+        assert_eq!(document["contract_version"], 2);
+        assert_eq!(document["nix_material"], "absent");
+        assert!(document.get("nix_lib_revision").is_none());
+        assert!(document.get("flake_lock_sha256").is_none());
+        assert!(!fixture.service.join("flake.nix").exists());
+        assert!(!fixture.service.join("flake.lock").exists());
+
+        let lock = ServiceSourceLockV2::from_canonical_bytes(
+            &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
+        )
+        .expect("valid source lock");
+        for name in ["flake.nix", "flake.lock", PREDECESSOR_LOCK_FILENAME] {
+            write_file(&fixture.service.join(name), b"unexpected");
+            assert_eq!(
+                validate_source_lock_files(&fixture.service, &lock),
+                Err(ReleaseArtifactError::InvalidSourceLock),
+                "accepted absent-state release input with {name}"
+            );
+            fs::remove_file(fixture.service.join(name)).expect("remove unexpected file");
+        }
     }
 
     #[test]

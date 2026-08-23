@@ -14,6 +14,7 @@ resolver = "3"
 [workspace.metadata.radroots.service_source_lock]
 service = "fixture_service"
 host_feature_profile = "service-host"
+nix_material = "absent"
 config_contract_version = 1
 state_contract_version = 2
 admin_contract_version = 3

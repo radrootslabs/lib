@@ -13,12 +13,15 @@ use tempfile::{NamedTempFile, TempDir};
 use walkdir::WalkDir;
 
 use crate::service_source_lock::{
-    ContractVersions, LIB_REPOSITORY, LOCK_FILENAME, ServiceSourceLockParts, ServiceSourceLockV1,
+    ContractVersions, LIB_REPOSITORY, LOCK_FILENAME, NixMaterialParts, NixMaterialState,
+    PREDECESSOR_LOCK_FILENAME, ServiceSourceLockParts, ServiceSourceLockV2,
+    validate_deferred_nix_material,
 };
 
 const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v2.toml";
 const CARGO_MANIFEST: &str = "Cargo.toml";
 const CARGO_LOCK: &str = "Cargo.lock";
+const FLAKE_NIX: &str = "flake.nix";
 const FLAKE_LOCK: &str = "flake.lock";
 const RUST_TOOLCHAIN: &str = "rust-toolchain.toml";
 const LIB_VERSION_REQUIREMENT: &str = "=0.1.0-alpha";
@@ -28,6 +31,7 @@ const RUST_VERSION: &str = "1.97.1";
 const MAX_MANIFEST_BYTES: usize = 1_048_576;
 const MAX_CARGO_LOCK_BYTES: usize = 16_777_216;
 const MAX_FLAKE_LOCK_BYTES: usize = 4_194_304;
+const MAX_FLAKE_NIX_BYTES: usize = 1_048_576;
 const MAX_TOOLCHAIN_BYTES: usize = 65_536;
 const MAX_CATALOG_BYTES: usize = 4_194_304;
 const MAX_GIT_OUTPUT_BYTES: usize = 65_536;
@@ -48,6 +52,7 @@ enum CommandError {
     InvalidServiceMetadata,
     InvalidCargoManifest,
     InvalidCargoLock,
+    InvalidNixMaterial,
     InvalidFlakeLock,
     InvalidToolchain,
     InvalidSourceArchive,
@@ -65,6 +70,7 @@ impl fmt::Display for CommandError {
             Self::InvalidServiceMetadata => "service source-lock metadata is invalid",
             Self::InvalidCargoManifest => "service Cargo manifest dependency is invalid",
             Self::InvalidCargoLock => "service Cargo lock is invalid",
+            Self::InvalidNixMaterial => "service deferred Nix material is invalid",
             Self::InvalidFlakeLock => "service flake lock is invalid",
             Self::InvalidToolchain => "service Rust toolchain is invalid",
             Self::InvalidSourceArchive => "Lib source archive is invalid",
@@ -81,7 +87,39 @@ impl std::error::Error for CommandError {}
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ServiceMetadata {
     service: String,
+    nix_material: NixMaterialState,
     contract_versions: ContractVersions,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum NixMaterialEvidence {
+    Absent,
+    Deferred {
+        lib_revision: String,
+        flake_lock_sha256: String,
+    },
+}
+
+impl NixMaterialEvidence {
+    fn as_parts(&self) -> NixMaterialParts<'_> {
+        match self {
+            Self::Absent => NixMaterialParts::Absent,
+            Self::Deferred {
+                lib_revision,
+                flake_lock_sha256,
+            } => NixMaterialParts::Deferred {
+                lib_revision,
+                flake_lock_sha256,
+            },
+        }
+    }
+
+    fn revision(&self) -> Option<&str> {
+        match self {
+            Self::Absent => None,
+            Self::Deferred { lib_revision, .. } => Some(lib_revision),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -148,6 +186,10 @@ fn run_with(
     reachability: &dyn RevisionReachability,
 ) -> Result<(), CommandError> {
     let service_root = validate_service_root(service_root)?;
+    match fs::symlink_metadata(service_root.join(PREDECESSOR_LOCK_FILENAME)) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        _ => return Err(CommandError::InvalidSourceLock),
+    }
     let initial_head = service_head(&service_root)?;
     validate_service_cleanliness(&service_root)?;
 
@@ -160,13 +202,7 @@ fn run_with(
     let metadata = parse_service_metadata(&root_manifest)?;
     let revision = validate_cargo_manifests(&service_root, None)?;
 
-    let flake_lock = read_bounded_regular(
-        &service_root.join(FLAKE_LOCK),
-        MAX_FLAKE_LOCK_BYTES,
-        CommandError::InvalidFlakeLock,
-    )?;
-    validate_flake_lock(&flake_lock, &revision)?;
-    let flake_lock_sha256 = sha256(&flake_lock);
+    let nix = read_nix_material(&service_root, metadata.nix_material)?;
 
     validate_toolchain(&service_root)?;
     let archive = validate_archive(source_archive, &revision)?;
@@ -182,18 +218,23 @@ fn run_with(
     validate_cargo_lock(&cargo_lock, &revision, &archive.package_names)?;
     let cargo_lock_sha256 = sha256(&cargo_lock);
     reachability.verify(&archive.revision)?;
+    if let Some(nix_revision) = nix.revision()
+        && nix_revision != archive.revision
+    {
+        reachability.verify(nix_revision)?;
+    }
     validate_service_cleanliness(&service_root)?;
     if service_head(&service_root)? != initial_head {
         return Err(CommandError::DirtyServiceSource);
     }
 
-    let desired = ServiceSourceLockV1::new(ServiceSourceLockParts {
+    let desired = ServiceSourceLockV2::new(ServiceSourceLockParts {
         service: &metadata.service,
         revision: &archive.revision,
         workspace_catalog_sha256: &archive.catalog_sha256,
         source_archive_sha256: &archive.archive_sha256,
         cargo_lock_sha256: &cargo_lock_sha256,
-        flake_lock_sha256: &flake_lock_sha256,
+        nix: nix.as_parts(),
         contract_versions: metadata.contract_versions,
     })
     .map_err(|_| CommandError::InvalidServiceMetadata)?;
@@ -202,7 +243,7 @@ fn run_with(
     let result = match mode {
         CommandMode::Check => {
             let current = read_bounded_regular(&lock_path, 4096, CommandError::InvalidSourceLock)?;
-            let current = ServiceSourceLockV1::from_canonical_bytes(&current)
+            let current = ServiceSourceLockV2::from_canonical_bytes(&current)
                 .map_err(|_| CommandError::InvalidSourceLock)?;
             if current == desired {
                 Ok(())
@@ -213,7 +254,7 @@ fn run_with(
         CommandMode::Write => {
             atomic_write_lock(&service_root, &lock_path, desired.canonical_bytes())?;
             let current = read_bounded_regular(&lock_path, 4096, CommandError::WriteFailure)?;
-            let current = ServiceSourceLockV1::from_canonical_bytes(&current)
+            let current = ServiceSourceLockV2::from_canonical_bytes(&current)
                 .map_err(|_| CommandError::WriteFailure)?;
             if current == desired {
                 Ok(())
@@ -276,7 +317,7 @@ fn validate_service_cleanliness(root: &Path) -> Result<(), CommandError> {
             "--quiet",
             "--",
             ".",
-            ":(exclude)radroots.service.source-lock.v1.toml",
+            ":(exclude)radroots.service.source-lock.v2.toml",
         ],
     )
     .map_err(|_| CommandError::DirtyServiceSource)?;
@@ -288,7 +329,7 @@ fn validate_service_cleanliness(root: &Path) -> Result<(), CommandError> {
             "--quiet",
             "--",
             ".",
-            ":(exclude)radroots.service.source-lock.v1.toml",
+            ":(exclude)radroots.service.source-lock.v2.toml",
         ],
     )
     .map_err(|_| CommandError::DirtyServiceSource)?;
@@ -320,6 +361,7 @@ fn parse_service_metadata(root: &toml::Value) -> Result<ServiceMetadata, Command
         "admin_contract_version",
         "config_contract_version",
         "host_feature_profile",
+        "nix_material",
         "provider_contract_version",
         "service",
         "state_contract_version",
@@ -345,8 +387,14 @@ fn parse_service_metadata(root: &toml::Value) -> Result<ServiceMetadata, Command
     if text("host_feature_profile")? != HOST_FEATURE_PROFILE {
         return Err(CommandError::InvalidServiceMetadata);
     }
+    let nix_material = match text("nix_material")? {
+        "absent" => NixMaterialState::Absent,
+        "deferred" => NixMaterialState::Deferred,
+        _ => return Err(CommandError::InvalidServiceMetadata),
+    };
     Ok(ServiceMetadata {
         service: text("service")?.to_owned(),
+        nix_material,
         contract_versions: ContractVersions::new(
             version("config_contract_version")?,
             version("state_contract_version")?,
@@ -530,70 +578,47 @@ fn validate_cargo_lock(
     }
 }
 
-fn validate_flake_lock(bytes: &[u8], revision: &str) -> Result<(), CommandError> {
-    let value = serde_json::from_slice::<serde_json::Value>(bytes)
-        .map_err(|_| CommandError::InvalidFlakeLock)?;
-    let version = value.get("version").and_then(serde_json::Value::as_u64);
-    let root_name = value.get("root").and_then(serde_json::Value::as_str);
-    let nodes = value.get("nodes").and_then(serde_json::Value::as_object);
-    if version != Some(7) || root_name.is_none() || nodes.is_none() {
-        return Err(CommandError::InvalidFlakeLock);
-    }
-    let nodes = nodes.ok_or(CommandError::InvalidFlakeLock)?;
-    let root = nodes
-        .get(root_name.ok_or(CommandError::InvalidFlakeLock)?)
-        .and_then(|node| node.get("inputs"))
-        .and_then(serde_json::Value::as_object)
-        .ok_or(CommandError::InvalidFlakeLock)?;
-    let direct = root
-        .values()
-        .filter_map(serde_json::Value::as_str)
-        .collect::<Vec<_>>();
-    let mut lib_nodes = 0_usize;
-    let mut exact_direct = 0_usize;
-    for (name, node) in nodes {
-        let locked = node.get("locked").and_then(serde_json::Value::as_object);
-        let original = node.get("original").and_then(serde_json::Value::as_object);
-        let is_lib = locked.is_some_and(|locked| {
-            locked.get("owner").and_then(serde_json::Value::as_str) == Some("radrootslabs")
-                && locked.get("repo").and_then(serde_json::Value::as_str) == Some("lib")
-        }) || original.is_some_and(|original| {
-            original.get("owner").and_then(serde_json::Value::as_str) == Some("radrootslabs")
-                && original.get("repo").and_then(serde_json::Value::as_str) == Some("lib")
-        });
-        if !is_lib {
-            continue;
+fn read_nix_material(
+    root: &Path,
+    state: NixMaterialState,
+) -> Result<NixMaterialEvidence, CommandError> {
+    match state {
+        NixMaterialState::Absent => {
+            for name in [FLAKE_NIX, FLAKE_LOCK] {
+                match fs::symlink_metadata(root.join(name)) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    _ => return Err(CommandError::InvalidNixMaterial),
+                }
+            }
+            Ok(NixMaterialEvidence::Absent)
         }
-        lib_nodes += 1;
-        let locked = locked.ok_or(CommandError::InvalidFlakeLock)?;
-        let original = original.ok_or(CommandError::InvalidFlakeLock)?;
-        let locked_keys = locked.keys().map(String::as_str).collect::<BTreeSet<_>>();
-        let original_keys = original.keys().map(String::as_str).collect::<BTreeSet<_>>();
-        let exact = locked_keys
-            == BTreeSet::from(["lastModified", "narHash", "owner", "repo", "rev", "type"])
-            && original_keys == BTreeSet::from(["owner", "repo", "rev", "type"])
-            && locked.get("type").and_then(serde_json::Value::as_str) == Some("github")
-            && locked.get("owner").and_then(serde_json::Value::as_str) == Some("radrootslabs")
-            && locked.get("repo").and_then(serde_json::Value::as_str) == Some("lib")
-            && locked.get("rev").and_then(serde_json::Value::as_str) == Some(revision)
-            && locked
-                .get("narHash")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(valid_nix_sha256)
-            && original.get("type").and_then(serde_json::Value::as_str) == Some("github")
-            && original.get("owner").and_then(serde_json::Value::as_str) == Some("radrootslabs")
-            && original.get("repo").and_then(serde_json::Value::as_str) == Some("lib")
-            && original.get("rev").and_then(serde_json::Value::as_str) == Some(revision)
-            && original.get("ref").is_none();
-        if direct.iter().filter(|direct| **direct == name).count() == 1 && exact {
-            exact_direct += 1;
+        NixMaterialState::Deferred => {
+            let expression = read_bounded_regular(
+                &root.join(FLAKE_NIX),
+                MAX_FLAKE_NIX_BYTES,
+                CommandError::InvalidNixMaterial,
+            )?;
+            let lock = read_bounded_regular(
+                &root.join(FLAKE_LOCK),
+                MAX_FLAKE_LOCK_BYTES,
+                CommandError::InvalidFlakeLock,
+            )?;
+            crate::service_source_lock::validate_deferred_nix_lock(&lock)
+                .map_err(|_| CommandError::InvalidFlakeLock)?;
+            let evidence = validate_deferred_nix_material(&expression, &lock)
+                .map_err(|_| CommandError::InvalidNixMaterial)?;
+            Ok(NixMaterialEvidence::Deferred {
+                lib_revision: evidence.lib_revision().to_owned(),
+                flake_lock_sha256: evidence.flake_lock_sha256().to_owned(),
+            })
         }
     }
-    if lib_nodes == 1 && exact_direct == 1 {
-        Ok(())
-    } else {
-        Err(CommandError::InvalidFlakeLock)
-    }
+}
+
+#[cfg(test)]
+fn validate_flake_lock(bytes: &[u8]) -> Result<String, CommandError> {
+    crate::service_source_lock::validate_deferred_nix_lock(bytes)
+        .map_err(|_| CommandError::InvalidFlakeLock)
 }
 
 fn validate_toolchain(root: &Path) -> Result<(), CommandError> {
@@ -818,6 +843,7 @@ fn valid_lower_hex(value: &str, length: usize) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+#[cfg(test)]
 fn valid_nix_sha256(value: &str) -> bool {
     let Some(encoded) = value.strip_prefix("sha256-") else {
         return false;
@@ -978,6 +1004,7 @@ resolver = "3"
 [workspace.metadata.radroots.service_source_lock]
 service = "fixture_service"
 host_feature_profile = "service-host"
+nix_material = "deferred"
 config_contract_version = 1
 state_contract_version = 2
 admin_contract_version = 3
@@ -997,6 +1024,13 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
                 ),
             )
             .expect("Cargo.lock");
+            fs::write(
+                service.join(FLAKE_NIX),
+                format!(
+                    "{{\n  inputs.lib = {{\n    url = \"github:radrootslabs/lib/{revision}\";\n    flake = false;\n  }};\n  outputs = {{ ... }}: {{ }};\n}}\n"
+                ),
+            )
+            .expect("flake.nix");
             fs::write(
                 service.join(FLAKE_LOCK),
                 format!(
@@ -1065,6 +1099,8 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
         let text = std::str::from_utf8(&bytes).expect("UTF-8");
         assert!(text.contains("service = \"fixture_service\""));
         assert!(text.contains(&format!("revision = \"{}\"", fixture.revision)));
+        assert!(text.contains("material = \"deferred\""));
+        assert!(text.contains(&format!("lib_revision = \"{}\"", fixture.revision)));
         assert!(text.contains("config = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5"));
         assert!(fixture.root.path().exists());
     }
@@ -1162,6 +1198,18 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
                 "radroots_service_host",
                 "other",
                 CommandError::InvalidCargoLock,
+            ),
+            (
+                FLAKE_NIX,
+                "radrootslabs/lib",
+                "example.invalid/lib",
+                CommandError::InvalidNixMaterial,
+            ),
+            (
+                FLAKE_NIX,
+                "inputs.lib = {",
+                "other = {",
+                CommandError::InvalidNixMaterial,
             ),
             (
                 FLAKE_LOCK,
@@ -1344,6 +1392,136 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
     }
 
     #[test]
+    fn absent_and_independently_revisioned_deferred_nix_material_are_exact() {
+        let fixture = Fixture::new();
+        let manifest = fixture.service.join(CARGO_MANIFEST);
+        let source = fs::read_to_string(&manifest).expect("manifest");
+        fs::write(
+            &manifest,
+            source.replacen(
+                "nix_material = \"deferred\"",
+                "nix_material = \"absent\"",
+                1,
+            ),
+        )
+        .expect("absent metadata");
+        fs::remove_file(fixture.service.join(FLAKE_NIX)).expect("remove flake expression");
+        fs::remove_file(fixture.service.join(FLAKE_LOCK)).expect("remove flake lock");
+        git(&fixture.service, &["add", "-A"]);
+        git(&fixture.service, &["commit", "--quiet", "-m", "absent Nix"]);
+        run_with(
+            CommandMode::Write,
+            &fixture.service,
+            &fixture.archive,
+            &fixture.reachable(),
+        )
+        .expect("write absent-Nix lock");
+        let lock = fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock");
+        let lock = ServiceSourceLockV2::from_canonical_bytes(&lock).expect("canonical lock");
+        assert_eq!(lock.nix_material_state(), NixMaterialState::Absent);
+        assert_eq!(lock.nix_lib_revision(), None);
+        assert_eq!(lock.flake_lock_sha256(), None);
+
+        let fixture = Fixture::new();
+        let deferred_revision = "b".repeat(40);
+        for name in [FLAKE_NIX, FLAKE_LOCK] {
+            let path = fixture.service.join(name);
+            let current = fs::read_to_string(&path).expect("Nix source");
+            fs::write(
+                &path,
+                current.replace(&fixture.revision, &deferred_revision),
+            )
+            .expect("deferred revision");
+        }
+        git(&fixture.service, &["add", "."]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "defer Nix revision"],
+        );
+        run_with(
+            CommandMode::Write,
+            &fixture.service,
+            &fixture.archive,
+            &fixture.reachable(),
+        )
+        .expect("write independently revisioned lock");
+        let lock = fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock");
+        let lock = ServiceSourceLockV2::from_canonical_bytes(&lock).expect("canonical lock");
+        assert_eq!(lock.revision(), fixture.revision);
+        assert_eq!(lock.nix_material_state(), NixMaterialState::Deferred);
+        assert_eq!(lock.nix_lib_revision(), Some(deferred_revision.as_str()));
+    }
+
+    #[test]
+    fn predecessor_source_lock_is_rejected_instead_of_forming_dual_authority() {
+        let fixture = Fixture::new();
+        fs::write(
+            fixture.service.join(PREDECESSOR_LOCK_FILENAME),
+            b"historical lock",
+        )
+        .expect("predecessor lock");
+        git(&fixture.service, &["add", "."]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "retain predecessor lock"],
+        );
+        assert_eq!(
+            run_with(
+                CommandMode::Write,
+                &fixture.service,
+                &fixture.archive,
+                &fixture.reachable(),
+            ),
+            Err(CommandError::InvalidSourceLock)
+        );
+    }
+
+    #[test]
+    fn partial_or_mismatched_nix_material_fails_closed() {
+        for removed in [FLAKE_NIX, FLAKE_LOCK] {
+            let fixture = Fixture::new();
+            fs::remove_file(fixture.service.join(removed)).expect("remove one Nix input");
+            git(&fixture.service, &["add", "-A"]);
+            git(
+                &fixture.service,
+                &["commit", "--quiet", "-m", "partial Nix"],
+            );
+            assert!(matches!(
+                run_with(
+                    CommandMode::Write,
+                    &fixture.service,
+                    &fixture.archive,
+                    &fixture.reachable(),
+                ),
+                Err(CommandError::InvalidNixMaterial | CommandError::InvalidFlakeLock)
+            ));
+        }
+
+        let fixture = Fixture::new();
+        let expression = fixture.service.join(FLAKE_NIX);
+        let source = fs::read_to_string(&expression).expect("flake expression");
+        fs::write(
+            &expression,
+            source.replace(&fixture.revision, &"b".repeat(40)),
+        )
+        .expect("mismatch expression");
+        git(&fixture.service, &["add", "."]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "mismatch Nix"],
+        );
+        assert_eq!(
+            run_with(
+                CommandMode::Write,
+                &fixture.service,
+                &fixture.archive,
+                &fixture.reachable(),
+            ),
+            Err(CommandError::InvalidNixMaterial)
+        );
+    }
+
+    #[test]
     fn flake_lock_rejects_each_independent_fixed_field_drift() {
         let fixture = Fixture::new();
         let bytes = fs::read(fixture.service.join(FLAKE_LOCK)).expect("flake lock");
@@ -1355,6 +1533,7 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
             ("/nodes/lib/locked/owner", serde_json::json!("other")),
             ("/nodes/lib/locked/repo", serde_json::json!("other")),
             ("/nodes/lib/locked/rev", serde_json::json!("other")),
+            ("/nodes/lib/locked/lastModified", serde_json::json!("1")),
             (
                 "/nodes/lib/locked/narHash",
                 serde_json::json!("sha256-invalid"),
@@ -1367,10 +1546,7 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
             let mut drifted = canonical.clone();
             *drifted.pointer_mut(pointer).expect("governed field") = replacement;
             assert_eq!(
-                validate_flake_lock(
-                    &serde_json::to_vec(&drifted).expect("flake json"),
-                    &fixture.revision
-                ),
+                validate_flake_lock(&serde_json::to_vec(&drifted).expect("flake json")),
                 Err(CommandError::InvalidFlakeLock),
                 "accepted drift at {pointer}"
             );
@@ -1387,22 +1563,40 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
                 .expect("flake section")
                 .insert(field.into(), serde_json::json!("unexpected"));
             assert_eq!(
-                validate_flake_lock(
-                    &serde_json::to_vec(&drifted).expect("flake json"),
-                    &fixture.revision
-                ),
+                validate_flake_lock(&serde_json::to_vec(&drifted).expect("flake json")),
                 Err(CommandError::InvalidFlakeLock),
                 "accepted {section}.{field}"
             );
         }
 
+        let mut extra_node_field = canonical.clone();
+        extra_node_field["nodes"]["lib"]["extra"] = serde_json::json!(true);
+        assert_eq!(
+            validate_flake_lock(&serde_json::to_vec(&extra_node_field).expect("flake json")),
+            Err(CommandError::InvalidFlakeLock)
+        );
+
         let mut duplicate = canonical.clone();
         duplicate["nodes"]["lib2"] = duplicate["nodes"]["lib"].clone();
         assert_eq!(
-            validate_flake_lock(
-                &serde_json::to_vec(&duplicate).expect("flake json"),
-                &fixture.revision
-            ),
+            validate_flake_lock(&serde_json::to_vec(&duplicate).expect("flake json")),
+            Err(CommandError::InvalidFlakeLock)
+        );
+
+        let aliased = String::from_utf8(bytes.clone())
+            .expect("flake UTF-8")
+            .replacen("\"lib\":\"lib\"", "\"other\":\"lib\"", 1);
+        assert_eq!(
+            validate_flake_lock(aliased.as_bytes()),
+            Err(CommandError::InvalidFlakeLock)
+        );
+        let duplicated = String::from_utf8(bytes).expect("flake UTF-8").replacen(
+            "\"version\":7",
+            "\"version\":7,\"version\":7",
+            1,
+        );
+        assert_eq!(
+            validate_flake_lock(duplicated.as_bytes()),
             Err(CommandError::InvalidFlakeLock)
         );
     }
@@ -1415,6 +1609,7 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
         for (field, replacement) in [
             ("service", toml::Value::Integer(1)),
             ("host_feature_profile", toml::Value::String("other".into())),
+            ("nix_material", toml::Value::String("other".into())),
             ("config_contract_version", toml::Value::Integer(0)),
             ("state_contract_version", toml::Value::Integer(0)),
             ("admin_contract_version", toml::Value::Integer(0)),
@@ -1728,16 +1923,12 @@ package = []
         );
 
         assert_eq!(
-            validate_flake_lock(
-                br#"{"nodes":{"root":{"inputs":{}}},"root":"root","version":7}"#,
-                &"a".repeat(40),
-            ),
+            validate_flake_lock(br#"{"nodes":{"root":{"inputs":{}}},"root":"root","version":7}"#,),
             Err(CommandError::InvalidFlakeLock)
         );
         assert_eq!(
             validate_flake_lock(
                 br#"{"nodes":{"root":{"inputs":{"lib":"lib"}},"lib":{"original":{"owner":"radrootslabs","repo":"lib"}}},"root":"root","version":7}"#,
-                &"a".repeat(40),
             ),
             Err(CommandError::InvalidFlakeLock)
         );
@@ -1770,6 +1961,7 @@ package = []
             CommandError::InvalidServiceMetadata,
             CommandError::InvalidCargoManifest,
             CommandError::InvalidCargoLock,
+            CommandError::InvalidNixMaterial,
             CommandError::InvalidFlakeLock,
             CommandError::InvalidToolchain,
             CommandError::InvalidSourceArchive,

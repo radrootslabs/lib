@@ -1,0 +1,136 @@
+{
+  "schema": "radroots.services-hardening.source-lock-decisions.v2",
+  "contract_version": 2,
+  "decision_state": "active",
+  "predecessor": {
+    "schema": "radroots.service.source-lock.v1",
+    "filename": "radroots.service.source-lock.v1.toml",
+    "transition": "forward_only_replace"
+  },
+  "lock_filename": "radroots.service.source-lock.v2.toml",
+  "lock_schema": "radroots.service.source-lock.v2",
+  "canonical_encoding": "compact_canonical_toml_with_final_newline",
+  "maximum_lock_utf8_bytes": 4096,
+  "maximum_service_utf8_bytes": 128,
+  "canonical_field_order_deferred": [
+    "schema",
+    "contract_version",
+    "service",
+    "repository",
+    "revision",
+    "architecture",
+    "workspace_catalog_sha256",
+    "version",
+    "source_archive_sha256",
+    "cargo_lock_sha256",
+    "rust_version",
+    "host_feature_profile",
+    "nix.material",
+    "nix.lib_revision",
+    "nix.flake_lock_sha256",
+    "contract_versions.config",
+    "contract_versions.state",
+    "contract_versions.admin",
+    "contract_versions.status",
+    "contract_versions.provider"
+  ],
+  "canonical_field_order_absent": [
+    "schema",
+    "contract_version",
+    "service",
+    "repository",
+    "revision",
+    "architecture",
+    "workspace_catalog_sha256",
+    "version",
+    "source_archive_sha256",
+    "cargo_lock_sha256",
+    "rust_version",
+    "host_feature_profile",
+    "nix.material",
+    "contract_versions.config",
+    "contract_versions.state",
+    "contract_versions.admin",
+    "contract_versions.status",
+    "contract_versions.provider"
+  ],
+  "fixed": {
+    "repository": "https://github.com/radrootslabs/lib",
+    "architecture": "radroots.crates.release.v2",
+    "version": "0.1.0-alpha",
+    "rust_version": "1.97.1",
+    "host_feature_profile": "service-host"
+  },
+  "revision_encoding": "git_oid_lowercase_hex_40",
+  "digest_encoding": "sha256_lowercase_hex_64",
+  "digest_subjects": {
+    "workspace_catalog_sha256": "lib/contracts/crates/catalog.v2.toml",
+    "source_archive_sha256": "canonical_lib_revision_source_archive",
+    "cargo_lock_sha256": "service/Cargo.lock",
+    "flake_lock_sha256": "service/flake.lock"
+  },
+  "service_identifier": "ascii_lower_snake_case_starting_with_letter_ending_with_letter_or_digit_no_empty_segments_1_to_128_bytes",
+  "contract_version_rule": "u32_nonzero",
+  "negative_error_codes": [
+    "invalid_contract_version",
+    "invalid_digest",
+    "invalid_feature_profile",
+    "invalid_fixed_identity",
+    "invalid_nix_material",
+    "invalid_revision",
+    "invalid_service",
+    "invalid_toolchain",
+    "malformed",
+    "noncanonical",
+    "too_large"
+  ],
+  "canonical_vectors": {
+    "deferred": {
+      "toml": "schema = \"radroots.service.source-lock.v2\"\ncontract_version = 2\nservice = \"fixture_service\"\nrepository = \"https://github.com/radrootslabs/lib\"\nrevision = \"2222222222222222222222222222222222222222\"\narchitecture = \"radroots.crates.release.v2\"\nworkspace_catalog_sha256 = \"2222222222222222222222222222222222222222222222222222222222222222\"\nversion = \"0.1.0-alpha\"\nsource_archive_sha256 = \"3333333333333333333333333333333333333333333333333333333333333333\"\ncargo_lock_sha256 = \"3f32f227550b26ffccf6ee73ceab7471b3d8ce40b3e7c345d2ed65af7e9affa0\"\nrust_version = \"1.97.1\"\nhost_feature_profile = \"service-host\"\n\n[nix]\nmaterial = \"deferred\"\nlib_revision = \"1111111111111111111111111111111111111111\"\nflake_lock_sha256 = \"13638c254efcc7ccc5798242d2c095934e84fbc406a9af244fc754b18a6f9353\"\n\n[contract_versions]\nconfig = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5\n",
+      "sha256": "da7b8894a6480e7022d9937369a5c9bafbf90128a901652923e501c52aced1a2"
+    },
+    "absent": {
+      "toml": "schema = \"radroots.service.source-lock.v2\"\ncontract_version = 2\nservice = \"fixture_service\"\nrepository = \"https://github.com/radrootslabs/lib\"\nrevision = \"2222222222222222222222222222222222222222\"\narchitecture = \"radroots.crates.release.v2\"\nworkspace_catalog_sha256 = \"2222222222222222222222222222222222222222222222222222222222222222\"\nversion = \"0.1.0-alpha\"\nsource_archive_sha256 = \"3333333333333333333333333333333333333333333333333333333333333333\"\ncargo_lock_sha256 = \"3f32f227550b26ffccf6ee73ceab7471b3d8ce40b3e7c345d2ed65af7e9affa0\"\nrust_version = \"1.97.1\"\nhost_feature_profile = \"service-host\"\n\n[nix]\nmaterial = \"absent\"\n\n[contract_versions]\nconfig = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5\n",
+      "sha256": "2af058ba042509c77efd6dc264c60a7abf4371378223e52e34eb441cab7e263c"
+    }
+  },
+  "operations": {
+    "command": "cargo xtask service-source-lock",
+    "modes": ["check", "write"],
+    "required_arguments": ["mode", "service_root", "source_archive"],
+    "service_metadata_path": "Cargo.toml.workspace.metadata.radroots.service_source_lock",
+    "service_metadata_fields": [
+      "service",
+      "host_feature_profile",
+      "nix_material",
+      "config_contract_version",
+      "state_contract_version",
+      "admin_contract_version",
+      "status_contract_version",
+      "provider_contract_version"
+    ],
+    "lib_dependency_inventory": "verified_source_archive_workspace_catalog",
+    "source_cleanliness": "all_changes_forbidden_except_exact_generated_lock_path",
+    "predecessor_lock_presence": "forbidden",
+    "service_revision_stability": "same_head_before_and_after_evidence_and_output",
+    "active_revision_agreement": [
+      "cargo_manifests",
+      "cargo_lock",
+      "source_archive",
+      "canonical_public_remote"
+    ],
+    "nix_material_states": ["absent", "deferred"],
+    "deferred_nix_agreement": [
+      "flake_expression",
+      "flake_lock",
+      "source_lock_nix_revision",
+      "canonical_public_remote"
+    ],
+    "maximum_source_archive_bytes": 1073741824
+  },
+  "deferred_operations": [
+    "embedded_build_information_agreement",
+    "nix_qualification",
+    "nix_active_revision_alignment"
+  ]
+}

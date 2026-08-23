@@ -1,0 +1,108 @@
+{
+  "schema": "radroots.services-hardening.release-artifacts-decisions.v2",
+  "contract_version": 2,
+  "decision_state": "active",
+  "predecessor": {
+    "schema": "radroots.services-hardening.release-artifacts-decisions.v1",
+    "filename": "services_hardening_release_artifacts.v1.json",
+    "transition": "forward_only_replace"
+  },
+  "command": "cargo xtask service-release-artifacts",
+  "modes": [
+    "check",
+    "write"
+  ],
+  "required_arguments": [
+    "mode",
+    "service_root",
+    "input_root",
+    "output_root",
+    "target",
+    "source_date_epoch"
+  ],
+  "service_metadata_path": "Cargo.toml.workspace.metadata.radroots.service_release",
+  "service_metadata_fields": [
+    "service",
+    "service_package",
+    "binary_name",
+    "version"
+  ],
+  "supported_targets": [
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "input_inventory": [
+    "config.example.toml",
+    "config.schema.json",
+    "lib-source.bundle",
+    "nixos-module.nix",
+    "oci-image.tar.gz",
+    "service-binary",
+    "service-source.bundle",
+    "systemd.service"
+  ],
+  "excluded_parent_owned_inputs": [
+    "backup_restore_runbook",
+    "operator_runbook"
+  ],
+  "service_root_inventory": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "radroots.service.source-lock.v2.toml"
+  ],
+  "output_inventory": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "SHA256SUMS",
+    "THIRD-PARTY-NOTICES.txt",
+    "artifact-manifest.v1.json",
+    "binary.tar.gz",
+    "config.example.toml",
+    "config.schema.json",
+    "lib-source.bundle",
+    "nixos-module.nix",
+    "oci-image.tar.gz",
+    "oci-image.v1.json",
+    "provenance-input.v1.json",
+    "radroots.service.source-lock.v2.toml",
+    "sbom.cdx.json",
+    "service-source.bundle",
+    "source-bundles.v2.json",
+    "systemd.service"
+  ],
+  "canonical_json": "compact_utf8_json_with_one_final_lf",
+  "checksum_format": "sha256_lower_hex_two_spaces_path_lf_sorted_by_path",
+  "sbom_format": "cyclonedx_json_1_5_locked_cargo_graph",
+  "provenance_posture": "deterministic_unsigned_slsa_v1_signing_input_external_keys_only",
+  "protected_material_scan_scope": "all_textual_release_inputs_and_generated_documents",
+  "source_cleanliness": "no_tracked_staged_or_untracked_changes",
+  "revision_stability": "same_service_head_before_and_after_generation",
+  "no_protected_material": true,
+  "maximums": {
+    "text_input_bytes": 1048576,
+    "generated_document_bytes": 16777216,
+    "service_cargo_lock_bytes": 16777216,
+    "service_flake_lock_bytes": 4194304,
+    "binary_bytes": 536870912,
+    "source_bundle_bytes": 1073741824,
+    "oci_bytes": 2147483648,
+    "cargo_metadata_bytes": 33554432,
+    "packages": 8192,
+    "workspace_packages": 64
+  },
+  "negative_error_codes": [
+    "invalid_contract",
+    "invalid_service_root",
+    "dirty_service_source",
+    "invalid_service_metadata",
+    "invalid_input_root",
+    "invalid_input_artifact",
+    "invalid_source_lock",
+    "invalid_source_bundle",
+    "invalid_package_inventory",
+    "protected_material_detected",
+    "invalid_output_root",
+    "stale_output",
+    "generation_failure"
+  ]
+}
