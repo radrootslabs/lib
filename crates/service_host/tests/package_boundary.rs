@@ -172,6 +172,12 @@ fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
         "parent.child_token()",
         "streamed directly into the capped response writer",
         "validates borrowed UTF-8 before it creates the",
+        "Administration operation and correlation identifiers are closed ASCII values",
+        "Their first byte is alphanumeric; later bytes are",
+        "alphanumeric or `.`, `_`, `:`, or `-`",
+        "Ordinary `Debug` is redacted and no",
+        "`Display` implementation exposes the retained value",
+        "explicit borrowed `as_str` accessor for serialization",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -185,6 +191,8 @@ fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
         "pub struct radroots_service_host::AdminRouter",
         "pub struct radroots_service_host::OperationsServer",
         "pub struct radroots_service_host::BoundedMetricsSnapshot",
+        "pub struct radroots_service_host::AdminOperationId",
+        "pub struct radroots_service_host::AdminCorrelationId",
         "pub struct radroots_service_host::ServiceStatus",
         "pub trait radroots_service_host::MonotonicClock",
         "pub trait radroots_service_host::EntropySource",
@@ -206,6 +214,8 @@ fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
         "serde_json::",
         "tokio::",
         "tokio_util::",
+        "impl core::fmt::Display for radroots_service_host::AdminOperationId",
+        "impl core::fmt::Display for radroots_service_host::AdminCorrelationId",
     ] {
         assert!(
             !PUBLIC_API.contains(forbidden),

@@ -33,6 +33,8 @@ impl AdminIdentifierField {
 pub enum AdminIdentifierError {
     Empty { field: AdminIdentifierField },
     TooLong { field: AdminIdentifierField },
+    InvalidFirstCharacter { field: AdminIdentifierField },
+    InvalidCharacter { field: AdminIdentifierField },
 }
 
 impl fmt::Display for AdminIdentifierError {
@@ -45,30 +47,20 @@ impl Error for AdminIdentifierError {}
 
 macro_rules! admin_identifier {
     ($name:ident, $field:expr) => {
-        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(String);
 
         impl $name {
             pub fn new(value: impl AsRef<str>) -> Result<Self, AdminIdentifierError> {
                 let value = value.as_ref();
                 let field = $field;
-                if value.is_empty() {
-                    return Err(AdminIdentifierError::Empty { field });
-                }
-                if value.len() > field.maximum_utf8_bytes() {
-                    return Err(AdminIdentifierError::TooLong { field });
-                }
+                validate_admin_identifier(value, field)?;
                 Ok(Self(value.to_owned()))
             }
 
             fn from_string(value: String) -> Result<Self, AdminIdentifierError> {
                 let field = $field;
-                if value.is_empty() {
-                    return Err(AdminIdentifierError::Empty { field });
-                }
-                if value.len() > field.maximum_utf8_bytes() {
-                    return Err(AdminIdentifierError::TooLong { field });
-                }
+                validate_admin_identifier(&value, field)?;
                 Ok(Self(value))
             }
 
@@ -78,9 +70,12 @@ macro_rules! admin_identifier {
             }
         }
 
-        impl fmt::Display for $name {
+        impl fmt::Debug for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str(self.as_str())
+                formatter
+                    .debug_tuple(stringify!($name))
+                    .field(&"[redacted]")
+                    .finish()
             }
         }
 
@@ -130,6 +125,29 @@ macro_rules! admin_identifier {
 
 admin_identifier!(AdminOperationId, AdminIdentifierField::OperationId);
 admin_identifier!(AdminCorrelationId, AdminIdentifierField::CorrelationId);
+
+fn validate_admin_identifier(
+    value: &str,
+    field: AdminIdentifierField,
+) -> Result<(), AdminIdentifierError> {
+    let bytes = value.as_bytes();
+    let Some((first, remaining)) = bytes.split_first() else {
+        return Err(AdminIdentifierError::Empty { field });
+    };
+    if bytes.len() > field.maximum_utf8_bytes() {
+        return Err(AdminIdentifierError::TooLong { field });
+    }
+    if !first.is_ascii_alphanumeric() {
+        return Err(AdminIdentifierError::InvalidFirstCharacter { field });
+    }
+    if !remaining
+        .iter()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+    {
+        return Err(AdminIdentifierError::InvalidCharacter { field });
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminErrorCodeError {
@@ -2086,8 +2104,67 @@ mod tests {
         );
         assert!(AdminOperationId::new("x".repeat(ADMIN_OPERATION_ID_MAX_UTF8_BYTES)).is_ok());
         assert!(AdminOperationId::new("x".repeat(ADMIN_OPERATION_ID_MAX_UTF8_BYTES + 1)).is_err());
-        assert!(AdminCorrelationId::new("é".repeat(64)).is_ok());
-        assert!(AdminCorrelationId::new(format!("{}x", "é".repeat(64))).is_err());
+        for valid in ["a", "Z9", "a.b_c:d-e"] {
+            assert!(AdminOperationId::new(valid).is_ok());
+            assert!(AdminCorrelationId::new(valid).is_ok());
+        }
+        let maximum = "0".repeat(ADMIN_OPERATION_ID_MAX_UTF8_BYTES);
+        assert!(AdminOperationId::new(&maximum).is_ok());
+        assert!(AdminCorrelationId::new(&maximum).is_ok());
+        for invalid in [
+            ".first", "_first", ":first", "-first", "é", "a/b", "a b", "a\n",
+        ] {
+            assert!(AdminOperationId::new(invalid).is_err());
+            assert!(AdminCorrelationId::new(invalid).is_err());
+        }
+        assert_eq!(
+            AdminOperationId::new("-first").unwrap_err(),
+            AdminIdentifierError::InvalidFirstCharacter {
+                field: AdminIdentifierField::OperationId
+            }
+        );
+        assert_eq!(
+            AdminCorrelationId::new("a/b").unwrap_err(),
+            AdminIdentifierError::InvalidCharacter {
+                field: AdminIdentifierField::CorrelationId
+            }
+        );
+        let redacted_operation = AdminOperationId::new("private-operation").unwrap();
+        let redacted_correlation = AdminCorrelationId::new("private-correlation").unwrap();
+        assert_eq!(
+            format!("{redacted_operation:?}"),
+            "AdminOperationId(\"[redacted]\")"
+        );
+        assert_eq!(
+            format!("{redacted_correlation:?}"),
+            "AdminCorrelationId(\"[redacted]\")"
+        );
+        assert_eq!(redacted_operation.as_str(), "private-operation");
+        assert_eq!(redacted_correlation.as_str(), "private-correlation");
+        assert_eq!(
+            serde_json::to_string(&redacted_operation).unwrap(),
+            "\"private-operation\""
+        );
+        assert_eq!(
+            serde_json::to_string(&redacted_correlation).unwrap(),
+            "\"private-correlation\""
+        );
+        for byte in 0_u8..=127 {
+            let character = char::from(byte);
+            let first = character.to_string();
+            let first_allowed = byte.is_ascii_alphanumeric();
+            assert_eq!(AdminOperationId::new(&first).is_ok(), first_allowed);
+            assert_eq!(AdminCorrelationId::new(&first).is_ok(), first_allowed);
+
+            let remaining = format!("a{character}");
+            let remaining_allowed =
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-');
+            assert_eq!(AdminOperationId::new(&remaining).is_ok(), remaining_allowed);
+            assert_eq!(
+                AdminCorrelationId::new(&remaining).is_ok(),
+                remaining_allowed
+            );
+        }
         assert!(AdminErrorCode::new("valid_code_2").is_ok());
         assert!(AdminErrorCode::new("x".repeat(ADMIN_ERROR_CODE_MAX_UTF8_BYTES)).is_ok());
         assert!(AdminErrorCode::new("Invalid-Code").is_err());
@@ -2176,8 +2253,8 @@ mod tests {
         ] {
             assert!(!rendered.is_empty());
         }
-        assert_eq!(operation.to_string(), "stable-operation");
-        assert_eq!(correlation.to_string(), "safe-correlation");
+        assert_eq!(operation.as_str(), "stable-operation");
+        assert_eq!(correlation.as_str(), "safe-correlation");
         assert!(AdminErrorCode::new("").is_err());
         assert!(AdminErrorCode::new("x".repeat(ADMIN_ERROR_CODE_MAX_UTF8_BYTES + 1)).is_err());
         assert!(AdminErrorMessage::new("").is_err());

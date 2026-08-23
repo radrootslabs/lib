@@ -106,6 +106,12 @@ retained string. Bounded wire strings use validating Serde visitors, so the
 host does not create a second prevalidation copy of identifiers, safe messages,
 reason codes, task names, routes, or metric vocabulary.
 
+Administration operation and correlation identifiers are closed ASCII values
+of 1 through 128 bytes. Their first byte is alphanumeric; later bytes are
+alphanumeric or `.`, `_`, `:`, or `-`. Ordinary `Debug` is redacted and no
+`Display` implementation exposes the retained value. Trusted protocol code
+uses the explicit borrowed `as_str` accessor for serialization.
+
 ## Process and runtime ownership
 
 The crate does not parse a CLI, read configuration from environment variables,

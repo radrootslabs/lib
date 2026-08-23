@@ -50,6 +50,10 @@ pub radroots_service_host::AdminHttpMethod::Post
 pub enum radroots_service_host::AdminIdentifierError
 pub radroots_service_host::AdminIdentifierError::Empty
 pub radroots_service_host::AdminIdentifierError::Empty::field: radroots_service_host::AdminIdentifierField
+pub radroots_service_host::AdminIdentifierError::InvalidCharacter
+pub radroots_service_host::AdminIdentifierError::InvalidCharacter::field: radroots_service_host::AdminIdentifierField
+pub radroots_service_host::AdminIdentifierError::InvalidFirstCharacter
+pub radroots_service_host::AdminIdentifierError::InvalidFirstCharacter::field: radroots_service_host::AdminIdentifierField
 pub radroots_service_host::AdminIdentifierError::TooLong
 pub radroots_service_host::AdminIdentifierError::TooLong::field: radroots_service_host::AdminIdentifierField
 impl core::error::Error for radroots_service_host::AdminIdentifierError
@@ -644,7 +648,7 @@ pub struct radroots_service_host::AdminCorrelationId(_)
 impl radroots_service_host::AdminCorrelationId
 pub fn radroots_service_host::AdminCorrelationId::as_str(&self) -> &str
 pub fn radroots_service_host::AdminCorrelationId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
-impl core::fmt::Display for radroots_service_host::AdminCorrelationId
+impl core::fmt::Debug for radroots_service_host::AdminCorrelationId
 pub fn radroots_service_host::AdminCorrelationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_service_host::AdminCorrelationId
 pub fn radroots_service_host::AdminCorrelationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
@@ -697,7 +701,7 @@ pub struct radroots_service_host::AdminOperationId(_)
 impl radroots_service_host::AdminOperationId
 pub fn radroots_service_host::AdminOperationId::as_str(&self) -> &str
 pub fn radroots_service_host::AdminOperationId::new(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_service_host::AdminIdentifierError>
-impl core::fmt::Display for radroots_service_host::AdminOperationId
+impl core::fmt::Debug for radroots_service_host::AdminOperationId
 pub fn radroots_service_host::AdminOperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_service_host::AdminOperationId
 pub fn radroots_service_host::AdminOperationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
