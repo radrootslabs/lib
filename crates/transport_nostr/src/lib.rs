@@ -18,6 +18,7 @@ pub use cursor::RelayCursor;
 pub use error::Error;
 pub use profile::{RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind};
 pub use relay::{RelayUrl, RelayUrlPolicy};
+pub use sink::PreparedDelivery;
 pub use status::{
     RelayAggregateState, RelayCapabilityEvidence, RelayEvidenceState, RelayStatus,
     RelayStatusReport,

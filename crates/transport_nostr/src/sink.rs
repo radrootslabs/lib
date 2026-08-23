@@ -1,11 +1,11 @@
 //! Nostr implementation of the transport event sink.
 
 use crate::{NostrTransport, RelayUrl, status};
-use core::time::Duration;
+use core::{fmt, time::Duration};
 use futures::{StreamExt, stream};
 use radroots_nostr::event::Event;
 use radroots_transport::{
-    BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure,
+    BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure, Target,
     outcome::DeliveryOutcome,
     sink::{DeliveryTargetReceipt, SinkStatus},
 };
@@ -15,6 +15,35 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) struct RelayPublishResult {
     relay: RelayUrl,
     outcome: DeliveryOutcome,
+}
+
+/// Sealed, no-I/O result of validating one delivery against this adapter.
+///
+/// The value retains the exact request and converted signed event. It is
+/// constructed only by [`NostrTransport::prepare_delivery`] and is consumed by
+/// [`NostrTransport::execute_prepared_delivery`]. Ordinary `Debug` never
+/// exposes event bytes, request identities, or relay destinations.
+#[must_use = "prepared delivery must be durably bound before execution or deliberately discarded"]
+pub struct PreparedDelivery {
+    request: DeliveryRequest,
+    config: crate::Config,
+    event: Event,
+    authorized: Vec<(RelayUrl, Target)>,
+    skipped: Vec<DeliveryTargetReceipt>,
+}
+
+impl PreparedDelivery {
+    /// Returns the exact validated request retained for persistence binding.
+    #[must_use]
+    pub const fn request(&self) -> &DeliveryRequest {
+        &self.request
+    }
+}
+
+impl fmt::Debug for PreparedDelivery {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PreparedDelivery([redacted])")
+    }
 }
 
 pub(crate) trait RelayClient: Send + Sync {
@@ -96,60 +125,77 @@ impl RelayClient for LiveRelayClient {
     }
 }
 
-impl EventSink for NostrTransport {
-    fn status(&self) -> BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
-        Box::pin(async move { Ok(status::sink_status(&self.status)) })
-    }
-
-    fn deliver(
+impl NostrTransport {
+    /// Validates and converts one delivery without reading a clock or performing relay I/O.
+    pub fn prepare_delivery(
         &self,
         request: DeliveryRequest,
+    ) -> Result<PreparedDelivery, Box<SinkFailure>> {
+        let mut authorized = Vec::new();
+        let mut skipped = Vec::new();
+        for target in request.target_set().targets() {
+            match self.config().endpoint_for_target(target) {
+                Some(endpoint) if endpoint.access().can_write() => {
+                    authorized.push((endpoint.url().clone(), target.clone()));
+                }
+                None | Some(_) => skipped.push(
+                    DeliveryTargetReceipt::skipped(
+                        target.clone(),
+                        DeliveryOutcome::rejected()
+                            .with_detail("target_denied", "target is not configured for this sink")
+                            .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?,
+                    )
+                    .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?,
+                ),
+            }
+        }
+        let event = radroots_nostr::event::to_nostr(request.payload().event().envelope())
+            .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?;
+        Ok(PreparedDelivery {
+            request,
+            config: self.config().clone(),
+            event,
+            authorized,
+            skipped,
+        })
+    }
+
+    /// Performs relay I/O for one exact prepared delivery and consumes its authority.
+    pub fn execute_prepared_delivery(
+        &self,
+        prepared: PreparedDelivery,
     ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
         Box::pin(async move {
+            let PreparedDelivery {
+                request,
+                config,
+                event,
+                authorized,
+                mut skipped,
+            } = prepared;
+            if config != *self.config() {
+                return Err(SinkFailure::invalid_contract(&request));
+            }
             let now_unix_ms = unix_time_ms();
             let mut requested = Vec::new();
-            let mut skipped = Vec::new();
-            for target in request.target_set().targets() {
-                match self.config().endpoint_for_target(target) {
-                    Some(endpoint) if endpoint.access().can_write() => {
-                        let relay = endpoint.url().clone();
-                        if self.status.may_write(&relay, now_unix_ms) {
-                            requested.push((relay, target.clone()));
-                        } else {
-                            skipped.push(
-                                DeliveryTargetReceipt::skipped(
-                                    target.clone(),
-                                    DeliveryOutcome::unavailable()
-                                        .with_detail(
-                                            "reconnect_backoff",
-                                            "relay reconnect backoff is active",
-                                        )
-                                        .map_err(|_| SinkFailure::invalid_contract(&request))?,
-                                )
-                                .map_err(|_| SinkFailure::invalid_contract(&request))?,
-                            );
-                        }
-                    }
-                    None | Some(_) => skipped.push(
+            for (relay, target) in authorized {
+                if self.status.may_write(&relay, now_unix_ms) {
+                    requested.push((relay, target));
+                } else {
+                    skipped.push(
                         DeliveryTargetReceipt::skipped(
-                            target.clone(),
-                            DeliveryOutcome::rejected()
+                            target,
+                            DeliveryOutcome::unavailable()
                                 .with_detail(
-                                    "target_denied",
-                                    "target is not configured for this sink",
+                                    "reconnect_backoff",
+                                    "relay reconnect backoff is active",
                                 )
                                 .map_err(|_| SinkFailure::invalid_contract(&request))?,
                         )
                         .map_err(|_| SinkFailure::invalid_contract(&request))?,
-                    ),
+                    );
                 }
             }
-
-            let event = match radroots_nostr::event::to_nostr(request.payload().event().envelope())
-            {
-                Ok(event) => event,
-                Err(_) => return Err(SinkFailure::invalid_contract(&request)),
-            };
             let remaining_ms = request.deadline_unix_ms().saturating_sub(now_unix_ms);
             let operation_timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
             if operation_timeout_ms == 0 {
@@ -211,6 +257,22 @@ impl EventSink for NostrTransport {
     }
 }
 
+impl EventSink for NostrTransport {
+    fn status(&self) -> BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
+        Box::pin(async move { Ok(status::sink_status(&self.status)) })
+    }
+
+    fn deliver(
+        &self,
+        request: DeliveryRequest,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+        Box::pin(async move {
+            let prepared = self.prepare_delivery(request).map_err(|failure| *failure)?;
+            self.execute_prepared_delivery(prepared).await
+        })
+    }
+}
+
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn unix_time_ms() -> u64 {
     std::time::SystemTime::now()
@@ -261,6 +323,23 @@ mod tests {
                     })
                     .collect()
             })
+        }
+    }
+
+    #[derive(Debug)]
+    struct CountingRelayClient(Arc<AtomicUsize>);
+
+    impl RelayClient for CountingRelayClient {
+        fn publish<'a>(
+            &'a self,
+            _relays: Vec<RelayUrl>,
+            _event: Event,
+            _max_connections: usize,
+            _connect_timeout: Duration,
+            _operation_timeout: Duration,
+        ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Vec::new() })
         }
     }
 
@@ -336,23 +415,6 @@ mod tests {
 
     #[test]
     fn dropping_an_unpolled_delivery_performs_no_relay_work() {
-        #[derive(Debug)]
-        struct CountingRelayClient(Arc<AtomicUsize>);
-
-        impl RelayClient for CountingRelayClient {
-            fn publish<'a>(
-                &'a self,
-                _relays: Vec<RelayUrl>,
-                _event: Event,
-                _max_connections: usize,
-                _connect_timeout: Duration,
-                _operation_timeout: Duration,
-            ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
-                self.0.fetch_add(1, Ordering::SeqCst);
-                Box::pin(async { Vec::new() })
-            }
-        }
-
         let calls = Arc::new(AtomicUsize::new(0));
         let config = Config::from_profile(
             crate::profile::test_profile(
@@ -370,24 +432,52 @@ mod tests {
     }
 
     #[test]
+    fn preparation_is_no_io_redacted_consuming_and_bound_to_exact_config() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let profile = crate::profile::test_profile(
+            crate::RelayProfileKind::Public,
+            RelayUrlPolicy::Public,
+            ["wss://one.example", "wss://two.example"],
+        )
+        .expect("profile");
+        let config = Config::from_profile(profile.clone());
+        let transport =
+            NostrTransport::with_client(config, Arc::new(CountingRelayClient(Arc::clone(&calls))));
+        let request = request();
+
+        let prepared = transport
+            .prepare_delivery(request.clone())
+            .expect("prepared delivery");
+        assert_eq!(prepared.request(), &request);
+        assert_eq!(format!("{prepared:?}"), "PreparedDelivery([redacted])");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+        let receipt = futures::executor::block_on(transport.execute_prepared_delivery(prepared))
+            .expect("executed delivery");
+        assert_eq!(receipt.request_id(), request.request_id());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let mismatch_calls = Arc::new(AtomicUsize::new(0));
+        let mismatched = NostrTransport::with_client(
+            Config::from_profile(profile)
+                .with_timeouts(5_000, 20_000, 2_000)
+                .expect("different bounded config"),
+            Arc::new(CountingRelayClient(Arc::clone(&mismatch_calls))),
+        );
+        let prepared = transport
+            .prepare_delivery(request)
+            .expect("second prepared delivery");
+        assert_eq!(
+            futures::executor::block_on(mismatched.execute_prepared_delivery(prepared))
+                .expect_err("prepared authority is config-bound")
+                .code(),
+            "invalid_transport_contract"
+        );
+        assert_eq!(mismatch_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
     fn expired_delivery_deadline_performs_no_relay_work() {
-        #[derive(Debug)]
-        struct CountingRelayClient(Arc<AtomicUsize>);
-
-        impl RelayClient for CountingRelayClient {
-            fn publish<'a>(
-                &'a self,
-                _relays: Vec<RelayUrl>,
-                _event: Event,
-                _max_connections: usize,
-                _connect_timeout: Duration,
-                _operation_timeout: Duration,
-            ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
-                self.0.fetch_add(1, Ordering::SeqCst);
-                Box::pin(async { Vec::new() })
-            }
-        }
-
         let calls = Arc::new(AtomicUsize::new(0));
         let config = Config::from_profile(
             crate::profile::test_profile(

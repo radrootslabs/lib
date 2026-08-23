@@ -98,6 +98,9 @@ impl radroots_transport_nostr::NostrTransport
 pub const fn radroots_transport_nostr::NostrTransport::config(&self) -> &radroots_transport_nostr::Config
 pub fn radroots_transport_nostr::NostrTransport::new(radroots_transport_nostr::Config) -> Self
 pub fn radroots_transport_nostr::NostrTransport::relay_status(&self) -> radroots_transport_nostr::RelayStatusReport
+impl radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::execute_prepared_delivery(&self, radroots_transport_nostr::PreparedDelivery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_transport_nostr::NostrTransport::prepare_delivery(&self, radroots_transport::sink::DeliveryRequest) -> core::result::Result<radroots_transport_nostr::PreparedDelivery, alloc::boxed::Box<radroots_transport::sink::SinkFailure>>
 impl core::fmt::Debug for radroots_transport_nostr::NostrTransport
 pub fn radroots_transport_nostr::NostrTransport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl radroots_transport::sink::EventSink for radroots_transport_nostr::NostrTransport
@@ -108,6 +111,11 @@ pub fn radroots_transport_nostr::NostrTransport::fetch(&self, radroots_transport
 pub fn radroots_transport_nostr::NostrTransport::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SourceStatus, radroots_transport::error::Error>>
 impl radroots_transport::source::EventSubscriber for radroots_transport_nostr::NostrTransport
 pub fn radroots_transport_nostr::NostrTransport::subscribe(&self, radroots_transport::source::SubscriptionRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::BoxSubscription, radroots_transport::error::Error>>
+pub struct radroots_transport_nostr::PreparedDelivery
+impl radroots_transport_nostr::PreparedDelivery
+pub const fn radroots_transport_nostr::PreparedDelivery::request(&self) -> &radroots_transport::sink::DeliveryRequest
+impl core::fmt::Debug for radroots_transport_nostr::PreparedDelivery
+pub fn radroots_transport_nostr::PreparedDelivery::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_transport_nostr::ReconnectBackoff
 impl radroots_transport_nostr::ReconnectBackoff
 pub const fn radroots_transport_nostr::ReconnectBackoff::initial_delay_ms(self) -> u64

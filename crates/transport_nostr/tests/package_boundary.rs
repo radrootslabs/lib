@@ -9,6 +9,7 @@ const PUBLIC_API: &str =
     include_str!("../../../contracts/api_baselines/radroots_transport_nostr.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
 const PROFILE: &str = include_str!("../src/profile.rs");
+const SINK: &str = include_str!("../src/sink.rs");
 const SUBSCRIPTION: &str = include_str!("../src/subscription.rs");
 
 #[test]
@@ -55,6 +56,7 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
         "pub use error::Error;",
         "pub use profile::{",
         "pub use relay::{RelayUrl, RelayUrlPolicy};",
+        "pub use sink::PreparedDelivery;",
     ] {
         assert!(ROOT.contains(export), "crate root is missing `{export}`");
     }
@@ -67,6 +69,7 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "## Public surface",
         "## Relay and network security",
         "## Fetch, live subscription, delivery, and outcome behavior",
+        "## Prepared delivery boundary",
         "## Deadlines, cancellation, and commit points",
         "## Serialization and diagnostics",
         "## Features and runtime requirements",
@@ -79,6 +82,11 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "event-ID tie breaker",
         "upstream auto-close deadline",
         "adapter-owned worker",
+        "validates the exact request, writable\nrelay bindings, and signed-event conversion without reading a clock, polling\nstatus, or performing relay I/O",
+        "Executing a capability\nthrough a differently configured transport fails closed",
+        "let _forged = PreparedDelivery {",
+        "request: panic!(),",
+        "skipped: panic!(),",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -102,6 +110,7 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
     for required in [
         "pub struct radroots_transport_nostr::Config",
         "pub struct radroots_transport_nostr::NostrTransport",
+        "pub struct radroots_transport_nostr::PreparedDelivery",
         "pub enum radroots_transport_nostr::RelayAggregateState",
         "pub struct radroots_transport_nostr::RelayProfile",
         "pub fn radroots_transport_nostr::RelayEndpoint::new(",
@@ -116,6 +125,8 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "NostrTransport::begin_authentication",
         "NostrTransport::complete_authentication",
         "NostrTransport::reject_authentication",
+        "NostrTransport::prepare_delivery",
+        "NostrTransport::execute_prepared_delivery",
     ] {
         assert!(
             PUBLIC_API.contains(required),
@@ -129,10 +140,56 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "radroots_storage",
         "radroots_outbox",
         "pub trait radroots_transport_nostr",
+        "impl core::clone::Clone for radroots_transport_nostr::PreparedDelivery",
+        "impl serde_core::ser::Serialize for radroots_transport_nostr::PreparedDelivery",
     ] {
         assert!(
             !PUBLIC_API.contains(forbidden),
             "reviewed public API baseline exposes `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn preparation_is_sealed_and_separated_from_execution_io() {
+    let prepare = SINK
+        .split_once("pub fn prepare_delivery(")
+        .expect("prepared delivery function")
+        .1
+        .split_once("pub fn execute_prepared_delivery(")
+        .expect("execution boundary")
+        .0;
+    for forbidden in [".await", "unix_time_ms", "self.status", ".publish("] {
+        assert!(
+            !prepare.contains(forbidden),
+            "delivery preparation contains I/O authority `{forbidden}`"
+        );
+    }
+    for required in [
+        "pub struct PreparedDelivery",
+        "#[must_use = \"prepared delivery must be durably bound before execution or deliberately discarded\"]",
+        "request: DeliveryRequest",
+        "event: Event",
+        "config: crate::Config",
+        "formatter.write_str(\"PreparedDelivery([redacted])\")",
+        "pub const fn request(&self) -> &DeliveryRequest",
+    ] {
+        assert!(
+            SINK.contains(required),
+            "prepared boundary is missing `{required}`"
+        );
+    }
+    for forbidden in [
+        "impl Clone for PreparedDelivery",
+        "derive(Clone",
+        "pub fn new(",
+        "pub request:",
+        "pub event:",
+        "pub config:",
+    ] {
+        assert!(
+            !prepare.contains(forbidden),
+            "prepared boundary exposes `{forbidden}`"
         );
     }
 }

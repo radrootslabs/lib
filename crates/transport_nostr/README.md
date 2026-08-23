@@ -55,6 +55,31 @@ and `DeliveryRequest` values from `radroots_transport`, polls the returned
 futures on its executor, and applies any retry or scheduling policy outside
 this crate.
 
+## Prepared delivery boundary
+
+[`NostrTransport::prepare_delivery`] validates the exact request, writable
+relay bindings, and signed-event conversion without reading a clock, polling
+status, or performing relay I/O. It returns a sealed [`PreparedDelivery`]
+whose ordinary `Debug` is redacted. The composing host may bind the retained
+request to durable Submitted state and then pass the capability to
+[`NostrTransport::execute_prepared_delivery`], which consumes it and is the
+only half of this boundary that may contact relays. Executing a capability
+through a differently configured transport fails closed.
+
+Callers cannot forge or mutate prepared authority:
+
+```compile_fail
+use radroots_transport_nostr::PreparedDelivery;
+
+let _forged = PreparedDelivery {
+    request: panic!(),
+    config: panic!(),
+    event: panic!(),
+    authorized: panic!(),
+    skipped: panic!(),
+};
+```
+
 ## Public surface
 
 - [`RelayProfile`] defines public, loopback-simulator, and physical-device
@@ -69,6 +94,8 @@ this crate.
   used by scoped fetch continuation cursors.
 - [`NostrTransport`] implements all three transport SPIs, exposes passive typed
   per-relay evidence, and provides explicit NIP-42 challenge lifecycle methods.
+- [`PreparedDelivery`] is the non-forgeable, consuming boundary between inert
+  adapter validation and relay execution.
 - [`Error`] contains only package-owned validation and authentication errors;
   upstream failures are normalized before crossing the public boundary.
 
