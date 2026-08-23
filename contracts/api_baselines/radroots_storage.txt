@@ -365,6 +365,74 @@ impl core::convert::TryFrom<[u8; 16]> for radroots_storage::authored_delivery::A
 pub type radroots_storage::authored_delivery::AuthoredDeliveryPlanId::Error = radroots_storage::Error
 pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlanId::try_from([u8; 16]) -> core::result::Result<Self, Self::Error>
 pub const radroots_storage::authored_delivery::DELIVERY_PLAN_ATTEMPTS_MAX: u32
+pub mod radroots_storage::authored_draft
+pub enum radroots_storage::authored_draft::AuthoredDraftStage
+pub radroots_storage::authored_draft::AuthoredDraftStage::Cancelled
+pub radroots_storage::authored_draft::AuthoredDraftStage::Draft
+pub radroots_storage::authored_draft::AuthoredDraftStage::MediaPreparing
+pub radroots_storage::authored_draft::AuthoredDraftStage::MediaUploading
+pub radroots_storage::authored_draft::AuthoredDraftStage::Queued
+pub radroots_storage::authored_draft::AuthoredDraftStage::ReadyToSign
+impl radroots_storage::authored_draft::AuthoredDraftStage
+pub const fn radroots_storage::authored_draft::AuthoredDraftStage::is_terminal(self) -> bool
+pub enum radroots_storage::authored_draft::DraftAppendDisposition
+pub radroots_storage::authored_draft::DraftAppendDisposition::Inserted
+pub radroots_storage::authored_draft::DraftAppendDisposition::Replay
+pub struct radroots_storage::authored_draft::AuthoredDraft
+impl radroots_storage::authored_draft::AuthoredDraft
+pub const fn radroots_storage::authored_draft::AuthoredDraft::author(&self) -> &[u8; 32]
+pub const fn radroots_storage::authored_draft::AuthoredDraft::created_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_draft::AuthoredDraft::draft_id(&self) -> radroots_storage::authored_draft::AuthoredDraftId
+pub fn radroots_storage::authored_draft::AuthoredDraft::initial(radroots_storage::authored_draft::AuthoredDraftId, [u8; 32], impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<u8>, radroots_storage::authored_draft::AuthoredDraftStage, core::option::Option<radroots_storage::journal::OperationInstanceId>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft::AuthoredDraft::operation_id(&self) -> core::option::Option<radroots_storage::journal::OperationInstanceId>
+pub fn radroots_storage::authored_draft::AuthoredDraft::payload(&self) -> &[u8]
+pub fn radroots_storage::authored_draft::AuthoredDraft::payload_schema(&self) -> &str
+pub const fn radroots_storage::authored_draft::AuthoredDraft::payload_sha256(&self) -> &[u8; 32]
+pub fn radroots_storage::authored_draft::AuthoredDraft::reconstruct(radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision, [u8; 32], impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<u8>, [u8; 32], radroots_storage::authored_draft::AuthoredDraftStage, core::option::Option<radroots_storage::journal::OperationInstanceId>, u64, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft::AuthoredDraft::revision(&self) -> radroots_storage::authored_draft::AuthoredDraftRevision
+pub const fn radroots_storage::authored_draft::AuthoredDraft::stage(&self) -> radroots_storage::authored_draft::AuthoredDraftStage
+pub fn radroots_storage::authored_draft::AuthoredDraft::successor(&self, alloc::vec::Vec<u8>, radroots_storage::authored_draft::AuthoredDraftStage, core::option::Option<radroots_storage::journal::OperationInstanceId>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft::AuthoredDraft::updated_at_unix_ms(&self) -> u64
+pub fn radroots_storage::authored_draft::AuthoredDraft::validate(&self) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_draft::AuthoredDraft::validate_successor_of(&self, &Self) -> core::result::Result<(), radroots_storage::Error>
+pub struct radroots_storage::authored_draft::AuthoredDraftId(_)
+impl radroots_storage::authored_draft::AuthoredDraftId
+pub const fn radroots_storage::authored_draft::AuthoredDraftId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_storage::authored_draft::AuthoredDraftId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
+impl core::convert::From<radroots_storage::authored_draft::AuthoredDraftId> for [u8; 16]
+pub fn [u8; 16]::from(radroots_storage::authored_draft::AuthoredDraftId) -> Self
+impl core::convert::TryFrom<[u8; 16]> for radroots_storage::authored_draft::AuthoredDraftId
+pub type radroots_storage::authored_draft::AuthoredDraftId::Error = radroots_storage::Error
+pub fn radroots_storage::authored_draft::AuthoredDraftId::try_from([u8; 16]) -> core::result::Result<Self, Self::Error>
+pub struct radroots_storage::authored_draft::AuthoredDraftRevision(_)
+impl radroots_storage::authored_draft::AuthoredDraftRevision
+pub const radroots_storage::authored_draft::AuthoredDraftRevision::INITIAL: Self
+pub const fn radroots_storage::authored_draft::AuthoredDraftRevision::get(self) -> u64
+pub const fn radroots_storage::authored_draft::AuthoredDraftRevision::new(u64) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored_draft::AuthoredDraftRevision::next(self) -> core::result::Result<Self, radroots_storage::Error>
+impl core::convert::From<radroots_storage::authored_draft::AuthoredDraftRevision> for u64
+pub fn u64::from(radroots_storage::authored_draft::AuthoredDraftRevision) -> Self
+impl core::convert::TryFrom<u64> for radroots_storage::authored_draft::AuthoredDraftRevision
+pub type radroots_storage::authored_draft::AuthoredDraftRevision::Error = radroots_storage::Error
+pub fn radroots_storage::authored_draft::AuthoredDraftRevision::try_from(u64) -> core::result::Result<Self, Self::Error>
+pub struct radroots_storage::authored_draft::DraftAppendReceipt
+impl radroots_storage::authored_draft::DraftAppendReceipt
+pub const fn radroots_storage::authored_draft::DraftAppendReceipt::disposition(&self) -> radroots_storage::authored_draft::DraftAppendDisposition
+pub const fn radroots_storage::authored_draft::DraftAppendReceipt::draft(&self) -> &radroots_storage::authored_draft::AuthoredDraft
+pub const fn radroots_storage::authored_draft::DraftAppendReceipt::new(radroots_storage::authored_draft::AuthoredDraft, radroots_storage::authored_draft::DraftAppendDisposition) -> Self
+pub const radroots_storage::authored_draft::AUTHORED_DRAFT_PAYLOAD_MAX_BYTES: usize
+pub const radroots_storage::authored_draft::AUTHORED_DRAFT_QUERY_LIMIT_MAX: u16
+pub const radroots_storage::authored_draft::AUTHORED_DRAFT_SCHEMA_MAX_BYTES: usize
+pub trait radroots_storage::authored_draft::AuthoredDraftStore: core::marker::Send + core::marker::Sync
+pub fn radroots_storage::authored_draft::AuthoredDraftStore::append_authored_draft(&self, radroots_storage::authored_draft::AuthoredDraft, core::option::Option<radroots_storage::authored_draft::AuthoredDraftRevision>) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft::DraftAppendReceipt, radroots_storage::Error>>
+pub fn radroots_storage::authored_draft::AuthoredDraftStore::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::authored_draft::AuthoredDraftStore::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::authored_draft::AuthoredDraftStore::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+impl radroots_storage::authored_draft::AuthoredDraftStore for radroots_storage::memory::MemoryStorage
+pub fn radroots_storage::memory::MemoryStorage::append_authored_draft(&self, radroots_storage::authored_draft::AuthoredDraft, core::option::Option<radroots_storage::authored_draft::AuthoredDraftRevision>) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft::DraftAppendReceipt, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub mod radroots_storage::backup
 pub enum radroots_storage::backup::BackupMemberKind
 pub radroots_storage::backup::BackupMemberKind::Metadata
@@ -589,6 +657,18 @@ impl radroots_storage::event::StoredVisibleEvent
 pub const fn radroots_storage::event::StoredVisibleEvent::event(&self) -> &radroots_event::draft::SignedEvent
 pub const fn radroots_storage::event::StoredVisibleEvent::new(radroots_storage::event::EventPosition, radroots_event::draft::SignedEvent) -> Self
 pub const fn radroots_storage::event::StoredVisibleEvent::position(&self) -> radroots_storage::event::EventPosition
+pub struct radroots_storage::event::VisibilityDigest(_)
+impl radroots_storage::event::VisibilityDigest
+pub const fn radroots_storage::event::VisibilityDigest::as_bytes(&self) -> &[u8; 32]
+pub struct radroots_storage::event::VisibilitySnapshot
+impl radroots_storage::event::VisibilitySnapshot
+pub fn radroots_storage::event::VisibilitySnapshot::current_heads(&self) -> &[radroots_event::envelope::event_head::v1::CurrentEventHead]
+pub fn radroots_storage::event::VisibilitySnapshot::deletion_request_ids(&self) -> &[radroots_event::id::EventId]
+pub const fn radroots_storage::event::VisibilitySnapshot::digest(&self) -> radroots_storage::event::VisibilityDigest
+pub const fn radroots_storage::event::VisibilitySnapshot::generation(&self) -> radroots_storage::event::SourceGeneration
+pub fn radroots_storage::event::VisibilitySnapshot::superseded_event_ids(&self) -> &[radroots_event::id::EventId]
+pub fn radroots_storage::event::VisibilitySnapshot::suppressed_event_ids(&self) -> &[radroots_event::id::EventId]
+pub fn radroots_storage::event::VisibilitySnapshot::visible_event_ids(&self) -> &[radroots_event::id::EventId]
 pub const radroots_storage::event::EVENT_QUERY_ID_MAX: usize
 pub const radroots_storage::event::EVENT_QUERY_LIMIT_MAX: u16
 pub trait radroots_storage::event::EventStore: core::marker::Send + core::marker::Sync
@@ -597,6 +677,7 @@ pub fn radroots_storage::event::EventStore::query_provenance(&self, radroots_eve
 pub fn radroots_storage::event::EventStore::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::event::EventStore::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 impl radroots_storage::event::EventStore for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::admit(&self, radroots_storage::event::EventAdmission) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::AdmissionReceipt, radroots_storage::Error>>
@@ -604,6 +685,7 @@ pub fn radroots_storage::memory::MemoryStorage::query_provenance(&self, radroots
 pub fn radroots_storage::memory::MemoryStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 pub type radroots_storage::event::EventCursor = radroots_storage::event::EventPosition
 pub mod radroots_storage::journal
@@ -736,6 +818,11 @@ pub fn radroots_storage::memory::MemoryStorage::authored_delivery_plan(&self, ra
 pub fn radroots_storage::memory::MemoryStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::execute_authored(&self, radroots_storage::authored_atomic::AuthoredAtomicCommand) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>>
+impl radroots_storage::authored_draft::AuthoredDraftStore for radroots_storage::memory::MemoryStorage
+pub fn radroots_storage::memory::MemoryStorage::append_authored_draft(&self, radroots_storage::authored_draft::AuthoredDraft, core::option::Option<radroots_storage::authored_draft::AuthoredDraftRevision>) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft::DraftAppendReceipt, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 impl radroots_storage::backup::StorageReliability for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::begin_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::begin_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
@@ -750,6 +837,7 @@ pub fn radroots_storage::memory::MemoryStorage::query_provenance(&self, radroots
 pub fn radroots_storage::memory::MemoryStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 impl radroots_storage::journal::Journal for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::by_idempotency_key(&self, radroots_protocol::runtime::v1::OperationId, radroots_storage::journal::IdempotencyKey) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::journal::OperationRecord>, radroots_storage::Error>>
@@ -778,8 +866,12 @@ pub fn radroots_storage::memory::MemoryStorage::event_index_checkpoint(&self, ra
 pub fn radroots_storage::memory::MemoryStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::projection_snapshot(&self, radroots_storage::projection::ProjectionId, [u8; 32]) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -973,10 +1065,18 @@ pub struct radroots_storage::private_artifact::ArtifactKind(_)
 impl radroots_storage::private_artifact::ArtifactKind
 pub fn radroots_storage::private_artifact::ArtifactKind::as_str(&self) -> &str
 pub fn radroots_storage::private_artifact::ArtifactKind::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_storage::Error>
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::ArtifactKind
+pub fn radroots_storage::private_artifact::ArtifactKind::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::ArtifactKind
+pub fn radroots_storage::private_artifact::ArtifactKind::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::private_artifact::ArtifactSchemaId(_)
 impl radroots_storage::private_artifact::ArtifactSchemaId
 pub fn radroots_storage::private_artifact::ArtifactSchemaId::as_str(&self) -> &str
 pub fn radroots_storage::private_artifact::ArtifactSchemaId::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_storage::Error>
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::ArtifactSchemaId
+pub fn radroots_storage::private_artifact::ArtifactSchemaId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::ArtifactSchemaId
+pub fn radroots_storage::private_artifact::ArtifactSchemaId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::private_artifact::ArtifactTombstone
 impl radroots_storage::private_artifact::ArtifactTombstone
 pub const fn radroots_storage::private_artifact::ArtifactTombstone::commitment(self) -> radroots_storage::private_artifact::ArtifactCommitment
@@ -1017,6 +1117,10 @@ pub const fn radroots_storage::private_artifact::PrivateArtifactId::as_bytes(&se
 pub const fn radroots_storage::private_artifact::PrivateArtifactId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
 impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactId
 pub fn radroots_storage::private_artifact::PrivateArtifactId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::PrivateArtifactId
+pub fn radroots_storage::private_artifact::PrivateArtifactId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::PrivateArtifactId
+pub fn radroots_storage::private_artifact::PrivateArtifactId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::private_artifact::PrivateArtifactMetadata
 impl radroots_storage::private_artifact::PrivateArtifactMetadata
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::artifact_id(&self) -> radroots_storage::private_artifact::PrivateArtifactId
@@ -1037,12 +1141,20 @@ pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::stage(
 pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::tombstone_record(&self) -> core::option::Option<radroots_storage::private_artifact::ArtifactTombstone>
 pub const fn radroots_storage::private_artifact::PrivateArtifactMetadata::updated_at_unix_ms(&self) -> u64
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::PrivateArtifactMetadata
+pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::PrivateArtifactMetadata
+pub fn radroots_storage::private_artifact::PrivateArtifactMetadata::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::private_artifact::PrivateArtifactResealId(_)
 impl radroots_storage::private_artifact::PrivateArtifactResealId
 pub const fn radroots_storage::private_artifact::PrivateArtifactResealId::as_bytes(&self) -> &[u8; 16]
 pub const fn radroots_storage::private_artifact::PrivateArtifactResealId::new([u8; 16]) -> core::result::Result<Self, radroots_storage::Error>
 impl core::fmt::Debug for radroots_storage::private_artifact::PrivateArtifactResealId
 pub fn radroots_storage::private_artifact::PrivateArtifactResealId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::PrivateArtifactResealId
+pub fn radroots_storage::private_artifact::PrivateArtifactResealId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::PrivateArtifactResealId
+pub fn radroots_storage::private_artifact::PrivateArtifactResealId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::private_artifact::PrivateArtifactResealReceipt
 impl radroots_storage::private_artifact::PrivateArtifactResealReceipt
 pub const fn radroots_storage::private_artifact::PrivateArtifactResealReceipt::artifact_id(self) -> radroots_storage::private_artifact::PrivateArtifactId
@@ -1073,6 +1185,10 @@ impl radroots_storage::private_artifact::PrivateArtifactRevision
 pub const radroots_storage::private_artifact::PrivateArtifactRevision::INITIAL: Self
 pub const fn radroots_storage::private_artifact::PrivateArtifactRevision::get(self) -> u64
 pub const fn radroots_storage::private_artifact::PrivateArtifactRevision::new(u64) -> core::result::Result<Self, radroots_storage::Error>
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::PrivateArtifactRevision
+pub fn radroots_storage::private_artifact::PrivateArtifactRevision::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::PrivateArtifactRevision
+pub fn radroots_storage::private_artifact::PrivateArtifactRevision::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_storage::private_artifact::PrivateArtifactStatus
 pub radroots_storage::private_artifact::PrivateArtifactStatus::active: u64
 pub radroots_storage::private_artifact::PrivateArtifactStatus::expired: u64
@@ -1087,6 +1203,10 @@ pub const fn radroots_storage::private_artifact::RetentionPolicy::indefinite() -
 pub const fn radroots_storage::private_artifact::RetentionPolicy::is_expired_at(self, u64) -> bool
 pub const fn radroots_storage::private_artifact::RetentionPolicy::new(core::option::Option<u64>, core::option::Option<u64>) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::private_artifact::RetentionPolicy::permits_deletion_at(self, u64) -> bool
+impl serde_core::ser::Serialize for radroots_storage::private_artifact::RetentionPolicy
+pub fn radroots_storage::private_artifact::RetentionPolicy::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::private_artifact::RetentionPolicy
+pub fn radroots_storage::private_artifact::RetentionPolicy::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_storage::private_artifact::ARTIFACT_KIND_MAX_BYTES: usize
 pub const radroots_storage::private_artifact::ARTIFACT_SCHEMA_MAX_BYTES: usize
 pub const radroots_storage::private_artifact::EXPIRED_ARTIFACT_QUERY_LIMIT_MAX: u16
@@ -1189,6 +1309,13 @@ pub const fn radroots_storage::projection::ProjectionCheckpoint::projected_rows(
 pub const fn radroots_storage::projection::ProjectionCheckpoint::projection_id(&self) -> &radroots_storage::projection::ProjectionId
 pub const fn radroots_storage::projection::ProjectionCheckpoint::source_position(&self) -> core::option::Option<radroots_storage::event::EventPosition>
 pub const fn radroots_storage::projection::ProjectionCheckpoint::updated_at_unix_ms(&self) -> u64
+pub struct radroots_storage::projection::ProjectionDocument
+impl radroots_storage::projection::ProjectionDocument
+pub fn radroots_storage::projection::ProjectionDocument::from_stored_parts(alloc::string::String, alloc::vec::Vec<u8>, [u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::projection::ProjectionDocument::key(&self) -> &str
+pub fn radroots_storage::projection::ProjectionDocument::new(alloc::string::String, alloc::vec::Vec<u8>) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::projection::ProjectionDocument::value(&self) -> &[u8]
+pub const fn radroots_storage::projection::ProjectionDocument::value_sha256(&self) -> &[u8; 32]
 pub struct radroots_storage::projection::ProjectionGeneration(_)
 impl radroots_storage::projection::ProjectionGeneration
 pub const fn radroots_storage::projection::ProjectionGeneration::as_bytes(&self) -> &[u8; 32]
@@ -1210,6 +1337,16 @@ impl radroots_storage::projection::ProjectionRevision
 pub const radroots_storage::projection::ProjectionRevision::INITIAL: Self
 pub const fn radroots_storage::projection::ProjectionRevision::get(self) -> u64
 pub const fn radroots_storage::projection::ProjectionRevision::new(u64) -> core::result::Result<Self, radroots_storage::Error>
+pub struct radroots_storage::projection::ProjectionSnapshot
+impl radroots_storage::projection::ProjectionSnapshot
+pub const fn radroots_storage::projection::ProjectionSnapshot::created_at_unix_ms(&self) -> u64
+pub fn radroots_storage::projection::ProjectionSnapshot::from_stored_parts(radroots_storage::projection::ProjectionId, [u8; 32], radroots_storage::projection::ProjectionGeneration, u64, alloc::vec::Vec<u8>, [u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::projection::ProjectionSnapshot::generation(&self) -> radroots_storage::projection::ProjectionGeneration
+pub fn radroots_storage::projection::ProjectionSnapshot::new(radroots_storage::projection::ProjectionId, [u8; 32], radroots_storage::projection::ProjectionGeneration, u64, alloc::vec::Vec<u8>) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::projection::ProjectionSnapshot::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub const fn radroots_storage::projection::ProjectionSnapshot::snapshot_id(&self) -> &[u8; 32]
+pub fn radroots_storage::projection::ProjectionSnapshot::value(&self) -> &[u8]
+pub const fn radroots_storage::projection::ProjectionSnapshot::value_sha256(&self) -> &[u8; 32]
 pub struct radroots_storage::projection::ProjectionStatus
 impl radroots_storage::projection::ProjectionStatus
 pub const fn radroots_storage::projection::ProjectionStatus::active_rebuild(&self) -> core::option::Option<radroots_storage::projection::RebuildTicketId>
@@ -1253,6 +1390,8 @@ pub const radroots_storage::projection::EVENT_INDEX_ARTIFACT_PATH_MAX_BYTES: usi
 pub const radroots_storage::projection::EVENT_INDEX_CURSOR_MAX_BYTES: usize
 pub const radroots_storage::projection::EVENT_INDEX_SHARDS_MAX: usize
 pub const radroots_storage::projection::EVENT_INDEX_SHARD_ID_MAX_BYTES: usize
+pub const radroots_storage::projection::PROJECTION_DOCUMENT_KEY_MAX_BYTES: usize
+pub const radroots_storage::projection::PROJECTION_DOCUMENT_VALUE_MAX_BYTES: usize
 pub const radroots_storage::projection::PROJECTION_ID_MAX_BYTES: usize
 pub trait radroots_storage::projection::ProjectionStore: core::marker::Send + core::marker::Sync
 pub fn radroots_storage::projection::ProjectionStore::checkpoint(&self, radroots_storage::projection::ProjectionCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
@@ -1260,8 +1399,12 @@ pub fn radroots_storage::projection::ProjectionStore::event_index_checkpoint(&se
 pub fn radroots_storage::projection::ProjectionStore::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::projection_snapshot(&self, radroots_storage::projection::ProjectionId, [u8; 32]) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1272,8 +1415,12 @@ pub fn radroots_storage::memory::MemoryStorage::event_index_checkpoint(&self, ra
 pub fn radroots_storage::memory::MemoryStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::projection_snapshot(&self, radroots_storage::projection::ProjectionId, [u8; 32]) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1291,17 +1438,25 @@ pub radroots_storage::status::IntegrityHealth::Corrupt
 pub radroots_storage::status::IntegrityHealth::Degraded
 pub radroots_storage::status::IntegrityHealth::Healthy
 pub radroots_storage::status::IntegrityHealth::Unknown
+impl radroots_storage::status::IntegrityHealth
+pub const fn radroots_storage::status::IntegrityHealth::as_str(self) -> &'static str
 pub enum radroots_storage::status::ShutdownState
 pub radroots_storage::status::ShutdownState::Closed
 pub radroots_storage::status::ShutdownState::Closing
 pub radroots_storage::status::ShutdownState::Open
+impl radroots_storage::status::ShutdownState
+pub const fn radroots_storage::status::ShutdownState::as_str(self) -> &'static str
 pub enum radroots_storage::status::StorageBackend
 pub radroots_storage::status::StorageBackend::Memory
 pub radroots_storage::status::StorageBackend::Sqlite
+impl radroots_storage::status::StorageBackend
+pub const fn radroots_storage::status::StorageBackend::as_str(self) -> &'static str
 pub enum radroots_storage::status::StorageOpenMode
 pub radroots_storage::status::StorageOpenMode::Create
 pub radroots_storage::status::StorageOpenMode::ReadOnly
 pub radroots_storage::status::StorageOpenMode::ReadWriteExisting
+impl radroots_storage::status::StorageOpenMode
+pub const fn radroots_storage::status::StorageOpenMode::as_str(self) -> &'static str
 pub enum radroots_storage::status::WriterPolicy
 pub radroots_storage::status::WriterPolicy::AdvisoryProcessLock
 pub radroots_storage::status::WriterPolicy::NoWriter
@@ -1344,15 +1499,19 @@ pub radroots_storage::Error::AtomicWorkflowMismatch
 pub radroots_storage::Error::BackendUnavailable
 pub radroots_storage::Error::BackupManifestPlanMismatch
 pub radroots_storage::Error::BackupSecretPolicyViolation
+pub radroots_storage::Error::CorruptAuthoredDraft
 pub radroots_storage::Error::CorruptJournalRecord
 pub radroots_storage::Error::CorruptOutboxRecord
 pub radroots_storage::Error::CorruptPrivateArtifactMetadata
+pub radroots_storage::Error::CorruptProjectionDocument
 pub radroots_storage::Error::CorruptProjectionRecord
 pub radroots_storage::Error::CorruptReliabilityOperation
 pub radroots_storage::Error::CorruptStoredEvent
 pub radroots_storage::Error::CursorGenerationMismatch
 pub radroots_storage::Error::DeliveryAttemptOverflow
 pub radroots_storage::Error::DeliveryPlanClaimConflict
+pub radroots_storage::Error::DraftNotFound
+pub radroots_storage::Error::DraftRevisionConflict
 pub radroots_storage::Error::DuplicateBackupMember
 pub radroots_storage::Error::DuplicateEventIndexShard
 pub radroots_storage::Error::DuplicateEventQueryId
@@ -1365,6 +1524,7 @@ pub radroots_storage::Error::InvalidAtomicCommitId
 pub radroots_storage::Error::InvalidAtomicCommitTimestamp
 pub radroots_storage::Error::InvalidAuthoredArtifact
 pub radroots_storage::Error::InvalidAuthoredDeliveryPlan
+pub radroots_storage::Error::InvalidAuthoredDraft
 pub radroots_storage::Error::InvalidAuthoredOperation
 pub radroots_storage::Error::InvalidAuthoredTransition
 pub radroots_storage::Error::InvalidBackupId
@@ -1410,10 +1570,12 @@ pub radroots_storage::Error::InvalidPrivateArtifactRevision
 pub radroots_storage::Error::InvalidPrivateArtifactSchema
 pub radroots_storage::Error::InvalidPrivateArtifactSecretReference
 pub radroots_storage::Error::InvalidPrivateArtifactTimestamp
+pub radroots_storage::Error::InvalidProjectionDocument
 pub radroots_storage::Error::InvalidProjectionGeneration
 pub radroots_storage::Error::InvalidProjectionId
 pub radroots_storage::Error::InvalidProjectionInvalidation
 pub radroots_storage::Error::InvalidProjectionRevision
+pub radroots_storage::Error::InvalidProjectionSnapshot
 pub radroots_storage::Error::InvalidProjectionTimestamp
 pub radroots_storage::Error::InvalidRebuildTicketId
 pub radroots_storage::Error::InvalidRebuildTransition
@@ -1490,6 +1652,7 @@ pub fn radroots_storage::EventStore::query_provenance(&self, radroots_event::id:
 pub fn radroots_storage::EventStore::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::EventStore::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 impl radroots_storage::event::EventStore for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::admit(&self, radroots_storage::event::EventAdmission) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::AdmissionReceipt, radroots_storage::Error>>
@@ -1497,6 +1660,7 @@ pub fn radroots_storage::memory::MemoryStorage::query_provenance(&self, radroots
 pub fn radroots_storage::memory::MemoryStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 pub trait radroots_storage::Journal: core::marker::Send + core::marker::Sync
 pub fn radroots_storage::Journal::by_idempotency_key(&self, radroots_protocol::runtime::v1::OperationId, radroots_storage::journal::IdempotencyKey) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::journal::OperationRecord>, radroots_storage::Error>>
@@ -1530,8 +1694,12 @@ pub fn radroots_storage::ProjectionStore::event_index_checkpoint(&self, radroots
 pub fn radroots_storage::ProjectionStore::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::projection_snapshot(&self, radroots_storage::projection::ProjectionId, [u8; 32]) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1542,11 +1710,15 @@ pub fn radroots_storage::memory::MemoryStorage::event_index_checkpoint(&self, ra
 pub fn radroots_storage::memory::MemoryStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::projection_snapshot(&self, radroots_storage::projection::ProjectionId, [u8; 32]) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
-pub trait radroots_storage::Storage: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage
-impl<T> radroots_storage::Storage for T where T: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage
+pub trait radroots_storage::Storage: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage + radroots_storage::authored_draft::AuthoredDraftStore
+impl<T> radroots_storage::Storage for T where T: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::private_artifact::PrivateArtifactStore + radroots_storage::backup::StorageReliability + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage + radroots_storage::authored_draft::AuthoredDraftStore
