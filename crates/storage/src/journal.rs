@@ -51,8 +51,8 @@ const fn all_zero(bytes: &[u8; 16]) -> bool {
 pub struct IdempotencyKey(String);
 
 impl IdempotencyKey {
-    pub fn parse(value: impl Into<String>) -> Result<Self, Error> {
-        let value = value.into();
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, Error> {
+        let value = value.as_ref();
         if value.is_empty()
             || value.len() > IDEMPOTENCY_KEY_MAX_BYTES
             || value != value.trim()
@@ -60,7 +60,7 @@ impl IdempotencyKey {
         {
             return Err(Error::InvalidIdempotencyKey);
         }
-        Ok(Self(value))
+        Ok(Self(value.to_owned()))
     }
 
     pub fn as_str(&self) -> &str {

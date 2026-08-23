@@ -325,6 +325,17 @@ fn journal_value_and_state_validation_matrix_is_complete() {
         IdempotencyKey::parse("x".repeat(radroots_storage::journal::IDEMPOTENCY_KEY_MAX_BYTES + 1)),
         Err(Error::InvalidIdempotencyKey)
     );
+    assert_eq!(
+        IdempotencyKey::parse("x".repeat(4 * 1024 * 1024)),
+        Err(Error::InvalidIdempotencyKey)
+    );
+    let maximum =
+        IdempotencyKey::parse("x".repeat(radroots_storage::journal::IDEMPOTENCY_KEY_MAX_BYTES))
+            .expect("exact maximum key");
+    assert_eq!(
+        maximum.as_str().len(),
+        radroots_storage::journal::IDEMPOTENCY_KEY_MAX_BYTES
+    );
     let idempotency_key = key(1);
     assert_eq!(idempotency_key.as_str(), "sync-push-01");
     let digest = IdempotencyDigest::new([2; 32]);

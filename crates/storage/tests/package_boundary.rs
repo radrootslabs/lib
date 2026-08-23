@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+const README: &str = include_str!("../README.md");
+const JOURNAL: &str = include_str!("../src/journal.rs");
+
 #[test]
 fn manifest_matches_the_release_v1_package_boundary() {
     let manifest = fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
@@ -105,6 +108,38 @@ fn root_exports_are_exact_and_implementation_types_do_not_leak() {
         assert!(
             !source.contains(forbidden),
             "public storage source leaks implementation path {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn idempotency_keys_validate_borrowed_input_before_bounded_allocation() {
+    for required in [
+        "Idempotency-key construction validates borrowed input before allocating its\nbounded owned representation",
+        "rejected oversized input cannot force a\nsecond attacker-sized allocation",
+    ] {
+        assert!(README.contains(required), "README is missing `{required}`");
+    }
+    let parser = JOURNAL
+        .split_once("pub fn parse(value: impl AsRef<str>)")
+        .expect("borrowed idempotency parser")
+        .1
+        .split_once("pub fn as_str")
+        .expect("idempotency accessor")
+        .0;
+    assert!(parser.contains("let value = value.as_ref();"));
+    assert_eq!(parser.matches("to_owned()").count(), 1);
+    let validation = parser
+        .find("value.len() > IDEMPOTENCY_KEY_MAX_BYTES")
+        .expect("pre-allocation byte bound");
+    let allocation = parser
+        .find("Self(value.to_owned())")
+        .expect("bounded owned representation");
+    assert!(validation < allocation);
+    for forbidden in ["impl Into<String>", "let value = value.into()"] {
+        assert!(
+            !parser.contains(forbidden),
+            "idempotency parser contains pre-validation allocation `{forbidden}`"
         );
     }
 }

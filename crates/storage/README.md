@@ -99,6 +99,10 @@ evidence without owning a transport adapter. Projection storage owns only
 checkpoints, invalidation/rebuild state, and event-index manifests; reducer
 algorithms and projected domain rows stay with their domain owners.
 
+Idempotency-key construction validates borrowed input before allocating its
+bounded owned representation, so rejected oversized input cannot force a
+second attacker-sized allocation at this public boundary.
+
 ## Protected metadata and security
 
 `private_artifact` stores bounded metadata and opaque durable secret references.

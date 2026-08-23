@@ -732,7 +732,7 @@ pub const fn radroots_storage::journal::IdempotencyDigest::new([u8; 32]) -> Self
 pub struct radroots_storage::journal::IdempotencyKey(_)
 impl radroots_storage::journal::IdempotencyKey
 pub fn radroots_storage::journal::IdempotencyKey::as_str(&self) -> &str
-pub fn radroots_storage::journal::IdempotencyKey::parse(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::journal::IdempotencyKey::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_storage::Error>
 impl core::fmt::Debug for radroots_storage::journal::IdempotencyKey
 pub fn radroots_storage::journal::IdempotencyKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_storage::journal::IdempotencyKey
