@@ -7,14 +7,19 @@ use tokio::task::{Id, JoinError, JoinSet};
 
 use crate::HostError;
 
-use super::{CancellationToken, TaskClassification, TaskMetadata, UnfinishedWork};
+use super::{CancellationToken, ShutdownPhase, TaskClassification, TaskMetadata, UnfinishedWork};
 
 /// Owns every spawned service task until its join result is observed.
 #[must_use = "a task supervisor must be run or drained so authoritative tasks are joined"]
 pub struct TaskSupervisor {
     cancellation: CancellationToken,
     tasks: JoinSet<TaskCompletion>,
-    metadata: HashMap<Id, TaskMetadata>,
+    controls: HashMap<Id, TaskControl>,
+}
+
+struct TaskControl {
+    metadata: TaskMetadata,
+    cancellation: CancellationToken,
 }
 
 impl TaskSupervisor {
@@ -22,7 +27,7 @@ impl TaskSupervisor {
         Self {
             cancellation: CancellationToken::new(),
             tasks: JoinSet::new(),
-            metadata: HashMap::new(),
+            controls: HashMap::new(),
         }
     }
 
@@ -58,9 +63,9 @@ impl TaskSupervisor {
         Fut: Future<Output = Result<(), HostError>> + Send + 'static,
     {
         if self
-            .metadata
+            .controls
             .values()
-            .any(|active| active.name() == metadata.name())
+            .any(|active| active.metadata.name() == metadata.name())
         {
             return Err(TaskRegistrationError::DuplicateName);
         }
@@ -69,6 +74,7 @@ impl TaskSupervisor {
         let task_metadata = metadata.clone();
         let child = self.cancellation.child_token();
         let completion_observer = child.clone();
+        let phase_cancellation = child.clone();
         let abort = self.tasks.spawn_on(
             async move {
                 let result = task(child).await;
@@ -80,8 +86,40 @@ impl TaskSupervisor {
             },
             &runtime,
         );
-        self.metadata.insert(abort.id(), metadata);
+        self.controls.insert(
+            abort.id(),
+            TaskControl {
+                metadata,
+                cancellation: phase_cancellation,
+            },
+        );
         Ok(())
+    }
+
+    pub(crate) fn request_phase_cancellation(&self, phase: ShutdownPhase) {
+        for control in self.controls.values() {
+            if control.metadata.shutdown_phase() == Some(phase) {
+                control.cancellation.cancel();
+            }
+        }
+    }
+
+    pub(crate) async fn supervise_phase(
+        &mut self,
+        phase: ShutdownPhase,
+    ) -> Result<Vec<SupervisedTaskExit>, SupervisionFailure> {
+        let mut exits = Vec::new();
+        while self.has_phase_work(phase) {
+            let outcome = self
+                .join_next()
+                .await
+                .expect("phase work must retain a join-owned task");
+            match outcome {
+                Ok(exit) => exits.push(exit),
+                Err(failure) => return Err(failure),
+            }
+        }
+        Ok(exits)
     }
 
     /// Observes all task exits, cancels peers on the first fatal outcome, and drains every join.
@@ -125,11 +163,14 @@ impl TaskSupervisor {
     ) -> Result<SupervisedTaskExit, SupervisionFailure> {
         match joined {
             Ok((id, completion)) => {
-                self.metadata.remove(&id);
+                self.controls.remove(&id);
                 classify_completion(completion)
             }
             Err(error) => {
-                let metadata = self.metadata.remove(&error.id());
+                let metadata = self
+                    .controls
+                    .remove(&error.id())
+                    .map(|control| control.metadata);
                 let cancelled_during_shutdown =
                     error.is_cancelled() && self.cancellation.is_cancelled();
                 if cancelled_during_shutdown && let Some(metadata) = metadata {
@@ -157,12 +198,12 @@ impl TaskSupervisor {
     }
 
     pub(crate) fn unfinished_work(&self) -> UnfinishedWork {
-        if self.metadata.is_empty() {
+        if self.controls.is_empty() {
             UnfinishedWork::None
         } else if self
-            .metadata
+            .controls
             .values()
-            .any(|metadata| metadata.classification().failure_is_fatal())
+            .any(|control| control.metadata.classification().failure_is_fatal())
         {
             UnfinishedWork::FatalAuthoritative
         } else {
@@ -174,6 +215,14 @@ impl TaskSupervisor {
         self.cancellation.cancel();
         self.tasks.abort_all();
         while self.join_next().await.is_some() {}
+    }
+
+    fn has_phase_work(&self, phase: ShutdownPhase) -> bool {
+        self.controls.values().any(|control| {
+            control.metadata.shutdown_phase() == Some(phase)
+                || (phase == ShutdownPhase::DrainOperations
+                    && control.metadata.classification() == TaskClassification::OneShot)
+        })
     }
 }
 
@@ -380,6 +429,14 @@ mod tests {
         TaskMetadata::new(TaskName::new(name).unwrap(), classification, shutdown_phase).unwrap()
     }
 
+    fn metadata_at(
+        name: &str,
+        classification: TaskClassification,
+        shutdown_phase: Option<ShutdownPhase>,
+    ) -> TaskMetadata {
+        TaskMetadata::new(TaskName::new(name).unwrap(), classification, shutdown_phase).unwrap()
+    }
+
     #[test]
     fn registration_without_a_runtime_fails_before_spawning() {
         let mut supervisor = TaskSupervisor::new();
@@ -422,6 +479,88 @@ mod tests {
         assert_eq!(drained.load(Ordering::SeqCst), 1);
         assert!(supervisor.is_empty());
         assert!(supervisor.cancellation_token().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn phase_cancellation_stops_and_joins_only_the_assigned_tasks() {
+        let ingress_stopped = Arc::new(AtomicUsize::new(0));
+        let network_stopped = Arc::new(AtomicUsize::new(0));
+        let mut supervisor = TaskSupervisor::new();
+        let ingress = Arc::clone(&ingress_stopped);
+        supervisor
+            .spawn(
+                metadata_at(
+                    "ingress_worker",
+                    TaskClassification::Critical,
+                    Some(ShutdownPhase::CancelIngress),
+                ),
+                move |token| async move {
+                    token.cancelled().await;
+                    ingress.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let network = Arc::clone(&network_stopped);
+        supervisor
+            .spawn(
+                metadata_at(
+                    "network_worker",
+                    TaskClassification::Critical,
+                    Some(ShutdownPhase::CloseNetwork),
+                ),
+                move |token| async move {
+                    token.cancelled().await;
+                    network.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        supervisor.request_phase_cancellation(ShutdownPhase::CancelIngress);
+        let ingress_exits = supervisor
+            .supervise_phase(ShutdownPhase::CancelIngress)
+            .await
+            .unwrap();
+        assert_eq!(ingress_exits.len(), 1);
+        assert_eq!(ingress_stopped.load(Ordering::SeqCst), 1);
+        assert_eq!(network_stopped.load(Ordering::SeqCst), 0);
+        assert_eq!(supervisor.task_count(), 1);
+
+        supervisor.request_phase_cancellation(ShutdownPhase::CloseNetwork);
+        let network_exits = supervisor
+            .supervise_phase(ShutdownPhase::CloseNetwork)
+            .await
+            .unwrap();
+        assert_eq!(network_exits.len(), 1);
+        assert_eq!(network_stopped.load(Ordering::SeqCst), 1);
+        assert!(supervisor.is_empty());
+    }
+
+    #[tokio::test]
+    async fn drain_operations_joins_one_shot_work_without_cancelling_it() {
+        let mut supervisor = TaskSupervisor::new();
+        supervisor
+            .spawn(
+                metadata_at("bounded_operation", TaskClassification::OneShot, None),
+                |token| async move {
+                    assert!(!token.is_cancelled());
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        supervisor.request_phase_cancellation(ShutdownPhase::DrainOperations);
+        let exits = supervisor
+            .supervise_phase(ShutdownPhase::DrainOperations)
+            .await
+            .unwrap();
+        assert_eq!(exits.len(), 1);
+        assert_eq!(
+            exits[0].status(),
+            SupervisedTaskExitStatus::ExpectedCompletion
+        );
+        assert!(supervisor.is_empty());
     }
 
     #[tokio::test]

@@ -121,6 +121,17 @@ or own service-domain policy. Process binaries inject clocks and entropy,
 normalize signals through [`ProcessSignalAdapter`], register every authoritative
 task with [`TaskSupervisor`], and execute [`GracefulShutdown`] explicitly.
 
+Shutdown task cancellation is phase aware. Entering a phase cancels only tasks
+assigned to that phase and does not advance until their joins are observed;
+bounded one-shot work drains without cancellation during `DrainOperations`,
+while a fatal task outcome still
+cancels and joins the complete graph. `GracefulShutdown` retains one absolute
+deadline plus the completed handler/drain boundary across cancellation and
+retry, so no phase or cleanup attempt receives a fresh grace period. A caller-
+cancelled incomplete handler may be entered again and must be idempotent and
+cancellation safe. The first phase or task failure is retained while later
+close phases continue as long as the original deadline remains.
+
 ## Supported targets and publication
 
 The generic host/config/status/lifecycle surfaces support the workspace's

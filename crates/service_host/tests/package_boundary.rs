@@ -178,6 +178,20 @@ fn documentation_and_reviewed_public_api_are_complete_and_dependency_safe() {
         "Ordinary `Debug` is redacted and no",
         "`Display` implementation exposes the retained value",
         "explicit borrowed `as_str` accessor for serialization",
+        "Shutdown task cancellation is phase aware",
+        "Entering a phase cancels only tasks",
+        "assigned to that phase and does not advance until their joins are observed",
+        "bounded one-shot work drains without",
+        "cancellation during `DrainOperations`",
+        "a fatal task outcome still",
+        "cancels and joins the complete graph",
+        "retains one absolute",
+        "deadline plus the completed handler/drain boundary across cancellation and",
+        "no phase or cleanup attempt receives a fresh grace period",
+        "incomplete handler may be entered again and must be idempotent and",
+        "cancellation safe",
+        "first phase or task failure is retained while later",
+        "close phases continue as long as the original deadline remains",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }

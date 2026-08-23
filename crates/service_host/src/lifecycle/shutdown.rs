@@ -21,6 +21,11 @@ const ORDERED_PHASES: [ShutdownPhase; 7] = [
 pub type ShutdownPhaseFuture<'a> = Pin<Box<dyn Future<Output = Result<(), HostError>> + Send + 'a>>;
 
 /// Executes service-specific phase work without transferring lifecycle ownership.
+///
+/// If the caller cancels [`GracefulShutdown::run`] before one `enter` future
+/// completes, a later call re-enters that incomplete phase under the original
+/// deadline. Implementations must therefore make each phase idempotent and
+/// cancellation safe. A completed phase is never re-entered.
 pub trait ShutdownPhaseHandler: Send {
     fn enter(&mut self, phase: ShutdownPhase) -> ShutdownPhaseFuture<'_>;
 }
@@ -28,9 +33,26 @@ pub trait ShutdownPhaseHandler: Send {
 /// Reusable, idempotent bounded shutdown coordinator.
 pub struct GracefulShutdown {
     grace: Duration,
+    progress: Option<ShutdownProgress>,
     completed: Option<ShutdownSummary>,
     phase_failure: Option<ShutdownPhaseFailure>,
     task_failure: Option<SupervisionFailure>,
+}
+
+#[derive(Clone, Copy)]
+struct ShutdownProgress {
+    deadline: MonotonicDeadline,
+    runtime_deadline: tokio::time::Instant,
+    phase_index: usize,
+    stage: ShutdownPhaseStage,
+    disposition: ShutdownDisposition,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ShutdownPhaseStage {
+    Enter,
+    Drain,
+    Abort(ShutdownDisposition),
 }
 
 impl GracefulShutdown {
@@ -40,6 +62,7 @@ impl GracefulShutdown {
         }
         Ok(Self {
             grace,
+            progress: None,
             completed: None,
             phase_failure: None,
             task_failure: None,
@@ -63,7 +86,11 @@ impl GracefulShutdown {
         self.task_failure.as_ref()
     }
 
-    /// Runs the exact shutdown sequence once; later calls return the first summary unchanged.
+    /// Runs or resumes the exact shutdown sequence under one retained absolute deadline.
+    ///
+    /// Cancelling this future retains the last completed handler/drain boundary.
+    /// A retry resumes that boundary with the original remaining duration.
+    /// Completed runs return the first summary unchanged.
     pub async fn run<C, F>(
         &mut self,
         clock: &C,
@@ -78,82 +105,106 @@ impl GracefulShutdown {
         if let Some(completed) = self.completed {
             return Ok(completed);
         }
-        let deadline = clock
-            .deadline_after(self.grace)
-            .map_err(ShutdownStartError::Deadline)?;
-        let deadline_wait = tokio::time::sleep(self.grace);
-        tokio::pin!(deadline_wait);
+        if self.progress.is_none() {
+            let deadline = clock
+                .deadline_after(self.grace)
+                .map_err(ShutdownStartError::Deadline)?;
+            let runtime_deadline = tokio::time::Instant::now().checked_add(self.grace).ok_or(
+                ShutdownStartError::Deadline(MonotonicClockError::DeadlineOverflow),
+            )?;
+            self.progress = Some(ShutdownProgress {
+                deadline,
+                runtime_deadline,
+                phase_index: 0,
+                stage: ShutdownPhaseStage::Enter,
+                disposition: ShutdownDisposition::Completed,
+            });
+        }
         tokio::pin!(force);
 
-        let mut disposition = ShutdownDisposition::Completed;
-        for phase in ORDERED_PHASES {
-            if phase == ShutdownPhase::CancelIngress {
-                supervisor.request_cancellation();
+        loop {
+            let progress = self
+                .progress
+                .expect("shutdown progress must be initialized");
+            if let ShutdownPhaseStage::Abort(disposition) = progress.stage {
+                supervisor.abort_and_drain().await;
+                return Ok(self.complete(progress.deadline, disposition));
             }
+            let Some(&phase) = ORDERED_PHASES.get(progress.phase_index) else {
+                return Ok(self.complete(progress.deadline, progress.disposition));
+            };
+            let deadline_wait = tokio::time::sleep_until(progress.runtime_deadline);
+            tokio::pin!(deadline_wait);
 
-            match wait_bounded(
-                || handler.enter(phase),
-                force.as_mut(),
-                deadline_wait.as_mut(),
-            )
-            .await
-            {
-                BoundedWait::Completed(Ok(())) => {}
-                BoundedWait::Completed(Err(error)) => {
-                    let unfinished = supervisor.unfinished_work();
-                    self.phase_failure = Some(ShutdownPhaseFailure { phase, error });
-                    supervisor.abort_and_drain().await;
-                    return Ok(self.complete(
-                        deadline,
-                        ShutdownDisposition::PhaseFailed { phase, unfinished },
-                    ));
-                }
-                BoundedWait::Forced => {
-                    let unfinished = supervisor.unfinished_work();
-                    supervisor.abort_and_drain().await;
-                    return Ok(self.complete(deadline, ShutdownDisposition::Forced { unfinished }));
-                }
-                BoundedWait::GraceExpired => {
-                    let unfinished = supervisor.unfinished_work();
-                    supervisor.abort_and_drain().await;
-                    return Ok(
-                        self.complete(deadline, ShutdownDisposition::GraceExpired { unfinished })
-                    );
-                }
-            }
-
-            if phase == ShutdownPhase::DrainOperations {
-                match wait_bounded(
-                    || supervisor.supervise(),
+            let outcome = match progress.stage {
+                ShutdownPhaseStage::Enter => wait_bounded(
+                    || async {
+                        supervisor.request_phase_cancellation(phase);
+                        handler.enter(phase).await
+                    },
                     force.as_mut(),
                     deadline_wait.as_mut(),
                 )
                 .await
-                {
-                    BoundedWait::Completed(Ok(_exits)) => {}
-                    BoundedWait::Completed(Err(failure)) => {
+                .map(ShutdownPhaseOutcome::Entered),
+                ShutdownPhaseStage::Drain => wait_bounded(
+                    || supervisor.supervise_phase(phase),
+                    force.as_mut(),
+                    deadline_wait.as_mut(),
+                )
+                .await
+                .map(ShutdownPhaseOutcome::Drained),
+                ShutdownPhaseStage::Abort(_) => unreachable!("abort stage handled before phase"),
+            };
+
+            match outcome {
+                BoundedWait::Completed(ShutdownPhaseOutcome::Entered(result)) => {
+                    if let Err(error) = result {
+                        let unfinished = supervisor.unfinished_work();
+                        if self.phase_failure.is_none() {
+                            self.phase_failure = Some(ShutdownPhaseFailure { phase, error });
+                        }
+                        self.retain_first_disposition(ShutdownDisposition::PhaseFailed {
+                            phase,
+                            unfinished,
+                        });
+                    }
+                    self.progress.as_mut().expect("shutdown progress").stage =
+                        ShutdownPhaseStage::Drain;
+                }
+                BoundedWait::Completed(ShutdownPhaseOutcome::Drained(result)) => match result {
+                    Ok(_exits) => {
+                        let progress = self.progress.as_mut().expect("shutdown progress");
+                        progress.phase_index += 1;
+                        progress.stage = ShutdownPhaseStage::Enter;
+                    }
+                    Err(failure) => {
                         let kind = failure.kind();
-                        self.task_failure = Some(failure);
-                        disposition = ShutdownDisposition::TaskFailed { kind };
+                        if self.task_failure.is_none() {
+                            self.task_failure = Some(failure);
+                        }
+                        self.retain_first_disposition(ShutdownDisposition::TaskFailed { kind });
                     }
-                    BoundedWait::Forced => {
-                        let unfinished = supervisor.unfinished_work();
-                        supervisor.abort_and_drain().await;
-                        return Ok(
-                            self.complete(deadline, ShutdownDisposition::Forced { unfinished })
-                        );
-                    }
-                    BoundedWait::GraceExpired => {
-                        let unfinished = supervisor.unfinished_work();
-                        supervisor.abort_and_drain().await;
-                        return Ok(self
-                            .complete(deadline, ShutdownDisposition::GraceExpired { unfinished }));
-                    }
+                },
+                BoundedWait::Forced => {
+                    let unfinished = supervisor.unfinished_work();
+                    self.progress.as_mut().expect("shutdown progress").stage =
+                        ShutdownPhaseStage::Abort(ShutdownDisposition::Forced { unfinished });
+                }
+                BoundedWait::GraceExpired => {
+                    let unfinished = supervisor.unfinished_work();
+                    self.progress.as_mut().expect("shutdown progress").stage =
+                        ShutdownPhaseStage::Abort(ShutdownDisposition::GraceExpired { unfinished });
                 }
             }
         }
+    }
 
-        Ok(self.complete(deadline, disposition))
+    fn retain_first_disposition(&mut self, disposition: ShutdownDisposition) {
+        let progress = self.progress.as_mut().expect("shutdown progress");
+        if progress.disposition == ShutdownDisposition::Completed {
+            progress.disposition = disposition;
+        }
     }
 
     fn complete(
@@ -166,14 +217,30 @@ impl GracefulShutdown {
             disposition,
         };
         self.completed = Some(summary);
+        self.progress = None;
         summary
     }
+}
+
+enum ShutdownPhaseOutcome {
+    Entered(Result<(), HostError>),
+    Drained(Result<Vec<super::SupervisedTaskExit>, SupervisionFailure>),
 }
 
 enum BoundedWait<T> {
     Completed(T),
     Forced,
     GraceExpired,
+}
+
+impl<T> BoundedWait<T> {
+    fn map<U>(self, map: impl FnOnce(T) -> U) -> BoundedWait<U> {
+        match self {
+            Self::Completed(value) => BoundedWait::Completed(map(value)),
+            Self::Forced => BoundedWait::Forced,
+            Self::GraceExpired => BoundedWait::GraceExpired,
+        }
+    }
 }
 
 async fn wait_bounded<T, MakeWork, Work, Force>(
@@ -369,6 +436,24 @@ mod tests {
 
     impl Error for SensitiveCause {}
 
+    struct BlockingHandler {
+        phases: Arc<Mutex<Vec<ShutdownPhase>>>,
+        block_at: ShutdownPhase,
+        entered: Arc<tokio::sync::Notify>,
+    }
+
+    impl ShutdownPhaseHandler for BlockingHandler {
+        fn enter(&mut self, phase: ShutdownPhase) -> ShutdownPhaseFuture<'_> {
+            self.phases.lock().unwrap().push(phase);
+            if phase == self.block_at {
+                self.entered.notify_one();
+                Box::pin(pending())
+            } else {
+                Box::pin(ready(Ok(())))
+            }
+        }
+    }
+
     fn clock() -> FakeClock {
         FakeClock {
             now: MonotonicTime::from_duration_since_origin(Duration::from_secs(5)),
@@ -512,7 +597,7 @@ mod tests {
                 unfinished: UnfinishedWork::None,
             }
         );
-        assert_eq!(*phases.lock().unwrap(), ORDERED_PHASES[..=3].to_vec());
+        assert_eq!(*phases.lock().unwrap(), ORDERED_PHASES);
         let failure = shutdown.phase_failure().unwrap();
         assert_eq!(failure.phase(), ShutdownPhase::PersistRecoverableWork);
         assert_eq!(
@@ -551,6 +636,161 @@ mod tests {
         let failure = shutdown.task_failure().unwrap();
         assert_eq!(failure.metadata().unwrap().name().as_str(), "fatal_worker");
         assert!(failure.source().is_some());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cancelled_run_retains_its_absolute_deadline_and_completed_phase_progress() {
+        let mut supervisor = TaskSupervisor::new();
+        let phases = Arc::new(Mutex::new(Vec::new()));
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let mut handler = BlockingHandler {
+            phases: Arc::clone(&phases),
+            block_at: ShutdownPhase::PersistRecoverableWork,
+            entered: Arc::clone(&entered),
+        };
+        let mut shutdown = GracefulShutdown::new(Duration::from_secs(10)).unwrap();
+        let shutdown_clock = clock();
+
+        {
+            let mut run =
+                Box::pin(shutdown.run(&shutdown_clock, &mut supervisor, &mut handler, pending()));
+            tokio::select! {
+                () = entered.notified() => {}
+                result = &mut run => panic!("blocked phase completed unexpectedly: {result:?}"),
+            }
+        }
+        assert_eq!(*phases.lock().unwrap(), ORDERED_PHASES[..=3].to_vec());
+
+        tokio::time::advance(Duration::from_secs(10)).await;
+        let summary = tokio::time::timeout(
+            Duration::from_millis(1),
+            shutdown.run(&shutdown_clock, &mut supervisor, &mut handler, pending()),
+        )
+        .await
+        .expect("retry must use the original elapsed runtime deadline")
+        .unwrap();
+        assert_eq!(
+            summary.disposition(),
+            ShutdownDisposition::GraceExpired {
+                unfinished: UnfinishedWork::None
+            }
+        );
+        assert_eq!(
+            summary.deadline().time().duration_since_origin(),
+            Duration::from_secs(15)
+        );
+        assert_eq!(
+            *phases.lock().unwrap(),
+            ORDERED_PHASES[..=3].to_vec(),
+            "an elapsed retry must not reconstruct the incomplete phase"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_during_phase_drain_resumes_without_reentering_completed_handler() {
+        let (release, wait_for_release) = tokio::sync::oneshot::channel();
+        let cleanup_started = Arc::new(tokio::sync::Notify::new());
+        let mut supervisor = TaskSupervisor::new();
+        let started = Arc::clone(&cleanup_started);
+        let metadata = TaskMetadata::new(
+            TaskName::new("mutation_gate").unwrap(),
+            TaskClassification::Critical,
+            Some(ShutdownPhase::RejectNewMutations),
+        )
+        .unwrap();
+        supervisor
+            .spawn(metadata, move |token| async move {
+                token.cancelled().await;
+                started.notify_one();
+                let _ = wait_for_release.await;
+                Ok(())
+            })
+            .unwrap();
+        let (mut handler, phases) = handler(None);
+        let mut shutdown = GracefulShutdown::new(Duration::from_secs(30)).unwrap();
+        let shutdown_clock = clock();
+
+        {
+            let mut run =
+                Box::pin(shutdown.run(&shutdown_clock, &mut supervisor, &mut handler, pending()));
+            tokio::select! {
+                () = cleanup_started.notified() => {}
+                result = &mut run => panic!("phase drain completed unexpectedly: {result:?}"),
+            }
+        }
+        assert_eq!(
+            *phases.lock().unwrap(),
+            vec![ShutdownPhase::RejectNewMutations]
+        );
+
+        release.send(()).unwrap();
+        let summary = shutdown
+            .run(&shutdown_clock, &mut supervisor, &mut handler, pending())
+            .await
+            .unwrap();
+        assert_eq!(summary.disposition(), ShutdownDisposition::Completed);
+        assert_eq!(*phases.lock().unwrap(), ORDERED_PHASES);
+        assert!(supervisor.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cancellation_while_fatal_peers_drain_retains_the_first_task_failure() {
+        let (release, wait_for_release) = tokio::sync::oneshot::channel();
+        let peer_waiting = Arc::new(tokio::sync::Notify::new());
+        let mut supervisor = TaskSupervisor::new();
+        let phase_metadata = |name| {
+            TaskMetadata::new(
+                TaskName::new(name).unwrap(),
+                TaskClassification::Critical,
+                Some(ShutdownPhase::RejectNewMutations),
+            )
+            .unwrap()
+        };
+        supervisor
+            .spawn(phase_metadata("failing_gate"), |_| async {
+                Err(HostError::new(HostErrorKind::TaskFailure))
+            })
+            .unwrap();
+        let waiting = Arc::clone(&peer_waiting);
+        supervisor
+            .spawn(phase_metadata("draining_peer"), move |token| async move {
+                token.cancelled().await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                waiting.notify_one();
+                let _ = wait_for_release.await;
+                Ok(())
+            })
+            .unwrap();
+        let (mut handler, phases) = handler(None);
+        let mut shutdown = GracefulShutdown::new(Duration::from_secs(30)).unwrap();
+        let shutdown_clock = clock();
+
+        {
+            let mut run =
+                Box::pin(shutdown.run(&shutdown_clock, &mut supervisor, &mut handler, pending()));
+            tokio::select! {
+                () = peer_waiting.notified() => {}
+                result = &mut run => panic!("fatal peer drain completed unexpectedly: {result:?}"),
+            }
+        }
+        assert_eq!(
+            shutdown.task_failure().map(SupervisionFailure::kind),
+            Some(SupervisionFailureKind::TaskReturnedError)
+        );
+
+        release.send(()).unwrap();
+        let summary = shutdown
+            .run(&shutdown_clock, &mut supervisor, &mut handler, pending())
+            .await
+            .unwrap();
+        assert_eq!(
+            summary.disposition(),
+            ShutdownDisposition::TaskFailed {
+                kind: SupervisionFailureKind::TaskReturnedError
+            }
+        );
+        assert_eq!(*phases.lock().unwrap(), ORDERED_PHASES);
+        assert!(supervisor.is_empty());
     }
 
     #[test]
