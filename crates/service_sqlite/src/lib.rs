@@ -55,8 +55,9 @@ pub use backup::{
 };
 pub use config::{ServiceSqliteConnectionOptions, ServiceSqliteConnectionOptionsError};
 pub use connection::{
-    ServiceSqliteHost, ServiceSqliteTransaction, ServiceSqliteTransactionError,
-    ServiceSqliteTransactionErrorKind, ServiceSqliteTransactionFuture,
+    OpenedExistingServiceDatabase, ServiceSqliteHost, ServiceSqliteTransaction,
+    ServiceSqliteTransactionError, ServiceSqliteTransactionErrorKind,
+    ServiceSqliteTransactionFuture,
 };
 pub use error::{
     SafeServiceSqliteError, ServiceSqliteError, ServiceSqliteErrorCode, ServiceSqliteErrorKind,
@@ -68,8 +69,8 @@ pub use integrity::{
     ServiceSqliteIntegrityReport,
 };
 pub use metadata::{
-    ServiceDatabaseIdentity, ServiceDatabaseMetadata, ServiceSqliteApplicationId,
-    ServiceSqliteMetadataValueError,
+    ExistingServiceDatabaseIntent, ServiceDatabaseIdentity, ServiceDatabaseMetadata,
+    ServiceSqliteApplicationId, ServiceSqliteMetadataValueError,
 };
 pub use migration::{
     MigrationApplicationOutcome, MigrationAppliedAtUnixSeconds, MigrationBuildIdentity,

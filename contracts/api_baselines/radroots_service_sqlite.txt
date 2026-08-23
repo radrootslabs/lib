@@ -176,6 +176,15 @@ pub const fn radroots_service_sqlite::BackupMemberSha256::as_bytes(&self) -> &[u
 pub const fn radroots_service_sqlite::BackupMemberSha256::from_bytes([u8; 32]) -> Self
 impl core::fmt::Debug for radroots_service_sqlite::BackupMemberSha256
 pub fn radroots_service_sqlite::BackupMemberSha256::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_service_sqlite::ExistingServiceDatabaseIntent
+impl radroots_service_sqlite::ExistingServiceDatabaseIntent
+pub const fn radroots_service_sqlite::ExistingServiceDatabaseIntent::application_id(&self) -> radroots_service_sqlite::ServiceSqliteApplicationId
+pub fn radroots_service_sqlite::ExistingServiceDatabaseIntent::instance(&self) -> &radroots_runtime_paths::identifier::InstanceId
+pub fn radroots_service_sqlite::ExistingServiceDatabaseIntent::new(&radroots_service_sqlite::ServiceSqlitePaths, core::num::nonzero::NonZeroU32, radroots_service_sqlite::ServiceSqliteApplicationId) -> Self
+pub fn radroots_service_sqlite::ExistingServiceDatabaseIntent::service(&self) -> &radroots_runtime_paths::identifier::ServiceId
+pub const fn radroots_service_sqlite::ExistingServiceDatabaseIntent::supported_state_schema_version(&self) -> core::num::nonzero::NonZeroU32
+impl core::fmt::Debug for radroots_service_sqlite::ExistingServiceDatabaseIntent
+pub fn radroots_service_sqlite::ExistingServiceDatabaseIntent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_service_sqlite::IntegrityCheckedAtUnixMs(_)
 impl radroots_service_sqlite::IntegrityCheckedAtUnixMs
 pub const fn radroots_service_sqlite::IntegrityCheckedAtUnixMs::get(self) -> u64
@@ -249,6 +258,13 @@ pub const fn radroots_service_sqlite::MinimumFreeBytes::get(self) -> u64
 pub const fn radroots_service_sqlite::MinimumFreeBytes::new(u64) -> core::result::Result<Self, radroots_service_sqlite::StateFilesystemCapacityError>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_service_sqlite::MinimumFreeBytes
 pub fn radroots_service_sqlite::MinimumFreeBytes::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_service_sqlite::OpenedExistingServiceDatabase
+impl radroots_service_sqlite::OpenedExistingServiceDatabase
+pub const fn radroots_service_sqlite::OpenedExistingServiceDatabase::database_metadata(&self) -> &radroots_service_sqlite::ServiceDatabaseMetadata
+pub const fn radroots_service_sqlite::OpenedExistingServiceDatabase::host(&self) -> &radroots_service_sqlite::ServiceSqliteHost
+pub fn radroots_service_sqlite::OpenedExistingServiceDatabase::into_parts(self) -> (radroots_service_sqlite::ServiceSqliteHost, radroots_service_sqlite::ServiceDatabaseMetadata)
+impl core::fmt::Debug for radroots_service_sqlite::OpenedExistingServiceDatabase
+pub fn radroots_service_sqlite::OpenedExistingServiceDatabase::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_service_sqlite::PlatformStateFilesystemCapacitySource
 impl radroots_service_sqlite::StateFilesystemCapacitySource for radroots_service_sqlite::PlatformStateFilesystemCapacitySource
 pub fn radroots_service_sqlite::PlatformStateFilesystemCapacitySource::available_bytes(&self, &radroots_service_sqlite::ServiceSqlitePaths) -> core::result::Result<u64, radroots_service_sqlite::StateFilesystemCapacityError>
@@ -368,7 +384,9 @@ pub async fn radroots_service_sqlite::ServiceSqliteHost::inspect_integrity(&self
 pub const fn radroots_service_sqlite::ServiceSqliteHost::mode(&self) -> radroots_service_sqlite::OpenMode
 pub async fn radroots_service_sqlite::ServiceSqliteHost::open_initialized(&radroots_service_sqlite::ServiceSqlitePaths, &radroots_service_sqlite::ServiceDatabaseIdentity, &radroots_service_sqlite::MigrationCatalog, &radroots_service_sqlite::SchemaCatalog, radroots_service_sqlite::ServiceSqliteConnectionOptions, radroots_service_sqlite::WriterAuthority, radroots_service_sqlite::MigrationAppliedAtUnixSeconds, &radroots_service_sqlite::MigrationBuildIdentity, &[radroots_service_sqlite::MigrationCallbackBinding]) -> core::result::Result<(Self, radroots_service_sqlite::MigrationApplicationOutcome), radroots_service_sqlite::ServiceSqliteError>
 pub async fn radroots_service_sqlite::ServiceSqliteHost::open_read_only_inspection(&radroots_service_sqlite::ServiceSqlitePaths, &radroots_service_sqlite::ServiceDatabaseIdentity, &radroots_service_sqlite::MigrationCatalog, &radroots_service_sqlite::SchemaCatalog, radroots_service_sqlite::ServiceSqliteConnectionOptions) -> core::result::Result<Self, radroots_service_sqlite::ServiceSqliteError>
+pub async fn radroots_service_sqlite::ServiceSqliteHost::open_read_only_inspection_with_intent(&radroots_service_sqlite::ServiceSqlitePaths, &radroots_service_sqlite::ExistingServiceDatabaseIntent, &radroots_service_sqlite::MigrationCatalog, &radroots_service_sqlite::SchemaCatalog, radroots_service_sqlite::ServiceSqliteConnectionOptions) -> core::result::Result<radroots_service_sqlite::OpenedExistingServiceDatabase, radroots_service_sqlite::ServiceSqliteError>
 pub async fn radroots_service_sqlite::ServiceSqliteHost::open_read_write_existing(&radroots_service_sqlite::ServiceSqlitePaths, &radroots_service_sqlite::ServiceDatabaseIdentity, &radroots_service_sqlite::MigrationCatalog, &radroots_service_sqlite::SchemaCatalog, radroots_service_sqlite::ServiceSqliteConnectionOptions, radroots_service_sqlite::MigrationAppliedAtUnixSeconds, &radroots_service_sqlite::MigrationBuildIdentity, &[radroots_service_sqlite::MigrationCallbackBinding]) -> core::result::Result<(Self, radroots_service_sqlite::MigrationApplicationOutcome), radroots_service_sqlite::ServiceSqliteError>
+pub async fn radroots_service_sqlite::ServiceSqliteHost::open_read_write_existing_with_intent(&radroots_service_sqlite::ServiceSqlitePaths, &radroots_service_sqlite::ExistingServiceDatabaseIntent, &radroots_service_sqlite::MigrationCatalog, &radroots_service_sqlite::SchemaCatalog, radroots_service_sqlite::ServiceSqliteConnectionOptions, radroots_service_sqlite::MigrationAppliedAtUnixSeconds, &radroots_service_sqlite::MigrationBuildIdentity, &[radroots_service_sqlite::MigrationCallbackBinding]) -> core::result::Result<(radroots_service_sqlite::OpenedExistingServiceDatabase, radroots_service_sqlite::MigrationApplicationOutcome), radroots_service_sqlite::ServiceSqliteError>
 pub async fn radroots_service_sqlite::ServiceSqliteHost::transaction<T, E, F>(&self, F) -> core::result::Result<T, radroots_service_sqlite::ServiceSqliteTransactionError<E>> where T: core::marker::Send + 'static, E: core::marker::Send + 'static, F: for<'a> core::ops::function::FnOnce(&'a mut radroots_service_sqlite::ServiceSqliteTransaction<'_>) -> radroots_service_sqlite::ServiceSqliteTransactionFuture<'a, T, E> + core::marker::Send
 impl core::fmt::Debug for radroots_service_sqlite::ServiceSqliteHost
 pub fn radroots_service_sqlite::ServiceSqliteHost::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

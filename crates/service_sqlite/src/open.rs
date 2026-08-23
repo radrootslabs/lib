@@ -32,9 +32,9 @@ use sqlx::{
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::{
-    MigrationAppliedAtUnixSeconds, MigrationBuildIdentity, MigrationCatalog, SchemaCatalog,
-    ServiceDatabaseIdentity, ServiceSqliteConnectionOptions, ServiceSqliteError,
-    ServiceSqliteErrorKind, WriterAuthority,
+    ExistingServiceDatabaseIntent, MigrationAppliedAtUnixSeconds, MigrationBuildIdentity,
+    MigrationCatalog, SchemaCatalog, ServiceDatabaseIdentity, ServiceDatabaseMetadata,
+    ServiceSqliteConnectionOptions, ServiceSqliteError, ServiceSqliteErrorKind, WriterAuthority,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -58,6 +58,51 @@ struct PoolConnectionValidation {
     schema_catalog: SchemaCatalog,
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy)]
+enum ServiceDatabaseExpectation<'a> {
+    Exact(&'a ServiceDatabaseIdentity),
+    Existing(&'a ExistingServiceDatabaseIntent),
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl ServiceDatabaseExpectation<'_> {
+    fn matches_paths(self, paths: &ServiceSqlitePaths) -> bool {
+        match self {
+            Self::Exact(identity) => identity.matches_paths(paths),
+            Self::Existing(intent) => intent.matches_paths(paths),
+        }
+    }
+
+    fn supported_state_schema_version(self) -> core::num::NonZeroU32 {
+        match self {
+            Self::Exact(identity) => identity.supported_state_schema_version(),
+            Self::Existing(intent) => intent.supported_state_schema_version(),
+        }
+    }
+
+    async fn verify_metadata(
+        self,
+        connection: &mut SqliteConnection,
+    ) -> Result<ServiceDatabaseMetadata, ServiceSqliteError> {
+        match self {
+            Self::Exact(identity) => {
+                crate::metadata::verify_database_metadata(connection, identity).await
+            }
+            Self::Existing(intent) => {
+                crate::metadata::verify_existing_database_intent(connection, intent).await
+            }
+        }
+    }
+
+    fn exact_identity(self, metadata: &ServiceDatabaseMetadata) -> ServiceDatabaseIdentity {
+        match self {
+            Self::Exact(identity) => identity.clone(),
+            Self::Existing(intent) => intent.identity_for(metadata),
+        }
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -381,6 +426,17 @@ impl PrivateConnectionPool {
 
     pub(crate) fn identity(&self) -> &ServiceDatabaseIdentity {
         &self.identity
+    }
+
+    pub(crate) async fn database_metadata(
+        &self,
+    ) -> Result<ServiceDatabaseMetadata, ServiceSqliteError> {
+        self.validate()?;
+        let mut connection = self.acquire().await?;
+        let result =
+            crate::metadata::verify_database_metadata(&mut connection, &self.identity).await;
+        self.validate()?;
+        result
     }
 
     pub(crate) fn backup_source_validator(&self) -> BackupSourceValidator {
@@ -765,6 +821,46 @@ pub(crate) async fn open_existing_connection_pool(
     mode: OpenMode,
     policy: ServiceSqliteConnectionOptions,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
+    open_existing_connection_pool_for(
+        paths,
+        ServiceDatabaseExpectation::Exact(identity),
+        catalog,
+        schema_catalog,
+        mode,
+        policy,
+    )
+    .await
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn open_existing_connection_pool_with_intent(
+    paths: &ServiceSqlitePaths,
+    intent: &ExistingServiceDatabaseIntent,
+    catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
+    mode: OpenMode,
+    policy: ServiceSqliteConnectionOptions,
+) -> Result<PrivateConnectionPool, ServiceSqliteError> {
+    open_existing_connection_pool_for(
+        paths,
+        ServiceDatabaseExpectation::Existing(intent),
+        catalog,
+        schema_catalog,
+        mode,
+        policy,
+    )
+    .await
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn open_existing_connection_pool_for(
+    paths: &ServiceSqlitePaths,
+    expectation: ServiceDatabaseExpectation<'_>,
+    catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
+    mode: OpenMode,
+    policy: ServiceSqliteConnectionOptions,
+) -> Result<PrivateConnectionPool, ServiceSqliteError> {
     if mode == OpenMode::Initialize {
         return Err(connection_error(
             ServiceSqliteErrorKind::Open,
@@ -778,7 +874,7 @@ pub(crate) async fn open_existing_connection_pool(
     };
     open_connection_pool(
         paths,
-        identity,
+        expectation,
         catalog,
         schema_catalog,
         mode,
@@ -801,7 +897,7 @@ pub(crate) async fn open_initialized_connection_pool(
     authority.validate_for(paths)?;
     open_connection_pool(
         paths,
-        identity,
+        ServiceDatabaseExpectation::Exact(identity),
         catalog,
         schema_catalog,
         OpenMode::Initialize,
@@ -857,7 +953,7 @@ impl PoolConnectionValidation {
 #[allow(clippy::too_many_arguments)]
 async fn open_connection_pool(
     paths: &ServiceSqlitePaths,
-    identity: &ServiceDatabaseIdentity,
+    expectation: ServiceDatabaseExpectation<'_>,
     catalog: &MigrationCatalog,
     schema_catalog: &SchemaCatalog,
     mode: OpenMode,
@@ -865,10 +961,10 @@ async fn open_connection_pool(
     authority: Option<WriterAuthority>,
     inspection_guard: Option<ReadOnlyInspectionGuard>,
 ) -> Result<PrivateConnectionPool, ServiceSqliteError> {
-    if !identity.matches_paths(paths) {
+    if !expectation.matches_paths(paths) {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
     }
-    if identity.supported_state_schema_version().get() != catalog.current_version() {
+    if expectation.supported_state_schema_version().get() != catalog.current_version() {
         return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Migration));
     }
     if !schema_catalog.matches_migrations(catalog) {
@@ -881,9 +977,14 @@ async fn open_connection_pool(
             authority.validate_for(paths)?;
             result
         }
-        (OpenMode::ReadWriteExisting, Some(authority), None) => {
-            crate::restore::recover_for_open(paths, identity, authority)
-        }
+        (OpenMode::ReadWriteExisting, Some(authority), None) => match expectation {
+            ServiceDatabaseExpectation::Exact(identity) => {
+                crate::restore::recover_for_open(paths, identity, authority)
+            }
+            ServiceDatabaseExpectation::Existing(intent) => {
+                crate::restore::recover_for_open_with_intent(paths, intent, authority)
+            }
+        },
         (OpenMode::ReadOnlyInspection, None, Some(inspection_guard)) => {
             inspection_guard.validate_for(paths)?;
             let result = crate::restore::refuse_unresolved_recovery(&inspection_guard.directory);
@@ -921,10 +1022,10 @@ async fn open_connection_pool(
     let preflight_policy = verify_connection_policy(&mut preflight, mode, policy).await;
     binding.validate(paths)?;
     preflight_policy.map_err(|source| connection_source(ServiceSqliteErrorKind::Pragma, source))?;
-    let preflight_metadata =
-        crate::metadata::verify_database_metadata(&mut preflight, identity).await;
+    let preflight_metadata = expectation.verify_metadata(&mut preflight).await;
     binding.validate(paths)?;
-    preflight_metadata?;
+    let preflight_metadata = preflight_metadata?;
+    let identity = expectation.exact_identity(&preflight_metadata);
     let preflight_history = crate::migration::verify_migration_history(
         &mut preflight,
         catalog,
@@ -2944,7 +3045,7 @@ mod tests {
         );
         let Err(error) = open_connection_pool(
             &paths,
-            &wrong_identity,
+            ServiceDatabaseExpectation::Exact(&wrong_identity),
             &base_catalog(),
             &base_schema_catalog(),
             OpenMode::Initialize,
@@ -2968,7 +3069,7 @@ mod tests {
         );
         let Err(error) = open_connection_pool(
             &paths,
-            &newer_identity,
+            ServiceDatabaseExpectation::Exact(&newer_identity),
             &base_catalog(),
             &base_schema_catalog(),
             OpenMode::Initialize,
@@ -2986,7 +3087,7 @@ mod tests {
             initialized_authority(directory.path(), "schema-drift-preflight").await;
         let Err(error) = open_connection_pool(
             &paths,
-            &identity,
+            ServiceDatabaseExpectation::Exact(&identity),
             &base_catalog(),
             &migration_schema_catalog(),
             OpenMode::Initialize,

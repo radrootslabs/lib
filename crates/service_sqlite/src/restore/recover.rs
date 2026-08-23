@@ -13,8 +13,8 @@ use {
         },
     },
     crate::{
-        ServiceDatabaseIdentity, ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqlitePaths,
-        WriterAuthority,
+        ExistingServiceDatabaseIntent, ServiceDatabaseIdentity, ServiceSqliteError,
+        ServiceSqliteErrorKind, ServiceSqlitePaths, WriterAuthority,
     },
     rustix::{
         fs::{
@@ -37,6 +37,39 @@ pub(crate) fn recover_for_open(
     identity: &ServiceDatabaseIdentity,
     authority: &WriterAuthority,
 ) -> Result<(), ServiceSqliteError> {
+    recover_for_open_expectation(
+        paths,
+        RecoveryDatabaseExpectation::Exact(identity),
+        authority,
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) fn recover_for_open_with_intent(
+    paths: &ServiceSqlitePaths,
+    intent: &ExistingServiceDatabaseIntent,
+    authority: &WriterAuthority,
+) -> Result<(), ServiceSqliteError> {
+    recover_for_open_expectation(
+        paths,
+        RecoveryDatabaseExpectation::Existing(intent),
+        authority,
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy)]
+enum RecoveryDatabaseExpectation<'a> {
+    Exact(&'a ServiceDatabaseIdentity),
+    Existing(&'a ExistingServiceDatabaseIntent),
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn recover_for_open_expectation(
+    paths: &ServiceSqlitePaths,
+    expectation: RecoveryDatabaseExpectation<'_>,
+    authority: &WriterAuthority,
+) -> Result<(), ServiceSqliteError> {
     authority.validate_for(paths)?;
     let Some(mut marker) = RestoreMarkerBinding::load_for_recovery(paths, authority)? else {
         authority_checked(authority, paths, || {
@@ -44,7 +77,13 @@ pub(crate) fn recover_for_open(
         })?;
         return Ok(());
     };
-    if !marker.marker().matches_identity(identity) {
+    let intent_matches = match expectation {
+        RecoveryDatabaseExpectation::Exact(identity) => marker.marker().matches_identity(identity),
+        RecoveryDatabaseExpectation::Existing(intent) => {
+            marker.marker().matches_existing_intent(intent)
+        }
+    };
+    if !intent_matches {
         return Err(recovery_error(RecoveryFailureKind::Intent));
     }
 
@@ -759,6 +798,15 @@ mod tests {
         fn recover(&self) -> Result<(), ServiceSqliteError> {
             recover_for_open(&self.paths, &self.identity, &self.authority)
         }
+
+        fn recover_with_intent(&self) -> Result<(), ServiceSqliteError> {
+            let intent = ExistingServiceDatabaseIntent::new(
+                &self.paths,
+                self.identity.supported_state_schema_version(),
+                self.identity.application_id(),
+            );
+            recover_for_open_with_intent(&self.paths, &intent, &self.authority)
+        }
     }
 
     #[test]
@@ -785,6 +833,17 @@ mod tests {
         let fixture = Fixture::new();
         fixture.retain_live(false);
         fixture.recover().expect("recover after first rename");
+        assert_eq!(fs::read(fixture.paths.state_database()).unwrap(), NEW_BYTES);
+        assert_no_recovery_evidence(&fixture.paths);
+    }
+
+    #[test]
+    fn generation_discovering_intent_recovers_when_live_database_is_retained() {
+        let fixture = Fixture::new();
+        fixture.retain_live(false);
+        fixture
+            .recover_with_intent()
+            .expect("recover from marker-bound existing intent");
         assert_eq!(fs::read(fixture.paths.state_database()).unwrap(), NEW_BYTES);
         assert_no_recovery_evidence(&fixture.paths);
     }

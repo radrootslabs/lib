@@ -80,6 +80,15 @@ pub struct ServiceDatabaseIdentity {
     application_id: ServiceSqliteApplicationId,
 }
 
+/// Sealed expectation for opening an existing database without guessing its generation.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ExistingServiceDatabaseIntent {
+    service: ServiceId,
+    instance: InstanceId,
+    supported_state_schema_version: NonZeroU32,
+    application_id: ServiceSqliteApplicationId,
+}
+
 impl ServiceDatabaseMetadata {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn from_verified_backup(
@@ -237,6 +246,67 @@ impl ServiceDatabaseIdentity {
     }
 }
 
+impl ExistingServiceDatabaseIntent {
+    /// Binds an existing-only open to canonical paths and the binary's fixed contract.
+    #[must_use]
+    pub fn new(
+        paths: &ServiceSqlitePaths,
+        supported_state_schema_version: NonZeroU32,
+        application_id: ServiceSqliteApplicationId,
+    ) -> Self {
+        Self {
+            service: paths.service().clone(),
+            instance: paths.instance().clone(),
+            supported_state_schema_version,
+            application_id,
+        }
+    }
+
+    /// Returns the bound service identity.
+    #[must_use]
+    pub fn service(&self) -> &ServiceId {
+        &self.service
+    }
+
+    /// Returns the bound instance identity.
+    #[must_use]
+    pub fn instance(&self) -> &InstanceId {
+        &self.instance
+    }
+
+    /// Returns the newest state schema version this binary accepts.
+    #[must_use]
+    pub const fn supported_state_schema_version(&self) -> NonZeroU32 {
+        self.supported_state_schema_version
+    }
+
+    /// Returns the expected SQLite application identifier.
+    #[must_use]
+    pub const fn application_id(&self) -> ServiceSqliteApplicationId {
+        self.application_id
+    }
+
+    pub(crate) fn matches_paths(&self, paths: &ServiceSqlitePaths) -> bool {
+        crate::all_constraints([
+            self.service == *paths.service(),
+            self.instance == *paths.instance(),
+        ])
+    }
+
+    pub(crate) fn identity_for(
+        &self,
+        metadata: &ServiceDatabaseMetadata,
+    ) -> ServiceDatabaseIdentity {
+        ServiceDatabaseIdentity {
+            service: self.service.clone(),
+            instance: self.instance.clone(),
+            source_generation: metadata.source_generation,
+            supported_state_schema_version: self.supported_state_schema_version,
+            application_id: self.application_id,
+        }
+    }
+}
+
 impl fmt::Debug for ServiceDatabaseIdentity {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -244,6 +314,21 @@ impl fmt::Debug for ServiceDatabaseIdentity {
             .field("service", &"[redacted]")
             .field("instance", &"[redacted]")
             .field("source_generation", &"[redacted]")
+            .field(
+                "supported_state_schema_version",
+                &self.supported_state_schema_version,
+            )
+            .field("application_id", &self.application_id)
+            .finish()
+    }
+}
+
+impl fmt::Debug for ExistingServiceDatabaseIntent {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ExistingServiceDatabaseIntent")
+            .field("service", &"[redacted]")
+            .field("instance", &"[redacted]")
             .field(
                 "supported_state_schema_version",
                 &self.supported_state_schema_version,
@@ -413,6 +498,24 @@ pub(crate) async fn verify_database_metadata(
             actual.source_generation == expected.source_generation,
             actual.application_id == expected.application_id,
             actual.state_schema_version <= expected.supported_state_schema_version,
+        ]),
+        MetadataFailureKind::Mismatch,
+    )?;
+    Ok(actual)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn verify_existing_database_intent(
+    connection: &mut SqliteConnection,
+    intent: &ExistingServiceDatabaseIntent,
+) -> Result<ServiceDatabaseMetadata, ServiceSqliteError> {
+    let actual = read_database_metadata(connection).await?;
+    require_metadata_condition(
+        crate::all_constraints([
+            actual.service == intent.service,
+            actual.instance == intent.instance,
+            actual.application_id == intent.application_id,
+            actual.state_schema_version <= intent.supported_state_schema_version,
         ]),
         MetadataFailureKind::Mismatch,
     )?;
@@ -753,6 +856,84 @@ mod tests {
             assert!(!debug.contains(sensitive));
         }
         assert!(debug.contains("source_generation: \"[redacted]\""));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn existing_intent_discovers_generation_and_binds_every_trusted_dimension() {
+        let paths = sqlite_paths("myc", "primary");
+        let expected = metadata(&paths, 7, 1, 1_700_000_000_000, 0x5244_5351);
+        let mut connection = memory_connection().await;
+        write_database_metadata(&mut connection, &expected, &base_schema_catalog())
+            .await
+            .expect("write metadata");
+
+        let intent = ExistingServiceDatabaseIntent::new(
+            &paths,
+            NonZeroU32::new(2).expect("schema ceiling"),
+            expected.application_id(),
+        );
+        let actual = verify_existing_database_intent(&mut connection, &intent)
+            .await
+            .expect("discover metadata");
+        assert_eq!(actual, expected);
+        assert_eq!(actual.source_generation().as_bytes(), &[7; 32]);
+        assert_eq!(
+            intent.identity_for(&actual).source_generation(),
+            actual.source_generation()
+        );
+
+        let debug = format!("{intent:?}");
+        assert!(debug.contains("ExistingServiceDatabaseIntent"));
+        assert!(!debug.contains("myc"));
+        assert!(!debug.contains("primary"));
+        assert!(!debug.contains("07070707"));
+
+        let other_paths = sqlite_paths("rhi", "primary");
+        let wrong_service = ExistingServiceDatabaseIntent::new(
+            &other_paths,
+            intent.supported_state_schema_version(),
+            intent.application_id(),
+        );
+        let other_instance_paths = sqlite_paths("myc", "secondary");
+        let wrong_instance = ExistingServiceDatabaseIntent::new(
+            &other_instance_paths,
+            intent.supported_state_schema_version(),
+            intent.application_id(),
+        );
+        let wrong_application = ExistingServiceDatabaseIntent::new(
+            &paths,
+            intent.supported_state_schema_version(),
+            ServiceSqliteApplicationId::new(7).expect("other application"),
+        );
+        for rejected in [&wrong_service, &wrong_instance, &wrong_application] {
+            assert_eq!(
+                verify_existing_database_intent(&mut connection, rejected)
+                    .await
+                    .expect_err("intent mismatch")
+                    .kind(),
+                ServiceSqliteErrorKind::Metadata
+            );
+        }
+
+        sqlx::query(
+            "UPDATE radroots_service_metadata SET state_schema_version = 2 WHERE singleton = 1",
+        )
+        .execute(&mut connection)
+        .await
+        .expect("advance stored schema");
+        let older_binary = ExistingServiceDatabaseIntent::new(
+            &paths,
+            NonZeroU32::new(1).expect("older ceiling"),
+            expected.application_id(),
+        );
+        assert_eq!(
+            verify_existing_database_intent(&mut connection, &older_binary)
+                .await
+                .expect_err("newer stored schema")
+                .kind(),
+            ServiceSqliteErrorKind::Metadata
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

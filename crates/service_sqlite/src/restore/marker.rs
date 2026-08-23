@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    BackupManifestSha256, ServiceDatabaseIdentity, ServiceDatabaseMetadata,
-    ServiceSqliteApplicationId, ServiceSqlitePaths,
+    BackupManifestSha256, ExistingServiceDatabaseIntent, ServiceDatabaseIdentity,
+    ServiceDatabaseMetadata, ServiceSqliteApplicationId, ServiceSqlitePaths,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -395,6 +395,15 @@ impl RestoreRecoveryMarker {
             self.source_generation == identity.source_generation(),
             self.application_id == identity.application_id(),
             self.state_schema_version <= identity.supported_state_schema_version(),
+        ])
+    }
+
+    pub(crate) fn matches_existing_intent(&self, intent: &ExistingServiceDatabaseIntent) -> bool {
+        crate::all_constraints([
+            self.service == *intent.service(),
+            self.instance == *intent.instance(),
+            self.application_id == intent.application_id(),
+            self.state_schema_version <= intent.supported_state_schema_version(),
         ])
     }
 }
@@ -1941,6 +1950,50 @@ mod tests {
             NonZeroU32::new(2).expect("schema ceiling"),
             exact.application_id(),
         )));
+    }
+
+    #[test]
+    fn marker_existing_intent_discovers_generation_but_binds_other_dimensions() {
+        let root = tempfile::tempdir().expect("root");
+        let paths = paths(root.path());
+        let marker = marker(&paths);
+        let exact = ExistingServiceDatabaseIntent::new(
+            &paths,
+            NonZeroU32::new(3).expect("schema ceiling"),
+            ServiceSqliteApplicationId::new(0x5244_5254).expect("application"),
+        );
+        assert!(marker.matches_existing_intent(&exact));
+
+        let other_service_paths = paths_for(root.path(), "rhi", "primary");
+        assert!(
+            !marker.matches_existing_intent(&ExistingServiceDatabaseIntent::new(
+                &other_service_paths,
+                exact.supported_state_schema_version(),
+                exact.application_id(),
+            ))
+        );
+        let other_instance_paths = paths_for(root.path(), "myc", "secondary");
+        assert!(
+            !marker.matches_existing_intent(&ExistingServiceDatabaseIntent::new(
+                &other_instance_paths,
+                exact.supported_state_schema_version(),
+                exact.application_id(),
+            ))
+        );
+        assert!(
+            !marker.matches_existing_intent(&ExistingServiceDatabaseIntent::new(
+                &paths,
+                NonZeroU32::new(2).expect("older schema ceiling"),
+                exact.application_id(),
+            ))
+        );
+        assert!(
+            !marker.matches_existing_intent(&ExistingServiceDatabaseIntent::new(
+                &paths,
+                exact.supported_state_schema_version(),
+                ServiceSqliteApplicationId::new(7).expect("other application"),
+            ))
+        );
     }
 
     #[test]

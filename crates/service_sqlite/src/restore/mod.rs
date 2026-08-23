@@ -16,7 +16,7 @@ pub use stage::{StagedServiceRestore, stage_verified_restore};
 pub(crate) use recover::refuse_unresolved_recovery;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) use recover::recover_for_open;
+pub(crate) use recover::{recover_for_open, recover_for_open_with_intent};
 
 #[allow(unused_imports)]
 pub(crate) use marker::{

@@ -15,6 +15,18 @@ runner-owned. Writable host opening finishes every pending governed migration
 before returning, and read-only inspection opens only current migration and
 schema state.
 
+Existing databases can be admitted without a caller guessing their stored
+source generation. `ExistingServiceDatabaseIntent` seals the canonical
+service and instance, supported schema ceiling, and SQLite application ID;
+`ServiceSqliteHost::open_read_write_existing_with_intent` and
+`ServiceSqliteHost::open_read_only_inspection_with_intent` discover and verify
+the actual immutable metadata while retaining the corresponding writer or
+inspection authority. Success returns an `OpenedExistingServiceDatabase`,
+which keeps the host and verified metadata inseparable until the caller
+consumes them together. Recovery remains fail closed and may use this intent
+only to discover the marker-bound generation; every other identity dimension,
+artifact binding, migration prefix, and schema catalog remains governed.
+
 Service-controlled SQL is screened before SQLite compilation through both the
 borrowed transaction executor and migration callback executor. The closed
 statement-control inventory is `PRAGMA`, `ATTACH`, `DETACH`, `BEGIN`, `COMMIT`,

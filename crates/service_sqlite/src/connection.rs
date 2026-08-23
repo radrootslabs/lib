@@ -19,10 +19,11 @@ use sqlx::{
 };
 
 use crate::{
-    MigrationApplicationOutcome, MigrationAppliedAtUnixSeconds, MigrationBuildIdentity,
-    MigrationCallbackBinding, MigrationCatalog, OpenMode, SchemaCatalog, ServiceDatabaseIdentity,
-    ServiceSqliteConnectionOptions, ServiceSqliteError, ServiceSqliteErrorKind,
-    ServiceSqliteIntegrityReport, ServiceSqlitePaths, WriterAuthority,
+    ExistingServiceDatabaseIntent, MigrationApplicationOutcome, MigrationAppliedAtUnixSeconds,
+    MigrationBuildIdentity, MigrationCallbackBinding, MigrationCatalog, OpenMode, SchemaCatalog,
+    ServiceDatabaseIdentity, ServiceDatabaseMetadata, ServiceSqliteConnectionOptions,
+    ServiceSqliteError, ServiceSqliteErrorKind, ServiceSqliteIntegrityReport, ServiceSqlitePaths,
+    WriterAuthority,
 };
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -53,6 +54,56 @@ pub struct ServiceSqliteHost {
     integrity_driver: tokio::sync::Mutex<IntegrityInspectionDriver>,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     failpoints: crate::failpoint::DurabilityFailpoints,
+}
+
+/// Existing database opened under retained authority with its verified metadata.
+///
+/// This result cannot be assembled independently from a host and metadata:
+///
+/// ```compile_fail
+/// use radroots_service_sqlite::{OpenedExistingServiceDatabase, ServiceSqliteHost};
+///
+/// fn forge(host: ServiceSqliteHost) {
+///     let _ = OpenedExistingServiceDatabase { host };
+/// }
+/// ```
+pub struct OpenedExistingServiceDatabase {
+    host: ServiceSqliteHost,
+    metadata: ServiceDatabaseMetadata,
+}
+
+impl OpenedExistingServiceDatabase {
+    fn new(host: ServiceSqliteHost, metadata: ServiceDatabaseMetadata) -> Self {
+        Self { host, metadata }
+    }
+
+    /// Borrows the authority-retaining host.
+    #[must_use]
+    pub const fn host(&self) -> &ServiceSqliteHost {
+        &self.host
+    }
+
+    /// Borrows the metadata discovered and verified by the retained open.
+    #[must_use]
+    pub const fn database_metadata(&self) -> &ServiceDatabaseMetadata {
+        &self.metadata
+    }
+
+    /// Consumes the binding into the authority-retaining host and actual metadata.
+    #[must_use]
+    pub fn into_parts(self) -> (ServiceSqliteHost, ServiceDatabaseMetadata) {
+        (self.host, self.metadata)
+    }
+}
+
+impl fmt::Debug for OpenedExistingServiceDatabase {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OpenedExistingServiceDatabase")
+            .field("mode", &self.host.mode())
+            .field("database_metadata", &"[redacted]")
+            .finish()
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -244,6 +295,62 @@ impl ServiceSqliteHost {
         }
     }
 
+    /// Opens existing writable state and discovers its stored generation under authority.
+    ///
+    /// The intent binds service, instance, application ID, and the supported
+    /// schema ceiling before filesystem or SQLite admission. The returned
+    /// metadata is read from the same authority-retaining host after governed
+    /// migrations finish, so callers never guess a source generation or reopen
+    /// the database between discovery and use.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn open_read_write_existing_with_intent(
+        paths: &ServiceSqlitePaths,
+        intent: &ExistingServiceDatabaseIntent,
+        migrations: &MigrationCatalog,
+        schema: &SchemaCatalog,
+        options: ServiceSqliteConnectionOptions,
+        applied_at: MigrationAppliedAtUnixSeconds,
+        build: &MigrationBuildIdentity,
+        callbacks: &[MigrationCallbackBinding],
+    ) -> Result<(OpenedExistingServiceDatabase, MigrationApplicationOutcome), ServiceSqliteError>
+    {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let pool = crate::open::open_existing_connection_pool_with_intent(
+                paths,
+                intent,
+                migrations,
+                schema,
+                OpenMode::ReadWriteExisting,
+                options,
+            )
+            .await?;
+            let outcome = match pool.apply_migrations(applied_at, build, callbacks).await {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    drop(pool.close().await);
+                    return Err(error);
+                }
+            };
+            let metadata = match pool.database_metadata().await {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    drop(pool.close().await);
+                    return Err(error);
+                }
+            };
+            let host = Self::from_pool(OpenMode::ReadWriteExisting, pool);
+            Ok((OpenedExistingServiceDatabase::new(host, metadata), outcome))
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (
+                paths, intent, migrations, schema, options, applied_at, build, callbacks,
+            );
+            Err(unsupported_host())
+        }
+    }
+
     /// Opens state created under a retained initialization writer authority.
     #[allow(clippy::too_many_arguments)]
     pub async fn open_initialized(
@@ -305,6 +412,42 @@ impl ServiceSqliteHost {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             let _ = (paths, identity, migrations, schema, options);
+            Err(unsupported_host())
+        }
+    }
+
+    /// Opens existing state for immutable inspection and discovers its metadata.
+    pub async fn open_read_only_inspection_with_intent(
+        paths: &ServiceSqlitePaths,
+        intent: &ExistingServiceDatabaseIntent,
+        migrations: &MigrationCatalog,
+        schema: &SchemaCatalog,
+        options: ServiceSqliteConnectionOptions,
+    ) -> Result<OpenedExistingServiceDatabase, ServiceSqliteError> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let pool = crate::open::open_existing_connection_pool_with_intent(
+                paths,
+                intent,
+                migrations,
+                schema,
+                OpenMode::ReadOnlyInspection,
+                options,
+            )
+            .await?;
+            let metadata = match pool.database_metadata().await {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    drop(pool.close().await);
+                    return Err(error);
+                }
+            };
+            let host = Self::from_pool(OpenMode::ReadOnlyInspection, pool);
+            Ok(OpenedExistingServiceDatabase::new(host, metadata))
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (paths, intent, migrations, schema, options);
             Err(unsupported_host())
         }
     }
@@ -1445,6 +1588,83 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn integrity_checked_at(value: u64) -> crate::IntegrityCheckedAtUnixMs {
         crate::IntegrityCheckedAtUnixMs::new(value).expect("integrity inspection time")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn existing_intent_returns_actual_metadata_without_releasing_authority() {
+        let (_root, paths, identity, migrations, schema, initialized) = initialized_host().await;
+        initialized.close().await.expect("close initialized host");
+        let intent = ExistingServiceDatabaseIntent::new(
+            &paths,
+            identity.supported_state_schema_version(),
+            identity.application_id(),
+        );
+
+        let wrong_application = ExistingServiceDatabaseIntent::new(
+            &paths,
+            identity.supported_state_schema_version(),
+            crate::ServiceSqliteApplicationId::new(7).expect("other application"),
+        );
+        let error = ServiceSqliteHost::open_read_write_existing_with_intent(
+            &paths,
+            &wrong_application,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_001).expect("migration time"),
+            &build_identity(),
+            &[],
+        )
+        .await
+        .expect_err("application mismatch");
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+
+        let (opened, outcome) = ServiceSqliteHost::open_read_write_existing_with_intent(
+            &paths,
+            &intent,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_001).expect("migration time"),
+            &build_identity(),
+            &[],
+        )
+        .await
+        .expect("open writable from intent");
+        assert_eq!(outcome.applied_count(), 0);
+        assert_eq!(
+            opened.database_metadata().source_generation(),
+            identity.source_generation()
+        );
+        assert_eq!(opened.host().mode(), OpenMode::ReadWriteExisting);
+        let debug = format!("{opened:?}");
+        assert!(debug.contains("OpenedExistingServiceDatabase"));
+        assert!(!debug.contains("09090909"));
+        assert!(WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting).is_err());
+        let (writable, actual) = opened.into_parts();
+        assert_eq!(actual.source_generation(), identity.source_generation());
+        assert_eq!(row_count(&writable).await, 0);
+        writable.close().await.expect("close writable host");
+
+        let inspected = ServiceSqliteHost::open_read_only_inspection_with_intent(
+            &paths,
+            &intent,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+        )
+        .await
+        .expect("open inspection from intent");
+        assert_eq!(inspected.host().mode(), OpenMode::ReadOnlyInspection);
+        assert_eq!(
+            inspected.database_metadata().source_generation(),
+            identity.source_generation()
+        );
+        assert!(WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting).is_err());
+        let (inspection, actual) = inspected.into_parts();
+        assert_eq!(actual.source_generation(), identity.source_generation());
+        inspection.close().await.expect("close inspection host");
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
