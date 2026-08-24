@@ -5,7 +5,12 @@ use crate::{
     outcome::FetchTargetOutcome,
     target::{TargetFingerprint, TargetSet},
 };
-use alloc::{boxed::Box, collections::BTreeSet, string::String, vec::Vec};
+use alloc::{
+    boxed::Box,
+    collections::{BTreeMap, BTreeSet},
+    string::String,
+    vec::Vec,
+};
 use core::{fmt, future::Future, pin::Pin};
 use radroots_event::SignedEvent;
 use radroots_identity::PublicKey;
@@ -25,6 +30,19 @@ pub const FETCH_PAGE_MAX_EVENTS: u16 = 1_000;
 pub const FETCH_SELECTOR_MAX_KINDS: usize = 64;
 /// Maximum distinct event authors in one source selector.
 pub const FETCH_SELECTOR_MAX_AUTHORS: usize = 256;
+/// Maximum distinct exact single-letter tag keys in one source selector.
+pub const FETCH_SELECTOR_MAX_TAG_KEYS: usize = 26;
+/// Maximum exact tag values across one source selector.
+pub const FETCH_SELECTOR_MAX_TAG_VALUES: usize = 256;
+/// Maximum UTF-8 bytes in one exact tag value.
+pub const FETCH_SELECTOR_TAG_VALUE_MAX_BYTES: usize = 4_096;
+
+// Deliberate representation indirection keeps every selector-bearing request
+// and terminal value compact while allocating nothing for the common no-tag
+// case. The map itself still owns its bounded tree nodes.
+#[allow(clippy::box_collection)]
+type ExactTagFilters = Box<BTreeMap<char, Vec<String>>>;
+
 /// Maximum encoded live-subscription request identity length.
 pub const SUBSCRIPTION_REQUEST_ID_MAX_BYTES: usize = 256;
 /// Maximum number of events one live subscription may emit.
@@ -199,15 +217,21 @@ impl SubscriptionBounds {
 
 /// Transport-neutral constraints applied before a source page is bounded.
 ///
-/// An empty kind or author collection means "any" for that dimension. Time
-/// bounds are inclusive Unix seconds. Adapters must apply every configured
-/// dimension remotely when their protocol supports it and must defensively
-/// exclude non-matching events before returning a page.
+/// An empty kind, author, or tag collection means "any" for that dimension.
+/// Values for one tag key are alternatives, while distinct tag keys are
+/// conjunctive. Time bounds are inclusive Unix seconds. Adapters must apply
+/// every configured dimension remotely when their protocol supports it and
+/// must defensively exclude non-matching events before returning a page.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct FetchSelector {
     kinds: Vec<u32>,
     authors: Vec<PublicKey>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(serialize_with = "serde_impl::serialize_exact_tags")
+    )]
+    exact_tags: Option<ExactTagFilters>,
     since_unix_seconds: Option<u64>,
     until_unix_seconds: Option<u64>,
 }
@@ -219,6 +243,7 @@ impl FetchSelector {
         Self {
             kinds: Vec::new(),
             authors: Vec::new(),
+            exact_tags: None,
             since_unix_seconds: None,
             until_unix_seconds: None,
         }
@@ -250,6 +275,50 @@ impl FetchSelector {
         Ok(self)
     }
 
+    /// Requires one exact indexed single-letter tag value.
+    ///
+    /// Repeating a key adds an alternative value for that key. Different keys
+    /// are conjunctive. Keys are lowercase ASCII letters and values are
+    /// non-empty bounded UTF-8 strings.
+    pub fn with_exact_tag_value(
+        mut self,
+        key: char,
+        value: impl AsRef<str>,
+    ) -> Result<Self, Error> {
+        if !key.is_ascii_lowercase() {
+            return Err(Error::InvalidFetchTagKey);
+        }
+        let value = value.as_ref();
+        if value.is_empty()
+            || value.len() > FETCH_SELECTOR_TAG_VALUE_MAX_BYTES
+            || value.chars().any(char::is_control)
+        {
+            return Err(Error::InvalidFetchTagValue);
+        }
+        let exact_tags = self.exact_tags.as_deref();
+        let total_values = exact_tags
+            .into_iter()
+            .flat_map(BTreeMap::values)
+            .map(Vec::len)
+            .sum::<usize>();
+        if (!exact_tags.is_some_and(|tags| tags.contains_key(&key))
+            && exact_tags.is_some_and(|tags| tags.len() == FETCH_SELECTOR_MAX_TAG_KEYS))
+            || total_values == FETCH_SELECTOR_MAX_TAG_VALUES
+        {
+            return Err(Error::FetchSelectorTooLarge);
+        }
+        let values = self
+            .exact_tags
+            .get_or_insert_with(|| Box::new(BTreeMap::new()))
+            .entry(key)
+            .or_default();
+        match values.binary_search_by(|candidate| candidate.as_str().cmp(value)) {
+            Ok(_) => return Err(Error::DuplicateFetchTagValue),
+            Err(position) => values.insert(position, String::from(value)),
+        }
+        Ok(self)
+    }
+
     /// Sets an inclusive lower event-time bound.
     pub fn with_since_unix_seconds(mut self, since: u64) -> Result<Self, Error> {
         if self.until_unix_seconds.is_some_and(|until| since > until) {
@@ -278,6 +347,14 @@ impl FetchSelector {
         self.authors.as_slice()
     }
 
+    /// Returns exact tag filters in canonical key order.
+    pub fn exact_tag_filters(&self) -> impl Iterator<Item = (char, &[String])> + '_ {
+        self.exact_tags
+            .iter()
+            .flat_map(|tags| tags.iter())
+            .map(|(key, values)| (*key, values.as_slice()))
+    }
+
     /// Returns the inclusive lower event-time bound.
     pub const fn since_unix_seconds(&self) -> Option<u64> {
         self.since_unix_seconds
@@ -293,6 +370,20 @@ impl FetchSelector {
     pub fn matches(&self, event: &SignedEvent) -> bool {
         (self.kinds.is_empty() || self.kinds.binary_search(&event.kind()).is_ok())
             && (self.authors.is_empty() || self.authors.binary_search(event.pubkey()).is_ok())
+            && self.exact_tags.as_deref().is_none_or(|tags| {
+                tags.iter().all(|(key, values)| {
+                    event.envelope().tag_slices().iter().any(|tag| {
+                        let elements = tag.as_slice();
+                        elements.first().is_some_and(|candidate| {
+                            candidate.len() == 1 && candidate.starts_with(*key)
+                        }) && elements.get(1).is_some_and(|value| {
+                            values
+                                .binary_search_by(|candidate| candidate.as_str().cmp(value))
+                                .is_ok()
+                        })
+                    })
+                })
+            })
             && self
                 .since_unix_seconds
                 .is_none_or(|since| event.created_at() >= since)
@@ -934,6 +1025,19 @@ pub trait EventSubscriber: Send + Sync {
 mod serde_impl {
     use super::*;
 
+    pub(super) fn serialize_exact_tags<S>(
+        exact_tags: &Option<ExactTagFilters>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match exact_tags {
+            Some(exact_tags) => serde::Serialize::serialize(exact_tags, serializer),
+            None => serde::Serialize::serialize(&BTreeMap::<char, Vec<String>>::new(), serializer),
+        }
+    }
+
     impl serde::Serialize for FetchRequestId {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
@@ -1025,6 +1129,44 @@ mod serde_impl {
         }
     }
 
+    #[derive(Default)]
+    struct ExactTagsWire(Vec<(char, Vec<String>)>);
+
+    impl<'de> serde::Deserialize<'de> for ExactTagsWire {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            struct ExactTagsVisitor;
+
+            impl<'de> serde::de::Visitor<'de> for ExactTagsVisitor {
+                type Value = ExactTagsWire;
+
+                fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    formatter.write_str("a map of unique exact single-letter tag filters")
+                }
+
+                fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+                where
+                    A: serde::de::MapAccess<'de>,
+                {
+                    let mut entries = Vec::<(char, Vec<String>)>::new();
+                    while let Some((key, values)) = map.next_entry::<char, Vec<String>>()? {
+                        if entries.iter().any(|(candidate, _)| *candidate == key) {
+                            return Err(serde::de::Error::custom(
+                                "transport fetch selector contains a duplicate tag key",
+                            ));
+                        }
+                        entries.push((key, values));
+                    }
+                    Ok(ExactTagsWire(entries))
+                }
+            }
+
+            deserializer.deserialize_map(ExactTagsVisitor)
+        }
+    }
+
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct FetchRequestWire {
@@ -1090,6 +1232,8 @@ mod serde_impl {
                 kinds: Vec<u32>,
                 #[serde(default)]
                 authors: Vec<PublicKey>,
+                #[serde(default)]
+                exact_tags: ExactTagsWire,
                 since_unix_seconds: Option<u64>,
                 until_unix_seconds: Option<u64>,
             }
@@ -1098,6 +1242,16 @@ mod serde_impl {
             let selector = FetchSelector::all()
                 .with_kinds(wire.kinds)
                 .and_then(|selector| selector.with_authors(wire.authors))
+                .and_then(|selector| {
+                    wire.exact_tags
+                        .0
+                        .into_iter()
+                        .try_fold(selector, |selector, (key, values)| {
+                            values.into_iter().try_fold(selector, |selector, value| {
+                                selector.with_exact_tag_value(key, value)
+                            })
+                        })
+                })
                 .and_then(|selector| match wire.since_unix_seconds {
                     Some(since) => selector.with_since_unix_seconds(since),
                     None => Ok(selector),

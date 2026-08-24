@@ -60,6 +60,18 @@ fn every_transport_error_has_stable_operator_facing_text() {
             "transport fetch selector contains a duplicate author",
         ),
         (
+            Error::InvalidFetchTagKey,
+            "transport fetch selector tag key is invalid",
+        ),
+        (
+            Error::InvalidFetchTagValue,
+            "transport fetch selector tag value is invalid",
+        ),
+        (
+            Error::DuplicateFetchTagValue,
+            "transport fetch selector contains a duplicate tag value",
+        ),
+        (
             Error::InvalidFetchTimeRange,
             "transport fetch selector time range is invalid",
         ),

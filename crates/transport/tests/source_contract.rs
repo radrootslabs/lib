@@ -14,8 +14,9 @@ use radroots_transport::{
     outcome::{FetchTargetOutcome, FetchTargetState},
     source::{
         EventProvenance, FETCH_CURSOR_MAX_BYTES, FETCH_PAGE_MAX_EVENTS, FETCH_REQUEST_ID_MAX_BYTES,
-        FETCH_SELECTOR_MAX_AUTHORS, FETCH_SELECTOR_MAX_KINDS, FetchBounds, FetchCursor,
-        FetchSelector, NextPage, ObservedEvent,
+        FETCH_SELECTOR_MAX_AUTHORS, FETCH_SELECTOR_MAX_KINDS, FETCH_SELECTOR_MAX_TAG_VALUES,
+        FETCH_SELECTOR_TAG_VALUE_MAX_BYTES, FetchBounds, FetchCursor, FetchSelector, NextPage,
+        ObservedEvent,
     },
 };
 
@@ -25,13 +26,15 @@ fn target(uri: &str) -> Target {
 
 #[test]
 fn fetch_selector_is_bounded_canonical_and_request_bound() {
-    let event = signed_event();
+    let event = tagged_event();
     let author = *event.pubkey();
     let selector = FetchSelector::all()
         .with_kinds(vec![1, 0])
         .expect("kind selector")
         .with_authors(vec![author])
         .expect("author selector")
+        .with_exact_tag_value('d', "trade-1")
+        .expect("tag selector")
         .with_since_unix_seconds(1_700_000_000)
         .expect("since")
         .with_until_unix_seconds(1_700_000_100)
@@ -39,7 +42,26 @@ fn fetch_selector_is_bounded_canonical_and_request_bound() {
 
     assert_eq!(selector.kinds(), &[0, 1]);
     assert_eq!(selector.authors(), &[author]);
+    let exact_tags = selector.exact_tag_filters().collect::<Vec<_>>();
+    assert_eq!(exact_tags.len(), 1);
+    assert_eq!(exact_tags[0].0, 'd');
+    assert_eq!(exact_tags[0].1, &[String::from("trade-1")]);
     assert!(selector.matches(&event));
+    let encoded = serde_json::to_string(&selector).expect("selector JSON");
+    assert_eq!(
+        serde_json::from_str::<FetchSelector>(encoded.as_str()).expect("selector round trip"),
+        selector
+    );
+    assert!(
+        serde_json::from_value::<FetchSelector>(serde_json::json!({
+            "kinds": [],
+            "authors": [],
+            "exact_tags": {"D": ["trade-1"]},
+            "since_unix_seconds": null,
+            "until_unix_seconds": null
+        }))
+        .is_err()
+    );
     assert_eq!(
         FetchSelector::all()
             .with_kinds(vec![1, 1])
@@ -64,6 +86,73 @@ fn fetch_selector_is_bounded_canonical_and_request_bound() {
             .expect_err("too many authors"),
         Error::FetchSelectorTooLarge
     );
+    for invalid in ['D', '0', '#', 'é'] {
+        assert_eq!(
+            FetchSelector::all()
+                .with_exact_tag_value(invalid, "trade-1")
+                .expect_err("invalid tag key"),
+            Error::InvalidFetchTagKey
+        );
+    }
+    for invalid in [String::new(), String::from("line\nbreak")] {
+        assert_eq!(
+            FetchSelector::all()
+                .with_exact_tag_value('d', invalid)
+                .expect_err("invalid tag value"),
+            Error::InvalidFetchTagValue
+        );
+    }
+    assert_eq!(
+        FetchSelector::all()
+            .with_exact_tag_value('d', "x".repeat(FETCH_SELECTOR_TAG_VALUE_MAX_BYTES + 1))
+            .expect_err("oversized tag value"),
+        Error::InvalidFetchTagValue
+    );
+    assert!(
+        FetchSelector::all()
+            .with_exact_tag_value('d', "x".repeat(FETCH_SELECTOR_TAG_VALUE_MAX_BYTES))
+            .is_ok()
+    );
+    assert_eq!(
+        FetchSelector::all()
+            .with_exact_tag_value('d', "trade-1")
+            .and_then(|selector| selector.with_exact_tag_value('d', "trade-1"))
+            .expect_err("duplicate tag value"),
+        Error::DuplicateFetchTagValue
+    );
+    let maximum = (0..FETCH_SELECTOR_MAX_TAG_VALUES)
+        .try_fold(FetchSelector::all(), |selector, index| {
+            selector.with_exact_tag_value('d', format!("trade-{index:03}"))
+        });
+    assert!(maximum.is_ok());
+    assert_eq!(
+        maximum
+            .and_then(|selector| selector.with_exact_tag_value('d', "trade-overflow"))
+            .expect_err("too many tag values"),
+        Error::FetchSelectorTooLarge
+    );
+    let every_key = (0..radroots_transport::source::FETCH_SELECTOR_MAX_TAG_KEYS).try_fold(
+        FetchSelector::all(),
+        |selector, index| {
+            selector.with_exact_tag_value(
+                char::from(b'a' + u8::try_from(index).expect("bounded key index")),
+                "value",
+            )
+        },
+    );
+    assert_eq!(
+        every_key
+            .expect("all lowercase keys")
+            .exact_tag_filters()
+            .count(),
+        radroots_transport::source::FETCH_SELECTOR_MAX_TAG_KEYS
+    );
+    assert!(
+        serde_json::from_str::<FetchSelector>(
+            r#"{"kinds":[],"authors":[],"exact_tags":{"d":["one"],"d":["two"]},"since_unix_seconds":null,"until_unix_seconds":null}"#,
+        )
+        .is_err()
+    );
     assert_eq!(
         FetchSelector::all()
             .with_since_unix_seconds(2)
@@ -87,6 +176,15 @@ fn signed_event() -> SignedEvent {
     let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
     let wire = Nip01EventWire::parse_json(raw).expect("wire event");
     SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
+}
+
+fn tagged_event() -> SignedEvent {
+    let raw = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
+    let mut wire = Nip01EventWire::parse_json(raw).expect("wire event");
+    wire.tags = vec![vec![String::from("d"), String::from("trade-1")]];
+    wire.id = wire.computed_event_id().expect("event id").into_string();
+    let raw = serde_json::to_string(&wire).expect("event JSON");
+    SignedEvent::from_wire_verified_id(wire, raw.as_str()).expect("signed event")
 }
 
 fn request(targets: TargetSet, limit: u16) -> FetchRequest {
@@ -183,6 +281,9 @@ fn selectors_expose_bounds_and_reject_each_nonmatching_dimension() {
         FetchSelector::all()
             .with_authors(vec![other_author])
             .expect("authors"),
+        FetchSelector::all()
+            .with_exact_tag_value('d', "other-trade")
+            .expect("tag"),
         FetchSelector::all()
             .with_since_unix_seconds(event.created_at() + 1)
             .expect("since"),

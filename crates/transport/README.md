@@ -22,7 +22,7 @@ The authoritative package charter is the
 3. The caller creates a bounded [`FetchRequest`], [`SubscriptionRequest`], or
    [`DeliveryRequest`] with a request identity and absolute deadline. Inbound
    operations may carry a validated [`FetchSelector`] for exact kinds,
-   authors, and inclusive event-time bounds.
+   authors, indexed single-letter tag values, and inclusive event-time bounds.
 4. A dyn-compatible [`EventSource`], [`EventSubscriber`], or [`EventSink`]
    implementation performs only the requested operation.
 5. The caller validates [`FetchPage`] or [`DeliveryReceipt`] against the

@@ -97,6 +97,7 @@ pub radroots_transport::error::Error::DeliveryTargetReceiptStatusMismatch
 pub radroots_transport::error::Error::DuplicateDeliveryTargetReceipt
 pub radroots_transport::error::Error::DuplicateFetchAuthor
 pub radroots_transport::error::Error::DuplicateFetchKind
+pub radroots_transport::error::Error::DuplicateFetchTagValue
 pub radroots_transport::error::Error::DuplicateFetchTargetOutcome
 pub radroots_transport::error::Error::DuplicateRequiredTargetFingerprint
 pub radroots_transport::error::Error::DuplicateSubscriptionCheckpoint
@@ -125,6 +126,8 @@ pub radroots_transport::error::Error::InvalidFetchCursor
 pub radroots_transport::error::Error::InvalidFetchDeadline
 pub radroots_transport::error::Error::InvalidFetchLimit
 pub radroots_transport::error::Error::InvalidFetchRequestId
+pub radroots_transport::error::Error::InvalidFetchTagKey
+pub radroots_transport::error::Error::InvalidFetchTagValue
 pub radroots_transport::error::Error::InvalidFetchTimeRange
 pub radroots_transport::error::Error::InvalidObservedAt
 pub radroots_transport::error::Error::InvalidPayloadBytes
@@ -380,11 +383,13 @@ pub struct radroots_transport::source::FetchSelector
 impl radroots_transport::source::FetchSelector
 pub const fn radroots_transport::source::FetchSelector::all() -> Self
 pub fn radroots_transport::source::FetchSelector::authors(&self) -> &[radroots_identity::key::PublicKey]
+pub fn radroots_transport::source::FetchSelector::exact_tag_filters(&self) -> impl core::iter::traits::iterator::Iterator<Item = (char, &[alloc::string::String])> + '_
 pub fn radroots_transport::source::FetchSelector::kinds(&self) -> &[u32]
 pub fn radroots_transport::source::FetchSelector::matches(&self, &radroots_event::draft::SignedEvent) -> bool
 pub const fn radroots_transport::source::FetchSelector::since_unix_seconds(&self) -> core::option::Option<u64>
 pub const fn radroots_transport::source::FetchSelector::until_unix_seconds(&self) -> core::option::Option<u64>
 pub fn radroots_transport::source::FetchSelector::with_authors(self, alloc::vec::Vec<radroots_identity::key::PublicKey>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::source::FetchSelector::with_exact_tag_value(self, char, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::source::FetchSelector::with_kinds(self, alloc::vec::Vec<u32>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::source::FetchSelector::with_since_unix_seconds(self, u64) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::source::FetchSelector::with_until_unix_seconds(self, u64) -> core::result::Result<Self, radroots_transport::error::Error>
@@ -464,6 +469,9 @@ pub const radroots_transport::source::FETCH_PAGE_MAX_EVENTS: u16
 pub const radroots_transport::source::FETCH_REQUEST_ID_MAX_BYTES: usize
 pub const radroots_transport::source::FETCH_SELECTOR_MAX_AUTHORS: usize
 pub const radroots_transport::source::FETCH_SELECTOR_MAX_KINDS: usize
+pub const radroots_transport::source::FETCH_SELECTOR_MAX_TAG_KEYS: usize
+pub const radroots_transport::source::FETCH_SELECTOR_MAX_TAG_VALUES: usize
+pub const radroots_transport::source::FETCH_SELECTOR_TAG_VALUE_MAX_BYTES: usize
 pub const radroots_transport::source::SUBSCRIPTION_MAX_EVENTS: u16
 pub const radroots_transport::source::SUBSCRIPTION_REQUEST_ID_MAX_BYTES: usize
 pub trait radroots_transport::source::EventSource: core::marker::Send + core::marker::Sync
@@ -576,6 +584,7 @@ pub radroots_transport::Error::DeliveryTargetReceiptStatusMismatch
 pub radroots_transport::Error::DuplicateDeliveryTargetReceipt
 pub radroots_transport::Error::DuplicateFetchAuthor
 pub radroots_transport::Error::DuplicateFetchKind
+pub radroots_transport::Error::DuplicateFetchTagValue
 pub radroots_transport::Error::DuplicateFetchTargetOutcome
 pub radroots_transport::Error::DuplicateRequiredTargetFingerprint
 pub radroots_transport::Error::DuplicateSubscriptionCheckpoint
@@ -604,6 +613,8 @@ pub radroots_transport::Error::InvalidFetchCursor
 pub radroots_transport::Error::InvalidFetchDeadline
 pub radroots_transport::Error::InvalidFetchLimit
 pub radroots_transport::Error::InvalidFetchRequestId
+pub radroots_transport::Error::InvalidFetchTagKey
+pub radroots_transport::Error::InvalidFetchTagValue
 pub radroots_transport::Error::InvalidFetchTimeRange
 pub radroots_transport::Error::InvalidObservedAt
 pub radroots_transport::Error::InvalidPayloadBytes

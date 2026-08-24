@@ -84,6 +84,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "## Intended consumers",
         "radroots_crates_release_v1.toml",
         "examples/host_transport.rs",
+        "indexed single-letter tag values",
     ] {
         assert!(README.contains(required), "README is missing {required}");
     }
@@ -119,6 +120,11 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub struct radroots_transport::SubscriptionRequest",
         "pub enum radroots_transport::SubscriptionEndReason",
         "pub const radroots_transport::source::SUBSCRIPTION_MAX_EVENTS: u16",
+        "pub const radroots_transport::source::FETCH_SELECTOR_MAX_TAG_VALUES: usize",
+        "pub const radroots_transport::source::FETCH_SELECTOR_MAX_TAG_KEYS: usize",
+        "pub const radroots_transport::source::FETCH_SELECTOR_TAG_VALUE_MAX_BYTES: usize",
+        "pub fn radroots_transport::source::FetchSelector::with_exact_tag_value",
+        "pub fn radroots_transport::source::FetchSelector::exact_tag_filters",
         "pub fn radroots_transport::target::Target::new(radroots_transport::TransportId",
         "pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::TransportId",
     ] {

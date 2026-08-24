@@ -25,6 +25,9 @@ pub enum Error {
     FetchSelectorTooLarge,
     DuplicateFetchKind,
     DuplicateFetchAuthor,
+    InvalidFetchTagKey,
+    InvalidFetchTagValue,
+    DuplicateFetchTagValue,
     InvalidFetchTimeRange,
     EmptyFetchCursor,
     InvalidFetchCursor,
@@ -107,6 +110,13 @@ impl fmt::Display for Error {
             }
             Self::DuplicateFetchAuthor => {
                 f.write_str("transport fetch selector contains a duplicate author")
+            }
+            Self::InvalidFetchTagKey => f.write_str("transport fetch selector tag key is invalid"),
+            Self::InvalidFetchTagValue => {
+                f.write_str("transport fetch selector tag value is invalid")
+            }
+            Self::DuplicateFetchTagValue => {
+                f.write_str("transport fetch selector contains a duplicate tag value")
             }
             Self::InvalidFetchTimeRange => {
                 f.write_str("transport fetch selector time range is invalid")

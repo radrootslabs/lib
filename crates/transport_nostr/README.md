@@ -130,13 +130,13 @@ check before handing control to another network boundary.
 ## Fetch, live subscription, delivery, and outcome behavior
 
 Fetch accepts only configured readable Nostr targets, translates
-transport-neutral kind, author, and event-time selectors into Nostr filters,
-reapplies those selectors defensively, applies the request page bound,
-deduplicates events by event ID, preserves per-relay provenance, and emits an
-opaque versioned cursor bound to the exact target set and selector when more
-results remain. Equal timestamps are ordered by event ID so overlap-safe
-reconnect pagination cannot skip peers. Malformed relay events are ignored and
-reported as a partial target outcome rather than admitted.
+transport-neutral kind, author, exact indexed single-letter tag, and event-time
+selectors into Nostr filters, reapplies those selectors defensively, applies
+the request page bound, deduplicates events by event ID, preserves per-relay
+provenance, and emits an opaque versioned cursor bound to the exact target set
+and selector when more results remain. Equal timestamps are ordered by event ID
+so overlap-safe reconnect pagination cannot skip peers. Malformed relay events
+are ignored and reported as a partial target outcome rather than admitted.
 
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;

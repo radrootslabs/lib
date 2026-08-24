@@ -78,6 +78,7 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "examples/configure_transport.rs",
         "contracts/api_baselines/radroots_transport_nostr.txt",
         "Live subscriptions use the same explicit readable targets",
+        "exact indexed single-letter tag",
         "inclusive `since` timestamp",
         "event-ID tie breaker",
         "upstream auto-close deadline",

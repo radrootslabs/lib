@@ -90,12 +90,12 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
 
             for target in query.targets {
                 let url = target.relay.as_str().to_owned();
+                let filter = subscription_filter(&query.selector, target.since_unix_seconds)?;
                 self.client.add_relay(url.as_str()).await.map_err(|_| ())?;
                 self.client
                     .try_connect_relay(url.as_str(), query.connect_timeout)
                     .await
                     .map_err(|_| ())?;
-                let filter = subscription_filter(&query.selector, target.since_unix_seconds)?;
                 relay_lookup.insert(url.clone(), target.relay);
                 targeted.push((url, filter));
             }
@@ -593,6 +593,7 @@ fn subscription_filter(
     if !authors.is_empty() {
         filter = filter.authors(authors);
     }
+    filter = crate::source::apply_exact_tag_filters(filter, selector)?;
     if let Some(since) = since {
         filter = filter.since(Timestamp::from_secs(since));
     }
@@ -670,6 +671,7 @@ fn cursor_scope(
         hasher.update(author.as_bytes());
     }
     hasher.update([0]);
+    crate::source::hash_exact_tag_filters(&mut hasher, request.selector());
     hash_optional_u64(&mut hasher, request.selector().since_unix_seconds());
     hash_optional_u64(&mut hasher, request.selector().until_unix_seconds());
     hex_encode(&hasher.finalize())
@@ -861,6 +863,8 @@ mod tests {
         let selector = FetchSelector::all()
             .with_kinds(vec![1])
             .expect("kind")
+            .with_exact_tag_value('d', "trade-1")
+            .expect("tag")
             .with_since_unix_seconds(1_700_000_000)
             .expect("since")
             .with_until_unix_seconds(1_800_000_000)
@@ -892,6 +896,7 @@ mod tests {
             .expect("filter")
             .as_json();
         assert!(filter.contains("\"kinds\":[1]"));
+        assert!(filter.contains("\"#d\":[\"trade-1\"]"));
         assert!(filter.contains("\"since\":1700000000"));
         assert!(filter.contains("\"until\":1800000000"));
     }
@@ -968,7 +973,9 @@ mod tests {
             Some(radroots_transport::Error::InvalidFetchCursor)
         );
 
-        let other_selector = FetchSelector::all().with_kinds(vec![2]).expect("selector");
+        let other_selector = FetchSelector::all()
+            .with_exact_tag_value('d', "trade-1")
+            .expect("selector");
         let scoped = encode_cursor(
             &base,
             &target,

@@ -4,7 +4,7 @@ use crate::{NostrTransport, RelayCursor, RelayUrl, status};
 use core::cmp::Ordering;
 use core::time::Duration;
 use futures::{StreamExt, stream};
-use nostr_sdk::prelude::{Filter, JsonUtil, Kind, Timestamp};
+use nostr_sdk::prelude::{Filter, JsonUtil, Kind, SingleLetterTag, Timestamp};
 use radroots_transport::{
     BoxFuture, EventSource, FetchPage, FetchRequest,
     outcome::{FetchTargetOutcome, FetchTargetState},
@@ -94,10 +94,6 @@ impl RelaySourceClient for LiveRelaySourceClient {
                         if authors.len() != selector.authors().len() {
                             return Ok(Vec::new());
                         }
-                        self.client.add_relay(url.as_str()).await?;
-                        self.client
-                            .try_connect_relay(url.as_str(), connect_timeout)
-                            .await?;
                         let mut filter = Filter::new().limit(UPSTREAM_FETCH_LIMIT);
                         if !kinds.is_empty() {
                             filter = filter.kinds(kinds);
@@ -105,6 +101,9 @@ impl RelaySourceClient for LiveRelaySourceClient {
                         if !authors.is_empty() {
                             filter = filter.authors(authors);
                         }
+                        filter = apply_exact_tag_filters(filter, &selector).map_err(|()| {
+                            String::from("validated indexed tag cannot be encoded")
+                        })?;
                         if let Some(since) = selector.since_unix_seconds() {
                             filter = filter.since(Timestamp::from_secs(since));
                         }
@@ -112,12 +111,20 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             filter = filter.until(Timestamp::from_secs(until));
                         }
                         self.client
+                            .add_relay(url.as_str())
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        self.client
+                            .try_connect_relay(url.as_str(), connect_timeout)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        self.client
                             .fetch_events_from([url.as_str()], filter, timeout)
                             .await
                             .map(|events| events.iter().map(JsonUtil::as_json).collect())
+                            .map_err(|error| error.to_string())
                     }
-                    .await
-                    .map_err(|error: nostr_sdk::client::Error| error.to_string());
+                    .await;
                     RelayFetchBatch { relay, result }
                 }
             }))
@@ -387,9 +394,49 @@ fn request_scope(request: &FetchRequest) -> String {
         hasher.update(author.as_bytes());
     }
     hasher.update([0]);
+    hash_exact_tag_filters(&mut hasher, request.selector());
     hash_optional_u64(&mut hasher, request.selector().since_unix_seconds());
     hash_optional_u64(&mut hasher, request.selector().until_unix_seconds());
     hex_encode(&hasher.finalize())
+}
+
+pub(crate) fn hash_exact_tag_filters(
+    hasher: &mut Sha256,
+    selector: &radroots_transport::source::FetchSelector,
+) {
+    let mut filters = selector.exact_tag_filters().peekable();
+    if filters.peek().is_none() {
+        return;
+    }
+    hasher.update([2]);
+    for (key, values) in filters {
+        hasher.update([u8::try_from(key).expect("validated ASCII tag key")]);
+        hasher.update(
+            u64::try_from(values.len())
+                .expect("bounded tag-value count")
+                .to_be_bytes(),
+        );
+        for value in values {
+            hasher.update(
+                u64::try_from(value.len())
+                    .expect("bounded tag-value length")
+                    .to_be_bytes(),
+            );
+            hasher.update(value.as_bytes());
+        }
+    }
+    hasher.update([0]);
+}
+
+pub(crate) fn apply_exact_tag_filters(
+    mut filter: Filter,
+    selector: &radroots_transport::source::FetchSelector,
+) -> Result<Filter, ()> {
+    for (key, values) in selector.exact_tag_filters() {
+        let tag = SingleLetterTag::from_char(key).map_err(|_| ())?;
+        filter = filter.custom_tags(tag, values.iter().map(String::as_str));
+    }
+    Ok(filter)
 }
 
 fn hash_optional_u64(hasher: &mut Sha256, value: Option<u64>) {
@@ -739,6 +786,19 @@ mod tests {
         .expect_err("scope mismatch");
         assert_eq!(error, radroots_transport::Error::InvalidFetchCursor);
 
+        let tagged_selector = FetchSelector::all()
+            .with_exact_tag_value('d', "trade-1")
+            .expect("tag selector");
+        let error = futures::executor::block_on(
+            transport().fetch(
+                request(1)
+                    .with_selector(tagged_selector)
+                    .with_cursor(cursor.clone()),
+            ),
+        )
+        .expect_err("tag scope mismatch");
+        assert_eq!(error, radroots_transport::Error::InvalidFetchCursor);
+
         let other_targets =
             TargetSet::new(vec![Target::nostr_relay("wss://one.example").expect("one")])
                 .expect("targets");
@@ -755,6 +815,23 @@ mod tests {
         )
         .expect_err("target scope mismatch");
         assert_eq!(error, radroots_transport::Error::InvalidFetchCursor);
+    }
+
+    #[test]
+    fn exact_tag_selector_maps_to_nostr_filter_and_is_defensively_enforced() {
+        let selector = FetchSelector::all()
+            .with_exact_tag_value('d', "trade-2")
+            .and_then(|selector| selector.with_exact_tag_value('d', "trade-1"))
+            .expect("tag selector");
+        let encoded = apply_exact_tag_filters(Filter::new(), &selector)
+            .expect("Nostr filter")
+            .as_json();
+        assert!(encoded.contains("\"#d\":[\"trade-1\",\"trade-2\"]"));
+
+        let selected =
+            futures::executor::block_on(transport().fetch(request(10).with_selector(selector)))
+                .expect("selected page");
+        assert!(selected.events().is_empty());
     }
 
     #[test]
