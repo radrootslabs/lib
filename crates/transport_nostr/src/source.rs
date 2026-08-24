@@ -4,7 +4,10 @@ use crate::{NostrTransport, RelayCursor, RelayUrl, status};
 use core::cmp::Ordering;
 use core::time::Duration;
 use futures::{StreamExt, stream};
-use nostr_sdk::prelude::{Filter, JsonUtil, Kind, SingleLetterTag, Timestamp};
+use nostr_sdk::prelude::{
+    Filter, JsonUtil, Kind, RelayMessage, RelayNotification, ReqExitPolicy, SingleLetterTag,
+    SubscribeAutoCloseOptions, SubscribeOptions, SubscriptionId, Timestamp,
+};
 use radroots_transport::{
     BoxFuture, EventSource, FetchPage, FetchRequest,
     outcome::{FetchTargetOutcome, FetchTargetState},
@@ -31,7 +34,15 @@ pub(crate) struct SourceQuery {
 #[derive(Clone, Debug)]
 pub(crate) struct RelayFetchBatch {
     relay: RelayUrl,
-    result: Result<Vec<String>, String>,
+    result: RelayFetchResult,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RelayFetchResult {
+    Complete(Vec<String>),
+    Timeout(Vec<String>),
+    ResourceLimit(Vec<String>),
+    Failed(String),
 }
 
 pub(crate) trait RelaySourceClient: Send + Sync {
@@ -74,6 +85,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                 let selector = selector.clone();
                 async move {
                     let url = relay.as_str().to_owned();
+                    let started_at = tokio::time::Instant::now();
                     let result = async {
                         let kinds = selector
                             .kinds()
@@ -82,7 +94,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             .map(Kind::from)
                             .collect::<Vec<_>>();
                         if !selector.kinds().is_empty() && kinds.is_empty() {
-                            return Ok(Vec::new());
+                            return Ok(RelayFetchResult::Complete(Vec::new()));
                         }
                         let authors = selector
                             .authors()
@@ -92,7 +104,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             })
                             .collect::<Vec<_>>();
                         if authors.len() != selector.authors().len() {
-                            return Ok(Vec::new());
+                            return Ok(RelayFetchResult::Complete(Vec::new()));
                         }
                         let mut filter = Filter::new().limit(UPSTREAM_FETCH_LIMIT);
                         if !kinds.is_empty() {
@@ -118,20 +130,108 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             .try_connect_relay(url.as_str(), connect_timeout)
                             .await
                             .map_err(|error| error.to_string())?;
-                        self.client
-                            .fetch_events_from([url.as_str()], filter, timeout)
+                        let remaining = timeout.saturating_sub(started_at.elapsed());
+                        if remaining.is_zero() {
+                            return Ok(RelayFetchResult::Timeout(Vec::new()));
+                        }
+                        let relay = self
+                            .client
+                            .relay(url.as_str())
                             .await
-                            .map(|events| events.iter().map(JsonUtil::as_json).collect())
-                            .map_err(|error| error.to_string())
+                            .map_err(|error| error.to_string())?;
+                        let mut notifications = relay.notifications();
+                        let subscription_id = SubscriptionId::generate();
+                        let eose_deadline = tokio::time::Instant::now() + remaining;
+                        let options = SubscribeOptions::default().close_on(Some(
+                            SubscribeAutoCloseOptions::default()
+                                .exit_policy(ReqExitPolicy::ExitOnEOSE)
+                                .timeout(Some(remaining)),
+                        ));
+                        relay
+                            .subscribe_with_id(subscription_id.clone(), filter, options)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        Ok(
+                            collect_until_eose(&mut notifications, &subscription_id, eose_deadline)
+                                .await,
+                        )
                     }
                     .await;
-                    RelayFetchBatch { relay, result }
+                    RelayFetchBatch {
+                        relay,
+                        result: result.unwrap_or_else(RelayFetchResult::Failed),
+                    }
                 }
             }))
             .buffered(max_connections)
             .collect()
             .await
         })
+    }
+}
+
+async fn collect_until_eose(
+    notifications: &mut tokio::sync::broadcast::Receiver<RelayNotification>,
+    subscription_id: &SubscriptionId,
+    deadline: tokio::time::Instant,
+) -> RelayFetchResult {
+    let mut events = Vec::new();
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            return RelayFetchResult::Timeout(events);
+        }
+        let notification = match tokio::time::timeout_at(deadline, notifications.recv()).await {
+            Ok(Ok(notification)) => notification,
+            Ok(Err(error)) => return RelayFetchResult::Failed(error.to_string()),
+            Err(_) => return RelayFetchResult::Timeout(events),
+        };
+        match notification {
+            RelayNotification::Message {
+                message:
+                    RelayMessage::Event {
+                        subscription_id: observed_subscription,
+                        event,
+                    },
+            } if observed_subscription.as_ref() == subscription_id => {
+                if events.len() >= UPSTREAM_FETCH_LIMIT {
+                    return RelayFetchResult::ResourceLimit(events);
+                }
+                events.push(event.as_ref().as_json());
+            }
+            RelayNotification::Message {
+                message: RelayMessage::EndOfStoredEvents(observed_subscription),
+            } if observed_subscription.as_ref() == subscription_id => {
+                return if tokio::time::Instant::now() < deadline {
+                    RelayFetchResult::Complete(events)
+                } else {
+                    RelayFetchResult::Timeout(events)
+                };
+            }
+            RelayNotification::Message {
+                message:
+                    RelayMessage::Closed {
+                        subscription_id: observed_subscription,
+                        message,
+                    },
+            } if observed_subscription.as_ref() == subscription_id => {
+                return RelayFetchResult::Failed(message.into_owned());
+            }
+            RelayNotification::RelayStatus {
+                status:
+                    nostr_sdk::prelude::RelayStatus::Disconnected
+                    | nostr_sdk::prelude::RelayStatus::Terminated
+                    | nostr_sdk::prelude::RelayStatus::Banned,
+            } => {
+                return RelayFetchResult::Failed(String::from("relay disconnected"));
+            }
+            RelayNotification::AuthenticationFailed => {
+                return RelayFetchResult::Failed(String::from("relay authentication failed"));
+            }
+            RelayNotification::Shutdown => {
+                return RelayFetchResult::Failed(String::from("relay shutdown"));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -198,7 +298,7 @@ impl EventSource for NostrTransport {
                 outcomes.extend(targets.values().map(|target| {
                     FetchTargetOutcome::new(
                         target.fingerprint().clone(),
-                        FetchTargetState::FailedRetryable,
+                        FetchTargetState::Cancelled,
                     )
                     .with_message("fetch deadline elapsed before relay access")
                 }));
@@ -231,55 +331,21 @@ impl EventSource for NostrTransport {
             let mut reported = BTreeSet::new();
             let observed_at_unix_ms = unix_time_ms().max(now_ms);
             for batch in batches {
-                let Some(target) = targets.get(&batch.relay) else {
+                let RelayFetchBatch { relay, result } = batch;
+                let Some(target) = targets.get(&relay) else {
                     return Err(radroots_transport::Error::UnexpectedFetchTargetOutcome);
                 };
-                if !reported.insert(batch.relay.clone()) {
+                if !reported.insert(relay.clone()) {
                     return Err(radroots_transport::Error::DuplicateFetchTargetOutcome);
                 }
-                match batch.result {
-                    Ok(raw_events) => {
-                        self.status
-                            .record_read(&batch.relay, true, false, observed_at_unix_ms);
-                        for raw in raw_events {
-                            match radroots_event_codec::decode::signed_event(raw.as_str()) {
-                                Ok(event) if request.selector().matches(&event) => {
-                                    candidates.push(Candidate {
-                                        relay: batch.relay.clone(),
-                                        created_at: event.created_at(),
-                                        event_id: event.id_str().to_owned(),
-                                        raw,
-                                    })
-                                }
-                                Ok(_) => {}
-                                Err(_) => {
-                                    *malformed_by_relay.entry(batch.relay.clone()).or_default() +=
-                                        1;
-                                }
-                            }
-                        }
-                        let malformed = malformed_by_relay
-                            .get(&batch.relay)
-                            .copied()
-                            .unwrap_or_default();
-                        let outcome = if malformed == 0 {
-                            FetchTargetOutcome::new(
-                                target.fingerprint().clone(),
-                                FetchTargetState::Complete,
-                            )
-                        } else {
-                            FetchTargetOutcome::new(
-                                target.fingerprint().clone(),
-                                FetchTargetState::Partial,
-                            )
-                            .with_message(format!("ignored {malformed} malformed relay event(s)"))
-                        };
-                        outcomes.push(outcome);
-                    }
-                    Err(message) => {
+                let (raw_events, terminal) = match result {
+                    RelayFetchResult::Complete(events) => (events, FetchTargetState::Complete),
+                    RelayFetchResult::Timeout(events) => (events, FetchTargetState::Cancelled),
+                    RelayFetchResult::ResourceLimit(events) => (events, FetchTargetState::Partial),
+                    RelayFetchResult::Failed(message) => {
                         let (state, safe) = status::fetch_failure(message.as_str());
                         self.status.record_read(
-                            &batch.relay,
+                            &relay,
                             false,
                             state.is_retryable(),
                             observed_at_unix_ms,
@@ -288,8 +354,51 @@ impl EventSource for NostrTransport {
                             FetchTargetOutcome::new(target.fingerprint().clone(), state)
                                 .with_message(safe),
                         );
+                        continue;
+                    }
+                };
+                self.status.record_read(
+                    &relay,
+                    terminal == FetchTargetState::Complete,
+                    terminal != FetchTargetState::Complete,
+                    observed_at_unix_ms,
+                );
+                for raw in raw_events {
+                    match radroots_event_codec::decode::signed_event(raw.as_str()) {
+                        Ok(event) if request.selector().matches(&event) => {
+                            candidates.push(Candidate {
+                                relay: relay.clone(),
+                                created_at: event.created_at(),
+                                event_id: event.id_str().to_owned(),
+                                raw,
+                            })
+                        }
+                        Ok(_) => {}
+                        Err(_) => {
+                            *malformed_by_relay.entry(relay.clone()).or_default() += 1;
+                        }
                     }
                 }
+                let malformed = malformed_by_relay.get(&relay).copied().unwrap_or_default();
+                let outcome = if terminal == FetchTargetState::Cancelled {
+                    FetchTargetOutcome::new(
+                        target.fingerprint().clone(),
+                        FetchTargetState::Cancelled,
+                    )
+                    .with_message("relay fetch deadline elapsed before EOSE")
+                } else if terminal == FetchTargetState::Partial {
+                    FetchTargetOutcome::new(target.fingerprint().clone(), FetchTargetState::Partial)
+                        .with_message("relay result exceeded the bounded fetch inventory")
+                } else if malformed == 0 {
+                    FetchTargetOutcome::new(
+                        target.fingerprint().clone(),
+                        FetchTargetState::Complete,
+                    )
+                } else {
+                    FetchTargetOutcome::new(target.fingerprint().clone(), FetchTargetState::Partial)
+                        .with_message(format!("ignored {malformed} malformed relay event(s)"))
+                };
+                outcomes.push(outcome);
             }
             for (relay, target) in &targets {
                 if !reported.contains(relay) {
@@ -475,6 +584,7 @@ mod tests {
         FetchRequest, Target, TargetSet,
         source::{FetchBounds, FetchSelector, NextPage},
     };
+    use std::borrow::Cow;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering as AtomicOrdering},
@@ -494,7 +604,11 @@ mod tests {
                     .into_iter()
                     .map(|relay| RelayFetchBatch {
                         relay,
-                        result: Ok(vec![FIRST.to_owned(), SECOND.to_owned(), "{".to_owned()]),
+                        result: RelayFetchResult::Complete(vec![
+                            FIRST.to_owned(),
+                            SECOND.to_owned(),
+                            "{".to_owned(),
+                        ]),
                     })
                     .collect()
             })
@@ -521,6 +635,16 @@ mod tests {
                 Target::nostr_relay("wss://two.example").expect("two"),
             ])
             .expect("targets"),
+            FetchBounds::new(limit, u64::MAX).expect("bounds"),
+        )
+        .expect("request")
+    }
+
+    fn single_request(limit: u16) -> FetchRequest {
+        FetchRequest::new(
+            "nostr-fetch-one",
+            TargetSet::new(vec![Target::nostr_relay("wss://one.example").expect("one")])
+                .expect("targets"),
             FetchBounds::new(limit, u64::MAX).expect("bounds"),
         )
         .expect("request")
@@ -665,7 +789,7 @@ mod tests {
         let failed = futures::executor::block_on(
             scripted(vec![RelayFetchBatch {
                 relay: one.clone(),
-                result: Err("connection timeout".into()),
+                result: RelayFetchResult::Failed("connection timeout".into()),
             }])
             .fetch(request(10)),
         )
@@ -676,11 +800,11 @@ mod tests {
         let duplicate = scripted(vec![
             RelayFetchBatch {
                 relay: one.clone(),
-                result: Ok(vec![]),
+                result: RelayFetchResult::Complete(vec![]),
             },
             RelayFetchBatch {
                 relay: one,
-                result: Ok(vec![]),
+                result: RelayFetchResult::Complete(vec![]),
             },
         ]);
         assert_eq!(
@@ -691,7 +815,7 @@ mod tests {
         let other = RelayUrl::parse("wss://other.example", RelayUrlPolicy::Public).expect("other");
         let unexpected = scripted(vec![RelayFetchBatch {
             relay: other,
-            result: Ok(vec![]),
+            result: RelayFetchResult::Complete(vec![]),
         }]);
         assert_eq!(
             futures::executor::block_on(unexpected.fetch(request(10))),
@@ -701,7 +825,7 @@ mod tests {
         let complete = futures::executor::block_on(
             scripted(vec![RelayFetchBatch {
                 relay: two,
-                result: Ok(vec![]),
+                result: RelayFetchResult::Complete(vec![]),
             }])
             .fetch(request(10)),
         )
@@ -710,20 +834,98 @@ mod tests {
     }
 
     #[test]
+    fn eose_timeout_and_resource_exhaustion_remain_distinct() {
+        let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).expect("relay");
+        let fetch = |result| {
+            futures::executor::block_on(
+                scripted(vec![RelayFetchBatch {
+                    relay: relay.clone(),
+                    result,
+                }])
+                .fetch(single_request(10)),
+            )
+            .expect("page")
+        };
+
+        let complete = fetch(RelayFetchResult::Complete(vec![FIRST.to_owned()]));
+        assert_eq!(
+            complete.target_outcomes()[0].state(),
+            FetchTargetState::Complete
+        );
+        assert!(matches!(complete.next_page(), NextPage::Complete));
+
+        let timeout = fetch(RelayFetchResult::Timeout(vec![FIRST.to_owned()]));
+        assert_eq!(timeout.events().len(), 1);
+        assert_eq!(
+            timeout.target_outcomes()[0].state(),
+            FetchTargetState::Cancelled
+        );
+
+        let exhausted = fetch(RelayFetchResult::ResourceLimit(vec![FIRST.to_owned()]));
+        assert_eq!(exhausted.events().len(), 1);
+        assert_eq!(
+            exhausted.target_outcomes()[0].state(),
+            FetchTargetState::Partial
+        );
+    }
+
+    #[tokio::test]
+    async fn live_completion_requires_eose_strictly_before_deadline() {
+        let subscription_id = SubscriptionId::generate();
+        let (sender, mut receiver) = tokio::sync::broadcast::channel(2);
+        sender
+            .send(RelayNotification::Message {
+                message: RelayMessage::EndOfStoredEvents(Cow::Owned(subscription_id.clone())),
+            })
+            .expect("EOSE");
+        assert_eq!(
+            collect_until_eose(
+                &mut receiver,
+                &subscription_id,
+                tokio::time::Instant::now() + Duration::from_secs(1),
+            )
+            .await,
+            RelayFetchResult::Complete(Vec::new())
+        );
+
+        let (_sender, mut receiver) = tokio::sync::broadcast::channel(2);
+        assert_eq!(
+            collect_until_eose(&mut receiver, &subscription_id, tokio::time::Instant::now(),).await,
+            RelayFetchResult::Timeout(Vec::new())
+        );
+    }
+
+    #[test]
     fn source_rejects_unconfigured_targets_and_expired_deadlines() {
-        let target_set = TargetSet::new(vec![
+        let unconfigured_targets = TargetSet::new(vec![
             Target::nostr_relay("wss://other.example").expect("other"),
         ])
         .expect("targets");
+        let unconfigured = FetchRequest::new(
+            "unconfigured",
+            unconfigured_targets,
+            FetchBounds::new(1, u64::MAX).expect("bounds"),
+        )
+        .expect("request");
+        let page = futures::executor::block_on(transport().fetch(unconfigured)).expect("page");
+        assert_eq!(
+            page.target_outcomes()[0].state(),
+            FetchTargetState::FailedTerminal
+        );
+
         let expired = FetchRequest::new(
             "expired",
-            target_set,
+            single_request(1).target_set().clone(),
             FetchBounds::new(1, 1).expect("bounds"),
         )
         .expect("request");
         let page = futures::executor::block_on(transport().fetch(expired)).expect("page");
         assert!(page.events().is_empty());
         assert_eq!(page.target_outcomes().len(), 1);
+        assert_eq!(
+            page.target_outcomes()[0].state(),
+            FetchTargetState::Cancelled
+        );
         assert!(futures::executor::block_on(transport().status()).is_ok());
     }
 
@@ -850,6 +1052,6 @@ mod tests {
             max_connections: 1,
         }));
         assert_eq!(batches.len(), 1);
-        assert_eq!(batches[0].result, Ok(vec![]));
+        assert_eq!(batches[0].result, RelayFetchResult::Complete(vec![]));
     }
 }

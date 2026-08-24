@@ -137,6 +137,10 @@ provenance, and emits an opaque versioned cursor bound to the exact target set
 and selector when more results remain. Equal timestamps are ordered by event ID
 so overlap-safe reconnect pagination cannot skip peers. Malformed relay events
 are ignored and reported as a partial target outcome rather than admitted.
+Fetch reports `Complete` only after the exact subscription receives EOSE
+strictly before its absolute deadline. Deadline expiry is `Cancelled`, and a
+relay result that exceeds the bounded inventory is `Partial`; neither state is
+rewritten as completion even when it carries admissible events.
 
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;
