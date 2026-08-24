@@ -1,61 +1,44 @@
 use core::fmt;
 
 use radroots_runtime_distribution::HardenedServiceTarget;
-use radroots_runtime_paths::{InstanceId, RadrootsPathProfile, ServiceId};
+use radroots_runtime_paths::{InstanceId, RadrootsPathProfile, RuntimeContext, ServiceId};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use radroots_service_host::AdminTransportLimits;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::ManagedRuntimeStatusClient;
 use crate::{
-    ManagementModeContract, RadrootsRuntimeManagementContract, RadrootsRuntimeManagerError,
+    ManagedCliCommand, ManagedCliInvocation, ManagementModeContract,
+    RadrootsRuntimeManagementContract, RadrootsRuntimeManagerError,
 };
 
-/// Validated metadata-only runtime-management context.
+/// Validated frozen runtime-management contract.
 ///
-/// The context owns no filesystem path, registry, process, artifact, or
-/// lifecycle capability. Its fields are private so a caller cannot bypass the
-/// exact contract validation performed by [`ManagedRuntimeContext::new`].
+/// Instance identity, profile, and canonical paths are deliberately absent;
+/// those values enter only through a sealed [`RuntimeContext`] when a target is
+/// resolved.
 ///
 /// ```compile_fail
 /// use radroots_runtime_manager::ManagedRuntimeContext;
 ///
-/// let _ = ManagedRuntimeContext {
-///     contract: todo!(),
-///     profile: todo!(),
-///     management_mode: String::new(),
-/// };
+/// let _ = ManagedRuntimeContext { contract: todo!() };
 /// ```
 #[derive(Clone)]
 pub struct ManagedRuntimeContext {
     contract: RadrootsRuntimeManagementContract,
-    profile: RadrootsPathProfile,
-    management_mode: String,
 }
 
 impl ManagedRuntimeContext {
     pub fn new(
         contract: RadrootsRuntimeManagementContract,
-        profile: RadrootsPathProfile,
     ) -> Result<Self, RadrootsRuntimeManagerError> {
         crate::validate_hardened_management_contract(&contract)?;
-        let management_mode = active_management_mode_for_profile(&contract, profile)?.to_owned();
-        Ok(Self {
-            contract,
-            profile,
-            management_mode,
-        })
+        Ok(Self { contract })
     }
 
     #[must_use]
     pub fn contract(&self) -> &RadrootsRuntimeManagementContract {
         &self.contract
-    }
-
-    #[must_use]
-    pub const fn profile(&self) -> RadrootsPathProfile {
-        self.profile
-    }
-
-    #[must_use]
-    pub fn management_mode(&self) -> &str {
-        &self.management_mode
     }
 }
 
@@ -63,24 +46,23 @@ impl fmt::Debug for ManagedRuntimeContext {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ManagedRuntimeContext")
-            .field("profile", &self.profile)
-            .field("management_mode", &self.management_mode)
+            .field("schema", &self.contract.schema)
+            .field("schema_version", &self.contract.schema_version)
             .finish_non_exhaustive()
     }
 }
 
-/// Sealed metadata for one explicitly selected Myc or RHI instance.
+/// Sealed management capability for one validated Myc or RHI runtime context.
 ///
-/// The target deliberately carries no resolved runtime paths and exposes no
-/// lifecycle, registry, filesystem, process, or artifact capability.
+/// The target owns the sole service-instance identity/profile/path authority.
+/// It exposes typed CLI-v1 and status-v1 integration but no filesystem,
+/// process, PID, log, credential, or distribution-artifact mutation surface.
 ///
 /// ```compile_fail
 /// use radroots_runtime_manager::ManagedRuntimeTarget;
 ///
 /// let _ = ManagedRuntimeTarget {
-///     service_id: todo!(),
-///     instance_id: todo!(),
-///     profile: todo!(),
+///     context: todo!(),
 ///     service_target: todo!(),
 ///     management_mode: String::new(),
 ///     mode_contract: todo!(),
@@ -88,9 +70,7 @@ impl fmt::Debug for ManagedRuntimeContext {
 /// ```
 #[derive(Clone)]
 pub struct ManagedRuntimeTarget {
-    service_id: ServiceId,
-    instance_id: InstanceId,
-    profile: RadrootsPathProfile,
+    context: RuntimeContext,
     service_target: HardenedServiceTarget,
     management_mode: String,
     mode_contract: ManagementModeContract,
@@ -98,18 +78,23 @@ pub struct ManagedRuntimeTarget {
 
 impl ManagedRuntimeTarget {
     #[must_use]
+    pub fn runtime_context(&self) -> &RuntimeContext {
+        &self.context
+    }
+
+    #[must_use]
     pub fn service_id(&self) -> &ServiceId {
-        &self.service_id
+        self.context.service()
     }
 
     #[must_use]
     pub fn instance_id(&self) -> &InstanceId {
-        &self.instance_id
+        self.context.instance()
     }
 
     #[must_use]
-    pub const fn profile(&self) -> RadrootsPathProfile {
-        self.profile
+    pub fn profile(&self) -> RadrootsPathProfile {
+        self.context.profile()
     }
 
     #[must_use]
@@ -126,44 +111,62 @@ impl ManagedRuntimeTarget {
     pub fn mode_contract(&self) -> &ManagementModeContract {
         &self.mode_contract
     }
+
+    pub fn cli_invocation(
+        &self,
+        command: ManagedCliCommand,
+    ) -> Result<ManagedCliInvocation, RadrootsRuntimeManagerError> {
+        ManagedCliInvocation::for_context(&self.context, command)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn status_client(
+        &self,
+        limits: AdminTransportLimits,
+    ) -> Result<ManagedRuntimeStatusClient, RadrootsRuntimeManagerError> {
+        ManagedRuntimeStatusClient::for_context(&self.context, limits)
+    }
 }
 
 impl fmt::Debug for ManagedRuntimeTarget {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ManagedRuntimeTarget")
-            .field("service_id", &self.service_id)
-            .field("instance_id", &self.instance_id)
-            .field("profile", &self.profile)
+            .field("service_id", self.context.service())
+            .field("instance_id", self.context.instance())
+            .field("profile", &self.context.profile())
             .field("management_mode", &self.management_mode)
+            .field("paths", &"[redacted]")
             .finish_non_exhaustive()
     }
 }
 
 pub fn resolve_runtime_target(
     context: &ManagedRuntimeContext,
-    service_id: ServiceId,
-    instance_id: InstanceId,
+    runtime_context: RuntimeContext,
 ) -> Result<ManagedRuntimeTarget, RadrootsRuntimeManagerError> {
     let service_target = context
         .contract
         .service_targets
-        .get(&service_id)
+        .get(runtime_context.service())
         .cloned()
         .ok_or(RadrootsRuntimeManagerError::UnsupportedServiceTarget)?;
+    let management_mode =
+        active_management_mode_for_profile(&context.contract, runtime_context.profile())?;
     let mode_contract = context
         .contract
         .mode
-        .get(&context.management_mode)
+        .get(management_mode)
         .cloned()
         .ok_or(RadrootsRuntimeManagerError::InvalidContract)?;
+    if service_target.service_id() != runtime_context.service() {
+        return Err(RadrootsRuntimeManagerError::ContextMismatch);
+    }
 
     Ok(ManagedRuntimeTarget {
-        service_id,
-        instance_id,
-        profile: context.profile,
+        context: runtime_context,
         service_target,
-        management_mode: context.management_mode.clone(),
+        management_mode: management_mode.to_owned(),
         mode_contract,
     })
 }
@@ -189,68 +192,75 @@ fn active_management_mode_for_profile(
 
 #[cfg(test)]
 mod tests {
-    use radroots_runtime_paths::{InstanceId, RadrootsPathProfile, ServiceId};
+    use std::path::PathBuf;
+
+    use radroots_runtime_paths::{
+        InstanceId, RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPlatform, RuntimeContext, RuntimeContextBootstrap, RuntimeContextSource, ServiceId,
+    };
 
     use super::{ManagedRuntimeContext, resolve_runtime_target};
     use crate::{HARDENED_MANAGEMENT_CONTRACT, RadrootsRuntimeManagerError, parse_contract_str};
 
-    fn context(profile: RadrootsPathProfile) -> ManagedRuntimeContext {
+    fn management_context() -> ManagedRuntimeContext {
         ManagedRuntimeContext::new(
             parse_contract_str(HARDENED_MANAGEMENT_CONTRACT).expect("contract"),
-            profile,
         )
         .expect("management context")
     }
 
-    fn target(
-        context: &ManagedRuntimeContext,
+    fn runtime_context(
+        profile: RadrootsPathProfile,
         service: &str,
         instance: &str,
-    ) -> super::ManagedRuntimeTarget {
-        resolve_runtime_target(
-            context,
+    ) -> RuntimeContext {
+        let root = (profile == RadrootsPathProfile::RepoLocal)
+            .then(|| PathBuf::from("/sensitive/project-root"));
+        RuntimeContext::resolve(
+            &RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default()),
+            RuntimeContextBootstrap::new(
+                profile,
+                root,
+                if profile == RadrootsPathProfile::RepoLocal {
+                    RuntimeContextSource::BootstrapCli
+                } else {
+                    RuntimeContextSource::SafeDefault
+                },
+                RuntimeContextSource::BootstrapCli,
+            )
+            .expect("bootstrap"),
             ServiceId::new(service).expect("service"),
             InstanceId::new(instance).expect("instance"),
         )
-        .expect("target")
+        .expect("runtime context")
     }
 
     #[test]
-    fn contexts_accept_only_exact_contracts_and_supported_profiles() {
-        for (profile, mode) in [
-            (RadrootsPathProfile::RepoLocal, "interactive_user_managed"),
-            (RadrootsPathProfile::ServiceHost, "service_host_managed"),
-        ] {
-            let context = context(profile);
-            assert_eq!(context.profile(), profile);
-            assert_eq!(context.management_mode(), mode);
-            assert_eq!(context.contract().service_targets.len(), 2);
-        }
-
-        for profile in [
-            RadrootsPathProfile::InteractiveUser,
-            RadrootsPathProfile::MobileNative,
-        ] {
-            let contract = parse_contract_str(HARDENED_MANAGEMENT_CONTRACT).expect("contract");
-            assert!(matches!(
-                ManagedRuntimeContext::new(contract, profile),
-                Err(RadrootsRuntimeManagerError::UnsupportedProfile)
-            ));
-        }
+    fn context_accepts_only_the_exact_contract() {
+        let context = management_context();
+        assert_eq!(context.contract().service_targets.len(), 2);
 
         let mut direct = parse_contract_str(HARDENED_MANAGEMENT_CONTRACT).expect("contract");
         direct.lifecycle.actions.push("start".to_owned());
         assert!(matches!(
-            ManagedRuntimeContext::new(direct, RadrootsPathProfile::RepoLocal),
+            ManagedRuntimeContext::new(direct),
             Err(RadrootsRuntimeManagerError::InvalidContract)
         ));
     }
 
     #[test]
-    fn exact_myc_and_rhi_instances_resolve_to_static_metadata_only() {
-        let context = context(RadrootsPathProfile::RepoLocal);
-        let myc = target(&context, "myc", "primary");
-        let rhi = target(&context, "rhi", "secondary");
+    fn exact_myc_and_rhi_contexts_resolve_without_identity_duplication() {
+        let management = management_context();
+        let myc = resolve_runtime_target(
+            &management,
+            runtime_context(RadrootsPathProfile::RepoLocal, "myc", "primary"),
+        )
+        .expect("myc target");
+        let rhi = resolve_runtime_target(
+            &management,
+            runtime_context(RadrootsPathProfile::ServiceHost, "rhi", "secondary"),
+        )
+        .expect("rhi target");
 
         assert_eq!(myc.service_id().as_str(), "myc");
         assert_eq!(myc.instance_id().as_str(), "primary");
@@ -261,33 +271,41 @@ mod tests {
 
         assert_eq!(rhi.service_id().as_str(), "rhi");
         assert_eq!(rhi.instance_id().as_str(), "secondary");
-        assert_eq!(rhi.service_target().service_id(), rhi.service_id());
+        assert_eq!(rhi.management_mode(), "service_host_managed");
+        assert!(rhi.mode_contract().service_manager_integration);
+        assert_eq!(rhi.runtime_context().service(), rhi.service_id());
 
         for rendered in [
-            format!("{context:?}"),
+            format!("{management:?}"),
             format!("{myc:?}"),
             format!("{rhi:?}"),
         ] {
-            assert!(!rendered.contains('/'));
+            assert!(!rendered.contains("sensitive"));
             assert!(!rendered.contains("state.sqlite"));
-            assert!(!rendered.contains("instances.toml"));
+            assert!(!rendered.contains("admin.sock"));
         }
     }
 
     #[test]
-    fn unsupported_service_ids_fail_without_fallback_or_effects() {
-        let context = context(RadrootsPathProfile::ServiceHost);
-        let error = resolve_runtime_target(
-            &context,
-            ServiceId::new("radrootsd").expect("service"),
-            InstanceId::new("default").expect("instance"),
-        )
-        .expect_err("unsupported target");
-        assert_eq!(error, RadrootsRuntimeManagerError::UnsupportedServiceTarget);
+    fn unsupported_service_and_profile_fail_without_fallback() {
+        let management = management_context();
+        let unsupported = runtime_context(RadrootsPathProfile::ServiceHost, "radrootsd", "default");
+        assert!(matches!(
+            resolve_runtime_target(&management, unsupported),
+            Err(RadrootsRuntimeManagerError::UnsupportedServiceTarget)
+        ));
+
+        let mobile = RuntimeContextBootstrap::new(
+            RadrootsPathProfile::MobileNative,
+            None,
+            RuntimeContextSource::SafeDefault,
+            RuntimeContextSource::BootstrapCli,
+        );
+        assert!(mobile.is_err());
     }
 
     #[test]
-    fn production_manager_is_metadata_only_and_contains_no_io_authority() {
+    fn production_manager_has_no_direct_io_process_or_artifact_authority() {
         let source = include_str!("managed.rs")
             .split("\n#[cfg(test)]")
             .next()
@@ -295,8 +313,6 @@ mod tests {
         for forbidden in [
             "std::fs",
             "std::process",
-            "std::path",
-            "radroots_runtime_paths::RuntimeContext",
             "load_registry",
             "save_registry",
             "register_instance",
@@ -310,7 +326,7 @@ mod tests {
         ] {
             assert!(
                 !source.contains(forbidden),
-                "metadata-only manager retained `{forbidden}`"
+                "manager retained `{forbidden}`"
             );
         }
     }

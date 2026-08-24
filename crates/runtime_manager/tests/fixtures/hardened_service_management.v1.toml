@@ -7,27 +7,26 @@ capabilities_contract = "service-capabilities.v1.toml"
 
 [defaults]
 instance_cardinality = "multiple"
-managed_runtime_lookup = "typed_instance_registry"
-explicit_runtime_endpoint_overrides_precede_managed_instance_binding = true
+runtime_binding = "typed_runtime_context"
+admin_endpoint = "runtime_context_admin_socket"
 global_path_mutation_forbidden = true
 
 [management_clients]
-active = ["cli"]
+active = ["cli_v1", "unix_admin_v1"]
 
 [managed_runtime_targets]
-defined = ["myc", "rhi"]
+active = ["myc", "rhi"]
 
 [lifecycle]
-actions = []
+actions = ["config_init", "config_validate", "state_init", "run", "status", "doctor"]
 destructive_actions = []
-health_states = []
+health_states = ["starting", "ready", "degraded", "unready", "stopping", "failed"]
 
 [mode.interactive_user_managed]
 contract_state = "active"
 platforms = ["linux", "macos"]
 supported_profiles = ["interactive", "repo_local"]
 service_manager_integration = false
-uses_absolute_binary_paths = true
 default_instance_cardinality = "multiple"
 
 [mode.service_host_managed]
@@ -35,28 +34,10 @@ contract_state = "active"
 platforms = ["linux"]
 supported_profiles = ["service_host"]
 service_manager_integration = true
-uses_absolute_binary_paths = true
 default_instance_cardinality = "multiple"
 
-[paths.context_bound]
-shared_namespace = "services"
-instance_registry_root_class = "config"
-instance_registry_rel = "instances.toml"
-artifact_cache_root_class = "cache"
-artifact_cache_rel = "artifacts"
-install_root_class = "state"
-install_root_rel = "installs"
-state_root_class = "state"
-state_root_rel = "state.sqlite"
-logs_root_class = "logs"
-logs_root_rel = "instances"
-run_root_class = "run"
-run_root_rel = "admin.sock"
-secrets_root_class = "secrets"
-secrets_namespace_rel = "credentials"
-
 [instance_metadata]
-required_fields = ["service_id", "instance_id"]
+required_fields = ["service_id", "instance_id", "profile"]
 optional_fields = []
 
 [service_targets.myc]
@@ -86,5 +67,3 @@ status_surface = "local_admin_service_status_v1"
 operations_surface = "cached_livez_readyz_metrics"
 support_posture = "target"
 tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
-
-[bootstrap]

@@ -1,19 +1,30 @@
 # radroots_runtime_manager
 
 `radroots_runtime_manager` validates the frozen runtime-management contract and
-resolves explicitly selected Myc and RHI service-instance identities to sealed,
-metadata-only targets.
+binds explicitly resolved Myc and RHI `RuntimeContext` values to the common
+service-management interfaces.
 
-The crate performs no filesystem, registry, process, archive, artifact,
-configuration, log, PID, install, removal, or lifecycle work. It exposes no
-runtime paths or raw persistence helpers. Final service lifecycle and artifact
-behavior remains unavailable until the separately governed Steps 219 and 220.
+The sealed target uses its `RuntimeContext` as the sole service, instance,
+profile, and canonical-path authority. It can produce exact CLI-v1 argument
+plans for the common `config init`, `config validate`, `state init`, `run`,
+`status`, and `doctor` commands. On Linux and macOS it can also construct the
+shared bounded HTTP/1.1-over-Unix admin client for the fixed `/v1/status`
+endpoint. Service-owned typed status models must expose the common v1 identity
+projection, and every response is rejected unless its contract version,
+service, and instance match the selected runtime context.
+
+This crate never discovers or executes a program, opens a PID/config/log file,
+reads credentials, owns a service process, mutates canonical paths, or selects
+an archive, binary, channel, package, or install location. Artifact and
+distribution resolution remains separately governed by Step220. The status
+client performs only the bounded request explicitly initiated by its caller;
+target construction itself performs no I/O.
 
 Complete management TOML documents are rejected before parsing when they
 exceed exactly 1,048,576 UTF-8 bytes. Bounded documents still require the exact
-schema, version, closed field set, empty lifecycle inventory, and complete
-Myc/RHI metadata inventory. Directly constructed contracts are revalidated
-before a management context can be created.
+schema, version, closed field set, active Myc/RHI inventory, common CLI/admin
+clients, lifecycle vocabulary, and service metadata. Directly constructed
+contracts are revalidated before a management context can be created.
 
 ## Copyright
 

@@ -1,16 +1,21 @@
 #![forbid(unsafe_code)]
 
+mod cli;
 mod error;
 mod managed;
 mod model;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod status;
 
+pub use cli::{ManagedCliCommand, ManagedCliInvocation};
 pub use error::RadrootsRuntimeManagerError;
 pub use managed::{ManagedRuntimeContext, ManagedRuntimeTarget, resolve_runtime_target};
 pub use model::{
-    BootstrapRuntimeContract, InstanceMetadataContract, LifecycleContract, ManagementDefaults,
-    ManagementModeContract, ManagementPathContract, RadrootsRuntimeManagementContract,
-    RuntimeGroups,
+    InstanceMetadataContract, LifecycleContract, ManagementDefaults, ManagementModeContract,
+    RadrootsRuntimeManagementContract, RuntimeGroups,
 };
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use status::{ManagedRuntimeStatusClient, ManagedServiceStatusV1};
 
 pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots-runtime-management";
 pub const RUNTIME_MANAGEMENT_SCHEMA_VERSION: u32 = 1;
@@ -65,15 +70,18 @@ mod tests {
         let contract = parse_contract_str(CONTRACT).expect("contract");
         assert_eq!(contract.schema, RUNTIME_MANAGEMENT_SCHEMA);
         assert_eq!(contract.service_targets.len(), 2);
-        assert!(contract.bootstrap.is_empty());
+        assert_eq!(contract.managed_runtime_targets.active, ["myc", "rhi"]);
 
         for raw in [
             CONTRACT.replace("schema_version = 1", "schema_version = 2"),
             CONTRACT.replace(
-                "defined = [\"myc\", \"rhi\"]",
+                "active = [\"myc\", \"rhi\"]",
                 "active = [\"myc\"]\ndefined = [\"rhi\"]",
             ),
-            CONTRACT.replace("actions = []", "actions = [\"start\"]"),
+            CONTRACT.replace(
+                "actions = [\"config_init\", \"config_validate\", \"state_init\", \"run\", \"status\", \"doctor\"]",
+                "actions = [\"start\"]",
+            ),
             format!("{CONTRACT}\nunknown = true\n"),
         ] {
             assert!(parse_contract_str(&raw).is_err());

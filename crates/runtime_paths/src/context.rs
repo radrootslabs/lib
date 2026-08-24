@@ -1,7 +1,7 @@
 //! Immutable resolved bootstrap context for one service instance.
 
 use core::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use thiserror::Error;
@@ -137,6 +137,7 @@ impl RuntimeContextSources {
 ///     service: todo!(),
 ///     instance: todo!(),
 ///     profile: todo!(),
+///     repo_local_root: todo!(),
 ///     paths: todo!(),
 ///     sources: todo!(),
 /// };
@@ -146,6 +147,7 @@ pub struct RuntimeContext {
     service: ServiceId,
     instance: InstanceId,
     profile: RadrootsPathProfile,
+    repo_local_root: Option<PathBuf>,
     paths: RadrootsServiceInstancePaths,
     sources: RuntimeContextSources,
 }
@@ -157,16 +159,21 @@ impl RuntimeContext {
         service: ServiceId,
         instance: InstanceId,
     ) -> Result<Self, RuntimeContextError> {
+        let RuntimeContextBootstrap {
+            profile,
+            repo_local_root,
+            profile_source,
+            instance_source,
+        } = bootstrap;
         let roots = resolver
-            .resolve(bootstrap.profile, bootstrap.repo_local_root.as_deref())
+            .resolve(profile, repo_local_root.as_deref())
             .map_err(|_| RuntimeContextError::PathSelection)?;
         let paths = RadrootsServiceInstancePaths::from_resolved_roots(&roots, &service, &instance);
         let sources = RuntimeContextSources {
             service: RuntimeContextSource::SafeDefault,
-            instance: bootstrap.instance_source,
-            profile: bootstrap.profile_source,
-            repo_local_root: bootstrap
-                .repo_local_root
+            instance: instance_source,
+            profile: profile_source,
+            repo_local_root: repo_local_root
                 .as_ref()
                 .map(|_| RuntimeContextSource::BootstrapCli),
             paths: RuntimeContextSource::DerivedPath,
@@ -175,7 +182,8 @@ impl RuntimeContext {
         Ok(Self {
             service,
             instance,
-            profile: bootstrap.profile,
+            profile,
+            repo_local_root,
             paths,
             sources,
         })
@@ -196,6 +204,12 @@ impl RuntimeContext {
         self.profile
     }
 
+    /// Returns the validated explicit repo-local base when that profile is active.
+    #[must_use]
+    pub fn repo_local_root(&self) -> Option<&Path> {
+        self.repo_local_root.as_deref()
+    }
+
     #[must_use]
     pub fn paths(&self) -> &RadrootsServiceInstancePaths {
         &self.paths
@@ -214,6 +228,10 @@ impl fmt::Debug for RuntimeContext {
             .field("service", &self.service)
             .field("instance", &self.instance)
             .field("profile", &self.profile)
+            .field(
+                "repo_local_root",
+                &self.repo_local_root.as_ref().map(|_| "[redacted]"),
+            )
             .field("paths", &"[redacted]")
             .field("sources", &self.sources)
             .finish()
@@ -285,6 +303,7 @@ mod tests {
 
         for (service, instance) in [("myc", "primary"), ("myc", "secondary"), ("rhi", "default")] {
             let context = repo_local_context_for(base.clone(), service, instance);
+            assert_eq!(context.repo_local_root(), Some(base.as_path()));
             let suffix = PathBuf::from("services").join(service).join(instance);
             assert_eq!(context.paths().config(), base.join("config").join(&suffix));
             assert_eq!(context.paths().state(), base.join("data").join(&suffix));
@@ -588,6 +607,7 @@ mod tests {
             RuntimeContextSource::SafeDefault
         );
         assert_eq!(defaulted.sources().repo_local_root(), None);
+        assert_eq!(defaulted.repo_local_root(), None);
     }
 
     #[test]

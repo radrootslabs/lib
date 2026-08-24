@@ -124,6 +124,7 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
         "pub struct radroots_runtime_paths::ServiceId",
         "pub struct radroots_runtime_paths::InstanceId",
         "pub fn radroots_runtime_paths::RuntimeContext::resolve",
+        "pub fn radroots_runtime_paths::RuntimeContext::repo_local_root",
         "pub fn radroots_runtime_paths::RadrootsPlatform::current",
         "pub fn radroots_runtime_paths::default_service_instance_artifacts",
         "pub fn radroots_runtime_paths::service_credential_artifact_path",
