@@ -315,7 +315,7 @@ impl NostrTransport {
 
     pub(crate) fn next_subscription_sequence(&self) -> Result<u64, radroots_transport::Error> {
         self.subscription_sequence
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
                 current.checked_add(1)
             })
             .map(|previous| previous + 1)

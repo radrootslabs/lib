@@ -899,11 +899,25 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
     #[test]
     fn hardened_service_artifacts_reject_every_identity_and_inventory_drift() {
         for (needle, replacement) in [
+            (
+                "release_contract = \"contracts/services_hardening/native_release.v2.json\"",
+                "release_contract = \"contracts/services_hardening/untrusted.json\"",
+            ),
+            (
+                "f5ebb390a480830d51d502facc623bd1b10eda27b12dad9f3dbb6a1f1f949217",
+                "f5ebb390a480830d51d502facc623bd1b10eda27b12dad9f3dbb6a1f1f949218",
+            ),
+            ("package_name = \"myc\"", "package_name = \"other\""),
+            ("binary_name = \"myc\"", "binary_name = \"other\""),
             ("version = \"0.1.0\"", "version = \"0.1.1\""),
             ("channel = \"stable\"", "channel = \"candidate\""),
             (
                 "binary_archive_name = \"binary.tar.gz\"",
                 "binary_archive_name = \"myc.tar.gz\"",
+            ),
+            (
+                "artifact_manifest_name = \"artifact-manifest.v1.json\"",
+                "artifact_manifest_name = \"untrusted.json\"",
             ),
             (
                 "checksums_name = \"SHA256SUMS\"",
@@ -930,12 +944,56 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         assert!(RadrootsRuntimeDistributionResolver::parse_str(&missing_member).is_err());
         let uppercase_hash = HARDENED_SERVICE_CONTRACT.replacen("4b3ba578", "4B3BA578", 1);
         assert!(RadrootsRuntimeDistributionResolver::parse_str(&uppercase_hash).is_err());
+        let short_hash = HARDENED_SERVICE_CONTRACT.replacen(
+            "4b3ba5789fac6aa219e84e1e5c002cf8230b72f95fd6d95a6419d2fdf2915f83",
+            "00",
+            1,
+        );
+        assert!(RadrootsRuntimeDistributionResolver::parse_str(&short_hash).is_err());
         let unknown = HARDENED_SERVICE_CONTRACT.replacen(
             "[service_artifacts.myc]",
             "[service_artifacts.myc]\nunknown = true",
             1,
         );
         assert!(RadrootsRuntimeDistributionResolver::parse_str(&unknown).is_err());
+
+        let mut unsupported_service: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        unsupported_service["service_artifacts"]["myc"]["service_id"] =
+            Value::String("unsupported".to_owned());
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&unsupported_service).expect("unsupported-service contract")
+            )
+            .is_err()
+        );
+
+        let mut missing_artifact: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        let artifacts = missing_artifact["service_artifacts"]
+            .as_table_mut()
+            .expect("service artifact table");
+        let rhi = artifacts.remove("rhi").expect("RHI artifact");
+        artifacts.insert("other".to_owned(), rhi);
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&missing_artifact).expect("missing-artifact contract")
+            )
+            .is_err()
+        );
+
+        let mut empty_artifacts: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        empty_artifacts["service_artifacts"]
+            .as_table_mut()
+            .expect("service artifact table")
+            .clear();
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&empty_artifacts).expect("empty-artifact contract")
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -956,13 +1014,27 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
         let mut missing_service: Value =
             toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
-        missing_service["service_targets"]
+        let targets = missing_service["service_targets"]
             .as_table_mut()
-            .expect("service target table")
-            .remove("rhi");
+            .expect("service target table");
+        let rhi = targets.remove("rhi").expect("RHI target");
+        targets.insert("other".to_owned(), rhi);
         assert!(
             RadrootsRuntimeDistributionResolver::parse_str(
                 &toml::to_string(&missing_service).expect("missing-service contract")
+            )
+            .is_err()
+        );
+
+        let mut empty_targets: Value =
+            toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+        empty_targets["service_targets"]
+            .as_table_mut()
+            .expect("service target table")
+            .clear();
+        assert!(
+            RadrootsRuntimeDistributionResolver::parse_str(
+                &toml::to_string(&empty_targets).expect("empty-target contract")
             )
             .is_err()
         );
@@ -979,6 +1051,23 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn hardened_service_contract_requires_stable_in_both_channel_inventories() {
+        for channel_inventory in ["active", "defined"] {
+            let mut contract: Value =
+                toml::from_str(HARDENED_SERVICE_CONTRACT).expect("contract fixture value");
+            contract["channels"][channel_inventory] =
+                Value::Array(vec![Value::String("candidate".to_owned())]);
+            assert_eq!(
+                RadrootsRuntimeDistributionResolver::parse_str(
+                    &toml::to_string(&contract).expect("channel-drift contract")
+                )
+                .expect_err("stable channel is mandatory"),
+                RadrootsRuntimeDistributionError::InvalidServiceArtifactContract
+            );
+        }
     }
 
     #[test]

@@ -893,6 +893,15 @@ mod tests {
         let selector = FetchSelector::all()
             .with_kinds(vec![1])
             .expect("kind")
+            .with_authors(vec![
+                *radroots_event_codec::decode::signed_event(&signed_event(
+                    "subscription-author",
+                    1_800_000_000,
+                ))
+                .expect("signed author event")
+                .pubkey(),
+            ])
+            .expect("author")
             .with_exact_tag_value('d', "trade-1")
             .expect("tag")
             .with_since_unix_seconds(1_700_000_000)
@@ -940,7 +949,7 @@ mod tests {
             signed_event("equal-c", 1_800_000_000),
         ];
         events.sort_by_key(|event| event_id(event));
-        let base_request = request(&[relay], 2);
+        let base_request = request(&[relay], 3);
         let target = base_request.target_set().targets()[0].fingerprint().clone();
         let middle_cursor = RelayCursor::new(1_800_000_000, event_id(&events[1])).expect("cursor");
         let checkpoint = SubscriptionCheckpoint::new(
@@ -956,7 +965,13 @@ mod tests {
             .with_checkpoints([checkpoint])
             .expect("checkpointed request");
         let relay_url = RelayUrl::parse(relay, RelayUrlPolicy::Public).expect("relay");
+        let older = signed_event("older", 1_799_999_999);
+        let later = signed_event("later", 1_800_000_001);
         let client = Arc::new(MockSubscriptionClient::new([
+            ScriptedItem::Item(RelaySubscriptionItem::Event {
+                relay: relay_url.clone(),
+                raw: older,
+            }),
             ScriptedItem::Item(RelaySubscriptionItem::Event {
                 relay: relay_url.clone(),
                 raw: events[0].clone(),
@@ -966,8 +981,12 @@ mod tests {
                 raw: events[1].clone(),
             }),
             ScriptedItem::Item(RelaySubscriptionItem::Event {
-                relay: relay_url,
+                relay: relay_url.clone(),
                 raw: events[2].clone(),
+            }),
+            ScriptedItem::Item(RelaySubscriptionItem::Event {
+                relay: relay_url,
+                raw: later.clone(),
             }),
         ]));
         let transport =
@@ -989,6 +1008,10 @@ mod tests {
             event.checkpoint().cursor().as_str().split(':').nth(2),
             Some(event_id(&events[2]).as_str())
         );
+        let SubscriptionNext::Event(event) = subscription.next().await.expect("next event") else {
+            panic!("event expected");
+        };
+        assert_eq!(event.observed().event().id_str(), event_id(&later));
         assert_eq!(
             client.query().targets[0].since_unix_seconds,
             Some(1_800_000_000)
@@ -1005,6 +1028,10 @@ mod tests {
         ];
         events.sort_by_key(|event| event_id(event));
         let client = Arc::new(MockSubscriptionClient::new([
+            ScriptedItem::Item(RelaySubscriptionItem::Event {
+                relay: relay_url.clone(),
+                raw: events[1].clone(),
+            }),
             ScriptedItem::Item(RelaySubscriptionItem::Event {
                 relay: relay_url.clone(),
                 raw: events[1].clone(),
@@ -1062,6 +1089,17 @@ mod tests {
             &RelayCursor::new(10, "a".repeat(64)).expect("cursor"),
         )
         .expect("scoped cursor");
+        for malformed_cursor in [
+            FetchCursor::parse("nostr-live-v1:10").expect("opaque missing-field cursor"),
+            FetchCursor::parse(format!("{}:extra", scoped.as_str()))
+                .expect("opaque extra-field cursor"),
+        ] {
+            let checkpoint = SubscriptionCheckpoint::new(target.clone(), malformed_cursor);
+            assert_eq!(
+                parse_cursor(&base, &checkpoint),
+                Err(radroots_transport::Error::InvalidFetchCursor)
+            );
+        }
         let mismatched = base
             .with_selector(other_selector)
             .with_checkpoints([SubscriptionCheckpoint::new(target, scoped)])
@@ -1147,6 +1185,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_admitted_subscription_that_expires_before_next_is_deadline_bounded() {
+        let relay = "wss://one.example";
+        let client = Arc::new(MockSubscriptionClient::new([]));
+        let transport = NostrTransport::with_subscription_client(configured(&[relay]), client);
+        let request = SubscriptionRequest::new(
+            "expires-after-admission",
+            target_set(&[relay]),
+            SubscriptionBounds::new(1, unix_time_ms() + 50).expect("bounds"),
+        )
+        .expect("request");
+        let mut subscription = transport.subscribe(request).await.expect("subscription");
+        tokio::time::sleep(Duration::from_millis(75)).await;
+
+        let SubscriptionNext::End(terminal) = subscription.next().await.expect("deadline") else {
+            panic!("terminal expected");
+        };
+        assert_eq!(terminal.reason(), SubscriptionEndReason::Deadline);
+    }
+
+    #[tokio::test]
     async fn expired_unrepresentable_closed_and_failed_sources_are_bounded() {
         let relay = "wss://one.example";
         let client = Arc::new(MockSubscriptionClient::new([]));
@@ -1229,6 +1287,23 @@ mod tests {
         };
         assert_eq!(terminal.reason(), SubscriptionEndReason::SourceClosed);
         assert_eq!(client.cancellations.load(AtomicOrdering::SeqCst), 0);
+
+        let unexpected_close = Arc::new(MockSubscriptionClient::new([ScriptedItem::Item(
+            RelaySubscriptionItem::Closed {
+                relay: RelayUrl::parse("wss://unexpected.example", RelayUrlPolicy::Public)
+                    .expect("unexpected relay"),
+            },
+        )]));
+        let unexpected_transport =
+            NostrTransport::with_subscription_client(configured(&[relays[0]]), unexpected_close);
+        let mut unexpected = unexpected_transport
+            .subscribe(request(&[relays[0]], 1))
+            .await
+            .expect("subscription");
+        assert_eq!(
+            unexpected.next().await,
+            Err(radroots_transport::Error::SubscriptionUnavailable)
+        );
 
         let error_client = Arc::new(MockSubscriptionClient::new([ScriptedItem::Error]));
         let error_transport =

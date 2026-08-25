@@ -159,10 +159,6 @@ pub fn resolve_runtime_target(
         .get(management_mode)
         .cloned()
         .ok_or(RadrootsRuntimeManagerError::InvalidContract)?;
-    if service_target.service_id() != runtime_context.service() {
-        return Err(RadrootsRuntimeManagerError::ContextMismatch);
-    }
-
     Ok(ManagedRuntimeTarget {
         context: runtime_context,
         service_target,
@@ -198,9 +194,16 @@ mod tests {
         InstanceId, RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPathResolver,
         RadrootsPlatform, RuntimeContext, RuntimeContextBootstrap, RuntimeContextSource, ServiceId,
     };
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    use radroots_service_host::AdminTransportLimits;
 
-    use super::{ManagedRuntimeContext, resolve_runtime_target};
-    use crate::{HARDENED_MANAGEMENT_CONTRACT, RadrootsRuntimeManagerError, parse_contract_str};
+    use super::{
+        ManagedRuntimeContext, active_management_mode_for_profile, resolve_runtime_target,
+    };
+    use crate::{
+        HARDENED_MANAGEMENT_CONTRACT, ManagedCliCommand, RadrootsRuntimeManagerError,
+        parse_contract_str,
+    };
 
     fn management_context() -> ManagedRuntimeContext {
         ManagedRuntimeContext::new(
@@ -268,6 +271,19 @@ mod tests {
         assert_eq!(myc.service_target().service_id(), myc.service_id());
         assert_eq!(myc.management_mode(), "interactive_user_managed");
         assert!(!myc.mode_contract().service_manager_integration);
+        let invocation = myc
+            .cli_invocation(ManagedCliCommand::Doctor)
+            .expect("Myc doctor invocation");
+        assert_eq!(invocation.profile(), RadrootsPathProfile::RepoLocal);
+        assert_eq!(invocation.command(), ManagedCliCommand::Doctor);
+
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let status_client = myc
+                .status_client(AdminTransportLimits::DEFAULT)
+                .expect("Myc status client");
+            assert!(!format!("{status_client:?}").contains("sensitive"));
+        }
 
         assert_eq!(rhi.service_id().as_str(), "rhi");
         assert_eq!(rhi.instance_id().as_str(), "secondary");
@@ -302,6 +318,21 @@ mod tests {
             RuntimeContextSource::BootstrapCli,
         );
         assert!(mobile.is_err());
+    }
+
+    #[test]
+    fn inactive_management_mode_never_matches_a_supported_profile() {
+        let mut contract = parse_contract_str(HARDENED_MANAGEMENT_CONTRACT).expect("contract");
+        contract
+            .mode
+            .get_mut("interactive_user_managed")
+            .expect("interactive mode")
+            .contract_state = "inactive".to_owned();
+
+        assert_eq!(
+            active_management_mode_for_profile(&contract, RadrootsPathProfile::RepoLocal),
+            Err(RadrootsRuntimeManagerError::UnsupportedProfile)
+        );
     }
 
     #[test]
