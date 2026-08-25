@@ -18,6 +18,8 @@ use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::task::JoinHandle;
 
+#[cfg(test)]
+use super::test_support;
 use super::{
     ADMIN_CONTRACT_VERSION, ADMIN_ROUTE_PATH_MAX_UTF8_BYTES, AdminCorrelationId,
     AdminFailureResponse, AdminHttpMethod, AdminOperationId, AdminSuccessResponse,
@@ -897,7 +899,7 @@ mod tests {
 
     #[tokio::test]
     async fn server_client_round_trip_preserves_version_and_correlation() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let server = AdminServer::new(echo_router(), AdminTransportLimits::DEFAULT, FixedEntropy)
             .expect("admin server");
@@ -956,7 +958,7 @@ mod tests {
 
     #[tokio::test]
     async fn unavailable_socket_and_deadline_are_typed_and_safe() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let missing = directory.path().join("missing.sock");
         let client = AdminClient::new(&missing, AdminTransportLimits::DEFAULT).expect("client");
         let target = AdminClientTarget::new("/v1/status").expect("target");
@@ -992,7 +994,7 @@ mod tests {
 
     #[tokio::test]
     async fn version_malformed_duplicate_and_oversized_responses_fail_closed() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let target = AdminClientTarget::new("/v1/status").expect("target");
         let cases = [
             (
@@ -1092,7 +1094,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_and_query_limits_fail_before_socket_access() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let missing = directory.path().join("missing.sock");
         let client = AdminClient::new(
             &missing,
@@ -1152,7 +1154,7 @@ mod tests {
         assert!(!debug.contains("secret-id"));
         assert!(!debug.contains("protected"));
 
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("protected-admin.sock");
         let client = AdminClient::new(&socket, AdminTransportLimits::DEFAULT).expect("client");
         assert!(!format!("{client:?}").contains("protected-admin.sock"));

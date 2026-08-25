@@ -17,6 +17,8 @@ use rustix::fs::{
 use rustix::process::geteuid;
 
 use super::peer::{AdminPeerAuthorizationPolicy, PeerAuthorizer};
+#[cfg(test)]
+use super::test_support;
 
 const WRITER_LOCK_FILE_NAME: &str = ".radroots-admin-writer.lock";
 /// Final owner-only mode for the runtime directory.
@@ -536,7 +538,7 @@ mod tests {
 
     #[tokio::test]
     async fn binds_owner_only_socket_sets_modes_and_cleans_up() {
-        let directory = tempfile::tempdir().expect("temporary directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("admin.sock");
         let authority =
             UnixAdminSocketWriterAuthority::acquire(directory.path()).expect("writer authority");
@@ -577,7 +579,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn configured_admin_group_sets_group_access_modes_and_identity() {
-        let directory = tempfile::tempdir().expect("temporary directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("admin.sock");
         let admin_gid = rustix::process::getegid().as_raw();
         let policy = AdminPeerAuthorizationPolicy::with_admin_gid(admin_gid)
@@ -616,7 +618,7 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_a_live_socket_owned_outside_the_writer_guard() {
-        let directory = tempfile::tempdir().expect("temporary directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("admin.sock");
         let live = UnixListener::bind(&socket).expect("live listener");
         let authority =
@@ -632,7 +634,7 @@ mod tests {
 
     #[tokio::test]
     async fn recovers_only_a_proven_stale_socket() {
-        let directory = tempfile::tempdir().expect("temporary directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("admin.sock");
         drop(UnixListener::bind(&socket).expect("stale listener"));
         assert!(socket.exists());
@@ -649,8 +651,8 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_paths_outside_the_authorized_runtime_directory() {
-        let directory = tempfile::tempdir().expect("runtime directory");
-        let outside = tempfile::tempdir().expect("outside directory");
+        let directory = super::test_support::short_tempdir();
+        let outside = super::test_support::short_tempdir();
         let authority =
             UnixAdminSocketWriterAuthority::acquire(directory.path()).expect("writer authority");
 
@@ -662,7 +664,7 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_non_socket_entries_without_unlinking_them() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("admin.sock");
         fs::write(&socket, b"not a socket").expect("sentinel file");
         let authority =
@@ -680,7 +682,7 @@ mod tests {
 
     #[test]
     fn one_writer_authority_excludes_a_second_writer() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let first = UnixAdminSocketWriterAuthority::acquire(directory.path())
             .expect("first writer authority");
         let error = UnixAdminSocketWriterAuthority::acquire(directory.path())
@@ -691,8 +693,8 @@ mod tests {
 
     #[test]
     fn refuses_a_symlink_runtime_directory_and_wrong_owner_identity() {
-        let target = tempfile::tempdir().expect("runtime directory");
-        let link_parent = tempfile::tempdir().expect("link parent");
+        let target = super::test_support::short_tempdir();
+        let link_parent = super::test_support::short_tempdir();
         let link = link_parent.path().join("runtime");
         symlink(target.path(), &link).expect("runtime symlink");
         assert!(matches!(
@@ -716,7 +718,7 @@ mod tests {
 
     #[tokio::test]
     async fn cleanup_never_unlinks_a_replacement_socket() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let socket = directory.path().join("admin.sock");
         let authority =
             UnixAdminSocketWriterAuthority::acquire(directory.path()).expect("writer authority");
@@ -734,7 +736,7 @@ mod tests {
 
     #[test]
     fn public_errors_and_authority_debug_never_reveal_runtime_paths() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let authority =
             UnixAdminSocketWriterAuthority::acquire(directory.path()).expect("writer authority");
         let debug = format!("{authority:?}");
@@ -749,7 +751,7 @@ mod tests {
 
     #[test]
     fn helper_admission_checks_bind_every_identity_and_mode_dimension() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let uid = geteuid().as_raw();
         assert!(validate_owner(uid, uid).is_ok());
         assert_eq!(
@@ -827,7 +829,7 @@ mod tests {
 
     #[test]
     fn live_directory_revalidation_rejects_mode_identity_and_path_drift() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let authority = UnixAdminSocketWriterAuthority::acquire(directory.path()).unwrap();
         assert!(authority.ensure_directory_identity().is_ok());
         assert_eq!(

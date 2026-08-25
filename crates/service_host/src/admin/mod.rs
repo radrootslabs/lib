@@ -7,6 +7,8 @@ mod model;
 mod peer;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod server;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod test_support;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 

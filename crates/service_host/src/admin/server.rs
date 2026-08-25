@@ -22,6 +22,8 @@ use hyper_util::rt::{TokioIo, TokioTimer};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+#[cfg(test)]
+use super::test_support;
 use super::{
     ADMIN_CONTRACT_VERSION, AdminCorrelationId, AdminError, AdminErrorCode, AdminErrorMessage,
     AdminFailureResponse, AdminMutationRequest, AdminTransportLimits, UnixAdminSocketBinding,
@@ -1361,7 +1363,7 @@ mod tests {
 
     #[tokio::test]
     async fn serves_valid_json_with_exact_caller_correlation_and_no_web_headers() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let server = AdminServer::new(
             echo_router(),
@@ -1401,7 +1403,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_oversized_and_malformed_json_before_the_handler() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let calls = Arc::new(AtomicUsize::new(0));
         let handler_calls = Arc::clone(&calls);
@@ -1454,7 +1456,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_invalid_mutation_envelopes_duplicates_and_nested_null_before_dispatch() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let calls = Arc::new(AtomicUsize::new(0));
         let handler_calls = Arc::clone(&calls);
@@ -1506,7 +1508,7 @@ mod tests {
 
     #[tokio::test]
     async fn parameterized_routes_percent_decode_bounded_values_without_service_authority() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let calls = Arc::new(AtomicUsize::new(0));
         let handler_calls = Arc::clone(&calls);
@@ -1570,7 +1572,7 @@ mod tests {
 
     #[tokio::test]
     async fn caller_correlation_precedes_entropy_and_survives_timeout_handoff() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let entropy_calls = Arc::new(AtomicUsize::new(0));
         let mut router = AdminRouter::new();
@@ -1616,7 +1618,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_http_1_0_before_dispatch() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let calls = Arc::new(AtomicUsize::new(0));
         let handler_calls = Arc::clone(&calls);
@@ -1649,7 +1651,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_deadline_returns_a_safe_timeout_and_cancels_the_handler_future() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let mut router = AdminRouter::new();
         router
@@ -1680,7 +1682,7 @@ mod tests {
 
     #[tokio::test]
     async fn enforces_header_query_response_and_body_correlation_boundaries() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let calls = Arc::new(AtomicUsize::new(0));
         let handler_calls = Arc::clone(&calls);
@@ -1766,7 +1768,7 @@ mod tests {
 
     #[tokio::test]
     async fn connection_admission_never_exceeds_the_configured_limit() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let entered = Arc::new(Notify::new());
         let release = Arc::new(Notify::new());
@@ -1827,7 +1829,7 @@ mod tests {
 
     #[tokio::test]
     async fn graceful_cancellation_stops_admission_and_drains_an_active_request() {
-        let directory = tempfile::tempdir().expect("runtime directory");
+        let directory = super::test_support::short_tempdir();
         let (socket, binding) = binding(&directory).await;
         let entered = Arc::new(Notify::new());
         let release = Arc::new(Notify::new());
