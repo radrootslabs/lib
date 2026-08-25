@@ -144,10 +144,12 @@ rewritten as completion even when it carries admissible events.
 
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;
-the adapter reconnects with Nostr's inclusive `since` timestamp and suppresses
-only events at or before that checkpoint's event-ID tie breaker. This preserves
-every later event sharing the same second-granular timestamp. Each emitted
-event carries exact relay provenance and a new canonical target checkpoint.
+the adapter reconnects with Nostr's inclusive `since` timestamp, suppresses
+older timestamps and the exact checkpoint event, and permits at-least-once
+replay of other events from the checkpoint second. Within one subscription it
+deduplicates exact event IDs, accepts same-second events in relay arrival order,
+and never regresses the canonical target checkpoint. Each emitted event carries
+exact relay provenance and that current checkpoint.
 Event limits, absolute deadlines, explicit cancellation, source closure, and
 stable repeated terminal results follow the generic subscription contract.
 

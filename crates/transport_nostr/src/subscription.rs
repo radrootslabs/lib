@@ -222,8 +222,10 @@ struct RelayEventSubscription {
     session: Option<Box<dyn RelaySubscriptionSession>>,
     targets: BTreeMap<RelayUrl, radroots_transport::Target>,
     active_relays: BTreeSet<RelayUrl>,
+    resume_cursors: BTreeMap<radroots_transport::target::TargetFingerprint, RelayCursor>,
     cursors: BTreeMap<radroots_transport::target::TargetFingerprint, RelayCursor>,
     checkpoints: BTreeMap<radroots_transport::target::TargetFingerprint, SubscriptionCheckpoint>,
+    seen_event_ids: BTreeSet<String>,
     event_count: u16,
     terminal: Option<SubscriptionEnd>,
     cancellation_requested: Arc<AtomicBool>,
@@ -242,8 +244,10 @@ impl RelayEventSubscription {
             session: None,
             targets: BTreeMap::new(),
             active_relays: BTreeSet::new(),
+            resume_cursors: BTreeMap::new(),
             cursors: BTreeMap::new(),
             checkpoints: BTreeMap::new(),
+            seen_event_ids: BTreeSet::new(),
             event_count: 0,
             terminal: Some(terminal),
             cancellation_requested: Arc::new(AtomicBool::new(false)),
@@ -334,31 +338,54 @@ impl RelayEventSubscription {
         if !self.request.selector().matches(&event) {
             return Err(radroots_transport::Error::UnexpectedSubscriptionEvent);
         }
+        let event_id = event.id_str().to_owned();
+        let created_at = event.created_at();
+        if self.seen_event_ids.contains(event_id.as_str()) {
+            return Ok(None);
+        }
         if self
-            .cursors
+            .resume_cursors
             .get(target.fingerprint())
-            .is_some_and(|cursor| !cursor.precedes(event.created_at(), event.id_str()))
+            .is_some_and(|cursor| {
+                created_at < cursor.created_at_unix_s()
+                    || (created_at == cursor.created_at_unix_s()
+                        && event_id.as_str() == cursor.event_id())
+            })
         {
             return Ok(None);
         }
 
-        let cursor = RelayCursor::new(event.created_at(), event.id_str())
+        let cursor = RelayCursor::new(created_at, event_id.clone())
             .map_err(|_| radroots_transport::Error::UnexpectedSubscriptionEvent)?;
-        let opaque = encode_cursor(&self.request, target.fingerprint(), &cursor)?;
-        let checkpoint = SubscriptionCheckpoint::new(target.fingerprint().clone(), opaque.clone());
+        let cursor_advances = self
+            .cursors
+            .get(target.fingerprint())
+            .is_none_or(|current| cursor > *current);
+        if cursor_advances {
+            self.cursors
+                .insert(target.fingerprint().clone(), cursor.clone());
+            let opaque = encode_cursor(&self.request, target.fingerprint(), &cursor)?;
+            self.checkpoints.insert(
+                target.fingerprint().clone(),
+                SubscriptionCheckpoint::new(target.fingerprint().clone(), opaque),
+            );
+        }
+        let checkpoint = self
+            .checkpoints
+            .get(target.fingerprint())
+            .cloned()
+            .ok_or(radroots_transport::Error::UnexpectedSubscriptionEvent)?;
         let provenance = EventProvenance::new(
             radroots_transport::TransportId::NOSTR,
             target.fingerprint().clone(),
             unix_time_ms().max(1),
         )?
-        .with_cursor(opaque);
+        .with_cursor(checkpoint.cursor().clone());
         let observed = ObservedEvent::new(event, provenance);
         let subscription_event =
             SubscriptionEvent::for_request(&self.request, observed, checkpoint.clone())?;
 
-        self.cursors.insert(target.fingerprint().clone(), cursor);
-        self.checkpoints
-            .insert(target.fingerprint().clone(), checkpoint);
+        self.seen_event_ids.insert(event_id);
         self.event_count = self.event_count.saturating_add(1);
         self.status
             .record_read(relay, true, false, unix_time_ms().max(1));
@@ -526,13 +553,16 @@ impl EventSubscriber for NostrTransport {
                 }
             };
 
+            let resume_cursors = cursors.clone();
             Ok(Box::new(RelayEventSubscription {
                 request,
                 session: Some(session),
                 targets,
                 active_relays,
+                resume_cursors,
                 cursors,
                 checkpoints,
+                seen_event_ids: BTreeSet::new(),
                 event_count: 0,
                 terminal: None,
                 cancellation_requested: Arc::new(AtomicBool::new(false)),
@@ -932,6 +962,10 @@ mod tests {
                 raw: events[0].clone(),
             }),
             ScriptedItem::Item(RelaySubscriptionItem::Event {
+                relay: relay_url.clone(),
+                raw: events[1].clone(),
+            }),
+            ScriptedItem::Item(RelaySubscriptionItem::Event {
                 relay: relay_url,
                 raw: events[2].clone(),
             }),
@@ -942,15 +976,61 @@ mod tests {
         let SubscriptionNext::Event(event) = subscription.next().await.expect("next event") else {
             panic!("event expected");
         };
+        assert_eq!(event.observed().event().id_str(), event_id(&events[0]));
+        assert_eq!(
+            event.checkpoint().cursor().as_str().split(':').nth(2),
+            Some(event_id(&events[1]).as_str())
+        );
+        let SubscriptionNext::Event(event) = subscription.next().await.expect("next event") else {
+            panic!("event expected");
+        };
         assert_eq!(event.observed().event().id_str(), event_id(&events[2]));
         assert_eq!(
-            event.checkpoint().cursor().as_str().split(':').nth(1),
-            Some("1800000000")
+            event.checkpoint().cursor().as_str().split(':').nth(2),
+            Some(event_id(&events[2]).as_str())
         );
         assert_eq!(
             client.query().targets[0].since_unix_seconds,
             Some(1_800_000_000)
         );
+    }
+
+    #[tokio::test]
+    async fn live_subscription_accepts_same_second_events_in_relay_arrival_order() {
+        let relay = "wss://one.example";
+        let relay_url = RelayUrl::parse(relay, RelayUrlPolicy::Public).expect("relay");
+        let mut events = [
+            signed_event("same-second-a", 1_800_000_000),
+            signed_event("same-second-b", 1_800_000_000),
+        ];
+        events.sort_by_key(|event| event_id(event));
+        let client = Arc::new(MockSubscriptionClient::new([
+            ScriptedItem::Item(RelaySubscriptionItem::Event {
+                relay: relay_url.clone(),
+                raw: events[1].clone(),
+            }),
+            ScriptedItem::Item(RelaySubscriptionItem::Event {
+                relay: relay_url,
+                raw: events[0].clone(),
+            }),
+        ]));
+        let transport = NostrTransport::with_subscription_client(configured(&[relay]), client);
+        let mut subscription = transport
+            .subscribe(request(&[relay], 2))
+            .await
+            .expect("subscription");
+
+        for expected in [&events[1], &events[0]] {
+            let SubscriptionNext::Event(event) = subscription.next().await.expect("next event")
+            else {
+                panic!("event expected");
+            };
+            assert_eq!(event.observed().event().id_str(), event_id(expected));
+            assert_eq!(
+                event.checkpoint().cursor().as_str().split(':').nth(2),
+                Some(event_id(&events[1]).as_str())
+            );
+        }
     }
 
     #[tokio::test]

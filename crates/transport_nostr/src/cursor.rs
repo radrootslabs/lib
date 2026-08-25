@@ -5,8 +5,8 @@ use crate::Error;
 /// Stable total-order position for one Nostr event.
 ///
 /// Relay timestamps are only second-granular. The canonical lowercase event id
-/// is therefore a required tie-breaker for both descending fetch pages and
-/// inclusive reconnect catch-up after a subscription interruption.
+/// provides a deterministic tie-breaker for descending fetch pages and a
+/// non-regressing checkpoint position for inclusive subscription reconnects.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RelayCursor {
     created_at_unix_s: u64,
@@ -42,9 +42,10 @@ impl RelayCursor {
         self.event_id.as_str()
     }
 
-    /// Returns whether a candidate follows this cursor in ascending reconnect
-    /// order. Equal timestamps are resolved by event id, preventing loss when
-    /// a reconnect query uses an inclusive `since` timestamp.
+    /// Returns whether a candidate follows this cursor in ascending total
+    /// order. Equal timestamps are resolved by event id. Live subscriptions
+    /// additionally admit out-of-order peers from the checkpoint second so
+    /// this total-order helper is not itself used as a lossless admission gate.
     #[must_use]
     pub fn precedes(&self, created_at_unix_s: u64, event_id: &str) -> bool {
         created_at_unix_s > self.created_at_unix_s

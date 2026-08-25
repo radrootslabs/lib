@@ -83,7 +83,9 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "Deadline expiry is `Cancelled`",
         "exceeds the bounded inventory is `Partial`",
         "inclusive `since` timestamp",
-        "event-ID tie breaker",
+        "permits at-least-once",
+        "same-second events in relay arrival order",
+        "never regresses the canonical target checkpoint",
         "upstream auto-close deadline",
         "adapter-owned worker",
         "validates the exact request, writable\nrelay bindings, and signed-event conversion without reading a clock, polling\nstatus, or performing relay I/O",
@@ -299,7 +301,9 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
         "impl EventSubscriber for NostrTransport",
         "SubscribeAutoCloseOptions::default()",
         "ReqExitPolicy::WaitDurationAfterEOSE(query.timeout)",
-        "cursor.precedes(event.created_at(), event.id_str())",
+        "self.seen_event_ids.contains(event_id.as_str())",
+        "resume_cursors",
+        "let cursor_advances = self",
         "self.terminate(SubscriptionEndReason::Cancelled)",
     ] {
         assert!(
