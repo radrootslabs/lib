@@ -315,6 +315,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "`268435456` is the exact governed configuration and test vector, not an implicit universal threshold",
         "owner-owned state directory that is not group/other writable",
         "uses `fstatvfs` to measure bytes available to the unprivileged service user",
+        "current native qualification matrix is macOS aarch64 and Linux x86_64",
+        "successful compilation outside that matrix is not support evidence",
         "successful immutable snapshot is `ready` when available bytes are greater than or equal",
         "`low_disk` when they are below it",
         "measurement failure is a typed unavailable error and is never fabricated as low-disk evidence",
@@ -341,7 +343,9 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "orphan-stage refusal before a durable marker",
         "interrupted marker-scratch promotion",
         "permissive child umask cannot broaden",
-        "Linux execution is required for OS-level qualification",
+        "Linux execution on x86_64 is required for OS-level qualification",
+        "macOS aarch64 execution on the current machine is developer evidence",
+        "No other platform or architecture is an active qualification gate",
         "do not claim abrupt power-loss or storage-device durability behavior",
     ] {
         assert!(

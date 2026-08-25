@@ -259,7 +259,9 @@ and is constrained to `1..=i64::MAX`; it has no default. The value
 implicit universal threshold. On Linux and macOS the platform adapter opens the
 owner-owned state directory that is not group/other writable without following
 links, retains and revalidates its identity, and uses `fstatvfs` to measure
-bytes available to the unprivileged service user. Other platforms fail closed.
+bytes available to the unprivileged service user. The current native
+qualification matrix is macOS aarch64 and Linux x86_64; other platforms fail
+closed and successful compilation outside that matrix is not support evidence.
 
 A successful immutable snapshot is `ready` when available bytes are greater
 than or equal to the configured minimum and `low_disk` when they are below it.
@@ -301,10 +303,11 @@ durable marker, prepared rollback, interrupted marker-scratch promotion,
 installed-replacement recovery, and terminal-marker cleanup. A permissive
 child umask cannot broaden the fixed `0700` state directory or `0600` lock,
 database, stage, backup, marker, and marker-scratch artifacts. Linux execution
-is required for OS-level qualification; macOS execution is developer evidence,
-and unsupported targets compile the production library without the native
-process harness. These tests exercise process death at named durable edges and
-do not claim abrupt power-loss or storage-device durability behavior.
+on x86_64 is required for OS-level qualification; macOS aarch64 execution on
+the current machine is developer evidence. No other platform or architecture
+is an active qualification gate. These tests exercise process death at named
+durable edges and do not claim abrupt power-loss or storage-device durability
+behavior.
 
 The crate owns mechanics only. Service-specific tables, SQL, repositories,
 backup content policy, identity material, process lifecycle, and readiness
