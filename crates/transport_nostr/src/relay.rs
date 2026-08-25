@@ -415,8 +415,18 @@ mod tests {
 
         let root = Url::parse("wss://relay.example/").expect("root URL");
         let path = Url::parse("wss://relay.example/path/").expect("path URL");
+        let query = Url::parse("wss://relay.example/?scope=write").expect("query URL");
+        let fragment = Url::parse("wss://relay.example/#status").expect("fragment URL");
         assert_eq!(configured_policy_key(&root), "wss://relay.example");
         assert_eq!(configured_policy_key(&path), "wss://relay.example/path/");
+        assert_eq!(
+            configured_policy_key(&query),
+            "wss://relay.example/?scope=write"
+        );
+        assert_eq!(
+            configured_policy_key(&fragment),
+            "wss://relay.example/#status"
+        );
     }
 
     #[test]
