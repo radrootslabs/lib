@@ -856,8 +856,10 @@ impl Response {
         }
 
         if let Some(error) = envelope.error {
-            if matches!(method, Method::GetPublicKey | Method::GetSessionCapability)
-                && envelope.result.is_none()
+            if matches!(
+                method,
+                Method::Connect | Method::GetPublicKey | Method::GetSessionCapability
+            ) && envelope.result.is_none()
                 && error == PENDING_CONNECTION_ERROR
             {
                 return Ok(Self::PendingConnection);

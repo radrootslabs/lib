@@ -413,18 +413,24 @@ fn auth_url_response_parses_from_result_and_error_fields() {
 }
 
 #[test]
-fn get_public_key_pending_response_parses_as_typed_pending_connection() {
-    let response = Response::from_envelope(
-        &Method::GetPublicKey,
-        ResponseEnvelope {
-            id: "req-pending".to_owned(),
-            result: None,
-            error: Some(PENDING_CONNECTION_ERROR.to_owned()),
-        },
-    )
-    .expect("parse pending get_public_key response");
+fn connect_and_poll_pending_responses_parse_as_typed_pending_connection() {
+    for method in [
+        Method::Connect,
+        Method::GetPublicKey,
+        Method::GetSessionCapability,
+    ] {
+        let response = Response::from_envelope(
+            &method,
+            ResponseEnvelope {
+                id: "req-pending".to_owned(),
+                result: None,
+                error: Some(PENDING_CONNECTION_ERROR.to_owned()),
+            },
+        )
+        .expect("parse pending connection response");
 
-    assert_eq!(response, Response::PendingConnection);
+        assert_eq!(response, Response::PendingConnection);
+    }
 }
 
 #[test]
