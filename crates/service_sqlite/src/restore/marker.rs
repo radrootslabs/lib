@@ -1537,25 +1537,21 @@ mod store {
     impl StoreOperations for FailingStoreOperations {
         fn sync_file(&self, file: &File, directory: &File) -> std::io::Result<()> {
             match self.failure {
-                TestStoreFailure::ScratchSync => {
-                    Err(std::io::Error::other("injected scratch sync failure"))
-                }
+                TestStoreFailure::ScratchSync => Err(crate::failpoint::storage_full_error()),
                 TestStoreFailure::AuthorityDriftAndScratchSync => {
                     fchmod(
                         directory,
                         Mode::RUSR | Mode::WUSR | Mode::XUSR | Mode::RGRP | Mode::WGRP | Mode::XGRP,
                     )
                     .map_err(std::io::Error::from)?;
-                    Err(std::io::Error::other(
-                        "injected authority drift and scratch sync failure",
-                    ))
+                    Err(crate::failpoint::storage_full_error())
                 }
                 TestStoreFailure::ParentSyncAfterRename => file.sync_all(),
             }
         }
 
         fn sync_directory(&self, _directory: &File) -> std::io::Result<()> {
-            Err(std::io::Error::other("injected parent sync failure"))
+            Err(crate::failpoint::storage_full_error())
         }
 
         fn replace_marker(&self, directory: &File) -> std::io::Result<()> {
@@ -2168,7 +2164,7 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
-    fn atomic_advance_failures_leave_exact_old_or_new_valid_marker() {
+    fn atomic_advance_storage_full_failures_leave_exact_old_or_new_valid_marker() {
         use super::store::TestStoreFailure;
         use std::{fs, os::unix::fs::PermissionsExt};
 

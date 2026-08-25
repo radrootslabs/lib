@@ -674,7 +674,7 @@ impl FinalizeOperations for FailingFinalizeOperations {
             RenameStep::InstallStage => 7,
         };
         if failure == target {
-            return Err(std::io::Error::other("injected directory sync failure"));
+            return Err(crate::failpoint::storage_full_error());
         }
         SystemFinalizeOperations.sync_directory(directory, step)
     }

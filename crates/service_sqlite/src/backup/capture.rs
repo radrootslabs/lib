@@ -144,7 +144,7 @@ struct FailingCaptureOperations {
 impl CaptureOperations for FailingCaptureOperations {
     fn sync_state(&self, state: &File) -> io::Result<()> {
         if self.failure == TestCaptureSyncFailure::State {
-            Err(io::Error::other("injected state sync failure"))
+            Err(crate::failpoint::storage_full_error())
         } else {
             state.sync_all()
         }
@@ -152,7 +152,7 @@ impl CaptureOperations for FailingCaptureOperations {
 
     fn sync_staging(&self, staging: &File) -> io::Result<()> {
         if self.failure == TestCaptureSyncFailure::Staging {
-            Err(io::Error::other("injected staging sync failure"))
+            Err(crate::failpoint::storage_full_error())
         } else {
             staging.sync_all()
         }
@@ -161,7 +161,7 @@ impl CaptureOperations for FailingCaptureOperations {
     fn sync_parent(&self, parent: &File) -> io::Result<()> {
         let occurrence = self.parent_syncs.fetch_add(1, Ordering::AcqRel);
         if self.failure == TestCaptureSyncFailure::FinalParent && occurrence == 1 {
-            Err(io::Error::other("injected parent sync failure"))
+            Err(crate::failpoint::storage_full_error())
         } else {
             parent.sync_all()
         }

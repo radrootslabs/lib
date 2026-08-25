@@ -2595,7 +2595,7 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test]
-    async fn backup_sync_failures_cleanup_and_leave_host_recoverable() {
+    async fn backup_storage_full_sync_failures_cleanup_and_leave_host_recoverable() {
         let _serial = CAPTURE_TEST_LOCK.lock().await;
         crate::backup::test_capture_reset();
         let (root, _paths, _identity, _migrations, _schema, host) = initialized_host().await;
@@ -2625,6 +2625,12 @@ mod tests {
             .await
             .expect_err("injected synchronization failure must reject capture");
             assert_eq!(error.kind(), ServiceSqliteErrorKind::Backup);
+            let storage = error
+                .source()
+                .and_then(Error::source)
+                .and_then(|source| source.downcast_ref::<std::io::Error>())
+                .expect("storage-full cause");
+            assert_eq!(storage.kind(), std::io::ErrorKind::StorageFull);
             assert!(!stage.exists());
             assert!(!host.backup_active.load(Ordering::Acquire));
             assert_eq!(row_count(&host).await, 0);

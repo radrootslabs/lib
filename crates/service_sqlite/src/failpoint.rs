@@ -11,6 +11,11 @@ use std::{
 #[cfg(test)]
 const PROCESS_BARRIER_READY: &[u8] = b"\nRSHR_STEP073_READY\n";
 
+#[cfg(test)]
+pub(crate) fn storage_full_error() -> io::Error {
+    io::Error::from(io::ErrorKind::StorageFull)
+}
+
 /// Closed inventory of durability edges exercised by the crash-boundary harness.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DurabilityFailpoint {
@@ -362,6 +367,11 @@ impl std::error::Error for DurabilityFailpointError {}
 mod tests {
     use super::*;
     use std::thread;
+
+    #[test]
+    fn storage_full_injection_uses_the_semantic_io_kind() {
+        assert_eq!(storage_full_error().kind(), io::ErrorKind::StorageFull);
+    }
 
     #[test]
     fn every_closed_point_fires_once_on_its_owned_plan() {

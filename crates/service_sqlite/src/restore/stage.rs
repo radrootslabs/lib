@@ -1096,7 +1096,10 @@ fn sync_staged_file(file: &File, occurrence: u8) -> Result<(), ServiceSqliteErro
         .compare_exchange(occurrence, 0, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        return Err(restore_error(RestoreFailureKind::SyncStaged));
+        return Err(restore_source(
+            RestoreFailureKind::SyncStaged,
+            crate::failpoint::storage_full_error(),
+        ));
     }
     #[cfg(not(test))]
     let _ = occurrence;
@@ -1111,7 +1114,10 @@ fn sync_stage_directory(directory: &File) -> Result<(), ServiceSqliteError> {
         .compare_exchange(3, 0, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        return Err(restore_error(RestoreFailureKind::SyncDirectory));
+        return Err(restore_source(
+            RestoreFailureKind::SyncDirectory,
+            crate::failpoint::storage_full_error(),
+        ));
     }
     directory
         .sync_all()
@@ -2291,7 +2297,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn sync_and_join_failures_cleanup_and_allow_retry() {
+    async fn storage_full_sync_and_join_failures_cleanup_and_allow_retry() {
         let _serial = STAGE_TEST_LOCK.lock().await;
         for failure in [1, 2, 3] {
             reset_test_controls();
@@ -2307,6 +2313,12 @@ mod tests {
             .await
             .expect_err("sync failure");
             assert_eq!(error.kind(), ServiceSqliteErrorKind::Restore);
+            let storage = error
+                .source()
+                .and_then(Error::source)
+                .and_then(|source| source.downcast_ref::<std::io::Error>())
+                .expect("storage-full cause");
+            assert_eq!(storage.kind(), std::io::ErrorKind::StorageFull);
             wait_for_cleanup(&fixture.paths, &fixture.staged_path()).await;
         }
 
