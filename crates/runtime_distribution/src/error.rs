@@ -14,8 +14,10 @@ pub enum RadrootsRuntimeDistributionError {
     UnknownRuntime,
     #[error("runtime is not installable through the distribution contract")]
     RuntimeNotInstallable,
-    #[error("hardened service artifact authority is deferred")]
-    HardenedServiceArtifactDeferred,
+    #[error("hardened service artifact authority cannot use a legacy runtime row")]
+    HardenedServiceLegacyArtifactRow,
+    #[error("hardened service artifact contract is invalid")]
+    InvalidServiceArtifactContract,
     #[error("runtime has no target set in the distribution contract")]
     MissingTargetSet,
     #[error("runtime references an unknown artifact adapter")]

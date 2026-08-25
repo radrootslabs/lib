@@ -12,15 +12,23 @@ distribution contract resolution for the `radroots` core libraries.
  * an exact, typed Myc/RHI service-target inventory for multiple-instance TOML
    services with explicit existing-state startup, Unix local administration,
    cached operations endpoints, and Linux x86_64/aarch64 Tier-1 eligibility;
+ * a sealed Myc/RHI native-artifact inventory binding each service's exact
+   remotely reachable revision, native-release contract and SHA-256, source
+   lock and SHA-256, stable channel, package/binary identity, deterministic
+   twelve-member output inventory, checksum manifest, and target-specific
+   binary archive member;
  * TOML-backed contract handling for modular runtime deployment metadata.
 
 Complete TOML documents are rejected before parsing when they exceed exactly
 1,048,576 UTF-8 bytes. Schema, version, unknown-field, and exact-inventory
 validation remains fail closed after bounded admission.
 
-The hardened service-target inventory is metadata-only. It deliberately does
-not define Myc or RHI binaries, packages, archives, channels, artifact names,
-or qualified support claims.
+The hardened service artifact entries are resolution metadata only. They do
+not fetch, install, execute, sign, publish, or deploy an artifact, and target
+eligibility is not a qualified-support claim. Actual target-build byte hashes
+remain generated evidence in the exact `artifact-manifest.v1.json` and
+`SHA256SUMS` output; the resolver does not fabricate a digest before that
+deterministic build exists. Nix and OCI outputs remain deferred and unclaimed.
 
 ## Copyright
 

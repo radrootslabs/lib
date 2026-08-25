@@ -4,6 +4,7 @@ pub mod error;
 pub mod model;
 pub mod resolve;
 pub mod service;
+mod service_artifact;
 
 pub use error::RadrootsRuntimeDistributionError;
 pub use model::{
@@ -13,13 +14,18 @@ pub use model::{
 pub use resolve::{
     RUNTIME_DISTRIBUTION_CONTRACT_MAX_UTF8_BYTES, RUNTIME_DISTRIBUTION_SCHEMA,
     RUNTIME_DISTRIBUTION_SCHEMA_VERSION, RadrootsRuntimeDistributionResolver,
-    ResolvedRuntimeArtifact, ResolvedServiceTarget, RuntimeArtifactRequest, ServiceTargetRequest,
+    ResolvedRuntimeArtifact, ResolvedServiceArtifact, ResolvedServiceTarget,
+    RuntimeArtifactRequest, ServiceArtifactRequest, ServiceTargetRequest,
 };
 pub use service::{
     HardenedServiceTarget, HardenedServiceTargets, ServiceAdminBasePath, ServiceAdminTransport,
     ServiceConfigurationFormat, ServiceInstanceSupport, ServiceOperationsSurface,
     ServiceRunStatePolicy, ServiceStateInitialization, ServiceStatusSurface, ServiceSupportPosture,
     ServiceTier1Target,
+};
+pub use service_artifact::{
+    HardenedServiceArtifact, HardenedServiceArtifacts, ServiceArtifactChannel,
+    ServiceArtifactSha256,
 };
 
 #[cfg(test)]
@@ -32,9 +38,10 @@ mod tests {
         RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionContract,
         RadrootsRuntimeDistributionError, RadrootsRuntimeDistributionResolver,
         RuntimeArtifactRequest, RuntimeDistributionEntry, ServiceAdminBasePath,
-        ServiceAdminTransport, ServiceConfigurationFormat, ServiceInstanceSupport,
-        ServiceOperationsSurface, ServiceRunStatePolicy, ServiceStateInitialization,
-        ServiceStatusSurface, ServiceSupportPosture, ServiceTargetRequest, ServiceTier1Target,
+        ServiceAdminTransport, ServiceArtifactRequest, ServiceArtifactSha256,
+        ServiceConfigurationFormat, ServiceInstanceSupport, ServiceOperationsSurface,
+        ServiceRunStatePolicy, ServiceStateInitialization, ServiceStatusSurface,
+        ServiceSupportPosture, ServiceTargetRequest, ServiceTier1Target,
     };
 
     const HARDENED_SERVICE_CONTRACT: &str =
@@ -228,6 +235,38 @@ admin_contract_version = 1
 status_surface = "local_admin_service_status_v1"
 operations_surface = "cached_livez_readyz_metrics"
 support_posture = "target"
+tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+[service_artifacts.myc]
+service_id = "myc"
+service_revision = "77b381648ed1e586efb696888beb05b9215c69cf"
+release_contract = "contracts/services_hardening/native_release.v2.json"
+release_contract_sha256 = "4b3ba5789fac6aa219e84e1e5c002cf8230b72f95fd6d95a6419d2fdf2915f83"
+source_lock_sha256 = "f5ebb390a480830d51d502facc623bd1b10eda27b12dad9f3dbb6a1f1f949217"
+package_name = "myc"
+binary_name = "myc"
+version = "0.1.0"
+channel = "stable"
+binary_archive_name = "binary.tar.gz"
+artifact_manifest_name = "artifact-manifest.v1.json"
+checksums_name = "SHA256SUMS"
+output_inventory = ["LICENSE", "SHA256SUMS", "THIRD-PARTY-NOTICES.txt", "artifact-manifest.v1.json", "binary.tar.gz", "config.example.toml", "config.schema.json", "provenance-input.v1.json", "radroots.service.source-lock.v2.toml", "sbom.cdx.json", "service-source.tar.gz", "systemd.service"]
+tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+[service_artifacts.rhi]
+service_id = "rhi"
+service_revision = "07aa6ea988da5372654bb3d1ee183ac099a77cae"
+release_contract = "contracts/services_hardening/native_release.v1.json"
+release_contract_sha256 = "06a973176b4b8c11dad13000604576527df829dd0bbe2f501158662f75e70b94"
+source_lock_sha256 = "3cc8bfac0d98730937754abae2ccfe20e40d0a9bbdefe02ebd94264c20f0d0ff"
+package_name = "rhi"
+binary_name = "rhi"
+version = "0.1.0"
+channel = "stable"
+binary_archive_name = "binary.tar.gz"
+artifact_manifest_name = "artifact-manifest.v1.json"
+checksums_name = "SHA256SUMS"
+output_inventory = ["LICENSE", "SHA256SUMS", "THIRD-PARTY-NOTICES.txt", "artifact-manifest.v1.json", "binary.tar.gz", "config.example.toml", "config.schema.json", "provenance-input.v1.json", "radroots.service.source-lock.v2.toml", "sbom.cdx.json", "service-source.tar.gz", "systemd.service"]
 tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 "#;
 
@@ -716,10 +755,24 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
                 .collect::<Vec<_>>(),
             ["myc", "rhi"]
         );
+        let artifacts = &resolver.contract().service_artifacts;
+        assert_eq!(artifacts.len(), 2);
+        assert!(!artifacts.is_empty());
+        assert_eq!(
+            artifacts
+                .iter()
+                .map(|(service, _)| service)
+                .collect::<Vec<_>>(),
+            ["myc", "rhi"]
+        );
+
+        let literal = ServiceArtifactSha256::from_bytes([0x5a; 32]);
+        assert_eq!(literal.as_bytes(), &[0x5a; 32]);
+        assert_eq!(format!("{literal:?}"), "ServiceArtifactSha256(<redacted>)");
     }
 
     #[test]
-    fn hardened_services_are_metadata_only_and_reject_unsupported_targets() {
+    fn hardened_services_resolve_exact_native_artifacts_and_reject_unsupported_targets() {
         let resolver = RadrootsRuntimeDistributionResolver::parse_str(HARDENED_SERVICE_CONTRACT)
             .expect("hardened service contract");
         let myc = ServiceId::new("myc").expect("myc");
@@ -733,6 +786,65 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
                 Err(RadrootsRuntimeDistributionError::UnsupportedServiceTarget)
             );
         }
+        let artifact = resolver
+            .resolve_service_artifact(&ServiceArtifactRequest {
+                service_id: &myc,
+                target_id: "x86_64-unknown-linux-gnu",
+            })
+            .expect("Myc artifact");
+        assert_eq!(artifact.service_id(), &myc);
+        assert_eq!(artifact.target(), ServiceTier1Target::X86_64UnknownLinuxGnu);
+        assert_eq!(artifact.version(), "0.1.0");
+        assert_eq!(artifact.package_name(), "myc");
+        assert_eq!(artifact.binary_name(), "myc");
+        assert_eq!(artifact.channel(), "stable");
+        assert_eq!(artifact.binary_archive_name(), "binary.tar.gz");
+        assert_eq!(artifact.binary_archive_format(), "tar.gz");
+        assert_eq!(
+            artifact.binary_archive_member(),
+            "myc-0.1.0-x86_64-unknown-linux-gnu/myc"
+        );
+        assert_eq!(
+            artifact.artifact_manifest_name(),
+            "artifact-manifest.v1.json"
+        );
+        assert_eq!(artifact.checksums_name(), "SHA256SUMS");
+        assert_eq!(artifact.checksum_algorithm(), "sha256");
+        assert_eq!(
+            artifact.checksum_format(),
+            "sha256_lower_hex_two_spaces_path_lf_sorted_by_path"
+        );
+        assert_eq!(artifact.output_inventory().len(), 12);
+        assert_eq!(artifact.output_inventory()[0], "LICENSE");
+        assert_eq!(artifact.output_inventory()[11], "systemd.service");
+        assert_eq!(
+            artifact.release_contract_sha256(),
+            resolver
+                .service_artifact(&myc)
+                .expect("Myc release")
+                .release_contract_sha256()
+        );
+        assert_eq!(
+            artifact.source_lock_sha256(),
+            resolver
+                .service_artifact(&myc)
+                .expect("Myc release")
+                .source_lock_sha256()
+        );
+        let rendered = format!("{artifact:?}");
+        assert!(!rendered.contains("4b3ba578"));
+        assert!(!rendered.contains("f5ebb390"));
+        let rhi = ServiceId::new("rhi").expect("rhi");
+        let rhi_artifact = resolver
+            .resolve_service_artifact(&ServiceArtifactRequest {
+                service_id: &rhi,
+                target_id: "aarch64-unknown-linux-gnu",
+            })
+            .expect("RHI artifact");
+        assert_eq!(
+            rhi_artifact.binary_archive_member(),
+            "rhi-0.1.0-aarch64-unknown-linux-gnu/rhi"
+        );
         assert_eq!(
             resolver.resolve_artifact(&RuntimeArtifactRequest {
                 runtime_id: "myc",
@@ -760,7 +872,7 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         );
         assert_eq!(
             RadrootsRuntimeDistributionResolver::parse_str(&raw).expect_err("parsed bypass"),
-            RadrootsRuntimeDistributionError::HardenedServiceArtifactDeferred
+            RadrootsRuntimeDistributionError::HardenedServiceLegacyArtifactRow
         );
 
         let mut contract =
@@ -780,8 +892,50 @@ tier_1_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
         });
         assert_eq!(
             RadrootsRuntimeDistributionResolver::new(contract).expect_err("direct bypass"),
-            RadrootsRuntimeDistributionError::HardenedServiceArtifactDeferred
+            RadrootsRuntimeDistributionError::HardenedServiceLegacyArtifactRow
         );
+    }
+
+    #[test]
+    fn hardened_service_artifacts_reject_every_identity_and_inventory_drift() {
+        for (needle, replacement) in [
+            ("version = \"0.1.0\"", "version = \"0.1.1\""),
+            ("channel = \"stable\"", "channel = \"candidate\""),
+            (
+                "binary_archive_name = \"binary.tar.gz\"",
+                "binary_archive_name = \"myc.tar.gz\"",
+            ),
+            (
+                "checksums_name = \"SHA256SUMS\"",
+                "checksums_name = \"checksums.txt\"",
+            ),
+            (
+                "77b381648ed1e586efb696888beb05b9215c69cf",
+                "77b381648ed1e586efb696888beb05b9215c69ce",
+            ),
+            (
+                "4b3ba5789fac6aa219e84e1e5c002cf8230b72f95fd6d95a6419d2fdf2915f83",
+                "4b3ba5789fac6aa219e84e1e5c002cf8230b72f95fd6d95a6419d2fdf2915f84",
+            ),
+        ] {
+            let drift = HARDENED_SERVICE_CONTRACT.replacen(needle, replacement, 1);
+            assert!(
+                RadrootsRuntimeDistributionResolver::parse_str(&drift).is_err(),
+                "drift `{needle}` must fail"
+            );
+        }
+
+        let missing_member =
+            HARDENED_SERVICE_CONTRACT.replacen("\"systemd.service\"", "\"unexpected\"", 1);
+        assert!(RadrootsRuntimeDistributionResolver::parse_str(&missing_member).is_err());
+        let uppercase_hash = HARDENED_SERVICE_CONTRACT.replacen("4b3ba578", "4B3BA578", 1);
+        assert!(RadrootsRuntimeDistributionResolver::parse_str(&uppercase_hash).is_err());
+        let unknown = HARDENED_SERVICE_CONTRACT.replacen(
+            "[service_artifacts.myc]",
+            "[service_artifacts.myc]\nunknown = true",
+            1,
+        );
+        assert!(RadrootsRuntimeDistributionResolver::parse_str(&unknown).is_err());
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::service::HardenedServiceTargets;
+use crate::service_artifact::HardenedServiceArtifacts;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -24,6 +25,7 @@ pub struct RadrootsRuntimeDistributionContract {
     #[serde(default)]
     pub runtime: Vec<RuntimeDistributionEntry>,
     pub service_targets: HardenedServiceTargets,
+    pub service_artifacts: HardenedServiceArtifacts,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]

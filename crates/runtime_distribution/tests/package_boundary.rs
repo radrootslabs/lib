@@ -1,21 +1,20 @@
 const SERVICE_SOURCE: &str = include_str!("../src/service.rs");
+const SERVICE_ARTIFACT_SOURCE: &str = include_str!("../src/service_artifact.rs");
 const RESOLVER_SOURCE: &str = include_str!("../src/resolve.rs");
 const ROOT_SOURCE: &str = include_str!("../src/lib.rs");
 const SERVICE_FIXTURE: &str = include_str!("fixtures/hardened_service_targets.v1.toml");
 
 #[test]
-fn hardened_service_metadata_has_no_artifact_or_runtime_authority() {
+fn hardened_service_artifacts_are_closed_metadata_without_runtime_authority() {
     for forbidden in [
-        "binary_name",
-        "package_name",
         "artifact_adapter",
         "default_channel",
         "[[runtime]]",
         "qualified",
     ] {
         assert!(
-            !SERVICE_SOURCE.contains(forbidden) && !SERVICE_FIXTURE.contains(forbidden),
-            "hardened service metadata contains deferred authority `{forbidden}`"
+            !SERVICE_ARTIFACT_SOURCE.contains(forbidden) && !SERVICE_FIXTURE.contains(forbidden),
+            "hardened service artifact metadata contains forbidden authority `{forbidden}`"
         );
     }
 
@@ -29,10 +28,25 @@ fn hardened_service_metadata_has_no_artifact_or_runtime_authority() {
         "TcpListener",
     ] {
         assert!(
-            !SERVICE_SOURCE.contains(forbidden),
+            !SERVICE_SOURCE.contains(forbidden) && !SERVICE_ARTIFACT_SOURCE.contains(forbidden),
             "service metadata owns forbidden runtime behavior `{forbidden}`"
         );
     }
+
+    for required in [
+        "service_artifacts.myc",
+        "service_artifacts.rhi",
+        "binary.tar.gz",
+        "artifact-manifest.v1.json",
+        "SHA256SUMS",
+        "service-source.tar.gz",
+        "sbom.cdx.json",
+        "provenance-input.v1.json",
+    ] {
+        assert!(SERVICE_FIXTURE.contains(required), "missing `{required}`");
+    }
+    assert!(ROOT_SOURCE.contains("mod service_artifact;"));
+    assert!(!ROOT_SOURCE.contains("pub mod service_artifact;"));
 }
 
 #[test]
