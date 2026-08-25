@@ -90,9 +90,16 @@ does not participate in identity. The transport ID, endpoint, and scope do.
 Target-set construction preserves caller order and rejects duplicate
 fingerprints instead of silently deduplicating them.
 
-Adapter-specific endpoint policy belongs in the adapter. This generic package
-does not export relay URL types, Reticulum constants, network clients, or
-private-network exceptions.
+The ordinary Nostr target constructor admits TLS endpoints and exact loopback
+cleartext only. Physical-device callers must select
+[`TargetNetworkPolicy::PrivateDevice`] explicitly; that policy admits only
+literal RFC1918 IPv4 or ULA IPv6 endpoints. This is a passive construction
+boundary, not connection authority. Concrete adapters must retain the selected
+policy, revalidate every resolved address, and pin the validated destination
+when opening a socket. This generic package does not resolve names, open
+connections, export relay URL types, or own network fallback.
+
+[`TargetNetworkPolicy::PrivateDevice`]: crate::TargetNetworkPolicy::PrivateDevice
 
 ## Bounds, deadlines, cancellation, and commit points
 

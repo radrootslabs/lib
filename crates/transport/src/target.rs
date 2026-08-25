@@ -8,12 +8,26 @@ use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::net::Ipv6Addr;
+use core::net::{IpAddr, Ipv6Addr};
 use core::str::FromStr;
 use sha2::{Digest, Sha256};
 
 /// Maximum number of targets in one operation.
 pub const TARGET_SET_MAX_ITEMS: usize = 64;
+
+/// Construction policy for canonical Nostr relay targets.
+///
+/// This policy controls only whether a cleartext relay identifier may be
+/// represented. A concrete adapter must independently retain and enforce its
+/// network policy before and after address resolution.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum TargetNetworkPolicy {
+    /// TLS relay targets plus exact loopback cleartext targets.
+    TlsOrLoopback,
+    /// Exact RFC1918 IPv4 or ULA IPv6 device targets, with or without TLS.
+    PrivateDevice,
+}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -26,8 +40,11 @@ impl EndpointUri {
         Ok(Self(canonical))
     }
 
-    fn parse_nostr_relay(raw: impl AsRef<str>) -> Result<Self, TransportError> {
-        let canonical = canonicalize_nostr_relay_uri(raw.as_ref())?;
+    fn parse_nostr_relay(
+        raw: impl AsRef<str>,
+        policy: TargetNetworkPolicy,
+    ) -> Result<Self, TransportError> {
+        let canonical = canonicalize_nostr_relay_uri(raw.as_ref(), policy)?;
         Ok(Self(canonical))
     }
 
@@ -311,6 +328,11 @@ pub struct Target {
     scope: Option<TargetScope>,
     label: Option<TargetLabel>,
     fingerprint: TargetFingerprint,
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "private_device_cleartext_is_false")
+    )]
+    private_device_cleartext: bool,
 }
 
 impl Target {
@@ -322,12 +344,29 @@ impl Target {
         Self::nostr_relay_with_metadata(uri, None, None)
     }
 
+    /// Creates a Nostr relay target under an explicit construction policy.
+    ///
+    /// The private-device policy accepts only literal RFC1918 IPv4 or ULA IPv6
+    /// destinations. Named, public, loopback, link-local, unspecified, and
+    /// multicast destinations remain denied.
+    pub fn nostr_relay_with_policy(
+        uri: impl AsRef<str>,
+        policy: TargetNetworkPolicy,
+    ) -> Result<Self, TransportError> {
+        Self::new_with_metadata_and_nostr_policy(uri, None, None, policy)
+    }
+
     pub fn nostr_relay_with_metadata(
         uri: impl AsRef<str>,
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
     ) -> Result<Self, TransportError> {
-        Self::new_with_metadata(TransportId::NOSTR, uri, scope, label)
+        Self::new_with_metadata_and_nostr_policy(
+            uri,
+            scope,
+            label,
+            TargetNetworkPolicy::TlsOrLoopback,
+        )
     }
 
     pub fn local(uri: impl AsRef<str>) -> Result<Self, TransportError> {
@@ -348,14 +387,38 @@ impl Target {
         scope: Option<TargetScope>,
         label: Option<TargetLabel>,
     ) -> Result<Self, TransportError> {
-        let raw_uri = uri.as_ref();
-        let uri = match kind {
-            TransportId::NOSTR => EndpointUri::parse_nostr_relay(raw_uri)?,
-            _ => EndpointUri::parse(raw_uri)?,
-        };
+        if kind == TransportId::NOSTR {
+            return Self::new_with_metadata_and_nostr_policy(
+                uri,
+                scope,
+                label,
+                TargetNetworkPolicy::TlsOrLoopback,
+            );
+        }
+        let uri = EndpointUri::parse(uri)?;
         let fingerprint = TargetFingerprint::from_target(&kind, &uri, scope.as_ref());
         Ok(Self {
             kind,
+            uri,
+            scope,
+            label,
+            fingerprint,
+            private_device_cleartext: false,
+        })
+    }
+
+    fn new_with_metadata_and_nostr_policy(
+        uri: impl AsRef<str>,
+        scope: Option<TargetScope>,
+        label: Option<TargetLabel>,
+        policy: TargetNetworkPolicy,
+    ) -> Result<Self, TransportError> {
+        let uri = EndpointUri::parse_nostr_relay(uri, policy)?;
+        let fingerprint = TargetFingerprint::from_target(&TransportId::NOSTR, &uri, scope.as_ref());
+        Ok(Self {
+            kind: TransportId::NOSTR,
+            private_device_cleartext: policy == TargetNetworkPolicy::PrivateDevice
+                && uri.as_str().starts_with("ws://"),
             uri,
             scope,
             label,
@@ -393,6 +456,7 @@ struct TargetWire {
     scope: Option<String>,
     label: Option<String>,
     fingerprint: String,
+    private_device_cleartext: Option<bool>,
 }
 
 #[cfg(feature = "serde")]
@@ -425,9 +489,23 @@ impl<'de> serde::Deserialize<'de> for Target {
                 "transport target fingerprint is not canonical",
             ));
         }
+        if wire.private_device_cleartext == Some(false) {
+            return Err(serde::de::Error::custom(
+                "transport target private-device marker is not canonical",
+            ));
+        }
         let target =
-            Self::new_with_metadata(wire.kind, wire.uri.as_str(), scope.clone(), label.clone())
-                .map_err(serde::de::Error::custom)?;
+            if wire.kind == TransportId::NOSTR && wire.private_device_cleartext == Some(true) {
+                Self::new_with_metadata_and_nostr_policy(
+                    wire.uri.as_str(),
+                    scope.clone(),
+                    label.clone(),
+                    TargetNetworkPolicy::PrivateDevice,
+                )
+            } else {
+                Self::new_with_metadata(wire.kind, wire.uri.as_str(), scope.clone(), label.clone())
+            }
+            .map_err(serde::de::Error::custom)?;
         if target.uri.as_str() != wire.uri
             || target.scope != scope
             || target.label != label
@@ -550,7 +628,10 @@ fn is_valid_scheme(value: &str) -> bool {
         && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
 }
 
-fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, TransportError> {
+fn canonicalize_nostr_relay_uri(
+    raw: &str,
+    policy: TargetNetworkPolicy,
+) -> Result<String, TransportError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(TransportError::EmptyTargetUri);
@@ -581,7 +662,7 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, TransportError> {
     let authority_end = endpoint.find('/').unwrap_or(endpoint.len());
     let authority = &endpoint[..authority_end];
     let path = &endpoint[authority_end..];
-    let authority = canonicalize_nostr_relay_authority(authority, scheme.as_str())?;
+    let authority = canonicalize_nostr_relay_authority(authority, scheme.as_str(), policy)?;
     validate_nostr_relay_path(path)?;
     if path == "/" {
         return Ok(format!("{scheme}://{authority}"));
@@ -592,6 +673,7 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, TransportError> {
 fn canonicalize_nostr_relay_authority(
     authority: &str,
     scheme: &str,
+    policy: TargetNetworkPolicy,
 ) -> Result<String, TransportError> {
     if authority.is_empty() || authority.contains('@') {
         return Err(TransportError::InvalidTargetUri);
@@ -626,8 +708,17 @@ fn canonicalize_nostr_relay_authority(
             .transpose()?;
         (canonicalize_nostr_relay_host(host)?, port)
     };
-    if scheme == "ws" && !is_local_ws_relay_host(host.as_str()) {
-        return Err(TransportError::InvalidTargetUri);
+    match policy {
+        TargetNetworkPolicy::TlsOrLoopback => {
+            if scheme == "ws" && !is_local_ws_relay_host(host.as_str()) {
+                return Err(TransportError::InvalidTargetUri);
+            }
+        }
+        TargetNetworkPolicy::PrivateDevice => {
+            if !is_private_device_relay_host(host.as_str()) {
+                return Err(TransportError::InvalidTargetUri);
+            }
+        }
     }
     let port =
         port.filter(|port| !matches!((scheme, port.as_str()), ("wss", "443") | ("ws", "80")));
@@ -821,4 +912,17 @@ fn upper_hex_digit(byte: u8) -> bool {
 
 fn is_local_ws_relay_host(host: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "[::1]")
+}
+
+fn is_private_device_relay_host(host: &str) -> bool {
+    match host.trim_matches(['[', ']']).parse::<IpAddr>() {
+        Ok(IpAddr::V4(address)) => address.is_private(),
+        Ok(IpAddr::V6(address)) => address.segments()[0] & 0xfe00 == 0xfc00,
+        Err(_) => false,
+    }
+}
+
+#[cfg(feature = "serde")]
+const fn private_device_cleartext_is_false(value: &bool) -> bool {
+    !*value
 }

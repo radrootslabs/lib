@@ -1,7 +1,7 @@
 use core::str::FromStr;
 
 use radroots_transport::{
-    Error, TARGET_SET_MAX_ITEMS, Target, TargetSet, TransportId,
+    Error, TARGET_SET_MAX_ITEMS, Target, TargetNetworkPolicy, TargetSet, TransportId,
     endpoint::{
         ENDPOINT_URI_MAX_BYTES, EndpointUri, TARGET_LABEL_MAX_BYTES, TARGET_SCOPE_MAX_BYTES,
         TargetLabel, TargetScope,
@@ -102,6 +102,18 @@ fn transport_target_uri_vectors_match_the_canonical_parser() {
             "transport.nostr_relay_target.invalid" => {
                 assert!(Target::nostr_relay(raw).is_err())
             }
+            "transport.nostr_relay_private_device.valid" => assert_eq!(
+                Target::nostr_relay_with_policy(raw, TargetNetworkPolicy::PrivateDevice)
+                    .expect("valid private-device relay")
+                    .uri()
+                    .as_str(),
+                vector["expected"]["canonical_uri"]
+                    .as_str()
+                    .expect("canonical URI")
+            ),
+            "transport.nostr_relay_private_device.invalid" => assert!(
+                Target::nostr_relay_with_policy(raw, TargetNetworkPolicy::PrivateDevice).is_err()
+            ),
             other => panic!("unknown vector kind {other}"),
         }
     }
@@ -250,6 +262,45 @@ fn nostr_targets_reject_ambiguous_authorities_hosts_ports_and_paths() {
 }
 
 #[test]
+fn private_device_relay_targets_require_an_explicit_literal_policy() {
+    for (raw, canonical, requires_explicit_policy) in [
+        ("ws://10.0.0.1:7447", "ws://10.0.0.1:7447", true),
+        ("ws://172.16.0.1", "ws://172.16.0.1", true),
+        ("wss://192.168.1.2", "wss://192.168.1.2", false),
+        ("ws://[FD00::1]:7447", "ws://[fd00::1]:7447", true),
+    ] {
+        assert_eq!(
+            Target::nostr_relay(raw).is_err(),
+            requires_explicit_policy,
+            "{raw}"
+        );
+        assert_eq!(
+            Target::nostr_relay_with_policy(raw, TargetNetworkPolicy::PrivateDevice)
+                .expect("private-device target")
+                .uri()
+                .as_str(),
+            canonical
+        );
+    }
+
+    for denied in [
+        "ws://relay.example",
+        "ws://8.8.8.8",
+        "ws://127.0.0.1",
+        "ws://169.254.1.1",
+        "ws://224.0.0.1",
+        "ws://[::1]",
+        "ws://[fe80::1]",
+        "ws://[ff02::1]",
+    ] {
+        assert!(
+            Target::nostr_relay_with_policy(denied, TargetNetworkPolicy::PrivateDevice).is_err(),
+            "{denied}"
+        );
+    }
+}
+
+#[test]
 fn target_metadata_identity_and_collection_accessors_are_explicit() {
     let scope = TargetScope::parse("local").expect("scope");
     let label = TargetLabel::parse(" Local node ").expect("label");
@@ -352,4 +403,30 @@ fn target_deserialization_revalidates_every_canonical_identity_field() {
     let first = duplicate["targets"][0].clone();
     duplicate["targets"].as_array_mut().unwrap().push(first);
     assert!(serde_json::from_value::<TargetSet>(duplicate).is_err());
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn private_device_cleartext_target_round_trip_remains_explicit_and_validated() {
+    let target =
+        Target::nostr_relay_with_policy("ws://[fd00::5]:7447", TargetNetworkPolicy::PrivateDevice)
+            .expect("private-device target");
+    let value = serde_json::to_value(&target).expect("private-device target JSON");
+    assert_eq!(value["private_device_cleartext"], Value::Bool(true));
+    assert_eq!(
+        serde_json::from_value::<Target>(value.clone()).expect("private-device round trip"),
+        target
+    );
+
+    let mut false_marker = value.clone();
+    false_marker["private_device_cleartext"] = Value::Bool(false);
+    assert!(serde_json::from_value::<Target>(false_marker).is_err());
+
+    let mut public_address = value.clone();
+    public_address["uri"] = Value::String("ws://8.8.8.8:7447".into());
+    assert!(serde_json::from_value::<Target>(public_address).is_err());
+
+    let mut named = value;
+    named["uri"] = Value::String("ws://relay.internal:7447".into());
+    assert!(serde_json::from_value::<Target>(named).is_err());
 }

@@ -24,7 +24,7 @@ pub use source::{
     FetchRequest, SourceStatus, SubscriptionEnd, SubscriptionEndReason, SubscriptionEvent,
     SubscriptionNext, SubscriptionRequest,
 };
-pub use target::{TARGET_SET_MAX_ITEMS, Target, TargetSet};
+pub use target::{TARGET_SET_MAX_ITEMS, Target, TargetNetworkPolicy, TargetSet};
 
 #[cfg(test)]
 extern crate self as radroots_transport;

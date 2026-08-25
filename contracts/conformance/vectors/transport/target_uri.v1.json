@@ -71,6 +71,26 @@
       "expected": {
         "error": "invalid_target_uri"
       }
+    },
+    {
+      "id": "transport_nostr_relay_private_device_008",
+      "kind": "transport.nostr_relay_private_device.valid",
+      "input": {
+        "uri": "WS://192.168.1.2:7447/"
+      },
+      "expected": {
+        "canonical_uri": "ws://192.168.1.2:7447"
+      }
+    },
+    {
+      "id": "transport_nostr_relay_named_device_009",
+      "kind": "transport.nostr_relay_private_device.invalid",
+      "input": {
+        "uri": "ws://relay.internal"
+      },
+      "expected": {
+        "error": "invalid_target_uri"
+      }
     }
   ]
 }

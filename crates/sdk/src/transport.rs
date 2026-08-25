@@ -76,7 +76,7 @@ pub enum BlossomEndpointAuthority {
     PublicWebPki,
     /// Development-only HTTP or HTTPS resolving exclusively to loopback.
     LoopbackDevelopment,
-    /// Development-only HTTPS resolving to a non-loopback trusted network.
+    /// Development-only HTTP or HTTPS using an exact RFC1918 or ULA address.
     PrivateNetworkDevelopment,
 }
 
@@ -648,7 +648,7 @@ pub enum BlossomTransportSecurity {
     PublicWebPki,
     /// Development HTTPS without a public-origin availability claim.
     DevelopmentTls,
-    /// Simulator-only cleartext loopback HTTP.
+    /// Development-only cleartext loopback or exact-private-network HTTP.
     DevelopmentCleartext,
 }
 
@@ -1595,7 +1595,12 @@ impl std::fmt::Debug for BlossomSlot {
 #[cfg(feature = "blossom")]
 fn endpoint_scheme_is_allowed(scheme: &str, authority: BlossomEndpointAuthority) -> bool {
     scheme == "https"
-        || scheme == "http" && authority == BlossomEndpointAuthority::LoopbackDevelopment
+        || scheme == "http"
+            && matches!(
+                authority,
+                BlossomEndpointAuthority::LoopbackDevelopment
+                    | BlossomEndpointAuthority::PrivateNetworkDevelopment
+            )
 }
 
 #[cfg(feature = "blossom")]
@@ -1624,7 +1629,7 @@ fn validate_blossom_host(
     host: &str,
     authority: BlossomEndpointAuthority,
 ) -> Result<(), BlossomError> {
-    let address = host.parse::<IpAddr>().ok();
+    let address = host.trim_matches(['[', ']']).parse::<IpAddr>().ok();
     let accepted = match (authority, address) {
         (BlossomEndpointAuthority::PublicWebPki, Some(address)) => public_blossom_address(address),
         (BlossomEndpointAuthority::PublicWebPki, None) => public_blossom_hostname(host),
@@ -1633,7 +1638,7 @@ fn validate_blossom_host(
         (BlossomEndpointAuthority::PrivateNetworkDevelopment, Some(address)) => {
             trusted_blossom_address(address)
         }
-        (BlossomEndpointAuthority::PrivateNetworkDevelopment, None) => host != "localhost",
+        (BlossomEndpointAuthority::PrivateNetworkDevelopment, None) => false,
     };
     if accepted {
         Ok(())
@@ -1691,15 +1696,8 @@ fn public_blossom_address(address: IpAddr) -> bool {
 #[cfg(feature = "blossom")]
 fn trusted_blossom_address(address: IpAddr) -> bool {
     match address {
-        IpAddr::V4(address) => {
-            !address.is_unspecified()
-                && !address.is_loopback()
-                && !address.is_multicast()
-                && !address.is_broadcast()
-        }
-        IpAddr::V6(address) => {
-            !address.is_unspecified() && !address.is_loopback() && !address.is_multicast()
-        }
+        IpAddr::V4(address) => address.is_private(),
+        IpAddr::V6(address) => address.segments()[0] & 0xfe00 == 0xfc00,
     }
 }
 
@@ -2363,7 +2361,9 @@ mod tests {
         assert!(simulator_blossom_profile("http://localhost:3000").is_ok());
         assert!(simulator_blossom_profile("http://media.example").is_err());
         assert!(device_blossom_profile("https://10.0.0.10:8443").is_ok());
-        assert!(device_blossom_profile("http://10.0.0.10:8443").is_err());
+        assert!(device_blossom_profile("http://10.0.0.10:8443").is_ok());
+        assert!(device_blossom_profile("http://8.8.8.8:8443").is_err());
+        assert!(device_blossom_profile("https://device.example:8443").is_err());
         assert!(device_blossom_profile("https://127.0.0.1:8443").is_err());
     }
 
@@ -2486,6 +2486,13 @@ mod tests {
             cleartext.transport_security(),
             BlossomTransportSecurity::DevelopmentCleartext
         );
+        let device_cleartext = BlossomEndpointEvidence::configured(&BlossomConfig::from_profile(
+            device_blossom_profile("http://10.0.0.10:3000").expect("device profile"),
+        ));
+        assert_eq!(
+            device_cleartext.transport_security(),
+            BlossomTransportSecurity::DevelopmentCleartext
+        );
 
         slot.clear();
         assert!(slot.evidence().is_none());
@@ -2592,7 +2599,7 @@ mod tests {
             BlossomProfile::new(
                 BlossomHostKind::PhysicalDevice,
                 BlossomEndpointAuthority::PrivateNetworkDevelopment,
-                "https://device.example",
+                "https://10.0.0.10",
                 std::iter::empty::<&str>(),
             )
             .unwrap()
@@ -3039,7 +3046,7 @@ mod tests {
                 .validate_resolved_addresses([IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))])
                 .is_ok()
         );
-        let device = device_blossom_profile("https://device.example").unwrap();
+        let device = device_blossom_profile("https://10.0.0.10").unwrap();
         assert!(
             device
                 .primary()
@@ -3076,6 +3083,34 @@ mod tests {
             BlossomEndpointAuthority::PrivateNetworkDevelopment,
             IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))
         ));
+    }
+
+    #[cfg(feature = "blossom")]
+    #[test]
+    fn blossom_device_policy_matches_the_shared_conformance_vectors() {
+        let document: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/transport/device_network_policy.v1.json"
+        ))
+        .expect("device network policy vectors");
+        for vector in document["vectors"].as_array().expect("vectors") {
+            let input = &vector["input"];
+            if input["surface"] != "blossom" {
+                continue;
+            }
+            let endpoint = input["endpoint"].as_str().expect("endpoint");
+            let profile = match input["policy"].as_str().expect("policy") {
+                "public" => public_blossom_profile(endpoint),
+                "loopback" => simulator_blossom_profile(endpoint),
+                "private_device" => device_blossom_profile(endpoint),
+                other => panic!("unknown Blossom policy {other}"),
+            };
+            assert_eq!(
+                profile.is_ok(),
+                vector["expected"]["accepted"].as_bool().expect("accepted"),
+                "{}",
+                vector["id"].as_str().expect("id")
+            );
+        }
     }
 
     #[cfg(feature = "blossom")]

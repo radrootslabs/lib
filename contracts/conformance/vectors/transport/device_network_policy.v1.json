@@ -1,0 +1,24 @@
+{
+  "suite": "transport-device-network-policy",
+  "contract_version": "1.0.0",
+  "vectors": [
+    { "id": "relay_public_tls_name", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "public", "endpoint": "wss://relay.example" }, "expected": { "accepted": true } },
+    { "id": "relay_public_plaintext_name", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "public", "endpoint": "ws://relay.example" }, "expected": { "accepted": false } },
+    { "id": "relay_loopback_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "loopback", "endpoint": "ws://127.0.0.1:7447" }, "expected": { "accepted": true } },
+    { "id": "relay_device_rfc1918_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "private_device", "endpoint": "ws://10.0.0.5:7447" }, "expected": { "accepted": true } },
+    { "id": "relay_device_ula_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "private_device", "endpoint": "ws://[fd00::5]:7447" }, "expected": { "accepted": true } },
+    { "id": "relay_device_named_tls", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "private_device", "endpoint": "wss://relay.internal" }, "expected": { "accepted": false } },
+    { "id": "relay_device_public_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "private_device", "endpoint": "ws://8.8.8.8:7447" }, "expected": { "accepted": false } },
+    { "id": "relay_device_loopback_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "private_device", "endpoint": "ws://127.0.0.1:7447" }, "expected": { "accepted": false } },
+    { "id": "relay_device_link_local_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "relay", "policy": "private_device", "endpoint": "ws://169.254.1.1:7447" }, "expected": { "accepted": false } },
+    { "id": "blossom_public_tls_name", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "public", "endpoint": "https://media.example" }, "expected": { "accepted": true } },
+    { "id": "blossom_public_plaintext_name", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "public", "endpoint": "http://media.example" }, "expected": { "accepted": false } },
+    { "id": "blossom_loopback_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "loopback", "endpoint": "http://127.0.0.1:3100" }, "expected": { "accepted": true } },
+    { "id": "blossom_device_rfc1918_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "private_device", "endpoint": "http://192.168.1.5:3100" }, "expected": { "accepted": true } },
+    { "id": "blossom_device_ula_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "private_device", "endpoint": "http://[fd00::5]:3100" }, "expected": { "accepted": true } },
+    { "id": "blossom_device_named_tls", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "private_device", "endpoint": "https://media.internal" }, "expected": { "accepted": false } },
+    { "id": "blossom_device_public_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "private_device", "endpoint": "http://8.8.8.8:3100" }, "expected": { "accepted": false } },
+    { "id": "blossom_device_loopback_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "private_device", "endpoint": "http://127.0.0.1:3100" }, "expected": { "accepted": false } },
+    { "id": "blossom_device_link_local_plaintext", "kind": "transport.device_network_policy", "input": { "surface": "blossom", "policy": "private_device", "endpoint": "http://[fe80::1]:3100" }, "expected": { "accepted": false } }
+  ]
+}

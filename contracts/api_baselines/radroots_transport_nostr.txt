@@ -10,10 +10,8 @@ pub radroots_transport_nostr::Error::AuthSignerUnavailable
 pub radroots_transport_nostr::Error::AuthStateUnavailable
 pub radroots_transport_nostr::Error::AuthTransport
 pub radroots_transport_nostr::Error::DuplicateRelayUrl
-pub radroots_transport_nostr::Error::DuplicateRelayUrl::url: alloc::string::String
 pub radroots_transport_nostr::Error::EmptyRelaySet
 pub radroots_transport_nostr::Error::EmptyResolution
-pub radroots_transport_nostr::Error::EmptyResolution::url: alloc::string::String
 pub radroots_transport_nostr::Error::InvalidAuthChallenge
 pub radroots_transport_nostr::Error::InvalidConnectionLimit
 pub radroots_transport_nostr::Error::InvalidConnectionLimit::value: usize
@@ -22,26 +20,18 @@ pub radroots_transport_nostr::Error::InvalidReconnectBackoff::initial_delay_ms: 
 pub radroots_transport_nostr::Error::InvalidReconnectBackoff::max_delay_ms: u64
 pub radroots_transport_nostr::Error::InvalidRelayCursor
 pub radroots_transport_nostr::Error::InvalidRelayUrl
-pub radroots_transport_nostr::Error::InvalidRelayUrl::reason: alloc::string::String
-pub radroots_transport_nostr::Error::InvalidRelayUrl::url: alloc::string::String
 pub radroots_transport_nostr::Error::InvalidTimeout
 pub radroots_transport_nostr::Error::InvalidTimeout::field: &'static str
 pub radroots_transport_nostr::Error::InvalidTimeout::value_ms: u64
 pub radroots_transport_nostr::Error::RelayDestinationDenied
-pub radroots_transport_nostr::Error::RelayDestinationDenied::reason: &'static str
-pub radroots_transport_nostr::Error::RelayDestinationDenied::url: alloc::string::String
 pub radroots_transport_nostr::Error::RelayProfilePolicyMismatch
 pub radroots_transport_nostr::Error::RelaySchemeDenied
-pub radroots_transport_nostr::Error::RelaySchemeDenied::url: alloc::string::String
 pub radroots_transport_nostr::Error::ResolvedAddressDenied
-pub radroots_transport_nostr::Error::ResolvedAddressDenied::address: alloc::string::String
-pub radroots_transport_nostr::Error::ResolvedAddressDenied::url: alloc::string::String
-pub radroots_transport_nostr::Error::Target(alloc::string::String)
+pub radroots_transport_nostr::Error::Target
 pub radroots_transport_nostr::Error::TooManyRelays
 pub radroots_transport_nostr::Error::TooManyRelays::actual: usize
 pub radroots_transport_nostr::Error::TooManyRelays::max: usize
 pub radroots_transport_nostr::Error::UnexpectedTransport
-pub radroots_transport_nostr::Error::UnexpectedTransport::actual: alloc::string::String
 impl core::error::Error for radroots_transport_nostr::Error
 impl core::fmt::Display for radroots_transport_nostr::Error
 pub fn radroots_transport_nostr::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

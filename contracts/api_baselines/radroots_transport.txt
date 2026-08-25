@@ -486,6 +486,9 @@ pub fn radroots_transport::source::EventSubscription::request(&self) -> &radroot
 pub type radroots_transport::source::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
 pub type radroots_transport::source::BoxSubscription = alloc::boxed::Box<dyn radroots_transport::source::EventSubscription>
 pub mod radroots_transport::target
+#[non_exhaustive] pub enum radroots_transport::target::TargetNetworkPolicy
+pub radroots_transport::target::TargetNetworkPolicy::PrivateDevice
+pub radroots_transport::target::TargetNetworkPolicy::TlsOrLoopback
 pub struct radroots_transport::target::EndpointUri(_)
 impl radroots_transport::target::EndpointUri
 pub fn radroots_transport::target::EndpointUri::as_str(&self) -> &str
@@ -513,6 +516,7 @@ pub fn radroots_transport::target::Target::new(radroots_transport::TransportId, 
 pub fn radroots_transport::target::Target::new_with_metadata(radroots_transport::TransportId, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::nostr_relay(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::nostr_relay_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::target::Target::nostr_relay_with_policy(impl core::convert::AsRef<str>, radroots_transport::target::TargetNetworkPolicy) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::scope(&self) -> core::option::Option<&radroots_transport::target::TargetScope>
 pub fn radroots_transport::target::Target::uri(&self) -> &radroots_transport::target::EndpointUri
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::target::Target
@@ -658,6 +662,9 @@ pub radroots_transport::SubscriptionEndReason::SourceClosed
 pub enum radroots_transport::SubscriptionNext
 pub radroots_transport::SubscriptionNext::End(radroots_transport::source::SubscriptionEnd)
 pub radroots_transport::SubscriptionNext::Event(alloc::boxed::Box<radroots_transport::source::SubscriptionEvent>)
+#[non_exhaustive] pub enum radroots_transport::TargetNetworkPolicy
+pub radroots_transport::TargetNetworkPolicy::PrivateDevice
+pub radroots_transport::TargetNetworkPolicy::TlsOrLoopback
 pub struct radroots_transport::DeliveryReceipt
 impl radroots_transport::sink::DeliveryReceipt
 pub fn radroots_transport::sink::DeliveryReceipt::for_request(&radroots_transport::sink::DeliveryRequest, alloc::vec::Vec<radroots_transport::sink::DeliveryTargetReceipt>) -> core::result::Result<Self, radroots_transport::error::Error>
@@ -776,6 +783,7 @@ pub fn radroots_transport::target::Target::new(radroots_transport::TransportId, 
 pub fn radroots_transport::target::Target::new_with_metadata(radroots_transport::TransportId, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::nostr_relay(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::nostr_relay_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::target::Target::nostr_relay_with_policy(impl core::convert::AsRef<str>, radroots_transport::target::TargetNetworkPolicy) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::scope(&self) -> core::option::Option<&radroots_transport::target::TargetScope>
 pub fn radroots_transport::target::Target::uri(&self) -> &radroots_transport::target::EndpointUri
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::target::Target

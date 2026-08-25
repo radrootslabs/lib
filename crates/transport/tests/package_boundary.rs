@@ -5,8 +5,8 @@ use radroots_transport::{
     DeliveryReceipt as _, DeliveryRequest as _, Error as _, EventSink as _, EventSource as _,
     EventSubscriber as _, EventSubscription as _, FetchPage as _, FetchRequest as _,
     SubscriptionEnd as _, SubscriptionEvent as _, SubscriptionRequest as _, Target as _,
-    TargetSet as _, TransportId as _, capability as _, endpoint as _, error as _, outcome as _,
-    policy as _, sink as _, source as _, target as _,
+    TargetNetworkPolicy as _, TargetSet as _, TransportId as _, capability as _, endpoint as _,
+    error as _, outcome as _, policy as _, sink as _, source as _, target as _,
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
@@ -85,6 +85,9 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "radroots_crates_release_v1.toml",
         "examples/host_transport.rs",
         "indexed single-letter tag values",
+        "TargetNetworkPolicy::PrivateDevice",
+        "literal RFC1918 IPv4 or ULA IPv6 endpoints",
+        "not connection authority",
     ] {
         assert!(README.contains(required), "README is missing {required}");
     }
@@ -127,6 +130,8 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub fn radroots_transport::source::FetchSelector::exact_tag_filters",
         "pub fn radroots_transport::target::Target::new(radroots_transport::TransportId",
         "pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::TransportId",
+        "pub enum radroots_transport::target::TargetNetworkPolicy",
+        "pub fn radroots_transport::target::Target::nostr_relay_with_policy",
     ] {
         assert!(
             PUBLIC_API.contains(required),

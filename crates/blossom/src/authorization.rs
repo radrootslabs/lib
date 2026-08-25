@@ -8,11 +8,12 @@
 //! authentication and request-commit responsibility.
 
 use alloc::{
+    format,
     string::{String, ToString},
     vec,
     vec::Vec,
 };
-use core::{fmt, str::FromStr};
+use core::{fmt, net::Ipv6Addr, str::FromStr};
 
 use crate::{Error, Sha256};
 
@@ -78,6 +79,19 @@ impl ServerDomain {
             || value.bytes().any(|byte| byte.is_ascii_uppercase())
         {
             return Err(Error::InvalidAuthorizationServerDomain);
+        }
+
+        if let Some(address) = value
+            .strip_prefix('[')
+            .and_then(|value| value.strip_suffix(']'))
+        {
+            let address = address
+                .parse::<Ipv6Addr>()
+                .map_err(|_| Error::InvalidAuthorizationServerDomain)?;
+            if value != format!("[{address}]") {
+                return Err(Error::InvalidAuthorizationServerDomain);
+            }
+            return Ok(Self(value.to_string()));
         }
 
         let mut all_labels_are_numeric = true;
@@ -686,13 +700,15 @@ mod tests {
     }
 
     #[test]
-    fn domains_accept_lowercase_ldh_dns_localhost_and_canonical_ipv4() {
+    fn domains_accept_lowercase_ldh_dns_localhost_and_canonical_ip_literals() {
         for value in [
             "localhost",
             "media.example.com",
             "xn--bcher-kva.example",
             "127.0.0.1",
             "0.0.0.0",
+            "[fd00::1]",
+            "[2001:db8::1]",
         ] {
             let domain = ServerDomain::parse(value).unwrap();
             assert_eq!(domain.as_str(), value);
@@ -717,6 +733,9 @@ mod tests {
             "127.00.0.1",
             "256.0.0.1",
             "2130706433",
+            "fd00::1",
+            "[FD00::1]",
+            "[fd00:0:0:0:0:0:0:1]",
             &long_label,
             &long_domain,
         ] {

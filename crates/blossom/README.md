@@ -118,7 +118,8 @@ HTTP authorization material and must not be published to relays.
 
 `AuthoredUploadClaim` emits checked event wire parts; it does not sign them or
 send a request. Authorization content is bounded to 4,096 bytes, server domains
-use lowercase ASCII DNS or canonical IPv4 forms, timestamps are explicit
+use lowercase ASCII DNS, canonical IPv4, or bracketed canonical IPv6 forms,
+timestamps are explicit
 caller inputs, and authored lifetimes are limited to 300 seconds.
 
 The crate forbids unsafe Rust. It does not provide confidentiality,

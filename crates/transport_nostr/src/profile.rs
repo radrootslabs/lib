@@ -35,7 +35,7 @@ pub enum RelayProfileKind {
     Public,
     /// Development-only profile restricted to exact loopback destinations.
     Simulator,
-    /// Physical-device profile using explicit TLS endpoints on trusted networks.
+    /// Physical-device profile using public TLS or literal private-network endpoints.
     Device,
 }
 
@@ -127,9 +127,7 @@ impl RelayProfile {
                 return Err(Error::RelayProfilePolicyMismatch);
             }
             if !seen.insert(endpoint.url.clone()) {
-                return Err(Error::DuplicateRelayUrl {
-                    url: endpoint.url.to_string(),
-                });
+                return Err(Error::DuplicateRelayUrl);
             }
         }
         Ok(Self { kind, endpoints })

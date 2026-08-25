@@ -89,7 +89,7 @@ let _forged = PreparedDelivery {
 - [`RelayUrl`] is a canonical Nostr relay URL that converts to and from the
   generic `radroots_transport::Target` model.
 - [`RelayUrlPolicy`] selects public-Internet, exact-loopback, or explicitly
-  trusted private-network destination rules.
+  typed private-device destination rules.
 - [`RelayCursor`] provides the equal-timestamp-safe event ordering primitive
   used by scoped fetch continuation cursors.
 - [`NostrTransport`] implements all three transport SPIs, exposes passive typed
@@ -106,16 +106,18 @@ relay pool, Tokio handle, signer, storage handle, or retry worker.
 ## Relay and network security
 
 Profiles never inject a relay or infer destination policy. The caller supplies
-every endpoint together with its public-Internet, exact-loopback, or trusted
-private-network policy and independent read-only/read-write authority. Public
+every endpoint together with its public-Internet, exact-loopback, or typed
+private-device policy and independent read-only/read-write authority. Public
 profiles admit only public endpoints, simulator profiles admit only exact
-loopback endpoints, and physical-device profiles admit public or explicitly
-trusted private-network TLS endpoints.
+loopback endpoints, and physical-device profiles admit public endpoints or
+literal RFC1918 IPv4 and ULA IPv6 endpoints.
 
 `RelayUrlPolicy::Public` accepts TLS WebSocket URLs with public hostnames or
 global addresses. `Local` accepts exact loopback destinations and permits
-plaintext WebSocket only for that class. `PrivateNetwork` accepts explicit
-trusted private or public destinations but still requires TLS.
+plaintext WebSocket only for that class. `PrivateNetwork` accepts only literal RFC1918 IPv4 or ULA IPv6 destinations
+and permits plaintext WebSocket for that explicit device-network class. It
+rejects names, public, loopback, link-local,
+unspecified, and multicast destinations before DNS or socket I/O.
 
 Before opening a socket, the live connector resolves at most 32 addresses,
 validates the entire answer set against the selected policy, and connects to a
@@ -206,8 +208,9 @@ Generic requests, pages, receipts, targets, and status values follow the
 serialization contract of `radroots_transport`.
 
 Public diagnostics are bounded and secret-safe. Raw upstream client errors,
-relay challenge payloads, signed authentication events, credentials, and
-transport internals are not retained in public status or normalized outcomes.
+relay URLs and resolved addresses, relay challenge payloads, signed
+authentication events, credentials, and transport internals are not retained
+in public errors, status, or normalized outcomes.
 Applications should still avoid logging relay authentication inputs or signed
 event JSON.
 

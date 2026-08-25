@@ -9,7 +9,7 @@ use core::pin::Pin;
 use nostr_relay_pool::ConnectionMode;
 use nostr_relay_pool::transport::error::TransportError;
 use nostr_relay_pool::transport::websocket::{WebSocketSink, WebSocketStream, WebSocketTransport};
-use radroots_transport::{BoxFuture, Target, TransportId};
+use radroots_transport::{BoxFuture, Target, TargetNetworkPolicy, TransportId};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -28,19 +28,16 @@ impl RelayUrl {
     /// Parses, canonicalizes, and applies an explicit destination policy.
     pub fn parse(value: impl AsRef<str>, policy: RelayUrlPolicy) -> Result<Self, Error> {
         let original = value.as_ref();
-        let target = Target::nostr_relay(original).map_err(|error| Error::InvalidRelayUrl {
-            url: original.to_owned(),
-            reason: error.to_string(),
-        })?;
+        let target = match policy {
+            RelayUrlPolicy::PrivateNetwork => {
+                Target::nostr_relay_with_policy(original, TargetNetworkPolicy::PrivateDevice)
+            }
+            RelayUrlPolicy::Public | RelayUrlPolicy::Local => Target::nostr_relay(original),
+        }
+        .map_err(|_| Error::InvalidRelayUrl)?;
         let canonical = target.uri().as_str();
-        let parsed = Url::parse(canonical).map_err(|error| Error::InvalidRelayUrl {
-            url: original.to_owned(),
-            reason: error.to_string(),
-        })?;
-        let host = parsed.host_str().ok_or_else(|| Error::InvalidRelayUrl {
-            url: original.to_owned(),
-            reason: "host is required".to_owned(),
-        })?;
+        let parsed = Url::parse(canonical).map_err(|_| Error::InvalidRelayUrl)?;
+        let host = parsed.host_str().ok_or(Error::InvalidRelayUrl)?;
         validate_scheme(canonical, parsed.scheme(), policy)?;
         validate_host(canonical, host, policy)?;
         Ok(Self(canonical.to_owned()))
@@ -48,15 +45,17 @@ impl RelayUrl {
 
     /// Converts a validated relay URL into the generic Nostr target model.
     pub fn to_target(&self) -> Result<Target, Error> {
-        Target::nostr_relay(self.as_str()).map_err(|error| Error::Target(error.to_string()))
+        Target::nostr_relay(self.as_str())
+            .or_else(|_| {
+                Target::nostr_relay_with_policy(self.as_str(), TargetNetworkPolicy::PrivateDevice)
+            })
+            .map_err(|_| Error::Target)
     }
 
     /// Validates and converts a generic target under the selected policy.
     pub fn from_target(target: &Target, policy: RelayUrlPolicy) -> Result<Self, Error> {
         if *target.kind() != TransportId::NOSTR {
-            return Err(Error::UnexpectedTransport {
-                actual: target.kind().to_string(),
-            });
+            return Err(Error::UnexpectedTransport);
         }
         Self::parse(target.uri().as_str(), policy)
     }
@@ -71,16 +70,11 @@ impl RelayUrl {
         for address in addresses {
             resolved = true;
             if !policy.accepts_address(address) {
-                return Err(Error::ResolvedAddressDenied {
-                    url: self.0.clone(),
-                    address: address.to_string(),
-                });
+                return Err(Error::ResolvedAddressDenied);
             }
         }
         if !resolved {
-            return Err(Error::EmptyResolution {
-                url: self.0.clone(),
-            });
+            return Err(Error::EmptyResolution);
         }
         Ok(())
     }
@@ -137,14 +131,12 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                     "proxy and Tor connection modes are not configured",
                 ));
             }
-            let target = Target::nostr_relay(url.as_str())
-                .map_err(|_| policy_error("relay URL is invalid"))?;
             let policy = self
                 .policies
-                .get(target.uri().as_str())
+                .get(configured_policy_key(url))
                 .copied()
                 .ok_or_else(|| policy_error("relay URL is not configured"))?;
-            let relay = RelayUrl::parse(target.uri().as_str(), policy)
+            let relay = RelayUrl::parse(url.as_str(), policy)
                 .map_err(|_| policy_error("relay URL is denied by network policy"))?;
             let parsed =
                 Url::parse(relay.as_str()).map_err(|_| policy_error("relay URL is invalid"))?;
@@ -176,6 +168,14 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                 .await
                 .map_err(|_| policy_error("relay connection deadline elapsed"))?
         })
+    }
+}
+
+fn configured_policy_key(url: &Url) -> &str {
+    if url.path() == "/" && url.query().is_none() && url.fragment().is_none() {
+        url.as_str().strip_suffix('/').unwrap_or(url.as_str())
+    } else {
+        url.as_str()
     }
 }
 
@@ -275,7 +275,7 @@ pub enum RelayUrlPolicy {
     Public,
     /// Exact loopback endpoints; plaintext WebSocket is allowed.
     Local,
-    /// TLS-only endpoints on explicitly trusted private or public networks.
+    /// Exact RFC1918 IPv4 or ULA IPv6 device endpoints.
     PrivateNetwork,
 }
 
@@ -289,32 +289,33 @@ impl RelayUrlPolicy {
     }
 }
 
-fn validate_scheme(url: &str, scheme: &str, policy: RelayUrlPolicy) -> Result<(), Error> {
-    if scheme == "wss" || scheme == "ws" && matches!(policy, RelayUrlPolicy::Local) {
+fn validate_scheme(_url: &str, scheme: &str, policy: RelayUrlPolicy) -> Result<(), Error> {
+    if scheme == "wss"
+        || scheme == "ws"
+            && matches!(
+                policy,
+                RelayUrlPolicy::Local | RelayUrlPolicy::PrivateNetwork
+            )
+    {
         return Ok(());
     }
-    Err(Error::RelaySchemeDenied {
-        url: url.to_owned(),
-    })
+    Err(Error::RelaySchemeDenied)
 }
 
-fn validate_host(url: &str, host: &str, policy: RelayUrlPolicy) -> Result<(), Error> {
-    let address = host.parse::<IpAddr>().ok();
+fn validate_host(_url: &str, host: &str, policy: RelayUrlPolicy) -> Result<(), Error> {
+    let address = host.trim_matches(['[', ']']).parse::<IpAddr>().ok();
     let accepted = match (policy, address) {
         (RelayUrlPolicy::Public, Some(address)) => public_address(address),
         (RelayUrlPolicy::Public, None) => public_hostname(host),
         (RelayUrlPolicy::Local, Some(address)) => address.is_loopback(),
         (RelayUrlPolicy::Local, None) => host.eq_ignore_ascii_case("localhost"),
         (RelayUrlPolicy::PrivateNetwork, Some(address)) => trusted_network_address(address),
-        (RelayUrlPolicy::PrivateNetwork, None) => !host.eq_ignore_ascii_case("localhost"),
+        (RelayUrlPolicy::PrivateNetwork, None) => false,
     };
     if accepted {
         Ok(())
     } else {
-        Err(Error::RelayDestinationDenied {
-            url: url.to_owned(),
-            reason: "destination class does not match relay policy",
-        })
+        Err(Error::RelayDestinationDenied)
     }
 }
 
@@ -336,15 +337,8 @@ fn public_address(address: IpAddr) -> bool {
 
 fn trusted_network_address(address: IpAddr) -> bool {
     match address {
-        IpAddr::V4(address) => {
-            !address.is_unspecified()
-                && !address.is_loopback()
-                && !address.is_multicast()
-                && !address.is_broadcast()
-        }
-        IpAddr::V6(address) => {
-            !address.is_unspecified() && !address.is_loopback() && !address.is_multicast()
-        }
+        IpAddr::V4(address) => address.is_private(),
+        IpAddr::V6(address) => address.segments()[0] & 0xfe00 == 0xfc00,
     }
 }
 
@@ -393,8 +387,10 @@ mod tests {
         assert!(!public_hostname("host.localhost"));
         assert!(RelayUrl::parse("wss://host.local", RelayUrlPolicy::Public).is_err());
         assert!(RelayUrl::parse("wss://host.home.arpa", RelayUrlPolicy::Public).is_err());
-        assert!(RelayUrl::parse("wss://private.example", RelayUrlPolicy::PrivateNetwork).is_ok());
+        assert!(RelayUrl::parse("wss://private.example", RelayUrlPolicy::PrivateNetwork).is_err());
         assert!(RelayUrl::parse("wss://localhost", RelayUrlPolicy::PrivateNetwork).is_err());
+        assert!(RelayUrl::parse("ws://10.0.0.1", RelayUrlPolicy::PrivateNetwork).is_ok());
+        assert!(RelayUrl::parse("ws://8.8.8.8", RelayUrlPolicy::PrivateNetwork).is_err());
 
         let relay =
             RelayUrl::parse("wss://relay.example.com", RelayUrlPolicy::Public).expect("relay");
@@ -406,7 +402,7 @@ mod tests {
         let local = Target::local("local:device").expect("local target");
         assert!(matches!(
             RelayUrl::from_target(&local, RelayUrlPolicy::Public),
-            Err(Error::UnexpectedTransport { .. })
+            Err(Error::UnexpectedTransport)
         ));
         let profile = crate::profile::test_profile(
             crate::RelayProfileKind::Public,
@@ -416,6 +412,39 @@ mod tests {
         .expect("profile");
         assert!(HardenedWebsocketTransport::new(profile.endpoints()).support_ping());
         assert!(!policy_error("denied").to_string().is_empty());
+
+        let root = Url::parse("wss://relay.example/").expect("root URL");
+        let path = Url::parse("wss://relay.example/path/").expect("path URL");
+        assert_eq!(configured_policy_key(&root), "wss://relay.example");
+        assert_eq!(configured_policy_key(&path), "wss://relay.example/path/");
+    }
+
+    #[test]
+    fn device_network_policy_matches_the_shared_conformance_vectors() {
+        let document: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/conformance/vectors/transport/device_network_policy.v1.json"
+        ))
+        .expect("device network policy vectors");
+        for vector in document["vectors"].as_array().expect("vectors") {
+            let input = &vector["input"];
+            if input["surface"] != "relay" {
+                continue;
+            }
+            let policy = match input["policy"].as_str().expect("policy") {
+                "public" => RelayUrlPolicy::Public,
+                "loopback" => RelayUrlPolicy::Local,
+                "private_device" => RelayUrlPolicy::PrivateNetwork,
+                other => panic!("unknown relay policy {other}"),
+            };
+            let accepted =
+                RelayUrl::parse(input["endpoint"].as_str().expect("endpoint"), policy).is_ok();
+            assert_eq!(
+                accepted,
+                vector["expected"]["accepted"].as_bool().expect("accepted"),
+                "{}",
+                vector["id"].as_str().expect("id")
+            );
+        }
     }
 
     #[test]

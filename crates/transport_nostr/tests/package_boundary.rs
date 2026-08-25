@@ -8,6 +8,7 @@ const EXAMPLE: &str = include_str!("../examples/configure_transport.rs");
 const PUBLIC_API: &str =
     include_str!("../../../contracts/api_baselines/radroots_transport_nostr.txt");
 const ROOT: &str = include_str!("../src/lib.rs");
+const ERROR: &str = include_str!("../src/error.rs");
 const PROFILE: &str = include_str!("../src/profile.rs");
 const SINK: &str = include_str!("../src/sink.rs");
 const SUBSCRIPTION: &str = include_str!("../src/subscription.rs");
@@ -93,6 +94,8 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "let _forged = PreparedDelivery {",
         "request: panic!(),",
         "skipped: panic!(),",
+        "literal RFC1918 IPv4 or ULA IPv6 destinations",
+        "relay URLs and resolved addresses",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -152,6 +155,31 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         assert!(
             !PUBLIC_API.contains(forbidden),
             "reviewed public API baseline exposes `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn public_errors_retain_no_network_or_dependency_owned_material() {
+    let declaration = ERROR
+        .split_once("pub enum Error {")
+        .expect("error declaration")
+        .1
+        .split_once("\n}")
+        .expect("error declaration end")
+        .0;
+    for forbidden in [
+        "url:",
+        "address:",
+        "reason:",
+        "String",
+        "url::",
+        "nostr_sdk::",
+        "nostr_relay_pool::",
+    ] {
+        assert!(
+            !declaration.contains(forbidden),
+            "public error retains forbidden network material `{forbidden}`"
         );
     }
 }
