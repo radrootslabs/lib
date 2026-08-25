@@ -84,6 +84,8 @@ pub radroots_protocol::error::v1::Class::Storage
 pub radroots_protocol::error::v1::Class::Sync
 pub radroots_protocol::error::v1::Class::Unknown
 pub radroots_protocol::error::v1::Class::Validation
+impl radroots_protocol::error::v1::Class
+pub const fn radroots_protocol::error::v1::Class::as_str(self) -> &'static str
 pub enum radroots_protocol::error::v1::DetailValue
 pub radroots_protocol::error::v1::DetailValue::Bool(bool)
 pub radroots_protocol::error::v1::DetailValue::Signed(i64)
@@ -119,6 +121,9 @@ pub radroots_protocol::error::v1::KnownCode::Backpressure
 pub radroots_protocol::error::v1::KnownCode::BackupAuthenticationFailed
 pub radroots_protocol::error::v1::KnownCode::BackupInvalid
 pub radroots_protocol::error::v1::KnownCode::CancelledNoCommit
+pub radroots_protocol::error::v1::KnownCode::ClientCloseInProgress
+pub radroots_protocol::error::v1::KnownCode::ClientClosed
+pub radroots_protocol::error::v1::KnownCode::ClientClosing
 pub radroots_protocol::error::v1::KnownCode::DatabaseBusy
 pub radroots_protocol::error::v1::KnownCode::DeadlineExceeded
 pub radroots_protocol::error::v1::KnownCode::DmRelayUnconfigured
@@ -130,6 +135,7 @@ pub radroots_protocol::error::v1::KnownCode::InventoryUnavailable
 pub radroots_protocol::error::v1::KnownCode::LocalCommittedDeliveryPending
 pub radroots_protocol::error::v1::KnownCode::MaintenanceInProgress
 pub radroots_protocol::error::v1::KnownCode::MediaPolicyDenied
+pub radroots_protocol::error::v1::KnownCode::MissingStorage
 pub radroots_protocol::error::v1::KnownCode::NotFound
 pub radroots_protocol::error::v1::KnownCode::OperationInProgress
 pub radroots_protocol::error::v1::KnownCode::PreconditionChanged
@@ -153,7 +159,9 @@ pub radroots_protocol::error::v1::KnownCode::SignerOutputInvalid
 pub radroots_protocol::error::v1::KnownCode::SignerRejected
 pub radroots_protocol::error::v1::KnownCode::SignerTimeout
 pub radroots_protocol::error::v1::KnownCode::SignerUnavailable
+pub radroots_protocol::error::v1::KnownCode::SignerWithoutSink
 pub radroots_protocol::error::v1::KnownCode::StaleListingRevision
+pub radroots_protocol::error::v1::KnownCode::StorageCloseFailed
 pub radroots_protocol::error::v1::KnownCode::StorageIntegrityFailed
 pub radroots_protocol::error::v1::KnownCode::StorageSpaceInsufficient
 pub radroots_protocol::error::v1::KnownCode::SyncPartial
@@ -175,15 +183,19 @@ pub enum radroots_protocol::error::v1::RecoveryAction
 pub radroots_protocol::error::v1::RecoveryAction::CompleteSignerAuthentication
 pub radroots_protocol::error::v1::RecoveryAction::ConfigureGeoNamesCache
 pub radroots_protocol::error::v1::RecoveryAction::ConfigureSigner
+pub radroots_protocol::error::v1::RecoveryAction::ConfigureStorage
 pub radroots_protocol::error::v1::RecoveryAction::ConfigureTransportTargets
 pub radroots_protocol::error::v1::RecoveryAction::EnableRequiredFeature
 pub radroots_protocol::error::v1::RecoveryAction::FixRequest
 pub radroots_protocol::error::v1::RecoveryAction::InspectGeoNamesAsset
 pub radroots_protocol::error::v1::RecoveryAction::InspectLocalStores
+pub radroots_protocol::error::v1::RecoveryAction::RecreateClient
 pub radroots_protocol::error::v1::RecoveryAction::RetryAfterTransportFailure
 pub radroots_protocol::error::v1::RecoveryAction::RetryGeoNamesDownload
 pub radroots_protocol::error::v1::RecoveryAction::RetryOperationWithSameIdempotencyKey
 pub radroots_protocol::error::v1::RecoveryAction::SelectAuthorizedActor
+impl radroots_protocol::error::v1::RecoveryAction
+pub const fn radroots_protocol::error::v1::RecoveryAction::as_str(self) -> &'static str
 pub struct radroots_protocol::error::v1::CapabilityId(_)
 impl radroots_protocol::error::v1::CapabilityId
 pub fn radroots_protocol::error::v1::CapabilityId::as_str(&self) -> &str
@@ -685,6 +697,25 @@ pub enum radroots_protocol::runtime::v1::SignerRequirement
 pub radroots_protocol::runtime::v1::SignerRequirement::ConditionalRelayAuth
 pub radroots_protocol::runtime::v1::SignerRequirement::None
 pub radroots_protocol::runtime::v1::SignerRequirement::Required
+pub enum radroots_protocol::runtime::v1::SyncCapabilityState
+pub radroots_protocol::runtime::v1::SyncCapabilityState::Available
+pub radroots_protocol::runtime::v1::SyncCapabilityState::Compiled
+pub radroots_protocol::runtime::v1::SyncCapabilityState::Configured
+pub radroots_protocol::runtime::v1::SyncCapabilityState::Degraded
+pub radroots_protocol::runtime::v1::SyncCapabilityState::Unsupported
+pub enum radroots_protocol::runtime::v1::SyncHealth
+pub radroots_protocol::runtime::v1::SyncHealth::Degraded
+pub radroots_protocol::runtime::v1::SyncHealth::Healthy
+pub radroots_protocol::runtime::v1::SyncHealth::Unavailable
+pub enum radroots_protocol::runtime::v1::SyncRetryDecision
+pub radroots_protocol::runtime::v1::SyncRetryDecision::DeferredUntil
+pub radroots_protocol::runtime::v1::SyncRetryDecision::DeferredUntil::unix_ms: u64
+pub radroots_protocol::runtime::v1::SyncRetryDecision::Exhausted
+pub radroots_protocol::runtime::v1::SyncRetryDecision::Expired
+pub radroots_protocol::runtime::v1::SyncRetryDecision::InFlightUntil
+pub radroots_protocol::runtime::v1::SyncRetryDecision::InFlightUntil::unix_ms: u64
+pub radroots_protocol::runtime::v1::SyncRetryDecision::Ready
+pub radroots_protocol::runtime::v1::SyncRetryDecision::Satisfied
 pub struct radroots_protocol::runtime::v1::OperationDescriptor
 pub radroots_protocol::runtime::v1::OperationDescriptor::approval: radroots_protocol::runtime::v1::ApprovalRequirement
 pub radroots_protocol::runtime::v1::OperationDescriptor::deadline: radroots_protocol::runtime::v1::DeadlinePolicy
@@ -702,6 +733,31 @@ pub radroots_protocol::runtime::v1::OperationDescriptor::transport_capability: r
 impl radroots_protocol::runtime::v1::OperationDescriptor
 pub fn radroots_protocol::runtime::v1::OperationDescriptor::receipt_schema_id(self) -> &'static str
 pub fn radroots_protocol::runtime::v1::OperationDescriptor::request_schema_id(self) -> &'static str
+pub struct radroots_protocol::runtime::v1::SyncOutboxStatus
+pub radroots_protocol::runtime::v1::SyncOutboxStatus::exhausted: u64
+pub radroots_protocol::runtime::v1::SyncOutboxStatus::leased: u64
+pub radroots_protocol::runtime::v1::SyncOutboxStatus::pending: u64
+pub radroots_protocol::runtime::v1::SyncOutboxStatus::retryable: u64
+pub radroots_protocol::runtime::v1::SyncOutboxStatus::satisfied: u64
+pub struct radroots_protocol::runtime::v1::SyncProjectionStatus
+pub radroots_protocol::runtime::v1::SyncProjectionStatus::failed: u32
+pub radroots_protocol::runtime::v1::SyncProjectionStatus::invalidated: u32
+pub radroots_protocol::runtime::v1::SyncProjectionStatus::ready: u32
+pub radroots_protocol::runtime::v1::SyncProjectionStatus::rebuilding: u32
+pub radroots_protocol::runtime::v1::SyncProjectionStatus::untracked: u32
+pub struct radroots_protocol::runtime::v1::SyncStatusReceipt
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::health: radroots_protocol::runtime::v1::SyncHealth
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::outbox: radroots_protocol::runtime::v1::SyncOutboxStatus
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::projections: radroots_protocol::runtime::v1::SyncProjectionStatus
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::schema_version: u16
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::signer: radroots_protocol::runtime::v1::SyncCapabilityState
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::sink: radroots_protocol::runtime::v1::SyncCapabilityState
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::source: radroots_protocol::runtime::v1::SyncCapabilityState
+pub radroots_protocol::runtime::v1::SyncStatusReceipt::storage: radroots_protocol::runtime::v1::SyncCapabilityState
+impl radroots_protocol::runtime::v1::SyncStatusReceipt
+pub const fn radroots_protocol::runtime::v1::SyncStatusReceipt::validate(&self) -> core::result::Result<(), radroots_protocol::runtime::v1::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::runtime::v1::SyncStatusReceipt
+pub fn radroots_protocol::runtime::v1::SyncStatusReceipt::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_protocol::runtime::v1::TransportRoute
 pub radroots_protocol::runtime::v1::TransportRoute::deliver: bool
 pub radroots_protocol::runtime::v1::TransportRoute::diagnostics: bool
