@@ -22,6 +22,7 @@ use crate::{InstanceId, ServiceId, roots::RadrootsPaths};
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsServiceInstancePaths {
+    state_root: PathBuf,
     config: PathBuf,
     state: PathBuf,
     cache: PathBuf,
@@ -40,6 +41,7 @@ impl RadrootsServiceInstancePaths {
             .join(service.as_str())
             .join(instance.as_str());
         Self {
+            state_root: roots.data.clone(),
             config: roots.config.join(&relative),
             state: roots.data.join(&relative),
             cache: roots.cache.join(&relative),
@@ -77,6 +79,10 @@ impl RadrootsServiceInstancePaths {
     #[must_use]
     pub fn secrets(&self) -> &Path {
         &self.secrets
+    }
+
+    pub(crate) fn state_root(&self) -> &Path {
+        &self.state_root
     }
 }
 

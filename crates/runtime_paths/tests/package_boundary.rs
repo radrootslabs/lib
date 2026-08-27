@@ -11,6 +11,7 @@ const SOURCES: &[&str] = &[
     include_str!("../src/error.rs"),
     include_str!("../src/identifier.rs"),
     include_str!("../src/platform.rs"),
+    include_str!("../src/provision.rs"),
     include_str!("../src/roots.rs"),
     include_str!("../src/service.rs"),
 ];
@@ -29,7 +30,7 @@ fn runtime_paths_is_unpublished_lint_governed_and_dependency_bounded() {
     }
     assert_eq!(
         dependency_keys(MANIFEST),
-        BTreeSet::from(["serde", "thiserror"])
+        BTreeSet::from(["rustix", "serde", "thiserror"])
     );
     assert_eq!(
         ROOT.lines()
@@ -42,6 +43,7 @@ fn runtime_paths_is_unpublished_lint_governed_and_dependency_bounded() {
             "error",
             "identifier",
             "platform",
+            "provision",
             "roots",
             "service",
         ])
@@ -125,6 +127,10 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
         "pub struct radroots_runtime_paths::InstanceId",
         "pub fn radroots_runtime_paths::RuntimeContext::resolve",
         "pub fn radroots_runtime_paths::RuntimeContext::repo_local_root",
+        "pub fn radroots_runtime_paths::RuntimeContext::state_directory_plan",
+        "pub struct radroots_runtime_paths::RuntimeStateDirectoryPlan",
+        "pub fn radroots_runtime_paths::RuntimeStateDirectoryPlan::provision",
+        "pub enum radroots_runtime_paths::StateDirectoryProvisionError",
         "pub fn radroots_runtime_paths::RadrootsPlatform::current",
         "pub fn radroots_runtime_paths::default_service_instance_artifacts",
         "pub fn radroots_runtime_paths::service_credential_artifact_path",
@@ -140,6 +146,7 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
     for required in [
         "## Example",
         "## Root Profiles",
+        "## State Directory Provisioning",
         "## Common Artifacts",
         "## Support Caveats",
         "## Public API Baseline",
@@ -156,7 +163,13 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
         "| SQLite writer lock | `<state>/state.lock` |",
         "| Local admin socket | `<run>/admin.sock` |",
         "| Credential artifact | `<secrets>/<validated-credential-name>` |",
-        "It performs\nno filesystem I/O, creates no directories, and never reads the ambient process",
+        "Pure path\nresolution never reads the ambient process environment or performs filesystem\nI/O.",
+        "create only `services/<service>/<instance>`, one descriptor-relative component",
+        "never changes an existing mode, and identity-checks any cleanup",
+        "An entry whose identity cannot\nbe proven is preserved and the operation fails closed.",
+        "For `ServiceHost`, the entire state-directory suffix must already exist.",
+        "stable path-free unsupported-platform classification",
+        "does not create any common\nartifact, configuration, cache, log, run, or secrets path",
         "An absolute\n`XDG_RUNTIME_DIR` is mandatory and has no fallback.",
         "Linux service-host\non x86_64 and aarch64 is eligible for Tier 1 only after all release gates pass.",
         "Linux and macOS interactive and explicit repo-local profiles on x86_64 and\naarch64 are developer-target behavior.",
@@ -176,6 +189,7 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
         "pub mod radroots_runtime_paths::error",
         "pub mod radroots_runtime_paths::identifier",
         "pub mod radroots_runtime_paths::platform",
+        "pub mod radroots_runtime_paths::provision",
         "pub mod radroots_runtime_paths::roots",
         "pub mod radroots_runtime_paths::service",
         "radroots_runtime_paths::context::",
@@ -183,10 +197,12 @@ fn reviewed_api_requires_the_typed_runtime_context_boundary() {
         "radroots_runtime_paths::error::",
         "radroots_runtime_paths::identifier::",
         "radroots_runtime_paths::platform::",
+        "radroots_runtime_paths::provision::",
         "radroots_runtime_paths::roots::",
         "radroots_runtime_paths::service::",
         "thiserror::",
         "serde_json::",
+        "rustix::",
     ] {
         assert!(
             !PUBLIC_API.contains(forbidden),

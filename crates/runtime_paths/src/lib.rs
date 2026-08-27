@@ -6,6 +6,7 @@ mod conventions;
 mod error;
 mod identifier;
 mod platform;
+mod provision;
 mod roots;
 mod service;
 
@@ -37,5 +38,6 @@ pub use identifier::{
     ServiceIdentityKind,
 };
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
+pub use provision::{RuntimeStateDirectoryPlan, StateDirectoryProvisionError};
 pub use roots::RadrootsPathResolver;
 pub use service::RadrootsServiceInstancePaths;

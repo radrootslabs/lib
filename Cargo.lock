@@ -3420,8 +3420,10 @@ dependencies = [
 name = "radroots_runtime_paths"
 version = "0.1.0-alpha"
 dependencies = [
+ "rustix 1.1.4",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
 ]
 

@@ -61,6 +61,19 @@ pub radroots_runtime_paths::ServiceIdentityKind::Instance
 pub radroots_runtime_paths::ServiceIdentityKind::Service
 impl core::fmt::Display for radroots_runtime_paths::ServiceIdentityKind
 pub fn radroots_runtime_paths::ServiceIdentityKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_runtime_paths::StateDirectoryProvisionError
+pub radroots_runtime_paths::StateDirectoryProvisionError::Cleanup
+pub radroots_runtime_paths::StateDirectoryProvisionError::DirectoryConflict
+pub radroots_runtime_paths::StateDirectoryProvisionError::Filesystem
+pub radroots_runtime_paths::StateDirectoryProvisionError::InvalidPlan
+pub radroots_runtime_paths::StateDirectoryProvisionError::MissingDirectory
+pub radroots_runtime_paths::StateDirectoryProvisionError::StateRootUnavailable
+pub radroots_runtime_paths::StateDirectoryProvisionError::UnsafeDirectory
+pub radroots_runtime_paths::StateDirectoryProvisionError::UnsupportedPlatform
+pub radroots_runtime_paths::StateDirectoryProvisionError::UnsupportedProfile
+impl core::error::Error for radroots_runtime_paths::StateDirectoryProvisionError
+impl core::fmt::Display for radroots_runtime_paths::StateDirectoryProvisionError
+pub fn radroots_runtime_paths::StateDirectoryProvisionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_runtime_paths::InstanceId(_)
 impl radroots_runtime_paths::InstanceId
 pub fn radroots_runtime_paths::InstanceId::as_str(&self) -> &str
@@ -120,6 +133,7 @@ pub fn radroots_runtime_paths::RuntimeContext::repo_local_root(&self) -> core::o
 pub fn radroots_runtime_paths::RuntimeContext::resolve(&radroots_runtime_paths::RadrootsPathResolver, radroots_runtime_paths::RuntimeContextBootstrap, radroots_runtime_paths::ServiceId, radroots_runtime_paths::InstanceId) -> core::result::Result<Self, radroots_runtime_paths::RuntimeContextError>
 pub fn radroots_runtime_paths::RuntimeContext::service(&self) -> &radroots_runtime_paths::ServiceId
 pub fn radroots_runtime_paths::RuntimeContext::sources(&self) -> &radroots_runtime_paths::RuntimeContextSources
+pub fn radroots_runtime_paths::RuntimeContext::state_directory_plan(&self) -> core::result::Result<radroots_runtime_paths::RuntimeStateDirectoryPlan, radroots_runtime_paths::StateDirectoryProvisionError>
 impl core::fmt::Debug for radroots_runtime_paths::RuntimeContext
 pub fn radroots_runtime_paths::RuntimeContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_runtime_paths::RuntimeContext
@@ -137,6 +151,12 @@ pub fn radroots_runtime_paths::RuntimeContextSources::paths(&self) -> radroots_r
 pub fn radroots_runtime_paths::RuntimeContextSources::profile(&self) -> radroots_runtime_paths::RuntimeContextSource
 pub fn radroots_runtime_paths::RuntimeContextSources::repo_local_root(&self) -> core::option::Option<radroots_runtime_paths::RuntimeContextSource>
 pub fn radroots_runtime_paths::RuntimeContextSources::service(&self) -> radroots_runtime_paths::RuntimeContextSource
+pub struct radroots_runtime_paths::RuntimeStateDirectoryPlan
+impl radroots_runtime_paths::RuntimeStateDirectoryPlan
+pub fn radroots_runtime_paths::RuntimeStateDirectoryPlan::profile(&self) -> radroots_runtime_paths::RadrootsPathProfile
+pub fn radroots_runtime_paths::RuntimeStateDirectoryPlan::provision(&self) -> core::result::Result<(), radroots_runtime_paths::StateDirectoryProvisionError>
+impl core::fmt::Debug for radroots_runtime_paths::RuntimeStateDirectoryPlan
+pub fn radroots_runtime_paths::RuntimeStateDirectoryPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_runtime_paths::ServiceCredentialArtifactName(_)
 impl radroots_runtime_paths::ServiceCredentialArtifactName
 pub fn radroots_runtime_paths::ServiceCredentialArtifactName::as_str(&self) -> &str

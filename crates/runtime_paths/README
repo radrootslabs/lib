@@ -1,9 +1,9 @@
 # radroots_runtime_paths
 
 `radroots_runtime_paths` provides canonical, typed runtime paths for Radroots
-core libraries. Its public API is exposed only from the crate root. It performs
-no filesystem I/O, creates no directories, and never reads the ambient process
-environment.
+core libraries. Its public API is exposed only from the crate root. Pure path
+resolution never reads the ambient process environment or performs filesystem
+I/O. State-directory provisioning is a separate explicit operation.
 
 ## Overview
 
@@ -16,6 +16,8 @@ environment.
   bootstrap provenance.
 - A sealed `RuntimeContext` is the only public service-instance path
   construction boundary.
+- A sealed state-directory plan validates or provisions only the canonical
+  `services/<service>/<instance>` suffix under an existing state root.
 - Service paths and common artifacts are non-forgeable immutable views.
 - Pure shared geonames and runtime-store helpers remain independent of
   service-instance path selection.
@@ -90,6 +92,26 @@ resolution requires both injected `APPDATA` and `LOCALAPPDATA`. Repo-local
 resolution requires one explicit absolute, non-root base with no parent
 traversal. Repo-local never becomes an implicit or production fallback.
 
+## State Directory Provisioning
+
+`RuntimeContext::state_directory_plan` is pure and performs no filesystem I/O.
+Its sealed result exposes no caller-selected path or mutable component. Calling
+`RuntimeStateDirectoryPlan::provision` is an explicit filesystem operation.
+
+For `InteractiveUser` and `RepoLocal`, the canonical data/state root must
+already exist, be owned by the effective user, be owner-readable and
+owner-searchable, and not be group- or other-writable. The provisioner may then
+create only `services/<service>/<instance>`, one descriptor-relative component
+at a time, with mode `0700`. It uses no-follow opens, validates every existing
+directory, never changes an existing mode, and identity-checks any cleanup of
+directories it created during a failed attempt. An entry whose identity cannot
+be proven is preserved and the operation fails closed.
+
+For `ServiceHost`, the entire state-directory suffix must already exist. The
+plan performs validation only and never creates or permission-repairs service-
+host directories. Provisioning is implemented only on Linux and macOS; other
+targets fail with a stable path-free unsupported-platform classification.
+
 ## Common Artifacts
 
 | Artifact | Canonical location within the instance |
@@ -100,10 +122,12 @@ traversal. Repo-local never becomes an implicit or production fallback.
 | Local admin socket | `<run>/admin.sock` |
 | Credential artifact | `<secrets>/<validated-credential-name>` |
 
-The crate derives these paths but does not provision, open, inspect, remove, or
-set permissions on them. Callers own those operations and their security
-policy. The shared geonames and runtime-store helpers are pure joins over
-caller-supplied roots and do not select or alter a `RuntimeContext`.
+The crate derives these paths. Its explicit state-directory provisioner owns
+only the narrow behavior described above; it does not create any common
+artifact, configuration, cache, log, run, or secrets path. Callers own artifact
+creation and its security policy. The shared geonames and runtime-store helpers
+are pure joins over caller-supplied roots and do not select or alter a
+`RuntimeContext`.
 
 ## Support Caveats
 

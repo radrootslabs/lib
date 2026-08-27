@@ -7,7 +7,8 @@ use serde::{Serialize, Serializer, ser::SerializeStruct};
 use thiserror::Error;
 
 use crate::{
-    InstanceId, RadrootsPathProfile, RadrootsPathResolver, RadrootsServiceInstancePaths, ServiceId,
+    InstanceId, RadrootsPathProfile, RadrootsPathResolver, RadrootsServiceInstancePaths,
+    RuntimeStateDirectoryPlan, ServiceId, StateDirectoryProvisionError,
 };
 
 /// Closed provenance vocabulary for effective runtime configuration.
@@ -218,6 +219,17 @@ impl RuntimeContext {
     #[must_use]
     pub fn sources(&self) -> &RuntimeContextSources {
         &self.sources
+    }
+
+    /// Returns a sealed, filesystem-I/O-free plan for this instance's state directory.
+    ///
+    /// Calling this method does not inspect or mutate the filesystem. Callers must
+    /// explicitly invoke [`RuntimeStateDirectoryPlan::provision`] to validate or
+    /// create the governed state-directory suffix.
+    pub fn state_directory_plan(
+        &self,
+    ) -> Result<RuntimeStateDirectoryPlan, StateDirectoryProvisionError> {
+        RuntimeStateDirectoryPlan::from_context(self)
     }
 }
 
