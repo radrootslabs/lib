@@ -399,6 +399,7 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
 
     for required in [
         "pub struct radroots_service_sqlite::ServiceSqliteHost",
+        "pub struct radroots_service_sqlite::ServiceSqliteInitializer",
         "pub struct radroots_service_sqlite::ServiceSqliteTransaction",
         "pub struct radroots_service_sqlite::ServiceSqlitePaths",
         "pub struct radroots_service_sqlite::ExistingServiceDatabaseIntent",
@@ -413,6 +414,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "pub async fn radroots_service_sqlite::stage_verified_restore",
         "pub async fn radroots_service_sqlite::ServiceSqliteHost::open_read_write_existing_with_intent",
         "pub async fn radroots_service_sqlite::ServiceSqliteHost::open_read_only_inspection_with_intent",
+        "pub async fn radroots_service_sqlite::ServiceSqliteHost::open_or_initialize",
+        "impl<'executor, 'connection> sqlx_core::executor::Executor<'executor> for &'executor mut radroots_service_sqlite::ServiceSqliteInitializer<'connection>",
         "impl<'executor, 'connection> sqlx_core::executor::Executor<'executor> for &'executor mut radroots_service_sqlite::ServiceSqliteTransaction<'connection>",
     ] {
         assert!(
@@ -456,8 +459,10 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "Every service-owned table, index, trigger,",
         "[service-SQLite API baseline](../../contracts/api_baselines/radroots_service_sqlite.txt)",
         "Raw pools, pooled or direct connections, transaction-control handles, and",
-        "`sqlx::Executor` implementation for a borrowed",
-        "while the crate retains connection ownership and sole begin, commit, rollback,",
+        "`sqlx::Executor` implementation for borrowed",
+        "`&mut ServiceSqliteInitializer<'_>` and `&mut ServiceSqliteTransaction<'_>`",
+        "values. They permit compile-time typed queries. The crate retains connection",
+        "ownership and sole begin, commit, rollback, policy, and cancellation authority.",
     ] {
         assert!(README.contains(required), "README is missing `{required}`");
     }
@@ -511,6 +516,8 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "ServiceSqliteConnectionOptions",
         "ServiceSqliteConnectionOptionsError",
         "initialize_database",
+        "ServiceSqliteInitializer",
+        "ServiceSqliteInitializerFuture",
         "ServiceDatabaseIdentity",
         "ServiceDatabaseMetadata",
         "ServiceSqliteApplicationId",
@@ -1561,6 +1568,18 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "sync_directory",
         "validate_entry",
         "unlink_database",
+        "pub struct ServiceSqliteInitializer<'connection>",
+        "impl<'executor, 'connection> Executor<'executor>",
+        "ServiceSqliteInitializerFuture",
+        ".begin_with(\"BEGIN IMMEDIATE\")",
+        "write_database_metadata_in_transaction",
+        "permit_outer_commit",
+        "permit_runner_rollback",
+        "contains_forbidden_statement_control",
+        "RADROOTS_FORBIDDEN_INITIALIZATION_STATEMENT_CONTROL",
+        "pending.sqlite_descriptor_path()",
+        "journal_mode(SqliteJournalMode::Memory)",
+        "connection.close().await",
     ] {
         assert!(
             INITIALIZE_SOURCE.contains(required),
@@ -1578,6 +1597,14 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         "Command::new",
         "std::process",
         "pub fn directory",
+        "FnOnce(PathBuf)",
+        "FnOnce(std::path::PathBuf)",
+        "to_path_buf()).await",
+        ".filename(paths.state_database())",
+        "Deref for ServiceSqliteInitializer",
+        "AsRef<SqliteConnection>",
+        "pub fn connection(",
+        "pub fn into_inner(",
     ] {
         let production = INITIALIZE_SOURCE
             .split_once("#[cfg(test)]")
@@ -1586,6 +1613,33 @@ fn service_sqlite_is_unpublished_lint_governed_and_dependency_bounded() {
         assert!(
             !production.contains(forbidden),
             "Step 055 production source contains deferred or bypass surface `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "pub async fn open_or_initialize",
+        "initialize_or_existing_database",
+        "InitializeDatabaseOutcome::Initialized",
+        "InitializeDatabaseOutcome::Existing",
+        "schema.matches_migrations(migrations)",
+        "open_existing_connection_pool_with_intent_and_authority",
+        "The existing branch never runs",
+        "the initializer. Callers therefore do not use pathname probes, error-text",
+    ] {
+        assert!(
+            CONNECTION_SOURCE.contains(required)
+                || OPEN_SOURCE.contains(required)
+                || README.contains(required),
+            "Step 243 atomic bootstrap boundary is missing `{required}`"
+        );
+    }
+    for forbidden in ["try_exists()", "error.to_string()", "create_dir_all"] {
+        let connection_production = CONNECTION_SOURCE
+            .split_once("#[cfg(test)]")
+            .map_or(CONNECTION_SOURCE, |(production, _)| production);
+        assert!(
+            !connection_production.contains(forbidden),
+            "Step 243 atomic bootstrap uses forbidden branch surface `{forbidden}`"
         );
     }
 

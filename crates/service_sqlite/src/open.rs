@@ -853,6 +853,29 @@ pub(crate) async fn open_existing_connection_pool_with_intent(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn open_existing_connection_pool_with_intent_and_authority(
+    paths: &ServiceSqlitePaths,
+    intent: &ExistingServiceDatabaseIntent,
+    catalog: &MigrationCatalog,
+    schema_catalog: &SchemaCatalog,
+    policy: ServiceSqliteConnectionOptions,
+    authority: WriterAuthority,
+) -> Result<PrivateConnectionPool, ServiceSqliteError> {
+    authority.validate_for(paths)?;
+    open_connection_pool(
+        paths,
+        ServiceDatabaseExpectation::Existing(intent),
+        catalog,
+        schema_catalog,
+        OpenMode::ReadWriteExisting,
+        policy,
+        Some(authority),
+        None,
+    )
+    .await
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn open_existing_connection_pool_for(
     paths: &ServiceSqlitePaths,
     expectation: ServiceDatabaseExpectation<'_>,
@@ -2217,16 +2240,7 @@ mod tests {
             OpenMode::Initialize,
             &metadata,
             &schema_catalog,
-            |database_path| async move {
-                let options = SqliteConnectOptions::new()
-                    .filename(database_path)
-                    .create_if_missing(false);
-                let connection = SqliteConnection::connect_with(&options)
-                    .await
-                    .expect("open reserved database");
-                connection.close().await.expect("close reserved database");
-                Ok::<_, Infallible>(())
-            },
+            |_| Box::pin(async move { Ok::<_, Infallible>(()) }),
         )
         .await
         .expect("initialize database");
@@ -2572,7 +2586,7 @@ mod tests {
             OpenMode::Initialize,
             &database_metadata(&paths),
             &base_schema_catalog(),
-            |_| async { Ok::<_, Infallible>(()) },
+            |_| Box::pin(async { Ok::<_, Infallible>(()) }),
         )
         .await
         .expect_err("initialize must not recover existing evidence");

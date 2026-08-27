@@ -1624,14 +1624,7 @@ mod tests {
                 OpenMode::Initialize,
                 &metadata,
                 &schema,
-                |path| async move {
-                    let options = SqliteConnectOptions::new()
-                        .filename(path)
-                        .create_if_missing(false)
-                        .disable_statement_logging();
-                    let connection = SqliteConnection::connect_with(&options).await?;
-                    connection.close().await
-                },
+                |_| Box::pin(async move { Ok::<(), sqlx::Error>(()) }),
             )
             .await
             .expect("initialize");
@@ -2605,7 +2598,7 @@ mod tests {
             OpenMode::Initialize,
             &fixture.metadata,
             &fixture.schema,
-            |_| async { Ok::<(), std::io::Error>(()) },
+            |_| Box::pin(async { Ok::<(), std::io::Error>(()) }),
         )
         .await
         .expect_err("unresolved recovery must reject initialization");

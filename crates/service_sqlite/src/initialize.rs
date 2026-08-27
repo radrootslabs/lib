@@ -1,22 +1,172 @@
 //! Create-new initialization for one service-owned SQLite database.
 
 use core::{fmt, future::Future};
-use std::{error::Error, path::PathBuf};
+use std::{
+    error::Error,
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use futures::{future::BoxFuture, stream::BoxStream};
+use sqlx::{
+    Either, Execute, Executor, SqlStr, Sqlite, SqliteConnection,
+    sqlite::{SqliteQueryResult, SqliteRow, SqliteStatement, SqliteTypeInfo},
+};
 
 use crate::{
     OpenMode, SchemaCatalog, ServiceDatabaseMetadata, ServiceSqliteError, ServiceSqliteErrorKind,
     ServiceSqlitePaths, WriterAuthority,
 };
 
+/// A sealed initialization executor that never exposes its SQLite connection.
+///
+/// Service repositories may create their product schema with ordinary typed
+/// SQLx queries through a mutable borrow. The service-SQLite runner exclusively
+/// owns transaction begin, commit, rollback, shared metadata, and the migration
+/// ledger.
+///
+/// ```
+/// use radroots_service_sqlite::ServiceSqliteInitializer;
+///
+/// async fn create_product_schema(
+///     initializer: &mut ServiceSqliteInitializer<'_>,
+/// ) -> Result<(), sqlx::Error> {
+///     sqlx::query(concat!("CREATE ", "TABLE product_items (id INTEGER PRIMARY KEY)"))
+///         .execute(initializer)
+///         .await?;
+///     Ok(())
+/// }
+/// ```
+///
+/// Transaction control and the raw connection remain inaccessible:
+///
+/// ```compile_fail
+/// use radroots_service_sqlite::ServiceSqliteInitializer;
+///
+/// async fn bypass(initializer: ServiceSqliteInitializer<'_>) {
+///     initializer.commit().await.unwrap();
+/// }
+/// ```
+pub struct ServiceSqliteInitializer<'connection> {
+    connection: &'connection mut SqliteConnection,
+    statement_control_rejected: Arc<AtomicBool>,
+}
+
+struct RestrictedInitializationExecute<Q> {
+    query: Q,
+    statement_control_rejected: Arc<AtomicBool>,
+}
+
+impl<'query, Q> Execute<'query, Sqlite> for RestrictedInitializationExecute<Q>
+where
+    Q: Execute<'query, Sqlite>,
+{
+    fn sql(self) -> SqlStr {
+        restricted_initialization_sql(self.query.sql(), &self.statement_control_rejected)
+    }
+
+    fn statement(&self) -> Option<&SqliteStatement> {
+        None
+    }
+
+    fn take_arguments(
+        &mut self,
+    ) -> Result<Option<<Sqlite as sqlx::Database>::Arguments>, sqlx::error::BoxDynError> {
+        self.query.take_arguments()
+    }
+
+    fn persistent(&self) -> bool {
+        self.query.persistent()
+    }
+}
+
+fn restricted_initialization_sql(sql: SqlStr, statement_control_rejected: &AtomicBool) -> SqlStr {
+    if crate::statement_policy::contains_forbidden_statement_control(sql.as_str()) {
+        statement_control_rejected.store(true, Ordering::Release);
+        SqlStr::from_static("RADROOTS_FORBIDDEN_INITIALIZATION_STATEMENT_CONTROL")
+    } else {
+        sql
+    }
+}
+
+impl fmt::Debug for ServiceSqliteInitializer<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ServiceSqliteInitializer([redacted])")
+    }
+}
+
+impl<'executor, 'connection> Executor<'executor>
+    for &'executor mut ServiceSqliteInitializer<'connection>
+where
+    'connection: 'executor,
+{
+    type Database = Sqlite;
+
+    fn fetch_many<'e, 'q: 'e, Q>(
+        self,
+        query: Q,
+    ) -> BoxStream<'e, Result<Either<SqliteQueryResult, SqliteRow>, sqlx::Error>>
+    where
+        'executor: 'e,
+        Q: 'q + Execute<'q, Self::Database>,
+    {
+        (&mut *self.connection).fetch_many(RestrictedInitializationExecute {
+            query,
+            statement_control_rejected: Arc::clone(&self.statement_control_rejected),
+        })
+    }
+
+    fn fetch_optional<'e, 'q: 'e, Q>(
+        self,
+        query: Q,
+    ) -> BoxFuture<'e, Result<Option<SqliteRow>, sqlx::Error>>
+    where
+        'executor: 'e,
+        Q: 'q + Execute<'q, Self::Database>,
+    {
+        (&mut *self.connection).fetch_optional(RestrictedInitializationExecute {
+            query,
+            statement_control_rejected: Arc::clone(&self.statement_control_rejected),
+        })
+    }
+
+    fn prepare_with<'e>(
+        self,
+        sql: SqlStr,
+        parameters: &'e [SqliteTypeInfo],
+    ) -> BoxFuture<'e, Result<SqliteStatement, sqlx::Error>>
+    where
+        'executor: 'e,
+    {
+        (&mut *self.connection).prepare_with(
+            restricted_initialization_sql(sql, &self.statement_control_rejected),
+            parameters,
+        )
+    }
+}
+
+/// Boxed callback future tied to the borrowed initialization executor.
+pub type ServiceSqliteInitializerFuture<'a, E> =
+    Pin<Box<dyn Future<Output = Result<(), E>> + Send + 'a>>;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Debug)]
+pub(crate) enum InitializeDatabaseOutcome {
+    Initialized(WriterAuthority),
+    Existing(WriterAuthority),
+}
+
 /// Creates and initializes a missing service database while holding sole writer authority.
 ///
-/// The callback receives the already-reserved canonical database path. It must
-/// open that file without create or replacement flags, initialize its schema,
-/// close every database handle, and only then resolve its future. The supplied
-/// metadata must derive from the same paths; it is written and verified after
-/// the callback but before the database becomes durable. Cancellation or
-/// failure removes only the exact inode reserved by this call.
-pub async fn initialize_database<F, Fut, E>(
+/// The callback receives only a mutable borrow of the sealed initialization
+/// executor. Product schema, shared metadata, the empty v1 migration ledger,
+/// and catalog verification occur in one runner-owned transaction. Cancellation
+/// or failure quarantines the one-shot connection and removes only the exact
+/// inode reserved by this call.
+pub async fn initialize_database<F, E>(
     paths: &ServiceSqlitePaths,
     mode: OpenMode,
     metadata: &ServiceDatabaseMetadata,
@@ -24,8 +174,9 @@ pub async fn initialize_database<F, Fut, E>(
     initialize_schema: F,
 ) -> Result<WriterAuthority, ServiceSqliteError>
 where
-    F: FnOnce(PathBuf) -> Fut,
-    Fut: Future<Output = Result<(), E>>,
+    F: for<'a> FnOnce(
+        &'a mut ServiceSqliteInitializer<'_>,
+    ) -> ServiceSqliteInitializerFuture<'a, E>,
     E: Error + Send + Sync + 'static,
 {
     if mode != OpenMode::Initialize {
@@ -54,7 +205,7 @@ where
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let failpoints = crate::failpoint::DurabilityFailpoints::default();
-        initialize_with_ops(
+        match initialize_with_ops(
             paths,
             authority,
             metadata,
@@ -63,7 +214,13 @@ where
             &SystemInitializationOperations,
             &failpoints,
         )
-        .await
+        .await?
+        {
+            InitializeDatabaseOutcome::Initialized(authority) => Ok(authority),
+            InitializeDatabaseOutcome::Existing(_authority) => Err(initialization_error(
+                InitializationCause::new(InitializationFailureKind::StateAlreadyExists),
+            )),
+        }
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -73,6 +230,40 @@ where
             InitializationFailureKind::CreateUnavailable,
         )))
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn initialize_or_existing_database<F, E>(
+    paths: &ServiceSqlitePaths,
+    metadata: &ServiceDatabaseMetadata,
+    schema_catalog: &SchemaCatalog,
+    initialize_schema: F,
+) -> Result<InitializeDatabaseOutcome, ServiceSqliteError>
+where
+    F: for<'a> FnOnce(
+        &'a mut ServiceSqliteInitializer<'_>,
+    ) -> ServiceSqliteInitializerFuture<'a, E>,
+    E: Error + Send + Sync + 'static,
+{
+    if !metadata.matches_paths(paths) {
+        return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Metadata));
+    }
+    let authority = WriterAuthority::acquire(paths, OpenMode::Initialize)?.ok_or_else(|| {
+        initialization_error(InitializationCause::new(
+            InitializationFailureKind::UnsupportedMode,
+        ))
+    })?;
+    let failpoints = crate::failpoint::DurabilityFailpoints::default();
+    initialize_with_ops(
+        paths,
+        authority,
+        metadata,
+        schema_catalog,
+        initialize_schema,
+        &SystemInitializationOperations,
+        &failpoints,
+    )
+    .await
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -271,7 +462,7 @@ mod failure_tests {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod supported {
-    use std::fs::File;
+    use std::{fs::File, os::fd::AsRawFd};
 
     use rustix::{
         fs::{AtFlags, FileType, Mode, OFlags, fchmod, fstat, lstat, openat, statat, unlinkat},
@@ -366,6 +557,15 @@ mod supported {
                 InitializationFailureKind::InvalidDatabase,
             )?;
             self.validate_entry()
+        }
+
+        fn sqlite_descriptor_path(&self) -> String {
+            let descriptor = self.database.as_raw_fd();
+            #[cfg(target_os = "linux")]
+            let path = format!("/proc/self/fd/{descriptor}");
+            #[cfg(target_os = "macos")]
+            let path = format!("/dev/fd/{descriptor}");
+            path
         }
 
         fn validate_entry(&self) -> Result<(), InitializationCause> {
@@ -553,14 +753,14 @@ mod supported {
     async fn fail_with_rollback<O: InitializationOperations>(
         mut pending: PendingDatabase<'_, O>,
         primary: InitializationCause,
-    ) -> Result<WriterAuthority, ServiceSqliteError> {
+    ) -> Result<InitializeDatabaseOutcome, ServiceSqliteError> {
         Err(rollback_failure(primary, pending.rollback()))
     }
 
     async fn fail_metadata_with_rollback<O: InitializationOperations>(
         mut pending: PendingDatabase<'_, O>,
         primary: ServiceSqliteError,
-    ) -> Result<WriterAuthority, ServiceSqliteError> {
+    ) -> Result<InitializeDatabaseOutcome, ServiceSqliteError> {
         match pending.rollback() {
             Ok(()) => Err(primary),
             Err(cleanup) => Err(initialization_error(InitializationCause::with_source(
@@ -570,7 +770,7 @@ mod supported {
         }
     }
 
-    pub(super) async fn initialize_with_ops<F, Fut, E, O>(
+    pub(super) async fn initialize_with_ops<F, E, O>(
         paths: &ServiceSqlitePaths,
         authority: WriterAuthority,
         metadata: &ServiceDatabaseMetadata,
@@ -578,10 +778,11 @@ mod supported {
         initialize_schema: F,
         operations: &O,
         failpoints: &crate::failpoint::DurabilityFailpoints,
-    ) -> Result<WriterAuthority, ServiceSqliteError>
+    ) -> Result<InitializeDatabaseOutcome, ServiceSqliteError>
     where
-        F: FnOnce(PathBuf) -> Fut,
-        Fut: Future<Output = Result<(), E>>,
+        F: for<'a> FnOnce(
+            &'a mut ServiceSqliteInitializer<'_>,
+        ) -> ServiceSqliteInitializerFuture<'a, E>,
         E: Error + Send + Sync + 'static,
         O: InitializationOperations,
     {
@@ -590,8 +791,19 @@ mod supported {
             crate::failpoint::DurabilityFailpoint::InitializeBeforeCreate,
         )
         .map_err(initialization_error)?;
-        let mut pending = PendingDatabase::create(authority.directory(), operations)
-            .map_err(initialization_error)?;
+        let initialization_directory = authority.directory().try_clone().map_err(|source| {
+            initialization_error(InitializationCause::with_source(
+                InitializationFailureKind::CreateUnavailable,
+                source,
+            ))
+        })?;
+        let mut pending = match PendingDatabase::create(&initialization_directory, operations) {
+            Ok(pending) => pending,
+            Err(error) if error.kind == InitializationFailureKind::StateAlreadyExists => {
+                return Ok(InitializeDatabaseOutcome::Existing(authority));
+            }
+            Err(error) => return Err(initialization_error(error)),
+        };
         if let Err(error) = hit(
             failpoints,
             crate::failpoint::DurabilityFailpoint::InitializeAfterCreate,
@@ -613,47 +825,25 @@ mod supported {
         ) {
             return fail_with_rollback(pending, error).await;
         }
-        if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
-            return fail_with_rollback(pending, error).await;
-        }
-        let callback_result = initialize_schema(paths.state_database().to_path_buf()).await;
-        if let Err(error) = callback_result {
-            return fail_with_rollback(
-                pending,
-                InitializationCause::with_source(
-                    InitializationFailureKind::SchemaInitializationFailed,
-                    error,
-                ),
-            )
-            .await;
-        }
-        if let Err(error) = pending.validate() {
-            return fail_with_rollback(pending, error).await;
+        authority.validate_for(paths)?;
+        let recovery = crate::restore::refuse_unresolved_recovery(authority.directory());
+        authority.validate_for(paths)?;
+        if let Err(error) = recovery {
+            return fail_metadata_with_rollback(pending, error).await;
         }
         if let Err(error) = pending.validate_canonical_path(paths.state_database()) {
             return fail_with_rollback(pending, error).await;
         }
-        let metadata_result = async {
-            use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
-
-            let options = SqliteConnectOptions::new()
-                .filename(paths.state_database())
-                .create_if_missing(false)
-                .disable_statement_logging();
-            let mut connection = sqlx::SqliteConnection::connect_with(&options)
-                .await
-                .map_err(|source| {
-                    ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
-                })?;
-            let write_result =
-                crate::metadata::write_database_metadata(&mut connection, metadata, schema_catalog)
-                    .await;
-            let close_result = connection.close().await.map_err(|source| {
-                ServiceSqliteError::with_source(ServiceSqliteErrorKind::Metadata, source)
-            });
-            write_result.and(close_result)
-        }
+        let metadata_result = initialize_transaction(
+            paths,
+            &authority,
+            &pending,
+            metadata,
+            schema_catalog,
+            initialize_schema,
+        )
         .await;
+        authority.validate_for(paths)?;
         if let Err(error) = pending.validate() {
             return fail_with_rollback(pending, error).await;
         }
@@ -673,7 +863,188 @@ mod supported {
             return fail_with_rollback(pending, error).await;
         }
         drop(pending);
-        Ok(authority)
+        Ok(InitializeDatabaseOutcome::Initialized(authority))
+    }
+
+    async fn initialize_transaction<F, E, O>(
+        paths: &ServiceSqlitePaths,
+        authority: &WriterAuthority,
+        pending: &PendingDatabase<'_, O>,
+        metadata: &ServiceDatabaseMetadata,
+        schema_catalog: &SchemaCatalog,
+        initialize_schema: F,
+    ) -> Result<(), ServiceSqliteError>
+    where
+        F: for<'a> FnOnce(
+            &'a mut ServiceSqliteInitializer<'_>,
+        ) -> ServiceSqliteInitializerFuture<'a, E>,
+        E: Error + Send + Sync + 'static,
+        O: InitializationOperations,
+    {
+        use sqlx::{
+            ConnectOptions, Connection,
+            sqlite::{SqliteConnectOptions, SqliteJournalMode},
+        };
+
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let options = SqliteConnectOptions::new()
+            .filename(pending.sqlite_descriptor_path())
+            .create_if_missing(false)
+            .foreign_keys(true)
+            .journal_mode(SqliteJournalMode::Memory)
+            .pragma("trusted_schema", "OFF")
+            .disable_statement_logging();
+        let connected = SqliteConnection::connect_with(&options).await;
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let mut connection = connected.map_err(|source| {
+            initialization_error(InitializationCause::with_source(
+                InitializationFailureKind::SchemaInitializationFailed,
+                source,
+            ))
+        })?;
+        let installed =
+            crate::transaction_control::TransactionControlGate::install(&mut connection).await;
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let gate = installed.map_err(|source| {
+            initialization_error(InitializationCause::with_source(
+                InitializationFailureKind::SchemaInitializationFailed,
+                source,
+            ))
+        })?;
+        let begun = connection.begin_with("BEGIN IMMEDIATE").await;
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let mut transaction = begun.map_err(|source| {
+            initialization_error(InitializationCause::with_source(
+                InitializationFailureKind::SchemaInitializationFailed,
+                source,
+            ))
+        })?;
+
+        let statement_control_rejected = Arc::new(AtomicBool::new(false));
+        let callback = {
+            let mut initializer = ServiceSqliteInitializer {
+                connection: &mut transaction,
+                statement_control_rejected: Arc::clone(&statement_control_rejected),
+            };
+            initialize_schema(&mut initializer).await
+        };
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let governed_after_callback =
+            crate::migration::assert_governed_transaction(&mut transaction)
+                .await
+                .is_ok();
+        authority.validate_for(paths)?;
+
+        let operation = match callback {
+            Ok(())
+                if !statement_control_rejected.load(Ordering::Acquire)
+                    && !gate.control_violation_observed()
+                    && governed_after_callback =>
+            {
+                crate::metadata::write_database_metadata_in_transaction(
+                    &mut transaction,
+                    metadata,
+                    schema_catalog,
+                )
+                .await
+            }
+            Ok(()) => Err(initialization_error(InitializationCause::new(
+                InitializationFailureKind::SchemaInitializationFailed,
+            ))),
+            Err(source) => Err(initialization_error(InitializationCause::with_source(
+                InitializationFailureKind::SchemaInitializationFailed,
+                source,
+            ))),
+        };
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let governed_before_commit =
+            crate::migration::assert_governed_transaction(&mut transaction)
+                .await
+                .is_ok();
+        authority.validate_for(paths)?;
+
+        if let Err(primary) = operation {
+            let permit = gate.permit_runner_rollback();
+            let rollback = transaction.rollback().await;
+            drop(permit);
+            authority.validate_for(paths)?;
+            pending
+                .validate()
+                .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+                .map_err(initialization_error)?;
+            let remove = gate.remove(&mut connection).await;
+            authority.validate_for(paths)?;
+            let close = connection.close().await;
+            authority.validate_for(paths)?;
+            if let Err(source) = rollback.or(remove).or(close) {
+                return Err(initialization_error(InitializationCause::with_source(
+                    InitializationFailureKind::SchemaInitializationFailed,
+                    source,
+                )));
+            }
+            return Err(primary);
+        }
+
+        if gate.control_violation_observed() || !governed_before_commit {
+            let permit = gate.permit_runner_rollback();
+            let rollback = transaction.rollback().await;
+            drop(permit);
+            let remove = gate.remove(&mut connection).await;
+            let close = connection.close().await;
+            authority.validate_for(paths)?;
+            rollback.or(remove).or(close).map_err(|source| {
+                initialization_error(InitializationCause::with_source(
+                    InitializationFailureKind::SchemaInitializationFailed,
+                    source,
+                ))
+            })?;
+            return Err(initialization_error(InitializationCause::new(
+                InitializationFailureKind::SchemaInitializationFailed,
+            )));
+        }
+
+        let permit = gate.permit_outer_commit();
+        let committed = transaction.commit().await;
+        drop(permit);
+        authority.validate_for(paths)?;
+        pending
+            .validate()
+            .and_then(|()| pending.validate_canonical_path(paths.state_database()))
+            .map_err(initialization_error)?;
+        let removed = gate.remove(&mut connection).await;
+        authority.validate_for(paths)?;
+        let closed = connection.close().await;
+        authority.validate_for(paths)?;
+        committed.or(removed).or(closed).map_err(|source| {
+            initialization_error(InitializationCause::with_source(
+                InitializationFailureKind::SchemaInitializationFailed,
+                source,
+            ))
+        })
     }
 
     fn hit(
@@ -689,14 +1060,14 @@ mod supported {
     mod tests {
         use std::{
             cell::{Cell, RefCell},
+            convert::Infallible,
             fs,
-            future::{Future, pending, ready},
+            future::{pending, ready},
             io,
             num::NonZeroU32,
             os::unix::fs::{MetadataExt, PermissionsExt, symlink},
             path::Path,
-            pin::Pin,
-            task::{Context, Poll, Waker},
+            sync::Arc,
         };
 
         use radroots_runtime_paths::{
@@ -705,6 +1076,7 @@ mod supported {
             ServiceId,
         };
         use radroots_storage::event::SourceGeneration;
+        use tokio::sync::Notify;
 
         use super::*;
 
@@ -762,13 +1134,6 @@ mod supported {
                 }
                 SystemInitializationOperations.unlink_database(directory)
             }
-        }
-
-        fn poll_once<F: Future>(future: F) -> (Poll<F::Output>, Pin<Box<F>>) {
-            let mut future = Box::pin(future);
-            let mut context = Context::from_waker(Waker::noop());
-            let result = future.as_mut().poll(&mut context);
-            (result, future)
         }
 
         fn paths(root: &Path, instance: &str) -> ServiceSqlitePaths {
@@ -845,7 +1210,6 @@ mod supported {
             let root = tempfile::tempdir().expect("root");
             let paths = paths(root.path(), "success");
             prepare(&paths);
-            let expected_path = paths.state_database().to_path_buf();
             let metadata = metadata(&paths);
             let schema_catalog = service_schema_catalog();
             let mut authority = initialize_database(
@@ -853,20 +1217,17 @@ mod supported {
                 OpenMode::Initialize,
                 &metadata,
                 &schema_catalog,
-                |path| async move {
-                    assert_eq!(path, expected_path);
-                    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
-
-                    let options = SqliteConnectOptions::new()
-                        .filename(path)
-                        .create_if_missing(false)
-                        .disable_statement_logging();
-                    let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
-                    sqlx::query("CREATE TABLE service_schema (id INTEGER PRIMARY KEY)")
-                        .execute(&mut connection)
-                        .await?;
-                    connection.close().await?;
-                    Ok::<(), sqlx::Error>(())
+                |initializer| {
+                    Box::pin(async move {
+                        assert_eq!(
+                            format!("{initializer:?}"),
+                            "ServiceSqliteInitializer([redacted])"
+                        );
+                        sqlx::query("CREATE TABLE service_schema (id INTEGER PRIMARY KEY)")
+                            .execute(initializer)
+                            .await?;
+                        Ok::<(), sqlx::Error>(())
+                    })
                 },
             )
             .await
@@ -910,7 +1271,7 @@ mod supported {
                     &schema_catalog,
                     |_| {
                         called.set(true);
-                        ready(Ok::<(), CallbackFailure>(()))
+                        Box::pin(ready(Ok::<(), CallbackFailure>(())))
                     },
                 )
                 .await
@@ -931,7 +1292,7 @@ mod supported {
                 let schema_catalog = base_schema_catalog();
                 let error = initialize_database(&paths, mode, &metadata, &schema_catalog, |_| {
                     called.set(true);
-                    ready(Ok::<(), CallbackFailure>(()))
+                    Box::pin(ready(Ok::<(), CallbackFailure>(())))
                 })
                 .await
                 .expect_err("mode must reject");
@@ -957,7 +1318,7 @@ mod supported {
                 &base_schema_catalog(),
                 |_| {
                     called.set(true);
-                    ready(Ok::<(), CallbackFailure>(()))
+                    Box::pin(ready(Ok::<(), CallbackFailure>(())))
                 },
             )
             .await
@@ -980,7 +1341,7 @@ mod supported {
                 OpenMode::Initialize,
                 &metadata,
                 &schema_catalog,
-                |_| ready(Err::<(), _>(CallbackFailure)),
+                |_| Box::pin(ready(Err::<(), _>(CallbackFailure))),
             )
             .await
             .expect_err("callback failure");
@@ -1008,12 +1369,66 @@ mod supported {
                 OpenMode::Initialize,
                 &metadata,
                 &schema_catalog,
-                |_| ready(Ok::<(), CallbackFailure>(())),
+                |_| Box::pin(ready(Ok::<(), CallbackFailure>(()))),
             )
             .await
             .expect("retry after cleanup");
             assert!(retry.is_held());
             assert!(paths.state_database().exists());
+        }
+
+        #[tokio::test(flavor = "current_thread")]
+        async fn transaction_control_and_attachments_are_rejected_before_sqlite_compilation() {
+            for scenario in ["commit", "rollback_begin", "attach_detach"] {
+                let root = tempfile::tempdir().expect("root");
+                let paths = paths(root.path(), scenario);
+                prepare(&paths);
+                let external = root.path().join("must-not-exist.sqlite");
+                let external_for_callback = external.clone();
+                let metadata = metadata(&paths);
+                let schema_catalog = base_schema_catalog();
+                let error = initialize_database(
+                    &paths,
+                    OpenMode::Initialize,
+                    &metadata,
+                    &schema_catalog,
+                    move |initializer| {
+                        Box::pin(async move {
+                            let sql = match scenario {
+                                "commit" => "COMMIT".to_owned(),
+                                "rollback_begin" => {
+                                    "ROLLBACK; BEGIN DEFERRED; CREATE TABLE escaped(value INTEGER)"
+                                        .to_owned()
+                                }
+                                "attach_detach" => format!(
+                                    "ATTACH DATABASE '{}' AS extra; DETACH DATABASE extra",
+                                    external_for_callback.display()
+                                ),
+                                _ => unreachable!(),
+                            };
+                            let _ = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+                                .execute(initializer)
+                                .await;
+                            Ok::<(), Infallible>(())
+                        })
+                    },
+                )
+                .await
+                .expect_err("forbidden statement control must fail initialization");
+                assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
+                for rendered in [error.to_string(), format!("{error:?}")] {
+                    assert!(!rendered.contains("must-not-exist"));
+                    assert!(!rendered.contains("ATTACH"));
+                    assert!(!rendered.contains("ROLLBACK"));
+                }
+                assert!(!paths.state_database().exists());
+                assert!(!external.exists());
+                assert!(
+                    WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                        .expect("reacquire")
+                        .is_some()
+                );
+            }
         }
 
         #[tokio::test(flavor = "current_thread")]
@@ -1040,17 +1455,11 @@ mod supported {
                     OpenMode::Initialize,
                     &metadata,
                     &schema_catalog,
-                    move |path| async move {
-                        use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
-
-                        let options = SqliteConnectOptions::new()
-                            .filename(path)
-                            .create_if_missing(false)
-                            .disable_statement_logging();
-                        let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
-                        sqlx::query(statement).execute(&mut connection).await?;
-                        connection.close().await?;
-                        Ok::<(), sqlx::Error>(())
+                    move |initializer| {
+                        Box::pin(async move {
+                            sqlx::query(statement).execute(initializer).await?;
+                            Ok::<(), sqlx::Error>(())
+                        })
                     },
                 )
                 .await
@@ -1078,19 +1487,13 @@ mod supported {
                 OpenMode::Initialize,
                 &metadata,
                 &schema_catalog,
-                |path| async move {
-                    use sqlx::{ConnectOptions, Connection, sqlite::SqliteConnectOptions};
-
-                    let options = SqliteConnectOptions::new()
-                        .filename(path)
-                        .create_if_missing(false)
-                        .disable_statement_logging();
-                    let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
-                    sqlx::query("CREATE TABLE unexpected (value INTEGER)")
-                        .execute(&mut connection)
-                        .await?;
-                    connection.close().await?;
-                    Ok::<(), sqlx::Error>(())
+                |initializer| {
+                    Box::pin(async move {
+                        sqlx::query("CREATE TABLE unexpected (value INTEGER)")
+                            .execute(initializer)
+                            .await?;
+                        Ok::<(), sqlx::Error>(())
+                    })
                 },
             )
             .await
@@ -1111,17 +1514,32 @@ mod supported {
             prepare(&paths);
             let metadata = metadata(&paths);
             let schema_catalog = base_schema_catalog();
-            let (poll, future) = poll_once(initialize_database(
-                &paths,
-                OpenMode::Initialize,
-                &metadata,
-                &schema_catalog,
-                |_| pending::<Result<(), CallbackFailure>>(),
-            ));
-            assert!(poll.is_pending());
+            let task_paths = paths.clone();
+            let reached = Arc::new(Notify::new());
+            let reached_from_callback = Arc::clone(&reached);
+            let task = tokio::spawn(async move {
+                initialize_database(
+                    &task_paths,
+                    OpenMode::Initialize,
+                    &metadata,
+                    &schema_catalog,
+                    move |initializer| {
+                        Box::pin(async move {
+                            sqlx::query("CREATE TABLE cancelled_probe (value INTEGER)")
+                                .execute(initializer)
+                                .await?;
+                            reached_from_callback.notify_one();
+                            pending::<Result<(), sqlx::Error>>().await
+                        })
+                    },
+                )
+                .await
+            });
+            reached.notified().await;
             assert!(paths.state_database().exists());
             assert!(WriterAuthority::acquire(&paths, OpenMode::Initialize).is_err());
-            drop(future);
+            task.abort();
+            task.await.expect_err("initialization task is cancelled");
             assert!(!paths.state_database().exists());
             assert!(
                 WriterAuthority::acquire(&paths, OpenMode::Initialize)
@@ -1143,10 +1561,12 @@ mod supported {
                 OpenMode::Initialize,
                 &metadata,
                 &schema_catalog,
-                move |path| async move {
-                    fs::remove_file(&path)?;
-                    fs::write(&replacement_path, b"replacement")?;
-                    Ok::<(), io::Error>(())
+                move |_| {
+                    Box::pin(async move {
+                        fs::remove_file(&replacement_path)?;
+                        fs::write(&replacement_path, b"replacement")?;
+                        Ok::<(), io::Error>(())
+                    })
                 },
             )
             .await
@@ -1172,18 +1592,20 @@ mod supported {
                 OpenMode::Initialize,
                 &metadata,
                 &schema_catalog,
-                move |_| async move {
-                    fs::rename(&state_directory, &displaced_for_callback)?;
-                    fs::create_dir(&state_directory)?;
-                    fs::write(&replacement_path, b"replacement")?;
-                    fs::set_permissions(&replacement_path, fs::Permissions::from_mode(0o600))?;
-                    Ok::<(), io::Error>(())
+                move |_| {
+                    Box::pin(async move {
+                        fs::rename(&state_directory, &displaced_for_callback)?;
+                        fs::create_dir(&state_directory)?;
+                        fs::write(&replacement_path, b"replacement")?;
+                        fs::set_permissions(&replacement_path, fs::Permissions::from_mode(0o600))?;
+                        Ok::<(), io::Error>(())
+                    })
                 },
             )
             .await
             .expect_err("canonical path replacement must fail");
 
-            assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Authority);
             assert_eq!(fs::read(paths.state_database()).unwrap(), b"replacement");
             assert!(!displaced_directory.join("state.sqlite").exists());
         }
@@ -1223,7 +1645,7 @@ mod supported {
                         authority,
                         &metadata,
                         &schema_catalog,
-                        |_| ready(Err::<(), _>(CallbackFailure)),
+                        |_| Box::pin(ready(Err::<(), _>(CallbackFailure))),
                         &operations,
                         &crate::failpoint::DurabilityFailpoints::default(),
                     )
@@ -1234,7 +1656,7 @@ mod supported {
                         authority,
                         &metadata,
                         &schema_catalog,
-                        |_| ready(Ok::<(), CallbackFailure>(())),
+                        |_| Box::pin(ready(Ok::<(), CallbackFailure>(()))),
                         &operations,
                         &crate::failpoint::DurabilityFailpoints::default(),
                     )
@@ -1386,7 +1808,7 @@ mod supported {
                     authority,
                     &metadata,
                     &schema_catalog,
-                    |_| ready(Ok::<(), CallbackFailure>(())),
+                    |_| Box::pin(ready(Ok::<(), CallbackFailure>(()))),
                     &operations,
                     &failpoints,
                 )

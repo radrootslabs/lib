@@ -60,22 +60,12 @@ impl Fixture {
             .expect("restrict state directory");
         let metadata = metadata(&paths);
         let (migrations, schema) = catalogs();
-        let mut authority = initialize_database(
-            &paths,
-            OpenMode::Initialize,
-            &metadata,
-            &schema,
-            |path| async move {
-                let options = SqliteConnectOptions::new()
-                    .filename(path)
-                    .create_if_missing(false)
-                    .disable_statement_logging();
-                let connection = sqlx::SqliteConnection::connect_with(&options).await?;
-                connection.close().await
-            },
-        )
-        .await
-        .expect("initialize process database");
+        let mut authority =
+            initialize_database(&paths, OpenMode::Initialize, &metadata, &schema, |_| {
+                Box::pin(async move { Ok::<(), sqlx::Error>(()) })
+            })
+            .await
+            .expect("initialize process database");
         authority
             .release()
             .expect("release initialization authority");

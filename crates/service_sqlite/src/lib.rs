@@ -62,7 +62,9 @@ pub use connection::{
 pub use error::{
     SafeServiceSqliteError, ServiceSqliteError, ServiceSqliteErrorCode, ServiceSqliteErrorKind,
 };
-pub use initialize::initialize_database;
+pub use initialize::{
+    ServiceSqliteInitializer, ServiceSqliteInitializerFuture, initialize_database,
+};
 pub use integrity::{
     IntegrityCheckOutcome, IntegrityCheckedAtUnixMs, IntegrityDiagnosticCode, SchemaCatalog,
     SchemaCatalogContractError, SchemaDigest, SchemaObject, SchemaObjectKind, SchemaVersionCatalog,

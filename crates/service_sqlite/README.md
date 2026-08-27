@@ -15,6 +15,25 @@ runner-owned. Writable host opening finishes every pending governed migration
 before returning, and read-only inspection opens only current migration and
 schema state.
 
+Create-new state uses the borrowed `ServiceSqliteInitializer` executor rather
+than a database path or raw connection. The runner reserves and retains the
+exact canonical file, opens SQLite only through that retained descriptor, owns
+`BEGIN IMMEDIATE`, and uses a private memory journal so descriptor-bound
+initialization creates no path-derived SQLite sidecar. It commits the product
+schema, shared `radroots_service_metadata`, empty v1 `schema_migrations`
+ledger, and exact schema-catalog verification in one transaction. The
+initializer screens the same closed transaction-control and attachment
+inventory as host transactions; an ignored rejection still prevents commit.
+Callback failure or cancellation cannot return a reusable connection or
+publish a partial database.
+
+Interactive callers may use `ServiceSqliteHost::open_or_initialize`. One held
+writer authority and an exclusive create decide whether the sealed initializer
+runs or the exact existing database is opened. The existing branch never runs
+the initializer. Callers therefore do not use pathname probes, error-text
+matching, recursive directory creation, permission repair, or direct SQLx
+connections to choose the bootstrap branch.
+
 Existing databases can be admitted without a caller guessing their stored
 source generation. `ExistingServiceDatabaseIntent` seals the canonical
 service and instance, supported schema ceiling, and SQLite application ID;
@@ -331,7 +350,7 @@ The crate-root exports are frozen in the reviewed
 [service-SQLite API baseline](../../contracts/api_baselines/radroots_service_sqlite.txt).
 Raw pools, pooled or direct connections, transaction-control handles, and
 dependency re-exports are forbidden. The deliberate narrow exception is the
-`sqlx::Executor` implementation for a borrowed
-`&mut ServiceSqliteTransaction<'_>`: it permits compile-time typed queries
-while the crate retains connection ownership and sole begin, commit, rollback,
-policy, and cancellation authority.
+`sqlx::Executor` implementation for borrowed
+`&mut ServiceSqliteInitializer<'_>` and `&mut ServiceSqliteTransaction<'_>`
+values. They permit compile-time typed queries. The crate retains connection
+ownership and sole begin, commit, rollback, policy, and cancellation authority.

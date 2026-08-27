@@ -351,6 +351,100 @@ impl ServiceSqliteHost {
         }
     }
 
+    /// Atomically creates interactive state or opens the exact existing database.
+    ///
+    /// The runner holds writer authority while an exclusive create decides the
+    /// branch. Callers never probe the filesystem or inspect error text. On the
+    /// create branch, the sealed initializer, shared metadata, empty v1 ledger,
+    /// and schema-catalog verification commit together before the host opens and
+    /// applies governed migrations. On exact create collision, the same retained
+    /// authority is transferred to an existing-only open and the initialization
+    /// callback is never invoked.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn open_or_initialize<F, E>(
+        paths: &ServiceSqlitePaths,
+        initialization_metadata: &ServiceDatabaseMetadata,
+        migrations: &MigrationCatalog,
+        schema: &SchemaCatalog,
+        options: ServiceSqliteConnectionOptions,
+        applied_at: MigrationAppliedAtUnixSeconds,
+        build: &MigrationBuildIdentity,
+        callbacks: &[MigrationCallbackBinding],
+        initialize_schema: F,
+    ) -> Result<(Self, MigrationApplicationOutcome), ServiceSqliteError>
+    where
+        F: for<'a> FnOnce(
+            &'a mut crate::ServiceSqliteInitializer<'_>,
+        ) -> crate::ServiceSqliteInitializerFuture<'a, E>,
+        E: Error + Send + Sync + 'static,
+    {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            if !schema.matches_migrations(migrations) {
+                return Err(ServiceSqliteError::new(ServiceSqliteErrorKind::Integrity));
+            }
+            let supported_version = core::num::NonZeroU32::new(migrations.current_version())
+                .expect("migration catalogs always have a nonzero current version");
+            let initialized = crate::initialize::initialize_or_existing_database(
+                paths,
+                initialization_metadata,
+                schema,
+                initialize_schema,
+            )
+            .await?;
+            let (mode, pool) = match initialized {
+                crate::initialize::InitializeDatabaseOutcome::Initialized(authority) => {
+                    let identity = ServiceDatabaseIdentity::new(
+                        paths,
+                        initialization_metadata.source_generation(),
+                        supported_version,
+                        initialization_metadata.application_id(),
+                    );
+                    let pool = crate::open::open_initialized_connection_pool(
+                        paths, &identity, migrations, schema, options, authority,
+                    )
+                    .await?;
+                    (OpenMode::Initialize, pool)
+                }
+                crate::initialize::InitializeDatabaseOutcome::Existing(authority) => {
+                    let intent = ExistingServiceDatabaseIntent::new(
+                        paths,
+                        supported_version,
+                        initialization_metadata.application_id(),
+                    );
+                    let pool =
+                        crate::open::open_existing_connection_pool_with_intent_and_authority(
+                            paths, &intent, migrations, schema, options, authority,
+                        )
+                        .await?;
+                    (OpenMode::ReadWriteExisting, pool)
+                }
+            };
+            match pool.apply_migrations(applied_at, build, callbacks).await {
+                Ok(outcome) => Ok((Self::from_pool(mode, pool), outcome)),
+                Err(error) => {
+                    drop(pool.close().await);
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            drop((
+                paths,
+                initialization_metadata,
+                migrations,
+                schema,
+                options,
+                applied_at,
+                build,
+                callbacks,
+                initialize_schema,
+            ));
+            Err(unsupported_host())
+        }
+    }
+
     /// Opens state created under a retained initialization writer authority.
     #[allow(clippy::too_many_arguments)]
     pub async fn open_initialized(
@@ -1535,19 +1629,14 @@ mod tests {
             OpenMode::Initialize,
             &metadata,
             &schema,
-            |database_path| async move {
-                let options = SqliteConnectOptions::new()
-                    .filename(database_path)
-                    .create_if_missing(false);
-                let mut connection = SqliteConnection::connect_with(&options)
-                    .await
-                    .expect("open reserved database");
-                sqlx::query(HOST_TABLE_SQL)
-                    .execute(&mut connection)
-                    .await
-                    .expect("create host table");
-                connection.close().await.expect("close reserved database");
-                Ok::<_, Infallible>(())
+            |initializer| {
+                Box::pin(async move {
+                    sqlx::query(HOST_TABLE_SQL)
+                        .execute(initializer)
+                        .await
+                        .expect("create host table");
+                    Ok::<_, Infallible>(())
+                })
             },
         )
         .await
@@ -1665,6 +1754,128 @@ mod tests {
         let (inspection, actual) = inspected.into_parts();
         assert_eq!(actual.source_generation(), identity.source_generation());
         inspection.close().await.expect("close inspection host");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn open_or_initialize_uses_exclusive_create_without_filesystem_probing() {
+        let root = tempfile::tempdir().expect("temporary root");
+        let paths = ServiceSqlitePaths::from_runtime_context(&runtime_context(root.path()))
+            .expect("SQLite paths");
+        fs::create_dir_all(paths.state_database().parent().expect("state directory"))
+            .expect("create state directory");
+        let metadata = ServiceDatabaseMetadata::new(
+            &paths,
+            SourceGeneration::new([31; 32]).expect("source generation"),
+            NonZeroU32::new(1).expect("schema version"),
+            1_700_000_000_000,
+            crate::ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+        )
+        .expect("database metadata");
+        let migrations = migration_catalog();
+        let schema = schema_catalog(&migrations);
+        let initialized_callback = Arc::new(AtomicBool::new(false));
+        let called = Arc::clone(&initialized_callback);
+        let (initialized, outcome) = ServiceSqliteHost::open_or_initialize(
+            &paths,
+            &metadata,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_000).expect("migration time"),
+            &build_identity(),
+            &[],
+            move |initializer| {
+                called.store(true, Ordering::Release);
+                Box::pin(async move {
+                    sqlx::query(HOST_TABLE_SQL).execute(initializer).await?;
+                    Ok::<(), sqlx::Error>(())
+                })
+            },
+        )
+        .await
+        .expect("initialize missing state");
+        assert!(initialized_callback.load(Ordering::Acquire));
+        assert_eq!(initialized.mode(), OpenMode::Initialize);
+        assert_eq!(outcome.applied_count(), 0);
+        initialized.close().await.expect("close initialized host");
+
+        let existing_callback = Arc::new(AtomicBool::new(false));
+        let called = Arc::clone(&existing_callback);
+        let (existing, outcome) = ServiceSqliteHost::open_or_initialize(
+            &paths,
+            &metadata,
+            &migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_001).expect("migration time"),
+            &build_identity(),
+            &[],
+            move |_| {
+                called.store(true, Ordering::Release);
+                Box::pin(async { Ok::<(), Infallible>(()) })
+            },
+        )
+        .await
+        .expect("open exact existing state");
+        assert!(!existing_callback.load(Ordering::Acquire));
+        assert_eq!(existing.mode(), OpenMode::ReadWriteExisting);
+        assert_eq!(outcome.applied_count(), 0);
+        assert_eq!(row_count(&existing).await, 0);
+        existing.close().await.expect("close existing host");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn open_or_initialize_rejects_catalog_mismatch_before_reservation() {
+        const MIGRATION_SQL: &str = "CREATE TABLE later_probe (value INTEGER NOT NULL)";
+
+        let root = tempfile::tempdir().expect("temporary root");
+        let paths = ServiceSqlitePaths::from_runtime_context(&runtime_context(root.path()))
+            .expect("SQLite paths");
+        fs::create_dir_all(paths.state_database().parent().expect("state directory"))
+            .expect("create state directory");
+        let metadata = ServiceDatabaseMetadata::new(
+            &paths,
+            SourceGeneration::new([32; 32]).expect("source generation"),
+            NonZeroU32::new(1).expect("schema version"),
+            1_700_000_000_000,
+            crate::ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+        )
+        .expect("database metadata");
+        let base_migrations = migration_catalog();
+        let schema = schema_catalog(&base_migrations);
+        let different_migrations = MigrationCatalog::new([crate::MigrationDescriptor::sql(
+            2,
+            "create_later_probe",
+            MIGRATION_SQL,
+            crate::MigrationChecksum::for_sql(MIGRATION_SQL),
+        )
+        .expect("different migration")])
+        .expect("different migration catalog");
+        let callback_called = Arc::new(AtomicBool::new(false));
+        let called = Arc::clone(&callback_called);
+
+        let error = ServiceSqliteHost::open_or_initialize(
+            &paths,
+            &metadata,
+            &different_migrations,
+            &schema,
+            ServiceSqliteConnectionOptions::reviewed(),
+            MigrationAppliedAtUnixSeconds::new(1_700_000_002).expect("migration time"),
+            &build_identity(),
+            &[],
+            move |_| {
+                called.store(true, Ordering::Release);
+                Box::pin(async { Ok::<(), Infallible>(()) })
+            },
+        )
+        .await
+        .expect_err("catalog mismatch must fail before reservation");
+
+        assert_eq!(error.kind(), ServiceSqliteErrorKind::Integrity);
+        assert!(!callback_called.load(Ordering::Acquire));
+        assert!(!paths.state_database().exists());
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

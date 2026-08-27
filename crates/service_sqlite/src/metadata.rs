@@ -12,7 +12,10 @@ use crate::ServiceSqlitePaths;
 use crate::{ServiceSqliteError, ServiceSqliteErrorKind};
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+use sqlx::Connection;
 
 const MAX_APPLICATION_ID: u32 = i32::MAX as u32;
 const MAX_CREATED_AT_UNIX_MS: u64 = i64::MAX as u64;
@@ -409,8 +412,29 @@ impl fmt::Display for MigrationLedgerInitializationFailure {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Error for MigrationLedgerInitializationFailure {}
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 pub(crate) async fn write_database_metadata(
+    connection: &mut SqliteConnection,
+    expected: &ServiceDatabaseMetadata,
+    schema_catalog: &crate::SchemaCatalog,
+) -> Result<(), ServiceSqliteError> {
+    let mut transaction = connection
+        .begin()
+        .await
+        .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
+    write_database_metadata_in_transaction(&mut transaction, expected, schema_catalog).await?;
+    transaction
+        .commit()
+        .await
+        .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
+
+    let actual = read_database_metadata(connection).await?;
+    require_metadata_condition(actual == *expected, MetadataFailureKind::Mismatch)?;
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn write_database_metadata_in_transaction(
     connection: &mut SqliteConnection,
     expected: &ServiceDatabaseMetadata,
     schema_catalog: &crate::SchemaCatalog,
@@ -422,19 +446,15 @@ pub(crate) async fn write_database_metadata(
         return Err(metadata_error(MetadataFailureKind::AlreadyPresent));
     }
 
-    let mut transaction = connection
-        .begin()
-        .await
-        .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
     for statement in crate::integrity::catalog::METADATA_SCHEMA_SQL {
         sqlx::query(statement)
-            .execute(&mut *transaction)
+            .execute(&mut *connection)
             .await
             .map_err(|_| metadata_error(MetadataFailureKind::AlreadyPresent))?;
     }
     for statement in crate::integrity::catalog::MIGRATION_LEDGER_SCHEMA_SQL {
         sqlx::query(statement)
-            .execute(&mut *transaction)
+            .execute(&mut *connection)
             .await
             .map_err(|_source| {
                 ServiceSqliteError::with_source(
@@ -457,7 +477,7 @@ pub(crate) async fn write_database_metadata(
         i64::try_from(expected.created_at_unix_ms())
             .map_err(|_| metadata_error(MetadataFailureKind::Corrupt))?,
     )
-    .execute(&mut *transaction)
+    .execute(&mut *connection)
     .await
     .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
     let set_application_id = format!(
@@ -466,20 +486,15 @@ pub(crate) async fn write_database_metadata(
     );
     // The only dynamic token is a validated decimal u31 value.
     sqlx::query(sqlx::AssertSqlSafe(set_application_id.as_str()))
-        .execute(&mut *transaction)
+        .execute(&mut *connection)
         .await
         .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
     crate::integrity::verify_schema_catalog(
-        &mut transaction,
+        &mut *connection,
         schema_catalog,
         expected.state_schema_version().get(),
     )
     .await?;
-    transaction
-        .commit()
-        .await
-        .map_err(|_| metadata_error(MetadataFailureKind::Storage))?;
-
     let actual = read_database_metadata(connection).await?;
     require_metadata_condition(actual == *expected, MetadataFailureKind::Mismatch)?;
     Ok(())
