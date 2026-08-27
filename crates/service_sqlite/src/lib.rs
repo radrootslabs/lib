@@ -55,7 +55,7 @@ pub use backup::{
 };
 pub use config::{ServiceSqliteConnectionOptions, ServiceSqliteConnectionOptionsError};
 pub use connection::{
-    OpenedExistingServiceDatabase, ServiceSqliteHost, ServiceSqliteTransaction,
+    OpenedServiceDatabase, ServiceSqliteHost, ServiceSqliteTransaction,
     ServiceSqliteTransactionError, ServiceSqliteTransactionErrorKind,
     ServiceSqliteTransactionFuture,
 };

@@ -32,7 +32,10 @@ writer authority and an exclusive create decide whether the sealed initializer
 runs or the exact existing database is opened. The existing branch never runs
 the initializer. Callers therefore do not use pathname probes, error-text
 matching, recursive directory creation, permission repair, or direct SQLx
-connections to choose the bootstrap branch.
+connections to choose the bootstrap branch. Success returns an
+`OpenedServiceDatabase` that binds the retained host to the actual verified
+metadata from the selected branch, including the persisted source generation
+when state already existed.
 
 Existing databases can be admitted without a caller guessing their stored
 source generation. `ExistingServiceDatabaseIntent` seals the canonical
@@ -40,7 +43,7 @@ service and instance, supported schema ceiling, and SQLite application ID;
 `ServiceSqliteHost::open_read_write_existing_with_intent` and
 `ServiceSqliteHost::open_read_only_inspection_with_intent` discover and verify
 the actual immutable metadata while retaining the corresponding writer or
-inspection authority. Success returns an `OpenedExistingServiceDatabase`,
+inspection authority. Success returns an `OpenedServiceDatabase`,
 which keeps the host and verified metadata inseparable until the caller
 consumes them together. Recovery remains fail closed and may use this intent
 only to discover the marker-bound generation; every other identity dimension,

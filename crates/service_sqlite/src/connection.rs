@@ -56,23 +56,23 @@ pub struct ServiceSqliteHost {
     failpoints: crate::failpoint::DurabilityFailpoints,
 }
 
-/// Existing database opened under retained authority with its verified metadata.
+/// Database opened under retained authority with its verified metadata.
 ///
 /// This result cannot be assembled independently from a host and metadata:
 ///
 /// ```compile_fail
-/// use radroots_service_sqlite::{OpenedExistingServiceDatabase, ServiceSqliteHost};
+/// use radroots_service_sqlite::{OpenedServiceDatabase, ServiceSqliteHost};
 ///
 /// fn forge(host: ServiceSqliteHost) {
-///     let _ = OpenedExistingServiceDatabase { host };
+///     let _ = OpenedServiceDatabase { host };
 /// }
 /// ```
-pub struct OpenedExistingServiceDatabase {
+pub struct OpenedServiceDatabase {
     host: ServiceSqliteHost,
     metadata: ServiceDatabaseMetadata,
 }
 
-impl OpenedExistingServiceDatabase {
+impl OpenedServiceDatabase {
     fn new(host: ServiceSqliteHost, metadata: ServiceDatabaseMetadata) -> Self {
         Self { host, metadata }
     }
@@ -96,10 +96,10 @@ impl OpenedExistingServiceDatabase {
     }
 }
 
-impl fmt::Debug for OpenedExistingServiceDatabase {
+impl fmt::Debug for OpenedServiceDatabase {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("OpenedExistingServiceDatabase")
+            .debug_struct("OpenedServiceDatabase")
             .field("mode", &self.host.mode())
             .field("database_metadata", &"[redacted]")
             .finish()
@@ -312,8 +312,7 @@ impl ServiceSqliteHost {
         applied_at: MigrationAppliedAtUnixSeconds,
         build: &MigrationBuildIdentity,
         callbacks: &[MigrationCallbackBinding],
-    ) -> Result<(OpenedExistingServiceDatabase, MigrationApplicationOutcome), ServiceSqliteError>
-    {
+    ) -> Result<(OpenedServiceDatabase, MigrationApplicationOutcome), ServiceSqliteError> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             let pool = crate::open::open_existing_connection_pool_with_intent(
@@ -340,7 +339,7 @@ impl ServiceSqliteHost {
                 }
             };
             let host = Self::from_pool(OpenMode::ReadWriteExisting, pool);
-            Ok((OpenedExistingServiceDatabase::new(host, metadata), outcome))
+            Ok((OpenedServiceDatabase::new(host, metadata), outcome))
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
@@ -359,7 +358,8 @@ impl ServiceSqliteHost {
     /// and schema-catalog verification commit together before the host opens and
     /// applies governed migrations. On exact create collision, the same retained
     /// authority is transferred to an existing-only open and the initialization
-    /// callback is never invoked.
+    /// callback is never invoked. Success binds the retained host to the actual
+    /// verified metadata selected by that atomic decision.
     #[allow(clippy::too_many_arguments)]
     pub async fn open_or_initialize<F, E>(
         paths: &ServiceSqlitePaths,
@@ -371,7 +371,7 @@ impl ServiceSqliteHost {
         build: &MigrationBuildIdentity,
         callbacks: &[MigrationCallbackBinding],
         initialize_schema: F,
-    ) -> Result<(Self, MigrationApplicationOutcome), ServiceSqliteError>
+    ) -> Result<(OpenedServiceDatabase, MigrationApplicationOutcome), ServiceSqliteError>
     where
         F: for<'a> FnOnce(
             &'a mut crate::ServiceSqliteInitializer<'_>,
@@ -420,13 +420,22 @@ impl ServiceSqliteHost {
                     (OpenMode::ReadWriteExisting, pool)
                 }
             };
-            match pool.apply_migrations(applied_at, build, callbacks).await {
-                Ok(outcome) => Ok((Self::from_pool(mode, pool), outcome)),
+            let outcome = match pool.apply_migrations(applied_at, build, callbacks).await {
+                Ok(outcome) => outcome,
                 Err(error) => {
                     drop(pool.close().await);
-                    Err(error)
+                    return Err(error);
                 }
-            }
+            };
+            let metadata = match pool.database_metadata().await {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    drop(pool.close().await);
+                    return Err(error);
+                }
+            };
+            let host = Self::from_pool(mode, pool);
+            Ok((OpenedServiceDatabase::new(host, metadata), outcome))
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
@@ -517,7 +526,7 @@ impl ServiceSqliteHost {
         migrations: &MigrationCatalog,
         schema: &SchemaCatalog,
         options: ServiceSqliteConnectionOptions,
-    ) -> Result<OpenedExistingServiceDatabase, ServiceSqliteError> {
+    ) -> Result<OpenedServiceDatabase, ServiceSqliteError> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             let pool = crate::open::open_existing_connection_pool_with_intent(
@@ -537,7 +546,7 @@ impl ServiceSqliteHost {
                 }
             };
             let host = Self::from_pool(OpenMode::ReadOnlyInspection, pool);
-            Ok(OpenedExistingServiceDatabase::new(host, metadata))
+            Ok(OpenedServiceDatabase::new(host, metadata))
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
@@ -1728,7 +1737,7 @@ mod tests {
         );
         assert_eq!(opened.host().mode(), OpenMode::ReadWriteExisting);
         let debug = format!("{opened:?}");
-        assert!(debug.contains("OpenedExistingServiceDatabase"));
+        assert!(debug.contains("OpenedServiceDatabase"));
         assert!(!debug.contains("09090909"));
         assert!(WriterAuthority::acquire(&paths, OpenMode::ReadWriteExisting).is_err());
         let (writable, actual) = opened.into_parts();
@@ -1796,15 +1805,26 @@ mod tests {
         .await
         .expect("initialize missing state");
         assert!(initialized_callback.load(Ordering::Acquire));
-        assert_eq!(initialized.mode(), OpenMode::Initialize);
+        assert_eq!(initialized.host().mode(), OpenMode::Initialize);
+        assert_eq!(initialized.database_metadata(), &metadata);
         assert_eq!(outcome.applied_count(), 0);
+        let (initialized, initialized_metadata) = initialized.into_parts();
+        assert_eq!(initialized_metadata, metadata);
         initialized.close().await.expect("close initialized host");
 
         let existing_callback = Arc::new(AtomicBool::new(false));
         let called = Arc::clone(&existing_callback);
+        let alternative_metadata = ServiceDatabaseMetadata::new(
+            &paths,
+            SourceGeneration::new([32; 32]).expect("alternative source generation"),
+            NonZeroU32::new(1).expect("schema version"),
+            1_700_000_000_001,
+            crate::ServiceSqliteApplicationId::new(0x5244_5351).expect("application ID"),
+        )
+        .expect("alternative database metadata");
         let (existing, outcome) = ServiceSqliteHost::open_or_initialize(
             &paths,
-            &metadata,
+            &alternative_metadata,
             &migrations,
             &schema,
             ServiceSqliteConnectionOptions::reviewed(),
@@ -1819,8 +1839,11 @@ mod tests {
         .await
         .expect("open exact existing state");
         assert!(!existing_callback.load(Ordering::Acquire));
-        assert_eq!(existing.mode(), OpenMode::ReadWriteExisting);
+        assert_eq!(existing.host().mode(), OpenMode::ReadWriteExisting);
+        assert_eq!(existing.database_metadata(), &metadata);
         assert_eq!(outcome.applied_count(), 0);
+        let (existing, existing_metadata) = existing.into_parts();
+        assert_eq!(existing_metadata, metadata);
         assert_eq!(row_count(&existing).await, 0);
         existing.close().await.expect("close existing host");
     }
