@@ -10,6 +10,8 @@ use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::build_output::is_build_output_directory;
+
 const SOURCE_LOCK_NAME: &str = "radroots.lib.source-lock.v1.toml";
 const CONSUMER_MARKER: &str = ".radroots-consumer-root";
 const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v2.toml";
@@ -741,19 +743,9 @@ fn collect_manifests(root: &Path, current: &Path, output: &mut Vec<PathBuf>) -> 
         }
         let name = entry.file_name();
         if file_type.is_dir() {
-            if matches!(
-                name.to_str(),
-                Some(
-                    ".git"
-                        | ".gradle"
-                        | ".kotlin"
-                        | ".radroots"
-                        | "build"
-                        | "node_modules"
-                        | "out"
-                        | "target"
-                )
-            ) {
+            if matches!(name.to_str(), Some(".git" | ".radroots"))
+                || is_build_output_directory(name.as_os_str())
+            {
                 continue;
             }
             collect_manifests(root, &entry.path(), output)?;
@@ -1192,6 +1184,22 @@ mod tests {
             toml::to_string(&fixture.source_lock).expect("serialize escaping source lock"),
         )
         .expect("write escaping source lock");
+        assert!(ConsumerRoot::open(&fixture.consumer).is_err());
+    }
+
+    #[test]
+    fn consumer_manifest_discovery_skips_swiftpm_build_output_only() {
+        let fixture = Fixture::new("mobile");
+        let swiftpm_checkout = fixture.consumer.join(".build/checkouts/dependency");
+        fs::create_dir_all(&swiftpm_checkout).expect("SwiftPM checkout directory");
+        fs::write(swiftpm_checkout.join("Cargo.toml"), "not valid TOML")
+            .expect("SwiftPM build manifest");
+        ConsumerRoot::open(&fixture.consumer).expect("SwiftPM build output is excluded");
+
+        let source_lookalike = fixture.consumer.join(".builder");
+        fs::create_dir(&source_lookalike).expect("source lookalike directory");
+        fs::write(source_lookalike.join("Cargo.toml"), "not valid TOML")
+            .expect("source lookalike manifest");
         assert!(ConsumerRoot::open(&fixture.consumer).is_err());
     }
 

@@ -12,6 +12,7 @@ use sha2::{Digest as _, Sha256};
 use tempfile::{NamedTempFile, TempDir};
 use walkdir::WalkDir;
 
+use crate::build_output::is_build_output_directory;
 use crate::service_source_lock::{
     ContractVersions, LIB_REPOSITORY, LOCK_FILENAME, NixMaterialParts, NixMaterialState,
     PREDECESSOR_LOCK_FILENAME, ServiceSourceLockParts, ServiceSourceLockV2,
@@ -415,10 +416,7 @@ fn validate_cargo_manifests(
         .follow_links(false)
         .into_iter()
         .filter_entry(|entry| {
-            !matches!(
-                entry.file_name().to_str(),
-                Some(".git" | ".gradle" | ".kotlin" | "build" | "node_modules" | "out" | "target")
-            )
+            entry.file_name() != OsStr::new(".git") && !is_build_output_directory(entry.file_name())
         });
     for entry in walker {
         entries = entries
@@ -1818,6 +1816,28 @@ name = "radroots_service_host"
                 Err(CommandError::InvalidCargoManifest)
             );
         }
+    }
+
+    #[test]
+    fn service_manifest_discovery_skips_swiftpm_build_output_only() {
+        let fixture = Fixture::new();
+        let swiftpm_checkout = fixture.service.join(".build/checkouts/dependency");
+        fs::create_dir_all(&swiftpm_checkout).expect("SwiftPM checkout directory");
+        fs::write(swiftpm_checkout.join(CARGO_MANIFEST), "not valid TOML")
+            .expect("SwiftPM build manifest");
+        assert_eq!(
+            validate_cargo_manifests(&fixture.service, None),
+            Ok(fixture.revision)
+        );
+
+        let source_lookalike = fixture.service.join(".builder");
+        fs::create_dir(&source_lookalike).expect("source lookalike directory");
+        fs::write(source_lookalike.join(CARGO_MANIFEST), "not valid TOML")
+            .expect("source lookalike manifest");
+        assert_eq!(
+            validate_cargo_manifests(&fixture.service, None),
+            Err(CommandError::InvalidCargoManifest)
+        );
     }
 
     #[test]

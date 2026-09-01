@@ -13,6 +13,7 @@ mod api_qualification;
 mod architecture;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod build_control;
+mod build_output;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod catalog;
 #[cfg_attr(coverage_nightly, coverage(off))]
