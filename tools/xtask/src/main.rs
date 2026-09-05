@@ -11,6 +11,7 @@
 mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
+mod bounded_process;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod build_control;
 mod build_output;
@@ -65,6 +66,7 @@ enum XtaskCommand {
     Architecture,
     ArchitectureCi,
     ArchitectureSourceExportCi,
+    BoundedProcessSelfTest,
     CheckApiBoundaries,
     CheckDependencyBoundaries,
     Check {
@@ -299,6 +301,7 @@ fn usage() {
     eprintln!("  cargo xtask architecture");
     eprintln!("  cargo xtask architecture-ci");
     eprintln!("  cargo xtask architecture-source-export-ci");
+    eprintln!("  cargo xtask bounded-process-self-test");
     eprintln!("  cargo xtask check-api-boundaries");
     eprintln!("  cargo xtask check-dependency-boundaries");
     eprintln!("  cargo xtask check --group <group> [--operation check|test|clippy] [--execute]");
@@ -478,6 +481,7 @@ fn run(args: &[String]) -> Result<(), String> {
             architecture::validate_ci(&workspace_root())?;
             validate_contract()
         }
+        XtaskCommand::BoundedProcessSelfTest => bounded_process::self_test(),
         XtaskCommand::CheckApiBoundaries => {
             architecture::validate_api_boundaries(&workspace_root())
         }
@@ -686,6 +690,8 @@ mod tests {
 
     #[test]
     fn typed_build_control_cli_requires_explicit_modes_and_known_values() {
+        assert!(Cli::try_parse_from(["xtask", "bounded-process-self-test"]).is_ok());
+
         let source_args = [
             "xtask",
             "source",

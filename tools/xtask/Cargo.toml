@@ -29,6 +29,7 @@ radroots_identity = { workspace = true }
 radroots_identity_bindings = { workspace = true }
 radroots_protocol = { workspace = true, features = ["std"] }
 radroots_replica_schema_bindings = { workspace = true }
+rustix = { workspace = true, features = ["event"] }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

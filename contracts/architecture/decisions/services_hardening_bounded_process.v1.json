@@ -1,0 +1,89 @@
+{
+  "schema": "radroots.services-hardening.bounded-process-decisions.v1",
+  "contract_version": 1,
+  "decision_state": "active",
+  "owner": "tools/xtask",
+  "self_test_command": "cargo xtask bounded-process-self-test",
+  "platform_scope": {
+    "implementation": [
+      "macos_aarch64",
+      "linux_x86_64"
+    ],
+    "source_gate": [
+      "macos_aarch64"
+    ],
+    "cross_platform_promotion_owner": "step-297"
+  },
+  "process_model": {
+    "child_process_group": "new_group_with_child_as_leader",
+    "stdin": "closed_devnull",
+    "stdout": "concurrently_drained_live_byte_cap",
+    "stderr": "concurrently_drained_live_byte_cap",
+    "deadline_clock": "monotonic",
+    "normal_leader_exit": "clean_remaining_process_group",
+    "failure_cleanup": "term_group_bounded_grace_then_kill_group_and_bounded_reap",
+    "unsupported_platform": "fail_closed"
+  },
+  "hard_maximums": {
+    "deadline_seconds": 86400,
+    "termination_grace_seconds": 5,
+    "stdout_bytes": 67108864,
+    "stderr_bytes": 67108864,
+    "environment_entries": 64,
+    "environment_name_bytes": 128,
+    "environment_value_bytes": 65536
+  },
+  "environment": {
+    "inheritance": "replace_with_explicit_allowlist",
+    "ambient_snapshot": false,
+    "duplicate_name": "reject",
+    "invalid_name_or_nul": "reject",
+    "forbidden_names": [
+      "CARGO_ENCODED_RUSTFLAGS",
+      "DYLD_INSERT_LIBRARIES",
+      "DYLD_LIBRARY_PATH",
+      "LD_LIBRARY_PATH",
+      "LD_PRELOAD",
+      "NIX_CONFIG",
+      "NIX_PATH",
+      "NIXPKGS_ALLOW_BROKEN",
+      "NIXPKGS_ALLOW_UNFREE",
+      "RUSTFLAGS"
+    ],
+    "forbidden_name_patterns": [
+      "*CREDENTIAL*",
+      "*KEY*",
+      "*PASSWORD*",
+      "*SECRET*",
+      "*TOKEN*"
+    ],
+    "equivalent_build_controls": [
+      "CARGO_BUILD_RUSTFLAGS",
+      "CARGO_TARGET_*_RUSTFLAGS",
+      "DYLD_*",
+      "LD_AUDIT",
+      "LD_DEBUG",
+      "LD_PROFILE",
+      "RUSTC_WRAPPER",
+      "RUSTC_WORKSPACE_WRAPPER",
+      "RUSTDOCFLAGS"
+    ]
+  },
+  "diagnostic_safety": {
+    "program_argv_cwd": "redacted",
+    "environment_values": "redacted",
+    "captured_stream_bytes": "redacted",
+    "operating_system_error_text": "redacted",
+    "source_error_chain": "absent"
+  },
+  "required_vectors": [
+    "timeout",
+    "orphan_child",
+    "stdout_cap",
+    "stderr_cap",
+    "closed_stdin",
+    "inherited_build_environment",
+    "loader_injection",
+    "redaction"
+  ]
+}

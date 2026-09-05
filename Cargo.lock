@@ -6106,6 +6106,7 @@ dependencies = [
  "radroots_identity_bindings",
  "radroots_protocol",
  "radroots_replica_schema_bindings",
+ "rustix 1.1.4",
  "semver",
  "serde",
  "serde_json",
