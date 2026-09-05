@@ -29,15 +29,10 @@ pub fn run(root: &Path) -> Result<(), String> {
         verify_revision(root, &baseline.revision)?;
     }
     for package in &contract.packages {
-        clear_rustdoc_artifacts(root)?;
         let args = invocation(&contract, package);
         eprintln!("cargo {}", args.join(" "));
         let status = Command::new("cargo")
             .args(&args)
-            // Keep rustdoc-JSON qualification distinct from ordinary `cargo doc`
-            // artifacts in the extbuild-owned target tree. Cargo otherwise may
-            // reuse an HTML-only rustdoc fingerprint and leave semver-checks
-            // without the JSON artifact it requested.
             .env("CARGO_PROFILE_DEV_DEBUG", "none")
             .current_dir(root)
             .status()
@@ -47,25 +42,6 @@ pub fn run(root: &Path) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-fn clear_rustdoc_artifacts(root: &Path) -> Result<(), String> {
-    let args = rustdoc_cleanup_invocation();
-    eprintln!("cargo {}", args.join(" "));
-    let status = Command::new("cargo")
-        .args(args)
-        .current_dir(root)
-        .status()
-        .map_err(|error| format!("failed to start rustdoc cleanup: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("rustdoc cleanup failed before public API qualification".to_owned())
-    }
-}
-
-fn rustdoc_cleanup_invocation() -> [&'static str; 2] {
-    ["clean", "--doc"]
 }
 
 fn load(root: &Path) -> Result<Contract, String> {
@@ -168,7 +144,7 @@ fn invocation(contract: &Contract, package: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{invocation, load, rustdoc_cleanup_invocation, validate};
+    use super::{invocation, load, validate};
 
     #[test]
     fn current_contract_covers_all_library_packages() {
@@ -181,6 +157,5 @@ mod tests {
         let invocation = invocation(&contract, "radroots_core");
         assert!(invocation.contains(&"--all-features".to_owned()));
         assert!(invocation.ends_with(&["--release-type".to_owned(), "major".to_owned()]));
-        assert_eq!(rustdoc_cleanup_invocation(), ["clean", "--doc"]);
     }
 }
