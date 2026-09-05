@@ -24,6 +24,9 @@ const HARD_MAX_ARCHIVE_EXPANDED_BYTES: u64 = 17_179_869_184;
 const HARD_MAX_ARCHIVE_MEMBERS: u64 = 65_536;
 const HARD_MAX_ARCHIVE_MEMBER_BYTES: u64 = 17_179_869_184;
 const HARD_MAX_ARCHIVE_PAYLOAD_BYTES: u64 = 17_179_869_184;
+const TAR_BLOCK_BYTES: usize = 512;
+const TAR_TERMINATOR_BYTES: usize = TAR_BLOCK_BYTES * 2;
+const CANONICAL_GZIP_COMPRESSION_LEVEL: u32 = 6;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LimitKind {
@@ -122,6 +125,70 @@ pub(crate) struct ArchiveEvidence {
     pub(crate) payload_bytes: u64,
 }
 
+#[derive(Debug)]
+pub(crate) struct MaterializedArchive {
+    root_descriptor: File,
+    root_identity: OutputDirectoryIdentity,
+    root_chain: Vec<DirectoryIdentity>,
+    parent_descriptor: File,
+    parent_identity: OutputDirectoryIdentity,
+    parent_path: PathBuf,
+    parent_chain: Vec<OutputDirectoryIdentity>,
+    snapshot: TraversalSnapshot,
+    evidence: ArchiveEvidence,
+    directory: tempfile::TempDir,
+}
+
+impl MaterializedArchive {
+    pub(crate) fn root(&self) -> &Path {
+        self.directory.path()
+    }
+
+    pub(crate) fn evidence(&self) -> &ArchiveEvidence {
+        &self.evidence
+    }
+
+    pub(crate) fn snapshot(&self) -> &TraversalSnapshot {
+        &self.snapshot
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<(), ArtifactIoError> {
+        let changed = || ArtifactIoError::new(ArtifactIoFailureKind::ChangedDuringRead);
+        if output_directory_identity(identity(&self.parent_descriptor).map_err(|_| changed())?)
+            != self.parent_identity
+        {
+            return Err(ArtifactIoError::new(
+                ArtifactIoFailureKind::ChangedDuringRead,
+            ));
+        }
+        if output_directory_identity(identity(&self.root_descriptor).map_err(|_| changed())?)
+            != self.root_identity
+        {
+            return Err(ArtifactIoError::new(
+                ArtifactIoFailureKind::ChangedDuringRead,
+            ));
+        }
+        let (current_root, current_root_chain) =
+            open_absolute_directory(self.root()).map_err(|_| changed())?;
+        if output_directory_identity(identity(&current_root).map_err(|_| changed())?)
+            != self.root_identity
+            || current_root_chain != self.root_chain
+        {
+            return Err(ArtifactIoError::new(
+                ArtifactIoFailureKind::ChangedDuringRead,
+            ));
+        }
+        let (_, current_parent_chain) =
+            open_trusted_output_directory(&self.parent_path).map_err(|_| changed())?;
+        if current_parent_chain != self.parent_chain {
+            return Err(ArtifactIoError::new(
+                ArtifactIoFailureKind::ChangedDuringRead,
+            ));
+        }
+        self.snapshot.revalidate().map_err(|_| changed())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct TraversedFile {
     relative: PathBuf,
@@ -159,6 +226,12 @@ impl TraversalSnapshot {
 
     pub(crate) const fn total_bytes(&self) -> u64 {
         self.total_bytes
+    }
+
+    pub(crate) fn directories(&self) -> impl Iterator<Item = (&Path, u32)> {
+        self.directories
+            .iter()
+            .map(|directory| (directory.relative.as_path(), directory.permission_mode))
     }
 
     pub(crate) fn root_permission_mode(&self) -> u32 {
@@ -212,6 +285,35 @@ impl TraversalSnapshot {
                 require_observed_length(evidence.byte_length, admitted_length)?;
                 Ok(evidence)
             },
+        )
+    }
+
+    pub(crate) fn admit_deterministic_tar_gzip(
+        &self,
+        file: &TraversedFile,
+        limits: TarGzipLimits,
+    ) -> Result<ArchiveEvidence, ArtifactIoError> {
+        admit_tar_gzip_relative(
+            &self.root,
+            &file.relative,
+            limits,
+            Some(&file.identity),
+            TarGzipPolicy::DeterministicSnapshot,
+        )
+    }
+
+    pub(crate) fn materialize_deterministic_tar_gzip(
+        &self,
+        file: &TraversedFile,
+        trusted_parent: &Path,
+        limits: TarGzipLimits,
+    ) -> Result<MaterializedArchive, ArtifactIoError> {
+        materialize_tar_gzip_relative(
+            &self.root,
+            &file.relative,
+            trusted_parent,
+            limits,
+            Some(&file.identity),
         )
     }
 
@@ -983,16 +1085,32 @@ pub(crate) fn admit_tar_gzip_path(
     path: &Path,
     limits: TarGzipLimits,
 ) -> Result<ArchiveEvidence, ArtifactIoError> {
-    validate_archive_limits(limits)?;
     let (root, relative) = split_absolute_file(path)?;
+    admit_tar_gzip_relative(&root, &relative, limits, None, TarGzipPolicy::Generic)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TarGzipPolicy {
+    Generic,
+    DeterministicSnapshot,
+}
+
+fn admit_tar_gzip_relative(
+    root: &Path,
+    relative: &Path,
+    limits: TarGzipLimits,
+    expected: Option<&FileIdentity>,
+    policy: TarGzipPolicy,
+) -> Result<ArchiveEvidence, ArtifactIoError> {
+    validate_archive_limits(limits)?;
     with_regular(
-        &root,
-        &relative,
+        root,
+        relative,
         limits.max_compressed_bytes,
-        None,
+        expected,
         || {},
         |file, admitted_length| {
-            let evidence = admit_tar_gzip_reader(file, limits)?;
+            let evidence = admit_tar_gzip_reader(file, limits, policy, None)?;
             require_observed_length(evidence.compressed.byte_length, admitted_length)?;
             Ok(evidence)
         },
@@ -1003,6 +1121,126 @@ pub(crate) fn admit_tar_gzip_path(
         ),
         _ => error,
     })
+}
+
+fn materialize_tar_gzip_relative(
+    root: &Path,
+    relative: &Path,
+    trusted_parent: &Path,
+    limits: TarGzipLimits,
+    expected: Option<&FileIdentity>,
+) -> Result<MaterializedArchive, ArtifactIoError> {
+    validate_archive_limits(limits)?;
+    let (parent_descriptor, parent_chain) = open_trusted_output_directory(trusted_parent)?;
+    let parent_identity = *parent_chain
+        .last()
+        .ok_or_else(|| ArtifactIoError::new(ArtifactIoFailureKind::InvalidRequest))?;
+    let mut directory_builder = tempfile::Builder::new();
+    directory_builder.prefix("radroots-advisory-materialized-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        directory_builder.permissions(fs::Permissions::from_mode(0o700));
+    }
+    let directory = directory_builder
+        .tempdir_in(trusted_parent)
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+    let (_, rebound_parent_chain) = open_trusted_output_directory(trusted_parent)?;
+    if rebound_parent_chain != parent_chain
+        || output_directory_identity(identity(&parent_descriptor)?) != parent_identity
+    {
+        return Err(ArtifactIoError::new(
+            ArtifactIoFailureKind::ChangedDuringRead,
+        ));
+    }
+    let (output, root_chain) = open_absolute_directory(directory.path())?;
+    let output_identity = identity(&output)?;
+    let parent_directory_chain = parent_chain
+        .iter()
+        .map(|identity| identity.directory)
+        .collect::<Vec<_>>();
+    if root_chain.len() != parent_directory_chain.len().saturating_add(1)
+        || root_chain[..parent_directory_chain.len()] != parent_directory_chain
+    {
+        return Err(ArtifactIoError::new(
+            ArtifactIoFailureKind::ChangedDuringRead,
+        ));
+    }
+    #[cfg(unix)]
+    if output_identity.owner != rustix::process::geteuid().as_raw()
+        || permission_mode(output_identity) != 0o700
+    {
+        return Err(ArtifactIoError::new(
+            ArtifactIoFailureKind::ChangedDuringRead,
+        ));
+    }
+    parent_descriptor
+        .sync_all()
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+    let evidence = with_regular(
+        root,
+        relative,
+        limits.max_compressed_bytes,
+        expected,
+        || {},
+        |file, admitted_length| {
+            let evidence = admit_tar_gzip_reader(
+                file,
+                limits,
+                TarGzipPolicy::DeterministicSnapshot,
+                Some(&output),
+            )?;
+            require_observed_length(evidence.compressed.byte_length, admitted_length)?;
+            output
+                .sync_all()
+                .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+            Ok(evidence)
+        },
+    )
+    .map_err(|error| match error.kind() {
+        ArtifactIoFailureKind::LimitExceeded(LimitKind::FileBytes) => ArtifactIoError::new(
+            ArtifactIoFailureKind::LimitExceeded(LimitKind::ArchiveCompressedBytes),
+        ),
+        _ => error,
+    })?;
+    let materialized_snapshot = traverse_regular_files(
+        directory.path(),
+        TraversalLimits {
+            max_entries: limits.max_members,
+            max_files: limits.max_members,
+            max_total_bytes: limits.max_payload_bytes,
+            max_file_bytes: limits.max_member_bytes,
+            max_depth: limits.max_depth,
+            max_path_bytes: limits.max_path_bytes,
+        },
+        &[],
+    )?;
+    if materialized_snapshot.entry_count() != evidence.member_count
+        || materialized_snapshot.total_bytes() != evidence.payload_bytes
+    {
+        return Err(ArtifactIoError::new(
+            ArtifactIoFailureKind::ChangedDuringRead,
+        ));
+    }
+    materialized_snapshot.revalidate()?;
+    parent_descriptor
+        .sync_all()
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+    let materialized = MaterializedArchive {
+        root_descriptor: output,
+        root_identity: output_directory_identity(output_identity),
+        root_chain,
+        parent_descriptor,
+        parent_identity,
+        parent_path: trusted_parent.to_owned(),
+        parent_chain,
+        snapshot: materialized_snapshot,
+        evidence,
+        directory,
+    };
+    materialized.revalidate()?;
+    Ok(materialized)
 }
 
 fn validate_archive_limits(limits: TarGzipLimits) -> Result<(), ArtifactIoError> {
@@ -1030,6 +1268,8 @@ fn validate_archive_limits(limits: TarGzipLimits) -> Result<(), ArtifactIoError>
 fn admit_tar_gzip_reader(
     file: &mut File,
     limits: TarGzipLimits,
+    policy: TarGzipPolicy,
+    materialization_root: Option<&File>,
 ) -> Result<ArchiveEvidence, ArtifactIoError> {
     let expected_compressed_bytes = file
         .metadata()
@@ -1037,13 +1277,20 @@ fn admit_tar_gzip_reader(
         .len();
     let compressed = HashingLimitReader::new(file, limits.max_compressed_bytes);
     let mut buffered = BufReader::new(compressed);
-    validate_minimal_gzip_header(&mut buffered)?;
+    validate_gzip_header(&mut buffered, policy)?;
     let decoder = GzDecoder::new(buffered);
     let expanded = LimitReader::new(decoder, limits.max_expanded_bytes);
     let mut archive = tar::Archive::new(expanded);
     let mut names = BTreeMap::<Vec<u8>, ArchiveMemberKind>::new();
     let mut members = 0_u64;
     let mut payload = 0_u64;
+    let mut previous_name = None::<Vec<u8>>;
+    let mut canonical = (policy == TarGzipPolicy::DeterministicSnapshot).then(|| {
+        GzBuilder::new().mtime(0).operating_system(255).write(
+            HashingLimitWriter::new(limits.max_compressed_bytes),
+            Compression::new(CANONICAL_GZIP_COMPRESSION_LEVEL),
+        )
+    });
 
     let parse_result = (|| {
         let entries = archive
@@ -1081,10 +1328,34 @@ fn admit_tar_gzip_reader(
             };
             let name = entry.path_bytes().into_owned();
             validate_archive_path(&name, limits.max_depth, limits.max_path_bytes)?;
-            if member_kind == ArchiveMemberKind::File && name.ends_with(b"/") {
+            let canonical_header = if policy == TarGzipPolicy::DeterministicSnapshot {
+                let header = validate_deterministic_tar_header(
+                    entry.header(),
+                    member_kind,
+                    &name,
+                    declared,
+                )?;
+                if previous_name
+                    .as_ref()
+                    .is_some_and(|previous| previous >= &name)
+                {
+                    return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject));
+                }
+                previous_name = Some(name.clone());
+                Some(header)
+            } else {
+                None
+            };
+            if match member_kind {
+                ArchiveMemberKind::Directory => !name.ends_with(b"/"),
+                ArchiveMemberKind::File => name.ends_with(b"/"),
+            } {
                 return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject));
             }
-            admit_archive_name(&mut names, name, member_kind)?;
+            admit_archive_name(&mut names, &name, member_kind)?;
+            if let (Some(encoder), Some(header)) = (canonical.as_mut(), canonical_header.as_ref()) {
+                write_canonical_archive_bytes(encoder, header.as_bytes())?;
+            }
             payload = payload.checked_add(declared).ok_or_else(|| {
                 ArtifactIoError::new(ArtifactIoFailureKind::LimitExceeded(
                     LimitKind::ArchivePayloadBytes,
@@ -1095,6 +1366,10 @@ fn admit_tar_gzip_reader(
                     LimitKind::ArchivePayloadBytes,
                 )));
             }
+            let mut materialized = materialization_root
+                .map(|root| materialize_archive_member(root, member_kind, &name))
+                .transpose()?
+                .flatten();
             let mut actual = 0_u64;
             let mut buffer = [0_u8; STREAM_BUFFER_BYTES];
             loop {
@@ -1114,11 +1389,32 @@ fn admit_tar_gzip_reader(
                         LimitKind::ArchiveMemberBytes,
                     )));
                 }
+                if let Some(destination) = materialized.as_mut() {
+                    destination
+                        .write_all(&buffer[..read])
+                        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+                }
+                if let Some(encoder) = canonical.as_mut() {
+                    write_canonical_archive_bytes(encoder, &buffer[..read])?;
+                }
             }
             if actual != declared {
                 return Err(ArtifactIoError::new(
                     ArtifactIoFailureKind::MalformedArchive,
                 ));
+            }
+            if let Some(encoder) = canonical.as_mut() {
+                let padding = (TAR_BLOCK_BYTES as u64 - actual % TAR_BLOCK_BYTES as u64)
+                    % TAR_BLOCK_BYTES as u64;
+                write_canonical_archive_bytes(
+                    encoder,
+                    &[0_u8; TAR_BLOCK_BYTES][..padding as usize],
+                )?;
+            }
+            if let Some(destination) = materialized {
+                destination
+                    .sync_all()
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
             }
         }
         Ok(())
@@ -1136,6 +1432,10 @@ fn admit_tar_gzip_reader(
         )));
     }
     parse_result?;
+
+    if let Some(encoder) = canonical.as_mut() {
+        write_canonical_archive_bytes(encoder, &[0_u8; TAR_TERMINATOR_BYTES])?;
+    }
 
     let mut trailing = [0_u8; STREAM_BUFFER_BYTES];
     let mut trailing_zero_bytes = 0_u64;
@@ -1198,20 +1498,145 @@ fn admit_tar_gzip_reader(
             ArtifactIoFailureKind::MalformedArchive,
         ));
     }
-    let compressed_hash = compressed.finalize();
+    let compressed_evidence = FileEvidence {
+        byte_length: compressed_bytes,
+        sha256: compressed.finalize(),
+    };
+    if let Some(encoder) = canonical {
+        let canonical_evidence = encoder
+            .finish()
+            .map_err(|_| {
+                ArtifactIoError::new(ArtifactIoFailureKind::LimitExceeded(
+                    LimitKind::ArchiveCompressedBytes,
+                ))
+            })?
+            .finalize();
+        if canonical_evidence != compressed_evidence {
+            return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject));
+        }
+    }
     Ok(ArchiveEvidence {
-        compressed: FileEvidence {
-            byte_length: compressed_bytes,
-            sha256: compressed_hash,
-        },
+        compressed: compressed_evidence,
         expanded_bytes,
         member_count: members,
         payload_bytes: payload,
     })
 }
 
-fn validate_minimal_gzip_header(
+#[cfg(unix)]
+fn materialize_archive_member(
+    root: &File,
+    kind: ArchiveMemberKind,
+    raw_name: &[u8],
+) -> Result<Option<File>, ArtifactIoError> {
+    use rustix::fs::{Mode, OFlags, fchmod, mkdirat, openat};
+
+    let name = std::str::from_utf8(raw_name)
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?
+        .trim_end_matches('/');
+    let path = Path::new(name);
+    let mut components = path.components().peekable();
+    let mut current = root
+        .try_clone()
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+    while let Some(component) = components.next() {
+        let Component::Normal(component) = component else {
+            return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject));
+        };
+        let is_leaf = components.peek().is_none();
+        if !is_leaf {
+            current = File::from(
+                openat(
+                    &current,
+                    component,
+                    OFlags::RDONLY
+                        | OFlags::DIRECTORY
+                        | OFlags::NOFOLLOW
+                        | OFlags::CLOEXEC
+                        | OFlags::NONBLOCK,
+                    Mode::empty(),
+                )
+                .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?,
+            );
+            continue;
+        }
+        return match kind {
+            ArchiveMemberKind::Directory => {
+                mkdirat(&current, component, Mode::RUSR | Mode::WUSR | Mode::XUSR)
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?;
+                let directory = File::from(
+                    openat(
+                        &current,
+                        component,
+                        OFlags::RDONLY
+                            | OFlags::DIRECTORY
+                            | OFlags::NOFOLLOW
+                            | OFlags::CLOEXEC
+                            | OFlags::NONBLOCK,
+                        Mode::empty(),
+                    )
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?,
+                );
+                fchmod(
+                    &directory,
+                    Mode::RUSR
+                        | Mode::WUSR
+                        | Mode::XUSR
+                        | Mode::RGRP
+                        | Mode::XGRP
+                        | Mode::ROTH
+                        | Mode::XOTH,
+                )
+                .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+                directory
+                    .sync_all()
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+                current
+                    .sync_all()
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+                Ok(None)
+            }
+            ArchiveMemberKind::File => {
+                let file = File::from(
+                    openat(
+                        &current,
+                        component,
+                        OFlags::WRONLY
+                            | OFlags::CREATE
+                            | OFlags::EXCL
+                            | OFlags::NOFOLLOW
+                            | OFlags::CLOEXEC
+                            | OFlags::NONBLOCK,
+                        Mode::RUSR | Mode::WUSR,
+                    )
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?,
+                );
+                fchmod(&file, Mode::RUSR | Mode::WUSR | Mode::RGRP | Mode::ROTH)
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+                current
+                    .sync_all()
+                    .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::IoFailure))?;
+                Ok(Some(file))
+            }
+        };
+    }
+    Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))
+}
+
+#[cfg(not(unix))]
+fn materialize_archive_member(
+    _root: &File,
+    _kind: ArchiveMemberKind,
+    _raw_name: &[u8],
+) -> Result<Option<File>, ArtifactIoError> {
+    Err(ArtifactIoError::new(
+        ArtifactIoFailureKind::UnsupportedPlatform,
+    ))
+}
+
+fn validate_gzip_header(
     reader: &mut BufReader<HashingLimitReader<'_>>,
+    policy: TarGzipPolicy,
 ) -> Result<(), ArtifactIoError> {
     if reader.fill_buf().is_err() {
         return Err(if reader.get_ref().exceeded() {
@@ -1231,7 +1656,59 @@ fn validate_minimal_gzip_header(
     if header[3] != 0 {
         return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject));
     }
+    if policy == TarGzipPolicy::DeterministicSnapshot
+        && (header[4..8] != [0, 0, 0, 0] || header[8] != 0 || header[9] != 255)
+    {
+        return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject));
+    }
     Ok(())
+}
+
+fn validate_deterministic_tar_header(
+    header: &tar::Header,
+    kind: ArchiveMemberKind,
+    name: &[u8],
+    size: u64,
+) -> Result<TarHeader, ArtifactIoError> {
+    let path = std::str::from_utf8(name)
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?;
+    let mut expected = TarHeader::new_gnu();
+    expected
+        .set_path(path)
+        .map_err(|_| ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))?;
+    expected.set_entry_type(match kind {
+        ArchiveMemberKind::Directory => tar::EntryType::Directory,
+        ArchiveMemberKind::File => tar::EntryType::Regular,
+    });
+    expected.set_mode(match kind {
+        ArchiveMemberKind::Directory => 0o755,
+        ArchiveMemberKind::File => 0o644,
+    });
+    expected.set_uid(0);
+    expected.set_gid(0);
+    expected.set_mtime(0);
+    expected.set_size(size);
+    expected.set_cksum();
+    if header.as_bytes() == expected.as_bytes() {
+        Ok(expected)
+    } else {
+        Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidObject))
+    }
+}
+
+fn write_canonical_archive_bytes(
+    encoder: &mut flate2::write::GzEncoder<HashingLimitWriter>,
+    bytes: &[u8],
+) -> Result<(), ArtifactIoError> {
+    encoder.write_all(bytes).map_err(|_| {
+        if encoder.get_ref().exceeded() {
+            ArtifactIoError::new(ArtifactIoFailureKind::LimitExceeded(
+                LimitKind::ArchiveCompressedBytes,
+            ))
+        } else {
+            ArtifactIoError::new(ArtifactIoFailureKind::IoFailure)
+        }
+    })
 }
 
 fn classify_expanded_error(
@@ -1303,9 +1780,10 @@ fn validate_archive_path(
 
 fn admit_archive_name(
     names: &mut BTreeMap<Vec<u8>, ArchiveMemberKind>,
-    mut path: Vec<u8>,
+    path: &[u8],
     kind: ArchiveMemberKind,
 ) -> Result<(), ArtifactIoError> {
+    let mut path = path.to_vec();
     if kind == ArchiveMemberKind::Directory && path.ends_with(b"/") {
         path.pop();
     }
@@ -1454,6 +1932,55 @@ impl Read for HashingLimitReader<'_> {
     }
 }
 
+struct HashingLimitWriter {
+    maximum: u64,
+    total: u64,
+    exceeded: bool,
+    hasher: Sha256,
+}
+
+impl HashingLimitWriter {
+    fn new(maximum: u64) -> Self {
+        Self {
+            maximum,
+            total: 0,
+            exceeded: false,
+            hasher: Sha256::new(),
+        }
+    }
+
+    const fn exceeded(&self) -> bool {
+        self.exceeded
+    }
+
+    fn finalize(self) -> FileEvidence {
+        FileEvidence {
+            byte_length: self.total,
+            sha256: hex::encode(self.hasher.finalize()),
+        }
+    }
+}
+
+impl Write for HashingLimitWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let next = self
+            .total
+            .checked_add(bytes.len() as u64)
+            .ok_or_else(|| io::Error::other("bounded stream length overflow"))?;
+        if next > self.maximum {
+            self.exceeded = true;
+            return Err(io::Error::other("bounded stream limit exceeded"));
+        }
+        self.hasher.update(bytes);
+        self.total = next;
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 fn split_absolute_file(path: &Path) -> Result<(PathBuf, PathBuf), ArtifactIoError> {
     if !path.is_absolute() {
         return Err(ArtifactIoError::new(ArtifactIoFailureKind::InvalidRequest));
@@ -1495,6 +2022,11 @@ fn open_absolute_directory(path: &Path) -> Result<(File, Vec<DirectoryIdentity>)
         }
     }
     Ok((current, chain))
+}
+
+pub(crate) fn validate_trusted_output_directory(path: &Path) -> Result<(), ArtifactIoError> {
+    let _ = open_trusted_output_directory(path)?;
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -2665,5 +3197,218 @@ mod tests {
         let diagnostic = format!("{error}");
         assert!(!diagnostic.contains("sensitive"));
         assert!(!diagnostic.contains("secret"));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod step_294_tests {
+    use std::fs::{self, File};
+    use std::io::Write as _;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::path::{Path, PathBuf};
+
+    use flate2::{Compression, GzBuilder};
+    use sha2::{Digest as _, Sha256};
+    use tar::{Builder, EntryType, Header};
+    use tempfile::TempDir;
+
+    use super::*;
+
+    const REVIEWED_FLATE2_LOCK: &str = concat!(
+        "name = \"flate2\"\n",
+        "version = \"1.1.9\"\n",
+        "source = \"registry+https://github.com/rust-lang/crates.io-index\"\n",
+        "checksum = \"843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c\"",
+    );
+    const REVIEWED_MINIZ_OXIDE_LOCK: &str = concat!(
+        "name = \"miniz_oxide\"\n",
+        "version = \"0.8.9\"\n",
+        "source = \"registry+https://github.com/rust-lang/crates.io-index\"\n",
+        "checksum = \"1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316\"",
+    );
+    const CANONICAL_ARCHIVE_BYTE_LENGTH: u64 = 147;
+    const CANONICAL_ARCHIVE_SHA256: &str =
+        "6073c70a98ff9ab610085ed74b7886811da3fe64e9ec2771464300a94befd0fb";
+
+    fn root(directory: &TempDir) -> PathBuf {
+        directory
+            .path()
+            .canonicalize()
+            .expect("canonical Step 294 test root")
+    }
+
+    fn trusted_tempdir(prefix: &str) -> TempDir {
+        let current = std::env::current_dir()
+            .expect("Step 294 current directory")
+            .canonicalize()
+            .expect("canonical Step 294 current directory");
+        open_trusted_output_directory(&current).expect("trusted Step 294 current directory");
+        let mut builder = tempfile::Builder::new();
+        builder
+            .prefix(prefix)
+            .permissions(fs::Permissions::from_mode(0o700));
+        let directory = builder
+            .tempdir_in(current)
+            .expect("private Step 294 tempdir");
+        let canonical = root(&directory);
+        let (descriptor, _) =
+            open_trusted_output_directory(&canonical).expect("trusted private Step 294 tempdir");
+        let actual = identity(&descriptor).expect("Step 294 tempdir identity");
+        assert_eq!(actual.owner, rustix::process::geteuid().as_raw());
+        assert_eq!(permission_mode(actual), 0o700);
+        directory
+    }
+
+    fn archive_limits() -> TarGzipLimits {
+        TarGzipLimits {
+            max_compressed_bytes: 64 * 1024,
+            max_expanded_bytes: 128 * 1024,
+            max_members: 8,
+            max_member_bytes: 32 * 1024,
+            max_payload_bytes: 64 * 1024,
+            max_depth: 4,
+            max_path_bytes: 128,
+        }
+    }
+
+    fn write_deterministic_archive(path: &Path, payload: &[u8], extra_terminator: bool) {
+        let output = File::create(path).expect("Step 294 archive output");
+        let encoder = GzBuilder::new()
+            .mtime(0)
+            .operating_system(255)
+            .write(output, Compression::new(CANONICAL_GZIP_COMPRESSION_LEVEL));
+        let mut builder = Builder::new(encoder);
+
+        let mut directory = Header::new_gnu();
+        directory
+            .set_path("snapshot/")
+            .expect("Step 294 directory path");
+        directory.set_entry_type(EntryType::Directory);
+        directory.set_mode(0o755);
+        directory.set_uid(0);
+        directory.set_gid(0);
+        directory.set_mtime(0);
+        directory.set_size(0);
+        directory.set_cksum();
+        builder
+            .append(&directory, &[][..])
+            .expect("Step 294 directory member");
+
+        let mut file = Header::new_gnu();
+        file.set_path("snapshot/data.json")
+            .expect("Step 294 file path");
+        file.set_entry_type(EntryType::Regular);
+        file.set_mode(0o644);
+        file.set_uid(0);
+        file.set_gid(0);
+        file.set_mtime(0);
+        file.set_size(payload.len() as u64);
+        file.set_cksum();
+        builder
+            .append(&file, payload)
+            .expect("Step 294 file member");
+
+        let mut encoder = builder.into_inner().expect("finish Step 294 tar");
+        if extra_terminator {
+            encoder
+                .write_all(&[0_u8; TAR_BLOCK_BYTES])
+                .expect("append noncanonical tar terminator");
+        }
+        encoder.finish().expect("finish Step 294 gzip");
+    }
+
+    #[test]
+    fn canonical_tar_gzip_is_exactly_reencoded_before_admission() {
+        let directory = trusted_tempdir("radroots-step-294-source-");
+        let root = root(&directory);
+        let canonical = root.join("canonical.tar.gz");
+        let noncanonical = root.join("noncanonical.tar.gz");
+        let payload = br#"{"schema":"radroots.step-294.test.v1"}"#;
+        write_deterministic_archive(&canonical, payload, false);
+        write_deterministic_archive(&noncanonical, payload, true);
+
+        let evidence = admit_tar_gzip_relative(
+            &root,
+            Path::new("canonical.tar.gz"),
+            archive_limits(),
+            None,
+            TarGzipPolicy::DeterministicSnapshot,
+        )
+        .expect("exact canonical archive admitted");
+        let cargo_lock = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.lock"));
+        assert_eq!(cargo_lock.matches(REVIEWED_FLATE2_LOCK).count(), 1);
+        assert_eq!(cargo_lock.matches(REVIEWED_MINIZ_OXIDE_LOCK).count(), 1);
+        assert_eq!(
+            evidence.compressed.byte_length,
+            CANONICAL_ARCHIVE_BYTE_LENGTH
+        );
+        assert_eq!(evidence.compressed.sha256, CANONICAL_ARCHIVE_SHA256);
+        assert_eq!(evidence.member_count, 2);
+        assert_eq!(evidence.payload_bytes, payload.len() as u64);
+        assert_eq!(
+            evidence.compressed.sha256,
+            hex::encode(Sha256::digest(
+                fs::read(&canonical).expect("canonical bytes")
+            ))
+        );
+
+        admit_tar_gzip_path(&noncanonical, archive_limits())
+            .expect("generic parser accepts safe extended terminator");
+        assert_eq!(
+            admit_tar_gzip_relative(
+                &root,
+                Path::new("noncanonical.tar.gz"),
+                archive_limits(),
+                None,
+                TarGzipPolicy::DeterministicSnapshot,
+            )
+            .expect_err("byte-noncanonical archive rejected")
+            .kind(),
+            ArtifactIoFailureKind::InvalidObject
+        );
+    }
+
+    #[test]
+    fn materialization_retains_exact_member_and_parent_bindings() {
+        let directory = trusted_tempdir("radroots-step-294-source-");
+        let source_root = root(&directory);
+        let archive = source_root.join("canonical.tar.gz");
+        let payload = br#"{"snapshot":"immutable"}"#;
+        write_deterministic_archive(&archive, payload, false);
+
+        let parent = trusted_tempdir("radroots-step-294-materialization-");
+        let parent_root = root(&parent);
+        let materialized = materialize_tar_gzip_relative(
+            &source_root,
+            Path::new("canonical.tar.gz"),
+            &parent_root,
+            archive_limits(),
+            None,
+        )
+        .expect("descriptor-bound materialization");
+        let snapshot = materialized.snapshot();
+        assert_eq!(snapshot.entry_count(), 2);
+        assert_eq!(snapshot.files().len(), 1);
+        assert_eq!(snapshot.total_bytes(), payload.len() as u64);
+        assert_eq!(
+            snapshot
+                .hash(&snapshot.files()[0], payload.len() as u64)
+                .expect("bound member hash")
+                .sha256,
+            hex::encode(Sha256::digest(payload))
+        );
+        materialized
+            .revalidate()
+            .expect("unchanged materialization");
+
+        fs::write(materialized.root().join("snapshot/data.json"), b"changed")
+            .expect("mutate materialized member");
+        assert_eq!(
+            materialized
+                .revalidate()
+                .expect_err("member mutation invalidates materialization")
+                .kind(),
+            ArtifactIoFailureKind::ChangedDuringRead
+        );
     }
 }

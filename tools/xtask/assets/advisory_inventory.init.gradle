@@ -1,0 +1,691 @@
+import groovy.json.JsonOutput
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFileAttributes
+import java.nio.file.attribute.PosixFilePermissions
+import java.security.MessageDigest
+import java.util.HexFormat
+import org.gradle.api.Named
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ModuleComponentSelector
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentSelector
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.artifacts.result.UnresolvedDependencyResult
+
+final long MAX_ARTIFACT_BYTES = 17_179_869_184L
+final long MAX_TOTAL_ARTIFACT_BYTES = 17_179_869_184L
+final int MAX_JSON_BYTES = 67_108_864
+final int STREAM_BUFFER_BYTES = 65_536
+final int MAX_EXTERNAL_VARIANT_DEPTH = 4
+final int MAX_COMPONENTS = 65_536
+final int MAX_DEPENDENCY_RESULTS = 262_144
+final int MAX_ARTIFACTS = 65_536
+final int MAX_VARIANTS_PER_COMPONENT = 4_096
+final int MAX_ATTRIBUTES = 1_024
+final int MAX_CAPABILITIES = 1_024
+final int MAX_REJECTED_VERSIONS = 1_024
+final Set<String> ADMITTED_EXTENSIONS = [
+    "aar", "jar", "js", "klib", "module", "pom", "wasm", "zip"
+] as Set
+
+def authorities = [
+    "harvestcircle": [
+        build_root: ".",
+        workloads: [
+            ":app:design_system|desktopRuntimeClasspath": "app_design_system",
+            ":app:desktop|runtimeClasspath": "app_desktop",
+            ":app:shared|desktopRuntimeClasspath": "app_shared",
+            ":tools:design_catalog|desktopRuntimeClasspath": "tools_design_catalog",
+        ],
+    ],
+    "harvestcircle-build-logic": [
+        build_root: "build-logic",
+        workloads: [
+            ":contracts|runtimeClasspath": "build_logic_contracts",
+            ":plugins|runtimeClasspath": "build_logic_plugins",
+        ],
+    ],
+]
+
+def fail = { ->
+    throw new GradleException("governed advisory graph projection failed")
+}
+
+def safeString = { Object value, int maximum, boolean allowEmpty = false ->
+    if (!(value instanceof CharSequence)) {
+        fail()
+    }
+    String text = value.toString()
+    if ((!allowEmpty && text.isEmpty())
+        || text.getBytes(StandardCharsets.UTF_8).length > maximum
+        || text.codePoints().anyMatch { codePoint ->
+            codePoint > 0x7f || Character.isISOControl(codePoint)
+        }) {
+        fail()
+    }
+    text
+}
+
+def nullableString = { Object value, int maximum, boolean allowEmpty = false ->
+    value == null ? null : safeString(value, maximum, allowEmpty)
+}
+
+Closure<String> canonicalJson
+canonicalJson = { Object value ->
+    if (value == null || value instanceof Boolean || value instanceof Number
+        || value instanceof CharSequence) {
+        return JsonOutput.toJson(value)
+    }
+    if (value instanceof Map) {
+        def keys = value.keySet().collect { key ->
+            if (!(key instanceof String)) {
+                fail()
+            }
+            safeString(key, 256)
+        }.sort()
+        return "{" + keys.collect { key ->
+            JsonOutput.toJson(key) + ":" + canonicalJson(value[key])
+        }.join(",") + "}"
+    }
+    if (value instanceof Collection) {
+        return "[" + value.collect { entry -> canonicalJson(entry) }.join(",") + "]"
+    }
+    fail()
+}
+
+def boundedSize = { Collection values, int maximum, boolean allowEmpty = true ->
+    int count = values.size()
+    if ((!allowEmpty && count == 0) || count > maximum) {
+        fail()
+    }
+    count
+}
+
+def canonicalSortedSet = { Collection rows, int maximum, boolean allowEmpty = true ->
+    boundedSize(rows, maximum, allowEmpty)
+    def byIdentity = new TreeMap<String, Object>()
+    rows.each { row ->
+        String identity = canonicalJson(row)
+        byIdentity[identity] = row
+    }
+    if (byIdentity.size() > maximum || (!allowEmpty && byIdentity.isEmpty())) {
+        fail()
+    }
+    byIdentity.values().toList()
+}
+
+def canonicalSortedRows = { Collection rows, int maximum, boolean allowEmpty = true ->
+    boundedSize(rows, maximum, allowEmpty)
+    def byIdentity = new TreeMap<String, Object>()
+    rows.each { row ->
+        String identity = canonicalJson(row)
+        if (byIdentity.put(identity, row) != null) {
+            fail()
+        }
+    }
+    if (byIdentity.size() != rows.size()) {
+        fail()
+    }
+    byIdentity.values().toList()
+}
+
+def attributeValue = { Object value ->
+    if (value instanceof Named) {
+        return safeString(value.name, 512)
+    }
+    if (value instanceof Enum) {
+        return safeString(value.name(), 512)
+    }
+    if (value instanceof CharSequence || value instanceof Number || value instanceof Boolean) {
+        return safeString(String.valueOf(value), 512, true)
+    }
+    fail()
+}
+
+def attributeRows = { attributes ->
+    def keys = attributes.keySet()
+    int expectedCount = boundedSize(keys, MAX_ATTRIBUTES)
+    def rows = keys.collect { attribute ->
+        [
+            name: safeString(attribute.name, 512),
+            value: attributeValue(attributes.getAttribute(attribute)),
+        ]
+    }.sort { left, right ->
+        left.name <=> right.name ?: left.value <=> right.value
+    }
+    if (rows.size() != expectedCount
+        || rows.collect { row -> row.name }.toSet().size() != rows.size()) {
+        fail()
+    }
+    rows
+}
+
+def capabilityRows = { capabilities ->
+    int expectedCount = boundedSize(capabilities, MAX_CAPABILITIES)
+    def rows = capabilities.collect { capability ->
+        [
+            group: safeString(capability.group, 256, true),
+            name: safeString(capability.name, 256),
+            version: nullableString(capability.version, 128, true),
+        ]
+    }
+    if (rows.size() != expectedCount) {
+        fail()
+    }
+    canonicalSortedSet(rows, MAX_CAPABILITIES)
+}
+
+Closure<Map> variantRow
+variantRow = { variant, int depth = 0 ->
+    if (depth > MAX_EXTERNAL_VARIANT_DEPTH) {
+        fail()
+    }
+    def external = variant.externalVariant
+    [
+        attributes: attributeRows(variant.attributes),
+        capabilities: capabilityRows(variant.capabilities),
+        external_variant: external.present ? variantRow(external.get(), depth + 1) : null,
+    ]
+}
+
+def variantEnvelope = { Collection variants ->
+    def selected = canonicalSortedSet(variants, MAX_VARIANTS_PER_COMPONENT, false)
+    [selected: selected]
+}
+
+def requiredProperty = { String name ->
+    def value = gradle.startParameter.projectProperties[name]
+    if (value == null) {
+        fail()
+    }
+    safeString(value, 4_096)
+}
+
+def logicalBuildRoot = { String invocationBuildRoot, String buildPath ->
+    String admitted = safeString(buildPath, 256)
+    if (admitted == ":") {
+        return invocationBuildRoot
+    }
+    if (admitted == ":build-logic") {
+        return "build-logic"
+    }
+    fail()
+}
+
+def componentCore = { identifier, String invocationBuildRoot ->
+    if (identifier instanceof ModuleComponentIdentifier) {
+        return [
+            build_root: null,
+            group: safeString(identifier.group, 256),
+            kind: "module",
+            name: safeString(identifier.module, 256),
+            project_path: null,
+            version: safeString(identifier.version, 128),
+        ]
+    }
+    if (identifier instanceof ProjectComponentIdentifier) {
+        return [
+            build_root: logicalBuildRoot(invocationBuildRoot, identifier.build.buildPath),
+            group: null,
+            kind: "project",
+            name: null,
+            project_path: safeString(identifier.projectPath, 256),
+            version: null,
+        ]
+    }
+    fail()
+}
+
+def selectorRow = { selector, String invocationBuildRoot ->
+    if (!selector.capabilitySelectors.isEmpty()) {
+        fail()
+    }
+    if (selector instanceof ModuleComponentSelector) {
+        def constraint = selector.versionConstraint
+        def rejectedVersions = constraint.rejectedVersions
+        int rejectedCount = boundedSize(rejectedVersions, MAX_REJECTED_VERSIONS)
+        def rejected = rejectedVersions.collect { version ->
+            safeString(version, 512)
+        }
+        if (rejected.size() != rejectedCount) {
+            fail()
+        }
+        return [
+            attributes: attributeRows(selector.attributes),
+            build_root: null,
+            capabilities: capabilityRows(selector.requestedCapabilities),
+            group: safeString(selector.group, 256),
+            kind: "module",
+            name: safeString(selector.module, 256),
+            project_path: null,
+            version: safeString(selector.version, 512, true),
+            version_constraint: [
+                branch: nullableString(constraint.branch, 256, true),
+                preferred: safeString(constraint.preferredVersion, 512, true),
+                rejected: canonicalSortedSet(rejected, MAX_REJECTED_VERSIONS),
+                required: safeString(constraint.requiredVersion, 512, true),
+                strict: safeString(constraint.strictVersion, 512, true),
+            ],
+        ]
+    }
+    if (selector instanceof ProjectComponentSelector) {
+        return [
+            attributes: attributeRows(selector.attributes),
+            build_root: logicalBuildRoot(invocationBuildRoot, selector.buildPath),
+            capabilities: capabilityRows(selector.requestedCapabilities),
+            group: null,
+            kind: "project",
+            name: null,
+            project_path: safeString(selector.projectPath, 256),
+            version: null,
+            version_constraint: null,
+        ]
+    }
+    fail()
+}
+
+def sameBasicIdentity = { BasicFileAttributes left, BasicFileAttributes right ->
+    left.fileKey() != null
+        && right.fileKey() != null
+        && left.fileKey() == right.fileKey()
+        && left.isRegularFile()
+        && right.isRegularFile()
+        && left.size() == right.size()
+        && left.lastModifiedTime() == right.lastModifiedTime()
+        && left.creationTime() == right.creationTime()
+}
+
+def digestBytes = { byte[] bytes ->
+    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
+}
+
+def observeRegularFile = { Path path, long maximum ->
+    if (!path.isAbsolute() || path != path.normalize()) {
+        fail()
+    }
+    BasicFileAttributes before = Files.readAttributes(
+        path, BasicFileAttributes, LinkOption.NOFOLLOW_LINKS
+    )
+    if (!before.isRegularFile() || before.isSymbolicLink() || before.fileKey() == null
+        || before.size() <= 0L || before.size() > maximum) {
+        fail()
+    }
+    def digest = MessageDigest.getInstance("SHA-256")
+    long observed = 0L
+    FileChannel channel = FileChannel.open(
+        path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS
+    )
+    try {
+        if (channel.size() != before.size()) {
+            fail()
+        }
+        ByteBuffer buffer = ByteBuffer.allocate(STREAM_BUFFER_BYTES)
+        while (true) {
+            int count = channel.read(buffer)
+            if (count < 0) {
+                break
+            }
+            if (count == 0) {
+                fail()
+            }
+            observed = Math.addExact(observed, (long) count)
+            if (observed > maximum) {
+                fail()
+            }
+            buffer.flip()
+            digest.update(buffer)
+            buffer.clear()
+        }
+        if (observed != before.size() || channel.position() != observed
+            || channel.size() != observed) {
+            fail()
+        }
+    } finally {
+        channel.close()
+    }
+    BasicFileAttributes after = Files.readAttributes(
+        path, BasicFileAttributes, LinkOption.NOFOLLOW_LINKS
+    )
+    if (!sameBasicIdentity(before, after) || after.size() != observed) {
+        fail()
+    }
+    [
+        byte_length: observed,
+        sha256: HexFormat.of().formatHex(digest.digest()),
+    ]
+}
+
+def artifactCorrelationKey = { artifact, String invocationBuildRoot ->
+    Path source = artifact.file.toPath().toAbsolutePath().normalize()
+    canonicalJson([
+        component: componentCore(artifact.id.componentIdentifier, invocationBuildRoot),
+        source_path: safeString(source.toString(), 4_096),
+    ])
+}
+
+def moduleVersionRow = { moduleVersion ->
+    if (moduleVersion == null) {
+        fail()
+    }
+    def identifier = moduleVersion.id
+    if (identifier == null) {
+        fail()
+    }
+    [
+        group: safeString(identifier.group, 256),
+        name: safeString(identifier.name, 256),
+        version: safeString(identifier.version, 128),
+    ]
+}
+
+def writeCreateNew = { Path output, byte[] bytes ->
+    if (!output.isAbsolute() || output != output.normalize()
+        || output.fileName == null || output.parent == null
+        || bytes.length <= 0 || bytes.length > MAX_JSON_BYTES) {
+        fail()
+    }
+    safeString(output.fileName.toString(), 256)
+    Path parent = output.parent
+    BasicFileAttributes parentBefore = Files.readAttributes(
+        parent, BasicFileAttributes, LinkOption.NOFOLLOW_LINKS
+    )
+    if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()
+        || parentBefore.fileKey() == null
+        || Files.exists(output, LinkOption.NOFOLLOW_LINKS)) {
+        fail()
+    }
+    def outputOptions = [
+        StandardOpenOption.CREATE_NEW,
+        StandardOpenOption.WRITE,
+        LinkOption.NOFOLLOW_LINKS,
+    ] as Set
+    def outputPermissions = PosixFilePermissions.fromString("rw-------")
+    FileChannel channel = FileChannel.open(
+        output, outputOptions, PosixFilePermissions.asFileAttribute(outputPermissions)
+    )
+    try {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes)
+        while (buffer.hasRemaining()) {
+            if (channel.write(buffer) <= 0) {
+                fail()
+            }
+        }
+        channel.force(true)
+        if (channel.position() != bytes.length || channel.size() != bytes.length) {
+            fail()
+        }
+    } finally {
+        channel.close()
+    }
+    PosixFileAttributes outputAttributes = Files.readAttributes(
+        output, PosixFileAttributes, LinkOption.NOFOLLOW_LINKS
+    )
+    if (!outputAttributes.isRegularFile() || outputAttributes.isSymbolicLink()
+        || outputAttributes.fileKey() == null
+        || outputAttributes.permissions() != outputPermissions) {
+        fail()
+    }
+    BasicFileAttributes parentAfter = Files.readAttributes(
+        parent, BasicFileAttributes, LinkOption.NOFOLLOW_LINKS
+    )
+    if (parentBefore.fileKey() != parentAfter.fileKey()
+        || !parentAfter.isDirectory() || parentAfter.isSymbolicLink()) {
+        fail()
+    }
+    def observed = observeRegularFile(output, MAX_JSON_BYTES)
+    if (observed.byte_length != bytes.length || observed.sha256 != digestBytes(bytes)) {
+        fail()
+    }
+}
+
+gradle.afterProject { project, state ->
+    if (state.failure != null) {
+        return
+    }
+    def authority = authorities[project.rootProject.name]
+    if (authority == null) {
+        return
+    }
+    def matching = authority.workloads.findAll { key, ignored ->
+        key.startsWith(project.path + "|")
+    }
+    if (matching.isEmpty()) {
+        return
+    }
+    if (project.tasks.findByName("rshrAdvisoryGraph") != null) {
+        fail()
+    }
+    project.tasks.register("rshrAdvisoryGraph") {
+        doLast {
+            String targetConfiguration = requiredProperty("rshrAdvisoryConfiguration")
+            String outputArgument = requiredProperty("rshrAdvisoryOutput")
+            String authorityKey = project.path + "|" + targetConfiguration
+            String workloadId = authority.workloads[authorityKey]
+            String expectedTask = project.path + ":rshrAdvisoryGraph"
+            if (workloadId == null
+                || gradle.startParameter.taskNames != [expectedTask]
+                || !gradle.startParameter.offline) {
+                fail()
+            }
+            def configuration = project.configurations.findByName(targetConfiguration)
+            if (configuration == null || !configuration.canBeResolved) {
+                fail()
+            }
+
+            String invocationBuildRoot = authority.build_root
+            def resolution = configuration.incoming.resolutionResult
+            def allDependencies = resolution.allDependencies
+            int dependencyCount = boundedSize(
+                allDependencies, MAX_DEPENDENCY_RESULTS
+            )
+            def dependencyResults = allDependencies.toList()
+            if (dependencyResults.size() != dependencyCount) {
+                fail()
+            }
+            dependencyResults.each { dependency ->
+                if (dependency instanceof UnresolvedDependencyResult
+                    || !(dependency instanceof ResolvedDependencyResult)) {
+                    fail()
+                }
+            }
+
+            def componentStates = new TreeMap<String, Object>()
+            def allComponents = resolution.allComponents
+            int componentCount = boundedSize(allComponents, MAX_COMPONENTS, false)
+            allComponents.each { component ->
+                Map core = componentCore(component.id, invocationBuildRoot)
+                String key = canonicalJson(core)
+                if (componentStates.containsKey(key)) {
+                    fail()
+                }
+                def rawVariants = component.variants
+                int variantCount = boundedSize(
+                    rawVariants, MAX_VARIANTS_PER_COMPONENT
+                )
+                def variants = rawVariants.collect { variant -> variantRow(variant) }
+                if (variants.size() != variantCount) {
+                    fail()
+                }
+                componentStates[key] = [
+                    component: component,
+                    core: core,
+                    variants: variants,
+                ]
+            }
+            if (componentStates.size() != componentCount) {
+                fail()
+            }
+            def appendVariant = { Map componentState, Map selectedVariant ->
+                if (componentState.variants.size() >= MAX_VARIANTS_PER_COMPONENT) {
+                    fail()
+                }
+                componentState.variants.add(selectedVariant)
+            }
+            def rootComponent = resolution.rootComponent.get()
+            Map rootCore = componentCore(rootComponent.id, invocationBuildRoot)
+            String rootKey = canonicalJson(rootCore)
+            if (!componentStates.containsKey(rootKey)) {
+                fail()
+            }
+            appendVariant(
+                componentStates[rootKey], variantRow(resolution.rootVariant.get())
+            )
+
+            def edgeRows = []
+            dependencyResults.each { dependency ->
+                Map from = componentCore(dependency.from.id, invocationBuildRoot)
+                Map to = componentCore(dependency.selected.id, invocationBuildRoot)
+                String fromKey = canonicalJson(from)
+                String toKey = canonicalJson(to)
+                if (!componentStates.containsKey(fromKey)
+                    || !componentStates.containsKey(toKey)) {
+                    fail()
+                }
+                Map selectedVariant = variantRow(dependency.resolvedVariant)
+                appendVariant(componentStates[toKey], selectedVariant)
+                edgeRows.add([
+                    constraint: dependency.constraint,
+                    from: from,
+                    requested: selectorRow(dependency.requested, invocationBuildRoot),
+                    selected_variant: selectedVariant,
+                    to: to,
+                ])
+            }
+            if (edgeRows.size() != dependencyCount) {
+                fail()
+            }
+            edgeRows = canonicalSortedRows(edgeRows, MAX_DEPENDENCY_RESULTS)
+
+            def artifactCollection = configuration.incoming.artifacts
+            if (!artifactCollection.failures.isEmpty()) {
+                fail()
+            }
+            def resolvedArtifacts = artifactCollection.artifacts
+            int artifactCount = boundedSize(resolvedArtifacts, MAX_ARTIFACTS)
+            def legacyResolution = configuration.resolvedConfiguration
+            if (legacyResolution.hasError()) {
+                fail()
+            }
+            legacyResolution.rethrowFailure()
+            def legacyArtifacts = legacyResolution.resolvedArtifacts
+            int legacyArtifactCount = boundedSize(legacyArtifacts, MAX_ARTIFACTS)
+            if (legacyArtifactCount != artifactCount) {
+                fail()
+            }
+            def legacyByKey = new TreeMap<String, Object>()
+            legacyArtifacts.each { artifact ->
+                String key = artifactCorrelationKey(artifact, invocationBuildRoot)
+                def metadata = [
+                    artifact_id: artifact.id,
+                    artifact_type: safeString(artifact.type, 64),
+                    classifier: nullableString(artifact.classifier, 128),
+                    extension: safeString(artifact.extension, 64),
+                    logical_name: safeString(artifact.name, 256),
+                    module_version: moduleVersionRow(artifact.moduleVersion),
+                ]
+                if (!ADMITTED_EXTENSIONS.contains(metadata.extension)
+                    || legacyByKey.put(key, metadata) != null) {
+                    fail()
+                }
+            }
+            if (legacyByKey.size() != legacyArtifactCount) {
+                fail()
+            }
+            long totalArtifactBytes = 0L
+            def artifactRows = resolvedArtifacts.collect { artifact ->
+                Map component = componentCore(
+                    artifact.id.componentIdentifier, invocationBuildRoot
+                )
+                Map variantOwner = componentCore(artifact.variant.owner, invocationBuildRoot)
+                String componentKey = canonicalJson(component)
+                if (componentKey != canonicalJson(variantOwner)
+                    || !componentStates.containsKey(componentKey)) {
+                    fail()
+                }
+                Map selectedVariant = variantRow(artifact.variant)
+                appendVariant(componentStates[componentKey], selectedVariant)
+                Path source = artifact.file.toPath().toAbsolutePath().normalize()
+                String fileName = safeString(source.fileName.toString(), 256)
+                int separator = fileName.lastIndexOf('.')
+                if (separator <= 0 || separator == fileName.length() - 1) {
+                    fail()
+                }
+                String extension = safeString(fileName.substring(separator + 1), 64)
+                if (!ADMITTED_EXTENSIONS.contains(extension)) {
+                    fail()
+                }
+                String correlationKey = artifactCorrelationKey(
+                    artifact, invocationBuildRoot
+                )
+                def metadata = legacyByKey.remove(correlationKey)
+                if (metadata == null || metadata.artifact_id != artifact.id
+                    || metadata.extension != extension) {
+                    fail()
+                }
+                def observation = observeRegularFile(source, MAX_ARTIFACT_BYTES)
+                totalArtifactBytes = Math.addExact(
+                    totalArtifactBytes, (long) observation.byte_length
+                )
+                if (totalArtifactBytes > MAX_TOTAL_ARTIFACT_BYTES) {
+                    fail()
+                }
+                [
+                    artifact_name: fileName,
+                    artifact_type: metadata.artifact_type,
+                    classifier: metadata.classifier,
+                    component: component,
+                    extension: extension,
+                    group: component.group,
+                    logical_name: metadata.logical_name,
+                    name: component.name,
+                    module_version: metadata.module_version,
+                    observed_byte_length: observation.byte_length,
+                    observed_sha256: observation.sha256,
+                    source_path: safeString(source.toString(), 4_096),
+                    variant: selectedVariant,
+                    version: component.version,
+                ]
+            }
+            if (artifactRows.size() != artifactCount
+                || !legacyByKey.isEmpty()
+                || !artifactCollection.failures.isEmpty()) {
+                fail()
+            }
+            artifactRows = canonicalSortedRows(artifactRows, MAX_ARTIFACTS)
+
+            def componentRows = componentStates.collect { key, value ->
+                value.core + [
+                    root: key == rootKey,
+                    variant: variantEnvelope(value.variants),
+                ]
+            }.sort { left, right ->
+                canonicalJson(left) <=> canonicalJson(right)
+            }
+            if (componentRows.size() != componentCount
+                || componentRows.count { row -> row.root } != 1) {
+                fail()
+            }
+
+            def manifest = [
+                schema: "radroots.gradle-advisory-graph.v1",
+                workload_id: workloadId,
+                build_root: invocationBuildRoot,
+                project_path: project.path,
+                configuration: targetConfiguration,
+                components: componentRows,
+                edges: edgeRows,
+                artifacts: artifactRows,
+            ]
+            byte[] bytes = canonicalJson(manifest).getBytes(StandardCharsets.UTF_8)
+            writeCreateNew(Paths.get(outputArgument), bytes)
+        }
+    }
+}

@@ -1,0 +1,729 @@
+{
+  "schema": "radroots.services-hardening.advisory-snapshot-decisions.v1",
+  "contract_version": 1,
+  "decision_state": "active",
+  "owner": "tools/xtask",
+  "self_test_command": "cargo xtask advisory-snapshot-self-test",
+  "platform_scope": {
+    "implementation": [
+      "macos_aarch64"
+    ],
+    "source_gate": [
+      "macos_aarch64"
+    ],
+    "cross_platform_promotion_owner": "step-297"
+  },
+  "scope": {
+    "claims": [
+      "closed_advisory_workload_inventory",
+      "exact_step_287_tool_acquisition_binding",
+      "one_external_immutable_rustsec_snapshot_per_candidate",
+      "one_bounded_nvd_only_update_per_candidate",
+      "offline_no_update_analysis",
+      "digest_time_freshness",
+      "owned_exact_expiring_suppressions",
+      "descriptor_admitted_actual_scanner_outputs",
+      "deterministic_byte_canonical_snapshot_archives"
+    ],
+    "nonclaims": [
+      "live_rustsec_snapshot_acquisition",
+      "live_nvd_update_or_provider_access_at_step_294",
+      "scanner_or_provider_current_availability_before_step_297",
+      "candidate_or_generation_instance_created",
+      "step_314_advisory_qualification_or_pass_evidence",
+      "oss_index_or_credential_authority",
+      "cross_platform_runtime_promotion_before_step_297",
+      "artifact_nix_oci_signing_notarization_publication_deployment_or_production_qualification"
+    ]
+  },
+  "tool_binding": {
+    "authority": "exact_full_step_287_tool_acquisition_objects",
+    "required_ids": [
+      "cargo_audit",
+      "owasp_dependency_check",
+      "java",
+      "gradle_wrapper"
+    ],
+    "comparison": "parse_the_complete_structured_row_require_exact_equality_then_digest_canonical_compact_utf8_json",
+    "free_digest_without_parsed_row": "reject",
+    "availability": "must_be_observed_and_bound_by_the_step_297_generation_scoped_tool_manifest_before_live_use",
+    "live_observation_authority": "exact_radroots_services_hardening_rshr_200_tool_observation_v1_rows_from_the_step_297_generation_scoped_tool_manifest_and_fresh_advisory_lane_observation",
+    "live_observation_binding": "candidate_generation_tool_manifest_snapshot_sha256_platform_observation_sha256_producer_request_sha256_and_canonical_ordered_required_tool_rows",
+    "copied_pin_or_observation_fields_without_the_resolved_manifest_and_observation_digests": "reject",
+    "tool_review_maximum_age_seconds": 86400,
+    "path_only_or_version_only_admission": "reject"
+  },
+  "tool_acquisition": {
+    "cargo_audit": {
+      "distribution": "governed_binary",
+      "id": "cargo_audit",
+      "platform": [
+        {
+          "executable_name": "cargo-audit",
+          "executable_resolution": "path_lookup",
+          "id": "macos_aarch64",
+          "normalized_version": "0.22.1",
+          "package_name": "cargo-audit",
+          "package_receipt_kind": "cargo_install_identity_projection_canonical_json_v1",
+          "package_receipt_projection": {
+            "acquisition_source_sha256": "2f4e27b0ab2d116c87c29db159ad42565cdcdccf77eb62ef0486ddd017a02da6",
+            "executable_sha256": "c5cd7c0da8a9d0dff338aa1a2a30b0c723fde8201c23481f49e75be0bb77fe74",
+            "identity": {
+              "cargo_crates_entry": {
+                "binaries": [
+                  "cargo-audit"
+                ],
+                "package": "cargo-audit",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "version": "0.22.1"
+              },
+              "crate_archive_exact_bytes_sha256": "2f4e27b0ab2d116c87c29db159ad42565cdcdccf77eb62ef0486ddd017a02da6"
+            },
+            "kind": "cargo_install_identity_projection_canonical_json_v1",
+            "normalized_version": "0.22.1",
+            "package_name": "cargo-audit",
+            "platform": "macos_aarch64",
+            "provider": "pinned_archive",
+            "resolver_executable_name": "none",
+            "resolver_executable_sha256": "none",
+            "schema": "radroots.services-hardening.rshr-200-package-receipt-projection.v1",
+            "selected_executable": {
+              "exact_bytes_sha256": "c5cd7c0da8a9d0dff338aa1a2a30b0c723fde8201c23481f49e75be0bb77fe74",
+              "mode": "100755",
+              "path": "bin/cargo-audit"
+            }
+          },
+          "package_receipt_sha256": "74196dcade966311e535813d2e3bda2f9515186c700f3074acdc2849abce1303",
+          "platform_image_sha256": "none",
+          "provider": "pinned_archive",
+          "repository": "none",
+          "repository_relative_path": "none",
+          "source_digest_kind": "source_artifact_exact_bytes_v1",
+          "source_identity": "cargo-audit",
+          "source_identity_projection": "source_locator_exact_artifact_bytes",
+          "source_locator": "https://static.crates.io/crates/cargo-audit/cargo-audit-0.22.1.crate",
+          "source_revision": "none",
+          "source_sha256": "2f4e27b0ab2d116c87c29db159ad42565cdcdccf77eb62ef0486ddd017a02da6",
+          "source_tree": "none",
+          "source_version": "0.22.1",
+          "version_argv": [
+            "--version"
+          ],
+          "version_parser": "cargo_audit_version_v1",
+          "version_relation": "source_version_equals_normalized_version",
+          "version_stream": "stdout"
+        }
+      ],
+      "required_lane": [
+        "advisory",
+        "aggregate"
+      ],
+      "resolution": "exact_name_path_source_digest_and_version_output",
+      "resolution_authority": "candidate-tool-contract",
+      "role": "advisory"
+    },
+    "owasp_dependency_check": {
+      "distribution": "governed_binary",
+      "id": "owasp_dependency_check",
+      "platform": [
+        {
+          "executable_name": "dependency-check",
+          "executable_resolution": "path_lookup",
+          "id": "macos_aarch64",
+          "normalized_version": "12.2.2",
+          "package_name": "dependency-check",
+          "package_receipt_kind": "archive_tree_identity_projection_canonical_json_v1",
+          "package_receipt_projection": {
+            "acquisition_source_sha256": "bf07fefd81af3094c5f6850423b014df44db62ce2dbad0f79079a90df675e44a",
+            "executable_sha256": "d683a49ec335eeca93d8707f3e8ce21d7ba63a1e619a325c6518f89c25efcdc4",
+            "identity": {
+              "archive_exact_bytes_sha256": "bf07fefd81af3094c5f6850423b014df44db62ce2dbad0f79079a90df675e44a",
+              "tree_projection": {
+                "canonical_json_sha256": "d1d4022193b0677fd200eb4d7b34842313a97e4d70ce0c2ce26928b784687790",
+                "canonicalization": "canonical_compact_utf8_json_sorted_keys_no_lf_array_entries_bytewise_ascii_path_order_resolved_root_relative_link_target_v1",
+                "entry_count": 86,
+                "entry_schema": "radroots.services-hardening.archive-tree-entry.v1",
+                "max_entry_count": 100000,
+                "max_member_uncompressed_bytes": 1073741824,
+                "max_total_uncompressed_bytes": 8589934592,
+                "schema": "radroots.services-hardening.archive-tree-entry-projection.v1",
+                "total_uncompressed_bytes": 32444859
+              }
+            },
+            "kind": "archive_tree_identity_projection_canonical_json_v1",
+            "normalized_version": "12.2.2",
+            "package_name": "dependency-check",
+            "platform": "macos_aarch64",
+            "provider": "pinned_archive",
+            "resolver_executable_name": "none",
+            "resolver_executable_sha256": "none",
+            "schema": "radroots.services-hardening.rshr-200-package-receipt-projection.v1",
+            "selected_executable": {
+              "exact_bytes_sha256": "d683a49ec335eeca93d8707f3e8ce21d7ba63a1e619a325c6518f89c25efcdc4",
+              "mode": "100755",
+              "path": "bin/dependency-check"
+            }
+          },
+          "package_receipt_sha256": "83d9a668179fb5e9ad6fd5c625a9ab58b8371a6d32b59808fc8d2973957f54a2",
+          "platform_image_sha256": "none",
+          "provider": "pinned_archive",
+          "repository": "none",
+          "repository_relative_path": "none",
+          "source_digest_kind": "source_artifact_exact_bytes_v1",
+          "source_identity": "dependency-check",
+          "source_identity_projection": "source_locator_exact_artifact_bytes",
+          "source_locator": "https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip",
+          "source_revision": "none",
+          "source_sha256": "bf07fefd81af3094c5f6850423b014df44db62ce2dbad0f79079a90df675e44a",
+          "source_tree": "none",
+          "source_version": "12.2.2",
+          "version_argv": [
+            "--version"
+          ],
+          "version_parser": "owasp_dependency_check_version_v1",
+          "version_relation": "source_version_equals_normalized_version",
+          "version_stream": "stdout"
+        }
+      ],
+      "required_lane": [
+        "advisory",
+        "aggregate"
+      ],
+      "resolution": "exact_name_path_source_digest_and_version_output",
+      "resolution_authority": "candidate-tool-contract",
+      "role": "advisory"
+    },
+    "java": {
+      "distribution": "governed_binary",
+      "id": "java",
+      "platform": [
+        {
+          "executable_name": "java",
+          "executable_resolution": "path_lookup",
+          "id": "macos_aarch64",
+          "normalized_version": "21.0.12.1",
+          "package_name": "net.temurin.21.jdk",
+          "package_receipt_kind": "apple_pkgutil_identity_projection_canonical_json_v1",
+          "package_receipt_projection": {
+            "acquisition_source_sha256": "575bb8d9d604821d8f350325b28a35e49bcffd7ec33727b41edc8d709537dada",
+            "executable_sha256": "9be1d0a740ff6502df1a762145e62860f5de4b7e17658d9cb9498da3acf9d16c",
+            "identity": {
+              "pkg_info": {
+                "install_location": "",
+                "pkg_version": "21.0.12.1+1-LTS",
+                "pkgid": "net.temurin.21.jdk",
+                "receipt_plist_version": 1,
+                "volume": "/"
+              },
+              "pkgutil_files_lc_all_c_stdout_exact_bytes_sha256": "4d176bdae561efa1653174389a961a798e67b208105268ccfefb6494f1f3bb15"
+            },
+            "kind": "apple_pkgutil_identity_projection_canonical_json_v1",
+            "normalized_version": "21.0.12.1",
+            "package_name": "net.temurin.21.jdk",
+            "platform": "macos_aarch64",
+            "provider": "pinned_archive",
+            "resolver_executable_name": "none",
+            "resolver_executable_sha256": "none",
+            "schema": "radroots.services-hardening.rshr-200-package-receipt-projection.v1",
+            "selected_executable": {
+              "exact_bytes_sha256": "9be1d0a740ff6502df1a762145e62860f5de4b7e17658d9cb9498da3acf9d16c",
+              "mode": "100755",
+              "path": "bin/java"
+            }
+          },
+          "package_receipt_sha256": "e7018157655e26443392ace45967e427aafa1dd98e2e67f94bdd04267d1d9296",
+          "platform_image_sha256": "none",
+          "provider": "pinned_archive",
+          "repository": "none",
+          "repository_relative_path": "none",
+          "source_digest_kind": "source_artifact_exact_bytes_v1",
+          "source_identity": "net.temurin.21.jdk",
+          "source_identity_projection": "source_locator_exact_artifact_bytes",
+          "source_locator": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.12.1_1.pkg",
+          "source_revision": "none",
+          "source_sha256": "575bb8d9d604821d8f350325b28a35e49bcffd7ec33727b41edc8d709537dada",
+          "source_tree": "none",
+          "source_version": "21.0.12.1",
+          "version_argv": [
+            "-version"
+          ],
+          "version_parser": "java_version_v1",
+          "version_relation": "source_version_equals_normalized_version",
+          "version_stream": "stderr"
+        }
+      ],
+      "required_lane": [
+        "advisory",
+        "macos_artifacts",
+        "package_install",
+        "release_evidence",
+        "reproducibility",
+        "aggregate"
+      ],
+      "resolution": "exact_name_path_source_digest_and_version_output",
+      "resolution_authority": "candidate-tool-contract",
+      "role": "runtime"
+    },
+    "gradle_wrapper": {
+      "distribution": "gradle_wrapper",
+      "id": "gradle_wrapper",
+      "platform": [
+        {
+          "executable_name": "gradlew",
+          "executable_resolution": "repository_relative",
+          "id": "macos_aarch64",
+          "normalized_version": "9.5.0",
+          "package_name": "gradle",
+          "package_receipt_kind": "gradle_distribution_identity_projection_canonical_json_v1",
+          "package_receipt_projection": {
+            "acquisition_source_sha256": "553c78f50dafcd54d65b9a444649057857469edf836431389695608536d6b746",
+            "executable_sha256": "ab5c0cad16305af2e619c159c1f58dd68d07fab9c11e36701e109c0277407f7a",
+            "identity": {
+              "distribution_archive_exact_bytes_sha256": "553c78f50dafcd54d65b9a444649057857469edf836431389695608536d6b746",
+              "wrapper_jar_exact_bytes_sha256": "497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7"
+            },
+            "kind": "gradle_distribution_identity_projection_canonical_json_v1",
+            "normalized_version": "9.5.0",
+            "package_name": "gradle",
+            "platform": "macos_aarch64",
+            "provider": "gradle_distribution",
+            "resolver_executable_name": "none",
+            "resolver_executable_sha256": "none",
+            "schema": "radroots.services-hardening.rshr-200-package-receipt-projection.v1",
+            "selected_executable": {
+              "exact_bytes_sha256": "ab5c0cad16305af2e619c159c1f58dd68d07fab9c11e36701e109c0277407f7a",
+              "mode": "100755",
+              "path": "bin/gradlew"
+            }
+          },
+          "package_receipt_sha256": "a6538aaef9f5e2510cf4bbfe6d560e64ae4065e64a5c8ba0807d7448f6a89610",
+          "platform_image_sha256": "none",
+          "provider": "gradle_distribution",
+          "repository": "oss/harvestcircle",
+          "repository_relative_path": "gradlew",
+          "source_digest_kind": "source_artifact_exact_bytes_v1",
+          "source_identity": "gradle",
+          "source_identity_projection": "source_locator_exact_artifact_bytes",
+          "source_locator": "https://services.gradle.org/distributions/gradle-9.5.0-bin.zip",
+          "source_revision": "none",
+          "source_sha256": "553c78f50dafcd54d65b9a444649057857469edf836431389695608536d6b746",
+          "source_tree": "none",
+          "source_version": "9.5.0",
+          "version_argv": [
+            "--version"
+          ],
+          "version_parser": "gradle_wrapper_version_v1",
+          "version_relation": "source_version_equals_normalized_version",
+          "version_stream": "stdout"
+        }
+      ],
+      "required_lane": [
+        "advisory",
+        "macos_artifacts",
+        "package_install",
+        "release_evidence",
+        "reproducibility",
+        "aggregate"
+      ],
+      "resolution": "exact_name_path_source_digest_and_version_output",
+      "resolution_authority": "gradle-wrapper-lock",
+      "role": "build"
+    }
+  },
+  "workload_inventory": {
+    "ordering": "cargo_then_gradle_kotlin_within_each_class_exact_list_order",
+    "completeness": "exact_presence_unique_no_unexpected_no_reordered_and_every_workload_emits_one_result_even_when_zero_findings",
+    "per_workload_input_binding": "candidate_source_identity_exact_dependency_input_bytes_and_sha256_dependency_count_scanner_argv_and_raw_report_bytes_and_sha256",
+    "cargo": [
+      {
+        "id": "cli",
+        "repository": "oss/cli",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "harvest_core",
+        "repository": "oss/harvestcircle",
+        "workdir": "core",
+        "manifest_path": "core/Cargo.toml",
+        "lockfile_path": "core/Cargo.lock"
+      },
+      {
+        "id": "harvest_xtask",
+        "repository": "oss/harvestcircle",
+        "workdir": "tools/xtask",
+        "manifest_path": "tools/xtask/Cargo.toml",
+        "lockfile_path": "tools/xtask/Cargo.lock"
+      },
+      {
+        "id": "ios_ffi",
+        "repository": "oss/ios_app",
+        "workdir": "RadrootsFFI",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "lib",
+        "repository": "oss/lib",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "myc",
+        "repository": "oss/myc",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "radrootsd",
+        "repository": "oss/radrootsd",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "rhi",
+        "repository": "oss/rhi",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "root",
+        "repository": "_radroots",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      },
+      {
+        "id": "sdk",
+        "repository": "oss/sdk",
+        "workdir": ".",
+        "manifest_path": "Cargo.toml",
+        "lockfile_path": "Cargo.lock"
+      }
+    ],
+    "gradle_kotlin": [
+      {
+        "id": "app_design_system",
+        "repository": "oss/harvestcircle",
+        "build_root": ".",
+        "project_path": ":app:design_system",
+        "configuration": "desktopRuntimeClasspath"
+      },
+      {
+        "id": "app_desktop",
+        "repository": "oss/harvestcircle",
+        "build_root": ".",
+        "project_path": ":app:desktop",
+        "configuration": "runtimeClasspath"
+      },
+      {
+        "id": "app_shared",
+        "repository": "oss/harvestcircle",
+        "build_root": ".",
+        "project_path": ":app:shared",
+        "configuration": "desktopRuntimeClasspath"
+      },
+      {
+        "id": "tools_design_catalog",
+        "repository": "oss/harvestcircle",
+        "build_root": ".",
+        "project_path": ":tools:design_catalog",
+        "configuration": "desktopRuntimeClasspath"
+      },
+      {
+        "id": "build_logic_contracts",
+        "repository": "oss/harvestcircle",
+        "build_root": "build-logic",
+        "project_path": ":contracts",
+        "configuration": "runtimeClasspath"
+      },
+      {
+        "id": "build_logic_plugins",
+        "repository": "oss/harvestcircle",
+        "build_root": "build-logic",
+        "project_path": ":plugins",
+        "configuration": "runtimeClasspath"
+      }
+    ]
+  },
+  "gradle_dependency_graph": {
+    "projection_count": 6,
+    "projection_order": "exact_workload_inventory_gradle_kotlin_order",
+    "projection_owner": "tools_xtask_decision_bound_ephemeral_gradle_init_script",
+    "init_script_identity": "exact_embedded_utf8_bytes_sha256_4c51de29877813dd679c970507602940fdf8c38a586f8d2f6d101b6a93a8b598_compiled_into_the_step_294_implementation_and_bound_into_every_projection_input_digest",
+    "init_script_lifecycle": "materialize_create_new_0600_in_a_fresh_private_directory_read_with_evidence_before_invocation_and_revalidate_after_use",
+    "init_script_authority": "read_only_resolution_and_projection_only_no_repository_source_or_build_script_mutation",
+    "wrapper_tool_id": "gradle_wrapper",
+    "runner": "step_292_bounded_process_runner",
+    "execution": "sequential_one_module_configuration_per_invocation_no_parallel_full_graphs",
+    "working_directory": "exact_retained_candidate_oss_harvestcircle_repository_root_with_pre_and_post_entry_count_and_tree_digest_equality",
+    "argv_template": [
+      "--offline",
+      "--no-daemon",
+      "--no-parallel",
+      "--no-configuration-cache",
+      "--project-dir",
+      "{exact_build_root}",
+      "--init-script",
+      "{private_evidenced_init_script}",
+      "{exact_project_path}:rshrAdvisoryGraph",
+      "-PrshrAdvisoryConfiguration={exact_configuration}",
+      "-PrshrAdvisoryOutput={private_create_new_projection}"
+    ],
+    "gradle_state": "fresh_private_gradle_user_home_seeded_only_from_digest_verified_governed_wrapper_and_dependency_cache_inputs_with_network_disabled_and_no_ambient_user_or_project_cache_admitted",
+    "environment": "replace_allowlist_with_private_gradle_user_home_java_home_locale_timezone_tmpdir_and_step_292_required_process_fields",
+    "configuration_selection": "exact_named_configuration_from_the_workload_row_exists_is_resolvable_and_no_other_configuration_is_resolved",
+    "unresolved_component_or_artifact": "nonpass_without_partial_projection",
+    "graph_completeness": "resolution_root_all_selected_components_all_dependency_edges_all_resolved_artifacts_and_one_explicit_project_root_row_even_when_the_external_artifact_set_is_empty",
+    "component_identity": "canonical_module_group_name_version_or_build_root_and_project_path_with_selected_variant_attributes_no_display_string_as_sole_identity",
+    "artifact_identity": "component_identity_artifact_name_artifact_type_classifier_byte_length_and_sha256_from_the_exact_safely_read_bytes",
+    "canonical_projection": "canonical_compact_utf8_json_sorted_keys_with_components_edges_and_artifacts_each_sorted_by_their_complete_identity_and_no_host_paths",
+    "raw_projection_maximum_bytes_each": 8388608,
+    "artifact_source_roots": "each_source_path_is_descriptor_resolved_relative_to_exactly_one_governed_candidate_build_output_or_seed_cache_root_and_each_root_role_and_opaque_identity_digest_is_bound_into_the_projection_input_and_normalization_receipt",
+    "input_digest": "domain_separated_sha256_of_candidate_generation_harvest_source_revision_and_tree_workload_row_init_script_sha256_wrapper_tool_manifest_row_fresh_wrapper_observation_gradle_dependency_control_snapshot_and_seed_cache_inventory",
+    "result_digest": "sha256_of_the_exact_canonical_projection_bytes_observed_through_step_293_evidenced_io",
+    "scan_materialization": "fresh_private_create_new_projection_with_one_regular_file_per_resolved_artifact_named_by_lowercase_sha256_plus_validated_original_extension_and_revalidated_against_the_canonical_graph",
+    "scan_materialization_duplicates": "identical_digest_and_extension_coalesce_only_when_all_bound_artifact_identities_are_retained_in_the_graph_every_other_collision_is_nonpass",
+    "odc_scan_count": "exactly_one_per_projection_in_exact_projection_order",
+    "odc_nvd_state": "one_unique_fresh_private_materialized_copy_per_scan_with_source_pre_scan_and_post_scan_tree_digests_equal_to_the_single_accepted_candidate_nvd_snapshot",
+    "odc_argv_template": [
+      "--noupdate",
+      "--data",
+      "{private_materialized_nvd_snapshot}",
+      "--scan",
+      "{private_materialized_graph_projection}",
+      "--project",
+      "{exact_workload_id}",
+      "--format",
+      "JSON",
+      "--out",
+      "{private_create_new_report}",
+      "--disableKnownExploited",
+      "--disableRetireJs",
+      "--disableHostedSuppressions",
+      "--disableVersionCheck",
+      "--disableOssIndex",
+      "--disableCentral",
+      "--disableNodeAudit",
+      "--disableYarnAudit",
+      "--disablePnpmAudit"
+    ],
+    "result_binding": "one_complete_dependency_check_12_2_2_json_report_per_workload_even_with_zero_findings_bound_to_candidate_generation_workload_input_digest_graph_digest_nvd_digest_exact_argv_exit_status_process_evidence_report_byte_length_and_report_sha256",
+    "private_provider_evidence": "actual_raw_scanner_report_bytes_and_exact_argv_may_retain_attempt_local_absolute_paths_inside_access_controlled_candidate_evidence_so_the_output_file_and_argument_bindings_remain_independently_verifiable",
+    "normalized_outputs": "finding_inventory_result_digests_and_diagnostics_are_path_free_and_credential_free"
+  },
+  "snapshot_model": {
+    "providers": [
+      "rustsec",
+      "owasp_nvd"
+    ],
+    "accepted_snapshots_per_provider_per_candidate": 1,
+    "source_admission": "one_exact_bounded_traversal_snapshot_retained_while_every_member_is_read_with_read_evidenced_then_final_revalidation",
+    "evidence_origin": "byte_length_and_sha256_are_computed_from_the_exact_bytes_actually_read_not_accepted_from_caller_fields",
+    "archive_encoding": "deterministic_single_member_gzip_of_canonical_tar",
+    "archive_member_order": "raw_relative_path_bytes_ascending",
+    "archive_metadata": "mtime_zero_uid_zero_gid_zero_uname_empty_gname_empty_directories_0755_files_0644",
+    "archive_admission": "step_293_descriptor_bound_parser_plus_step_294_deterministic_header_member_order_and_full_byte_reencoding_equality_before_snapshot_acceptance",
+    "archive_evidence": "compressed_length_sha256_expanded_length_member_count_and_payload_length_from_the_admitted_bytes_plus_exact_reencoded_compressed_length_and_sha256_equality",
+    "archive_reencoding_backend": {
+      "compression_level": 6,
+      "flate2": "1.1.9",
+      "flate2_checksum": "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c",
+      "miniz_oxide": "0.8.9",
+      "miniz_oxide_checksum": "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316",
+      "golden_fixture_byte_length": 147,
+      "golden_fixture_sha256": "6073c70a98ff9ab610085ed74b7886811da3fe64e9ec2771464300a94befd0fb"
+    },
+    "archive_materialization": "fresh_private_0700_directory_create_new_0644_members_descriptor_bound_to_the_archive_and_parent_then_exact_membership_and_tree_revalidated_before_and_after_scanner_use",
+    "creation": "create_new_only_no_overwrite_no_rollback_and_failed_output_is_untrusted",
+    "immutability": "snapshot_identity_and_digest_are_fixed_once_adopted_and_every_later_use_revalidates_the_exact_snapshot",
+    "temporal_order": "acquisition_completion_epoch_less_than_or_equal_to_digest_finalization_epoch_less_than_or_equal_to_analysis_completion_epoch_less_than_or_equal_to_evaluation_epoch",
+    "logical_storage": "digest_addressed_normalized_identity_without_host_paths_while_access_controlled_raw_provider_evidence_retains_the_actual_report_and_argument_bindings",
+    "logical_uri_template": "extbuild-cas://sha256/{sha256}",
+    "logical_reference_fields": [
+      "logical_uri",
+      "sha256",
+      "size_bytes",
+      "media_type",
+      "logical_role"
+    ],
+    "logical_reference_validation": "uri_digest_equals_sha256_and_resolved_exact_bytes_size_and_digest_are_revalidated_under_the_step_286_cas_policy"
+  },
+  "rustsec": {
+    "provider": "rustsec",
+    "snapshot_acquisition": "external_to_cargo_audit_then_boundedly_admitted_as_one_immutable_candidate_snapshot",
+    "scanner_network_actions": 0,
+    "analysis_tool_id": "cargo_audit",
+    "analysis_count": "exactly_once_for_each_of_the_ten_cargo_workloads",
+    "analysis_network": "disabled",
+    "analysis_working_directory": "fresh_empty_config_free_directory",
+    "analysis_home": "fresh_empty_directory",
+    "analysis_cargo_home": "fresh_empty_directory",
+    "analysis_argv_policy": [
+      "audit",
+      "--db",
+      "exact_snapshot_directory",
+      "--no-fetch",
+      "--json",
+      "--file",
+      "exact_workload_lockfile"
+    ],
+    "fetch_or_update_arguments": "forbidden",
+    "yanked_registry_policy": "no_registry_network_or_update_no_ambient_cached_registry_index_admitted_and_no_yanked_result_accepted_the_pinned_tool_has_no_no_yank_argument",
+    "informational_warning_policy": "complete_notice_unmaintained_and_unsound_rows_are_governed_findings_and_require_the_same_exact_suppression_decision_as_vulnerabilities",
+    "exit_status_policy": "zero_or_one_with_complete_valid_json_is_report_bearing_and_findings_are_evaluated_after_parse_all_other_statuses_are_nonpass",
+    "report_parsing": "bounded_strict_complete_cargo_audit_0_22_1_json_from_the_actual_captured_stdout_per_workload_no_caller_normalized_clean_wrapper",
+    "report_input_binding": "each_raw_report_binds_the_exact_workload_id_lockfile_sha256_dependency_count_database_identity_scanner_argv_exit_status_byte_length_and_sha256",
+    "raw_output_admission": "actual_stdout_is_written_create_new_0600_in_a_fresh_private_directory_then_admitted_as_the_only_regular_file_read_with_descriptor_evidence_and_revalidated_before_parse_after_parse_and_before_final_acceptance",
+    "known_vulnerability": "nonpass_unless_one_active_exact_owned_suppression_matches",
+    "non_waivable_advisory_ids": [
+      "RUSTSEC-2026-0253"
+    ]
+  },
+  "owasp_dependency_check_nvd": {
+    "provider": "owasp_nvd",
+    "update_tool_id": "owasp_dependency_check",
+    "runtime_tool_id": "java",
+    "gradle_tool_id": "gradle_wrapper",
+    "update_count_per_candidate": 1,
+    "update_operation": "bounded_dependency_check_updateonly_into_a_new_private_directory",
+    "update_argv_template": [
+      "--updateonly",
+      "--data",
+      "{private_create_new_nvd_staging_directory}",
+      "--disableKnownExploited",
+      "--disableRetireJs",
+      "--disableHostedSuppressions",
+      "--disableVersionCheck",
+      "--disableOssIndex",
+      "--disableCentral",
+      "--disableNodeAudit",
+      "--disableYarnAudit",
+      "--disablePnpmAudit"
+    ],
+    "update_provider_allowlist": [
+      "nvd"
+    ],
+    "update_endpoint_allowlist": [
+      "https://services.nvd.nist.gov/rest/json/cves/2.0"
+    ],
+    "update_http_methods": [
+      "GET"
+    ],
+    "non_nvd_updates": "disabled_and_rejected",
+    "update_network": "contracted_fetch_only",
+    "update_network_trace": "complete_canonical_bounded_request_response_trace_with_exact_enforcement_program_and_configuration_digests_proves_only_sequential_get_requests_to_the_exact_nvd_https_endpoint_with_clear_nonsecret_query_values_contiguous_pagination_and_response_metadata_then_is_digest_bound_without_credentials_or_response_bodies",
+    "update_network_trace_limits": {
+      "maximum_requests": 1024,
+      "maximum_response_bytes_each": 67108864,
+      "maximum_response_bytes_aggregate": 536870912,
+      "maximum_trace_bytes": 16777216
+    },
+    "credential_environment": "absent",
+    "partial_or_failed_update": "untrusted_nonpass_and_never_adopted",
+    "analysis_count": "exactly_once_for_each_of_the_six_gradle_kotlin_modules",
+    "analysis_network": "disabled",
+    "analysis_update_mode": "no_update",
+    "gradle_network_mode": "offline",
+    "gradle_auto_update": false,
+    "analysis_failure_threshold_arguments": "forbidden_including_fail_on_cvss",
+    "exit_status_policy": "zero_with_complete_valid_json_is_report_bearing_and_findings_are_evaluated_after_parse_every_nonzero_status_is_nonpass",
+    "report_parsing": "bounded_strict_complete_dependency_check_12_2_2_json_from_the_actual_evidenced_output_file_per_workload_no_caller_normalized_clean_wrapper_and_vulnerability_ids_are_matched_software_identifiers_consistent_with_parsed_vulnerable_software_not_advisory_ids",
+    "report_input_binding": "each_raw_report_binds_the_exact_workload_id_dependency_graph_input_sha256_dependency_count_nvd_database_identity_scanner_argv_exit_status_byte_length_and_sha256",
+    "report_template_binding": {
+      "distribution_package_receipt_sha256": "83d9a668179fb5e9ad6fd5c625a9ab58b8371a6d32b59808fc8d2973957f54a2",
+      "dependency_check_core_jar_relative_identity": "dependency-check-core-12.2.2.jar",
+      "dependency_check_core_jar_sha256": "1ebe55e542b2f4d2727380395843922381447dc8b9a4f1633e77096f47ebfb48",
+      "template_member": "templates/jsonReport.vsl",
+      "template_member_byte_length": 34639,
+      "template_member_sha256": "35881409102304d5a91d08566c1d0fda6fa5f9ec8810994fcdd5106aed3729b5",
+      "parser": "strict_exact_schema_for_report_scan_project_dependency_evidence_identifier_related_dependency_vulnerability_cvss_reference_and_vulnerable_software_objects_with_unknown_fields_rejected"
+    },
+    "raw_output_admission": "actual_output_file_is_create_new_0600_in_a_fresh_private_directory_then_admitted_as_the_only_regular_file_read_with_descriptor_evidence_and_revalidated_before_parse_after_parse_and_before_final_acceptance",
+    "known_vulnerability": "nonpass_unless_one_active_exact_owned_suppression_matches"
+  },
+  "bounded_execution": {
+    "runner": "step_292_bounded_process_runner",
+    "environment": "replace_with_explicit_allowlist",
+    "stdin": "closed",
+    "deadline_clock": "monotonic",
+    "maximum_concurrent_top_level_operations": 1,
+    "required_process_receipts": 23,
+    "maximum_command_seconds": 3600,
+    "maximum_stdout_bytes": 67108864,
+    "maximum_stderr_bytes": 67108864,
+    "timeout_unavailable_interrupted_or_unparseable": "nonpass_without_fallback",
+    "exit_status_interpretation": "provider_specific_and_never_substitutes_for_complete_report_parsing",
+    "working_directories": "unique_opaque_identity_per_operation_with_kind_logical_uri_pre_and_post_entry_counts_and_tree_digests_cargo_audit_empty_config_free_gradle_retained_candidate_source_nvd_update_fresh_then_nonempty_and_odc_analysis_fresh_empty",
+    "environment_evidence": "exact_ordered_name_and_logical_role_allowlist_with_sha256_of_each_actual_replacement_value_fixed_C_and_UTC_values_shared_pinned_java_and_path_values_and_unique_private_roots_no_ambient_inheritance",
+    "authority_byte_limits": {
+      "snapshot_manifest": 67108864,
+      "producer_request": 1048576,
+      "tool_manifest": 16777216,
+      "tool_observation": 4194304,
+      "provider_execution_evidence": 67108864,
+      "raw_scanner_output_each": 33554432
+    }
+  },
+  "freshness": {
+    "clock": "caller_supplied_positive_utc_epoch_seconds",
+    "snapshot_time": "provider_digest_finalization_epoch_bound_to_the_accepted_snapshot_digest",
+    "future_snapshot_time": "reject",
+    "age_arithmetic": "checked_nonnegative_seconds",
+    "qualification_maximum_age_seconds": 86400,
+    "development_reuse_maximum_age_seconds": 604800,
+    "boundary": "fresh_when_age_is_less_than_or_equal_to_the_selected_maximum",
+    "providers_evaluated_independently": true,
+    "stale_or_missing_provider": "nonpass"
+  },
+  "suppressions": {
+    "inventory": "canonical_ordered_exact_rows_bound_into_the_candidate_advisory_input_digest",
+    "required_fields": [
+      "id",
+      "provider",
+      "advisory_id",
+      "workload_id",
+      "package_ecosystem",
+      "package_namespace",
+      "package_name",
+      "package_version",
+      "owner",
+      "rationale",
+      "created_at_epoch",
+      "expires_at_epoch"
+    ],
+    "matching": "one_row_matches_one_finding_only_when_provider_advisory_id_workload_id_package_ecosystem_package_namespace_package_name_and_package_version_are_all_exact",
+    "wildcards_ranges_regex_and_lexical_patterns": "forbidden",
+    "owner_and_rationale": "nonempty_bounded_safe_text",
+    "expiry": "active_only_when_evaluation_epoch_is_strictly_less_than_expires_at_epoch",
+    "expiry_equality": "expired",
+    "future_creation_time": "reject",
+    "unused_duplicate_ambiguous_or_unknown_rows": "nonpass",
+    "non_waivable_advisory_ids": [
+      "RUSTSEC-2026-0253"
+    ],
+    "non_waivable_match": "reject_even_when_a_suppression_row_is_otherwise_exact"
+  },
+  "result_model": {
+    "pass": "both_provider_snapshots_fresh_all_sixteen_workloads_present_in_exact_order_all_scans_completed_and_every_finding_is_absent_or_exactly_suppressed",
+    "unavailable": "nonpass",
+    "timeout": "nonpass",
+    "stale": "nonpass",
+    "missing_duplicate_unexpected_or_reordered_inventory": "nonpass",
+    "unknown_scanner_fields_or_malformed_reports": "nonpass",
+    "diagnostics": "stable_bounded_path_free_member_free_source_free_and_credential_free_while_raw_access_controlled_provider_evidence_remains_separate"
+  },
+  "required_vectors": [
+    "known_vulnerable_fixture",
+    "missing_inventory",
+    "unavailable",
+    "stale",
+    "timeout",
+    "expired_suppression"
+  ]
+}

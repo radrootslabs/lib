@@ -7,6 +7,7 @@
 // advisory scanners, SBOM generators, and target checks. They are exercised
 // by their dedicated release gates and must not recursively execute inside
 // xtask's unit-coverage process.
+mod advisory_snapshot;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -65,6 +66,12 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum XtaskCommand {
+    AdvisorySnapshotSelfTest,
+    #[command(hide = true)]
+    AdvisorySnapshotFixtureScanner {
+        #[arg(long, default_value = "report")]
+        mode: String,
+    },
     Architecture,
     ArchitectureCi,
     ArchitectureSourceExportCi,
@@ -304,6 +311,7 @@ fn usage() {
     eprintln!("  cargo xtask architecture");
     eprintln!("  cargo xtask architecture-ci");
     eprintln!("  cargo xtask architecture-source-export-ci");
+    eprintln!("  cargo xtask advisory-snapshot-self-test");
     eprintln!("  cargo xtask bounded-process-self-test");
     eprintln!("  cargo xtask safe-artifact-io-self-test");
     eprintln!("  cargo xtask check-api-boundaries");
@@ -447,7 +455,8 @@ fn release_preflight_at(root: &Path) -> Result<(), String> {
             LaneId::DtoRoots => dto_roots::check(root),
             LaneId::ProtocolFreshness => generate::protocol::check(root),
             LaneId::ArtifactContracts => contract::validate_artifact_contracts(root),
-            LaneId::ReleaseContracts => contract::validate_release_preflight(root),
+            LaneId::ReleaseContracts => advisory_snapshot::validate_decision(root)
+                .and_then(|_| contract::validate_release_preflight(root)),
         };
         if result.is_ok() {
             LaneState::Pass
@@ -503,6 +512,10 @@ fn run(args: &[String]) -> Result<(), String> {
     let cli = Cli::try_parse_from(std::iter::once("xtask").chain(args.iter().map(String::as_str)))
         .map_err(|error| error.to_string())?;
     match cli.command {
+        XtaskCommand::AdvisorySnapshotSelfTest => advisory_snapshot::self_test(),
+        XtaskCommand::AdvisorySnapshotFixtureScanner { mode } => {
+            advisory_snapshot::write_fixture_scanner_output(&mode)
+        }
         XtaskCommand::Architecture => architecture::validate(&workspace_root()),
         XtaskCommand::ArchitectureCi => {
             catalog::check(&workspace_root())?;
