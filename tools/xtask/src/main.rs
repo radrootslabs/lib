@@ -34,8 +34,10 @@ mod hygiene;
 mod portable_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_graph;
+mod release_preflight;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
+mod safe_artifact_io;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod safety_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -67,6 +69,7 @@ enum XtaskCommand {
     ArchitectureCi,
     ArchitectureSourceExportCi,
     BoundedProcessSelfTest,
+    SafeArtifactIoSelfTest,
     CheckApiBoundaries,
     CheckDependencyBoundaries,
     Check {
@@ -302,6 +305,7 @@ fn usage() {
     eprintln!("  cargo xtask architecture-ci");
     eprintln!("  cargo xtask architecture-source-export-ci");
     eprintln!("  cargo xtask bounded-process-self-test");
+    eprintln!("  cargo xtask safe-artifact-io-self-test");
     eprintln!("  cargo xtask check-api-boundaries");
     eprintln!("  cargo xtask check-dependency-boundaries");
     eprintln!("  cargo xtask check --group <group> [--operation check|test|clippy] [--execute]");
@@ -413,17 +417,46 @@ fn release_preflight() -> Result<(), String> {
 }
 
 fn release_preflight_at(root: &Path) -> Result<(), String> {
-    catalog::check(root)?;
-    service_source_lock::validate_contract(root)?;
-    service_build_qualification::validate_contract(root)?;
-    service_release_artifacts::validate_contract(root)?;
-    for group in ["public_native", "preview", "tools"] {
-        build_control::group_plan(root, group, build_control::Operation::Check, false)?;
-    }
-    dto_roots::check(root)?;
-    generate::protocol::check(root)?;
-    contract::validate_artifact_contracts(root)?;
-    contract::validate_release_preflight(root)
+    use release_preflight::{LaneId, LaneState};
+
+    release_preflight::execute_all(|lane| {
+        let result = match lane {
+            LaneId::Catalog => catalog::check(root),
+            LaneId::ServiceSourceLockContract => service_source_lock::validate_contract(root),
+            LaneId::ServiceBuildQualificationContract => {
+                service_build_qualification::validate_contract(root)
+            }
+            LaneId::ServiceReleaseArtifactsContract => {
+                service_release_artifacts::validate_contract(root)
+            }
+            LaneId::PublicNativeGroup => build_control::group_plan(
+                root,
+                "public_native",
+                build_control::Operation::Check,
+                false,
+            )
+            .map(|_| ()),
+            LaneId::PreviewGroup => {
+                build_control::group_plan(root, "preview", build_control::Operation::Check, false)
+                    .map(|_| ())
+            }
+            LaneId::ToolsGroup => {
+                build_control::group_plan(root, "tools", build_control::Operation::Check, false)
+                    .map(|_| ())
+            }
+            LaneId::DtoRoots => dto_roots::check(root),
+            LaneId::ProtocolFreshness => generate::protocol::check(root),
+            LaneId::ArtifactContracts => contract::validate_artifact_contracts(root),
+            LaneId::ReleaseContracts => contract::validate_release_preflight(root),
+        };
+        if result.is_ok() {
+            LaneState::Pass
+        } else {
+            LaneState::Failed
+        }
+    })
+    .map(|_| ())
+    .map_err(|error| error.to_string())
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -482,6 +515,12 @@ fn run(args: &[String]) -> Result<(), String> {
             validate_contract()
         }
         XtaskCommand::BoundedProcessSelfTest => bounded_process::self_test(),
+        XtaskCommand::SafeArtifactIoSelfTest => {
+            safe_artifact_io::self_test()?;
+            release_preflight::self_test()?;
+            println!("safe artifact I/O self-test: ok");
+            Ok(())
+        }
         XtaskCommand::CheckApiBoundaries => {
             architecture::validate_api_boundaries(&workspace_root())
         }
@@ -691,6 +730,7 @@ mod tests {
     #[test]
     fn typed_build_control_cli_requires_explicit_modes_and_known_values() {
         assert!(Cli::try_parse_from(["xtask", "bounded-process-self-test"]).is_ok());
+        assert!(Cli::try_parse_from(["xtask", "safe-artifact-io-self-test"]).is_ok());
 
         let source_args = [
             "xtask",
@@ -867,11 +907,11 @@ mod tests {
     }
 
     #[test]
-    fn release_preflight_checks_catalog_authority_first() {
+    fn release_preflight_exhausts_the_closed_lane_inventory() {
         let workspace = tempfile::TempDir::new().expect("create empty workspace");
         let error = release_preflight_at(workspace.path())
-            .expect_err("missing catalog authority must fail first");
-        assert!(error.contains("inspect artifact path") && error.contains("contracts"));
+            .expect_err("missing required inputs must fail closed");
+        assert_eq!(error, "release preflight required lanes did not all pass");
     }
 
     #[test]

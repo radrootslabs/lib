@@ -1,0 +1,258 @@
+#![forbid(unsafe_code)]
+
+use serde_json::Value;
+
+const DECISION: &str = include_str!(
+    "../../../contracts/architecture/decisions/services_hardening_safe_artifact_io.v1.json"
+);
+
+fn decision() -> Value {
+    serde_json::from_str(DECISION).expect("safe-artifact-I/O decision must be valid JSON")
+}
+
+#[test]
+fn scope_platform_and_hard_maximums_are_exact() {
+    let value = decision();
+    assert_eq!(value.as_object().map(serde_json::Map::len), Some(16));
+    assert_eq!(
+        value["schema"],
+        "radroots.services-hardening.safe-artifact-io-decisions.v1"
+    );
+    assert_eq!(value["contract_version"], 1);
+    assert_eq!(value["decision_state"], "active");
+    assert_eq!(value["owner"], "tools/xtask");
+    assert_eq!(
+        value["self_test_command"],
+        "cargo xtask safe-artifact-io-self-test"
+    );
+    assert_eq!(
+        value["platform_scope"],
+        serde_json::json!({
+            "implementation": ["macos_aarch64", "linux_x86_64"],
+            "source_gate": ["macos_aarch64"],
+            "cross_platform_promotion_owner": "step-297"
+        })
+    );
+    assert_eq!(
+        value["scope"],
+        serde_json::json!({
+            "claims": [
+                "descriptor_bound_regular_file_io",
+                "bounded_exact_directory_snapshots",
+                "generic_parse_only_tar_gzip_admission",
+                "service_release_artifacts_adoption",
+                "result_level_release_preflight_aggregation"
+            ],
+            "nonclaims": [
+                "semantic_oci_or_binary_archive_validation_before_step_304",
+                "transitive_safe_io_inside_every_preflight_lane",
+                "panic_signal_hang_or_abort_containment_without_step_292_process_isolation",
+                "cross_platform_runtime_promotion_before_step_297"
+            ]
+        })
+    );
+    assert_eq!(
+        value["hard_maximums"],
+        serde_json::json!({
+            "buffered_read_bytes": 67_108_864,
+            "streaming_file_bytes": 17_179_869_184_u64,
+            "traversal_entries": 65_536,
+            "traversal_files": 65_536,
+            "traversal_total_bytes": 68_719_476_736_u64,
+            "traversal_depth": 64,
+            "path_bytes": 4_096,
+            "archive_compressed_bytes": 2_147_483_648_u64,
+            "archive_expanded_bytes": 17_179_869_184_u64,
+            "archive_members": 65_536,
+            "archive_member_bytes": 17_179_869_184_u64,
+            "archive_payload_bytes": 17_179_869_184_u64
+        })
+    );
+}
+
+#[test]
+fn filesystem_traversal_copy_and_archive_models_are_exact() {
+    let value = decision();
+    assert_eq!(
+        value["filesystem_model"],
+        serde_json::json!({
+            "absolute_root_walk": "open_from_filesystem_root_one_component_at_a_time",
+            "open_flags": ["O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"],
+            "intermediate_type": "directory",
+            "leaf_type": "regular_file",
+            "regular_link_count": "exactly_one",
+            "absolute_ancestor_identity": "device_inode_and_directory_type",
+            "regular_identity": "device_inode_type_mode_owner_link_count_length_mtime_ctime",
+            "permission_mode": "mode_bits_0o7777_including_special_bits",
+            "read_completion": "observed_bytes_equal_admitted_length",
+            "post_operation_binding": "reopen_complete_path_and_compare_ancestor_and_leaf_identities",
+            "hardlink_compatibility": "callers_must_privately_materialize_single_link_inputs_before_admission",
+            "trusted_root_normalization": "caller_may_canonicalize_a_trusted_root_before_descriptor_admission",
+            "diagnostic_paths": "redacted"
+        })
+    );
+    assert_eq!(
+        value["create_new_materialization"],
+        serde_json::json!({
+            "output_parent_binding": "descriptor_bound_complete_absolute_chain",
+            "output_chain_security": "every_directory_root_or_effective_uid_owned_and_no_group_or_world_write_mode_bits",
+            "output_chain_acl_precondition": "caller_guarantees_no_write_granting_acl_for_other_credentials_on_every_chain_directory",
+            "output_name": "direct_openat_create_exclusive_nofollow_cloexec",
+            "output_mode": "retained_descriptor_fchmod_0600",
+            "data": "fixed_buffer_stream_and_simultaneous_sha256",
+            "durability": "sync_retained_output_then_sync_parent",
+            "finalization": "capture_full_output_identity_after_write_and_sync_before_post_sync_hook",
+            "post_operation": "compare_retained_and_reopened_output_to_finalized_identity_and_revalidate_parent_chain_and_security",
+            "success_linearization": "final_rebound_and_complete_chain_security_check",
+            "caller_use": "final_revalidate_before_use",
+            "failure": "never_unlink_rename_or_rollback_after_successful_create",
+            "failed_output_trust": "untrusted_caller_owned_residue_requires_quarantine_and_fresh_retry_path",
+            "threat_boundary": "same_effective_credential_or_acl_authorized_mutation_after_final_revalidation_is_outside_strict_pathname_persistence"
+        })
+    );
+    assert_eq!(
+        value["traversal"],
+        serde_json::json!({
+            "entry_count": "every_non_dot_member_encountered_including_excluded_directories",
+            "file_count": "admitted_regular_files",
+            "total_bytes": "checked_sum_of_admitted_regular_lengths",
+            "depth": "root_is_zero_each_descended_directory_adds_one",
+            "path_bytes": "raw_platform_path_bytes_relative_to_root",
+            "ordering": "raw_member_name_bytes_ascending",
+            "special_members": "reject",
+            "excluded_directories": "retain_name_type_and_device_inode_binding_but_do_not_descend",
+            "snapshot_binding": "exact_sorted_membership_and_member_identity_for_root_and_every_descended_directory",
+            "snapshot_consumption": "read_hash_and_copy_require_the_traversed_file_identity",
+            "final_revalidation": "reopen_complete_bindings_and_reenumerate_exact_memberships"
+        })
+    );
+    assert_eq!(
+        value["archive_admission"],
+        serde_json::json!({
+            "format": "one_gzip_member_containing_one_nonempty_tar_stream",
+            "gzip_header": "minimal_ten_byte_header_with_zero_flags_optional_and_reserved_flags_rejected",
+            "operation": "parse_only_never_unpack",
+            "compressed_hash": "sha256_of_every_compressed_input_byte",
+            "tar_iteration": "raw_entries",
+            "tar_termination": "two_or_more_512_byte_zero_blocks",
+            "allowed_members": ["regular_file", "zero_length_directory"],
+            "rejected_members": [
+                "symlink",
+                "hardlink",
+                "fifo",
+                "character_device",
+                "block_device",
+                "sparse",
+                "pax_extension",
+                "gnu_extension",
+                "unknown_type"
+            ],
+            "paths": "utf8_relative_nonempty_components_no_dot_no_dotdot_no_backslash_no_nul",
+            "regular_trailing_slash": "reject",
+            "duplicates": "reject",
+            "file_directory_prefix_conflicts": "reject",
+            "gzip_trailing_or_concatenated_data": "reject",
+            "member_body": "drain_to_eof_and_require_actual_equals_declared",
+            "semantic_archive_qualification": "deferred_to_step_304"
+        })
+    );
+}
+
+#[test]
+fn aggregate_inventory_nonclaims_and_vectors_are_exact() {
+    let value = decision();
+    assert_eq!(
+        value["aggregate_preflight"],
+        serde_json::json!({
+            "required_lanes": [
+                "catalog",
+                "service_source_lock_contract",
+                "service_build_qualification_contract",
+                "service_release_artifacts_contract",
+                "public_native_group",
+                "preview_group",
+                "tools_group",
+                "dto_roots",
+                "protocol_freshness",
+                "artifact_contracts",
+                "release_contracts"
+            ],
+            "execution": "invoke_each_required_lane_exactly_once_in_required_order_after_returned_results",
+            "pass": "exact_order_exact_presence_unique_no_unexpected_and_every_state_pass",
+            "nonpass_states": ["failed", "interrupted", "skipped", "unavailable"],
+            "missing_duplicate_unexpected_or_reordered": "fail_closed",
+            "lane_internal_safety": "owned_by_later_migration_steps_and_step_297",
+            "panic_signal_hang_abort": "not_a_returned_lane_state_requires_step_292_process_isolation"
+        })
+    );
+    assert_eq!(
+        value["adoption"],
+        serde_json::json!({
+            "service_release_artifacts_inputs": "one_exact_flat_snapshot_retained_through_all_snapshot_bound_copies_and_final_revalidation",
+            "service_release_artifacts_output_inventory": "one_exact_flat_snapshot_for_all_hashes_and_final_revalidation",
+            "service_release_artifacts_archives": "generated_binary_and_supplied_oci_tar_gzip_are_generically_admitted",
+            "service_release_artifacts_copy": "descriptor_bound_create_new_no_rollback_copy",
+            "other_preflight_lane_internals": "not_claimed_by_step_293"
+        })
+    );
+    assert_eq!(
+        value["diagnostic_safety"],
+        serde_json::json!({
+            "paths_and_member_names": "redacted",
+            "archive_bytes": "redacted",
+            "operating_system_error_text": "redacted",
+            "source_error_chain": "absent"
+        })
+    );
+    assert_eq!(
+        value["required_vectors"],
+        serde_json::json!([
+            "buffered_read_cap",
+            "streaming_file_cap",
+            "traversal_entry_cap",
+            "traversal_file_cap",
+            "traversal_total_byte_cap",
+            "traversal_file_byte_cap",
+            "traversal_depth_cap",
+            "traversal_path_cap",
+            "symlink",
+            "fifo",
+            "hardlink",
+            "leaf_replacement",
+            "in_place_mutation",
+            "parent_replacement",
+            "late_member_insertion",
+            "excluded_directory_replacement",
+            "artifact_special_mode",
+            "create_new_success_0600",
+            "create_new_untrusted_error_residue",
+            "output_name_swap_preserves_replacement",
+            "output_post_sync_mutation",
+            "output_chain_security",
+            "archive_compressed_cap",
+            "archive_expanded_cap",
+            "archive_member_count_cap",
+            "archive_member_byte_cap",
+            "archive_payload_cap",
+            "archive_depth_cap",
+            "archive_path_cap",
+            "archive_special_member",
+            "archive_escape",
+            "archive_duplicate",
+            "archive_prefix_conflict",
+            "archive_truncated",
+            "archive_concatenated",
+            "archive_malformed",
+            "gzip_optional_or_reserved_header",
+            "aggregate_missing",
+            "aggregate_failed",
+            "aggregate_interrupted",
+            "aggregate_skipped",
+            "aggregate_unavailable",
+            "aggregate_duplicate",
+            "aggregate_unexpected",
+            "aggregate_reordered",
+            "redaction"
+        ])
+    );
+}

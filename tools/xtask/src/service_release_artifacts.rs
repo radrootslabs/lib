@@ -13,6 +13,7 @@ use sha2::{Digest as _, Sha256};
 use tar::{Builder as TarBuilder, Header as TarHeader};
 use tempfile::TempDir;
 
+use crate::safe_artifact_io::{self, TarGzipLimits, TraversalLimits};
 use crate::service_source_lock::{
     LIB_REPOSITORY, LOCK_FILENAME, NixMaterialState, PREDECESSOR_LOCK_FILENAME,
     ServiceSourceLockV2, validate_deferred_nix_material,
@@ -75,6 +76,11 @@ const MAX_GIT_OUTPUT_BYTES: usize = 65_536;
 const MAX_PACKAGES: usize = 8_192;
 const MAX_WORKSPACE_PACKAGES: usize = 64;
 const MAX_TEXT_FIELD_BYTES: usize = 512;
+const MAX_ARCHIVE_EXPANDED_BYTES: u64 = 17_179_869_184;
+const MAX_ARCHIVE_MEMBERS: u64 = 65_536;
+const MAX_ARCHIVE_DEPTH: usize = 64;
+const MAX_ARCHIVE_PATH_BYTES: usize = 4_096;
+const MAX_RELEASE_TREE_BYTES: u64 = 68_719_476_736;
 const FILE_MODE: u32 = 0o644;
 const DIRECTORY_MODE: u32 = 0o755;
 
@@ -409,7 +415,7 @@ fn run_inner(
         return Err(ReleaseArtifactError::InvalidServiceMetadata);
     }
     let service_root = validate_git_root(service_root)?;
-    let input_root = validate_exact_input_root(input_root)?;
+    let (input_root, input_snapshot) = validate_exact_input_root(input_root)?;
     let (output_parent, output_root) =
         validate_output_parent(output_root, &service_root, &input_root)?;
     let initial_head = git_head(&service_root)?;
@@ -443,8 +449,9 @@ fn run_inner(
         ("nixos-module.nix", "nixos-module.nix"),
     ];
     for (input, output) in static_inputs {
-        copy_bounded(
-            &input_root.join(input),
+        copy_snapshot_file(
+            &input_snapshot,
+            input,
             &staging.path().join(output),
             MAX_TEXT_INPUT_BYTES,
         )?;
@@ -463,27 +470,35 @@ fn run_inner(
     )?;
     validate_text_artifact(&staging.path().join("LICENSE-MIT"), "LICENSE-MIT")?;
     write_generated(&staging.path().join(LOCK_FILENAME), &source_lock_bytes)?;
-    create_binary_archive(
-        &input_root.join("service-binary"),
+    create_binary_archive_from_snapshot(
+        &input_snapshot,
+        "service-binary",
         &staging.path().join("binary.tar.gz"),
         &metadata.binary_name,
         source_date_epoch,
     )?;
-    let oci = copy_bounded(
-        &input_root.join("oci-image.tar.gz"),
+    let oci = copy_snapshot_file(
+        &input_snapshot,
+        "oci-image.tar.gz",
         &staging.path().join("oci-image.tar.gz"),
         MAX_OCI_BYTES,
     )?;
-    let service_source = copy_bounded(
-        &input_root.join("service-source.bundle"),
+    admit_oci_archive(&staging.path().join("oci-image.tar.gz"))?;
+    let service_source = copy_snapshot_file(
+        &input_snapshot,
+        "service-source.bundle",
         &staging.path().join("service-source.bundle"),
         MAX_SOURCE_BUNDLE_BYTES,
     )?;
-    let lib_source = copy_bounded(
-        &input_root.join("lib-source.bundle"),
+    let lib_source = copy_snapshot_file(
+        &input_snapshot,
+        "lib-source.bundle",
         &staging.path().join("lib-source.bundle"),
         MAX_SOURCE_BUNDLE_BYTES,
     )?;
+    input_snapshot
+        .revalidate()
+        .map_err(|_| ReleaseArtifactError::InvalidInputRoot)?;
     verify_bundle(&staging.path().join("service-source.bundle"), &initial_head)?;
     verify_bundle(
         &staging.path().join("lib-source.bundle"),
@@ -896,11 +911,14 @@ fn package_reference(package: &CargoPackage) -> String {
     )
 }
 
-fn validate_exact_input_root(path: &Path) -> Result<PathBuf, ReleaseArtifactError> {
+fn validate_exact_input_root(
+    path: &Path,
+) -> Result<(PathBuf, safe_artifact_io::TraversalSnapshot), ReleaseArtifactError> {
     let root = validate_absolute_directory(path, ReleaseArtifactError::InvalidInputRoot)?;
-    let inventory = directory_inventory(&root, ReleaseArtifactError::InvalidInputRoot)?;
+    let snapshot = flat_directory_snapshot(&root, ReleaseArtifactError::InvalidInputRoot)?;
+    let inventory = snapshot_inventory(&snapshot, ReleaseArtifactError::InvalidInputRoot)?;
     if inventory == INPUT_NAMES.into_iter().map(str::to_owned).collect() {
-        Ok(root)
+        Ok((root, snapshot))
     } else {
         Err(ReleaseArtifactError::InvalidInputRoot)
     }
@@ -1045,16 +1063,77 @@ fn verify_bundle(path: &Path, revision: &str) -> Result<(), ReleaseArtifactError
     }
 }
 
+#[cfg(test)]
 fn create_binary_archive(
     source: &Path,
     output: &Path,
     binary_name: &str,
     source_date_epoch: u32,
 ) -> Result<FileEvidence, ReleaseArtifactError> {
-    let source_metadata = validate_regular_input(source, MAX_BINARY_BYTES)?;
-    hash_regular(source, MAX_BINARY_BYTES)?;
+    let (_stable, stable_source) = binary_staging(output)?;
+    let source_evidence =
+        safe_artifact_io::copy_regular_to_new_path(source, &stable_source, MAX_BINARY_BYTES)
+            .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    if source_evidence.byte_length == 0 {
+        return Err(ReleaseArtifactError::InvalidInputArtifact);
+    }
+    write_binary_archive(
+        &stable_source,
+        output,
+        binary_name,
+        source_date_epoch,
+        source_evidence,
+    )
+}
+
+fn create_binary_archive_from_snapshot(
+    snapshot: &safe_artifact_io::TraversalSnapshot,
+    source_name: &str,
+    output: &Path,
+    binary_name: &str,
+    source_date_epoch: u32,
+) -> Result<FileEvidence, ReleaseArtifactError> {
+    let source = snapshot_file(snapshot, source_name)?;
+    let (_stable, stable_source) = binary_staging(output)?;
+    let source_evidence = snapshot
+        .copy_to_new_path(source, &stable_source, MAX_BINARY_BYTES)
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    if source_evidence.byte_length == 0 {
+        return Err(ReleaseArtifactError::InvalidInputArtifact);
+    }
+    write_binary_archive(
+        &stable_source,
+        output,
+        binary_name,
+        source_date_epoch,
+        source_evidence,
+    )
+}
+
+fn binary_staging(output: &Path) -> Result<(TempDir, PathBuf), ReleaseArtifactError> {
+    let parent = output
+        .parent()
+        .ok_or(ReleaseArtifactError::GenerationFailure)?;
+    let stable = tempfile::Builder::new()
+        .prefix(".radroots-binary-input-")
+        .tempdir_in(parent)
+        .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+    let stable_root = stable
+        .path()
+        .canonicalize()
+        .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+    Ok((stable, stable_root.join("admitted-binary")))
+}
+
+fn write_binary_archive(
+    stable_source: &Path,
+    output: &Path,
+    binary_name: &str,
+    source_date_epoch: u32,
+    source_evidence: safe_artifact_io::FileEvidence,
+) -> Result<FileEvidence, ReleaseArtifactError> {
     let mut source_file =
-        fs::File::open(source).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        fs::File::open(stable_source).map_err(|_| ReleaseArtifactError::GenerationFailure)?;
     let output_file = fs::OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -1066,7 +1145,7 @@ fn create_binary_archive(
         .write(output_file, Compression::best());
     let mut archive = TarBuilder::new(encoder);
     let mut header = TarHeader::new_gnu();
-    header.set_size(source_metadata.len());
+    header.set_size(source_evidence.byte_length);
     header.set_mode(0o755);
     header.set_uid(0);
     header.set_gid(0);
@@ -1085,8 +1164,35 @@ fn create_binary_archive(
         .sync_all()
         .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
     set_file_mode(output)?;
-    validate_unchanged_input(source, &source_metadata)?;
+    admit_binary_archive(output)?;
     hash_regular(output, MAX_BINARY_BYTES + MAX_TEXT_INPUT_BYTES)
+}
+
+fn snapshot_file<'a>(
+    snapshot: &'a safe_artifact_io::TraversalSnapshot,
+    name: &str,
+) -> Result<&'a safe_artifact_io::TraversedFile, ReleaseArtifactError> {
+    snapshot
+        .files()
+        .iter()
+        .find(|file| file.relative_path() == Path::new(name))
+        .ok_or(ReleaseArtifactError::InvalidInputRoot)
+}
+
+fn copy_snapshot_file(
+    snapshot: &safe_artifact_io::TraversalSnapshot,
+    source_name: &str,
+    output: &Path,
+    maximum: u64,
+) -> Result<FileEvidence, ReleaseArtifactError> {
+    let evidence = snapshot
+        .copy_to_new_path(snapshot_file(snapshot, source_name)?, output, maximum)
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    set_file_mode(output)?;
+    Ok(FileEvidence {
+        byte_length: evidence.byte_length,
+        sha256: evidence.sha256,
+    })
 }
 
 fn copy_bounded(
@@ -1094,47 +1200,43 @@ fn copy_bounded(
     output: &Path,
     maximum: u64,
 ) -> Result<FileEvidence, ReleaseArtifactError> {
-    let source_metadata = validate_regular_input(source, maximum)?;
-    let mut input =
-        fs::File::open(source).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
-    let mut output_file = fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(output)
-        .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
-    let mut hasher = Sha256::new();
-    let mut total = 0_u64;
-    let mut buffer = [0_u8; 65_536];
-    loop {
-        let read = input
-            .read(&mut buffer)
-            .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
-        if read == 0 {
-            break;
-        }
-        total = total
-            .checked_add(read as u64)
-            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
-        if total > maximum {
-            return Err(ReleaseArtifactError::InvalidInputArtifact);
-        }
-        hasher.update(&buffer[..read]);
-        output_file
-            .write_all(&buffer[..read])
-            .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
-    }
-    if total != source_metadata.len() {
-        return Err(ReleaseArtifactError::InvalidInputArtifact);
-    }
-    output_file
-        .sync_all()
-        .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+    let evidence = safe_artifact_io::copy_regular_to_new_path(source, output, maximum)
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
     set_file_mode(output)?;
-    validate_unchanged_input(source, &source_metadata)?;
     Ok(FileEvidence {
-        byte_length: total,
-        sha256: hex::encode(hasher.finalize()),
+        byte_length: evidence.byte_length,
+        sha256: evidence.sha256,
     })
+}
+
+fn admit_binary_archive(path: &Path) -> Result<(), ReleaseArtifactError> {
+    let limits = TarGzipLimits {
+        max_compressed_bytes: MAX_BINARY_BYTES + MAX_TEXT_INPUT_BYTES,
+        max_expanded_bytes: MAX_BINARY_BYTES + MAX_TEXT_INPUT_BYTES,
+        max_members: 4,
+        max_member_bytes: MAX_BINARY_BYTES,
+        max_payload_bytes: MAX_BINARY_BYTES,
+        max_depth: 4,
+        max_path_bytes: MAX_ARCHIVE_PATH_BYTES,
+    };
+    safe_artifact_io::admit_tar_gzip_path(path, limits)
+        .map(|_| ())
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)
+}
+
+fn admit_oci_archive(path: &Path) -> Result<(), ReleaseArtifactError> {
+    let limits = TarGzipLimits {
+        max_compressed_bytes: MAX_OCI_BYTES,
+        max_expanded_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+        max_members: MAX_ARCHIVE_MEMBERS,
+        max_member_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+        max_payload_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+        max_depth: MAX_ARCHIVE_DEPTH,
+        max_path_bytes: MAX_ARCHIVE_PATH_BYTES,
+    };
+    safe_artifact_io::admit_tar_gzip_path(path, limits)
+        .map(|_| ())
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)
 }
 
 #[derive(Default)]
@@ -1237,18 +1339,48 @@ fn write_checksums(root: &Path) -> Result<(), ReleaseArtifactError> {
 }
 
 fn inventory_records(root: &Path) -> Result<Vec<ArtifactRecord>, ReleaseArtifactError> {
-    let mut names = directory_inventory(root, ReleaseArtifactError::GenerationFailure)?
-        .into_iter()
-        .collect::<Vec<_>>();
-    names.sort();
-    names
-        .into_iter()
-        .map(|name| {
-            let maximum = output_maximum(&name)?;
-            let evidence = hash_regular(&root.join(&name), maximum)?;
-            Ok(artifact_record(&name, &evidence))
-        })
-        .collect()
+    inventory_records_impl(root, || {})
+}
+
+fn inventory_records_impl<F>(
+    root: &Path,
+    after_snapshot: F,
+) -> Result<Vec<ArtifactRecord>, ReleaseArtifactError>
+where
+    F: FnOnce(),
+{
+    let snapshot = flat_directory_snapshot(root, ReleaseArtifactError::GenerationFailure)?;
+    let names = snapshot_inventory(&snapshot, ReleaseArtifactError::GenerationFailure)?;
+    after_snapshot();
+    if snapshot.root_permission_mode() != DIRECTORY_MODE {
+        return Err(ReleaseArtifactError::GenerationFailure);
+    }
+    let mut records = Vec::with_capacity(names.len());
+    for name in names {
+        let maximum = output_maximum(&name)?;
+        let file = snapshot
+            .files()
+            .iter()
+            .find(|file| file.relative_path() == Path::new(&name))
+            .ok_or(ReleaseArtifactError::GenerationFailure)?;
+        if file.permission_mode() != FILE_MODE {
+            return Err(ReleaseArtifactError::GenerationFailure);
+        }
+        let evidence = snapshot
+            .hash(file, maximum)
+            .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+        records.push(artifact_record(
+            &name,
+            &FileEvidence {
+                byte_length: evidence.byte_length,
+                sha256: evidence.sha256,
+            },
+        ));
+    }
+    snapshot
+        .revalidate()
+        .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+    Ok(records)
 }
 
 fn artifact_record(path: &str, evidence: &FileEvidence) -> ArtifactRecord {
@@ -1283,36 +1415,11 @@ fn output_maximum(name: &str) -> Result<u64, ReleaseArtifactError> {
 }
 
 fn hash_regular(path: &Path, maximum: u64) -> Result<FileEvidence, ReleaseArtifactError> {
-    let metadata =
-        fs::symlink_metadata(path).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > maximum {
-        return Err(ReleaseArtifactError::InvalidInputArtifact);
-    }
-    let mut file = fs::File::open(path).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
-    let mut hasher = Sha256::new();
-    let mut total = 0_u64;
-    let mut buffer = [0_u8; 65_536];
-    loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
-        if read == 0 {
-            break;
-        }
-        total = total
-            .checked_add(read as u64)
-            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
-        if total > maximum {
-            return Err(ReleaseArtifactError::InvalidInputArtifact);
-        }
-        hasher.update(&buffer[..read]);
-    }
-    if total != metadata.len() {
-        return Err(ReleaseArtifactError::InvalidInputArtifact);
-    }
+    let evidence = safe_artifact_io::hash_regular_path(path, maximum)
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
     Ok(FileEvidence {
-        byte_length: total,
-        sha256: hex::encode(hasher.finalize()),
+        byte_length: evidence.byte_length,
+        sha256: evidence.sha256,
     })
 }
 
@@ -1321,24 +1428,10 @@ fn read_bounded_regular(
     maximum: u64,
     error: ReleaseArtifactError,
 ) -> Result<Vec<u8>, ReleaseArtifactError> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| error)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > maximum {
-        return Err(error);
-    }
-    let capacity = usize::try_from(metadata.len()).map_err(|_| error)?;
-    let mut bytes = Vec::with_capacity(capacity);
-    fs::File::open(path)
-        .map_err(|_| error)?
-        .take(maximum.saturating_add(1))
-        .read_to_end(&mut bytes)
-        .map_err(|_| error)?;
-    if bytes.len() as u64 > maximum {
-        Err(error)
-    } else {
-        Ok(bytes)
-    }
+    safe_artifact_io::read_regular_path(path, maximum).map_err(|_| error)
 }
 
+#[cfg(test)]
 fn validate_regular_input(path: &Path, maximum: u64) -> Result<fs::Metadata, ReleaseArtifactError> {
     let metadata =
         fs::symlink_metadata(path).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
@@ -1353,7 +1446,7 @@ fn validate_regular_input(path: &Path, maximum: u64) -> Result<fs::Metadata, Rel
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 fn validate_unchanged_input(
     path: &Path,
     expected: &fs::Metadata,
@@ -1373,7 +1466,7 @@ fn validate_unchanged_input(
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(all(test, not(unix)))]
 fn validate_unchanged_input(
     path: &Path,
     expected: &fs::Metadata,
@@ -1387,55 +1480,76 @@ fn validate_unchanged_input(
     }
 }
 
+#[cfg(test)]
 fn directory_inventory(
     root: &Path,
     error: ReleaseArtifactError,
 ) -> Result<BTreeSet<String>, ReleaseArtifactError> {
+    let snapshot = flat_directory_snapshot(root, error)?;
+    snapshot_inventory(&snapshot, error)
+}
+
+fn flat_directory_snapshot(
+    root: &Path,
+    error: ReleaseArtifactError,
+) -> Result<safe_artifact_io::TraversalSnapshot, ReleaseArtifactError> {
+    let limits = TraversalLimits {
+        max_entries: (OUTPUT_NAMES.len() + 1) as u64,
+        max_files: (OUTPUT_NAMES.len() + 1) as u64,
+        max_total_bytes: MAX_RELEASE_TREE_BYTES,
+        max_file_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+        max_depth: 1,
+        max_path_bytes: MAX_ARCHIVE_PATH_BYTES,
+    };
+    safe_artifact_io::traverse_regular_files(root, limits, &[]).map_err(|_| error)
+}
+
+fn snapshot_inventory(
+    snapshot: &safe_artifact_io::TraversalSnapshot,
+    error: ReleaseArtifactError,
+) -> Result<BTreeSet<String>, ReleaseArtifactError> {
+    if snapshot.entry_count() != snapshot.files().len() as u64 {
+        return Err(error);
+    }
     let mut names = BTreeSet::new();
-    for entry in fs::read_dir(root).map_err(|_| error)? {
-        let entry = entry.map_err(|_| error)?;
-        let file_type = entry.file_type().map_err(|_| error)?;
-        if file_type.is_symlink() || !file_type.is_file() {
+    for entry in snapshot.files() {
+        let path = entry.relative_path();
+        if path.components().count() != 1 {
             return Err(error);
         }
-        let name = entry.file_name().into_string().map_err(|_| error)?;
+        let name = path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .ok_or(error)?
+            .to_owned();
         if !names.insert(name) || names.len() > OUTPUT_NAMES.len() {
             return Err(error);
         }
     }
+    snapshot.revalidate().map_err(|_| error)?;
     Ok(names)
 }
 
 fn validate_exact_output_inventory(root: &Path) -> Result<(), ReleaseArtifactError> {
     let expected = OUTPUT_NAMES.into_iter().map(str::to_owned).collect();
-    if directory_inventory(root, ReleaseArtifactError::GenerationFailure)? != expected {
+    let actual = inventory_records(root)?
+        .into_iter()
+        .map(|record| record.path)
+        .collect::<BTreeSet<_>>();
+    if actual != expected {
         return Err(ReleaseArtifactError::GenerationFailure);
-    }
-    validate_directory_mode(root)?;
-    for name in OUTPUT_NAMES {
-        validate_file_mode(&root.join(name))?;
     }
     Ok(())
 }
 
 fn compare_output(expected: &Path, actual: &Path) -> Result<(), ReleaseArtifactError> {
     let actual = validate_absolute_directory(actual, ReleaseArtifactError::StaleOutput)?;
-    if directory_inventory(&actual, ReleaseArtifactError::StaleOutput)?
-        != OUTPUT_NAMES.into_iter().map(str::to_owned).collect()
-    {
+    let expected_records =
+        inventory_records(expected).map_err(|_| ReleaseArtifactError::StaleOutput)?;
+    let actual_records =
+        inventory_records(&actual).map_err(|_| ReleaseArtifactError::StaleOutput)?;
+    if expected_records != actual_records {
         return Err(ReleaseArtifactError::StaleOutput);
-    }
-    validate_directory_mode(&actual).map_err(|_| ReleaseArtifactError::StaleOutput)?;
-    for name in OUTPUT_NAMES {
-        validate_file_mode(&actual.join(name)).map_err(|_| ReleaseArtifactError::StaleOutput)?;
-        let maximum = output_maximum(name)?;
-        let left = hash_regular(&expected.join(name), maximum)
-            .map_err(|_| ReleaseArtifactError::StaleOutput)?;
-        let right = hash_regular(&actual.join(name), maximum)
-            .map_err(|_| ReleaseArtifactError::StaleOutput)?;
-        if left.byte_length != right.byte_length || left.sha256 != right.sha256 {
-            return Err(ReleaseArtifactError::StaleOutput);
-        }
     }
     Ok(())
 }
@@ -1479,14 +1593,14 @@ fn set_directory_mode(_path: &Path) -> Result<(), ReleaseArtifactError> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 fn validate_file_mode(path: &Path) -> Result<(), ReleaseArtifactError> {
     use std::os::unix::fs::PermissionsExt as _;
     let mode = fs::symlink_metadata(path)
         .map_err(|_| ReleaseArtifactError::StaleOutput)?
         .permissions()
         .mode()
-        & 0o777;
+        & 0o7777;
     if mode == FILE_MODE {
         Ok(())
     } else {
@@ -1494,19 +1608,19 @@ fn validate_file_mode(path: &Path) -> Result<(), ReleaseArtifactError> {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(all(test, not(unix)))]
 fn validate_file_mode(_path: &Path) -> Result<(), ReleaseArtifactError> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 fn validate_directory_mode(path: &Path) -> Result<(), ReleaseArtifactError> {
     use std::os::unix::fs::PermissionsExt as _;
     let mode = fs::symlink_metadata(path)
         .map_err(|_| ReleaseArtifactError::StaleOutput)?
         .permissions()
         .mode()
-        & 0o777;
+        & 0o7777;
     if mode == DIRECTORY_MODE {
         Ok(())
     } else {
@@ -1514,7 +1628,7 @@ fn validate_directory_mode(path: &Path) -> Result<(), ReleaseArtifactError> {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(all(test, not(unix)))]
 fn validate_directory_mode(_path: &Path) -> Result<(), ReleaseArtifactError> {
     Ok(())
 }
@@ -1738,9 +1852,10 @@ mod tests {
     impl ReleaseFixture {
         fn new() -> Self {
             let root = TempDir::new().expect("fixture root");
-            let service = root.path().join("service");
-            let lib = root.path().join("lib");
-            let input = root.path().join("input");
+            let canonical_root = root.path().canonicalize().expect("canonical fixture root");
+            let service = canonical_root.join("service");
+            let lib = canonical_root.join("lib");
+            let input = canonical_root.join("input");
             fs::create_dir_all(service.join("src")).expect("service source");
             fs::create_dir_all(lib.join("contracts/crates")).expect("Lib contracts");
             fs::create_dir(&input).expect("input root");
@@ -1843,14 +1958,11 @@ version = "0.1.0-alpha"
                 &input.join("service-binary"),
                 b"fixture service executable\0\xff",
             );
-            write_file(
-                &input.join("oci-image.tar.gz"),
-                b"fixture OCI archive\0\xff",
-            );
+            create_oci_fixture(&input.join("oci-image.tar.gz"));
 
             Self {
-                output_a: root.path().join("release-a"),
-                output_b: root.path().join("release-b"),
+                output_a: canonical_root.join("release-a"),
+                output_b: canonical_root.join("release-b"),
                 _root: root,
                 service,
                 input,
@@ -1954,6 +2066,29 @@ version = "0.1.0-alpha"
             .status()
             .expect("create source bundle");
         assert!(status.success());
+    }
+
+    fn create_oci_fixture(output: &Path) {
+        let output_file = fs::File::create(output).expect("create OCI fixture");
+        let encoder = GzBuilder::new()
+            .mtime(0)
+            .operating_system(255)
+            .write(output_file, Compression::best());
+        let mut archive = TarBuilder::new(encoder);
+        let bytes = b"{}";
+        let mut header = TarHeader::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_uid(0);
+        header.set_gid(0);
+        header.set_mtime(0);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, "index.json", bytes.as_slice())
+            .expect("write OCI fixture member");
+        let encoder = archive.into_inner().expect("finish OCI fixture tar");
+        let file = encoder.finish().expect("finish OCI fixture gzip");
+        file.sync_all().expect("sync OCI fixture");
     }
 
     fn sample_metadata() -> ReleaseMetadata {
@@ -2567,6 +2702,52 @@ version = "0.1.0-alpha"
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn snapshot_backed_inventory_rejects_file_and_root_mode_races() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory = TempDir::new().expect("inventory fixture");
+        let root = directory
+            .path()
+            .canonicalize()
+            .expect("canonical inventory fixture");
+        set_directory_mode(&root).expect("directory mode");
+        let file = root.join("LICENSE-MIT");
+        write_file(&file, b"license\n");
+        set_file_mode(&file).expect("file mode");
+
+        assert_eq!(
+            inventory_records_impl(&root, || {
+                fs::set_permissions(&file, fs::Permissions::from_mode(0o600))
+                    .expect("change file mode");
+            }),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+        set_file_mode(&file).expect("restore file mode");
+        assert_eq!(
+            inventory_records_impl(&root, || {
+                fs::set_permissions(&root, fs::Permissions::from_mode(0o700))
+                    .expect("change root mode");
+            }),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+        set_directory_mode(&root).expect("restore directory mode");
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o4644))
+            .expect("add file special mode bit");
+        assert_eq!(
+            inventory_records(&root),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+        set_file_mode(&file).expect("restore file mode");
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o1755))
+            .expect("add directory special mode bit");
+        assert_eq!(
+            inventory_records(&root),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+    }
+
     #[test]
     fn remaining_release_boundaries_fail_closed() {
         let fixture = ReleaseFixture::new();
@@ -2897,9 +3078,13 @@ version = "0.1.0-alpha"
     #[test]
     fn binary_archive_is_reproducible_and_metadata_is_fixed() {
         let root = TempDir::new().expect("archive fixture");
-        let source = root.path().join("service");
-        let first = root.path().join("first.tar.gz");
-        let second = root.path().join("second.tar.gz");
+        let root = root
+            .path()
+            .canonicalize()
+            .expect("canonical archive fixture");
+        let source = root.join("service");
+        let first = root.join("first.tar.gz");
+        let second = root.join("second.tar.gz");
         write_file(&source, b"exact executable bytes");
         create_binary_archive(&source, &first, "fixture-service", 1_700_000_000)
             .expect("first archive");

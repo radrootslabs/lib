@@ -26,6 +26,10 @@ tasks for the `radroots` core libraries.
    target and standalone command inventories, fixture Cargo/release metadata,
    source lock, and release-artifact evidence while keeping Nix outputs
    explicitly deferred;
+ * descriptor-bound, resource-bounded regular-file traversal, streaming
+   hashing, descriptor-bound create-new copying, generic parse-only tar-gzip
+   admission, and exact non-short-circuit aggregation of the release-preflight
+   lane inventory;
  * command-dispatch code used for contract, coverage, hygiene, and release
    paths inside the workspace;
  * a non-published binary crate used as tooling rather than as a library
