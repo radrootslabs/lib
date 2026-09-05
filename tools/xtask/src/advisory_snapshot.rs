@@ -1567,11 +1567,11 @@ pub(crate) fn validate_decision(root: &Path) -> Result<(), String> {
     if bytes != DECISION_BYTES {
         return Err("advisory snapshot decision differs from compiled authority".to_owned());
     }
-    let value: Value = serde_json::from_slice(&bytes)
+    let _: Value = serde_json::from_slice(&bytes)
         .map_err(|_| "advisory snapshot decision is invalid".to_owned())?;
-    if canonical_pretty_json(&value).as_slice() != bytes {
-        return Err("advisory snapshot decision is not canonical pretty JSON".to_owned());
-    }
+    // Exact equality with the compiled authority above already binds whitespace
+    // and object-member order. Re-serializing through `Value` would instead sort
+    // object keys and reject the repository's intentional semantic key order.
     Ok(())
 }
 
@@ -5593,12 +5593,6 @@ fn canonical_json(value: &Value) -> Vec<u8> {
     bytes
 }
 
-fn canonical_pretty_json(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).unwrap_or_default();
-    bytes.push(b'\n');
-    bytes
-}
-
 fn canonical_json_without_lf(value: &Value) -> Vec<u8> {
     serde_json::to_vec(value).unwrap_or_default()
 }
@@ -7543,5 +7537,20 @@ mod tests {
     #[test]
     fn expired_suppression_is_rejected() {
         expired_suppression_vector().expect("expired suppression must fail closed");
+    }
+}
+
+#[cfg(test)]
+mod step_296_tests {
+    use super::*;
+
+    #[test]
+    fn checked_in_semantically_ordered_decision_is_accepted() {
+        assert!(DECISION_BYTES.starts_with(b"{\n  \"schema\""));
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("xtask manifest must be beneath the workspace root");
+        validate_decision(root).expect("checked-in advisory decision must be accepted");
     }
 }
