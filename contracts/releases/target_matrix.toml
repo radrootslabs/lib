@@ -11,8 +11,3 @@ cross_cflags = "-target x86_64-linux-gnu"
 [[operating_system]]
 name = "macos"
 target = "aarch64-apple-darwin"
-
-[[operating_system]]
-name = "windows"
-target = "x86_64-pc-windows-gnu"
-cross_compiler = "x86_64-w64-mingw32-gcc"

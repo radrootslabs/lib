@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "radroots.services-hardening.rshr-200-service-source-lock.v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "contract_version",
+    "service",
+    "repository",
+    "revision",
+    "architecture",
+    "workspace_catalog_sha256",
+    "version",
+    "source_archive_sha256",
+    "source_archive_contract",
+    "cargo_lock_sha256",
+    "rust_version",
+    "host_feature_profile",
+    "nix",
+    "artifact_contract",
+    "sqlite",
+    "contract_versions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "radroots.service.source-lock.v3"
+    },
+    "contract_version": {
+      "const": 3
+    },
+    "service": {
+      "enum": [
+        "myc",
+        "rhi"
+      ]
+    },
+    "repository": {
+      "const": "https://github.com/radrootslabs/lib"
+    },
+    "revision": {
+      "$ref": "#/$defs/oid"
+    },
+    "architecture": {
+      "const": "radroots.crates.release.v2"
+    },
+    "workspace_catalog_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "version": {
+      "const": "0.1.0-alpha"
+    },
+    "source_archive_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "source_archive_contract": {
+      "const": {
+        "binding": "sha256_of_canonical_exact_lib_revision_tree_archive",
+        "format": "ustar",
+        "compression": "none",
+        "compression_timestamp": "not_applicable",
+        "entry_order": "bytewise_git_path",
+        "path_prefix": "none",
+        "file_mode": "git_index_100644_or_100755",
+        "uid": 0,
+        "gid": 0,
+        "uname": "",
+        "gname": "",
+        "mtime": "lib_revision_commit_timestamp",
+        "pax_headers": "forbidden",
+        "directory_entries": "omitted",
+        "symlinks": "forbidden",
+        "hardlinks": "forbidden",
+        "submodules": "forbidden",
+        "trailer": "two_zero_blocks"
+      }
+    },
+    "cargo_lock_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "rust_version": {
+      "const": "1.97.1"
+    },
+    "host_feature_profile": {
+      "const": "service-host"
+    },
+    "nix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "material",
+        "lib_revision",
+        "public_input_lock",
+        "parent_result",
+        "supported_systems"
+      ],
+      "properties": {
+        "material": {
+          "const": "qualified"
+        },
+        "lib_revision": {
+          "$ref": "#/$defs/oid"
+        },
+        "public_input_lock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "binding",
+            "mutable_reference",
+            "lib_input"
+          ],
+          "properties": {
+            "path": {
+              "const": "flake.lock"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "binding": {
+              "const": "exact_regular_file_bytes"
+            },
+            "mutable_reference": {
+              "const": "forbidden"
+            },
+            "lib_input": {
+              "const": "lib"
+            }
+          }
+        },
+        "parent_result": {
+          "const": {
+            "embedded_in_public_input_lock": false,
+            "embedded_in_source_lock": false,
+            "storage": "separate_generation_scoped_evidence"
+          }
+        },
+        "supported_systems": {
+          "const": [
+            "aarch64-darwin",
+            "x86_64-linux"
+          ]
+        }
+      }
+    },
+    "artifact_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "binding"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "contracts/release/myc-artifact-contract.v3.json",
+            "contracts/release/rhi-artifact-contract.v3.json"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "binding": {
+          "const": "exact_regular_file_bytes_in_same_source_revision"
+        }
+      }
+    },
+    "sqlite": {
+      "const": {
+        "high_level_authority": "sqlx_only",
+        "second_pool_connection_query_transaction_migration_authority": "forbidden",
+        "incremental_backup_adapter": "sealed_native_sqlx_owned_locked_handle_only",
+        "native_linkage_count": 1
+      }
+    },
+    "contract_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config",
+        "state",
+        "admin",
+        "status",
+        "provider"
+      ],
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/nonzero_u32"
+        },
+        "state": {
+          "$ref": "#/$defs/nonzero_u32"
+        },
+        "admin": {
+          "$ref": "#/$defs/nonzero_u32"
+        },
+        "status": {
+          "$ref": "#/$defs/nonzero_u32"
+        },
+        "provider": {
+          "$ref": "#/$defs/nonzero_u32"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "service": { "const": "myc" } },
+        "required": ["service"]
+      },
+      "then": {
+        "properties": {
+          "artifact_contract": {
+            "properties": {
+              "path": {
+                "const": "contracts/release/myc-artifact-contract.v3.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "service": { "const": "rhi" } },
+        "required": ["service"]
+      },
+      "then": {
+        "properties": {
+          "artifact_contract": {
+            "properties": {
+              "path": {
+                "const": "contracts/release/rhi-artifact-contract.v3.json"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonzero_u32": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    }
+  }
+}

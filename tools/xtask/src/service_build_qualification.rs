@@ -8,17 +8,20 @@ use crate::service_source_lock::{
 };
 
 const CONTRACT_RELATIVE: &str =
-    "contracts/architecture/decisions/services_hardening_build_qualification.v2.json";
+    "contracts/architecture/decisions/services_hardening_build_qualification.v3.json";
 const FIXTURE_RELATIVE: &str = "tools/xtask/fixtures/service-build-qualification";
 const MAX_CONTRACT_BYTES: usize = 32_768;
 const MAX_FIXTURE_FILE_BYTES: usize = 1_048_576;
+const SOURCE_LOCK_V3_SHA256: &str =
+    "3bc32c8ca2cecb06c8f8239ab1fe1fcfba93fe3ef0d60e9b078390347d08f817";
+const ARTIFACT_CONTRACT_V3_SHA256: &str =
+    "bc352a132dd4c0e6f1d2ae7449998833efe1fdda2ab851e512bc9241c49edbf0";
+const NIX_SYSTEMS_RELATIVE: &str = "build/nix/service/systems.nix";
+const NIX_SYSTEMS_BYTES: &[u8] = b"[\n  \"aarch64-darwin\"\n  \"x86_64-linux\"\n]\n";
 
-const SUPPORTED_RUST_TARGETS: [&str; 4] = [
-    "aarch64-apple-darwin",
-    "aarch64-unknown-linux-gnu",
-    "x86_64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-];
+const SUPPORTED_RUST_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"];
+const SUPPORTED_NIX_SYSTEMS: [&str; 2] = ["aarch64-darwin", "x86_64-linux"];
+const EXCLUDED_NIX_SYSTEMS: [&str; 2] = ["x86_64-darwin", "aarch64-linux"];
 const REQUIRED_XTASK_COMMANDS: [&str; 5] = [
     "cargo test --locked -p xtask service_source_lock::tests",
     "cargo test --locked -p xtask service_release_artifacts::tests",
@@ -83,6 +86,8 @@ struct BuildQualificationDecision {
     qualification_scope: String,
     fixture_root: String,
     supported_rust_targets: Vec<String>,
+    supported_nix_systems: Vec<String>,
+    excluded_nix_systems: Vec<String>,
     required_native_commands: Vec<String>,
     required_xtask_commands: Vec<String>,
     required_evidence: Vec<String>,
@@ -90,6 +95,9 @@ struct BuildQualificationDecision {
     fixture_contract: String,
     release_artifact_command: String,
     source_lock_command: String,
+    source_lock_v3_definition: String,
+    artifact_contract_v3: String,
+    nix_output_implementation_owner_step: u32,
     signing_authority: String,
     deferred_outputs: Vec<String>,
 }
@@ -115,28 +123,72 @@ fn validate_contract_inner(workspace_root: &Path) -> Result<(), BuildQualificati
     let decision = serde_json::from_slice::<BuildQualificationDecision>(&bytes)
         .map_err(|_| BuildQualificationError::InvalidContract)?;
     validate_decision(&decision)?;
+    validate_bound_contract(
+        workspace_root,
+        &decision.source_lock_v3_definition,
+        SOURCE_LOCK_V3_SHA256,
+    )?;
+    validate_bound_contract(
+        workspace_root,
+        &decision.artifact_contract_v3,
+        ARTIFACT_CONTRACT_V3_SHA256,
+    )?;
+    if read_bounded(
+        &workspace_root.join(NIX_SYSTEMS_RELATIVE),
+        1_024,
+        BuildQualificationError::InvalidContract,
+    )? != NIX_SYSTEMS_BYTES
+    {
+        return Err(BuildQualificationError::InvalidContract);
+    }
     validate_fixture(workspace_root)
 }
 
+fn validate_bound_contract(
+    workspace_root: &Path,
+    relative: &str,
+    expected_sha256: &str,
+) -> Result<(), BuildQualificationError> {
+    let bytes = read_bounded(
+        &workspace_root.join(relative),
+        MAX_CONTRACT_BYTES,
+        BuildQualificationError::InvalidContract,
+    )?;
+    let _: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| BuildQualificationError::InvalidContract)?;
+    if digest(&bytes) == expected_sha256 {
+        Ok(())
+    } else {
+        Err(BuildQualificationError::InvalidContract)
+    }
+}
+
 fn validate_decision(decision: &BuildQualificationDecision) -> Result<(), BuildQualificationError> {
-    let exact = decision.schema == "radroots.services-hardening.build-qualification-decisions.v2"
-        && decision.contract_version == 2
+    let exact = decision.schema == "radroots.services-hardening.build-qualification-decisions.v3"
+        && decision.contract_version == 3
         && decision.decision_state == "active"
         && decision.predecessor.schema
-            == "radroots.services-hardening.build-qualification-decisions.v1"
-        && decision.predecessor.filename == "services_hardening_build_qualification.v1.json"
+            == "radroots.services-hardening.build-qualification-decisions.v2"
+        && decision.predecessor.filename == "services_hardening_build_qualification.v2.json"
         && decision.predecessor.transition == "forward_only_replace"
-        && decision.qualification_scope == "native_release_foundation"
+        && decision.qualification_scope == "native_and_nix_release_foundation"
         && decision.fixture_root == FIXTURE_RELATIVE
         && decision.supported_rust_targets == SUPPORTED_RUST_TARGETS
+        && decision.supported_nix_systems == SUPPORTED_NIX_SYSTEMS
+        && decision.excluded_nix_systems == EXCLUDED_NIX_SYSTEMS
         && decision.required_native_commands == REQUIRED_NATIVE_COMMANDS
         && decision.required_xtask_commands == REQUIRED_XTASK_COMMANDS
         && decision.required_evidence == REQUIRED_EVIDENCE
         && decision.fixture_source_lock
             == "tools/xtask/fixtures/service-build-qualification/radroots.service.source-lock.v2.toml"
-        && decision.fixture_contract == "source_lock_package_and_release_metadata_exact_agreement"
+        && decision.fixture_contract
+            == "historical_v2_fixture_until_v3_service_instances_are_owned"
         && decision.release_artifact_command == "cargo xtask service-release-artifacts"
         && decision.source_lock_command == "cargo xtask service-source-lock"
+        && decision.source_lock_v3_definition
+            == "contracts/architecture/decisions/services_hardening_source_lock.v3.json"
+        && decision.artifact_contract_v3 == "contracts/release/lib-artifact-contract.v3.json"
+        && decision.nix_output_implementation_owner_step == 299
         && decision.signing_authority == "external_only"
         && decision.deferred_outputs == DEFERRED_OUTPUTS;
     if exact {
@@ -314,6 +366,8 @@ mod tests {
             ("/qualification_scope", serde_json::json!("other")),
             ("/fixture_root", serde_json::json!("other")),
             ("/supported_rust_targets", serde_json::json!([])),
+            ("/supported_nix_systems", serde_json::json!([])),
+            ("/excluded_nix_systems", serde_json::json!([])),
             ("/required_native_commands", serde_json::json!([])),
             ("/required_xtask_commands", serde_json::json!([])),
             ("/required_evidence", serde_json::json!([])),
@@ -321,6 +375,12 @@ mod tests {
             ("/fixture_contract", serde_json::json!("other")),
             ("/release_artifact_command", serde_json::json!("other")),
             ("/source_lock_command", serde_json::json!("other")),
+            ("/source_lock_v3_definition", serde_json::json!("other")),
+            ("/artifact_contract_v3", serde_json::json!("other")),
+            (
+                "/nix_output_implementation_owner_step",
+                serde_json::json!(1),
+            ),
             ("/signing_authority", serde_json::json!("internal")),
             ("/deferred_outputs", serde_json::json!([])),
         ] {
@@ -500,7 +560,9 @@ mod tests {
 
     #[test]
     fn contract_inventory_is_literal_and_complete() {
-        assert_eq!(SUPPORTED_RUST_TARGETS.len(), 4);
+        assert_eq!(SUPPORTED_RUST_TARGETS.len(), 2);
+        assert_eq!(SUPPORTED_NIX_SYSTEMS.len(), 2);
+        assert_eq!(EXCLUDED_NIX_SYSTEMS.len(), 2);
         assert_eq!(REQUIRED_NATIVE_COMMANDS.len(), 6);
         assert_eq!(REQUIRED_XTASK_COMMANDS.len(), 5);
         assert_eq!(REQUIRED_EVIDENCE.len(), 11);

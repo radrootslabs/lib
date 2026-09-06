@@ -116,12 +116,6 @@ fn validate(matrix: &TargetMatrix) -> Result<(), String> {
             Some("-target x86_64-linux-gnu"),
         ),
         ("macos", "aarch64-apple-darwin", None, None),
-        (
-            "windows",
-            "x86_64-pc-windows-gnu",
-            Some("x86_64-w64-mingw32-gcc"),
-            None,
-        ),
     ];
     if matrix.operating_system.len() != expected.len()
         || expected.iter().any(|(name, target, compiler, cflags)| {
@@ -134,7 +128,8 @@ fn validate(matrix: &TargetMatrix) -> Result<(), String> {
         })
     {
         return Err(
-            "target matrix must contain the exact Linux, macOS, and Windows triples".to_owned(),
+            "target matrix must contain the exact Linux x86_64 and macOS aarch64 triples"
+                .to_owned(),
         );
     }
     Ok(())
@@ -187,7 +182,7 @@ fn run_command(workspace_root: &Path, program: &str, args: &[&str]) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use super::load;
+    use super::{OperatingSystem, TargetMatrix, load, validate};
 
     #[test]
     fn current_contract_selects_exact_toolchains_targets_and_packages() {
@@ -198,7 +193,55 @@ mod tests {
         let (matrix, packages) = load(root).expect("target matrix");
         assert_eq!(matrix.msrv_toolchain, "1.97.1");
         assert_eq!(matrix.current_toolchain, "stable");
-        assert_eq!(matrix.operating_system.len(), 3);
+        assert_eq!(matrix.operating_system.len(), 2);
+        assert_eq!(
+            matrix
+                .operating_system
+                .iter()
+                .map(|entry| (entry.name.as_str(), entry.target.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("linux", "x86_64-unknown-linux-gnu"),
+                ("macos", "aarch64-apple-darwin"),
+            ]
+        );
         assert_eq!(packages.len(), 19);
+    }
+
+    #[test]
+    fn unsupported_production_targets_are_rejected() {
+        let mut matrix = TargetMatrix {
+            schema_version: 1,
+            msrv_toolchain: "1.97.1".to_owned(),
+            current_toolchain: "stable".to_owned(),
+            operating_system: vec![
+                OperatingSystem {
+                    name: "linux".to_owned(),
+                    target: "x86_64-unknown-linux-gnu".to_owned(),
+                    cross_compiler: Some("zig cc".to_owned()),
+                    cross_cflags: Some("-target x86_64-linux-gnu".to_owned()),
+                },
+                OperatingSystem {
+                    name: "macos".to_owned(),
+                    target: "aarch64-apple-darwin".to_owned(),
+                    cross_compiler: None,
+                    cross_cflags: None,
+                },
+            ],
+        };
+        for (name, target) in [
+            ("windows", "x86_64-pc-windows-gnu"),
+            ("macos", "x86_64-apple-darwin"),
+            ("linux", "aarch64-unknown-linux-gnu"),
+        ] {
+            matrix.operating_system.push(OperatingSystem {
+                name: name.to_owned(),
+                target: target.to_owned(),
+                cross_compiler: None,
+                cross_cflags: None,
+            });
+            assert!(validate(&matrix).is_err(), "accepted {target}");
+            matrix.operating_system.pop();
+        }
     }
 }
