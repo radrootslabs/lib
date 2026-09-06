@@ -39,6 +39,7 @@ mod release_preflight;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
 mod rshr_202_step_298_gate;
+mod rshr_202_step_298_platform;
 mod safe_artifact_io;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod safety_qualification;
@@ -143,6 +144,11 @@ enum XtaskCommand {
         candidate_digest: String,
         #[arg(long)]
         platform: String,
+        #[arg(long)]
+        execution_request_sha256: String,
+    },
+    #[command(name = "rshr-step-298-platform-probe", hide = true)]
+    RshrStep298PlatformProbe {
         #[arg(long)]
         execution_request_sha256: String,
     },
@@ -606,6 +612,9 @@ fn run(args: &[String]) -> Result<(), String> {
             platform,
             execution_request_sha256,
         }),
+        XtaskCommand::RshrStep298PlatformProbe {
+            execution_request_sha256,
+        } => rshr_202_step_298_platform::run(&execution_request_sha256),
         XtaskCommand::SourceLock { consumer_root } => {
             build_control::validate_consumer(&consumer_root).map(|_| ())
         }
