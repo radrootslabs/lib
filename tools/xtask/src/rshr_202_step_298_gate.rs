@@ -238,7 +238,7 @@ fn expected_contract(verifier_sha256: &str) -> Value {
         ],
         "gate_definition_sha256": GATE_DIGEST,
         "required_platforms": ["macos_aarch64"],
-        "required_tools": ["cargo"],
+        "required_tools": ["rustc"],
         "result_schema": "radroots.services-hardening.rshr-200-step-check-result.v1",
         "schema": "radroots.services-hardening.rshr-200-step-check-command.v1",
         "step": STEP,
