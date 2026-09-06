@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 use serde_json::{Value, json};
@@ -9,6 +11,14 @@ const PROBE_SOURCE_PATH: &str =
     "tools/radroots_scripts/src/radroots_scripts/verify/rshr_200_series.py";
 const PROBE_SOURCE_SHA256: &str =
     "add949c6c20a037123808230625dfd09dd6fa6c5afe5a856400227191f5de5b5";
+const REQUEST_PATH: &str = ".git/rshr-step-298-platform-request-sha256";
+
+fn root() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("xtask must remain under tools/xtask")
+}
 
 fn canonical(value: &Value) -> Result<Vec<u8>, String> {
     serde_json::to_vec(value).map_err(|_| "Step 298 platform JSON encoding failed".to_owned())
@@ -36,7 +46,12 @@ fn uname(flag: &str) -> Result<String, String> {
     Ok(value.to_owned())
 }
 
-pub(crate) fn run(execution_request_sha256: &str) -> Result<(), String> {
+pub(crate) fn run() -> Result<(), String> {
+    let request_bytes = fs::read(root().join(REQUEST_PATH))
+        .map_err(|_| "Step 298 platform execution request is unavailable".to_owned())?;
+    let raw_request = std::str::from_utf8(&request_bytes)
+        .map_err(|_| "Step 298 platform execution request is not UTF-8".to_owned())?;
+    let execution_request_sha256 = raw_request.strip_suffix('\n').unwrap_or(raw_request);
     if execution_request_sha256.len() != 64
         || !execution_request_sha256
             .bytes()

@@ -148,10 +148,7 @@ enum XtaskCommand {
         execution_request_sha256: String,
     },
     #[command(name = "rshr-step-298-platform-probe", hide = true)]
-    RshrStep298PlatformProbe {
-        #[arg(long)]
-        execution_request_sha256: String,
-    },
+    RshrStep298PlatformProbe,
     SourceLock {
         #[arg(long)]
         consumer_root: PathBuf,
@@ -612,9 +609,7 @@ fn run(args: &[String]) -> Result<(), String> {
             platform,
             execution_request_sha256,
         }),
-        XtaskCommand::RshrStep298PlatformProbe {
-            execution_request_sha256,
-        } => rshr_202_step_298_platform::run(&execution_request_sha256),
+        XtaskCommand::RshrStep298PlatformProbe => rshr_202_step_298_platform::run(),
         XtaskCommand::SourceLock { consumer_root } => {
             build_control::validate_consumer(&consumer_root).map(|_| ())
         }
