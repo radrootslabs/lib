@@ -38,6 +38,7 @@ mod release_graph;
 mod release_preflight;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod release_qualification;
+mod rshr_202_step_298_gate;
 mod safe_artifact_io;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod safety_qualification;
@@ -127,6 +128,23 @@ enum XtaskCommand {
     Release {
         #[arg(allow_hyphen_values = true)]
         args: Vec<String>,
+    },
+    #[command(name = "rshr-step-298-gate", hide = true)]
+    RshrStep298Gate {
+        #[arg(long)]
+        step: u16,
+        #[arg(long)]
+        check_id: String,
+        #[arg(long)]
+        source_revision: String,
+        #[arg(long)]
+        source_tree: String,
+        #[arg(long)]
+        candidate_digest: String,
+        #[arg(long)]
+        platform: String,
+        #[arg(long)]
+        execution_request_sha256: String,
     },
     SourceLock {
         #[arg(long)]
@@ -571,6 +589,23 @@ fn run(args: &[String]) -> Result<(), String> {
         XtaskCommand::Generate { args } => generate::run(&args, &workspace_root()),
         XtaskCommand::Hygiene { args } => hygiene::run(&args, &workspace_root()),
         XtaskCommand::Release { args } => run_release(&args),
+        XtaskCommand::RshrStep298Gate {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        } => rshr_202_step_298_gate::run(rshr_202_step_298_gate::Arguments {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        }),
         XtaskCommand::SourceLock { consumer_root } => {
             build_control::validate_consumer(&consumer_root).map(|_| ())
         }
