@@ -59,6 +59,12 @@ EXPECTED_FILES = {
     "build/nix/service/systems.nix": (
         "d16e21827022a2315234f4c5e4b485017a36ecd90a5559b01d23331cdd505e46"
     ),
+    "build/nix/service/fixture.nix": (
+        "d9f4ec24762b2cadb4aed45518f81e53308d4e1bf7ff2708aec74a1485269402"
+    ),
+    "build/nix/service/oci.nix": (
+        "9111ce51465bbe45944b718e5e2477b43a08f8f7d9e29f43940a67e86e75daf1"
+    ),
     "contracts/releases/target_matrix.toml": (
         "28583b0a163e51468d9688b463902ec2cd22b59c99061630596839baf9396527"
     ),

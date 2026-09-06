@@ -951,8 +951,6 @@ in
 assert
   service.supportedSystems == [
     "aarch64-darwin"
-    "aarch64-linux"
-    "x86_64-darwin"
     "x86_64-linux"
   ];
 assert nativeInputs.nativeBuildInputs == [ pkgs.coreutils ];
@@ -965,7 +963,6 @@ assert (
   pkgs.stdenv.isLinux
   ->
     ociImage.meta.platforms == [
-      "aarch64-linux"
       "x86_64-linux"
     ]
 );

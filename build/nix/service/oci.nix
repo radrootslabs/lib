@@ -10,8 +10,8 @@
 }:
 assert lib.assertMsg pkgs.stdenv.isLinux "service OCI images require a Linux builder";
 assert lib.assertMsg (
-  pkgs.stdenv.hostPlatform.isAarch64 || pkgs.stdenv.hostPlatform.isx86_64
-) "service OCI images support only aarch64-linux and x86_64-linux";
+  pkgs.stdenv.hostPlatform.isx86_64
+) "service OCI images support only x86_64-linux";
 assert lib.assertMsg (
   builtins.isString serviceName
   && builtins.stringLength serviceName <= 128
@@ -141,7 +141,6 @@ pkgs.dockerTools.buildLayeredImage {
   meta = {
     description = "Hardened rootless OCI image for ${serviceName}";
     platforms = [
-      "aarch64-linux"
       "x86_64-linux"
     ];
   };
