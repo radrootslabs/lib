@@ -185,7 +185,7 @@ def run_nix_lane() -> None:
         environment,
         label="Step 298 Nix system evaluation",
     )
-    if systems != b'["aarch64-darwin","x86_64-linux"]':
+    if systems != b'["aarch64-darwin","x86_64-linux"]\n':
         raise shared.GateError("Step 298 Nix systems differ")
     shared.run(
         [
