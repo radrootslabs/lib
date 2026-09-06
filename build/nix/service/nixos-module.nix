@@ -67,12 +67,20 @@ let
     builtins.stringLength name <= 128 && builtins.match "^[A-Za-z0-9][A-Za-z0-9_.-]*$" name != null;
   validCredentialPath =
     path:
+    let
+      segments = if builtins.isString path then lib.splitString "/" path else [ ];
+    in
     builtins.isString path
+    && builtins.stringLength path > 1
     && builtins.stringLength path <= 4096
     && lib.hasPrefix "/" path
+    && lib.last segments != ""
+    && lib.all (segment: segment != "" && segment != "." && segment != "..") (lib.drop 1 segments)
     && path != "/nix/store"
     && !(lib.hasPrefix "/nix/store/" path)
-    && builtins.match "^[^:\n]+$" path != null;
+    && !(lib.hasInfix ":" path)
+    && !(lib.hasInfix "\r" path)
+    && !(lib.hasInfix "\n" path);
   validCredentials =
     instance:
     builtins.length (builtins.attrNames instance.credentials) <= 32
@@ -91,7 +99,8 @@ let
       argument:
       builtins.isString argument
       && builtins.stringLength argument <= 4096
-      && builtins.match "^[^\n]*$" argument != null
+      && !(lib.hasInfix "\r" argument)
+      && !(lib.hasInfix "\n" argument)
     ) command;
   package = cfg.package;
   assertions = [

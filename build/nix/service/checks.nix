@@ -21,6 +21,7 @@ assert lib.assertMsg (builtins.pathExists source) "source must exist";
 assert lib.assertMsg (builtins.pathExists cargoLock) "cargoLock must exist";
 assert lib.assertMsg (
   builtins.isAttrs nativeInputs
+  && (nativeInputs.schema or null) == "radroots.service.native-inputs.v1"
   && builtins.isList (nativeInputs.nativeBuildInputs or null)
   && builtins.isList (nativeInputs.buildInputs or null)
   && builtins.isAttrs (nativeInputs.environment or null)

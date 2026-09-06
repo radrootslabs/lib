@@ -25,14 +25,33 @@
       imports = [ inputs.treefmt-nix.flakeModule ];
       systems = import ./build/nix/service/systems.nix;
 
-      flake.nixosModules.default =
-        (import ./build/nix/service/nixos-module.nix { lib = inputs.nixpkgs.lib; })
-          {
-            serviceName = "fixture_service";
-            binaryName = "fixture-service";
-            packageFor = pkgs: self.packages.${pkgs.stdenv.hostPlatform.system}.default;
-            commandForInstance = _: [ "--help" ];
+      flake.lib = {
+        supportedSystems = import ./build/nix/service/systems.nix;
+        mkServiceHelpers =
+          system:
+          assert inputs.nixpkgs.lib.assertMsg (builtins.elem system (
+            import ./build/nix/service/systems.nix
+          )) "service helpers support only the governed Nix systems";
+          let
+            pkgs = import inputs.nixpkgs {
+              inherit system;
+              overlays = [ inputs.rust-overlay.overlays.default ];
+            };
+          in
+          import ./build/nix/service {
+            crane = inputs.crane;
+            lib = inputs.nixpkgs.lib;
+            inherit pkgs;
           };
+      };
+
+      flake.overlays.default = final: _previous: {
+        radroots-lib =
+          assert inputs.nixpkgs.lib.assertMsg
+            (builtins.elem final.stdenv.hostPlatform.system self.lib.supportedSystems)
+            "the Radroots Lib overlay supports only the governed Nix systems";
+          self.packages.${final.stdenv.hostPlatform.system}.default;
+      };
 
       perSystem =
         {
@@ -62,43 +81,51 @@
             crane = inputs.crane;
             inherit lib pkgs toolchains;
           };
+          library = import ./build/nix/library.nix {
+            inherit lib pkgs;
+            inherit (common) version;
+          };
           serviceFixture = import ./build/nix/service/fixture.nix {
             inherit lib pkgs service;
             nixosSystem = inputs.nixpkgs.lib.nixosSystem;
             toolchain = toolchains.stable;
           };
+          fixtureChecks = lib.mapAttrs' (
+            name: value: lib.nameValuePair "service-fixture-${name}" value
+          ) serviceFixture.outputs.checks;
         in
         {
           treefmt = import ./treefmt.nix;
 
-          apps =
-            (import ./build/nix/apps.nix {
-              inherit
-                common
-                config
-                lib
-                pkgs
-                toolchains
-                ;
-            })
-            // serviceFixture.outputs.apps;
+          apps = {
+            default = library.app;
+          }
+          // (import ./build/nix/apps.nix {
+            inherit
+              common
+              config
+              lib
+              pkgs
+              toolchains
+              ;
+          });
 
           checks = lib.filterAttrs (_: value: value != null) (
             (import ./build/nix/checks.nix {
               inherit common pkgs;
             })
-            // serviceFixture.outputs.checks
+            // fixtureChecks
+            // {
+              release-bundle = library.check;
+            }
           );
 
-          devShells =
-            (import ./build/nix/devshells.nix {
-              inherit common pkgs toolchains;
-            })
-            // {
-              service-fixture = serviceFixture.outputs.devShells.default;
-            };
+          devShells = import ./build/nix/devshells.nix {
+            inherit common pkgs toolchains;
+          };
 
-          packages = serviceFixture.outputs.packages // {
+          packages = {
+            default = library.package;
             xtask = common.xtaskPackage;
           };
         };

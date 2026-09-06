@@ -9,7 +9,10 @@ let
   nativeInputs = service.mkNativeInputs {
     nativeBuildInputs = [ pkgs.coreutils ];
     environment = {
-      RADROOTS_SERVICE_FIXTURE = "1";
+      RADROOTS_SERVICE_FIXTURE = {
+        classification = "nonsecret";
+        value = "1";
+      };
     };
   };
   fixtureSource = ./fixture-service;
@@ -351,6 +354,42 @@ let
       nativeInputs = { };
     }).nativeInputs
   );
+  invalidNativeInputDefinitions =
+    map
+      (
+        environment:
+        builtins.tryEval (builtins.deepSeq (service.mkNativeInputs { inherit environment; }) true)
+      )
+      [
+        {
+          LEGACY_VALUE = "untyped";
+        }
+        {
+          CLASSIFIED_SECRET = {
+            classification = "secret";
+            value = "redacted";
+          };
+        }
+        {
+          EXTRA_FIELD = {
+            classification = "nonsecret";
+            value = "value";
+            unexpected = true;
+          };
+        }
+        {
+          API_TOKEN = {
+            classification = "nonsecret";
+            value = "redacted";
+          };
+        }
+        {
+          OVERLONG_VALUE = {
+            classification = "nonsecret";
+            value = lib.concatStrings (lib.replicate 4097 "a");
+          };
+        }
+      ];
   invalidServicePackage = builtins.tryEval (
     (service.mkServicePackage {
       inherit nativeInputs toolchain;
@@ -384,7 +423,10 @@ let
       cargoLock = fixtureSource + "/Cargo.lock";
       servicePackage = "fixture-service";
       nativeInputs = service.mkNativeInputs {
-        environment.CARGO_PROFILE = "dev";
+        environment.CARGO_PROFILE = {
+          classification = "nonsecret";
+          value = "dev";
+        };
       };
     }).outPath
   );
@@ -439,7 +481,10 @@ let
             checkArgs
             // {
               nativeInputs = service.mkNativeInputs {
-                environment.${variable} = "override";
+                environment.${variable} = {
+                  classification = "nonsecret";
+                  value = "override";
+                };
               };
             }
           )).check.outPath
@@ -506,7 +551,12 @@ let
       (service.mkServiceApps (
         appArgs
         // {
-          nativeInputs = service.mkNativeInputs { environment."INVALID-NAME" = "value"; };
+          nativeInputs = service.mkNativeInputs {
+            environment."INVALID-NAME" = {
+              classification = "nonsecret";
+              value = "value";
+            };
+          };
         }
       )).default.program
     ))
@@ -514,7 +564,12 @@ let
       (service.mkServiceApps (
         appArgs
         // {
-          nativeInputs = service.mkNativeInputs { environment.PATH = "/tmp"; };
+          nativeInputs = service.mkNativeInputs {
+            environment.PATH = {
+              classification = "nonsecret";
+              value = "/tmp";
+            };
+          };
         }
       )).default.program
     ))
@@ -554,7 +609,12 @@ let
       (service.mkServiceDevShell (
         devShellArgs
         // {
-          nativeInputs = service.mkNativeInputs { environment."INVALID-NAME" = "value"; };
+          nativeInputs = service.mkNativeInputs {
+            environment."INVALID-NAME" = {
+              classification = "nonsecret";
+              value = "value";
+            };
+          };
         }
       )).drvPath
     ))
@@ -562,7 +622,12 @@ let
       (service.mkServiceDevShell (
         devShellArgs
         // {
-          nativeInputs = service.mkNativeInputs { environment.RUSTC = "/tmp/rustc"; };
+          nativeInputs = service.mkNativeInputs {
+            environment.RUSTC = {
+              classification = "nonsecret";
+              value = "/tmp/rustc";
+            };
+          };
         }
       )).drvPath
     ))
@@ -853,6 +918,36 @@ let
     (
       baseNixosModuleConfiguration
       // {
+        instances.primary.credentials.token = "/run//operator/token";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/run/operator/./token";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/run/operator/../token";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/run/operator/token/";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
+        instances.primary.credentials.token = "/";
+      }
+    )
+    (
+      baseNixosModuleConfiguration
+      // {
         instances.primary.credentials.token = "/${lib.concatStrings (lib.replicate 4096 "a")}";
       }
     )
@@ -898,6 +993,7 @@ let
         (lib.replicate 65 "argument")
         [ (lib.concatStrings (lib.replicate 4097 "a")) ]
         [ "argument\nvalue" ]
+        [ "argument\rvalue" ]
       ];
   maximumNixosModule = service.mkServiceNixosModule (
     nixosModuleArguments
@@ -956,6 +1052,11 @@ assert
 assert nativeInputs.nativeBuildInputs == [ pkgs.coreutils ];
 assert nativeInputs.buildInputs == [ ];
 assert nativeInputs.environment.RADROOTS_SERVICE_FIXTURE == "1";
+assert
+  nativeInputs.environmentContract.RADROOTS_SERVICE_FIXTURE == {
+    classification = "nonsecret";
+    value = "1";
+  };
 assert outputs.serviceName == "fixture_service";
 assert outputs.packages.default == package;
 assert (pkgs.stdenv.isLinux -> outputs.packages.oci == ociImage);
@@ -1010,6 +1111,7 @@ assert invalidName.success == false;
 assert defaultOverride.success == false;
 assert invalidPackage.success == false;
 assert invalidNativeInputs.success == false;
+assert lib.all (result: result.success == false) invalidNativeInputDefinitions;
 assert invalidServicePackage.success == false;
 assert invalidBinaryName.success == false;
 assert invalidReleaseProfile.success == false;
