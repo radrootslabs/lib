@@ -25,22 +25,18 @@ let
     {"artifact":"public_library_workspace_release_bundle","package":"radroots","version":"${version}"}
     EOF
   '';
-  inspector = pkgs.writeShellApplication {
-    name = "radroots-lib-bundle-inspect";
-    runtimeInputs = [ pkgs.coreutils ];
-    text = ''
-      set -euo pipefail
-      test -f ${package}/share/radroots-lib/Cargo.toml
-      test -f ${package}/share/radroots-lib/Cargo.lock
-      exec cat ${package}/share/radroots-lib/release-bundle.json
-    '';
-  };
+  inspector = pkgs.writeShellScript "radroots-lib-bundle-inspect" ''
+    set -euo pipefail
+    ${pkgs.coreutils}/bin/test -f ${package}/share/radroots-lib/Cargo.toml
+    ${pkgs.coreutils}/bin/test -f ${package}/share/radroots-lib/Cargo.lock
+    exec ${pkgs.coreutils}/bin/cat ${package}/share/radroots-lib/release-bundle.json
+  '';
 in
 {
   inherit package;
   app = {
     type = "app";
-    program = "${inspector}/bin/radroots-lib-bundle-inspect";
+    program = "${inspector}";
     meta.description = "Inspect the installed Radroots Lib release bundle";
   };
   check = pkgs.runCommand "radroots-lib-release-bundle-check" { } ''

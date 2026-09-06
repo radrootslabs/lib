@@ -40,6 +40,7 @@ mod release_preflight;
 mod release_qualification;
 mod rshr_202_step_298_gate;
 mod rshr_202_step_298_platform;
+mod rshr_202_step_299_gate;
 mod safe_artifact_io;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod safety_qualification;
@@ -149,6 +150,23 @@ enum XtaskCommand {
     },
     #[command(name = "rshr-step-298-platform-probe", hide = true)]
     RshrStep298PlatformProbe,
+    #[command(name = "rshr-step-299-gate", hide = true)]
+    RshrStep299Gate {
+        #[arg(long)]
+        step: u16,
+        #[arg(long)]
+        check_id: String,
+        #[arg(long)]
+        source_revision: String,
+        #[arg(long)]
+        source_tree: String,
+        #[arg(long)]
+        candidate_digest: String,
+        #[arg(long)]
+        platform: String,
+        #[arg(long)]
+        execution_request_sha256: String,
+    },
     SourceLock {
         #[arg(long)]
         consumer_root: PathBuf,
@@ -610,6 +628,23 @@ fn run(args: &[String]) -> Result<(), String> {
             execution_request_sha256,
         }),
         XtaskCommand::RshrStep298PlatformProbe => rshr_202_step_298_platform::run(),
+        XtaskCommand::RshrStep299Gate {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        } => rshr_202_step_299_gate::run(rshr_202_step_299_gate::Arguments {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        }),
         XtaskCommand::SourceLock { consumer_root } => {
             build_control::validate_consumer(&consumer_root).map(|_| ())
         }
