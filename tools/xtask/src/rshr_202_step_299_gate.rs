@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 const STEP: u16 = 299;
-const GATE_DIGEST: &str = "aaf288b5bf9102722f61bd8160188dc80bf84a62f48ddaef9023a4417654d8ba";
+const GATE_DIGEST: &str = "b76f61a9a5365ca088d4b00eb140ed30b0b51f418cba68e26e3f3cf1c0ff3a15";
 const NIX_SHA256: &str = "a59ab70f97f6d571642d13c7506aafec0a4275520d53daee2d8451be7c495cd1";
 const NIX_VERSION_SHA256: &str = "6db806391ffaea4cdb08ade0031feac399c0cd08474b3bfde8cb33f88a36c8e1";
 const MAX_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
