@@ -14,42 +14,42 @@ use tar::{Builder as TarBuilder, Header as TarHeader};
 use tempfile::TempDir;
 
 use crate::safe_artifact_io::{TarGzipLimits, TraversalLimits};
-use crate::service_source_lock::{
-    LIB_REPOSITORY, LOCK_FILENAME, NixMaterialState, PREDECESSOR_LOCK_FILENAME,
-    ServiceSourceLockV2, validate_deferred_nix_material,
+use crate::service_source_lock::{LIB_REPOSITORY, validate_deferred_nix_material};
+use crate::service_source_lock_v3::{
+    LOCK_FILENAME, PREDECESSOR_LOCK_FILENAME, ServiceSourceLockV3,
 };
-use crate::{artifact_admission, safe_artifact_io};
+use crate::{artifact_admission, exact_tree_archive, safe_artifact_io};
 
 const CONTRACT_RELATIVE: &str =
-    "contracts/architecture/decisions/services_hardening_release_artifacts.v3.json";
-const INPUT_NAMES: [&str; 8] = [
+    "contracts/architecture/decisions/services_hardening_release_artifacts.v4.json";
+const INPUT_NAMES: [&str; 6] = [
     "config.example.toml",
     "config.schema.json",
-    "lib-source.bundle",
     "nixos-module.nix",
     "oci-image.tar.gz",
     "service-binary",
-    "service-source.bundle",
     "systemd.service",
 ];
-const OUTPUT_NAMES: [&str; 18] = [
+const OUTPUT_NAMES: [&str; 20] = [
     "LICENSE-APACHE",
     "LICENSE-MIT",
     "SHA256SUMS",
+    "THIRD-PARTY-LICENSES.txt",
     "THIRD-PARTY-NOTICES.txt",
-    "artifact-manifest.v1.json",
+    "artifact-manifest.v2.json",
+    "artifact-scan.v1.json",
     "binary.tar.gz",
     "config.example.toml",
     "config.schema.json",
-    "lib-source.bundle",
+    "lib-source.tar",
     "nixos-module.nix",
     "oci-image.tar.gz",
     "oci-image.v1.json",
-    "provenance-input.v1.json",
-    "radroots.service.source-lock.v2.toml",
+    "provenance.intoto.jsonl",
+    "radroots.service.source-lock.v3.toml",
     "sbom.cdx.json",
-    "service-source.bundle",
-    "source-bundles.v2.json",
+    "service-source.tar",
+    "source-archives.v3.json",
     "systemd.service",
 ];
 const SUPPORTED_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"];
@@ -70,7 +70,9 @@ const MAX_SOURCE_LOCK_BYTES: u64 = 4_096;
 const MAX_SERVICE_CARGO_LOCK_BYTES: u64 = 16_777_216;
 const MAX_SERVICE_FLAKE_LOCK_BYTES: u64 = 4_194_304;
 const MAX_BINARY_BYTES: u64 = 536_870_912;
-const MAX_SOURCE_BUNDLE_BYTES: u64 = 1_073_741_824;
+const MAX_SOURCE_ARCHIVE_BYTES: u64 = 1_073_741_824;
+const MAX_SOURCE_ARCHIVE_MEMBER_BYTES: u64 = 67_108_864;
+const MAX_SOURCE_ARCHIVE_MEMBERS: u64 = 65_536;
 const MAX_OCI_BYTES: u64 = 2_147_483_648;
 const MAX_METADATA_BYTES: usize = 33_554_432;
 const MAX_GIT_OUTPUT_BYTES: usize = 65_536;
@@ -82,6 +84,8 @@ const MAX_ARCHIVE_PATH_BYTES: usize = 4_096;
 const MAX_RELEASE_TREE_BYTES: u64 = 68_719_476_736;
 const FILE_MODE: u32 = 0o644;
 const DIRECTORY_MODE: u32 = 0o755;
+const CANDIDATE_DIGEST_DOMAIN: &str = "sha256:";
+const SECRET_SCAN_OVERLAP_BYTES: usize = 131_072;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CommandMode {
@@ -174,7 +178,18 @@ struct CargoPackage {
     source: Option<String>,
     checksum: Option<String>,
     license: Option<String>,
+    manifest_path: String,
+    license_file: Option<String>,
     targets: Vec<CargoTarget>,
+    #[serde(skip)]
+    license_texts: Vec<DependencyLicenseText>,
+}
+
+#[derive(Clone, Debug)]
+struct DependencyLicenseText {
+    filename: String,
+    sha256: String,
+    text: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -213,10 +228,19 @@ struct SbomComponent {
     bom_ref: String,
     name: String,
     version: String,
-    purl: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    purl: Option<String>,
     licenses: Vec<LicenseChoice>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     hashes: Vec<DigestValue>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    properties: Vec<SbomProperty>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+struct SbomProperty {
+    name: String,
+    value: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -229,10 +253,20 @@ struct SbomDependency {
 #[derive(Debug, Serialize)]
 struct SbomMetadata {
     component: SbomComponent,
+    properties: Vec<SbomProperty>,
+}
+
+#[derive(Debug, Serialize)]
+struct SbomComposition {
+    aggregate: &'static str,
+    assemblies: Vec<String>,
+    dependencies: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct CycloneDxSbom {
+    #[serde(rename = "$schema")]
+    json_schema: &'static str,
     #[serde(rename = "bomFormat")]
     bom_format: &'static str,
     #[serde(rename = "specVersion")]
@@ -241,6 +275,7 @@ struct CycloneDxSbom {
     metadata: SbomMetadata,
     components: Vec<SbomComponent>,
     dependencies: Vec<SbomDependency>,
+    compositions: Vec<SbomComposition>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -260,9 +295,10 @@ struct ContractVersionsDocument {
 }
 
 #[derive(Debug, Serialize)]
-struct SourceBundleDocument {
+struct SourceArchiveDocument {
     schema: &'static str,
     contract_version: u32,
+    candidate_digest: String,
     service: String,
     service_revision: String,
     lib_repository: &'static str,
@@ -272,11 +308,10 @@ struct SourceBundleDocument {
     source_lock_sha256: String,
     workspace_catalog_sha256: String,
     cargo_lock_sha256: String,
-    nix_material: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    nix_lib_revision: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    flake_lock_sha256: Option<String>,
+    flake_lock_sha256: String,
+    format: &'static str,
+    compression: &'static str,
+    git_history: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -293,6 +328,7 @@ struct OciImageDocument {
 struct ArtifactManifestDocument {
     schema: &'static str,
     contract_version: u32,
+    candidate_digest: String,
     service: String,
     version: String,
     target: String,
@@ -302,29 +338,94 @@ struct ArtifactManifestDocument {
     rust_version: &'static str,
     host_feature_profile: &'static str,
     contract_versions: ContractVersionsDocument,
-    protected_material_included: bool,
+    confidentiality: ConfidentialityDocument,
     artifacts: Vec<ArtifactRecord>,
 }
 
 #[derive(Debug, Serialize)]
-struct ProvenanceInputDocument {
+struct ConfidentialityDocument {
+    state: &'static str,
+    derived_from: ArtifactRecord,
+    protected_material_included: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct ScanDocument {
     schema: &'static str,
     contract_version: u32,
+    candidate_digest: String,
+    state: &'static str,
+    ruleset_sha256: String,
+    scanned_artifacts: Vec<ArtifactRecord>,
+    nested_members_scanned: u64,
+    expanded_bytes_scanned: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct InTotoStatement {
+    #[serde(rename = "_type")]
+    statement_type: &'static str,
+    subject: Vec<InTotoSubject>,
+    #[serde(rename = "predicateType")]
     predicate_type: &'static str,
+    predicate: SlsaPredicate,
+}
+
+#[derive(Debug, Serialize)]
+struct InTotoSubject {
+    name: String,
+    digest: BTreeMap<&'static str, String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaPredicate {
+    #[serde(rename = "buildDefinition")]
+    build_definition: SlsaBuildDefinition,
+    #[serde(rename = "runDetails")]
+    run_details: SlsaRunDetails,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaBuildDefinition {
+    #[serde(rename = "buildType")]
     build_type: &'static str,
-    builder_id: &'static str,
+    #[serde(rename = "externalParameters")]
+    external_parameters: SlsaExternalParameters,
+    #[serde(rename = "internalParameters")]
+    internal_parameters: BTreeMap<String, String>,
+    #[serde(rename = "resolvedDependencies")]
+    resolved_dependencies: Vec<SlsaResolvedDependency>,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaExternalParameters {
+    candidate_digest: String,
     service: String,
-    version: String,
     target: String,
     source_date_epoch: u32,
-    service_repository: String,
-    service_revision: String,
-    lib_repository: &'static str,
-    lib_revision: String,
-    source_lock_sha256: String,
-    manifest_sha256: String,
-    subjects: Vec<ArtifactRecord>,
-    signing_required: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaResolvedDependency {
+    uri: String,
+    digest: BTreeMap<&'static str, String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaRunDetails {
+    builder: SlsaBuilder,
+    metadata: SlsaRunMetadata,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaBuilder {
+    id: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct SlsaRunMetadata {
+    #[serde(rename = "invocationId")]
+    invocation_id: String,
 }
 
 #[derive(Clone, Debug)]
@@ -339,6 +440,7 @@ struct ReleaseDecision {
     schema: String,
     contract_version: u32,
     decision_state: String,
+    owner_step: u32,
     predecessor: ReleasePredecessor,
     command: String,
     modes: Vec<String>,
@@ -346,8 +448,13 @@ struct ReleaseDecision {
     service_metadata_path: String,
     service_metadata_fields: Vec<String>,
     service_license_path: String,
+    source_lock_schema: String,
+    source_lock_definition: String,
+    artifact_contract_binding: String,
     artifact_admission_contract: String,
     supported_targets: Vec<String>,
+    candidate_binding: String,
+    lib_root_binding: String,
     binary_admission: String,
     oci_admission: String,
     input_inventory: Vec<String>,
@@ -356,13 +463,17 @@ struct ReleaseDecision {
     output_inventory: Vec<String>,
     canonical_json: String,
     checksum_format: String,
+    source_archive_format: String,
     sbom_format: String,
+    license_evidence: String,
     provenance_posture: String,
     protected_material_scan_scope: String,
+    confidentiality_state: String,
     source_cleanliness: String,
     revision_stability: String,
     no_protected_material: bool,
     maximums: ReleaseMaximums,
+    required_negative_vectors: Vec<String>,
     negative_error_codes: Vec<String>,
 }
 
@@ -382,44 +493,56 @@ struct ReleaseMaximums {
     service_cargo_lock_bytes: u64,
     service_flake_lock_bytes: u64,
     binary_bytes: u64,
-    source_bundle_bytes: u64,
+    source_archive_bytes: u64,
+    source_archive_member_bytes: u64,
+    source_archive_members: u64,
     oci_bytes: u64,
+    artifact_scan_expanded_bytes: u64,
     cargo_metadata_bytes: usize,
     packages: usize,
     workspace_packages: usize,
 }
 
-pub(crate) fn run(
-    mode: CommandMode,
-    service_root: &Path,
-    input_root: &Path,
-    output_root: &Path,
-    target: &str,
-    source_date_epoch: u32,
-) -> Result<(), String> {
-    run_inner(
+#[derive(Clone, Copy)]
+pub(crate) struct Arguments<'a> {
+    pub(crate) mode: CommandMode,
+    pub(crate) service_root: &'a Path,
+    pub(crate) lib_root: &'a Path,
+    pub(crate) input_root: &'a Path,
+    pub(crate) output_root: &'a Path,
+    pub(crate) target: &'a str,
+    pub(crate) source_date_epoch: u32,
+    pub(crate) candidate_digest: &'a str,
+}
+
+pub(crate) fn run(arguments: Arguments<'_>) -> Result<(), String> {
+    run_inner(arguments).map_err(|error| error.to_string())
+}
+
+fn run_inner(arguments: Arguments<'_>) -> Result<(), ReleaseArtifactError> {
+    let Arguments {
         mode,
         service_root,
+        lib_root,
         input_root,
         output_root,
         target,
         source_date_epoch,
-    )
-    .map_err(|error| error.to_string())
-}
-
-fn run_inner(
-    mode: CommandMode,
-    service_root: &Path,
-    input_root: &Path,
-    output_root: &Path,
-    target: &str,
-    source_date_epoch: u32,
-) -> Result<(), ReleaseArtifactError> {
-    if !SUPPORTED_TARGETS.contains(&target) || source_date_epoch == 0 {
+        candidate_digest,
+    } = arguments;
+    if !SUPPORTED_TARGETS.contains(&target)
+        || source_date_epoch == 0
+        || !valid_lower_hex(candidate_digest, 64)
+    {
         return Err(ReleaseArtifactError::InvalidServiceMetadata);
     }
     let service_root = validate_git_root(service_root)?;
+    let lib_root = validate_git_root(lib_root)?;
+    if git_remote(&lib_root)? != "ssh://git@github.com/radrootslabs/lib.git"
+        && git_remote(&lib_root)? != LIB_REPOSITORY
+    {
+        return Err(ReleaseArtifactError::InvalidServiceRoot);
+    }
     let (input_root, input_snapshot) = validate_exact_input_root(input_root)?;
     let (output_parent, output_root) =
         validate_output_parent(output_root, &service_root, &input_root)?;
@@ -432,14 +555,14 @@ fn run_inner(
         MAX_SOURCE_LOCK_BYTES,
         ReleaseArtifactError::InvalidSourceLock,
     )?;
-    let source_lock = ServiceSourceLockV2::from_canonical_bytes(&source_lock_bytes)
+    let source_lock = ServiceSourceLockV3::from_canonical_bytes(&source_lock_bytes)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     if source_lock.service() != metadata.service {
         return Err(ReleaseArtifactError::InvalidSourceLock);
     }
     validate_source_lock_files(&service_root, &source_lock)?;
     let cargo_metadata = cargo_metadata(&service_root)?;
-    let (sbom, notices) = build_supply_chain_documents(&metadata, cargo_metadata)?;
+    let (sbom, notices, license_texts) = build_supply_chain_documents(&metadata, cargo_metadata)?;
 
     let staging = tempfile::Builder::new()
         .prefix(".radroots-service-release-")
@@ -510,27 +633,36 @@ fn run_inner(
         },
     )
     .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
-    let service_source = copy_snapshot_file(
-        &input_snapshot,
-        "service-source.bundle",
-        &staging.path().join("service-source.bundle"),
-        MAX_SOURCE_BUNDLE_BYTES,
-    )?;
-    let lib_source = copy_snapshot_file(
-        &input_snapshot,
-        "lib-source.bundle",
-        &staging.path().join("lib-source.bundle"),
-        MAX_SOURCE_BUNDLE_BYTES,
-    )?;
     input_snapshot
         .revalidate()
         .map_err(|_| ReleaseArtifactError::InvalidInputRoot)?;
-    verify_bundle(&staging.path().join("service-source.bundle"), &initial_head)?;
-    verify_bundle(
-        &staging.path().join("lib-source.bundle"),
+    let service_source = exact_tree_archive::create(
+        &service_root,
+        &initial_head,
+        &staging.path().join("service-source.tar"),
+        u64::from(source_date_epoch),
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
+    let lib_mtime = exact_tree_archive::commit_timestamp(&lib_root, source_lock.revision())
+        .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
+    let lib_source = exact_tree_archive::create(
+        &lib_root,
         source_lock.revision(),
-    )?;
+        &staging.path().join("lib-source.tar"),
+        lib_mtime,
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
     if lib_source.sha256 != source_lock.source_archive_sha256() {
+        return Err(ReleaseArtifactError::InvalidSourceBundle);
+    }
+    let catalog = exact_tree_archive::read_blob(
+        &lib_root,
+        source_lock.revision(),
+        "contracts/crates/catalog.v2.toml",
+        MAX_TEXT_INPUT_BYTES as usize,
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
+    if sha256_bytes(&catalog) != source_lock.workspace_catalog_sha256() {
         return Err(ReleaseArtifactError::InvalidSourceBundle);
     }
 
@@ -544,40 +676,67 @@ fn run_inner(
     };
     write_json(&staging.path().join("oci-image.v1.json"), &oci_document)?;
     let source_lock_sha256 = sha256_bytes(&source_lock_bytes);
-    let source_document = SourceBundleDocument {
-        schema: "radroots.service.source-bundles.v2",
-        contract_version: 2,
+    let source_document = SourceArchiveDocument {
+        schema: "radroots.service.source-archives.v3",
+        contract_version: 3,
+        candidate_digest: candidate_digest.to_owned(),
         service: metadata.service.clone(),
         service_revision: initial_head.clone(),
         lib_repository: LIB_REPOSITORY,
         lib_revision: source_lock.revision().to_owned(),
-        service_source: artifact_record("service-source.bundle", &service_source),
-        lib_source: artifact_record("lib-source.bundle", &lib_source),
+        service_source: artifact_record_from_exact_tree("service-source.tar", &service_source),
+        lib_source: artifact_record_from_exact_tree("lib-source.tar", &lib_source),
         source_lock_sha256: source_lock_sha256.clone(),
         workspace_catalog_sha256: source_lock.workspace_catalog_sha256().to_owned(),
         cargo_lock_sha256: source_lock.cargo_lock_sha256().to_owned(),
-        nix_material: match source_lock.nix_material_state() {
-            NixMaterialState::Absent => "absent",
-            NixMaterialState::Deferred => "deferred",
-        },
-        nix_lib_revision: source_lock.nix_lib_revision().map(str::to_owned),
-        flake_lock_sha256: source_lock.flake_lock_sha256().map(str::to_owned),
+        flake_lock_sha256: source_lock.flake_lock_sha256().to_owned(),
+        format: "ustar",
+        compression: "none",
+        git_history: "forbidden",
     };
     write_json(
-        &staging.path().join("source-bundles.v2.json"),
+        &staging.path().join("source-archives.v3.json"),
         &source_document,
     )?;
-    write_json(&staging.path().join("sbom.cdx.json"), &sbom)?;
     write_generated(
         &staging.path().join("THIRD-PARTY-NOTICES.txt"),
         notices.as_bytes(),
+    )?;
+    write_generated(
+        &staging.path().join("THIRD-PARTY-LICENSES.txt"),
+        license_texts.as_bytes(),
+    )?;
+
+    let mut sbom = sbom;
+    let sbom_artifacts = inventory_records(staging.path())?;
+    reconcile_sbom_artifacts(&mut sbom, &sbom_artifacts);
+    validate_cyclonedx_profile(&sbom, &sbom_artifacts)?;
+    write_json(&staging.path().join("sbom.cdx.json"), &sbom)?;
+    let scanned_artifacts = inventory_records(staging.path())?;
+    let (nested_members_scanned, expanded_bytes_scanned) =
+        scan_artifact_inventory(staging.path(), &scanned_artifacts)?;
+    let scan = ScanDocument {
+        schema: "radroots.service.artifact-scan.v1",
+        contract_version: 1,
+        candidate_digest: candidate_digest.to_owned(),
+        state: "no_protected_material_detected",
+        ruleset_sha256: scanner_ruleset_sha256(),
+        scanned_artifacts,
+        nested_members_scanned,
+        expanded_bytes_scanned,
+    };
+    write_json(&staging.path().join("artifact-scan.v1.json"), &scan)?;
+    let scan_evidence = hash_regular(
+        &staging.path().join("artifact-scan.v1.json"),
+        MAX_GENERATED_DOCUMENT_BYTES,
     )?;
 
     let payload = inventory_records(staging.path())?;
     let versions = source_lock.contract_versions();
     let manifest = ArtifactManifestDocument {
-        schema: "radroots.service.release-artifacts.v1",
-        contract_version: 1,
+        schema: "radroots.service.release-artifacts.v2",
+        contract_version: 2,
+        candidate_digest: candidate_digest.to_owned(),
         service: metadata.service.clone(),
         version: metadata.version.clone(),
         target: target.to_owned(),
@@ -593,38 +752,36 @@ fn run_inner(
             status: versions.status(),
             provider: versions.provider(),
         },
-        protected_material_included: false,
-        artifacts: payload,
+        confidentiality: ConfidentialityDocument {
+            state: scan.state,
+            derived_from: artifact_record("artifact-scan.v1.json", &scan_evidence),
+            protected_material_included: false,
+        },
+        artifacts: payload.clone(),
     };
-    write_json(&staging.path().join("artifact-manifest.v1.json"), &manifest)?;
+    validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &payload)?;
+    write_json(&staging.path().join("artifact-manifest.v2.json"), &manifest)?;
     let manifest_evidence = hash_regular(
-        &staging.path().join("artifact-manifest.v1.json"),
+        &staging.path().join("artifact-manifest.v2.json"),
         MAX_TEXT_INPUT_BYTES,
     )?;
     let service_repository = git_remote(&service_root)?;
-    let provenance = ProvenanceInputDocument {
-        schema: "radroots.service.provenance-input.v1",
-        contract_version: 1,
-        predicate_type: "https://slsa.dev/provenance/v1",
-        build_type: "https://radroots.dev/contracts/service-release-artifacts/v1",
-        builder_id: "https://radroots.dev/builders/service-release-artifacts/v1",
-        service: metadata.service,
-        version: metadata.version,
-        target: target.to_owned(),
-        source_date_epoch,
-        service_repository,
-        service_revision: initial_head.clone(),
-        lib_repository: LIB_REPOSITORY,
-        lib_revision: source_lock.revision().to_owned(),
-        source_lock_sha256,
-        manifest_sha256: manifest_evidence.sha256,
-        subjects: inventory_records(staging.path())?,
-        signing_required: true,
-    };
-    write_json(
-        &staging.path().join("provenance-input.v1.json"),
-        &provenance,
-    )?;
+    let provenance = build_provenance(
+        ProvenanceInput {
+            candidate_digest,
+            service: &metadata.service,
+            target,
+            source_date_epoch,
+            service_repository: &service_repository,
+            service_revision: &initial_head,
+            lib_revision: source_lock.revision(),
+            source_lock_sha256: &source_lock_sha256,
+            manifest_sha256: &manifest_evidence.sha256,
+        },
+        &payload,
+    );
+    validate_provenance_subjects(&provenance, candidate_digest, &payload)?;
+    write_json(&staging.path().join("provenance.intoto.jsonl"), &provenance)?;
     write_checksums(staging.path())?;
     validate_exact_output_inventory(staging.path())?;
     sync_directory(staging.path())?;
@@ -646,6 +803,24 @@ fn run_inner(
     fs::rename(&staging_path, &output_root).map_err(|_| ReleaseArtifactError::GenerationFailure)?;
     sync_directory(&output_parent)?;
     validate_output_records(&output_root, &expected_output)
+}
+
+fn validate_confidentiality_binding(
+    manifest: &ArtifactManifestDocument,
+    scan: &ScanDocument,
+    scan_evidence: &FileEvidence,
+    payload: &[ArtifactRecord],
+) -> Result<(), ReleaseArtifactError> {
+    if manifest.candidate_digest != scan.candidate_digest
+        || manifest.confidentiality.state != scan.state
+        || manifest.confidentiality.protected_material_included
+        || manifest.confidentiality.derived_from.path != "artifact-scan.v1.json"
+        || manifest.confidentiality.derived_from.sha256 != scan_evidence.sha256
+        || manifest.artifacts != payload
+    {
+        return Err(ReleaseArtifactError::GenerationFailure);
+    }
+    Ok(())
 }
 
 fn read_release_metadata(root: &Path) -> Result<ReleaseMetadata, ReleaseArtifactError> {
@@ -693,48 +868,46 @@ fn read_release_metadata(root: &Path) -> Result<ReleaseMetadata, ReleaseArtifact
 
 fn validate_source_lock_files(
     root: &Path,
-    source_lock: &ServiceSourceLockV2,
+    source_lock: &ServiceSourceLockV3,
 ) -> Result<(), ReleaseArtifactError> {
-    match fs::symlink_metadata(root.join(PREDECESSOR_LOCK_FILENAME)) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        _ => return Err(ReleaseArtifactError::InvalidSourceLock),
+    for name in [
+        PREDECESSOR_LOCK_FILENAME,
+        "radroots.service.source-lock.v1.toml",
+    ] {
+        match fs::symlink_metadata(root.join(name)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => return Err(ReleaseArtifactError::InvalidSourceLock),
+        }
     }
     let cargo_lock = hash_regular(&root.join("Cargo.lock"), MAX_SERVICE_CARGO_LOCK_BYTES)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     if cargo_lock.sha256 != source_lock.cargo_lock_sha256() {
         return Err(ReleaseArtifactError::InvalidSourceLock);
     }
-    match source_lock.nix_material_state() {
-        NixMaterialState::Absent => {
-            for name in ["flake.nix", "flake.lock"] {
-                match fs::symlink_metadata(root.join(name)) {
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    _ => return Err(ReleaseArtifactError::InvalidSourceLock),
-                }
-            }
-            Ok(())
-        }
-        NixMaterialState::Deferred => {
-            let flake_nix = read_bounded_regular(
-                &root.join("flake.nix"),
-                MAX_TEXT_INPUT_BYTES,
-                ReleaseArtifactError::InvalidSourceLock,
-            )?;
-            let flake_lock = read_bounded_regular(
-                &root.join("flake.lock"),
-                MAX_SERVICE_FLAKE_LOCK_BYTES,
-                ReleaseArtifactError::InvalidSourceLock,
-            )?;
-            let evidence = validate_deferred_nix_material(&flake_nix, &flake_lock)
-                .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
-            if Some(evidence.lib_revision()) == source_lock.nix_lib_revision()
-                && Some(evidence.flake_lock_sha256()) == source_lock.flake_lock_sha256()
-            {
-                Ok(())
-            } else {
-                Err(ReleaseArtifactError::InvalidSourceLock)
-            }
-        }
+    let flake_nix = read_bounded_regular(
+        &root.join("flake.nix"),
+        MAX_TEXT_INPUT_BYTES,
+        ReleaseArtifactError::InvalidSourceLock,
+    )?;
+    let flake_lock = read_bounded_regular(
+        &root.join("flake.lock"),
+        MAX_SERVICE_FLAKE_LOCK_BYTES,
+        ReleaseArtifactError::InvalidSourceLock,
+    )?;
+    let evidence = validate_deferred_nix_material(&flake_nix, &flake_lock)
+        .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
+    let artifact_contract = hash_regular(
+        &root.join(source_lock.artifact_contract_path()),
+        MAX_TEXT_INPUT_BYTES,
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
+    if evidence.lib_revision() == source_lock.revision()
+        && evidence.flake_lock_sha256() == source_lock.flake_lock_sha256()
+        && artifact_contract.sha256 == source_lock.artifact_contract_sha256()
+    {
+        Ok(())
+    } else {
+        Err(ReleaseArtifactError::InvalidSourceLock)
     }
 }
 
@@ -745,13 +918,108 @@ fn cargo_metadata(root: &Path) -> Result<CargoMetadata, ReleaseArtifactError> {
         .current_dir(root);
     let bytes = command_stdout(&mut command, MAX_METADATA_BYTES)
         .map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
-    serde_json::from_slice(&bytes).map_err(|_| ReleaseArtifactError::InvalidPackageInventory)
+    let mut metadata = serde_json::from_slice::<CargoMetadata>(&bytes)
+        .map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+    for package in &mut metadata.packages {
+        if package.source.is_some() {
+            package.license_texts = dependency_license_texts(package)?;
+        }
+    }
+    Ok(metadata)
+}
+
+fn dependency_license_texts(
+    package: &CargoPackage,
+) -> Result<Vec<DependencyLicenseText>, ReleaseArtifactError> {
+    let manifest = Path::new(&package.manifest_path);
+    if !manifest.is_absolute() || manifest.file_name() != Some(OsStr::new("Cargo.toml")) {
+        return Err(ReleaseArtifactError::InvalidPackageInventory);
+    }
+    let package_root = manifest
+        .parent()
+        .ok_or(ReleaseArtifactError::InvalidPackageInventory)?
+        .canonicalize()
+        .map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+    let mut candidates = BTreeSet::new();
+    if let Some(license_file) = package.license_file.as_deref() {
+        let relative = Path::new(license_file);
+        if relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(ReleaseArtifactError::InvalidPackageInventory);
+        }
+        candidates.insert(relative.to_path_buf());
+    } else {
+        let entries = fs::read_dir(&package_root)
+            .map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+        for (index, entry) in entries.enumerate() {
+            if index >= 256 {
+                return Err(ReleaseArtifactError::InvalidPackageInventory);
+            }
+            let entry = entry.map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+            let filename = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+            let uppercase = filename.to_ascii_uppercase();
+            if ["LICENSE", "COPYING", "COPYRIGHT", "NOTICE"]
+                .iter()
+                .any(|prefix| {
+                    uppercase == *prefix
+                        || uppercase.starts_with(&format!("{prefix}-"))
+                        || uppercase.starts_with(&format!("{prefix}."))
+                })
+            {
+                candidates.insert(PathBuf::from(filename));
+            }
+        }
+    }
+    if candidates.is_empty() || candidates.len() > 16 {
+        return Err(ReleaseArtifactError::InvalidPackageInventory);
+    }
+    let mut texts = Vec::with_capacity(candidates.len());
+    let mut total = 0_u64;
+    for relative in candidates {
+        let path = package_root.join(&relative);
+        let canonical = path
+            .canonicalize()
+            .map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+        if canonical.parent() != Some(package_root.as_path()) {
+            return Err(ReleaseArtifactError::InvalidPackageInventory);
+        }
+        let bytes = read_bounded_regular(
+            &canonical,
+            MAX_TEXT_INPUT_BYTES,
+            ReleaseArtifactError::InvalidPackageInventory,
+        )?;
+        total = total
+            .checked_add(bytes.len() as u64)
+            .filter(|total| *total <= MAX_GENERATED_DOCUMENT_BYTES)
+            .ok_or(ReleaseArtifactError::InvalidPackageInventory)?;
+        scan_bytes(&bytes)?;
+        let text =
+            String::from_utf8(bytes).map_err(|_| ReleaseArtifactError::InvalidPackageInventory)?;
+        if text.trim().is_empty() {
+            return Err(ReleaseArtifactError::InvalidPackageInventory);
+        }
+        texts.push(DependencyLicenseText {
+            filename: relative
+                .to_str()
+                .ok_or(ReleaseArtifactError::InvalidPackageInventory)?
+                .to_owned(),
+            sha256: sha256_bytes(text.as_bytes()),
+            text,
+        });
+    }
+    Ok(texts)
 }
 
 fn build_supply_chain_documents(
     metadata: &ReleaseMetadata,
     cargo: CargoMetadata,
-) -> Result<(CycloneDxSbom, String), ReleaseArtifactError> {
+) -> Result<(CycloneDxSbom, String, String), ReleaseArtifactError> {
     if cargo.packages.is_empty()
         || cargo.packages.len() > MAX_PACKAGES
         || cargo.workspace_members.is_empty()
@@ -832,14 +1100,20 @@ fn build_supply_chain_documents(
     }
     dependencies.sort_by(|left, right| left.reference.cmp(&right.reference));
     let sbom = CycloneDxSbom {
+        json_schema: "https://cyclonedx.org/schema/bom-1.6.schema.json",
         bom_format: "CycloneDX",
-        spec_version: "1.5",
+        spec_version: "1.6",
         version: 1,
         metadata: SbomMetadata {
             component: root_component,
+            properties: vec![SbomProperty {
+                name: "radroots:evidence:dependency-closure".to_owned(),
+                value: "complete".to_owned(),
+            }],
         },
         components,
         dependencies,
+        compositions: Vec::new(),
     };
 
     let mut third_party = by_id
@@ -852,8 +1126,12 @@ fn build_supply_chain_documents(
     let mut notices = String::from(
         "Radroots service third-party notices v1\n\nThis inventory is generated from the locked Cargo dependency graph.\n",
     );
+    let mut licenses = String::from(
+        "Radroots service third-party license texts v1\n\nThis file contains the exact bounded license texts admitted for each locked third-party Cargo package.\n",
+    );
     if third_party.is_empty() {
         notices.push_str("\nNo third-party Cargo packages are present.\n");
+        licenses.push_str("\nNo third-party Cargo packages are present.\n");
     } else {
         for package in third_party {
             let license = package
@@ -872,10 +1150,538 @@ fn build_supply_chain_documents(
                 .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
             writeln!(notices, "Source: {source}")
                 .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+            if package.license_texts.is_empty() {
+                return Err(ReleaseArtifactError::InvalidPackageInventory);
+            }
+            for license_text in &package.license_texts {
+                if !valid_output_component(&license_text.filename)
+                    || license_text.text.trim().is_empty()
+                    || license_text.sha256 != sha256_bytes(license_text.text.as_bytes())
+                {
+                    return Err(ReleaseArtifactError::InvalidPackageInventory);
+                }
+                writeln!(
+                    notices,
+                    "License-Text: {} sha256:{}",
+                    license_text.filename, license_text.sha256
+                )
+                .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+                writeln!(licenses).map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+                writeln!(
+                    licenses,
+                    "===== {} {} / {} / sha256:{} =====",
+                    package.name, package.version, license_text.filename, license_text.sha256
+                )
+                .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+                licenses.push_str(&license_text.text);
+                if !license_text.text.ends_with('\n') {
+                    licenses.push('\n');
+                }
+            }
         }
     }
     scan_bytes(notices.as_bytes())?;
-    Ok((sbom, notices))
+    scan_bytes(licenses.as_bytes())?;
+    if licenses.len() as u64 > MAX_GENERATED_DOCUMENT_BYTES {
+        return Err(ReleaseArtifactError::InvalidPackageInventory);
+    }
+    Ok((sbom, notices, licenses))
+}
+
+fn reconcile_sbom_artifacts(sbom: &mut CycloneDxSbom, artifacts: &[ArtifactRecord]) {
+    let root_reference = sbom.metadata.component.bom_ref.clone();
+    let mut assemblies = Vec::with_capacity(artifacts.len());
+    for artifact in artifacts {
+        let reference = format!("artifact:{}#{}", artifact.path, artifact.sha256);
+        assemblies.push(reference.clone());
+        sbom.components.push(SbomComponent {
+            component_type: "file",
+            bom_ref: reference.clone(),
+            name: artifact.path.clone(),
+            version: artifact.sha256.clone(),
+            purl: None,
+            licenses: sbom.metadata.component.licenses.clone(),
+            hashes: vec![DigestValue {
+                alg: "SHA-256",
+                content: artifact.sha256.clone(),
+            }],
+            properties: vec![
+                SbomProperty {
+                    name: "radroots:artifact:byte-length".to_owned(),
+                    value: artifact.byte_length.to_string(),
+                },
+                SbomProperty {
+                    name: "radroots:ecosystem".to_owned(),
+                    value: artifact_ecosystem(&artifact.path).to_owned(),
+                },
+            ],
+        });
+        sbom.dependencies.push(SbomDependency {
+            reference,
+            depends_on: vec![root_reference.clone()],
+        });
+    }
+    sbom.components.sort();
+    sbom.dependencies
+        .sort_by(|left, right| left.reference.cmp(&right.reference));
+    assemblies.sort();
+    let mut dependencies =
+        sbom.components
+            .iter()
+            .filter(|component| {
+                component.properties.iter().any(|property| {
+                    property.name == "radroots:ecosystem" && property.value == "cargo"
+                })
+            })
+            .map(|component| component.bom_ref.clone())
+            .collect::<Vec<_>>();
+    dependencies.push(root_reference);
+    dependencies.sort();
+    dependencies.dedup();
+    sbom.compositions = vec![SbomComposition {
+        aggregate: "complete",
+        assemblies,
+        dependencies,
+    }];
+}
+
+fn validate_cyclonedx_profile(
+    sbom: &CycloneDxSbom,
+    artifacts: &[ArtifactRecord],
+) -> Result<(), ReleaseArtifactError> {
+    let schema = serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["$schema", "bomFormat", "specVersion", "version", "metadata", "components", "dependencies", "compositions"],
+        "properties": {
+            "$schema": {"const": "https://cyclonedx.org/schema/bom-1.6.schema.json"},
+            "bomFormat": {"const": "CycloneDX"},
+            "specVersion": {"const": "1.6"},
+            "version": {"const": 1},
+            "metadata": {"type": "object"},
+            "components": {"type": "array", "minItems": 1},
+            "dependencies": {"type": "array", "minItems": 1},
+            "compositions": {"type": "array", "minItems": 1, "maxItems": 1}
+        }
+    });
+    let validator =
+        jsonschema::validator_for(&schema).map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+    let value = serde_json::to_value(sbom).map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+    validator
+        .validate(&value)
+        .map_err(|_| ReleaseArtifactError::GenerationFailure)?;
+
+    let component_references = sbom
+        .components
+        .iter()
+        .map(|component| component.bom_ref.as_str())
+        .chain(std::iter::once(sbom.metadata.component.bom_ref.as_str()))
+        .collect::<BTreeSet<_>>();
+    if component_references.len() != sbom.components.len() + 1
+        || sbom.dependencies.len() != component_references.len()
+        || sbom.dependencies.iter().any(|dependency| {
+            !component_references.contains(dependency.reference.as_str())
+                || dependency
+                    .depends_on
+                    .iter()
+                    .any(|reference| !component_references.contains(reference.as_str()))
+        })
+    {
+        return Err(ReleaseArtifactError::GenerationFailure);
+    }
+    let composition = sbom
+        .compositions
+        .first()
+        .ok_or(ReleaseArtifactError::GenerationFailure)?;
+    let expected_artifacts = artifacts
+        .iter()
+        .map(|artifact| format!("artifact:{}#{}", artifact.path, artifact.sha256))
+        .collect::<BTreeSet<_>>();
+    if composition.aggregate != "complete"
+        || composition.assemblies.iter().collect::<BTreeSet<_>>()
+            != expected_artifacts.iter().collect::<BTreeSet<_>>()
+        || artifacts.iter().any(|artifact| {
+            sbom.components
+                .iter()
+                .filter(|component| {
+                    component.bom_ref == format!("artifact:{}#{}", artifact.path, artifact.sha256)
+                        && component.hashes
+                            == [DigestValue {
+                                alg: "SHA-256",
+                                content: artifact.sha256.clone(),
+                            }]
+                })
+                .count()
+                != 1
+        })
+    {
+        return Err(ReleaseArtifactError::GenerationFailure);
+    }
+    Ok(())
+}
+
+fn validate_provenance_subjects(
+    provenance: &InTotoStatement,
+    candidate_digest: &str,
+    artifacts: &[ArtifactRecord],
+) -> Result<(), ReleaseArtifactError> {
+    let expected = artifacts
+        .iter()
+        .map(|artifact| (artifact.path.as_str(), artifact.sha256.as_str()))
+        .collect::<BTreeSet<_>>();
+    let observed = provenance
+        .subject
+        .iter()
+        .filter_map(|subject| {
+            subject
+                .digest
+                .get("sha256")
+                .map(|digest| (subject.name.as_str(), digest.as_str()))
+        })
+        .collect::<BTreeSet<_>>();
+    if provenance.statement_type != "https://in-toto.io/Statement/v1"
+        || provenance.predicate_type != "https://slsa.dev/provenance/v1"
+        || provenance
+            .predicate
+            .build_definition
+            .external_parameters
+            .candidate_digest
+            != format!("{CANDIDATE_DIGEST_DOMAIN}{candidate_digest}")
+        || observed != expected
+        || provenance.subject.len() != expected.len()
+    {
+        return Err(ReleaseArtifactError::GenerationFailure);
+    }
+    Ok(())
+}
+
+fn artifact_ecosystem(path: &str) -> &'static str {
+    if path == "oci-image.tar.gz" || path == "nixos-module.nix" {
+        "nix"
+    } else if path.ends_with("-source.tar") {
+        "git"
+    } else if path == "binary.tar.gz" {
+        "native"
+    } else {
+        "release"
+    }
+}
+
+struct ProvenanceInput<'a> {
+    candidate_digest: &'a str,
+    service: &'a str,
+    target: &'a str,
+    source_date_epoch: u32,
+    service_repository: &'a str,
+    service_revision: &'a str,
+    lib_revision: &'a str,
+    source_lock_sha256: &'a str,
+    manifest_sha256: &'a str,
+}
+
+fn build_provenance(input: ProvenanceInput<'_>, artifacts: &[ArtifactRecord]) -> InTotoStatement {
+    let ProvenanceInput {
+        candidate_digest,
+        service,
+        target,
+        source_date_epoch,
+        service_repository,
+        service_revision,
+        lib_revision,
+        source_lock_sha256,
+        manifest_sha256,
+    } = input;
+    let mut subject = artifacts
+        .iter()
+        .map(|artifact| InTotoSubject {
+            name: artifact.path.clone(),
+            digest: BTreeMap::from([("sha256", artifact.sha256.clone())]),
+        })
+        .collect::<Vec<_>>();
+    subject.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut resolved_dependencies = vec![
+        SlsaResolvedDependency {
+            uri: format!("git+{service_repository}@{service_revision}"),
+            digest: BTreeMap::from([("gitCommit", service_revision.to_owned())]),
+        },
+        SlsaResolvedDependency {
+            uri: format!("git+{LIB_REPOSITORY}@{lib_revision}"),
+            digest: BTreeMap::from([("gitCommit", lib_revision.to_owned())]),
+        },
+        SlsaResolvedDependency {
+            uri: format!("file:{LOCK_FILENAME}"),
+            digest: BTreeMap::from([("sha256", source_lock_sha256.to_owned())]),
+        },
+        SlsaResolvedDependency {
+            uri: "file:artifact-manifest.v2.json".to_owned(),
+            digest: BTreeMap::from([("sha256", manifest_sha256.to_owned())]),
+        },
+    ];
+    resolved_dependencies.sort_by(|left, right| left.uri.cmp(&right.uri));
+    let invocation_id = sha256_bytes(
+        format!(
+            "radroots.service.slsa.invocation.v1\0{candidate_digest}\0{service}\0{target}\0{manifest_sha256}"
+        )
+        .as_bytes(),
+    );
+    InTotoStatement {
+        statement_type: "https://in-toto.io/Statement/v1",
+        subject,
+        predicate_type: "https://slsa.dev/provenance/v1",
+        predicate: SlsaPredicate {
+            build_definition: SlsaBuildDefinition {
+                build_type: "https://radroots.dev/contracts/service-release-artifacts/v2",
+                external_parameters: SlsaExternalParameters {
+                    candidate_digest: format!("{CANDIDATE_DIGEST_DOMAIN}{candidate_digest}"),
+                    service: service.to_owned(),
+                    target: target.to_owned(),
+                    source_date_epoch,
+                },
+                internal_parameters: BTreeMap::new(),
+                resolved_dependencies,
+            },
+            run_details: SlsaRunDetails {
+                builder: SlsaBuilder {
+                    id: "https://radroots.dev/builders/service-release-artifacts/v2",
+                },
+                metadata: SlsaRunMetadata { invocation_id },
+            },
+        },
+    }
+}
+
+fn scanner_ruleset_sha256() -> String {
+    let mut bytes = b"radroots.service.artifact-scan.rules.v1\0".to_vec();
+    for pattern in SECRET_PATTERNS {
+        bytes.extend_from_slice(pattern);
+        bytes.push(0);
+    }
+    sha256_bytes(&bytes)
+}
+
+fn scan_artifact_inventory(
+    root: &Path,
+    artifacts: &[ArtifactRecord],
+) -> Result<(u64, u64), ReleaseArtifactError> {
+    let mut nested_members = 0_u64;
+    let mut expanded_bytes = 0_u64;
+    for artifact in artifacts {
+        let path = root.join(&artifact.path);
+        expanded_bytes = expanded_bytes
+            .checked_add(scan_regular_file(&path, artifact.byte_length)?)
+            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        if artifact.path == "service-source.tar" || artifact.path == "lib-source.tar" {
+            let (members, bytes) = scan_tar_members(&path, false)?;
+            nested_members = nested_members
+                .checked_add(members)
+                .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+            expanded_bytes = expanded_bytes
+                .checked_add(bytes)
+                .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        } else if artifact.path == "binary.tar.gz" {
+            let (members, bytes) = scan_tar_gzip_members(&path)?;
+            nested_members = nested_members
+                .checked_add(members)
+                .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+            expanded_bytes = expanded_bytes
+                .checked_add(bytes)
+                .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        } else if artifact.path == "oci-image.tar.gz" {
+            let limits = TarGzipLimits {
+                max_compressed_bytes: MAX_OCI_BYTES,
+                max_expanded_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+                max_members: 65_536,
+                max_member_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+                max_payload_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
+                max_depth: 64,
+                max_path_bytes: MAX_ARCHIVE_PATH_BYTES,
+            };
+            let materialized =
+                safe_artifact_io::materialize_tar_gzip_path(path.as_path(), root, limits)
+                    .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+            for file in materialized.snapshot().files() {
+                let relative = file
+                    .relative_path()
+                    .to_str()
+                    .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+                validate_scanned_path(relative)?;
+                let evidence = materialized
+                    .snapshot()
+                    .hash(file, MAX_ARCHIVE_EXPANDED_BYTES)
+                    .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+                expanded_bytes = expanded_bytes
+                    .checked_add(scan_regular_file(
+                        &materialized.root().join(file.relative_path()),
+                        evidence.byte_length,
+                    )?)
+                    .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+                nested_members = nested_members
+                    .checked_add(1)
+                    .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+                if relative.ends_with("/layer.tar") {
+                    let (members, bytes) =
+                        scan_tar_members(&materialized.root().join(file.relative_path()), true)?;
+                    nested_members = nested_members
+                        .checked_add(members)
+                        .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+                    expanded_bytes = expanded_bytes
+                        .checked_add(bytes)
+                        .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+                }
+            }
+            materialized
+                .revalidate()
+                .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        }
+    }
+    Ok((nested_members, expanded_bytes))
+}
+
+fn scan_tar_gzip_members(path: &Path) -> Result<(u64, u64), ReleaseArtifactError> {
+    let file = fs::File::open(path).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    let decoder = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(decoder);
+    let mut members = 0_u64;
+    let mut bytes = 0_u64;
+    for entry in archive
+        .entries()
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?
+    {
+        let mut entry = entry.map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        members = members
+            .checked_add(1)
+            .filter(|count| *count <= 4)
+            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        let path = entry
+            .path()
+            .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        let path = path
+            .to_str()
+            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        validate_scanned_path(path)?;
+        if entry.header().entry_type().is_file() {
+            let size = entry.size();
+            if size > MAX_BINARY_BYTES {
+                return Err(ReleaseArtifactError::InvalidInputArtifact);
+            }
+            bytes = bytes
+                .checked_add(scan_reader(&mut entry, size)?)
+                .filter(|count| *count <= MAX_BINARY_BYTES)
+                .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        } else if !entry.header().entry_type().is_dir() {
+            return Err(ReleaseArtifactError::InvalidInputArtifact);
+        }
+    }
+    if members == 0 {
+        Err(ReleaseArtifactError::InvalidInputArtifact)
+    } else {
+        Ok((members, bytes))
+    }
+}
+
+fn scan_tar_members(path: &Path, links_allowed: bool) -> Result<(u64, u64), ReleaseArtifactError> {
+    let file = fs::File::open(path).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    let mut archive = tar::Archive::new(file);
+    let mut members = 0_u64;
+    let mut bytes = 0_u64;
+    for entry in archive
+        .entries()
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?
+    {
+        let mut entry = entry.map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        let path = entry
+            .path()
+            .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        let path = path
+            .to_str()
+            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        validate_scanned_path(path)?;
+        members = members
+            .checked_add(1)
+            .filter(|count| *count <= MAX_SOURCE_ARCHIVE_MEMBERS)
+            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        if entry.header().entry_type().is_file() {
+            let size = entry.size();
+            if !links_allowed && size > MAX_SOURCE_ARCHIVE_MEMBER_BYTES {
+                return Err(ReleaseArtifactError::InvalidInputArtifact);
+            }
+            let scanned = scan_reader(&mut entry, size)?;
+            bytes = bytes
+                .checked_add(scanned)
+                .filter(|count| *count <= MAX_ARCHIVE_EXPANDED_BYTES)
+                .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        } else if !links_allowed
+            || !(entry.header().entry_type().is_dir()
+                || entry.header().entry_type().is_symlink()
+                || entry.header().entry_type().is_hard_link())
+        {
+            return Err(ReleaseArtifactError::InvalidInputArtifact);
+        }
+    }
+    if members == 0 {
+        Err(ReleaseArtifactError::InvalidInputArtifact)
+    } else {
+        Ok((members, bytes))
+    }
+}
+
+fn scan_regular_file(path: &Path, expected_length: u64) -> Result<u64, ReleaseArtifactError> {
+    let mut file = fs::File::open(path).map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    scan_reader(&mut file, expected_length)
+}
+
+fn scan_reader(
+    reader: &mut impl std::io::Read,
+    expected_length: u64,
+) -> Result<u64, ReleaseArtifactError> {
+    let mut scanner = SecretScanner::default();
+    let mut total = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = reader
+            .read(&mut buffer)
+            .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+        if read == 0 {
+            break;
+        }
+        total = total
+            .checked_add(read as u64)
+            .filter(|value| *value <= expected_length)
+            .ok_or(ReleaseArtifactError::InvalidInputArtifact)?;
+        scanner.scan(&buffer[..read])?;
+    }
+    if total == expected_length {
+        Ok(total)
+    } else {
+        Err(ReleaseArtifactError::InvalidInputArtifact)
+    }
+}
+
+fn validate_scanned_path(path: &str) -> Result<(), ReleaseArtifactError> {
+    let sensitive = Path::new(path).components().any(|component| {
+        let Component::Normal(value) = component else {
+            return true;
+        };
+        let value = value.to_string_lossy().to_ascii_lowercase();
+        matches!(
+            value.as_str(),
+            ".git"
+                | ".ssh"
+                | ".aws"
+                | ".env"
+                | "credentials"
+                | "secrets"
+                | "id_rsa"
+                | "id_ed25519"
+                | "private_key"
+        )
+    });
+    if sensitive || path.len() > MAX_ARCHIVE_PATH_BYTES {
+        Err(ReleaseArtifactError::ProtectedMaterialDetected)
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_metadata_package(
@@ -927,11 +1733,15 @@ fn sbom_component(
         bom_ref: package_reference(package),
         name: package.name.clone(),
         version: package.version.clone(),
-        purl: format!("pkg:cargo/{}@{}", package.name, package.version),
+        purl: Some(format!("pkg:cargo/{}@{}", package.name, package.version)),
         licenses: vec![LicenseChoice {
             expression: license,
         }],
         hashes,
+        properties: vec![SbomProperty {
+            name: "radroots:ecosystem".to_owned(),
+            value: "cargo".to_owned(),
+        }],
     })
 }
 
@@ -1069,33 +1879,6 @@ fn git_remote(root: &Path) -> Result<String, ReleaseArtifactError> {
         return Err(ReleaseArtifactError::InvalidServiceRoot);
     }
     Ok(value.to_owned())
-}
-
-fn verify_bundle(path: &Path, revision: &str) -> Result<(), ReleaseArtifactError> {
-    let verification = TempDir::new().map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
-    git_status(verification.path(), ["init", "--bare", "--quiet"])
-        .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
-    let output = Command::new("git")
-        .args(["bundle", "verify"])
-        .arg(path)
-        .current_dir(verification.path())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
-    if !output.success() {
-        return Err(ReleaseArtifactError::InvalidSourceBundle);
-    }
-    let mut command = Command::new("git");
-    command.args(["bundle", "list-heads"]).arg(path);
-    let heads = command_stdout(&mut command, MAX_GIT_OUTPUT_BYTES)
-        .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
-    if heads == format!("{revision} refs/heads/archive\n").as_bytes() {
-        Ok(())
-    } else {
-        Err(ReleaseArtifactError::InvalidSourceBundle)
-    }
 }
 
 #[cfg(test)]
@@ -1272,18 +2055,10 @@ impl SecretScanner {
         let mut combined = Vec::with_capacity(self.tail.len() + bytes.len());
         combined.extend_from_slice(&self.tail);
         combined.extend_from_slice(bytes);
-        if SECRET_PATTERNS
-            .iter()
-            .any(|pattern| contains_bytes(&combined, pattern))
-        {
+        if contains_secret(&combined) {
             return Err(ReleaseArtifactError::ProtectedMaterialDetected);
         }
-        let retained = SECRET_PATTERNS
-            .iter()
-            .map(|pattern| pattern.len().saturating_sub(1))
-            .max()
-            .unwrap_or(0)
-            .min(combined.len());
+        let retained = SECRET_SCAN_OVERLAP_BYTES.min(combined.len());
         self.tail.clear();
         self.tail
             .extend_from_slice(&combined[combined.len() - retained..]);
@@ -1291,11 +2066,91 @@ impl SecretScanner {
     }
 }
 
-fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty()
-        && haystack
-            .windows(needle.len())
-            .any(|window| window == needle)
+fn contains_secret(bytes: &[u8]) -> bool {
+    let pem = [
+        (
+            b"-----BEGIN PRIVATE KEY-----".as_slice(),
+            b"-----END PRIVATE KEY-----".as_slice(),
+        ),
+        (
+            b"-----BEGIN RSA PRIVATE KEY-----".as_slice(),
+            b"-----END RSA PRIVATE KEY-----".as_slice(),
+        ),
+        (
+            b"-----BEGIN EC PRIVATE KEY-----".as_slice(),
+            b"-----END EC PRIVATE KEY-----".as_slice(),
+        ),
+        (
+            b"-----BEGIN OPENSSH PRIVATE KEY-----".as_slice(),
+            b"-----END OPENSSH PRIVATE KEY-----".as_slice(),
+        ),
+    ]
+    .iter()
+    .any(|(begin, end)| contains_pem_secret(bytes, begin, end));
+    let github_pat = contains_prefixed_secret(bytes, b"github_pat_", 50, 128, is_token_byte);
+    let ghp = contains_prefixed_secret(bytes, b"ghp_", 36, 36, |byte| byte.is_ascii_alphanumeric());
+    let slack = contains_prefixed_secret(bytes, b"xoxb-", 20, 128, |byte| {
+        byte.is_ascii_digit() || byte == b'-'
+    });
+    pem || github_pat || ghp || slack
+}
+
+fn contains_pem_secret(bytes: &[u8], begin: &[u8], end: &[u8]) -> bool {
+    let Some(begin_at) = bytes
+        .windows(begin.len())
+        .position(|window| window == begin)
+    else {
+        return false;
+    };
+    let body = &bytes[begin_at + begin.len()..];
+    if !body.starts_with(b"\n") && !body.starts_with(b"\r\n") {
+        return false;
+    }
+    let Some(end_at) = body.windows(end.len()).position(|window| window == end) else {
+        return false;
+    };
+    let encoded = &body[..end_at];
+    encoded.iter().all(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=' | b'\n' | b'\r')
+    }) && encoded
+        .iter()
+        .filter(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
+        .count()
+        >= 32
+}
+
+fn contains_prefixed_secret(
+    bytes: &[u8],
+    prefix: &[u8],
+    minimum_suffix: usize,
+    maximum_suffix: usize,
+    valid_suffix: impl Fn(u8) -> bool,
+) -> bool {
+    bytes
+        .windows(prefix.len())
+        .enumerate()
+        .any(|(index, window)| {
+            if window != prefix
+                || index
+                    .checked_sub(1)
+                    .is_some_and(|prior| is_token_byte(bytes[prior]))
+            {
+                return false;
+            }
+            let start = index + prefix.len();
+            let suffix = bytes[start..]
+                .iter()
+                .take_while(|byte| valid_suffix(**byte))
+                .count();
+            (minimum_suffix..=maximum_suffix).contains(&suffix)
+                && bytes
+                    .get(start + suffix)
+                    .is_none_or(|byte| !is_token_byte(*byte))
+        })
+}
+
+fn is_token_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 fn scan_bytes(bytes: &[u8]) -> Result<(), ReleaseArtifactError> {
@@ -1414,25 +2269,38 @@ fn artifact_record(path: &str, evidence: &FileEvidence) -> ArtifactRecord {
     }
 }
 
+fn artifact_record_from_exact_tree(
+    path: &str,
+    evidence: &exact_tree_archive::ExactTreeArchiveEvidence,
+) -> ArtifactRecord {
+    ArtifactRecord {
+        path: path.to_owned(),
+        byte_length: evidence.byte_length,
+        sha256: evidence.sha256.clone(),
+    }
+}
+
 fn output_maximum(name: &str) -> Result<u64, ReleaseArtifactError> {
     match name {
         "binary.tar.gz" => Ok(MAX_BINARY_BYTES + MAX_TEXT_INPUT_BYTES),
         "oci-image.tar.gz" => Ok(MAX_OCI_BYTES),
-        "service-source.bundle" | "lib-source.bundle" => Ok(MAX_SOURCE_BUNDLE_BYTES),
+        "service-source.tar" | "lib-source.tar" => Ok(MAX_SOURCE_ARCHIVE_BYTES),
         "LICENSE-APACHE"
         | "LICENSE-MIT"
         | "config.example.toml"
         | "config.schema.json"
         | "nixos-module.nix"
-        | "radroots.service.source-lock.v2.toml"
+        | "radroots.service.source-lock.v3.toml"
         | "systemd.service" => Ok(MAX_TEXT_INPUT_BYTES),
         "SHA256SUMS"
+        | "THIRD-PARTY-LICENSES.txt"
         | "THIRD-PARTY-NOTICES.txt"
-        | "artifact-manifest.v1.json"
+        | "artifact-manifest.v2.json"
+        | "artifact-scan.v1.json"
         | "oci-image.v1.json"
-        | "provenance-input.v1.json"
+        | "provenance.intoto.jsonl"
         | "sbom.cdx.json"
-        | "source-bundles.v2.json" => Ok(MAX_GENERATED_DOCUMENT_BYTES),
+        | "source-archives.v3.json" => Ok(MAX_GENERATED_DOCUMENT_BYTES),
         _ => Err(ReleaseArtifactError::GenerationFailure),
     }
 }
@@ -1692,22 +2560,16 @@ fn git_stdout<const N: usize>(root: &Path, args: [&str; N], maximum: usize) -> R
     command_stdout(&mut command, maximum)
 }
 
-fn git_status<const N: usize>(root: &Path, args: [&str; N]) -> Result<(), ()> {
-    let status = Command::new("git")
-        .args(args)
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|_| ())?;
-    if status.success() { Ok(()) } else { Err(()) }
-}
-
 fn valid_metadata_text(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_TEXT_FIELD_BYTES
         && !value.contains(['\n', '\r'])
+        && !SECRET_PATTERNS.iter().any(|pattern| {
+            value
+                .as_bytes()
+                .windows(pattern.len())
+                .any(|window| window == *pattern)
+        })
         && scan_bytes(value.as_bytes()).is_ok()
 }
 
@@ -1800,12 +2662,13 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         ReleaseArtifactError::StaleOutput,
         ReleaseArtifactError::GenerationFailure,
     ];
-    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v3"
-        || decision.contract_version != 3
+    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v4"
+        || decision.contract_version != 4
         || decision.decision_state != "active"
+        || decision.owner_step != 305
         || decision.predecessor.schema
-            != "radroots.services-hardening.release-artifacts-decisions.v2"
-        || decision.predecessor.filename != "services_hardening_release_artifacts.v2.json"
+            != "radroots.services-hardening.release-artifacts-decisions.v3"
+        || decision.predecessor.filename != "services_hardening_release_artifacts.v3.json"
         || decision.predecessor.transition != "forward_only_replace"
         || decision.command != "cargo xtask service-release-artifacts"
         || decision.modes != ["check", "write"]
@@ -1813,10 +2676,12 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
             != [
                 "mode",
                 "service_root",
+                "lib_root",
                 "input_root",
                 "output_root",
                 "target",
                 "source_date_epoch",
+                "candidate_digest",
             ]
         || decision.service_metadata_path
             != "Cargo.toml.workspace.metadata.radroots.service_release"
@@ -1824,9 +2689,17 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
             != ["service", "service_package", "binary_name", "version"]
         || decision.service_license_path
             != "Cargo.toml.workspace.package.license_or_package.license"
+        || decision.source_lock_schema != "radroots.service.source-lock.v3"
+        || decision.source_lock_definition
+            != "contracts/architecture/decisions/services_hardening_source_lock.v3.json"
+        || decision.artifact_contract_binding
+            != "source_lock_exact_regular_file_bytes_in_same_service_revision"
         || decision.artifact_admission_contract
             != "contracts/architecture/decisions/services_hardening_artifact_admission.v1.json"
         || decision.supported_targets != SUPPORTED_TARGETS
+        || decision.candidate_binding != "explicit_sha256_candidate_identity_digest"
+        || decision.lib_root_binding
+            != "canonical_public_lib_git_root_containing_the_locked_revision"
         || decision.binary_admission
             != "exact_format_architecture_linkage_structural_and_native_bounded_help_smoke"
         || decision.oci_admission
@@ -1837,11 +2710,15 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         || decision.output_inventory != OUTPUT_NAMES
         || decision.canonical_json != "compact_utf8_json_with_one_final_lf"
         || decision.checksum_format != "sha256_lower_hex_two_spaces_path_lf_sorted_by_path"
-        || decision.sbom_format != "cyclonedx_json_1_5_locked_cargo_graph"
+        || decision.source_archive_format
+            != "canonical_uncompressed_ustar_exact_git_revision_tree_without_history"
+        || decision.sbom_format != "cyclonedx_json_1_6_complete_cargo_nix_and_artifact_closure"
+        || decision.license_evidence != "exact_dependency_attribution_with_bounded_license_texts"
         || decision.provenance_posture
-            != "deterministic_unsigned_slsa_v1_signing_input_external_keys_only"
+            != "candidate_derived_unsigned_intoto_statement_slsa_v1_exact_manifest_subjects"
         || decision.protected_material_scan_scope
-            != "all_textual_release_inputs_and_generated_documents"
+            != "all_artifact_bytes_and_bounded_nested_binary_oci_layer_and_source_archive_payloads"
+        || decision.confidentiality_state != "derived_only_from_the_exact_artifact_scan_record"
         || decision.source_cleanliness != "no_tracked_staged_or_untracked_changes"
         || decision.revision_stability != "same_service_head_before_and_after_generation"
         || !decision.no_protected_material
@@ -1850,11 +2727,28 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         || decision.maximums.service_cargo_lock_bytes != MAX_SERVICE_CARGO_LOCK_BYTES
         || decision.maximums.service_flake_lock_bytes != MAX_SERVICE_FLAKE_LOCK_BYTES
         || decision.maximums.binary_bytes != MAX_BINARY_BYTES
-        || decision.maximums.source_bundle_bytes != MAX_SOURCE_BUNDLE_BYTES
+        || decision.maximums.source_archive_bytes != MAX_SOURCE_ARCHIVE_BYTES
+        || decision.maximums.source_archive_member_bytes != MAX_SOURCE_ARCHIVE_MEMBER_BYTES
+        || decision.maximums.source_archive_members != MAX_SOURCE_ARCHIVE_MEMBERS
         || decision.maximums.oci_bytes != MAX_OCI_BYTES
+        || decision.maximums.artifact_scan_expanded_bytes != MAX_ARCHIVE_EXPANDED_BYTES
         || decision.maximums.cargo_metadata_bytes != MAX_METADATA_BYTES
         || decision.maximums.packages != MAX_PACKAGES
         || decision.maximums.workspace_packages != MAX_WORKSPACE_PACKAGES
+        || decision.required_negative_vectors
+            != [
+                "cyclonedx_schema_drift",
+                "missing_dependency_component",
+                "unreconciled_artifact_subject",
+                "missing_or_mismatched_license_text",
+                "invented_candidate_digest",
+                "git_history_bundle",
+                "secret_in_binary",
+                "secret_in_oci_layer",
+                "secret_in_source_archive",
+                "sensitive_archive_path",
+                "scan_confidentiality_mismatch",
+            ]
         || decision.negative_error_codes != errors.map(ReleaseArtifactError::code)
     {
         return Err(ReleaseArtifactError::InvalidContract);
@@ -1866,15 +2760,15 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
 mod tests {
     use std::process::Command;
 
-    use crate::service_source_lock::{
-        ContractVersions, NixMaterialParts, ServiceSourceLockParts, ServiceSourceLockV2,
-    };
+    use crate::service_source_lock::ContractVersions;
+    use crate::service_source_lock_v3::FixtureParts;
 
     use super::*;
 
     struct ReleaseFixture {
         _root: TempDir,
         service: PathBuf,
+        lib: PathBuf,
         input: PathBuf,
         output_a: PathBuf,
         output_b: PathBuf,
@@ -1898,8 +2792,15 @@ mod tests {
             write_file(&lib.join("README.md"), b"fixture Lib source\n");
             initialize_git(&lib, "https://github.com/radrootslabs/lib");
             let lib_revision = git_output(&lib, &["rev-parse", "HEAD"]);
-            create_bundle(&lib, &input.join("lib-source.bundle"));
-            let lib_bundle = fs::read(input.join("lib-source.bundle")).expect("Lib bundle");
+            let lib_archive_path = canonical_root.join("lib-source.tar");
+            let lib_archive = exact_tree_archive::create(
+                &lib,
+                &lib_revision,
+                &lib_archive_path,
+                exact_tree_archive::commit_timestamp(&lib, &lib_revision)
+                    .expect("Lib commit timestamp"),
+            )
+            .expect("Lib source archive");
             let catalog =
                 fs::read(lib.join("contracts/crates/catalog.v2.toml")).expect("workspace catalog");
 
@@ -1919,7 +2820,7 @@ path = "src/main.rs"
 resolver = "3"
 
 [workspace.metadata.radroots.service_release]
-service = "fixture_service"
+service = "myc"
 service_package = "fixture-service"
 binary_name = "fixture-service"
 version = "0.1.0-alpha"
@@ -1956,26 +2857,32 @@ version = "0.1.0-alpha"
                 b"Apache-2.0 fixture license\n",
             );
             write_file(&service.join("LICENSE-MIT"), b"MIT fixture license\n");
+            let artifact_contract_path =
+                service.join("contracts/release/myc-artifact-contract.v3.json");
+            fs::create_dir_all(
+                artifact_contract_path
+                    .parent()
+                    .expect("artifact contract parent"),
+            )
+            .expect("artifact contract directory");
+            write_file(&artifact_contract_path, b"{}\n");
             let cargo_lock = fs::read(service.join("Cargo.lock")).expect("Cargo lock");
             let flake_lock = fs::read(service.join("flake.lock")).expect("flake lock");
-            let source_lock = ServiceSourceLockV2::new(ServiceSourceLockParts {
-                service: "fixture_service",
+            let artifact_contract = fs::read(&artifact_contract_path).expect("artifact contract");
+            let source_lock = ServiceSourceLockV3::fixture(FixtureParts {
+                service: "myc",
                 revision: &lib_revision,
                 workspace_catalog_sha256: &sha256_bytes(&catalog),
-                source_archive_sha256: &sha256_bytes(&lib_bundle),
+                source_archive_sha256: &lib_archive.sha256,
                 cargo_lock_sha256: &sha256_bytes(&cargo_lock),
-                nix: NixMaterialParts::Deferred {
-                    lib_revision: &lib_revision,
-                    flake_lock_sha256: &sha256_bytes(&flake_lock),
-                },
+                flake_lock_sha256: &sha256_bytes(&flake_lock),
+                artifact_contract_sha256: &sha256_bytes(&artifact_contract),
                 contract_versions: ContractVersions::new(1, 1, 1, 1, 1),
             })
             .expect("source lock");
             write_file(&service.join(LOCK_FILENAME), source_lock.canonical_bytes());
             initialize_git(&service, "https://github.com/radrootslabs/fixture-service");
             let service_revision = git_output(&service, &["rev-parse", "HEAD"]);
-            create_bundle(&service, &input.join("service-source.bundle"));
-
             for (name, bytes) in [
                 ("config.example.toml", b"enabled = true\n".as_slice()),
                 ("config.schema.json", b"{\"type\":\"object\"}\n".as_slice()),
@@ -1987,11 +2894,13 @@ version = "0.1.0-alpha"
             ] {
                 write_file(&input.join(name), bytes);
             }
-            fs::copy(
-                std::env::current_exe().expect("current test executable"),
-                input.join("service-binary"),
-            )
-            .expect("copy fixture service binary");
+            let status = Command::new("rustc")
+                .args(["--edition=2024", "src/main.rs", "-o"])
+                .arg(input.join("service-binary"))
+                .current_dir(&service)
+                .status()
+                .expect("compile fixture service binary");
+            assert!(status.success(), "compile fixture service binary");
             create_oci_fixture(
                 &input.join("oci-image.tar.gz"),
                 &service_revision,
@@ -2003,65 +2912,35 @@ version = "0.1.0-alpha"
                 output_b: canonical_root.join("release-b"),
                 _root: root,
                 service,
+                lib,
                 input,
             }
         }
 
         fn write(&self, output: &Path) -> Result<(), ReleaseArtifactError> {
-            run_inner(
-                CommandMode::Write,
-                &self.service,
-                &self.input,
-                output,
-                native_fixture_target(),
-                1_700_000_000,
-            )
+            run_inner(Arguments {
+                mode: CommandMode::Write,
+                service_root: &self.service,
+                lib_root: &self.lib,
+                input_root: &self.input,
+                output_root: output,
+                target: native_fixture_target(),
+                source_date_epoch: 1_700_000_000,
+                candidate_digest: &"a".repeat(64),
+            })
         }
 
         fn check(&self, output: &Path) -> Result<(), ReleaseArtifactError> {
-            run_inner(
-                CommandMode::Check,
-                &self.service,
-                &self.input,
-                output,
-                native_fixture_target(),
-                1_700_000_000,
-            )
-        }
-
-        fn make_nix_material_absent(&self) {
-            let current = ServiceSourceLockV2::from_canonical_bytes(
-                &fs::read(self.service.join(LOCK_FILENAME)).expect("source lock"),
-            )
-            .expect("valid source lock");
-            for name in ["flake.nix", "flake.lock"] {
-                fs::remove_file(self.service.join(name)).expect("remove deferred Nix file");
-            }
-            let absent = ServiceSourceLockV2::new(ServiceSourceLockParts {
-                service: current.service(),
-                revision: current.revision(),
-                workspace_catalog_sha256: current.workspace_catalog_sha256(),
-                source_archive_sha256: current.source_archive_sha256(),
-                cargo_lock_sha256: current.cargo_lock_sha256(),
-                nix: NixMaterialParts::Absent,
-                contract_versions: current.contract_versions(),
+            run_inner(Arguments {
+                mode: CommandMode::Check,
+                service_root: &self.service,
+                lib_root: &self.lib,
+                input_root: &self.input,
+                output_root: output,
+                target: native_fixture_target(),
+                source_date_epoch: 1_700_000_000,
+                candidate_digest: &"a".repeat(64),
             })
-            .expect("absent-Nix source lock");
-            write_file(&self.service.join(LOCK_FILENAME), absent.canonical_bytes());
-            git(&self.service, &["add", "-A"]);
-            git(
-                &self.service,
-                &["commit", "--quiet", "-m", "remove deferred Nix material"],
-            );
-            fs::remove_file(self.input.join("service-source.bundle"))
-                .expect("remove prior service bundle");
-            create_bundle(&self.service, &self.input.join("service-source.bundle"));
-            fs::remove_file(self.input.join("oci-image.tar.gz")).expect("remove prior OCI fixture");
-            create_oci_fixture(
-                &self.input.join("oci-image.tar.gz"),
-                &git_output(&self.service, &["rev-parse", "HEAD"]),
-                current.revision(),
-            );
         }
     }
 
@@ -2101,17 +2980,6 @@ version = "0.1.0-alpha"
         git(root, &["branch", "-M", "archive"]);
     }
 
-    fn create_bundle(root: &Path, output: &Path) {
-        let status = Command::new("git")
-            .args(["bundle", "create"])
-            .arg(output)
-            .arg("refs/heads/archive")
-            .current_dir(root)
-            .status()
-            .expect("create source bundle");
-        assert!(status.success());
-    }
-
     fn native_fixture_target() -> &'static str {
         if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
             "aarch64-apple-darwin"
@@ -2145,7 +3013,7 @@ version = "0.1.0-alpha"
         let layer_digest = sha256_bytes(&layer);
         let layer_name = format!("{layer_digest}/layer.tar");
         let labels = artifact_admission::OciExpectation {
-            service: "fixture_service",
+            service: "myc",
             binary_name: "fixture-service",
             version: "0.1.0-alpha",
             service_revision,
@@ -2179,11 +3047,11 @@ version = "0.1.0-alpha"
         let manifest = serde_json::to_vec(&serde_json::json!([{
             "Config": config_name,
             "Layers": [layer_name],
-            "RepoTags": ["fixture-service:0.1.0-alpha"]
+            "RepoTags": ["myc:0.1.0-alpha"]
         }]))
         .expect("serialize manifest");
         let repositories = serde_json::to_vec(&serde_json::json!({
-            "fixture-service": {"0.1.0-alpha": layer_digest}
+            "myc": {"0.1.0-alpha": layer_digest}
         }))
         .expect("serialize repositories");
         let mut members = vec![
@@ -2249,6 +3117,8 @@ version = "0.1.0-alpha"
             source: source.map(str::to_owned),
             checksum: checksum.map(str::to_owned),
             license: license.map(str::to_owned),
+            manifest_path: format!("/fixture/{name}/Cargo.toml"),
+            license_file: None,
             targets: if binary {
                 vec![CargoTarget {
                     name: name.to_owned(),
@@ -2257,6 +3127,16 @@ version = "0.1.0-alpha"
             } else {
                 Vec::new()
             },
+            license_texts: source
+                .map(|_| {
+                    let text = "fixture dependency license text\n".to_owned();
+                    vec![DependencyLicenseText {
+                        filename: "LICENSE".to_owned(),
+                        sha256: sha256_bytes(text.as_bytes()),
+                        text,
+                    }]
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -2312,6 +3192,7 @@ version = "0.1.0-alpha"
             ("/schema", serde_json::json!("other")),
             ("/contract_version", serde_json::json!(1)),
             ("/decision_state", serde_json::json!("draft")),
+            ("/owner_step", serde_json::json!(1)),
             ("/predecessor/schema", serde_json::json!("other")),
             ("/predecessor/filename", serde_json::json!("other")),
             ("/predecessor/transition", serde_json::json!("other")),
@@ -2320,16 +3201,28 @@ version = "0.1.0-alpha"
             ("/required_arguments", serde_json::json!([])),
             ("/service_metadata_path", serde_json::json!("other")),
             ("/service_metadata_fields", serde_json::json!([])),
+            ("/service_license_path", serde_json::json!("other")),
+            ("/source_lock_schema", serde_json::json!("other")),
+            ("/source_lock_definition", serde_json::json!("other")),
+            ("/artifact_contract_binding", serde_json::json!("other")),
+            ("/artifact_admission_contract", serde_json::json!("other")),
             ("/supported_targets", serde_json::json!([])),
+            ("/candidate_binding", serde_json::json!("other")),
+            ("/lib_root_binding", serde_json::json!("other")),
+            ("/binary_admission", serde_json::json!("other")),
+            ("/oci_admission", serde_json::json!("other")),
             ("/input_inventory", serde_json::json!([])),
             ("/excluded_parent_owned_inputs", serde_json::json!([])),
             ("/service_root_inventory", serde_json::json!([])),
             ("/output_inventory", serde_json::json!([])),
             ("/canonical_json", serde_json::json!("other")),
             ("/checksum_format", serde_json::json!("other")),
+            ("/source_archive_format", serde_json::json!("other")),
             ("/sbom_format", serde_json::json!("other")),
+            ("/license_evidence", serde_json::json!("other")),
             ("/provenance_posture", serde_json::json!("other")),
             ("/protected_material_scan_scope", serde_json::json!("other")),
+            ("/confidentiality_state", serde_json::json!("other")),
             ("/source_cleanliness", serde_json::json!("other")),
             ("/revision_stability", serde_json::json!("other")),
             ("/no_protected_material", serde_json::json!(false)),
@@ -2338,11 +3231,21 @@ version = "0.1.0-alpha"
             ("/maximums/service_cargo_lock_bytes", serde_json::json!(1)),
             ("/maximums/service_flake_lock_bytes", serde_json::json!(1)),
             ("/maximums/binary_bytes", serde_json::json!(1)),
-            ("/maximums/source_bundle_bytes", serde_json::json!(1)),
+            ("/maximums/source_archive_bytes", serde_json::json!(1)),
+            (
+                "/maximums/source_archive_member_bytes",
+                serde_json::json!(1),
+            ),
+            ("/maximums/source_archive_members", serde_json::json!(1)),
             ("/maximums/oci_bytes", serde_json::json!(1)),
+            (
+                "/maximums/artifact_scan_expanded_bytes",
+                serde_json::json!(1),
+            ),
             ("/maximums/cargo_metadata_bytes", serde_json::json!(1)),
             ("/maximums/packages", serde_json::json!(1)),
             ("/maximums/workspace_packages", serde_json::json!(1)),
+            ("/required_negative_vectors", serde_json::json!([])),
             ("/negative_error_codes", serde_json::json!([])),
         ] {
             let mut drifted = canonical.clone();
@@ -2359,14 +3262,16 @@ version = "0.1.0-alpha"
 
     #[test]
     fn exact_inventory_and_limits_are_literal() {
-        assert_eq!(INPUT_NAMES.len(), 8);
-        assert_eq!(OUTPUT_NAMES.len(), 18);
+        assert_eq!(INPUT_NAMES.len(), 6);
+        assert_eq!(OUTPUT_NAMES.len(), 20);
         assert_eq!(MAX_TEXT_INPUT_BYTES, 1_048_576);
         assert_eq!(MAX_GENERATED_DOCUMENT_BYTES, 16_777_216);
         assert_eq!(MAX_SERVICE_CARGO_LOCK_BYTES, 16_777_216);
         assert_eq!(MAX_SERVICE_FLAKE_LOCK_BYTES, 4_194_304);
         assert_eq!(MAX_BINARY_BYTES, 536_870_912);
-        assert_eq!(MAX_SOURCE_BUNDLE_BYTES, 1_073_741_824);
+        assert_eq!(MAX_SOURCE_ARCHIVE_BYTES, 1_073_741_824);
+        assert_eq!(MAX_SOURCE_ARCHIVE_MEMBER_BYTES, 67_108_864);
+        assert_eq!(MAX_SOURCE_ARCHIVE_MEMBERS, 65_536);
         assert_eq!(MAX_OCI_BYTES, 2_147_483_648);
         assert_eq!(MAX_METADATA_BYTES, 33_554_432);
         assert_eq!(MAX_PACKAGES, 8_192);
@@ -2403,18 +3308,20 @@ version = "0.1.0-alpha"
                 ],
             }),
         };
-        let (sbom, notices) =
+        let (sbom, notices, licenses) =
             build_supply_chain_documents(&sample_metadata(), cargo).expect("documents");
         let bytes = serde_json::to_vec(&sbom).expect("SBOM JSON");
         assert_eq!(serde_json::to_vec(&sbom).expect("SBOM JSON"), bytes);
         assert_eq!(sbom.bom_format, "CycloneDX");
-        assert_eq!(sbom.spec_version, "1.5");
+        assert_eq!(sbom.spec_version, "1.6");
         assert_eq!(sbom.metadata.component.name, "fixture-service");
         assert_eq!(sbom.components.len(), 1);
         assert_eq!(sbom.dependencies.len(), 2);
         assert!(notices.contains("Package: dependency 0.1.0-alpha"));
         assert!(notices.contains("License: Apache-2.0"));
         assert!(notices.contains("registry+https://github.com/rust-lang/crates.io-index"));
+        assert!(notices.contains("License-Text: LICENSE sha256:"));
+        assert!(licenses.contains("fixture dependency license text"));
     }
 
     #[test]
@@ -2632,9 +3539,10 @@ version = "0.1.0-alpha"
                 }],
             }),
         };
-        let (_, notices) =
+        let (_, notices, licenses) =
             build_supply_chain_documents(&sample_metadata(), root_only).expect("root-only graph");
         assert!(notices.contains("No third-party Cargo packages are present."));
+        assert!(licenses.contains("No third-party Cargo packages are present."));
     }
 
     #[test]
@@ -2890,7 +3798,7 @@ version = "0.1.0-alpha"
             Err(ReleaseArtifactError::StaleOutput)
         );
 
-        let source_lock = ServiceSourceLockV2::from_canonical_bytes(
+        let source_lock = ServiceSourceLockV3::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("source lock");
@@ -2984,13 +3892,6 @@ version = "0.1.0-alpha"
         );
 
         assert_eq!(
-            verify_bundle(
-                &fixture.input.join("service-source.bundle"),
-                &"a".repeat(40)
-            ),
-            Err(ReleaseArtifactError::InvalidSourceBundle)
-        );
-        assert_eq!(
             write_generated(
                 &scope.path().join("oversized-generated"),
                 &vec![b'x'; MAX_GENERATED_DOCUMENT_BYTES as usize + 1]
@@ -3009,8 +3910,6 @@ version = "0.1.0-alpha"
                 .expect("bounded regular file"),
             b"same"
         );
-        assert!(!contains_bytes(b"bytes", b""));
-
         let directory = root.path().join("directory");
         fs::create_dir(&directory).expect("directory fixture");
         assert_eq!(
@@ -3126,45 +4025,15 @@ version = "0.1.0-alpha"
         let mut failed_stdout = Command::new("sh");
         failed_stdout.args(["-c", "exit 7"]);
         assert_eq!(command_stdout(&mut failed_stdout, 4), Err(()));
-        assert_eq!(
-            git_status(root.path(), ["rev-parse", "--verify", "refs/heads/missing"]),
-            Err(())
-        );
     }
 
     #[test]
     fn release_service_and_workspace_binding_fail_closed() {
         let fixture = ReleaseFixture::new();
-        let current = ServiceSourceLockV2::from_canonical_bytes(
-            &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
-        )
-        .expect("source lock");
-        let versions = current.contract_versions();
-        let mismatched = ServiceSourceLockV2::new(ServiceSourceLockParts {
-            service: "other_service",
-            revision: current.revision(),
-            workspace_catalog_sha256: current.workspace_catalog_sha256(),
-            source_archive_sha256: current.source_archive_sha256(),
-            cargo_lock_sha256: current.cargo_lock_sha256(),
-            nix: NixMaterialParts::Deferred {
-                lib_revision: current.nix_lib_revision().expect("deferred Nix revision"),
-                flake_lock_sha256: current
-                    .flake_lock_sha256()
-                    .expect("deferred flake-lock digest"),
-            },
-            contract_versions: ContractVersions::new(
-                versions.config(),
-                versions.state(),
-                versions.admin(),
-                versions.status(),
-                versions.provider(),
-            ),
-        })
-        .expect("mismatched source lock");
-        write_file(
-            &fixture.service.join(LOCK_FILENAME),
-            mismatched.canonical_bytes(),
-        );
+        let mismatched = fs::read_to_string(fixture.service.join(LOCK_FILENAME))
+            .expect("source lock")
+            .replace("service = \"myc\"", "service = \"rhi\"");
+        write_file(&fixture.service.join(LOCK_FILENAME), mismatched.as_bytes());
         git(&fixture.service, &["add", LOCK_FILENAME]);
         git(
             &fixture.service,
@@ -3287,11 +4156,12 @@ version = "0.1.0-alpha"
         assert_eq!(count, OUTPUT_NAMES.len() - 1);
 
         for name in [
-            "artifact-manifest.v1.json",
+            "artifact-manifest.v2.json",
+            "artifact-scan.v1.json",
             "oci-image.v1.json",
-            "provenance-input.v1.json",
+            "provenance.intoto.jsonl",
             "sbom.cdx.json",
-            "source-bundles.v2.json",
+            "source-archives.v3.json",
         ] {
             let bytes = fs::read(fixture.output_a.join(name)).expect("JSON output");
             assert_eq!(bytes.last(), Some(&b'\n'));
@@ -3299,10 +4169,18 @@ version = "0.1.0-alpha"
             serde_json::from_slice::<serde_json::Value>(&bytes).expect("valid JSON");
         }
         let provenance: serde_json::Value = serde_json::from_slice(
-            &fs::read(fixture.output_a.join("provenance-input.v1.json")).expect("provenance"),
+            &fs::read(fixture.output_a.join("provenance.intoto.jsonl")).expect("provenance"),
         )
         .expect("provenance JSON");
-        assert_eq!(provenance["signing_required"], true);
+        assert_eq!(provenance["_type"], "https://in-toto.io/Statement/v1");
+        assert_eq!(
+            provenance["predicateType"],
+            "https://slsa.dev/provenance/v1"
+        );
+        assert_eq!(
+            provenance["predicate"]["buildDefinition"]["externalParameters"]["candidate_digest"],
+            format!("sha256:{}", "a".repeat(64))
+        );
 
         write_file(
             &fixture.output_a.join("config.example.toml"),
@@ -3319,48 +4197,58 @@ version = "0.1.0-alpha"
     }
 
     #[test]
-    fn absent_nix_material_is_preserved_without_invented_digest_evidence() {
+    fn qualified_nix_material_is_required_and_preserved() {
         let fixture = ReleaseFixture::new();
-        fixture.make_nix_material_absent();
         fixture
             .write(&fixture.output_a)
-            .expect("absent-Nix release");
+            .expect("qualified-Nix release");
 
         let document: serde_json::Value = serde_json::from_slice(
-            &fs::read(fixture.output_a.join("source-bundles.v2.json"))
-                .expect("source bundle document"),
+            &fs::read(fixture.output_a.join("source-archives.v3.json"))
+                .expect("source archive document"),
         )
-        .expect("source bundle JSON");
-        assert_eq!(document["schema"], "radroots.service.source-bundles.v2");
-        assert_eq!(document["contract_version"], 2);
-        assert_eq!(document["nix_material"], "absent");
-        assert!(document.get("nix_lib_revision").is_none());
-        assert!(document.get("flake_lock_sha256").is_none());
-        assert!(!fixture.service.join("flake.nix").exists());
-        assert!(!fixture.service.join("flake.lock").exists());
+        .expect("source archive JSON");
+        assert_eq!(document["schema"], "radroots.service.source-archives.v3");
+        assert_eq!(document["contract_version"], 3);
+        assert!(valid_lower_hex(
+            document["flake_lock_sha256"]
+                .as_str()
+                .expect("flake digest"),
+            64
+        ));
 
-        let lock = ServiceSourceLockV2::from_canonical_bytes(
+        let lock = ServiceSourceLockV3::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("valid source lock");
-        for name in ["flake.nix", "flake.lock", PREDECESSOR_LOCK_FILENAME] {
-            write_file(&fixture.service.join(name), b"unexpected");
+        for name in ["flake.nix", "flake.lock"] {
+            let path = fixture.service.join(name);
+            let original = fs::read(&path).expect("qualified Nix file");
+            fs::remove_file(&path).expect("remove qualified Nix file");
             assert_eq!(
                 validate_source_lock_files(&fixture.service, &lock),
                 Err(ReleaseArtifactError::InvalidSourceLock),
-                "accepted absent-state release input with {name}"
+                "accepted missing qualified-Nix file {name}"
             );
-            fs::remove_file(fixture.service.join(name)).expect("remove unexpected file");
+            write_file(&path, &original);
         }
+        write_file(
+            &fixture.service.join(PREDECESSOR_LOCK_FILENAME),
+            b"unexpected",
+        );
+        assert_eq!(
+            validate_source_lock_files(&fixture.service, &lock),
+            Err(ReleaseArtifactError::InvalidSourceLock)
+        );
     }
 
     #[test]
     fn protected_text_and_invalid_inventory_fail_closed() {
         let fixture = ReleaseFixture::new();
-        write_file(
-            &fixture.input.join("config.example.toml"),
-            b"-----BEGIN PRIVATE KEY-----\n",
-        );
+        let mut secret = b"-----BEGIN PRIVATE KEY-----\n".to_vec();
+        secret.extend_from_slice(&[b'A'; 48]);
+        secret.extend_from_slice(b"\n-----END PRIVATE KEY-----\n");
+        write_file(&fixture.input.join("config.example.toml"), &secret);
         assert_eq!(
             fixture.write(&fixture.output_a),
             Err(ReleaseArtifactError::ProtectedMaterialDetected)
@@ -3377,7 +4265,7 @@ version = "0.1.0-alpha"
     }
 
     #[test]
-    fn source_lock_and_source_bundle_drift_fail_closed() {
+    fn source_lock_and_source_archive_drift_fail_closed() {
         let fixture = ReleaseFixture::new();
         write_file(
             &fixture.service.join("Cargo.lock"),
@@ -3394,9 +4282,24 @@ version = "0.1.0-alpha"
         );
 
         let fixture = ReleaseFixture::new();
-        let mut bundle = fs::read(fixture.input.join("lib-source.bundle")).expect("bundle");
-        bundle[0] ^= 0xff;
-        write_file(&fixture.input.join("lib-source.bundle"), &bundle);
+        let current = ServiceSourceLockV3::from_canonical_bytes(
+            &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
+        )
+        .expect("source lock");
+        let drifted = String::from_utf8(current.canonical_bytes().to_vec())
+            .expect("UTF-8 lock")
+            .replace(current.source_archive_sha256(), &"0".repeat(64));
+        write_file(&fixture.service.join(LOCK_FILENAME), drifted.as_bytes());
+        git(&fixture.service, &["add", LOCK_FILENAME]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "drift source archive digest"],
+        );
+        create_oci_fixture(
+            &fixture.input.join("oci-image.tar.gz"),
+            &git_output(&fixture.service, &["rev-parse", "HEAD"]),
+            current.revision(),
+        );
         assert_eq!(
             fixture.write(&fixture.output_a),
             Err(ReleaseArtifactError::InvalidSourceBundle)
@@ -3424,25 +4327,42 @@ version = "0.1.0-alpha"
             Err(ReleaseArtifactError::InvalidOutputRoot)
         );
         assert_eq!(
-            run_inner(
-                CommandMode::Write,
-                &fixture.service,
-                &fixture.input,
-                &fixture.output_a,
-                "x86_64-apple-darwin",
-                1_700_000_000,
-            ),
+            run_inner(Arguments {
+                mode: CommandMode::Write,
+                service_root: &fixture.service,
+                lib_root: &fixture.lib,
+                input_root: &fixture.input,
+                output_root: &fixture.output_a,
+                target: "x86_64-apple-darwin",
+                source_date_epoch: 1_700_000_000,
+                candidate_digest: &"a".repeat(64),
+            }),
             Err(ReleaseArtifactError::InvalidServiceMetadata)
         );
         assert_eq!(
-            run_inner(
-                CommandMode::Write,
-                &fixture.service,
-                &fixture.input,
-                &fixture.output_a,
-                "x86_64-unknown-linux-gnu",
-                0,
-            ),
+            run_inner(Arguments {
+                mode: CommandMode::Write,
+                service_root: &fixture.service,
+                lib_root: &fixture.lib,
+                input_root: &fixture.input,
+                output_root: &fixture.output_a,
+                target: "x86_64-unknown-linux-gnu",
+                source_date_epoch: 0,
+                candidate_digest: &"a".repeat(64),
+            }),
+            Err(ReleaseArtifactError::InvalidServiceMetadata)
+        );
+        assert_eq!(
+            run_inner(Arguments {
+                mode: CommandMode::Write,
+                service_root: &fixture.service,
+                lib_root: &fixture.lib,
+                input_root: &fixture.input,
+                output_root: &fixture.output_a,
+                target: native_fixture_target(),
+                source_date_epoch: 1_700_000_000,
+                candidate_digest: &"A".repeat(64),
+            }),
             Err(ReleaseArtifactError::InvalidServiceMetadata)
         );
     }
@@ -3452,9 +4372,186 @@ version = "0.1.0-alpha"
         let mut scanner = SecretScanner::default();
         scanner.scan(b"prefix -----BEGIN OPENSSH").expect("prefix");
         assert_eq!(
-            scanner.scan(b" PRIVATE KEY----- suffix"),
+            scanner.scan(
+                b" PRIVATE KEY-----\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END OPENSSH PRIVATE KEY----- suffix"
+            ),
             Err(ReleaseArtifactError::ProtectedMaterialDetected)
         );
+    }
+
+    #[test]
+    fn schema_reconciliation_attribution_and_subjects_fail_closed() {
+        let (mut sbom, _, _) =
+            build_supply_chain_documents(&sample_metadata(), sample_cargo_metadata())
+                .expect("supply-chain documents");
+        let artifacts = vec![ArtifactRecord {
+            path: "binary.tar.gz".to_owned(),
+            byte_length: 42,
+            sha256: "a".repeat(64),
+        }];
+        reconcile_sbom_artifacts(&mut sbom, &artifacts);
+        validate_cyclonedx_profile(&sbom, &artifacts).expect("CycloneDX profile");
+        sbom.spec_version = "1.5";
+        assert_eq!(
+            validate_cyclonedx_profile(&sbom, &artifacts),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+        sbom.spec_version = "1.6";
+        sbom.components.pop();
+        assert_eq!(
+            validate_cyclonedx_profile(&sbom, &artifacts),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+
+        let mut cargo = sample_cargo_metadata();
+        cargo.packages[1].license_texts[0].sha256 = "b".repeat(64);
+        assert!(matches!(
+            build_supply_chain_documents(&sample_metadata(), cargo),
+            Err(ReleaseArtifactError::InvalidPackageInventory)
+        ));
+
+        let mut provenance = build_provenance(
+            ProvenanceInput {
+                candidate_digest: &"a".repeat(64),
+                service: "myc",
+                target: native_fixture_target(),
+                source_date_epoch: 1_700_000_000,
+                service_repository: "https://github.com/radrootslabs/mycelium",
+                service_revision: &"1".repeat(40),
+                lib_revision: &"2".repeat(40),
+                source_lock_sha256: &"3".repeat(64),
+                manifest_sha256: &"4".repeat(64),
+            },
+            &artifacts,
+        );
+        validate_provenance_subjects(&provenance, &"a".repeat(64), &artifacts)
+            .expect("exact provenance subjects");
+        provenance.subject.clear();
+        assert_eq!(
+            validate_provenance_subjects(&provenance, &"a".repeat(64), &artifacts),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+
+        let scan_evidence = FileEvidence {
+            byte_length: 7,
+            sha256: "5".repeat(64),
+        };
+        let scan = ScanDocument {
+            schema: "radroots.service.artifact-scan.v1",
+            contract_version: 1,
+            candidate_digest: "a".repeat(64),
+            state: "no_protected_material_detected",
+            ruleset_sha256: "6".repeat(64),
+            scanned_artifacts: artifacts.clone(),
+            nested_members_scanned: 1,
+            expanded_bytes_scanned: 42,
+        };
+        let mut manifest = ArtifactManifestDocument {
+            schema: "radroots.service.release-artifacts.v2",
+            contract_version: 2,
+            candidate_digest: "a".repeat(64),
+            service: "myc".to_owned(),
+            version: "0.1.0-alpha".to_owned(),
+            target: native_fixture_target().to_owned(),
+            source_date_epoch: 1_700_000_000,
+            service_revision: "1".repeat(40),
+            lib_revision: "2".repeat(40),
+            rust_version: "1.97.1",
+            host_feature_profile: "service-host",
+            contract_versions: ContractVersionsDocument {
+                config: 1,
+                state: 1,
+                admin: 1,
+                status: 1,
+                provider: 1,
+            },
+            confidentiality: ConfidentialityDocument {
+                state: scan.state,
+                derived_from: artifact_record("artifact-scan.v1.json", &scan_evidence),
+                protected_material_included: false,
+            },
+            artifacts: artifacts.clone(),
+        };
+        validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &artifacts)
+            .expect("derived confidentiality");
+        manifest.confidentiality.state = "invented_clean_state";
+        assert_eq!(
+            validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &artifacts),
+            Err(ReleaseArtifactError::GenerationFailure)
+        );
+    }
+
+    #[test]
+    fn secret_path_and_history_archive_vectors_fail_closed() {
+        let root = TempDir::new().expect("archive vector root");
+        let mut token = b"ghp_".to_vec();
+        token.extend(std::iter::repeat_n(b'A', 36));
+
+        let source = root.path().join("source.tar");
+        write_tar_fixture(&source, "src/value.bin", &token, false);
+        assert_eq!(
+            scan_tar_members(&source, false),
+            Err(ReleaseArtifactError::ProtectedMaterialDetected)
+        );
+
+        let sensitive = root.path().join("sensitive.tar");
+        write_tar_fixture(&sensitive, ".git/config", b"clean", false);
+        assert_eq!(
+            scan_tar_members(&sensitive, false),
+            Err(ReleaseArtifactError::ProtectedMaterialDetected)
+        );
+
+        let binary = root.path().join("binary.tar.gz");
+        write_tar_fixture(&binary, "bin/service", &token, true);
+        assert_eq!(
+            scan_tar_gzip_members(&binary),
+            Err(ReleaseArtifactError::ProtectedMaterialDetected)
+        );
+
+        let layer = root.path().join("layer.tar");
+        write_tar_fixture(&layer, "nix/store/service", &token, false);
+        assert_eq!(
+            scan_tar_members(&layer, true),
+            Err(ReleaseArtifactError::ProtectedMaterialDetected)
+        );
+
+        let bundle = root.path().join("history.bundle");
+        write_file(&bundle, b"not an exact-tree archive");
+        assert_eq!(
+            scan_tar_members(&bundle, false),
+            Err(ReleaseArtifactError::InvalidInputArtifact)
+        );
+    }
+
+    fn write_tar_fixture(path: &Path, member: &str, bytes: &[u8], gzip: bool) {
+        let mut header = TarHeader::new_gnu();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_uid(0);
+        header.set_gid(0);
+        header.set_mtime(1);
+        header.set_cksum();
+        if gzip {
+            let output = fs::File::create(path).expect("gzip tar fixture");
+            let encoder = GzBuilder::new()
+                .mtime(1)
+                .operating_system(255)
+                .write(output, Compression::best());
+            let mut archive = TarBuilder::new(encoder);
+            archive
+                .append_data(&mut header, member, bytes)
+                .expect("gzip tar member");
+            let encoder = archive.into_inner().expect("gzip tar archive");
+            encoder.finish().expect("gzip tar finish");
+        } else {
+            let output = fs::File::create(path).expect("tar fixture");
+            let mut archive = TarBuilder::new(output);
+            archive
+                .append_data(&mut header, member, bytes)
+                .expect("tar member");
+            archive.finish().expect("tar finish");
+        }
     }
 
     #[test]

@@ -26,6 +26,7 @@ mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod dto_roots;
+mod exact_tree_archive;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod fuzz_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -43,6 +44,7 @@ mod rshr_202_step_298_gate;
 mod rshr_202_step_298_platform;
 mod rshr_202_step_299_gate;
 mod rshr_202_step_304_gate;
+mod rshr_202_step_305_gate;
 mod safe_artifact_io;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod safety_qualification;
@@ -52,6 +54,7 @@ mod service_build_qualification;
 mod service_release_artifacts;
 mod service_source_lock;
 mod service_source_lock_command;
+mod service_source_lock_v3;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -186,6 +189,23 @@ enum XtaskCommand {
         #[arg(long)]
         execution_request_sha256: String,
     },
+    #[command(name = "rshr-step-305-gate", hide = true)]
+    RshrStep305Gate {
+        #[arg(long)]
+        step: u16,
+        #[arg(long)]
+        check_id: String,
+        #[arg(long)]
+        source_revision: String,
+        #[arg(long)]
+        source_tree: String,
+        #[arg(long)]
+        candidate_digest: String,
+        #[arg(long)]
+        platform: String,
+        #[arg(long)]
+        execution_request_sha256: String,
+    },
     SourceLock {
         #[arg(long)]
         consumer_root: PathBuf,
@@ -204,6 +224,8 @@ enum XtaskCommand {
         #[arg(long)]
         service_root: PathBuf,
         #[arg(long)]
+        lib_root: PathBuf,
+        #[arg(long)]
         input_root: PathBuf,
         #[arg(long)]
         output_root: PathBuf,
@@ -211,6 +233,8 @@ enum XtaskCommand {
         target: String,
         #[arg(long)]
         source_date_epoch: u32,
+        #[arg(long)]
+        candidate_digest: String,
     },
     Source {
         #[command(subcommand)]
@@ -417,7 +441,7 @@ fn usage() {
         "  cargo xtask service-source-lock --mode <check|write> --service-root <absolute-directory> --source-archive <absolute-bundle>"
     );
     eprintln!(
-        "  cargo xtask service-release-artifacts --mode <check|write> --service-root <absolute-directory> --input-root <absolute-directory> --output-root <absolute-directory> --target <rust-target> --source-date-epoch <seconds>"
+        "  cargo xtask service-release-artifacts --mode <check|write> --service-root <absolute-directory> --lib-root <absolute-directory> --input-root <absolute-directory> --output-root <absolute-directory> --target <rust-target> --source-date-epoch <seconds> --candidate-digest <sha256>"
     );
     eprintln!(
         "  cargo xtask source materialize --consumer-root <absolute-directory> --cache-root <absolute-directory> --mode <prefetch|offline>"
@@ -682,6 +706,23 @@ fn run(args: &[String]) -> Result<(), String> {
             platform,
             execution_request_sha256,
         }),
+        XtaskCommand::RshrStep305Gate {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        } => rshr_202_step_305_gate::run(rshr_202_step_305_gate::Arguments {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        }),
         XtaskCommand::SourceLock { consumer_root } => {
             build_control::validate_consumer(&consumer_root).map(|_| ())
         }
@@ -700,21 +741,25 @@ fn run(args: &[String]) -> Result<(), String> {
         XtaskCommand::ServiceReleaseArtifacts {
             mode,
             service_root,
+            lib_root,
             input_root,
             output_root,
             target,
             source_date_epoch,
-        } => service_release_artifacts::run(
-            match mode {
+            candidate_digest,
+        } => service_release_artifacts::run(service_release_artifacts::Arguments {
+            mode: match mode {
                 ServiceReleaseArtifactMode::Check => service_release_artifacts::CommandMode::Check,
                 ServiceReleaseArtifactMode::Write => service_release_artifacts::CommandMode::Write,
             },
-            &service_root,
-            &input_root,
-            &output_root,
-            &target,
+            service_root: &service_root,
+            lib_root: &lib_root,
+            input_root: &input_root,
+            output_root: &output_root,
+            target: &target,
             source_date_epoch,
-        ),
+            candidate_digest: &candidate_digest,
+        }),
         XtaskCommand::Source { command } => match command {
             SourceCommand::Materialize {
                 consumer_root,
@@ -900,6 +945,8 @@ mod tests {
                 "write",
                 "--service-root",
                 "/tmp/service",
+                "--lib-root",
+                "/tmp/lib",
                 "--input-root",
                 "/tmp/input",
                 "--output-root",
@@ -925,6 +972,8 @@ mod tests {
                 "x86_64-unknown-linux-gnu",
                 "--source-date-epoch",
                 "1",
+                "--candidate-digest",
+                "1111111111111111111111111111111111111111111111111111111111111111",
             ])
             .is_ok()
         );

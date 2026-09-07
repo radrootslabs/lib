@@ -581,14 +581,6 @@ impl ServiceSourceLockV2 {
         &self.raw.revision
     }
 
-    pub(crate) fn workspace_catalog_sha256(&self) -> &str {
-        &self.raw.workspace_catalog_sha256
-    }
-
-    pub(crate) fn source_archive_sha256(&self) -> &str {
-        &self.raw.source_archive_sha256
-    }
-
     pub(crate) fn cargo_lock_sha256(&self) -> &str {
         &self.raw.cargo_lock_sha256
     }
