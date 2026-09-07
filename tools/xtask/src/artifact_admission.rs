@@ -164,9 +164,17 @@ fn admit_binary_inner(
     }
     let bytes = safe_artifact_io::read_regular_path(path, MAX_BINARY_PARSE_BYTES)
         .map_err(|_| AdmissionError::InvalidBinary)?;
+    admit_binary_bytes(&bytes, target)?;
+    if runtime_smoke && target_matches_host(target) {
+        runtime_help_smoke(path)?;
+    }
+    Ok(())
+}
+
+fn admit_binary_bytes(bytes: &[u8], target: &str) -> Result<(), AdmissionError> {
     let libraries = match (
         target,
-        Object::parse(&bytes).map_err(|_| AdmissionError::InvalidBinary)?,
+        Object::parse(bytes).map_err(|_| AdmissionError::InvalidBinary)?,
     ) {
         (LINUX_TARGET, Object::Elf(binary)) => {
             if binary.header.e_machine != EM_X86_64
@@ -209,11 +217,7 @@ fn admit_binary_inner(
         }
         _ => return Err(AdmissionError::InvalidBinary),
     };
-    validate_dynamic_libraries(&libraries)?;
-    if runtime_smoke && target_matches_host(target) {
-        runtime_help_smoke(path)?;
-    }
-    Ok(())
+    validate_dynamic_libraries(&libraries)
 }
 
 fn validate_dynamic_libraries(libraries: &[String]) -> Result<(), AdmissionError> {
@@ -842,7 +846,16 @@ mod tests {
             return;
         };
         let binary = std::env::current_exe().expect("test binary");
-        admit_binary_inner(&binary, target, false).expect("native admission");
+        let bytes = fs::read(&binary).expect("test binary bytes");
+        admit_binary_bytes(&bytes, target).expect("native binary structure");
+        if bytes.len() <= MAX_BINARY_PARSE_BYTES as usize {
+            admit_binary_inner(&binary, target, false).expect("bounded native admission");
+        } else {
+            assert_eq!(
+                admit_binary_inner(&binary, target, false),
+                Err(AdmissionError::InvalidBinary)
+            );
+        }
         let wrong = if target == MACOS_TARGET {
             LINUX_TARGET
         } else {
