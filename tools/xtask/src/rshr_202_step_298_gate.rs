@@ -19,7 +19,7 @@ const EXACT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "contracts/release/lib-artifact-contract.v3.json",
-        "bc352a132dd4c0e6f1d2ae7449998833efe1fdda2ab851e512bc9241c49edbf0",
+        "11d8fa7bc96191919a3d20189061aadcee105eefe546290032c2f2bab91b2f77",
     ),
     (
         "contracts/architecture/decisions/services_hardening_build_qualification.v3.json",
@@ -43,7 +43,7 @@ const EXACT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "tools/xtask/src/service_build_qualification.rs",
-        "20dbae0f446bdd95e99f84d1c27ef4dec422eae8035ead5876adba047db20a9f",
+        "4a440a42c4387421fcf9d6c2d1fa86563822753fc1911f9552f098f38a1cc166",
     ),
     (
         "tools/xtask/src/target_qualification.rs",

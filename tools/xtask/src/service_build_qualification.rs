@@ -15,7 +15,7 @@ const MAX_FIXTURE_FILE_BYTES: usize = 1_048_576;
 const SOURCE_LOCK_V3_SHA256: &str =
     "3bc32c8ca2cecb06c8f8239ab1fe1fcfba93fe3ef0d60e9b078390347d08f817";
 const ARTIFACT_CONTRACT_V3_SHA256: &str =
-    "bc352a132dd4c0e6f1d2ae7449998833efe1fdda2ab851e512bc9241c49edbf0";
+    "11d8fa7bc96191919a3d20189061aadcee105eefe546290032c2f2bab91b2f77";
 const NIX_SYSTEMS_RELATIVE: &str = "build/nix/service/systems.nix";
 const NIX_SYSTEMS_BYTES: &[u8] = b"[\n  \"aarch64-darwin\"\n  \"x86_64-linux\"\n]\n";
 
