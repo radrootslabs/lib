@@ -45,6 +45,7 @@ mod rshr_202_step_298_platform;
 mod rshr_202_step_299_gate;
 mod rshr_202_step_304_gate;
 mod rshr_202_step_305_gate;
+mod rshr_202_step_306_gate;
 mod safe_artifact_io;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod safety_qualification;
@@ -192,6 +193,23 @@ enum XtaskCommand {
     },
     #[command(name = "rshr-step-305-gate", hide = true)]
     RshrStep305Gate {
+        #[arg(long)]
+        step: u16,
+        #[arg(long)]
+        check_id: String,
+        #[arg(long)]
+        source_revision: String,
+        #[arg(long)]
+        source_tree: String,
+        #[arg(long)]
+        candidate_digest: String,
+        #[arg(long)]
+        platform: String,
+        #[arg(long)]
+        execution_request_sha256: String,
+    },
+    #[command(name = "rshr-step-306-gate", hide = true)]
+    RshrStep306Gate {
         #[arg(long)]
         step: u16,
         #[arg(long)]
@@ -737,6 +755,23 @@ fn run(args: &[String]) -> Result<(), String> {
             platform,
             execution_request_sha256,
         } => rshr_202_step_305_gate::run(rshr_202_step_305_gate::Arguments {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        }),
+        XtaskCommand::RshrStep306Gate {
+            step,
+            check_id,
+            source_revision,
+            source_tree,
+            candidate_digest,
+            platform,
+            execution_request_sha256,
+        } => rshr_202_step_306_gate::run(rshr_202_step_306_gate::Arguments {
             step,
             check_id,
             source_revision,
