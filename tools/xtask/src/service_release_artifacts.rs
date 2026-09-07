@@ -2056,8 +2056,7 @@ version = "0.1.0-alpha"
             fs::remove_file(self.input.join("service-source.bundle"))
                 .expect("remove prior service bundle");
             create_bundle(&self.service, &self.input.join("service-source.bundle"));
-            fs::remove_file(self.input.join("oci-image.tar.gz"))
-                .expect("remove prior OCI fixture");
+            fs::remove_file(self.input.join("oci-image.tar.gz")).expect("remove prior OCI fixture");
             create_oci_fixture(
                 &self.input.join("oci-image.tar.gz"),
                 &git_output(&self.service, &["rev-parse", "HEAD"]),
