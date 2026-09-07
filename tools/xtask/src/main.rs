@@ -52,6 +52,7 @@ mod safety_qualification;
 mod sdk_generation;
 mod service_build_qualification;
 mod service_release_artifacts;
+mod service_repro_install;
 mod service_source_lock;
 mod service_source_lock_command;
 mod service_source_lock_v3;
@@ -235,6 +236,22 @@ enum XtaskCommand {
         source_date_epoch: u32,
         #[arg(long)]
         candidate_digest: String,
+    },
+    ServiceReproInstall {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        source_root: PathBuf,
+        #[arg(long)]
+        root_preimage_root: PathBuf,
+        #[arg(long)]
+        predecessor_artifact_root: PathBuf,
+        #[arg(long)]
+        git_executable: PathBuf,
+        #[arg(long)]
+        adapter_executable: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
     },
     Source {
         #[command(subcommand)]
@@ -444,6 +461,9 @@ fn usage() {
         "  cargo xtask service-release-artifacts --mode <check|write> --service-root <absolute-directory> --lib-root <absolute-directory> --input-root <absolute-directory> --output-root <absolute-directory> --target <rust-target> --source-date-epoch <seconds> --candidate-digest <sha256>"
     );
     eprintln!(
+        "  cargo xtask service-repro-install --plan <absolute-file> --source-root <absolute-directory> --root-preimage-root <absolute-directory> --predecessor-artifact-root <absolute-directory> --git-executable <absolute-file> --adapter-executable <absolute-file> --output <absolute-file>"
+    );
+    eprintln!(
         "  cargo xtask source materialize --consumer-root <absolute-directory> --cache-root <absolute-directory> --mode <prefetch|offline>"
     );
     eprintln!("  cargo xtask source archive-verify --archive <bundle> --sha256 <digest>");
@@ -493,6 +513,7 @@ fn validate_contract() -> Result<(), String> {
     service_source_lock::validate_contract(&root)?;
     service_build_qualification::validate_contract(&root)?;
     service_release_artifacts::validate_contract(&root)?;
+    service_repro_install::validate_contract(&root)?;
     dto_roots::check(&root)?;
     generate::protocol::check(&root)?;
     contract::load_contract_bundle(&root)
@@ -519,6 +540,7 @@ fn release_preflight_at(root: &Path) -> Result<(), String> {
             }
             LaneId::ServiceReleaseArtifactsContract => {
                 service_release_artifacts::validate_contract(root)
+                    .and_then(|()| service_repro_install::validate_contract(root))
             }
             LaneId::PublicNativeGroup => build_control::group_plan(
                 root,
@@ -760,6 +782,26 @@ fn run(args: &[String]) -> Result<(), String> {
             source_date_epoch,
             candidate_digest: &candidate_digest,
         }),
+        XtaskCommand::ServiceReproInstall {
+            plan,
+            source_root,
+            root_preimage_root,
+            predecessor_artifact_root,
+            git_executable,
+            adapter_executable,
+            output,
+        } => service_repro_install::run(
+            &workspace_root(),
+            service_repro_install::Arguments {
+                plan: &plan,
+                source_root: &source_root,
+                root_preimage_root: &root_preimage_root,
+                predecessor_artifact_root: &predecessor_artifact_root,
+                git_executable: &git_executable,
+                adapter_executable: &adapter_executable,
+                output: &output,
+            },
+        ),
         XtaskCommand::Source { command } => match command {
             SourceCommand::Materialize {
                 consumer_root,
@@ -964,6 +1006,8 @@ mod tests {
                 "check",
                 "--service-root",
                 "/tmp/service",
+                "--lib-root",
+                "/tmp/lib",
                 "--input-root",
                 "/tmp/input",
                 "--output-root",
@@ -974,6 +1018,27 @@ mod tests {
                 "1",
                 "--candidate-digest",
                 "1111111111111111111111111111111111111111111111111111111111111111",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "xtask",
+                "service-repro-install",
+                "--plan",
+                "/tmp/plan.json",
+                "--source-root",
+                "/tmp/source",
+                "--root-preimage-root",
+                "/tmp/root",
+                "--predecessor-artifact-root",
+                "/tmp/predecessor",
+                "--git-executable",
+                "/usr/bin/git",
+                "--adapter-executable",
+                "/tmp/adapter",
+                "--output",
+                "/tmp/result.json",
             ])
             .is_ok()
         );
