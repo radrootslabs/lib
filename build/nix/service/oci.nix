@@ -19,6 +19,12 @@ assert lib.assertMsg (
 ) "serviceName must be a lowercase snake-case identifier";
 assert lib.assertMsg (lib.isDerivation package) "package must be a derivation";
 assert lib.assertMsg (
+  (package.passthru.radrootsServicePackage.schema or null) == "radroots.service-package.v1"
+  && (package.passthru.radrootsServicePackage.servicePackage or null) == binaryName
+  && (package.passthru.radrootsServicePackage.binaryName or null) == binaryName
+  && (package.passthru.radrootsServicePackage.serviceLicense or null) == "AGPL-3.0-or-later"
+) "package must carry the governed Cargo-derived service identity and license";
+assert lib.assertMsg (
   builtins.isString binaryName
   && builtins.stringLength binaryName <= 128
   && builtins.match "^[a-z][a-z0-9_-]*$" binaryName != null
@@ -102,7 +108,7 @@ let
     "dev.radroots.mount.state.mode" = "read-write";
     "dev.radroots.rootfs" = "read-only-compatible";
     "org.opencontainers.image.description" = "Hardened ${serviceName} service image";
-    "org.opencontainers.image.licenses" = "MIT OR Apache-2.0";
+    "org.opencontainers.image.licenses" = package.passthru.radrootsServicePackage.serviceLicense;
     "org.opencontainers.image.revision" = buildInfo.serviceCommit;
     "org.opencontainers.image.title" = serviceName;
     "org.opencontainers.image.version" = buildInfo.serviceVersion;

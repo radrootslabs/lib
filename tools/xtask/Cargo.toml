@@ -15,6 +15,7 @@ dto_bindgen_core = { workspace = true }
 dto_bindgen_backend_ts = { workspace = true }
 fs2 = { workspace = true }
 flate2 = { workspace = true }
+goblin = { workspace = true }
 hex = { workspace = true }
 jsonschema = { workspace = true }
 prettyplease = { workspace = true }

@@ -13,14 +13,15 @@ use sha2::{Digest as _, Sha256};
 use tar::{Builder as TarBuilder, Header as TarHeader};
 use tempfile::TempDir;
 
-use crate::safe_artifact_io::{self, TarGzipLimits, TraversalLimits};
+use crate::safe_artifact_io::{TarGzipLimits, TraversalLimits};
 use crate::service_source_lock::{
     LIB_REPOSITORY, LOCK_FILENAME, NixMaterialState, PREDECESSOR_LOCK_FILENAME,
     ServiceSourceLockV2, validate_deferred_nix_material,
 };
+use crate::{artifact_admission, safe_artifact_io};
 
 const CONTRACT_RELATIVE: &str =
-    "contracts/architecture/decisions/services_hardening_release_artifacts.v2.json";
+    "contracts/architecture/decisions/services_hardening_release_artifacts.v3.json";
 const INPUT_NAMES: [&str; 8] = [
     "config.example.toml",
     "config.schema.json",
@@ -51,7 +52,7 @@ const OUTPUT_NAMES: [&str; 18] = [
     "source-bundles.v2.json",
     "systemd.service",
 ];
-const SUPPORTED_TARGETS: [&str; 2] = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"];
+const SUPPORTED_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"];
 const SECRET_PATTERNS: [&[u8]; 7] = [
     b"-----BEGIN PRIVATE KEY-----",
     b"-----BEGIN RSA PRIVATE KEY-----",
@@ -77,8 +78,6 @@ const MAX_PACKAGES: usize = 8_192;
 const MAX_WORKSPACE_PACKAGES: usize = 64;
 const MAX_TEXT_FIELD_BYTES: usize = 512;
 const MAX_ARCHIVE_EXPANDED_BYTES: u64 = 17_179_869_184;
-const MAX_ARCHIVE_MEMBERS: u64 = 65_536;
-const MAX_ARCHIVE_DEPTH: usize = 64;
 const MAX_ARCHIVE_PATH_BYTES: usize = 4_096;
 const MAX_RELEASE_TREE_BYTES: u64 = 68_719_476_736;
 const FILE_MODE: u32 = 0o644;
@@ -156,6 +155,8 @@ struct ReleaseMetadata {
     service_package: String,
     binary_name: String,
     version: String,
+    #[serde(skip)]
+    license: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -344,7 +345,11 @@ struct ReleaseDecision {
     required_arguments: Vec<String>,
     service_metadata_path: String,
     service_metadata_fields: Vec<String>,
+    service_license_path: String,
+    artifact_admission_contract: String,
     supported_targets: Vec<String>,
+    binary_admission: String,
+    oci_admission: String,
     input_inventory: Vec<String>,
     excluded_parent_owned_inputs: Vec<String>,
     service_root_inventory: Vec<String>,
@@ -475,6 +480,7 @@ fn run_inner(
         "service-binary",
         &staging.path().join("binary.tar.gz"),
         &metadata.binary_name,
+        target,
         source_date_epoch,
     )?;
     let oci = copy_snapshot_file(
@@ -483,7 +489,27 @@ fn run_inner(
         &staging.path().join("oci-image.tar.gz"),
         MAX_OCI_BYTES,
     )?;
-    admit_oci_archive(&staging.path().join("oci-image.tar.gz"))?;
+    let versions = source_lock.contract_versions();
+    artifact_admission::admit_oci(
+        &staging.path().join("oci-image.tar.gz"),
+        staging.path(),
+        &artifact_admission::OciExpectation {
+            service: &metadata.service,
+            binary_name: &metadata.binary_name,
+            version: &metadata.version,
+            service_revision: &initial_head,
+            lib_revision: source_lock.revision(),
+            license: &metadata.license,
+            contract_versions: artifact_admission::ContractVersions {
+                admin: versions.admin(),
+                config: versions.config(),
+                provider: versions.provider(),
+                state: versions.state(),
+                status: versions.status(),
+            },
+        },
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
     let service_source = copy_snapshot_file(
         &input_snapshot,
         "service-source.bundle",
@@ -639,13 +665,22 @@ fn read_release_metadata(root: &Path) -> Result<ReleaseMetadata, ReleaseArtifact
         .and_then(|value| value.get("service_release"))
         .cloned()
         .ok_or(ReleaseArtifactError::InvalidServiceMetadata)?;
-    let metadata = release
+    let mut metadata = release
         .try_into::<ReleaseMetadata>()
         .map_err(|_| ReleaseArtifactError::InvalidServiceMetadata)?;
+    metadata.license = value
+        .get("workspace")
+        .and_then(|workspace| workspace.get("package"))
+        .or_else(|| value.get("package"))
+        .and_then(|package| package.get("license"))
+        .and_then(toml::Value::as_str)
+        .ok_or(ReleaseArtifactError::InvalidServiceMetadata)?
+        .to_owned();
     if !valid_snake_identifier(&metadata.service)
         || !valid_kebab_identifier(&metadata.service_package)
         || !valid_kebab_identifier(&metadata.binary_name)
         || metadata.version.len() > 128
+        || metadata.license != "AGPL-3.0-or-later"
         || !matches!(
             semver::Version::parse(&metadata.version),
             Ok(version) if version.to_string() == metadata.version
@@ -1091,6 +1126,7 @@ fn create_binary_archive_from_snapshot(
     source_name: &str,
     output: &Path,
     binary_name: &str,
+    target: &str,
     source_date_epoch: u32,
 ) -> Result<FileEvidence, ReleaseArtifactError> {
     let source = snapshot_file(snapshot, source_name)?;
@@ -1101,6 +1137,8 @@ fn create_binary_archive_from_snapshot(
     if source_evidence.byte_length == 0 {
         return Err(ReleaseArtifactError::InvalidInputArtifact);
     }
+    artifact_admission::admit_binary(&stable_source, target, true)
+        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
     write_binary_archive(
         &stable_source,
         output,
@@ -1217,21 +1255,6 @@ fn admit_binary_archive(path: &Path) -> Result<(), ReleaseArtifactError> {
         max_member_bytes: MAX_BINARY_BYTES,
         max_payload_bytes: MAX_BINARY_BYTES,
         max_depth: 4,
-        max_path_bytes: MAX_ARCHIVE_PATH_BYTES,
-    };
-    safe_artifact_io::admit_tar_gzip_path(path, limits)
-        .map(|_| ())
-        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)
-}
-
-fn admit_oci_archive(path: &Path) -> Result<(), ReleaseArtifactError> {
-    let limits = TarGzipLimits {
-        max_compressed_bytes: MAX_OCI_BYTES,
-        max_expanded_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
-        max_members: MAX_ARCHIVE_MEMBERS,
-        max_member_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
-        max_payload_bytes: MAX_ARCHIVE_EXPANDED_BYTES,
-        max_depth: MAX_ARCHIVE_DEPTH,
         max_path_bytes: MAX_ARCHIVE_PATH_BYTES,
     };
     safe_artifact_io::admit_tar_gzip_path(path, limits)
@@ -1777,12 +1800,12 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         ReleaseArtifactError::StaleOutput,
         ReleaseArtifactError::GenerationFailure,
     ];
-    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v2"
-        || decision.contract_version != 2
+    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v3"
+        || decision.contract_version != 3
         || decision.decision_state != "active"
         || decision.predecessor.schema
-            != "radroots.services-hardening.release-artifacts-decisions.v1"
-        || decision.predecessor.filename != "services_hardening_release_artifacts.v1.json"
+            != "radroots.services-hardening.release-artifacts-decisions.v2"
+        || decision.predecessor.filename != "services_hardening_release_artifacts.v2.json"
         || decision.predecessor.transition != "forward_only_replace"
         || decision.command != "cargo xtask service-release-artifacts"
         || decision.modes != ["check", "write"]
@@ -1799,7 +1822,15 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
             != "Cargo.toml.workspace.metadata.radroots.service_release"
         || decision.service_metadata_fields
             != ["service", "service_package", "binary_name", "version"]
+        || decision.service_license_path
+            != "Cargo.toml.workspace.package.license_or_package.license"
+        || decision.artifact_admission_contract
+            != "contracts/architecture/decisions/services_hardening_artifact_admission.v1.json"
         || decision.supported_targets != SUPPORTED_TARGETS
+        || decision.binary_admission
+            != "exact_format_architecture_linkage_structural_and_native_bounded_help_smoke"
+        || decision.oci_admission
+            != "safe_materialization_exact_manifest_config_AGPL_labels_layers_and_entrypoint"
         || decision.input_inventory != INPUT_NAMES
         || decision.excluded_parent_owned_inputs != ["backup_restore_runbook", "operator_runbook"]
         || decision.service_root_inventory != ["LICENSE-APACHE", "LICENSE-MIT", LOCK_FILENAME]
@@ -1878,6 +1909,7 @@ mod tests {
 name = "fixture-service"
 version = "0.1.0-alpha"
 edition = "2024"
+license = "AGPL-3.0-or-later"
 
 [[bin]]
 name = "fixture-service"
@@ -1941,6 +1973,7 @@ version = "0.1.0-alpha"
             .expect("source lock");
             write_file(&service.join(LOCK_FILENAME), source_lock.canonical_bytes());
             initialize_git(&service, "https://github.com/radrootslabs/fixture-service");
+            let service_revision = git_output(&service, &["rev-parse", "HEAD"]);
             create_bundle(&service, &input.join("service-source.bundle"));
 
             for (name, bytes) in [
@@ -1954,11 +1987,16 @@ version = "0.1.0-alpha"
             ] {
                 write_file(&input.join(name), bytes);
             }
-            write_file(
-                &input.join("service-binary"),
-                b"fixture service executable\0\xff",
+            fs::copy(
+                std::env::current_exe().expect("current test executable"),
+                input.join("service-binary"),
+            )
+            .expect("copy fixture service binary");
+            create_oci_fixture(
+                &input.join("oci-image.tar.gz"),
+                &service_revision,
+                &lib_revision,
             );
-            create_oci_fixture(&input.join("oci-image.tar.gz"));
 
             Self {
                 output_a: canonical_root.join("release-a"),
@@ -1975,7 +2013,7 @@ version = "0.1.0-alpha"
                 &self.service,
                 &self.input,
                 output,
-                "x86_64-unknown-linux-gnu",
+                native_fixture_target(),
                 1_700_000_000,
             )
         }
@@ -1986,7 +2024,7 @@ version = "0.1.0-alpha"
                 &self.service,
                 &self.input,
                 output,
-                "x86_64-unknown-linux-gnu",
+                native_fixture_target(),
                 1_700_000_000,
             )
         }
@@ -2018,6 +2056,13 @@ version = "0.1.0-alpha"
             fs::remove_file(self.input.join("service-source.bundle"))
                 .expect("remove prior service bundle");
             create_bundle(&self.service, &self.input.join("service-source.bundle"));
+            fs::remove_file(self.input.join("oci-image.tar.gz"))
+                .expect("remove prior OCI fixture");
+            create_oci_fixture(
+                &self.input.join("oci-image.tar.gz"),
+                &git_output(&self.service, &["rev-parse", "HEAD"]),
+                current.revision(),
+            );
         }
     }
 
@@ -2068,24 +2113,113 @@ version = "0.1.0-alpha"
         assert!(status.success());
     }
 
-    fn create_oci_fixture(output: &Path) {
+    fn native_fixture_target() -> &'static str {
+        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            "aarch64-apple-darwin"
+        } else {
+            "x86_64-unknown-linux-gnu"
+        }
+    }
+
+    fn create_oci_fixture(output: &Path, service_revision: &str, lib_revision: &str) {
+        let entrypoint =
+            "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fixture-service/bin/fixture-service";
+        let mut layer = Vec::new();
+        {
+            let mut tar = TarBuilder::new(&mut layer);
+            let bytes = b"fixture executable";
+            let mut header = TarHeader::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o755);
+            header.set_uid(0);
+            header.set_gid(0);
+            header.set_mtime(0);
+            header.set_cksum();
+            tar.append_data(
+                &mut header,
+                entrypoint.trim_start_matches('/'),
+                bytes.as_slice(),
+            )
+            .expect("write layer entrypoint");
+            tar.finish().expect("finish layer");
+        }
+        let layer_digest = sha256_bytes(&layer);
+        let layer_name = format!("{layer_digest}/layer.tar");
+        let labels = artifact_admission::OciExpectation {
+            service: "fixture_service",
+            binary_name: "fixture-service",
+            version: "0.1.0-alpha",
+            service_revision,
+            lib_revision,
+            license: "AGPL-3.0-or-later",
+            contract_versions: artifact_admission::ContractVersions {
+                admin: 1,
+                config: 1,
+                provider: 1,
+                state: 1,
+                status: 1,
+            },
+        };
+        let labels = artifact_admission::fixture_labels(&labels);
+        let config = serde_json::to_vec(&serde_json::json!({
+            "architecture": "amd64",
+            "config": {
+                "Entrypoint": [entrypoint],
+                "Env": ["SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"],
+                "Labels": labels,
+                "StopSignal": "SIGTERM",
+                "User": "65532:65532",
+                "WorkingDir": "/"
+            },
+            "created": "1970-01-01T00:00:01+00:00",
+            "os": "linux",
+            "rootfs": {"diff_ids": [format!("sha256:{layer_digest}")], "type": "layers"}
+        }))
+        .expect("serialize config");
+        let config_name = format!("{}.json", sha256_bytes(&config));
+        let manifest = serde_json::to_vec(&serde_json::json!([{
+            "Config": config_name,
+            "Layers": [layer_name],
+            "RepoTags": ["fixture-service:0.1.0-alpha"]
+        }]))
+        .expect("serialize manifest");
+        let repositories = serde_json::to_vec(&serde_json::json!({
+            "fixture-service": {"0.1.0-alpha": layer_digest}
+        }))
+        .expect("serialize repositories");
+        let mut members = vec![
+            (config_name, false, config),
+            (format!("{layer_digest}/"), true, Vec::new()),
+            (format!("{layer_digest}/VERSION"), false, b"1.0".to_vec()),
+            (format!("{layer_digest}/json"), false, b"{}".to_vec()),
+            (layer_name, false, layer),
+            ("manifest.json".to_owned(), false, manifest),
+            ("repositories".to_owned(), false, repositories),
+        ];
+        members.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
         let output_file = fs::File::create(output).expect("create OCI fixture");
         let encoder = GzBuilder::new()
             .mtime(0)
             .operating_system(255)
             .write(output_file, Compression::best());
         let mut archive = TarBuilder::new(encoder);
-        let bytes = b"{}";
-        let mut header = TarHeader::new_gnu();
-        header.set_size(bytes.len() as u64);
-        header.set_mode(0o644);
-        header.set_uid(0);
-        header.set_gid(0);
-        header.set_mtime(0);
-        header.set_cksum();
-        archive
-            .append_data(&mut header, "index.json", bytes.as_slice())
-            .expect("write OCI fixture member");
+        for (name, directory, bytes) in members {
+            let mut header = TarHeader::new_gnu();
+            header.set_entry_type(if directory {
+                tar::EntryType::Directory
+            } else {
+                tar::EntryType::Regular
+            });
+            header.set_size(bytes.len() as u64);
+            header.set_mode(if directory { 0o755 } else { 0o644 });
+            header.set_uid(0);
+            header.set_gid(0);
+            header.set_mtime(0);
+            header.set_cksum();
+            archive
+                .append_data(&mut header, name, bytes.as_slice())
+                .expect("write OCI member");
+        }
         let encoder = archive.into_inner().expect("finish OCI fixture tar");
         let file = encoder.finish().expect("finish OCI fixture gzip");
         file.sync_all().expect("sync OCI fixture");
@@ -2097,6 +2231,7 @@ version = "0.1.0-alpha"
             service_package: "fixture-service".to_owned(),
             binary_name: "fixture-service".to_owned(),
             version: "0.1.0-alpha".to_owned(),
+            license: "AGPL-3.0-or-later".to_owned(),
         }
     }
 

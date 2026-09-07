@@ -1,0 +1,72 @@
+{
+  "schema": "radroots.services-hardening.artifact-admission-decisions.v1",
+  "contract_version": 1,
+  "decision_state": "active",
+  "owner_step": 304,
+  "command_owner": "tools/xtask",
+  "supported_binary_targets": [
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "binary": {
+    "formats": {
+      "aarch64-apple-darwin": "thin_macho64_arm64_execute",
+      "x86_64-unknown-linux-gnu": "elf64_little_endian_x86_64_execute_or_pie"
+    },
+    "maximum_parse_bytes": 67108864,
+    "architecture": "exact_target_match",
+    "linkage": "parse_declared_dynamic_libraries_and_forbid_external_sqlite",
+    "sqlite": "one_bundled_native_linkage_under_the_separate_sqlx_only_source_contract",
+    "structural_smoke": "executable_type_nonzero_entrypoint_and_executable_segment",
+    "runtime_smoke": "bounded_help_execution_on_the_matching_native_host",
+    "fat_or_multi_arch": "forbidden"
+  },
+  "oci": {
+    "format": "single_image_docker_archive_tar_gzip",
+    "platform": "linux_amd64",
+    "maximum_layers": 2,
+    "outer_archive": "descriptor_bound_bounded_safe_materialization_with_exact_inventory",
+    "manifest": "one_entry_exact_config_repo_tag_and_layer_references",
+    "config": "content_addressed_json_with_exact_rootless_runtime_and_build_labels",
+    "license": "Cargo.toml package license derived AGPL-3.0-or-later",
+    "layers": "parse_only_bounded_tar_validation_with_content_digest_reconciliation",
+    "entrypoint": "one_regular_executable_payload_at_the_configured_store_path",
+    "unpacking": "forbidden"
+  },
+  "maximums": {
+    "outer_compressed_bytes": 2147483648,
+    "outer_expanded_bytes": 17179869184,
+    "outer_members": 65536,
+    "outer_member_bytes": 17179869184,
+    "json_bytes": 1048576,
+    "layer_members": 65536,
+    "layer_payload_bytes": 17179869184,
+    "path_bytes": 4096,
+    "depth": 64,
+    "runtime_seconds": 10,
+    "runtime_stream_bytes": 65536
+  },
+  "required_negative_vectors": [
+    "arbitrary_binary_bytes",
+    "wrong_binary_architecture",
+    "fat_macho",
+    "missing_binary_entrypoint",
+    "external_sqlite_linkage",
+    "runtime_smoke_failure",
+    "unsafe_outer_tar_member",
+    "wrong_oci_license",
+    "multiple_manifest_entries",
+    "config_digest_mismatch",
+    "wrong_oci_platform",
+    "wrong_rootless_config",
+    "unexpected_label",
+    "missing_layer",
+    "layer_digest_mismatch",
+    "unsafe_layer_path",
+    "missing_entrypoint_payload"
+  ],
+  "nonclaims": [
+    "Linux artifact build on a macOS host without a Linux builder",
+    "signature notarization publication deployment or production activation"
+  ]
+}

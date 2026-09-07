@@ -36,6 +36,15 @@ assert lib.assertMsg (
   !(builtins.hasAttr "CARGO_PROFILE" nativeInputs.environment)
 ) "nativeInputs.environment must not replace CARGO_PROFILE";
 let
+  manifest = builtins.fromTOML (builtins.readFile (source + "/Cargo.toml"));
+  serviceLicense =
+    if manifest ? workspace && manifest.workspace ? package then
+      manifest.workspace.package.license or null
+    else
+      manifest.package.license or null;
+  _licenseAssertion = assert lib.assertMsg (
+    serviceLicense == "AGPL-3.0-or-later"
+  ) "service source must derive the governed AGPL-3.0-or-later license from Cargo.toml"; true;
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
   cargoExtraArgs = "--locked --package ${servicePackage} --bin ${binaryName}";
   commonArgs = {
@@ -50,9 +59,15 @@ let
   };
   cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 in
+assert _licenseAssertion;
 craneLib.buildPackage (
   commonArgs
   // {
     inherit cargoArtifacts;
+    passthru.radrootsServicePackage = {
+      inherit binaryName serviceLicense servicePackage;
+      schema = "radroots.service-package.v1";
+    };
+    meta.license = lib.licenses.agpl3Plus;
   }
 )

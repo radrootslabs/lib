@@ -6094,6 +6094,7 @@ dependencies = [
  "dto_bindgen_core",
  "flate2",
  "fs2",
+ "goblin",
  "hex",
  "jsonschema",
  "prettyplease",

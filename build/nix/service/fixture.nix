@@ -113,7 +113,7 @@ let
               "dev.radroots.mount.state.mode": "read-write",
               "dev.radroots.rootfs": "read-only-compatible",
               "org.opencontainers.image.description": "Hardened fixture_service service image",
-              "org.opencontainers.image.licenses": "MIT OR Apache-2.0",
+              "org.opencontainers.image.licenses": "AGPL-3.0-or-later",
               "org.opencontainers.image.revision": "1111111111111111111111111111111111111111",
               "org.opencontainers.image.title": "fixture_service",
               "org.opencontainers.image.version": "0.1.0-alpha"
@@ -645,7 +645,6 @@ let
           ociArgs
           // {
             serviceName = lib.concatStrings (lib.replicate 128 "a");
-            binaryName = lib.concatStrings (lib.replicate 128 "b");
             buildInfo = fixtureBuildInfo // {
               serviceVersion = lib.concatStrings (lib.replicate 128 "1");
               contractVersions = lib.mapAttrs (_: _: 4294967295) fixtureBuildInfo.contractVersions;

@@ -314,6 +314,7 @@ impl TraversalSnapshot {
             trusted_parent,
             limits,
             Some(&file.identity),
+            TarGzipPolicy::DeterministicSnapshot,
         )
     }
 
@@ -1089,6 +1090,22 @@ pub(crate) fn admit_tar_gzip_path(
     admit_tar_gzip_relative(&root, &relative, limits, None, TarGzipPolicy::Generic)
 }
 
+pub(crate) fn materialize_tar_gzip_path(
+    path: &Path,
+    trusted_parent: &Path,
+    limits: TarGzipLimits,
+) -> Result<MaterializedArchive, ArtifactIoError> {
+    let (root, relative) = split_absolute_file(path)?;
+    materialize_tar_gzip_relative(
+        &root,
+        &relative,
+        trusted_parent,
+        limits,
+        None,
+        TarGzipPolicy::Generic,
+    )
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TarGzipPolicy {
     Generic,
@@ -1129,6 +1146,7 @@ fn materialize_tar_gzip_relative(
     trusted_parent: &Path,
     limits: TarGzipLimits,
     expected: Option<&FileIdentity>,
+    policy: TarGzipPolicy,
 ) -> Result<MaterializedArchive, ArtifactIoError> {
     validate_archive_limits(limits)?;
     let (parent_descriptor, parent_chain) = open_trusted_output_directory(trusted_parent)?;
@@ -1185,12 +1203,7 @@ fn materialize_tar_gzip_relative(
         expected,
         || {},
         |file, admitted_length| {
-            let evidence = admit_tar_gzip_reader(
-                file,
-                limits,
-                TarGzipPolicy::DeterministicSnapshot,
-                Some(&output),
-            )?;
+            let evidence = admit_tar_gzip_reader(file, limits, policy, Some(&output))?;
             require_observed_length(evidence.compressed.byte_length, admitted_length)?;
             output
                 .sync_all()
@@ -3384,6 +3397,7 @@ mod step_294_tests {
             &parent_root,
             archive_limits(),
             None,
+            TarGzipPolicy::DeterministicSnapshot,
         )
         .expect("descriptor-bound materialization");
         let snapshot = materialized.snapshot();

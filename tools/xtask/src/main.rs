@@ -12,6 +12,7 @@ mod advisory_snapshot;
 mod api_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod architecture;
+mod artifact_admission;
 mod bounded_process;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod build_control;
@@ -446,6 +447,7 @@ fn validate_protocol_contracts() -> Result<(), String> {
 fn validate_contract() -> Result<(), String> {
     validate_protocol_contracts()?;
     let root = workspace_root();
+    artifact_admission::validate_contract(&root)?;
     service_source_lock::validate_contract(&root)?;
     service_build_qualification::validate_contract(&root)?;
     service_release_artifacts::validate_contract(&root)?;
