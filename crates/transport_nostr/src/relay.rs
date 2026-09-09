@@ -19,6 +19,7 @@ use tokio::net::TcpStream;
 use url::Url;
 
 const MAX_RESOLVED_ADDRESSES: usize = 32;
+const MAX_WIRE_MESSAGE_BYTES: usize = 512 * 1024;
 
 /// Validated canonical Nostr relay URL.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -153,9 +154,17 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                     .validate_resolved_addresses(policy, addresses.iter().map(SocketAddr::ip))
                     .map_err(|_| policy_error("relay DNS result is denied by network policy"))?;
                 let tcp = connect_pinned(addresses.as_slice()).await?;
-                let (stream, _) = tokio_tungstenite::client_async_tls(relay.as_str(), tcp)
-                    .await
-                    .map_err(TransportError::backend)?;
+                let config = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
+                    .max_message_size(Some(MAX_WIRE_MESSAGE_BYTES))
+                    .max_frame_size(Some(MAX_WIRE_MESSAGE_BYTES));
+                let (stream, _) = tokio_tungstenite::client_async_tls_with_config(
+                    relay.as_str(),
+                    tcp,
+                    Some(config),
+                    None,
+                )
+                .await
+                .map_err(TransportError::backend)?;
                 let socket = WebSocket::Tokio(stream);
                 let (tx, rx) = socket.split();
                 let sink: WebSocketSink = Box::new(HardenedTransportSink(tx));

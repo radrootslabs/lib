@@ -144,6 +144,16 @@ strictly before its absolute deadline. Deadline expiry is `Cancelled`, and a
 relay result that exceeds the bounded inventory is `Partial`; neither state is
 rewritten as completion even when it carries admissible events.
 
+One fetch shares an 8 MiB raw event-JSON budget, a 4,096-event inventory and an
+8,192-notification work limit across all relay batches. Each relay retains at
+most 1,000 events; duplicate and malformed observations still consume the
+budget. An event is at most 256 KiB, and the WebSocket connector explicitly
+limits both frames and complete messages to 512 KiB before upstream decoding.
+Shared canonical decoding rechecks the event, aggregate-byte and inventory
+bounds before candidate collection. A fetch returns at most the caller's
+validated 1,000-event page limit. EOSE describes only the requested relay
+subscription and never proves complete global history.
+
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;
 the adapter reconnects with Nostr's inclusive `since` timestamp, suppresses
@@ -175,6 +185,10 @@ or delivery work.
 The absolute deadline in each generic request bounds the complete operation.
 The configured connection and request timeouts are upper bounds within that
 remaining budget. An already-expired request performs no relay work.
+Queued relay batches consume that same frozen deadline; they never receive a
+new timeout after an earlier relay stalls. Bounded local normalization retains
+the events and distinct outcomes already collected when network work ends, so
+one timed-out relay cannot erase another relay's earlier successful evidence.
 
 Dropping an unpolled fetch, subscription-start, or delivery future performs no
 I/O. Once polled, cancellation is best effort at the socket boundary. For

@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-013"
+date = "2026-09-09"
+status = "closed"
+approval = "Standing user approval of the complete reviewed refactor and its necessary same-owner producer repairs."
+affected_steps = ["201"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr",
+]
+source_evidence = [
+  "Current source.rs starts each buffered relay batch with a fresh timeout although the public fetch contract promises one absolute request deadline.",
+  "Per-relay event counts are bounded, but aggregate raw JSON bytes and parse inventory are not explicitly capped before shared candidate collection; relay.rs inherits dependency-default wire limits.",
+]
+replacement_action = "Repair the current concrete adapter within its existing bounded-fetch charter, using contracts/architecture/decisions/nostr_fetch_bounds.v1.json. This is a current source repair, not a reopening or replacement of historical release qualification."
+verification = [
+  "Deterministic limit, aggregate competition, queued-deadline and retained partial-outcome regressions plus bounded loopback source tests.",
+  "Canonical package/workspace checks, contracts, architecture, public API review and the unchanged affected-package coverage requirement.",
+]
+unresolved_risk = "Current package and workspace verification, byte-identical public API, all 49 required coverage reports and release preflight pass on the qualified source. Per-target partial/cancelled evidence is bounded; no global-history, power-loss, external release, device or new-platform qualification is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Fresh transport coverage passes all four unchanged thresholds; the public API is byte-identical to its baseline.",
+  "All 49 required coverage reports and the aggregate pass, together with workspace check, tests, Clippy, Rustdoc, contracts, freshness, dependency graph, portable checks and release preflight.",
+  "Deterministic maxima and aggregate budget tests plus real loopback queued-deadline, mixed-relay, oversized-wire and cancellation regressions pass.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-014"
 date = "2026-09-09"
 status = "closed"

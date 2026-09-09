@@ -15,7 +15,12 @@ use radroots_transport::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[path = "source_budget.rs"]
+mod budget;
+use budget::FetchBudget;
 
 const UPSTREAM_FETCH_LIMIT: usize = 1_000;
 const CURSOR_PREFIX: &str = "nostr-v2";
@@ -27,7 +32,7 @@ pub(crate) struct SourceQuery {
     selector: radroots_transport::source::FetchSelector,
     until_unix_seconds: Option<u64>,
     connect_timeout: Duration,
-    timeout: Duration,
+    deadline: tokio::time::Instant,
     max_connections: usize,
 }
 
@@ -78,15 +83,19 @@ impl RelaySourceClient for LiveRelaySourceClient {
                 selector,
                 until_unix_seconds,
                 connect_timeout,
-                timeout,
+                deadline,
                 max_connections,
             } = query;
+            let budget = Arc::new(FetchBudget::default());
             stream::iter(relays.into_iter().map(|relay| {
                 let selector = selector.clone();
+                let budget = Arc::clone(&budget);
                 async move {
                     let url = relay.as_str().to_owned();
-                    let started_at = tokio::time::Instant::now();
                     let result = async {
+                        if tokio::time::Instant::now() >= deadline {
+                            return Ok(RelayFetchResult::Timeout(Vec::new()));
+                        }
                         let kinds = selector
                             .kinds()
                             .iter()
@@ -122,17 +131,26 @@ impl RelaySourceClient for LiveRelaySourceClient {
                         if let Some(until) = until_unix_seconds {
                             filter = filter.until(Timestamp::from_secs(until));
                         }
-                        self.client
-                            .add_relay(url.as_str())
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        self.client
-                            .try_connect_relay(url.as_str(), connect_timeout)
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        let remaining = timeout.saturating_sub(started_at.elapsed());
-                        if remaining.is_zero() {
-                            return Ok(RelayFetchResult::Timeout(Vec::new()));
+                        let connected = tokio::time::timeout_at(deadline, async {
+                            self.client
+                                .add_relay(url.as_str())
+                                .await
+                                .map_err(|error| error.to_string())?;
+                            self.client
+                                .try_connect_relay(
+                                    url.as_str(),
+                                    connect_timeout.min(
+                                        deadline
+                                            .saturating_duration_since(tokio::time::Instant::now()),
+                                    ),
+                                )
+                                .await
+                                .map_err(|error| error.to_string())
+                        })
+                        .await;
+                        match connected {
+                            Ok(result) => result?,
+                            Err(_) => return Ok(RelayFetchResult::Timeout(Vec::new())),
                         }
                         let relay = self
                             .client
@@ -141,20 +159,34 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             .map_err(|error| error.to_string())?;
                         let mut notifications = relay.notifications();
                         let subscription_id = SubscriptionId::generate();
-                        let eose_deadline = tokio::time::Instant::now() + remaining;
+                        let remaining =
+                            deadline.saturating_duration_since(tokio::time::Instant::now());
+                        if remaining.is_zero() {
+                            return Ok(RelayFetchResult::Timeout(Vec::new()));
+                        }
                         let options = SubscribeOptions::default().close_on(Some(
                             SubscribeAutoCloseOptions::default()
                                 .exit_policy(ReqExitPolicy::ExitOnEOSE)
                                 .timeout(Some(remaining)),
                         ));
-                        relay
-                            .subscribe_with_id(subscription_id.clone(), filter, options)
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        Ok(
-                            collect_until_eose(&mut notifications, &subscription_id, eose_deadline)
-                                .await,
+                        match tokio::time::timeout_at(
+                            deadline,
+                            relay.subscribe_with_id(subscription_id.clone(), filter, options),
                         )
+                        .await
+                        {
+                            Ok(result) => {
+                                result.map_err(|error| error.to_string())?;
+                            }
+                            Err(_) => return Ok(RelayFetchResult::Timeout(Vec::new())),
+                        }
+                        Ok(collect_until_eose(
+                            &mut notifications,
+                            &subscription_id,
+                            deadline,
+                            &budget,
+                        )
+                        .await)
                     }
                     .await;
                     RelayFetchBatch {
@@ -174,6 +206,7 @@ async fn collect_until_eose(
     notifications: &mut tokio::sync::broadcast::Receiver<RelayNotification>,
     subscription_id: &SubscriptionId,
     deadline: tokio::time::Instant,
+    budget: &FetchBudget,
 ) -> RelayFetchResult {
     let mut events = Vec::new();
     loop {
@@ -185,6 +218,9 @@ async fn collect_until_eose(
             Ok(Err(error)) => return RelayFetchResult::Failed(error.to_string()),
             Err(_) => return RelayFetchResult::Timeout(events),
         };
+        if !budget.notification() {
+            return RelayFetchResult::ResourceLimit(events);
+        }
         match notification {
             RelayNotification::Message {
                 message:
@@ -196,7 +232,11 @@ async fn collect_until_eose(
                 if events.len() >= UPSTREAM_FETCH_LIMIT {
                     return RelayFetchResult::ResourceLimit(events);
                 }
-                events.push(event.as_ref().as_json());
+                let raw = event.as_ref().as_json();
+                if !budget.event(raw.len()) {
+                    return RelayFetchResult::ResourceLimit(events);
+                }
+                events.push(raw);
             }
             RelayNotification::Message {
                 message: RelayMessage::EndOfStoredEvents(observed_subscription),
@@ -262,6 +302,7 @@ impl EventSource for NostrTransport {
             let now_ms = unix_time_ms();
             let remaining_ms = request.bounds().deadline_unix_ms().saturating_sub(now_ms);
             let timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
+            let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
 
             let mut targets = BTreeMap::new();
             let mut outcomes = Vec::new();
@@ -322,11 +363,12 @@ impl EventSource for NostrTransport {
                     connect_timeout: Duration::from_millis(
                         timeout_ms.min(self.config().connect_timeout_ms()),
                     ),
-                    timeout: Duration::from_millis(timeout_ms),
+                    deadline,
                     max_connections: self.config().max_connections(),
                 })
                 .await;
             let mut candidates = Vec::new();
+            let parse_budget = FetchBudget::default();
             let mut malformed_by_relay = BTreeMap::<RelayUrl, usize>::new();
             let mut reported = BTreeSet::new();
             let observed_at_unix_ms = unix_time_ms().max(now_ms);
@@ -338,7 +380,7 @@ impl EventSource for NostrTransport {
                 if !reported.insert(relay.clone()) {
                     return Err(radroots_transport::Error::DuplicateFetchTargetOutcome);
                 }
-                let (raw_events, terminal) = match result {
+                let (raw_events, mut terminal) = match result {
                     RelayFetchResult::Complete(events) => (events, FetchTargetState::Complete),
                     RelayFetchResult::Timeout(events) => (events, FetchTargetState::Cancelled),
                     RelayFetchResult::ResourceLimit(events) => (events, FetchTargetState::Partial),
@@ -357,13 +399,13 @@ impl EventSource for NostrTransport {
                         continue;
                     }
                 };
-                self.status.record_read(
-                    &relay,
-                    terminal == FetchTargetState::Complete,
-                    terminal != FetchTargetState::Complete,
-                    observed_at_unix_ms,
-                );
-                for raw in raw_events {
+                for (index, raw) in raw_events.into_iter().enumerate() {
+                    if index >= UPSTREAM_FETCH_LIMIT || !parse_budget.event(raw.len()) {
+                        if terminal != FetchTargetState::Cancelled {
+                            terminal = FetchTargetState::Partial;
+                        }
+                        break;
+                    }
                     match radroots_event_codec::decode::signed_event(raw.as_str()) {
                         Ok(event) if request.selector().matches(&event) => {
                             candidates.push(Candidate {
@@ -379,6 +421,12 @@ impl EventSource for NostrTransport {
                         }
                     }
                 }
+                self.status.record_read(
+                    &relay,
+                    terminal == FetchTargetState::Complete,
+                    terminal != FetchTargetState::Complete,
+                    observed_at_unix_ms,
+                );
                 let malformed = malformed_by_relay.get(&relay).copied().unwrap_or_default();
                 let outcome = if terminal == FetchTargetState::Cancelled {
                     FetchTargetOutcome::new(
@@ -883,6 +931,7 @@ mod tests {
                 &mut receiver,
                 &subscription_id,
                 tokio::time::Instant::now() + Duration::from_secs(1),
+                &FetchBudget::default(),
             )
             .await,
             RelayFetchResult::Complete(Vec::new())
@@ -890,7 +939,13 @@ mod tests {
 
         let (_sender, mut receiver) = tokio::sync::broadcast::channel(2);
         assert_eq!(
-            collect_until_eose(&mut receiver, &subscription_id, tokio::time::Instant::now(),).await,
+            collect_until_eose(
+                &mut receiver,
+                &subscription_id,
+                tokio::time::Instant::now(),
+                &FetchBudget::default()
+            )
+            .await,
             RelayFetchResult::Timeout(Vec::new())
         );
     }
@@ -1048,10 +1103,204 @@ mod tests {
             selector,
             until_unix_seconds: None,
             connect_timeout: Duration::from_millis(1),
-            timeout: Duration::from_millis(1),
+            deadline: tokio::time::Instant::now() + Duration::from_millis(1),
             max_connections: 1,
         }));
         assert_eq!(batches.len(), 1);
         assert_eq!(batches[0].result, RelayFetchResult::Complete(vec![]));
+    }
+
+    #[tokio::test]
+    async fn continuous_notifications_terminate_at_the_shared_work_limit() {
+        let id = SubscriptionId::generate();
+        let (sender, mut receiver) =
+            tokio::sync::broadcast::channel(budget::MAX_FETCH_NOTIFICATIONS + 1);
+        for _ in 0..=budget::MAX_FETCH_NOTIFICATIONS {
+            sender
+                .send(RelayNotification::RelayStatus {
+                    status: nostr_sdk::prelude::RelayStatus::Connected,
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            collect_until_eose(
+                &mut receiver,
+                &id,
+                tokio::time::Instant::now() + Duration::from_secs(10),
+                &FetchBudget::default()
+            )
+            .await,
+            RelayFetchResult::ResourceLimit(Vec::new())
+        );
+    }
+
+    #[tokio::test]
+    async fn repeated_events_consume_inventory_before_deduplication() {
+        let id = SubscriptionId::generate();
+        let event = nostr_sdk::prelude::Event::from_json(FIRST).unwrap();
+        let (sender, mut receiver) = tokio::sync::broadcast::channel(UPSTREAM_FETCH_LIMIT + 1);
+        for _ in 0..=UPSTREAM_FETCH_LIMIT {
+            sender
+                .send(RelayNotification::Message {
+                    message: RelayMessage::Event {
+                        subscription_id: Cow::Owned(id.clone()),
+                        event: Cow::Owned(event.clone()),
+                    },
+                })
+                .unwrap();
+        }
+        let result = collect_until_eose(
+            &mut receiver,
+            &id,
+            tokio::time::Instant::now() + Duration::from_secs(10),
+            &FetchBudget::default(),
+        )
+        .await;
+        let RelayFetchResult::ResourceLimit(events) = result else {
+            panic!("bounded inventory");
+        };
+        assert_eq!(events.len(), UPSTREAM_FETCH_LIMIT);
+    }
+
+    #[test]
+    fn defensive_parse_budget_preserves_earlier_events_and_refuses_excess_work() {
+        let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).unwrap();
+        let mut records = vec![FIRST.to_owned()];
+        records.extend((1..UPSTREAM_FETCH_LIMIT).map(|_| "{".to_owned()));
+        records.push(SECOND.to_owned());
+        for records in [
+            records,
+            vec![
+                FIRST.to_owned(),
+                "x".repeat(budget::MAX_EVENT_BYTES + 1),
+                SECOND.to_owned(),
+            ],
+        ] {
+            let page = futures::executor::block_on(
+                scripted(vec![RelayFetchBatch {
+                    relay: relay.clone(),
+                    result: RelayFetchResult::Complete(records),
+                }])
+                .fetch(single_request(10)),
+            )
+            .unwrap();
+            assert_eq!(page.events().len(), 1);
+            assert_eq!(
+                page.events()[0].event().id_str(),
+                radroots_event_codec::decode::signed_event(FIRST)
+                    .unwrap()
+                    .id_str()
+            );
+            assert_eq!(page.target_outcomes()[0].state(), FetchTargetState::Partial);
+        }
+    }
+
+    #[tokio::test]
+    async fn completed_relay_batches_do_not_refund_the_shared_byte_budget() {
+        let mut wire: serde_json::Value = serde_json::from_str(FIRST).unwrap();
+        wire["content"] = serde_json::json!("");
+        let empty = nostr_sdk::prelude::Event::from_json(wire.to_string()).unwrap();
+        wire["content"] =
+            serde_json::json!("x".repeat(budget::MAX_EVENT_BYTES - empty.as_json().len()));
+        // Collection bounds precede canonical event admission; the fixture only
+        // needs the upstream event structure and an exact serialized size.
+        let event = nostr_sdk::prelude::Event::from_json(wire.to_string()).unwrap();
+        assert_eq!(event.as_json().len(), budget::MAX_EVENT_BYTES);
+        let shared = FetchBudget::default();
+        let mut retained_bytes = 0;
+        for batch in 0..2 {
+            let id = SubscriptionId::generate();
+            let (sender, mut receiver) = tokio::sync::broadcast::channel(18);
+            for _ in 0..17 {
+                sender
+                    .send(RelayNotification::Message {
+                        message: RelayMessage::Event {
+                            subscription_id: Cow::Owned(id.clone()),
+                            event: Cow::Owned(event.clone()),
+                        },
+                    })
+                    .unwrap();
+            }
+            sender
+                .send(RelayNotification::Message {
+                    message: RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone())),
+                })
+                .unwrap();
+            let result = collect_until_eose(
+                &mut receiver,
+                &id,
+                tokio::time::Instant::now() + Duration::from_secs(10),
+                &shared,
+            )
+            .await;
+            let events = match (batch, result) {
+                (0, RelayFetchResult::Complete(events)) => {
+                    assert_eq!(events.len(), 17);
+                    events
+                }
+                (1, RelayFetchResult::ResourceLimit(events)) => {
+                    assert_eq!(events.len(), 15);
+                    events
+                }
+                _ => panic!("the second relay must exhaust the shared byte budget"),
+            };
+            retained_bytes += events.iter().map(String::len).sum::<usize>();
+        }
+        assert_eq!(retained_bytes, budget::MAX_FETCH_BYTES);
+        assert!(!shared.event(1));
+    }
+
+    #[test]
+    fn duplicate_inventory_is_bounded_across_all_relay_batches_before_deduplication() {
+        let urls = (0..5)
+            .map(|index| format!("wss://relay{index}.example"))
+            .collect::<Vec<_>>();
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                urls.iter().map(String::as_str),
+            )
+            .unwrap(),
+        );
+        let targets = TargetSet::new(
+            config
+                .read_relays()
+                .map(|relay| relay.to_target().unwrap())
+                .collect(),
+        )
+        .unwrap();
+        let request = FetchRequest::new(
+            "aggregate-duplicates",
+            targets,
+            FetchBounds::new(10, unix_time_ms() + 10_000).unwrap(),
+        )
+        .unwrap();
+        let batches = urls
+            .iter()
+            .map(|url| RelayFetchBatch {
+                relay: RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap(),
+                result: RelayFetchResult::Complete(vec![FIRST.to_owned(); UPSTREAM_FETCH_LIMIT]),
+            })
+            .collect();
+        let transport =
+            NostrTransport::with_source_client(config, Arc::new(ScriptedSourceClient(batches)));
+        let page = futures::executor::block_on(transport.fetch(request)).unwrap();
+        assert_eq!(page.events().len(), 1);
+        assert_eq!(page.target_outcomes().len(), 5);
+        assert_eq!(
+            page.target_outcomes()
+                .iter()
+                .filter(|outcome| outcome.state() == FetchTargetState::Complete)
+                .count(),
+            4
+        );
+        assert_eq!(
+            page.target_outcomes()
+                .iter()
+                .filter(|outcome| outcome.state() == FetchTargetState::Partial)
+                .count(),
+            1
+        );
     }
 }

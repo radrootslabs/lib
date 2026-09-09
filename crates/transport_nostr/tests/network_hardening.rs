@@ -11,7 +11,9 @@ const CLIENT_SOURCE: &str = include_str!("../src/client.rs");
 fn tls_verification_and_pinned_dns_are_non_configurable_live_defaults() {
     assert!(WORKSPACE_MANIFEST.contains("rustls-tls-webpki-roots"));
     for required in [
-        "client_async_tls(relay.as_str(), tcp)",
+        "client_async_tls_with_config(",
+        ".max_message_size(Some(MAX_WIRE_MESSAGE_BYTES))",
+        ".max_frame_size(Some(MAX_WIRE_MESSAGE_BYTES))",
         "validate_resolved_addresses(",
         "connect_pinned(addresses.as_slice())",
         "ConnectionMode::Direct",
