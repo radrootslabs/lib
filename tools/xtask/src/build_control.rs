@@ -95,8 +95,8 @@ impl ConsumerRoot {
             .map_err(|error| format!("consumer marker is not UTF-8: {error}"))?
             .trim()
             .to_owned();
-        if !matches!(product.as_str(), "sdk" | "mobile" | "myc" | "rhi") {
-            return Err("consumer marker must contain sdk, mobile, myc, or rhi".to_owned());
+        if !matches!(product.as_str(), "sdk" | "myc" | "rhi") {
+            return Err("consumer marker must contain sdk, myc, or rhi".to_owned());
         }
         let source_lock_path = canonical.join(SOURCE_LOCK_NAME);
         let source_lock = parse_source_lock(&source_lock_path)?;
@@ -538,7 +538,6 @@ pub fn artifact(
     }
     let external_names = match product {
         "sdk" => vec!["radroots", "radroots_sdk"],
-        "mobile" => vec!["RadrootsFFI", "RadrootsKitBindings"],
         _ => return Err("unsupported artifact product".to_owned()),
     };
     let manifest = ArtifactManifest {
@@ -606,10 +605,6 @@ fn validate_artifact_route(product: &str, target: &str, language: &str) -> Resul
                 | ("wasm", "javascript")
                 | ("ffi", "swift")
                 | ("ffi", "kotlin")
-        ),
-        "mobile" => matches!(
-            (target, language),
-            ("ios", "swift") | ("android", "kotlin") | ("wasm", "javascript")
         ),
         _ => false,
     };
@@ -1163,6 +1158,37 @@ mod tests {
     }
 
     #[test]
+    fn retired_application_consumers_and_artifact_routes_fail_closed() {
+        for product in ["mobile", "tera"] {
+            let fixture = Fixture::new(product);
+            assert!(ConsumerRoot::open(&fixture.consumer).is_err());
+            for (target, language) in [
+                ("ios", "swift"),
+                ("android", "kotlin"),
+                ("wasm", "javascript"),
+            ] {
+                assert!(validate_artifact_route(product, target, language).is_err());
+                assert!(
+                    artifact(
+                        product,
+                        target,
+                        language,
+                        Mode::Write,
+                        &fixture.consumer,
+                        &fixture.source,
+                        Path::new("generated/retired.json"),
+                        1,
+                        "fixture",
+                        &[],
+                    )
+                    .is_err()
+                );
+            }
+            assert!(!fixture.consumer.join("generated").exists());
+        }
+    }
+
+    #[test]
     fn source_lock_supports_a_contained_nested_lockfile() {
         let mut fixture = Fixture::new("sdk");
         let core = fixture.consumer.join("core");
@@ -1189,7 +1215,7 @@ mod tests {
 
     #[test]
     fn consumer_manifest_discovery_skips_swiftpm_build_output_only() {
-        let fixture = Fixture::new("mobile");
+        let fixture = Fixture::new("sdk");
         let swiftpm_checkout = fixture.consumer.join(".build/checkouts/dependency");
         fs::create_dir_all(&swiftpm_checkout).expect("SwiftPM checkout directory");
         fs::write(swiftpm_checkout.join("Cargo.toml"), "not valid TOML")

@@ -390,11 +390,11 @@ mod tests {
         let expected = BTreeMap::from([
             (
                 "generated/swift/radroots_sdk.swift",
-                "0f81256c17243e485d9bca8f2dd4771c0ed2c2c1dc4fb03eb352389aab8599b0",
+                "38ff1a652ff49b45c48601d2b1c0064103c1e815df9e80604f3369af2e53f4ac",
             ),
             (
                 "generated/swift/radroots_sdkFFI.h",
-                "511d3a22f969ef21d1a6d7357241756c2fda5d96adbb8bb17f2da5e8c65bcc54",
+                "2efe02ecda4a68a495bacc61acf8ff41dc84bc01d9132a00b38353a57c51466a",
             ),
             (
                 "generated/swift/radroots_sdkFFI.modulemap",
@@ -402,12 +402,16 @@ mod tests {
             ),
             (
                 "generated/kotlin/uniffi/radroots_sdk/radroots_sdk.kt",
-                "63a91b7c7790ee786d1c94cfad30cbe6e3ac5c737108ec61c74696fc068ef7da",
+                "cc57260fade24a3b6d8366f06f17fb2d3132a0293cb61dd2a12d30d95f4a4e66",
             ),
         ]);
         for (relative, expected_sha256) in expected {
             let bytes = fs::read(consumer.path().join(relative)).expect("generated binding");
-            assert_eq!(format!("{:x}", Sha256::digest(bytes)), expected_sha256);
+            assert_eq!(
+                format!("{:x}", Sha256::digest(bytes)),
+                expected_sha256,
+                "generated SDK binding {relative}"
+            );
         }
     }
 }

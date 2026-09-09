@@ -33,9 +33,11 @@ This file exists for compatibility with tools that look for AGENTS.md.
   Service-host and service-owned operator contracts must implement or narrow
   that boundary without adding a second transport, exit map, or readiness
   authority.
-- Source-lock consumer identities include `sdk`, `mobile`, `myc`, and `rhi`.
-  Only the first two are generated-artifact product identities;
+- Source-lock consumer identities include `sdk`, `myc`, and `rhi`.
+  Only `sdk` is a generated-artifact product identity;
   accepting a service consumer marker must not expose an artifact route.
+  Tera owns its application packages and native/WASM artifact routes. Lib must
+  not regain an application package or a dependency on the Tera application.
 - The canonical service source lock is the bounded, canonical
   `radroots.service.source-lock.v2.toml` model. It binds the exact active public
   Lib repository and full revision, Lib source-archive and workspace-catalog

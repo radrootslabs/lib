@@ -7,13 +7,17 @@ rust_version = "1.97.1"
 edition = "2024"
 resolver = "3"
 public_package_count = 19
-package_count = 55
+package_count = 51
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
 source_provenance_policy = "imported_revision_tree_or_native_introduction_tree"
 provenance_correction_contract = "approved_correction_record_required"
 retired_packages = [
+  "radroots_mobile_bindgen",
+  "radroots_mobile_core",
+  "radroots_mobile_ffi",
+  "radroots_mobile_wasm",
   "radroots_app_core",
   "radroots_app_ffi",
   "radroots_app_wasm",
@@ -1363,127 +1367,3 @@ source_path = "crates/sql_wasm_runtime"
 source_tree_sha256 = "6ca1dca6f248c50b6bcd4c684b4ad31acd17b8bfc36a8b0072872f6db927c303"
 compatibility = ["wasm", "data", "package_private"]
 replaces = []
-
-[[package]]
-name = "radroots_mobile_core"
-path = "crates/mobile_core"
-state = "active"
-tier = "runtime"
-visibility = "private_runtime"
-publish = false
-version = "0.1.0-alpha"
-license = "GPL-3.0-or-later"
-platforms = ["native", "wasm32"]
-groups = ["coverage_required", "mobile"]
-owners = ["mobile"]
-permitted_dependency_tiers = [
-  "foundation",
-  "domain",
-  "spi",
-  "adapter",
-  "orchestration",
-  "sdk",
-  "facade",
-  "runtime",
-]
-provenance_kind = "imported"
-source_repository = "https://github.com/radrootslabs/app_rt"
-source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
-source_path = "crates/core"
-source_tree_sha256 = "8ae546ee60a97bfc145c12ea94dcd6d528bf5f49e974159442738c29eb3d6ee1"
-compatibility = ["product", "lifecycle", "package_private"]
-replaces = ["radroots_app_core"]
-
-[[package]]
-name = "radroots_mobile_ffi"
-path = "crates/mobile_ffi"
-state = "active"
-tier = "boundary"
-visibility = "private_boundary"
-publish = false
-version = "0.1.0-alpha"
-license = "GPL-3.0-or-later"
-platforms = ["apple", "android"]
-groups = ["coverage_required", "mobile", "boundaries"]
-owners = ["mobile"]
-permitted_dependency_tiers = [
-  "foundation",
-  "domain",
-  "spi",
-  "adapter",
-  "orchestration",
-  "sdk",
-  "facade",
-  "runtime",
-  "boundary",
-]
-provenance_kind = "imported"
-source_repository = "https://github.com/radrootslabs/app_rt"
-source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
-source_path = "crates/ffi"
-source_tree_sha256 = "9a38699ad6d39b9f8764fed6a67bd55908ff54cb2e3cae9a3890ce1a46789b2b"
-compatibility = ["ffi", "swift", "kotlin", "lifecycle", "package_private"]
-replaces = ["radroots_app_ffi"]
-
-[[package]]
-name = "radroots_mobile_wasm"
-path = "crates/mobile_wasm"
-state = "active"
-tier = "boundary"
-visibility = "private_boundary"
-publish = false
-version = "0.1.0-alpha"
-license = "GPL-3.0-or-later"
-platforms = ["wasm32"]
-groups = ["coverage_required", "mobile", "wasm", "boundaries"]
-owners = ["mobile"]
-permitted_dependency_tiers = [
-  "foundation",
-  "domain",
-  "spi",
-  "adapter",
-  "orchestration",
-  "sdk",
-  "facade",
-  "runtime",
-  "boundary",
-]
-provenance_kind = "imported"
-source_repository = "https://github.com/radrootslabs/app_rt"
-source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
-source_path = "crates/wasm"
-source_tree_sha256 = "8c65c867eafc0643ca9fd86150766af4f4ab2f0f8321d66306418261a8f43124"
-compatibility = ["wasm", "lifecycle", "package_private"]
-replaces = ["radroots_app_wasm"]
-
-[[package]]
-name = "radroots_mobile_bindgen"
-path = "crates/mobile_bindgen"
-state = "active"
-tier = "codegen"
-visibility = "private_codegen"
-publish = false
-version = "0.1.0-alpha"
-license = "GPL-3.0-or-later"
-platforms = ["native"]
-groups = ["coverage_required", "mobile", "boundaries"]
-owners = ["mobile"]
-permitted_dependency_tiers = [
-  "foundation",
-  "domain",
-  "spi",
-  "adapter",
-  "orchestration",
-  "sdk",
-  "facade",
-  "runtime",
-  "boundary",
-  "codegen",
-]
-provenance_kind = "imported"
-source_repository = "https://github.com/radrootslabs/app_rt"
-source_revision = "7ab1a8624d50890d6d18545ffb47d8083afa8c67"
-source_path = "crates/bindgen"
-source_tree_sha256 = "f0a9d7ec9794257bc56063117208e6e83a34efe1b852e8af6d6a56a1693d27fa"
-compatibility = ["generated", "swift", "kotlin", "package_private"]
-replaces = ["radroots_app_bindgen"]

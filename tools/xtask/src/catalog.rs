@@ -23,6 +23,39 @@ const CATALOG_SCHEMA: &str = "radroots.workspace.catalog.v2";
 const RELEASE_ID: &str = "radroots.crates.release.v2";
 const CONSOLIDATION_ID: &str = "radroots.rust.consolidation.v1";
 const VERSION: &str = "0.1.0-alpha";
+const APPLICATION_RETIREMENT: &str =
+    "contracts/architecture/decisions/tera_application_ownership.v1.json";
+const RETIRED_APPLICATION_PACKAGES: [&str; 4] = [
+    "radroots_mobile_bindgen",
+    "radroots_mobile_core",
+    "radroots_mobile_ffi",
+    "radroots_mobile_wasm",
+];
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApplicationRetirement {
+    schema: String,
+    source_repository: String,
+    source_catalog_revision: String,
+    source_catalog_sha256: String,
+    transfer_donor_commit: String,
+    transfer_donor_tree: String,
+    target_repository: String,
+    target_revision: String,
+    transfer_evidence_sha256: String,
+    package: Vec<RetiredApplication>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetiredApplication {
+    former_catalog_entry: CatalogPackage,
+    target_name: String,
+    target_path: String,
+    projected_commit: String,
+    projected_tree: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -145,6 +178,7 @@ struct CargoPackage {
 #[derive(Debug, Deserialize)]
 struct CargoDependency {
     name: String,
+    source: Option<String>,
     req: String,
     path: Option<String>,
     kind: Option<String>,
@@ -184,6 +218,7 @@ fn active_packages_matching(
 ) -> Result<Vec<String>, String> {
     let catalog = parse_file::<Catalog>(workspace_root, CATALOG_RELATIVE)?;
     validate_catalog(&catalog)?;
+    validate_application_retirement(&catalog, workspace_root)?;
     let mut packages = catalog
         .package
         .iter()
@@ -232,6 +267,7 @@ fn load_and_validate(
     let consolidation = parse_file::<ConsolidationV1>(workspace_root, CONSOLIDATION_RELATIVE)?;
     let coverage = parse_file::<CoveragePolicy>(workspace_root, COVERAGE_RELATIVE)?;
     validate_catalog(&catalog)?;
+    validate_application_retirement(&catalog, workspace_root)?;
     validate_coverage_authority(&catalog, &coverage)?;
     validate_release(&release, &catalog, workspace_root)?;
     validate_consolidation(&consolidation)?;
@@ -402,7 +438,6 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
     let required_groups = BTreeSet::from([
         "boundaries",
         "coverage_required",
-        "mobile",
         "portable",
         "preview",
         "public_native",
@@ -756,6 +791,13 @@ fn validate_workspace_manifest(catalog: &Catalog, workspace_root: &Path) -> Resu
         .and_then(|workspace| workspace.get("dependencies"))
         .and_then(toml::Value::as_table)
         .ok_or_else(|| "Cargo.toml lacks [workspace.dependencies]".to_owned())?;
+    for (name, value) in dependencies {
+        let name = value
+            .get("package")
+            .and_then(toml::Value::as_str)
+            .unwrap_or(name);
+        validate_foundation_dependency(name, value.get("git").and_then(toml::Value::as_str))?;
+    }
     for package in catalog
         .package
         .iter()
@@ -776,6 +818,86 @@ fn validate_workspace_manifest(catalog: &Catalog, workspace_root: &Path) -> Resu
                 "workspace dependency {} must use its catalog path and exact version only",
                 package.name
             ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_foundation_dependency(name: &str, source: Option<&str>) -> Result<(), String> {
+    if expected_retired_packages().contains(name)
+        || name == "tera"
+        || name.starts_with("tera_")
+        || source.is_some_and(|source| source.contains("radrootslabs/tera"))
+    {
+        return Err(format!(
+            "shared foundation cannot depend on retired or application package {name}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_application_retirement(catalog: &Catalog, root: &Path) -> Result<(), String> {
+    let bytes = read_regular_file(root, APPLICATION_RETIREMENT)?;
+    let retirement: ApplicationRetirement = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse application ownership decision: {error}"))?;
+    if retirement.schema != "radroots.tera.application-ownership.v1"
+        || retirement.source_repository != "https://github.com/radrootslabs/lib"
+        || retirement.target_repository != "https://github.com/radrootslabs/tera"
+        || retirement.package.len() != RETIRED_APPLICATION_PACKAGES.len()
+    {
+        return Err("application ownership decision identity drifted".to_owned());
+    }
+    validate_oid(
+        &retirement.source_catalog_revision,
+        "former catalog revision",
+    )?;
+    validate_oid(
+        &retirement.transfer_donor_commit,
+        "application donor commit",
+    )?;
+    validate_oid(&retirement.transfer_donor_tree, "application donor tree")?;
+    validate_oid(&retirement.target_revision, "application target revision")?;
+    validate_sha256(&retirement.source_catalog_sha256, "former catalog digest")?;
+    validate_sha256(
+        &retirement.transfer_evidence_sha256,
+        "transfer evidence digest",
+    )?;
+    let mut names = BTreeSet::new();
+    for transferred in &retirement.package {
+        let former = &transferred.former_catalog_entry;
+        if !RETIRED_APPLICATION_PACKAGES.contains(&former.name.as_str())
+            || !names.insert(former.name.as_str())
+            || !catalog.retired_packages.contains(&former.name)
+            || catalog
+                .package
+                .iter()
+                .any(|package| package.name == former.name)
+            || former.state != "active"
+            || former.publish
+            || former.license != "GPL-3.0-or-later"
+            || former.path != format!("crates/{}", former.name.trim_start_matches("radroots_"))
+            || transferred.target_name != former.name.replacen("radroots_mobile_", "tera_", 1)
+            || transferred.target_path != format!("core/crates/{}", transferred.target_name)
+        {
+            return Err(
+                "application package retirement or retained attribution drifted".to_owned(),
+            );
+        }
+        validate_package_provenance(former)?;
+        validate_oid(
+            &transferred.projected_commit,
+            "application projected commit",
+        )?;
+        validate_oid(&transferred.projected_tree, "application projected tree")?;
+        match fs::symlink_metadata(root.join(&former.path)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("inspect retired application path: {error}")),
+            Ok(_) => {
+                return Err(format!(
+                    "retired application path {} remains present",
+                    former.path
+                ));
+            }
         }
     }
     Ok(())
@@ -848,6 +970,7 @@ fn validate_metadata(
             return Err(format!("catalog and Cargo metadata drifted for {name}"));
         }
         for dependency in &cargo.dependencies {
+            validate_foundation_dependency(&dependency.name, dependency.source.as_deref())?;
             let Some(target) = catalog_by_name.get(dependency.name.as_str()) else {
                 continue;
             };
@@ -1257,6 +1380,10 @@ fn expected_retired_packages() -> BTreeSet<&'static str> {
         "radroots_app_core",
         "radroots_app_ffi",
         "radroots_app_wasm",
+        "radroots_mobile_bindgen",
+        "radroots_mobile_core",
+        "radroots_mobile_ffi",
+        "radroots_mobile_wasm",
         "radroots_sdk_xtask",
     ])
 }
@@ -1544,6 +1671,82 @@ mod tests {
     }
 
     #[test]
+    fn retired_application_packages_cannot_return_as_dependencies_or_sources() {
+        for name in
+            RETIRED_APPLICATION_PACKAGES
+                .into_iter()
+                .chain(["tera", "tera_core", "tera_ffi"])
+        {
+            assert!(validate_foundation_dependency(name, None).is_err());
+        }
+        for source in [
+            "git+https://github.com/radrootslabs/tera?rev=immutable",
+            "https://github.com/radrootslabs/tera.git",
+            "ssh://git@github.com/radrootslabs/tera.git",
+        ] {
+            assert!(validate_foundation_dependency("renamed_application", Some(source)).is_err());
+        }
+        validate_foundation_dependency("radroots_sdk", None).expect("shared SDK remains owned");
+        validate_foundation_dependency("radroots_storage_sqlite", None)
+            .expect("shared storage remains owned");
+        let catalog = checked_in_catalog();
+        validate_application_retirement(&catalog, &crate::workspace_root())
+            .expect("retirement is coherent");
+        let fixture = tempfile::TempDir::new().expect("retirement fixture");
+        let decision = fixture.path().join(APPLICATION_RETIREMENT);
+        fs::create_dir_all(decision.parent().expect("decision parent"))
+            .expect("decision directory");
+        fs::copy(
+            crate::workspace_root().join(APPLICATION_RETIREMENT),
+            &decision,
+        )
+        .expect("decision");
+        validate_application_retirement(&catalog, fixture.path()).expect("no application source");
+        fs::create_dir_all(fixture.path().join("crates/mobile_core")).expect("reintroduced source");
+        assert!(validate_application_retirement(&catalog, fixture.path()).is_err());
+    }
+
+    #[test]
+    fn retirement_rejects_missing_duplicate_or_modified_package_evidence() {
+        let fixture = tempfile::TempDir::new().expect("retirement fixture");
+        let path = fixture.path().join(APPLICATION_RETIREMENT);
+        fs::create_dir_all(path.parent().expect("parent")).expect("decision directory");
+        let original: serde_json::Value = serde_json::from_slice(
+            &fs::read(crate::workspace_root().join(APPLICATION_RETIREMENT)).expect("decision"),
+        )
+        .expect("decision JSON");
+        let catalog = checked_in_catalog();
+        for case in 0..5 {
+            let mut changed = original.clone();
+            match case {
+                0 => {
+                    changed["package"].as_array_mut().expect("packages").pop();
+                }
+                1 => {
+                    changed["package"][1] = changed["package"][0].clone();
+                }
+                2 => {
+                    changed["package"][0]["former_catalog_entry"]["license"] = "MIT".into();
+                }
+                3 => {
+                    changed["package"][0]["target_path"] = "../outside".into();
+                }
+                _ => {
+                    changed["unknown"] = true.into();
+                }
+            }
+            fs::write(&path, serde_json::to_vec(&changed).expect("encode"))
+                .expect("altered decision");
+            assert!(validate_application_retirement(&catalog, fixture.path()).is_err());
+        }
+        let mut reactivated = checked_in_catalog();
+        reactivated
+            .retired_packages
+            .retain(|name| name != "radroots_mobile_core");
+        assert!(validate_catalog(&reactivated).is_err());
+    }
+
+    #[test]
     fn catalog_rejects_version_visibility_license_and_retirement_drift() {
         let mut catalog = checked_in_catalog();
         catalog
@@ -1567,8 +1770,8 @@ mod tests {
         catalog
             .package
             .iter_mut()
-            .find(|package| package.name == "radroots_mobile_core")
-            .expect("mobile")
+            .find(|package| package.name == "radroots_sdk_ffi")
+            .expect("sdk ffi")
             .version = "0.1.0-alpha.1".to_owned();
         assert!(validate_catalog(&catalog).is_err());
 

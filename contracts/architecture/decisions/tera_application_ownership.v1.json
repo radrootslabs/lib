@@ -1,0 +1,222 @@
+{
+  "schema": "radroots.tera.application-ownership.v1",
+  "source_repository": "https://github.com/radrootslabs/lib",
+  "source_catalog_sha256": "deca0c080deae187ff8186c0708903e42f41ea57f77c5f91581e23aa561164a4",
+  "target_repository": "https://github.com/radrootslabs/tera",
+  "target_revision": "2b33144e628bf10e1ddd29829f801ae94cf922b6",
+  "transfer_evidence_sha256": "9b8d3f5c295a899be45f4a15b4711a5828b4c1140d3388f3d63b0c597a2b72b9",
+  "package": [
+    {
+      "former_catalog_entry": {
+        "name": "radroots_mobile_core",
+        "path": "crates/mobile_core",
+        "state": "active",
+        "tier": "runtime",
+        "visibility": "private_runtime",
+        "publish": false,
+        "version": "0.1.0-alpha",
+        "license": "GPL-3.0-or-later",
+        "platforms": [
+          "native",
+          "wasm32"
+        ],
+        "groups": [
+          "coverage_required",
+          "mobile"
+        ],
+        "owners": [
+          "mobile"
+        ],
+        "permitted_dependency_tiers": [
+          "foundation",
+          "domain",
+          "spi",
+          "adapter",
+          "orchestration",
+          "sdk",
+          "facade",
+          "runtime"
+        ],
+        "provenance_kind": "imported",
+        "source_repository": "https://github.com/radrootslabs/app_rt",
+        "source_revision": "7ab1a8624d50890d6d18545ffb47d8083afa8c67",
+        "source_path": "crates/core",
+        "source_tree_sha256": "8ae546ee60a97bfc145c12ea94dcd6d528bf5f49e974159442738c29eb3d6ee1",
+        "compatibility": [
+          "product",
+          "lifecycle",
+          "package_private"
+        ],
+        "replaces": [
+          "radroots_app_core"
+        ]
+      },
+      "target_name": "tera_core",
+      "target_path": "core/crates/tera_core",
+      "projected_commit": "d2f667e0de3b05f68c7735a0733854bd30ba4fe5",
+      "projected_tree": "312c0c4c6b157302ed5944169fefa34671bad3af"
+    },
+    {
+      "former_catalog_entry": {
+        "name": "radroots_mobile_ffi",
+        "path": "crates/mobile_ffi",
+        "state": "active",
+        "tier": "boundary",
+        "visibility": "private_boundary",
+        "publish": false,
+        "version": "0.1.0-alpha",
+        "license": "GPL-3.0-or-later",
+        "platforms": [
+          "apple",
+          "android"
+        ],
+        "groups": [
+          "coverage_required",
+          "mobile",
+          "boundaries"
+        ],
+        "owners": [
+          "mobile"
+        ],
+        "permitted_dependency_tiers": [
+          "foundation",
+          "domain",
+          "spi",
+          "adapter",
+          "orchestration",
+          "sdk",
+          "facade",
+          "runtime",
+          "boundary"
+        ],
+        "provenance_kind": "imported",
+        "source_repository": "https://github.com/radrootslabs/app_rt",
+        "source_revision": "7ab1a8624d50890d6d18545ffb47d8083afa8c67",
+        "source_path": "crates/ffi",
+        "source_tree_sha256": "9a38699ad6d39b9f8764fed6a67bd55908ff54cb2e3cae9a3890ce1a46789b2b",
+        "compatibility": [
+          "ffi",
+          "swift",
+          "kotlin",
+          "lifecycle",
+          "package_private"
+        ],
+        "replaces": [
+          "radroots_app_ffi"
+        ]
+      },
+      "target_name": "tera_ffi",
+      "target_path": "core/crates/tera_ffi",
+      "projected_commit": "eaeffef63efd0f23383c3320fb889bb85451a5ab",
+      "projected_tree": "3d76114aa1a63dce814c38bc2cc97652965608d5"
+    },
+    {
+      "former_catalog_entry": {
+        "name": "radroots_mobile_wasm",
+        "path": "crates/mobile_wasm",
+        "state": "active",
+        "tier": "boundary",
+        "visibility": "private_boundary",
+        "publish": false,
+        "version": "0.1.0-alpha",
+        "license": "GPL-3.0-or-later",
+        "platforms": [
+          "wasm32"
+        ],
+        "groups": [
+          "coverage_required",
+          "mobile",
+          "wasm",
+          "boundaries"
+        ],
+        "owners": [
+          "mobile"
+        ],
+        "permitted_dependency_tiers": [
+          "foundation",
+          "domain",
+          "spi",
+          "adapter",
+          "orchestration",
+          "sdk",
+          "facade",
+          "runtime",
+          "boundary"
+        ],
+        "provenance_kind": "imported",
+        "source_repository": "https://github.com/radrootslabs/app_rt",
+        "source_revision": "7ab1a8624d50890d6d18545ffb47d8083afa8c67",
+        "source_path": "crates/wasm",
+        "source_tree_sha256": "8c65c867eafc0643ca9fd86150766af4f4ab2f0f8321d66306418261a8f43124",
+        "compatibility": [
+          "wasm",
+          "lifecycle",
+          "package_private"
+        ],
+        "replaces": [
+          "radroots_app_wasm"
+        ]
+      },
+      "target_name": "tera_wasm",
+      "target_path": "core/crates/tera_wasm",
+      "projected_commit": "5aa29339dbc51376015090a6c3ad9acf5ce0d3ad",
+      "projected_tree": "b2a3a71ed8d7de20e4a894a1a6c5e7b531c2fe29"
+    },
+    {
+      "former_catalog_entry": {
+        "name": "radroots_mobile_bindgen",
+        "path": "crates/mobile_bindgen",
+        "state": "active",
+        "tier": "codegen",
+        "visibility": "private_codegen",
+        "publish": false,
+        "version": "0.1.0-alpha",
+        "license": "GPL-3.0-or-later",
+        "platforms": [
+          "native"
+        ],
+        "groups": [
+          "coverage_required",
+          "mobile",
+          "boundaries"
+        ],
+        "owners": [
+          "mobile"
+        ],
+        "permitted_dependency_tiers": [
+          "foundation",
+          "domain",
+          "spi",
+          "adapter",
+          "orchestration",
+          "sdk",
+          "facade",
+          "runtime",
+          "boundary",
+          "codegen"
+        ],
+        "provenance_kind": "imported",
+        "source_repository": "https://github.com/radrootslabs/app_rt",
+        "source_revision": "7ab1a8624d50890d6d18545ffb47d8083afa8c67",
+        "source_path": "crates/bindgen",
+        "source_tree_sha256": "f0a9d7ec9794257bc56063117208e6e83a34efe1b852e8af6d6a56a1693d27fa",
+        "compatibility": [
+          "generated",
+          "swift",
+          "kotlin",
+          "package_private"
+        ],
+        "replaces": [
+          "radroots_app_bindgen"
+        ]
+      },
+      "target_name": "tera_bindgen",
+      "target_path": "core/crates/tera_bindgen",
+      "projected_commit": "979f6dab4d47f8dbeae487e948906ea3e2f29984",
+      "projected_tree": "b2b8bedfa87e99907ce98e18e2aff4252dd7958b"
+    }
+  ],
+  "source_catalog_revision": "ec17de580ec174b2c0915d9b915e5cdf9272dfe8",
+  "transfer_donor_commit": "ad17b7d3455a7147cfa303d976fc5c70c3a4c0cb",
+  "transfer_donor_tree": "3d8cdf4b928d37e29a2dbc8aa785e7e4e4938a62"
+}

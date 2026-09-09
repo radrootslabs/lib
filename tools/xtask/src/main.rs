@@ -339,14 +339,12 @@ enum ServiceReleaseArtifactMode {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum ArtifactProduct {
     Sdk,
-    Mobile,
 }
 
 impl ArtifactProduct {
     fn as_str(self) -> &'static str {
         match self {
             Self::Sdk => "sdk",
-            Self::Mobile => "mobile",
         }
     }
 }
@@ -356,8 +354,6 @@ enum ArtifactTarget {
     Typescript,
     Wasm,
     Ffi,
-    Ios,
-    Android,
     Linux,
     Macos,
     Windows,
@@ -369,8 +365,6 @@ impl ArtifactTarget {
             Self::Typescript => "typescript",
             Self::Wasm => "wasm",
             Self::Ffi => "ffi",
-            Self::Ios => "ios",
-            Self::Android => "android",
             Self::Linux => "linux",
             Self::Macos => "macos",
             Self::Windows => "windows",
@@ -489,7 +483,7 @@ fn usage() {
         "  cargo xtask source archive-create --source-root <absolute-directory> --revision <full-sha> --output <absolute-bundle>"
     );
     eprintln!(
-        "  cargo xtask artifact --product <sdk|mobile> --target <target> --language <language> --mode <check|write> --consumer-root <absolute-directory> --source-root <absolute-directory> --output <relative-path> --source-date-epoch <seconds> --builder-id <id>"
+        "  cargo xtask artifact --product sdk --target <target> --language <language> --mode <check|write> --consumer-root <absolute-directory> --source-root <absolute-directory> --output <relative-path> --source-date-epoch <seconds> --builder-id <id>"
     );
 }
 
@@ -581,10 +575,12 @@ fn release_preflight_at(root: &Path) -> Result<(), String> {
             LaneId::ReleaseContracts => advisory_snapshot::validate_decision(root)
                 .and_then(|_| contract::validate_release_preflight(root)),
         };
-        if result.is_ok() {
-            LaneState::Pass
-        } else {
-            LaneState::Failed
+        match result {
+            Ok(()) => LaneState::Pass,
+            Err(error) => {
+                eprintln!("release preflight {} failed: {error}", lane.as_str());
+                LaneState::Failed
+            }
         }
     })
     .map(|_| ())
@@ -1107,34 +1103,20 @@ mod tests {
 
     #[test]
     fn artifact_cli_values_preserve_every_governed_identifier() {
-        assert_eq!(
-            [
-                ArtifactProduct::Sdk.as_str(),
-                ArtifactProduct::Mobile.as_str(),
-            ],
-            ["sdk", "mobile"]
-        );
+        assert!(ArtifactProduct::from_str("mobile", false).is_err());
+        assert!(ArtifactTarget::from_str("ios", false).is_err());
+        assert!(ArtifactTarget::from_str("android", false).is_err());
+        assert_eq!([ArtifactProduct::Sdk.as_str()], ["sdk"]);
         assert_eq!(
             [
                 ArtifactTarget::Typescript.as_str(),
                 ArtifactTarget::Wasm.as_str(),
                 ArtifactTarget::Ffi.as_str(),
-                ArtifactTarget::Ios.as_str(),
-                ArtifactTarget::Android.as_str(),
                 ArtifactTarget::Linux.as_str(),
                 ArtifactTarget::Macos.as_str(),
                 ArtifactTarget::Windows.as_str(),
             ],
-            [
-                "typescript",
-                "wasm",
-                "ffi",
-                "ios",
-                "android",
-                "linux",
-                "macos",
-                "windows",
-            ]
+            ["typescript", "wasm", "ffi", "linux", "macos", "windows",]
         );
         assert_eq!(
             [
