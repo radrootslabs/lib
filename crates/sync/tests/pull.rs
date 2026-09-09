@@ -3,6 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[path = "pull/summary.rs"]
+mod summary;
+
 use futures_executor::block_on;
 use radroots_event::{SignedEvent, draft::SignedEventParts};
 use radroots_storage::{event::SourceGeneration, memory::MemoryStorage};
@@ -174,7 +177,7 @@ fn observed(signature: &str, observed_at: u64) -> ObservedEvent {
     )
 }
 
-fn engine(source: Arc<ScriptedSource>, clock: Arc<dyn Clock>, timeout_ms: u64) -> Engine {
+fn engine(source: Arc<dyn EventSource>, clock: Arc<dyn Clock>, timeout_ms: u64) -> Engine {
     let storage: Arc<dyn SyncStorage> = Arc::new(MemoryStorage::new(
         SourceGeneration::new([8; 32]).expect("generation"),
     ));
@@ -245,6 +248,37 @@ fn single_and_multiple_pages_propagate_cursor_deadline_and_ingest_results() {
     assert_eq!(requests[0].cursor.as_deref(), Some("starting"));
     assert_eq!(requests[1].cursor.as_deref(), Some(next.as_str()));
     assert_eq!(requests[0].deadline_unix_ms, requests[1].deadline_unix_ms);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn later_complete_page_retains_earlier_incomplete_evidence() {
+    let source = Arc::new(ScriptedSource::new(vec![
+        Response::Page {
+            events: vec![],
+            state: FetchTargetState::Partial,
+            next: NextPage::Cursor(FetchCursor::parse("next").expect("cursor")),
+        },
+        Response::Page {
+            events: vec![],
+            state: FetchTargetState::Complete,
+            next: NextPage::Complete,
+        },
+    ]));
+    let pull = engine(source, Arc::new(FixedClock(100)), 50);
+    let receipt = block_on(pull.pull(
+        PullRequest::new(targets(), 10, 2).expect("request"),
+        &RegistryPolicy::visible(),
+    ))
+    .expect("pull");
+    assert_eq!(receipt.termination(), PullTermination::Complete);
+    assert_eq!(
+        receipt.target_outcomes()[0].state(),
+        FetchTargetState::Complete
+    );
+    let wire = serde_json::to_value(receipt).expect("receipt JSON");
+    assert_eq!(wire["target_summaries"][0]["incomplete_pages"], 1);
+    assert_eq!(wire["target_summaries"][0]["last_incomplete"], "partial");
 }
 
 #[test]

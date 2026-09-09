@@ -1,0 +1,27 @@
+{
+  "schema": "radroots.pull-target-evidence.v1",
+  "owner": "radroots_sync",
+  "status": "implemented",
+  "scope": "One explicit bounded Engine::pull call with its exact target set, selector, initial cursor and deadline.",
+  "max_targets": 64,
+  "max_pages": 1000,
+  "target_order": "Stable validated request order; every requested target is represented in a newly measured receipt, including when no page returns.",
+  "summary_fields": [
+    "target",
+    "pages_observed",
+    "incomplete_pages",
+    "missing_outcome_pages",
+    "last_incomplete"
+  ],
+  "counting": "Every returned validated page increments pages_observed for every requested target. A present non-complete typed outcome increments incomplete_pages and replaces last_incomplete. An absent outcome increments missing_outcome_pages without fabricating a transport state.",
+  "bounds": "Use the existing target-set and pull-page constants. Retain no additional messages, event bodies or per-page list. Reject an oversized serialized summary sequence before retaining its extra item; reject duplicate targets and invalid or inconsistent summary counters.",
+  "complete_evidence": "A summary reports all_pages_complete only for positive pages_observed with zero incomplete_pages and zero missing_outcome_pages. Callers must independently require appropriate pull termination and inspect the request scope; no global history is proved.",
+  "compatibility": "Keep target_outcomes as the last available outcome for each target. Add optional target_summaries. Missing or null summaries in legacy deserialization remain unknown; newly measured receipts always contain summaries. Existing source-page and transport behavior is unchanged.",
+  "source_failure": "No returned page means no new target observation. Preserve earlier summaries and the existing SourceFailed termination; never infer a target-specific failure or successful completion from a missing source response.",
+  "non_goals": [
+    "new scheduler, clock or transport policy",
+    "global-history completeness",
+    "per-page history or unbounded diagnostics",
+    "release, Nix, device or deployment qualification"
+  ]
+}

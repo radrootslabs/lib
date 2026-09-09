@@ -1,0 +1,378 @@
+pub mod radroots_sync
+pub mod radroots_sync::ingest
+pub enum radroots_sync::ingest::AdmissionDecision
+pub radroots_sync::ingest::AdmissionDecision::Reject
+pub radroots_sync::ingest::AdmissionDecision::Verified
+pub radroots_sync::ingest::AdmissionDecision::Visible
+pub struct radroots_sync::ingest::IngestBatchReceipt
+impl radroots_sync::ingest::IngestBatchReceipt
+pub fn radroots_sync::ingest::IngestBatchReceipt::accepted(&self) -> usize
+pub fn radroots_sync::ingest::IngestBatchReceipt::outcomes(&self) -> &[core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>]
+pub fn radroots_sync::ingest::IngestBatchReceipt::rejected(&self) -> usize
+pub struct radroots_sync::ingest::IngestReceipt
+impl radroots_sync::ingest::IngestReceipt
+pub const fn radroots_sync::ingest::IngestReceipt::admission(&self) -> &radroots_storage::event::AdmissionReceipt
+pub const fn radroots_sync::ingest::IngestReceipt::commit_disposition(&self) -> radroots_storage::atomic::AtomicCommitDisposition
+pub const fn radroots_sync::ingest::IngestReceipt::committed_at_unix_ms(&self) -> u64
+pub const fn radroots_sync::ingest::IngestReceipt::sync_id(&self) -> radroots_sync::policy::SyncId
+pub struct radroots_sync::ingest::RegistryPolicy
+impl radroots_sync::ingest::RegistryPolicy
+pub const fn radroots_sync::ingest::RegistryPolicy::verified() -> Self
+pub const fn radroots_sync::ingest::RegistryPolicy::visible() -> Self
+impl radroots_sync::ingest::AdmissionPolicy for radroots_sync::ingest::RegistryPolicy
+pub fn radroots_sync::ingest::RegistryPolicy::decide(&self, &radroots_event::verification::ContractValidatedEvent) -> radroots_sync::ingest::AdmissionDecision
+pub fn radroots_sync::ingest::RegistryPolicy::policy_id(&self) -> &'static str
+pub fn radroots_sync::ingest::RegistryPolicy::select_contract(&self, &radroots_event::verification::SignatureVerifiedEvent) -> core::option::Option<&'static str>
+pub trait radroots_sync::ingest::AdmissionPolicy: core::marker::Send + core::marker::Sync
+pub fn radroots_sync::ingest::AdmissionPolicy::decide(&self, &radroots_event::verification::ContractValidatedEvent) -> radroots_sync::ingest::AdmissionDecision
+pub fn radroots_sync::ingest::AdmissionPolicy::policy_id(&self) -> &'static str
+pub fn radroots_sync::ingest::AdmissionPolicy::select_contract(&self, &radroots_event::verification::SignatureVerifiedEvent) -> core::option::Option<&'static str>
+impl radroots_sync::ingest::AdmissionPolicy for radroots_sync::ingest::RegistryPolicy
+pub fn radroots_sync::ingest::RegistryPolicy::decide(&self, &radroots_event::verification::ContractValidatedEvent) -> radroots_sync::ingest::AdmissionDecision
+pub fn radroots_sync::ingest::RegistryPolicy::policy_id(&self) -> &'static str
+pub fn radroots_sync::ingest::RegistryPolicy::select_contract(&self, &radroots_event::verification::SignatureVerifiedEvent) -> core::option::Option<&'static str>
+pub mod radroots_sync::policy
+#[non_exhaustive] pub enum radroots_sync::policy::Error
+pub radroots_sync::policy::Error::AdmissionFailed
+pub radroots_sync::policy::Error::ClockUnavailable
+pub radroots_sync::policy::Error::DeadlineOverflow
+pub radroots_sync::policy::Error::DeliveryDeferred
+pub radroots_sync::policy::Error::InvalidDeadlinePolicy
+pub radroots_sync::policy::Error::InvalidDeliveryRequest
+pub radroots_sync::policy::Error::InvalidIngestReceipt
+pub radroots_sync::policy::Error::InvalidProjectionRequest
+pub radroots_sync::policy::Error::InvalidPullRequest
+pub radroots_sync::policy::Error::InvalidPushRequest
+pub radroots_sync::policy::Error::InvalidReducerOutput
+pub radroots_sync::policy::Error::InvalidSignerOutput
+pub radroots_sync::policy::Error::InvalidSourcePage
+pub radroots_sync::policy::Error::InvalidStatusRequest
+pub radroots_sync::policy::Error::InvalidSyncId
+pub radroots_sync::policy::Error::MissingSigner
+pub radroots_sync::policy::Error::MissingSink
+pub radroots_sync::policy::Error::MissingSource
+pub radroots_sync::policy::Error::MissingTransportCapability
+pub radroots_sync::policy::Error::PolicyRejected
+pub radroots_sync::policy::Error::ReducerFailed
+pub radroots_sync::policy::Error::SignerCapabilityUnavailable
+pub radroots_sync::policy::Error::SignerDeadlineExceeded
+pub radroots_sync::policy::Error::SignerFailed
+pub radroots_sync::policy::Error::SignerWithoutSink
+pub radroots_sync::policy::Error::SigningCancelled
+pub radroots_sync::policy::Error::SigningIndeterminate
+pub radroots_sync::policy::Error::StorageConflict
+pub radroots_sync::policy::Error::StorageFailed
+pub radroots_sync::policy::Error::VerificationFailed
+pub radroots_sync::policy::Error::WorkClaimConflict
+impl core::error::Error for radroots_sync::policy::Error
+impl core::fmt::Display for radroots_sync::policy::Error
+pub fn radroots_sync::policy::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_sync::policy::OperationKind
+pub radroots_sync::policy::OperationKind::Deliver
+pub radroots_sync::policy::OperationKind::Ingest
+pub radroots_sync::policy::OperationKind::Projection
+pub radroots_sync::policy::OperationKind::Pull
+pub radroots_sync::policy::OperationKind::Sign
+pub struct radroots_sync::policy::DeadlinePolicy
+impl radroots_sync::policy::DeadlinePolicy
+pub fn radroots_sync::policy::DeadlinePolicy::deadline_unix_ms(self, radroots_sync::policy::OperationKind, u64) -> core::result::Result<u64, radroots_sync::policy::Error>
+pub const fn radroots_sync::policy::DeadlinePolicy::new(u64, u64, u64) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub const fn radroots_sync::policy::DeadlinePolicy::timeout_ms(self, radroots_sync::policy::OperationKind) -> u64
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::policy::DeadlinePolicy
+pub fn radroots_sync::policy::DeadlinePolicy::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_sync::policy::EngineBuilder
+impl radroots_sync::policy::EngineBuilder
+pub fn radroots_sync::policy::EngineBuilder::build(self) -> core::result::Result<radroots_sync::Engine, radroots_sync::policy::Error>
+pub fn radroots_sync::policy::EngineBuilder::signer(self, alloc::sync::Arc<dyn radroots_signing::signer::Signer>) -> Self
+pub fn radroots_sync::policy::EngineBuilder::sink(self, alloc::sync::Arc<dyn radroots_transport::sink::EventSink>) -> Self
+pub fn radroots_sync::policy::EngineBuilder::source(self, alloc::sync::Arc<dyn radroots_transport::source::EventSource>) -> Self
+pub struct radroots_sync::policy::SyncId(_)
+impl radroots_sync::policy::SyncId
+pub const fn radroots_sync::policy::SyncId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_sync::policy::SyncId::new([u8; 16]) -> core::result::Result<Self, radroots_sync::policy::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::policy::SyncId
+pub fn radroots_sync::policy::SyncId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub trait radroots_sync::policy::Clock: core::marker::Send + core::marker::Sync
+pub fn radroots_sync::policy::Clock::now_unix_ms(&self) -> core::result::Result<u64, radroots_sync::policy::Error>
+pub trait radroots_sync::policy::IdSource: core::marker::Send + core::marker::Sync
+pub fn radroots_sync::policy::IdSource::next_id(&self, radroots_sync::policy::OperationKind) -> core::result::Result<radroots_sync::policy::SyncId, radroots_sync::policy::Error>
+pub trait radroots_sync::policy::SyncStorage: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage + radroots_storage::status::StorageStatusProvider
+impl<T> radroots_sync::policy::SyncStorage for T where T: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage + radroots_storage::status::StorageStatusProvider
+pub mod radroots_sync::projection
+pub enum radroots_sync::projection::RefreshKind
+pub radroots_sync::projection::RefreshKind::Incremental
+pub radroots_sync::projection::RefreshKind::Rebuild
+pub enum radroots_sync::projection::RefreshState
+pub radroots_sync::projection::RefreshState::Complete
+pub radroots_sync::projection::RefreshState::Failed
+pub radroots_sync::projection::RefreshState::Partial
+pub struct radroots_sync::projection::ReducerError
+pub struct radroots_sync::projection::RefreshReceipt
+impl radroots_sync::projection::RefreshReceipt
+pub const fn radroots_sync::projection::RefreshReceipt::batches(&self) -> u16
+pub const fn radroots_sync::projection::RefreshReceipt::checkpoint(&self) -> core::option::Option<&radroots_storage::projection::ProjectionCheckpoint>
+pub const fn radroots_sync::projection::RefreshReceipt::events_reduced(&self) -> usize
+pub const fn radroots_sync::projection::RefreshReceipt::kind(&self) -> radroots_sync::projection::RefreshKind
+pub const fn radroots_sync::projection::RefreshReceipt::rebuild_ticket(&self) -> core::option::Option<radroots_storage::projection::RebuildTicketId>
+pub const fn radroots_sync::projection::RefreshReceipt::state(&self) -> radroots_sync::projection::RefreshState
+pub struct radroots_sync::projection::RefreshRequest
+impl radroots_sync::projection::RefreshRequest
+pub const fn radroots_sync::projection::RefreshRequest::batch_limit(&self) -> u16
+pub const fn radroots_sync::projection::RefreshRequest::generation(&self) -> radroots_storage::projection::ProjectionGeneration
+pub const fn radroots_sync::projection::RefreshRequest::max_batches(&self) -> u16
+pub fn radroots_sync::projection::RefreshRequest::new(radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, u16, u16) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub const fn radroots_sync::projection::RefreshRequest::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub const radroots_sync::projection::PROJECTION_RAW_SOURCE_MAX_EVENTS: u64
+pub const radroots_sync::projection::PROJECTION_REFRESH_MAX_BATCHES: u16
+pub trait radroots_sync::projection::Reducer: core::marker::Send + core::marker::Sync
+pub fn radroots_sync::projection::Reducer::abort_rebuild(&self, radroots_storage::projection::RebuildTicketId, radroots_storage::projection::RebuildFailure) -> core::result::Result<(), radroots_sync::projection::ReducerError>
+pub fn radroots_sync::projection::Reducer::begin_rebuild(&self, radroots_storage::projection::RebuildTicketId, radroots_storage::event::SourceGeneration, radroots_storage::projection::RawSourceDigest) -> core::result::Result<(), radroots_sync::projection::ReducerError>
+pub fn radroots_sync::projection::Reducer::generation(&self) -> radroots_storage::projection::ProjectionGeneration
+pub fn radroots_sync::projection::Reducer::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub fn radroots_sync::projection::Reducer::reduce(&self, &[radroots_storage::event::StoredVisibleEvent], u64, core::option::Option<radroots_storage::projection::RebuildTicketId>) -> core::result::Result<u64, radroots_sync::projection::ReducerError>
+pub mod radroots_sync::pull
+pub enum radroots_sync::pull::PullTermination
+pub radroots_sync::pull::PullTermination::Cancelled
+pub radroots_sync::pull::PullTermination::Complete
+pub radroots_sync::pull::PullTermination::Deadline
+pub radroots_sync::pull::PullTermination::PageLimit
+pub radroots_sync::pull::PullTermination::SourceFailed
+pub struct radroots_sync::pull::PullReceipt
+impl radroots_sync::pull::PullReceipt
+pub const fn radroots_sync::pull::PullReceipt::deadline_unix_ms(&self) -> u64
+pub const fn radroots_sync::pull::PullReceipt::events_observed(&self) -> usize
+pub fn radroots_sync::pull::PullReceipt::ingest_outcomes(&self) -> &[core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>]
+pub const fn radroots_sync::pull::PullReceipt::pages_fetched(&self) -> u16
+pub const fn radroots_sync::pull::PullReceipt::resume_from(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
+pub const fn radroots_sync::pull::PullReceipt::sync_id(&self) -> radroots_sync::policy::SyncId
+pub fn radroots_sync::pull::PullReceipt::target_outcomes(&self) -> &[radroots_transport::outcome::FetchTargetOutcome]
+pub fn radroots_sync::pull::PullReceipt::target_summaries(&self) -> core::option::Option<&[radroots_sync::pull::PullTargetSummary]>
+pub const fn radroots_sync::pull::PullReceipt::termination(&self) -> radroots_sync::pull::PullTermination
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::pull::PullReceipt
+pub fn radroots_sync::pull::PullReceipt::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_sync::pull::PullRequest
+impl radroots_sync::pull::PullRequest
+pub const fn radroots_sync::pull::PullRequest::cursor(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
+pub const fn radroots_sync::pull::PullRequest::max_pages(&self) -> u16
+pub fn radroots_sync::pull::PullRequest::new(radroots_transport::target::TargetSet, u16, u16) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub const fn radroots_sync::pull::PullRequest::page_limit(&self) -> u16
+pub const fn radroots_sync::pull::PullRequest::selector(&self) -> &radroots_transport::source::FetchSelector
+pub const fn radroots_sync::pull::PullRequest::targets(&self) -> &radroots_transport::target::TargetSet
+pub fn radroots_sync::pull::PullRequest::with_cursor(self, radroots_transport::source::FetchCursor) -> Self
+pub fn radroots_sync::pull::PullRequest::with_selector(self, radroots_transport::source::FetchSelector) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::pull::PullRequest
+pub fn radroots_sync::pull::PullRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_sync::pull::PullTargetSummary
+impl radroots_sync::pull::PullTargetSummary
+pub const fn radroots_sync::pull::PullTargetSummary::all_pages_complete(&self) -> bool
+pub const fn radroots_sync::pull::PullTargetSummary::incomplete_pages(&self) -> u16
+pub const fn radroots_sync::pull::PullTargetSummary::last_incomplete(&self) -> core::option::Option<radroots_transport::outcome::FetchTargetState>
+pub const fn radroots_sync::pull::PullTargetSummary::missing_outcome_pages(&self) -> u16
+pub const fn radroots_sync::pull::PullTargetSummary::pages_observed(&self) -> u16
+pub const fn radroots_sync::pull::PullTargetSummary::target(&self) -> &radroots_transport::target::TargetFingerprint
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::pull::PullTargetSummary
+pub fn radroots_sync::pull::PullTargetSummary::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_sync::pull::PULL_MAX_PAGES: u16
+pub mod radroots_sync::push
+pub struct radroots_sync::push::AdmissionRunReceipt
+impl radroots_sync::push::AdmissionRunReceipt
+pub const fn radroots_sync::push::AdmissionRunReceipt::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::AdmissionRunReceipt::is_replay(&self) -> bool
+pub struct radroots_sync::push::DeliveryExecutionReceipt
+impl radroots_sync::push::DeliveryExecutionReceipt
+pub const fn radroots_sync::push::DeliveryExecutionReceipt::is_replay(&self) -> bool
+pub const fn radroots_sync::push::DeliveryExecutionReceipt::plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub struct radroots_sync::push::PushCancellationReceipt
+impl radroots_sync::push::PushCancellationReceipt
+pub const fn radroots_sync::push::PushCancellationReceipt::changed(&self) -> bool
+pub const fn radroots_sync::push::PushCancellationReceipt::status(&self) -> &radroots_sync::push::PushStatus
+pub struct radroots_sync::push::PushPreparation
+impl radroots_sync::push::PushPreparation
+pub const fn radroots_sync::push::PushPreparation::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::PushPreparation::delivery_plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub const fn radroots_sync::push::PushPreparation::is_replay(&self) -> bool
+pub const fn radroots_sync::push::PushPreparation::operation(&self) -> &radroots_storage::authored::AuthoredOperation
+pub struct radroots_sync::push::PushRequest
+impl radroots_sync::push::PushRequest
+pub const fn radroots_sync::push::PushRequest::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_sync::push::PushRequest::cancellation(&self) -> radroots_signing::request::CancellationPolicy
+pub const fn radroots_sync::push::PushRequest::delivery_deadline_unix_ms(&self) -> u64
+pub const fn radroots_sync::push::PushRequest::idempotency_key(&self) -> &radroots_storage::journal::IdempotencyKey
+pub fn radroots_sync::push::PushRequest::new(radroots_sync::policy::SyncId, radroots_storage::journal::IdempotencyKey, radroots_signing::actor::Actor, radroots_event_codec::authoring::AuthoredEventPlan, radroots_transport::target::TargetSet, radroots_transport::policy::SatisfactionPolicy, u64, radroots_signing::request::CancellationPolicy) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub const fn radroots_sync::push::PushRequest::operation_id(&self) -> radroots_sync::policy::SyncId
+pub const fn radroots_sync::push::PushRequest::plan(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_sync::push::PushRequest::satisfaction(&self) -> &radroots_transport::policy::SatisfactionPolicy
+pub const fn radroots_sync::push::PushRequest::targets(&self) -> &radroots_transport::target::TargetSet
+impl core::fmt::Debug for radroots_sync::push::PushRequest
+pub fn radroots_sync::push::PushRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sync::push::PushStatus
+impl radroots_sync::push::PushStatus
+pub const fn radroots_sync::push::PushStatus::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::PushStatus::delivery_plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub const fn radroots_sync::push::PushStatus::operation(&self) -> &radroots_storage::authored::AuthoredOperation
+pub const fn radroots_sync::push::PushStatus::settlement(&self) -> radroots_storage::authored::OperationSettlement
+pub struct radroots_sync::push::SigningRunReceipt
+impl radroots_sync::push::SigningRunReceipt
+pub const fn radroots_sync::push::SigningRunReceipt::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::SigningRunReceipt::is_replay(&self) -> bool
+pub mod radroots_sync::status
+pub struct radroots_sync::status::CapabilityReport<T>
+impl<T> radroots_sync::status::CapabilityReport<T>
+pub const fn radroots_sync::status::CapabilityReport<T>::state(&self) -> radroots_protocol::runtime::v1::SyncCapabilityState
+pub const fn radroots_sync::status::CapabilityReport<T>::status(&self) -> core::option::Option<&T>
+pub struct radroots_sync::status::ProjectionReport
+impl radroots_sync::status::ProjectionReport
+pub const fn radroots_sync::status::ProjectionReport::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub const fn radroots_sync::status::ProjectionReport::status(&self) -> core::option::Option<&radroots_storage::projection::ProjectionStatus>
+pub struct radroots_sync::status::SyncStatus
+impl radroots_sync::status::SyncStatus
+pub const fn radroots_sync::status::SyncStatus::events(&self) -> &radroots_storage::status::EventStoreStatus
+pub const fn radroots_sync::status::SyncStatus::health(&self) -> radroots_protocol::runtime::v1::SyncHealth
+pub const fn radroots_sync::status::SyncStatus::outbox(&self) -> radroots_storage::outbox::OutboxStatus
+pub fn radroots_sync::status::SyncStatus::projections(&self) -> &[radroots_sync::status::ProjectionReport]
+pub const fn radroots_sync::status::SyncStatus::signer(&self) -> &radroots_sync::status::CapabilityReport<radroots_signing::status::SignerStatus>
+pub const fn radroots_sync::status::SyncStatus::sink(&self) -> &radroots_sync::status::CapabilityReport<radroots_transport::status::SinkStatus>
+pub const fn radroots_sync::status::SyncStatus::source(&self) -> &radroots_sync::status::CapabilityReport<radroots_transport::status::SourceStatus>
+pub const fn radroots_sync::status::SyncStatus::storage(&self) -> radroots_storage::status::StorageStatus
+pub fn radroots_sync::status::SyncStatus::to_protocol(&self) -> radroots_protocol::runtime::v1::SyncStatusReceipt
+#[non_exhaustive] pub enum radroots_sync::Error
+pub radroots_sync::Error::AdmissionFailed
+pub radroots_sync::Error::ClockUnavailable
+pub radroots_sync::Error::DeadlineOverflow
+pub radroots_sync::Error::DeliveryDeferred
+pub radroots_sync::Error::InvalidDeadlinePolicy
+pub radroots_sync::Error::InvalidDeliveryRequest
+pub radroots_sync::Error::InvalidIngestReceipt
+pub radroots_sync::Error::InvalidProjectionRequest
+pub radroots_sync::Error::InvalidPullRequest
+pub radroots_sync::Error::InvalidPushRequest
+pub radroots_sync::Error::InvalidReducerOutput
+pub radroots_sync::Error::InvalidSignerOutput
+pub radroots_sync::Error::InvalidSourcePage
+pub radroots_sync::Error::InvalidStatusRequest
+pub radroots_sync::Error::InvalidSyncId
+pub radroots_sync::Error::MissingSigner
+pub radroots_sync::Error::MissingSink
+pub radroots_sync::Error::MissingSource
+pub radroots_sync::Error::MissingTransportCapability
+pub radroots_sync::Error::PolicyRejected
+pub radroots_sync::Error::ReducerFailed
+pub radroots_sync::Error::SignerCapabilityUnavailable
+pub radroots_sync::Error::SignerDeadlineExceeded
+pub radroots_sync::Error::SignerFailed
+pub radroots_sync::Error::SignerWithoutSink
+pub radroots_sync::Error::SigningCancelled
+pub radroots_sync::Error::SigningIndeterminate
+pub radroots_sync::Error::StorageConflict
+pub radroots_sync::Error::StorageFailed
+pub radroots_sync::Error::VerificationFailed
+pub radroots_sync::Error::WorkClaimConflict
+impl core::error::Error for radroots_sync::policy::Error
+impl core::fmt::Display for radroots_sync::policy::Error
+pub fn radroots_sync::policy::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sync::AdmissionRunReceipt
+impl radroots_sync::push::AdmissionRunReceipt
+pub const fn radroots_sync::push::AdmissionRunReceipt::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::AdmissionRunReceipt::is_replay(&self) -> bool
+pub struct radroots_sync::DeliveryExecutionReceipt
+impl radroots_sync::push::DeliveryExecutionReceipt
+pub const fn radroots_sync::push::DeliveryExecutionReceipt::is_replay(&self) -> bool
+pub const fn radroots_sync::push::DeliveryExecutionReceipt::plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub struct radroots_sync::Engine
+impl radroots_sync::Engine
+pub async fn radroots_sync::Engine::admit_signed(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::AdmissionRunReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::cancel_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::PushCancellationReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::deliver_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::DeliveryExecutionReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::prepare_push(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::PushPreparation, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::push_status(&self, radroots_sync::policy::SyncId) -> core::result::Result<core::option::Option<radroots_sync::push::PushStatus>, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::sign_prepared(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::SigningRunReceipt, radroots_sync::policy::Error>
+impl radroots_sync::Engine
+pub fn radroots_sync::Engine::builder(alloc::sync::Arc<dyn radroots_sync::policy::SyncStorage>, alloc::sync::Arc<dyn radroots_sync::policy::Clock>, alloc::sync::Arc<dyn radroots_sync::policy::IdSource>, radroots_sync::policy::DeadlinePolicy) -> radroots_sync::policy::EngineBuilder
+pub fn radroots_sync::Engine::clock(&self) -> &dyn radroots_sync::policy::Clock
+pub const fn radroots_sync::Engine::deadlines(&self) -> radroots_sync::policy::DeadlinePolicy
+pub fn radroots_sync::Engine::ids(&self) -> &dyn radroots_sync::policy::IdSource
+pub fn radroots_sync::Engine::signer(&self) -> core::option::Option<&dyn radroots_signing::signer::Signer>
+pub fn radroots_sync::Engine::sink(&self) -> core::option::Option<&dyn radroots_transport::sink::EventSink>
+pub fn radroots_sync::Engine::source(&self) -> core::option::Option<&dyn radroots_transport::source::EventSource>
+pub fn radroots_sync::Engine::storage(&self) -> &dyn radroots_sync::policy::SyncStorage
+impl radroots_sync::Engine
+pub async fn radroots_sync::Engine::ingest(&self, radroots_transport::source::ObservedEvent, &dyn radroots_sync::ingest::AdmissionPolicy) -> core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::ingest_batch(&self, alloc::vec::Vec<radroots_transport::source::ObservedEvent>, &dyn radroots_sync::ingest::AdmissionPolicy) -> radroots_sync::ingest::IngestBatchReceipt
+impl radroots_sync::Engine
+pub async fn radroots_sync::Engine::pull(&self, radroots_sync::pull::PullRequest, &dyn radroots_sync::ingest::AdmissionPolicy) -> core::result::Result<radroots_sync::pull::PullReceipt, radroots_sync::policy::Error>
+impl radroots_sync::Engine
+pub async fn radroots_sync::Engine::refresh_projection(&self, radroots_sync::projection::RefreshRequest, &dyn radroots_sync::projection::Reducer) -> core::result::Result<radroots_sync::projection::RefreshReceipt, radroots_sync::policy::Error>
+impl radroots_sync::Engine
+pub fn radroots_sync::Engine::retry_decision(&self, &radroots_storage::authored_delivery::AuthoredDeliveryPlan, u64) -> core::result::Result<radroots_protocol::runtime::v1::SyncRetryDecision, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::status(&self, &[radroots_storage::projection::ProjectionId]) -> core::result::Result<radroots_sync::status::SyncStatus, radroots_sync::policy::Error>
+impl core::fmt::Debug for radroots_sync::Engine
+pub fn radroots_sync::Engine::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sync::PullReceipt
+impl radroots_sync::pull::PullReceipt
+pub const fn radroots_sync::pull::PullReceipt::deadline_unix_ms(&self) -> u64
+pub const fn radroots_sync::pull::PullReceipt::events_observed(&self) -> usize
+pub fn radroots_sync::pull::PullReceipt::ingest_outcomes(&self) -> &[core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>]
+pub const fn radroots_sync::pull::PullReceipt::pages_fetched(&self) -> u16
+pub const fn radroots_sync::pull::PullReceipt::resume_from(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
+pub const fn radroots_sync::pull::PullReceipt::sync_id(&self) -> radroots_sync::policy::SyncId
+pub fn radroots_sync::pull::PullReceipt::target_outcomes(&self) -> &[radroots_transport::outcome::FetchTargetOutcome]
+pub fn radroots_sync::pull::PullReceipt::target_summaries(&self) -> core::option::Option<&[radroots_sync::pull::PullTargetSummary]>
+pub const fn radroots_sync::pull::PullReceipt::termination(&self) -> radroots_sync::pull::PullTermination
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::pull::PullReceipt
+pub fn radroots_sync::pull::PullReceipt::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_sync::PullRequest
+impl radroots_sync::pull::PullRequest
+pub const fn radroots_sync::pull::PullRequest::cursor(&self) -> core::option::Option<&radroots_transport::source::FetchCursor>
+pub const fn radroots_sync::pull::PullRequest::max_pages(&self) -> u16
+pub fn radroots_sync::pull::PullRequest::new(radroots_transport::target::TargetSet, u16, u16) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub const fn radroots_sync::pull::PullRequest::page_limit(&self) -> u16
+pub const fn radroots_sync::pull::PullRequest::selector(&self) -> &radroots_transport::source::FetchSelector
+pub const fn radroots_sync::pull::PullRequest::targets(&self) -> &radroots_transport::target::TargetSet
+pub fn radroots_sync::pull::PullRequest::with_cursor(self, radroots_transport::source::FetchCursor) -> Self
+pub fn radroots_sync::pull::PullRequest::with_selector(self, radroots_transport::source::FetchSelector) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::pull::PullRequest
+pub fn radroots_sync::pull::PullRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_sync::PushCancellationReceipt
+impl radroots_sync::push::PushCancellationReceipt
+pub const fn radroots_sync::push::PushCancellationReceipt::changed(&self) -> bool
+pub const fn radroots_sync::push::PushCancellationReceipt::status(&self) -> &radroots_sync::push::PushStatus
+pub struct radroots_sync::PushPreparation
+impl radroots_sync::push::PushPreparation
+pub const fn radroots_sync::push::PushPreparation::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::PushPreparation::delivery_plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub const fn radroots_sync::push::PushPreparation::is_replay(&self) -> bool
+pub const fn radroots_sync::push::PushPreparation::operation(&self) -> &radroots_storage::authored::AuthoredOperation
+pub struct radroots_sync::PushRequest
+impl radroots_sync::push::PushRequest
+pub const fn radroots_sync::push::PushRequest::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_sync::push::PushRequest::cancellation(&self) -> radroots_signing::request::CancellationPolicy
+pub const fn radroots_sync::push::PushRequest::delivery_deadline_unix_ms(&self) -> u64
+pub const fn radroots_sync::push::PushRequest::idempotency_key(&self) -> &radroots_storage::journal::IdempotencyKey
+pub fn radroots_sync::push::PushRequest::new(radroots_sync::policy::SyncId, radroots_storage::journal::IdempotencyKey, radroots_signing::actor::Actor, radroots_event_codec::authoring::AuthoredEventPlan, radroots_transport::target::TargetSet, radroots_transport::policy::SatisfactionPolicy, u64, radroots_signing::request::CancellationPolicy) -> core::result::Result<Self, radroots_sync::policy::Error>
+pub const fn radroots_sync::push::PushRequest::operation_id(&self) -> radroots_sync::policy::SyncId
+pub const fn radroots_sync::push::PushRequest::plan(&self) -> &radroots_event_codec::authoring::AuthoredEventPlan
+pub const fn radroots_sync::push::PushRequest::satisfaction(&self) -> &radroots_transport::policy::SatisfactionPolicy
+pub const fn radroots_sync::push::PushRequest::targets(&self) -> &radroots_transport::target::TargetSet
+impl core::fmt::Debug for radroots_sync::push::PushRequest
+pub fn radroots_sync::push::PushRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_sync::PushStatus
+impl radroots_sync::push::PushStatus
+pub const fn radroots_sync::push::PushStatus::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::PushStatus::delivery_plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub const fn radroots_sync::push::PushStatus::operation(&self) -> &radroots_storage::authored::AuthoredOperation
+pub const fn radroots_sync::push::PushStatus::settlement(&self) -> radroots_storage::authored::OperationSettlement
+pub struct radroots_sync::SigningRunReceipt
+impl radroots_sync::push::SigningRunReceipt
+pub const fn radroots_sync::push::SigningRunReceipt::artifact(&self) -> &radroots_storage::authored::AuthoredArtifact
+pub const fn radroots_sync::push::SigningRunReceipt::is_replay(&self) -> bool
+pub struct radroots_sync::SyncStatus
+impl radroots_sync::status::SyncStatus
+pub const fn radroots_sync::status::SyncStatus::events(&self) -> &radroots_storage::status::EventStoreStatus
+pub const fn radroots_sync::status::SyncStatus::health(&self) -> radroots_protocol::runtime::v1::SyncHealth
+pub const fn radroots_sync::status::SyncStatus::outbox(&self) -> radroots_storage::outbox::OutboxStatus
+pub fn radroots_sync::status::SyncStatus::projections(&self) -> &[radroots_sync::status::ProjectionReport]
+pub const fn radroots_sync::status::SyncStatus::signer(&self) -> &radroots_sync::status::CapabilityReport<radroots_signing::status::SignerStatus>
+pub const fn radroots_sync::status::SyncStatus::sink(&self) -> &radroots_sync::status::CapabilityReport<radroots_transport::status::SinkStatus>
+pub const fn radroots_sync::status::SyncStatus::source(&self) -> &radroots_sync::status::CapabilityReport<radroots_transport::status::SourceStatus>
+pub const fn radroots_sync::status::SyncStatus::storage(&self) -> radroots_storage::status::StorageStatus
+pub fn radroots_sync::status::SyncStatus::to_protocol(&self) -> radroots_protocol::runtime::v1::SyncStatusReceipt

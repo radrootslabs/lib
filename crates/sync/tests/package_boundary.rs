@@ -9,9 +9,41 @@ const SOURCES: &[(&str, &str)] = &[
     ("policy.rs", include_str!("../src/policy.rs")),
     ("projection.rs", include_str!("../src/projection.rs")),
     ("pull.rs", include_str!("../src/pull.rs")),
+    ("pull/summary.rs", include_str!("../src/pull/summary.rs")),
+    ("pull/wire.rs", include_str!("../src/pull/wire.rs")),
     ("push.rs", include_str!("../src/push.rs")),
     ("status.rs", include_str!("../src/status.rs")),
 ];
+
+#[test]
+fn pull_summary_contract_retains_existing_bounds_and_final_outcome_compatibility() {
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/architecture/decisions/pull_target_evidence.v1.json"
+    ))
+    .expect("pull target evidence contract");
+    assert_eq!(contract["owner"], "radroots_sync");
+    assert_eq!(
+        contract["max_targets"],
+        radroots_transport::target::TARGET_SET_MAX_ITEMS
+    );
+    assert_eq!(contract["max_pages"], radroots_sync::pull::PULL_MAX_PAGES);
+    assert_eq!(
+        contract["summary_fields"],
+        serde_json::json!([
+            "target",
+            "pages_observed",
+            "incomplete_pages",
+            "missing_outcome_pages",
+            "last_incomplete"
+        ])
+    );
+    assert!(
+        contract["compatibility"]
+            .as_str()
+            .unwrap()
+            .contains("legacy")
+    );
+}
 
 #[test]
 fn sync_depends_only_on_final_orchestration_boundaries() {

@@ -1,5 +1,11 @@
 //! Bounded source pagination and ingestion.
 
+mod summary;
+#[cfg(feature = "serde")]
+mod wire;
+
+pub use summary::PullTargetSummary;
+
 use radroots_transport::{
     FetchRequest,
     outcome::FetchTargetOutcome,
@@ -92,8 +98,8 @@ pub enum PullTermination {
     SourceFailed,
 }
 
-/// Normalized receipt retaining every ingest outcome and final target state.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// Normalized receipt retaining ingest outcomes, final states and bounded page evidence.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PullReceipt {
     sync_id: SyncId,
@@ -102,6 +108,7 @@ pub struct PullReceipt {
     events_observed: usize,
     ingest_outcomes: Vec<Result<IngestReceipt, Error>>,
     target_outcomes: Vec<FetchTargetOutcome>,
+    target_summaries: Option<summary::PullTargetSummaries>,
     termination: PullTermination,
     resume_from: Option<FetchCursor>,
 }
@@ -129,6 +136,15 @@ impl PullReceipt {
 
     pub fn target_outcomes(&self) -> &[FetchTargetOutcome] {
         self.target_outcomes.as_slice()
+    }
+
+    /// Cumulative evidence in request-target order, or `None` for a legacy receipt.
+    ///
+    /// A missing summary inventory is unknown evidence. Even complete summaries
+    /// must be interpreted with the termination and exact request scope; they
+    /// do not prove complete global history.
+    pub fn target_summaries(&self) -> Option<&[PullTargetSummary]> {
+        self.target_summaries.as_ref().map(|value| value.as_slice())
     }
 
     pub const fn termination(&self) -> PullTermination {
@@ -162,6 +178,7 @@ impl Engine {
             events_observed: 0,
             ingest_outcomes: Vec::new(),
             target_outcomes: Vec::new(),
+            target_summaries: Some(summary::PullTargetSummaries::new(&request.targets)),
             termination: PullTermination::Complete,
             resume_from: request.cursor.clone(),
         };
@@ -196,6 +213,9 @@ impl Engine {
             receipt.pages_fetched += 1;
             receipt.events_observed += page.events().len();
             merge_target_outcomes(&mut receipt.target_outcomes, page.target_outcomes());
+            if let Some(summaries) = &mut receipt.target_summaries {
+                summaries.observe(page.target_outcomes());
+            }
             let outcomes = self.ingest_batch(page.events().to_vec(), admission).await;
             receipt
                 .ingest_outcomes

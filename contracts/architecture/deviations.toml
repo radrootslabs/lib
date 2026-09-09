@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-015"
+date = "2026-09-09"
+status = "closed"
+approval = "Standing user approval of the reviewed refactor and necessary shared-owner prerequisites, including verified producer commits and non-force publication."
+affected_steps = ["201"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sync",
+]
+source_evidence = [
+  "PullReceipt intentionally retains the final per-target outcome, so a later complete page replaces an earlier partial or failed page.",
+  "FetchPage permits missing target outcomes; a complete page marker alone cannot prove every requested target supplied complete evidence.",
+]
+replacement_action = "Add bounded cumulative per-target summaries under contracts/architecture/decisions/pull_target_evidence.v1.json, preserving final-page API semantics and legacy receipts as unknown evidence."
+verification = [
+  "Exercise incomplete/complete ordering, omitted outcomes, multiple targets, exact limits, termination and compatible serialization through the real shared engine and SDK delegation.",
+  "Qualify current package/workspace, API, feature, coverage and release-preflight surfaces before publication and consumer adoption.",
+]
+unresolved_risk = "Current shared sync, SDK, workspace, API and unchanged coverage gates pass. Summary completeness remains scoped to returned pages and must be combined with pull termination; no global-history or new release authority is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The reproduced partial-then-complete regression passes while final outcomes remain unchanged; all actual incomplete states, missing outcomes, multiple targets, 64 targets and 1,000 pages are exercised.",
+  "Legacy and malformed serialization, source/page/deadline/cancellation cases, and actual SDK cumulative-evidence delegation pass with the supported feature profiles.",
+  "Generated shared API retains every previous declaration, SDK API is byte-identical, fresh sync/SDK coverage and all 45 reports/aggregate pass, and the full workspace and release-preflight lanes pass.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-013"
 date = "2026-09-09"
 status = "closed"

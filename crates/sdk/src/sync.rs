@@ -320,6 +320,92 @@ mod tests {
         }
     }
 
+    struct PartialThenCompleteSource(AtomicU8);
+
+    impl EventSource for PartialThenCompleteSource {
+        fn status(
+            &self,
+        ) -> radroots_transport::BoxFuture<'_, Result<SourceStatus, TransportError>> {
+            Box::pin(async { unreachable!("explicit pull only") })
+        }
+
+        fn fetch(
+            &self,
+            request: FetchRequest,
+        ) -> radroots_transport::BoxFuture<'_, Result<FetchPage, TransportError>> {
+            Box::pin(async move {
+                use radroots_transport::{
+                    outcome::{FetchTargetOutcome, FetchTargetState},
+                    source::FetchCursor,
+                };
+                let page = self.0.fetch_add(1, Ordering::Relaxed);
+                assert!(page < 2);
+                let (state, next) = if page == 0 {
+                    assert!(request.cursor().is_none());
+                    (
+                        FetchTargetState::Partial,
+                        NextPage::Cursor(FetchCursor::parse("second").expect("cursor")),
+                    )
+                } else {
+                    assert_eq!(request.cursor().map(FetchCursor::as_str), Some("second"));
+                    (FetchTargetState::Complete, NextPage::Complete)
+                };
+                let outcome = FetchTargetOutcome::new(
+                    request.target_set().targets()[0].fingerprint().clone(),
+                    state,
+                );
+                FetchPage::for_request(&request, vec![], vec![outcome], next)
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn operations_preserve_cumulative_pull_evidence_after_a_later_complete_page() {
+        let storage = Arc::new(MemoryStorage::new(
+            SourceGeneration::new([3; 32]).expect("generation"),
+        ));
+        let source = Arc::new(PartialThenCompleteSource(AtomicU8::new(0)));
+        let engine = Engine::builder(
+            storage.clone(),
+            Arc::new(FixedClock),
+            Arc::new(SequenceIds(AtomicU8::new(1))),
+            DeadlinePolicy::new(1_000, 1_000, 1_000).expect("deadlines"),
+        )
+        .source(source.clone())
+        .build()
+        .expect("engine");
+        let client = ClientBuilder::new()
+            .storage(storage)
+            .sync_engine(engine)
+            .build()
+            .expect("client");
+        let receipt = client
+            .sync()
+            .expect("open client")
+            .expect("sync")
+            .pull(
+                PullRequest::new(TargetSet::new(vec![target()]).expect("targets"), 1, 2)
+                    .expect("request"),
+                &RegistryPolicy::visible(),
+            )
+            .await
+            .expect("receipt");
+        assert_eq!(source.0.load(Ordering::Relaxed), 2);
+        assert_eq!(receipt.termination(), PullTermination::Complete);
+        assert_eq!(
+            receipt.target_outcomes()[0].state(),
+            radroots_transport::outcome::FetchTargetState::Complete
+        );
+        let summary = &receipt.target_summaries().expect("measured")[0];
+        assert_eq!(summary.pages_observed(), 2);
+        assert_eq!(summary.incomplete_pages(), 1);
+        assert_eq!(
+            summary.last_incomplete(),
+            Some(radroots_transport::outcome::FetchTargetState::Partial)
+        );
+        assert!(!summary.all_pages_complete());
+    }
+
     struct EmptyReducer {
         id: ProjectionId,
         generation: ProjectionGeneration,
@@ -460,6 +546,12 @@ mod tests {
             .await
             .expect("pull");
         assert_eq!(pull.termination(), PullTermination::Cancelled);
+        let summaries = pull.target_summaries().expect("measured target evidence");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].target(), target().fingerprint());
+        assert_eq!(summaries[0].pages_observed(), 1);
+        assert_eq!(summaries[0].missing_outcome_pages(), 1);
+        assert!(!summaries[0].all_pages_complete());
 
         let ingest = operations
             .ingest_batch(vec![invalid_observation(), invalid_observation()], &policy)
